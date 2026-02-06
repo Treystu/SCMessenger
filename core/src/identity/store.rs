@@ -32,7 +32,7 @@ impl IdentityStore {
             }
             Self::Persistent(db) => {
                 let bytes = keys.to_bytes();
-                db.insert(IDENTITY_KEY, bytes)?;
+                db.insert(IDENTITY_KEY, bytes.as_slice())?;
                 db.flush()?;
                 Ok(())
             }

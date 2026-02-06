@@ -3,5 +3,5 @@
 pub mod behaviour;
 pub mod swarm;
 
-pub use swarm::{start_swarm, SwarmHandle, SwarmEvent2 as SwarmEvent, SwarmCommand};
 pub use behaviour::{MessageRequest, MessageResponse};
+pub use swarm::{start_swarm, SwarmCommand, SwarmEvent2 as SwarmEvent, SwarmHandle};

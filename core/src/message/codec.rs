@@ -44,6 +44,16 @@ pub fn decode_message(bytes: &[u8]) -> Result<Message> {
     }
 
     let msg: Message = bincode::deserialize(bytes)?;
+
+    // Enforce the same payload size limit as encode_message
+    if msg.payload.len() > MAX_PAYLOAD_SIZE {
+        bail!(
+            "Decoded payload too large: {} bytes (max {})",
+            msg.payload.len(),
+            MAX_PAYLOAD_SIZE
+        );
+    }
+
     Ok(msg)
 }
 
@@ -73,6 +83,30 @@ pub fn decode_envelope(bytes: &[u8]) -> Result<Envelope> {
     }
 
     let envelope: Envelope = bincode::deserialize(bytes)?;
+
+    // Validate per-field sizes to reject malformed envelopes
+    if envelope.sender_public_key.len() != 32 {
+        bail!(
+            "Invalid sender_public_key length: {} (expected 32)",
+            envelope.sender_public_key.len()
+        );
+    }
+    if envelope.ephemeral_public_key.len() != 32 {
+        bail!(
+            "Invalid ephemeral_public_key length: {} (expected 32)",
+            envelope.ephemeral_public_key.len()
+        );
+    }
+    if envelope.nonce.len() != 24 {
+        bail!(
+            "Invalid nonce length: {} (expected 24)",
+            envelope.nonce.len()
+        );
+    }
+    if envelope.ciphertext.is_empty() {
+        bail!("Envelope ciphertext is empty");
+    }
+
     Ok(envelope)
 }
 

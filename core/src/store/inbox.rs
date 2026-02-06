@@ -2,7 +2,7 @@
 //
 // Tracks seen message IDs to prevent replay attacks and duplicate delivery.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Maximum tracked message IDs (for deduplication)
 const MAX_SEEN_IDS: usize = 50_000;
@@ -24,8 +24,8 @@ pub struct ReceivedMessage {
 pub struct Inbox {
     /// Set of seen message IDs (for dedup)
     seen_ids: HashSet<String>,
-    /// Ordered list of seen IDs (for eviction)
-    seen_order: Vec<String>,
+    /// Ordered list of seen IDs (for O(1) FIFO eviction)
+    seen_order: VecDeque<String>,
     /// Recent messages by sender (for application retrieval)
     messages: HashMap<String, Vec<ReceivedMessage>>,
     /// Total stored messages
@@ -36,7 +36,7 @@ impl Inbox {
     pub fn new() -> Self {
         Self {
             seen_ids: HashSet::new(),
-            seen_order: Vec::new(),
+            seen_order: VecDeque::new(),
             messages: HashMap::new(),
             total: 0,
         }
@@ -55,12 +55,11 @@ impl Inbox {
 
         // Track for dedup
         self.seen_ids.insert(msg.message_id.clone());
-        self.seen_order.push(msg.message_id.clone());
+        self.seen_order.push_back(msg.message_id.clone());
 
-        // Evict old IDs if at capacity
+        // Evict old IDs if at capacity (O(1) with VecDeque)
         while self.seen_ids.len() > MAX_SEEN_IDS {
-            if let Some(old_id) = self.seen_order.first().cloned() {
-                self.seen_order.remove(0);
+            if let Some(old_id) = self.seen_order.pop_front() {
                 self.seen_ids.remove(&old_id);
             }
         }
@@ -85,7 +84,10 @@ impl Inbox {
 
     /// Get all recent messages across all senders
     pub fn all_messages(&self) -> Vec<&ReceivedMessage> {
-        self.messages.values().flat_map(|msgs| msgs.iter()).collect()
+        self.messages
+            .values()
+            .flat_map(|msgs| msgs.iter())
+            .collect()
     }
 
     /// Total stored messages

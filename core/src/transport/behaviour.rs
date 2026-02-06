@@ -58,8 +58,7 @@ impl IronCoreBehaviour {
                 StreamProtocol::new("/sc/message/1.0.0"),
                 ProtocolSupport::Full,
             )],
-            request_response::Config::default()
-                .with_request_timeout(Duration::from_secs(30)),
+            request_response::Config::default().with_request_timeout(Duration::from_secs(30)),
         );
 
         // Gossipsub for pub/sub (future group messaging)
@@ -76,25 +75,16 @@ impl IronCoreBehaviour {
         .map_err(|e| anyhow::anyhow!("Gossipsub error: {}", e))?;
 
         // Kademlia DHT for peer discovery
-        let kademlia = kad::Behaviour::new(
-            peer_id,
-            kad::store::MemoryStore::new(peer_id),
-        );
+        let kademlia = kad::Behaviour::new(peer_id, kad::store::MemoryStore::new(peer_id));
 
         // mDNS for LAN discovery
-        let mdns = mdns::tokio::Behaviour::new(
-            mdns::Config::default(),
-            peer_id,
-        )?;
+        let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id)?;
 
         // Identify protocol
         let identify = identify::Behaviour::new(
-            identify::Config::new(
-                "/sc/id/1.0.0".to_string(),
-                keypair.public(),
-            )
-            .with_push_listen_addr_updates(true)
-            .with_interval(Duration::from_secs(60)),
+            identify::Config::new("/sc/id/1.0.0".to_string(), keypair.public())
+                .with_push_listen_addr_updates(true)
+                .with_interval(Duration::from_secs(60)),
         );
 
         Ok(Self {

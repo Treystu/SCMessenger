@@ -87,19 +87,26 @@ impl Message {
         }
     }
 
-    /// Create a receipt message
-    pub fn receipt(sender_id: String, recipient_id: String, receipt: &Receipt) -> Self {
-        Self {
+    /// Create a receipt message.
+    /// Returns an error if the receipt cannot be serialized.
+    pub fn receipt(
+        sender_id: String,
+        recipient_id: String,
+        receipt: &Receipt,
+    ) -> Result<Self, String> {
+        let payload = bincode::serialize(receipt)
+            .map_err(|e| format!("Failed to serialize receipt: {}", e))?;
+        Ok(Self {
             id: uuid::Uuid::new_v4().to_string(),
             sender_id,
             recipient_id,
             message_type: MessageType::Receipt,
-            payload: bincode::serialize(receipt).unwrap_or_default(),
+            payload,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
-        }
+        })
     }
 
     /// Get text content (only valid for Text messages)
@@ -111,13 +118,18 @@ impl Message {
         }
     }
 
-    /// Check if message is recent (within threshold_secs)
+    /// Check if message is recent (within threshold_secs).
+    /// Rejects future-dated messages (timestamp > now).
     pub fn is_recent(&self, threshold_secs: u64) -> bool {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        now.saturating_sub(self.timestamp) < threshold_secs
+        // Reject messages from the future
+        if self.timestamp > now {
+            return false;
+        }
+        (now - self.timestamp) < threshold_secs
     }
 }
 
@@ -177,11 +189,8 @@ mod tests {
     #[test]
     fn test_receipt_message() {
         let receipt = Receipt::delivered("msg-123".to_string());
-        let msg = Message::receipt(
-            "sender".to_string(),
-            "recipient".to_string(),
-            &receipt,
-        );
+        let msg =
+            Message::receipt("sender".to_string(), "recipient".to_string(), &receipt).unwrap();
 
         assert_eq!(msg.message_type, MessageType::Receipt);
         assert!(msg.text_content().is_none());
@@ -195,6 +204,11 @@ mod tests {
         let mut old_msg = Message::text("a".into(), "b".into(), "test");
         old_msg.timestamp = 0; // epoch
         assert!(!old_msg.is_recent(60));
+
+        // Future-dated messages should not be considered recent
+        let mut future_msg = Message::text("a".into(), "b".into(), "test");
+        future_msg.timestamp = u64::MAX;
+        assert!(!future_msg.is_recent(60));
     }
 
     #[test]

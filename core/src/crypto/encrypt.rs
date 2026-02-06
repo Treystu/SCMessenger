@@ -116,6 +116,10 @@ pub fn encrypt_message(
     // Zeroize key material
     symmetric_key.zeroize();
 
+    // TODO: The sender_public_key is NOT cryptographically bound to the ciphertext.
+    // An attacker could swap it without detection. In a future protocol version,
+    // either include the sender's public key as AAD in the AEAD encryption,
+    // or sign the full envelope with the sender's Ed25519 key.
     Ok(crate::message::Envelope {
         sender_public_key: sender_signing_key.verifying_key().to_bytes().to_vec(),
         ephemeral_public_key: ephemeral_public.to_bytes().to_vec(),

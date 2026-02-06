@@ -28,7 +28,9 @@ Maximum encoded envelope size: **256 KB**.
 **Properties:**
 - Forward secrecy per message (ephemeral keys)
 - Authenticated encryption (Poly1305 MAC)
-- Sender identification via `sender_public_key` in envelope
+- Sender identification via `sender_public_key` in envelope (unauthenticated — the
+  envelope does not include an Ed25519 signature, so a man-in-the-middle could spoof
+  the sender field. Signed envelopes are planned for a future protocol version.)
 
 ## Signing Scheme
 

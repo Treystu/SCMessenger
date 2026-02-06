@@ -26,7 +26,8 @@ mod tests {
         let info_before = core.get_identity_info();
         assert!(!info_before.initialized);
 
-        core.initialize_identity().expect("Failed to initialize identity");
+        core.initialize_identity()
+            .expect("Failed to initialize identity");
 
         let info_after = core.get_identity_info();
         assert!(info_after.initialized);
@@ -48,7 +49,10 @@ mod tests {
             .prepare_message(bob_pubkey, "Hello from mobile!".to_string())
             .unwrap();
 
-        let msg = bob.receive_message(envelope).unwrap();
-        assert_eq!(msg.text_content().unwrap(), "Hello from mobile!");
+        let msg_info = bob.receive_message(envelope).unwrap();
+        assert_eq!(
+            String::from_utf8(msg_info.payload).unwrap(),
+            "Hello from mobile!"
+        );
     }
 }

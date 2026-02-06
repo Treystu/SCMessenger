@@ -72,14 +72,20 @@ impl Outbox {
 
     /// Remove a specific message by ID (after successful delivery)
     pub fn remove(&mut self, message_id: &str) -> bool {
+        let mut found = false;
         for queue in self.queues.values_mut() {
             if let Some(pos) = queue.iter().position(|m| m.message_id == message_id) {
                 queue.remove(pos);
                 self.total -= 1;
-                return true;
+                found = true;
+                break;
             }
         }
-        false
+        if found {
+            // Clean up empty queues so peer_count() stays accurate
+            self.queues.retain(|_, q| !q.is_empty());
+        }
+        found
     }
 
     /// Drain all messages for a peer (for batch delivery)
