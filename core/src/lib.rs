@@ -5,6 +5,9 @@
 //
 // If the answer is no, it doesn't belong in Phase 0.
 
+// Allow clippy lint triggered by UniFFI-generated scaffolding code
+#![allow(clippy::empty_line_after_doc_comments)]
+
 pub mod crypto;
 pub mod identity;
 pub mod message;
