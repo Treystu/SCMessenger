@@ -1,0 +1,77 @@
+namespace scmessenger_core {
+};
+
+// ============================================================================
+// IDENTITY
+// ============================================================================
+
+dictionary IdentityInfo {
+    string? identity_id;
+    string? public_key_hex;
+    boolean initialized;
+};
+
+dictionary SignatureResult {
+    bytes signature;
+    string public_key_hex;
+};
+
+// ============================================================================
+// MAIN INTERFACE
+// ============================================================================
+
+interface IronCore {
+    constructor();
+    [Name=with_storage]
+    constructor(string storage_path);
+
+    // Lifecycle
+    [Throws=IronCoreError]
+    void start();
+    void stop();
+    boolean is_running();
+
+    // Identity & Cryptography
+    [Throws=IronCoreError]
+    void initialize_identity();
+    IdentityInfo get_identity_info();
+    [Throws=IronCoreError]
+    SignatureResult sign_data(bytes data);
+    [Throws=IronCoreError]
+    boolean verify_signature(bytes data, bytes signature, string public_key_hex);
+
+    // Messaging
+    [Throws=IronCoreError]
+    bytes prepare_message(string recipient_public_key_hex, string text);
+    u32 outbox_count();
+    u32 inbox_count();
+
+    // Delegate
+    void set_delegate(CoreDelegate? delegate);
+};
+
+// ============================================================================
+// CALLBACKS
+// ============================================================================
+
+callback interface CoreDelegate {
+    void on_peer_discovered(string peer_id);
+    void on_peer_disconnected(string peer_id);
+    void on_message_received(string sender_id, string message_id, bytes data);
+    void on_receipt_received(string message_id, string status);
+};
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+[Error]
+enum IronCoreError {
+    "NotInitialized",
+    "AlreadyRunning",
+    "StorageError",
+    "CryptoError",
+    "NetworkError",
+    "InvalidInput",
+    "Internal",
+};

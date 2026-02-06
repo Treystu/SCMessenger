@@ -1,0 +1,17 @@
+[package]
+name = "scmessenger-mobile"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+name = "scmessenger_mobile"
+
+[dependencies]
+scmessenger-core = { path = "../core" }
+uniffi = { workspace = true }
+
+[build-dependencies]
+uniffi = { workspace = true, features = ["build"] }
