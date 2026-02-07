@@ -7,6 +7,7 @@
 // - All behaviours from behaviour.rs
 
 use super::behaviour::{IronCoreBehaviour, MessageRequest, MessageResponse};
+use super::discovery::DiscoveryConfig;
 use anyhow::Result;
 use libp2p::{identity::Keypair, kad, swarm::SwarmEvent, Multiaddr, PeerId};
 use tokio::sync::mpsc;
@@ -151,9 +152,16 @@ impl SwarmHandle {
 ///
 /// This spawns a tokio task that runs the swarm event loop.
 /// The returned handle can be used to send commands to the swarm.
+///
+/// # Arguments
+/// * `keypair` - The node's cryptographic identity
+/// * `listen_addr` - Address to listen on (defaults to 0.0.0.0:0)
+/// * `discovery_config` - Configuration controlling discovery behavior
+/// * `event_tx` - Channel to send swarm events to the application
 pub async fn start_swarm(
     keypair: Keypair,
     listen_addr: Option<Multiaddr>,
+    discovery_config: DiscoveryConfig,
     event_tx: mpsc::Sender<SwarmEvent2>,
 ) -> Result<SwarmHandle> {
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
@@ -164,7 +172,8 @@ pub async fn start_swarm(
             libp2p::yamux::Config::default,
         )?
         .with_behaviour(|key| {
-            IronCoreBehaviour::new(key).expect("Failed to create network behaviour")
+            IronCoreBehaviour::new(key, &discovery_config)
+                .expect("Failed to create network behaviour")
         })?
         .with_swarm_config(|cfg| {
             cfg.with_idle_connection_timeout(std::time::Duration::from_secs(300))

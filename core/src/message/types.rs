@@ -71,6 +71,22 @@ pub struct Envelope {
     pub ciphertext: Vec<u8>,
 }
 
+/// A signed envelope — envelope with an outer Ed25519 signature.
+///
+/// This structure adds an outer signature layer over the complete envelope,
+/// allowing relay nodes or intermediate systems to verify sender identity
+/// without requiring decryption. The sender's public key is included for
+/// verification.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignedEnvelope {
+    /// The serialized Envelope (typically bincode-encoded)
+    pub envelope_data: Vec<u8>,
+    /// Ed25519 signature over envelope_data (64 bytes)
+    pub sender_signature: Vec<u8>,
+    /// Sender's Ed25519 public key (32 bytes) — for signature verification
+    pub sender_public_key: Vec<u8>,
+}
+
 impl Message {
     /// Create a new text message
     pub fn text(sender_id: String, recipient_id: String, text: &str) -> Self {

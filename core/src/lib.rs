@@ -9,8 +9,10 @@
 #![allow(clippy::empty_line_after_doc_comments)]
 
 pub mod crypto;
+pub mod drift;
 pub mod identity;
 pub mod message;
+pub mod routing;
 pub mod store;
 pub mod transport;
 
@@ -116,10 +118,6 @@ pub trait CoreDelegate: Send + Sync {
 // IRON CORE IMPLEMENTATION
 // ============================================================================
 
-// TODO: Outbox and Inbox are currently in-memory only. On restart, up to 10K
-// queued outgoing messages and 50K dedup IDs are lost, breaking store-and-forward
-// guarantees and allowing duplicate acceptance. Persist both stores via sled
-// (similar to identity key storage) in a future phase.
 pub struct IronCore {
     /// Identity and key management
     identity: Arc<RwLock<identity::IdentityManager>>,
@@ -153,9 +151,9 @@ impl IronCore {
             )
             .try_init();
 
-        let identity = if let Some(path) = storage_path {
+        let identity = if let Some(path) = storage_path.as_ref() {
             Arc::new(RwLock::new(
-                IdentityManager::with_path(&path).unwrap_or_else(|e| {
+                IdentityManager::with_path(path).unwrap_or_else(|e| {
                     tracing::warn!(
                         "Failed to open persistent storage at '{}': {}. Falling back to in-memory storage. \
                          Identity keys will NOT persist across restarts.",
@@ -168,10 +166,40 @@ impl IronCore {
             Arc::new(RwLock::new(IdentityManager::new()))
         };
 
+        let (outbox, inbox) = if let Some(path) = storage_path {
+            // Open sled database for outbox and inbox
+            match sled::open(&path) {
+                Ok(db) => {
+                    let outbox = store::Outbox::with_storage(db.clone())
+                        .unwrap_or_else(|e| {
+                            tracing::warn!("Failed to open persistent outbox: {}. Using in-memory outbox.", e);
+                            store::Outbox::new()
+                        });
+
+                    let inbox = store::Inbox::with_storage(db)
+                        .unwrap_or_else(|e| {
+                            tracing::warn!("Failed to open persistent inbox: {}. Using in-memory inbox.", e);
+                            store::Inbox::new()
+                        });
+
+                    (outbox, inbox)
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to open sled database at '{}': {}. Using in-memory stores.",
+                        path, e
+                    );
+                    (store::Outbox::new(), store::Inbox::new())
+                }
+            }
+        } else {
+            (store::Outbox::new(), store::Inbox::new())
+        };
+
         Self {
             identity,
-            outbox: Arc::new(RwLock::new(store::Outbox::new())),
-            inbox: Arc::new(RwLock::new(store::Inbox::new())),
+            outbox: Arc::new(RwLock::new(outbox)),
+            inbox: Arc::new(RwLock::new(inbox)),
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
         }
