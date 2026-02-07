@@ -231,6 +231,15 @@ pub fn decrypt_beacon(
     group_key: &[u8; 32],
     beacon_data: &[u8],
 ) -> Result<BeaconPayload, BeaconError> {
+    decrypt_beacon_with_period(group_key, beacon_data, 15 * 60)
+}
+
+/// Attempt to decrypt a discovery beacon with custom rotation period
+pub fn decrypt_beacon_with_period(
+    group_key: &[u8; 32],
+    beacon_data: &[u8],
+    rotation_period_secs: u64,
+) -> Result<BeaconPayload, BeaconError> {
     if beacon_data.len() < 25 {
         return Err(BeaconError::InvalidFormat);
     }
@@ -246,7 +255,7 @@ pub fn decrypt_beacon(
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| BeaconError::EncryptionError(e.to_string()))?;
-    let current_epoch = (now.as_secs() / (15 * 60)) as u32;
+    let current_epoch = (now.as_secs() / rotation_period_secs) as u32;
 
     // Try current epoch and ±1 window (should cover clock skew)
     for epoch_offset in -1..=1 {

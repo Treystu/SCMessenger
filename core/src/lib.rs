@@ -12,9 +12,14 @@ pub mod crypto;
 pub mod drift;
 pub mod identity;
 pub mod message;
+pub mod mobile;
+pub mod platform;
+pub mod privacy;
+pub mod relay;
 pub mod routing;
 pub mod store;
 pub mod transport;
+pub mod wasm_support;
 
 use parking_lot::RwLock;
 use std::sync::Arc;
