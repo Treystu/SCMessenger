@@ -313,15 +313,16 @@ impl NeighborhoodTable {
     }
 
     /// Evict the gateway with the stalest timestamp
-    fn evict_stalest_gateway(&mut self, now: u64) {
+    fn evict_stalest_gateway(&mut self, _now: u64) {
         if self.gateways.is_empty() {
             return;
         }
 
+        // Evict the gateway with the oldest last_updated timestamp
         let gateway_to_evict = *self
             .gateways
             .values()
-            .min_by_key(|g| now - g.last_updated)
+            .min_by_key(|g| g.last_updated)
             .map(|g| &g.gateway_id)
             .unwrap();
 
@@ -639,12 +640,16 @@ mod tests {
         let gateway4 = make_peer_id(4);
 
         table.update_gateway(gateway1, make_cell_summary(vec![make_hint(1)]), 1, TransportType::TCP);
+        // Manually backdate gateway1 to make it the stalest
+        if let Some(g) = table.gateways.get_mut(&gateway1) {
+            g.last_updated -= 1000;
+        }
         table.update_gateway(gateway2, make_cell_summary(vec![make_hint(2)]), 1, TransportType::TCP);
         table.update_gateway(gateway3, make_cell_summary(vec![make_hint(3)]), 1, TransportType::TCP);
 
         assert_eq!(table.gateway_count(), 3);
 
-        // Adding 4th gateway should evict the stalest
+        // Adding 4th gateway should evict gateway1 (the stalest)
         table.update_gateway(gateway4, make_cell_summary(vec![make_hint(4)]), 1, TransportType::TCP);
 
         assert_eq!(table.gateway_count(), 3);
