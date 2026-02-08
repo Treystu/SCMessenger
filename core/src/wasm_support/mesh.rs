@@ -120,7 +120,11 @@ impl WasmMeshNode {
             .map_err(|_| MeshError::InvalidEnvelope)?;
 
         // Priority is byte 16 (0-255), use it for eviction priority
-        let priority = if envelope.len() > 16 { envelope[16] } else { 100 };
+        let priority = if envelope.len() > 16 {
+            envelope[16]
+        } else {
+            100
+        };
 
         match self.store.insert(message_id, envelope, priority) {
             Ok(is_new) => {

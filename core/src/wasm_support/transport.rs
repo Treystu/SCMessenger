@@ -99,11 +99,7 @@ impl WebTransportManager {
     }
 
     /// Add a relay connection
-    pub fn add_relay(
-        &self,
-        url: String,
-        peer_id: [u8; 32],
-    ) -> Result<(), TransportError> {
+    pub fn add_relay(&self, url: String, peer_id: [u8; 32]) -> Result<(), TransportError> {
         if !url.starts_with("ws://") && !url.starts_with("wss://") {
             return Err(TransportError::InvalidUrl(url));
         }
@@ -193,10 +189,7 @@ impl WebTransportManager {
     }
 
     /// Add a WebRTC data channel
-    pub fn add_channel(
-        &self,
-        peer_id: [u8; 32],
-    ) -> Result<(), TransportError> {
+    pub fn add_channel(&self, peer_id: [u8; 32]) -> Result<(), TransportError> {
         let peer_key = hex::encode(peer_id);
 
         let mut channels = self.webrtc_channels.write();
@@ -399,9 +392,7 @@ mod tests {
         manager
             .queue_outgoing(url.clone(), b"test1".to_vec())
             .unwrap();
-        manager
-            .queue_outgoing(url, b"test2".to_vec())
-            .unwrap();
+        manager.queue_outgoing(url, b"test2".to_vec()).unwrap();
 
         let pending = manager.pending_outgoing();
         assert_eq!(pending.len(), 2);

@@ -160,11 +160,7 @@ impl WasmStore {
 
     /// Get total bytes used
     pub fn total_bytes(&self) -> usize {
-        self.messages
-            .read()
-            .values()
-            .map(|e| e.data.len())
-            .sum()
+        self.messages.read().values().map(|e| e.data.len()).sum()
     }
 
     /// Get all message IDs

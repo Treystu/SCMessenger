@@ -183,7 +183,8 @@ pub async fn start_swarm(
     // Start listening
     let addr = match listen_addr {
         Some(addr) => addr,
-        None => "/ip4/0.0.0.0/tcp/0".parse()
+        None => "/ip4/0.0.0.0/tcp/0"
+            .parse()
             .map_err(|e| anyhow::anyhow!("Failed to parse default listen address: {}", e))?,
     };
     swarm.listen_on(addr)?;

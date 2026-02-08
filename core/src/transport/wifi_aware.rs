@@ -11,10 +11,10 @@
 
 use async_trait::async_trait;
 use libp2p::PeerId;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use thiserror::Error;
 use tracing::{info, warn};
 
@@ -169,22 +169,13 @@ pub trait WifiAwarePlatformBridge: Send + Sync {
     async fn close_data_path(&self, peer_id: &str) -> Result<(), WifiAwareError>;
 
     /// Register callback for service discovered event
-    fn set_on_service_discovered(
-        &self,
-        callback: Box<dyn Fn(String, Vec<u8>, i32) + Send + Sync>,
-    );
+    fn set_on_service_discovered(&self, callback: Box<dyn Fn(String, Vec<u8>, i32) + Send + Sync>);
 
     /// Register callback for message received on data path
-    fn set_on_message_received(
-        &self,
-        callback: Box<dyn Fn(String, Vec<u8>) + Send + Sync>,
-    );
+    fn set_on_message_received(&self, callback: Box<dyn Fn(String, Vec<u8>) + Send + Sync>);
 
     /// Register callback for data path confirmation
-    fn set_on_data_path_confirmed(
-        &self,
-        callback: Box<dyn Fn(String, SocketAddr) + Send + Sync>,
-    );
+    fn set_on_data_path_confirmed(&self, callback: Box<dyn Fn(String, SocketAddr) + Send + Sync>);
 }
 
 // ============================================================================
@@ -271,16 +262,9 @@ impl WifiAwarePlatformBridge for MockWifiAwareBridge {
     ) {
     }
 
-    fn set_on_message_received(
-        &self,
-        _callback: Box<dyn Fn(String, Vec<u8>) + Send + Sync>,
-    ) {
-    }
+    fn set_on_message_received(&self, _callback: Box<dyn Fn(String, Vec<u8>) + Send + Sync>) {}
 
-    fn set_on_data_path_confirmed(
-        &self,
-        _callback: Box<dyn Fn(String, SocketAddr) + Send + Sync>,
-    ) {
+    fn set_on_data_path_confirmed(&self, _callback: Box<dyn Fn(String, SocketAddr) + Send + Sync>) {
     }
 }
 
@@ -325,14 +309,10 @@ impl WifiAwareTransport {
 
     /// Initialize and check WiFi Aware availability
     pub async fn initialize(&self) -> Result<(), WifiAwareError> {
-        let available = self
-            .bridge
-            .is_available()
-            .await
-            .map_err(|e| {
-                warn!("WiFi Aware availability check failed: {}", e);
-                e
-            })?;
+        let available = self.bridge.is_available().await.map_err(|e| {
+            warn!("WiFi Aware availability check failed: {}", e);
+            e
+        })?;
 
         if !available {
             *self.state.write() = WifiAwareState::Unavailable;
@@ -379,11 +359,17 @@ impl WifiAwareTransport {
         }
 
         self.bridge
-            .subscribe_to_services(&self.config.service_name, self.config.match_filter.as_deref())
+            .subscribe_to_services(
+                &self.config.service_name,
+                self.config.match_filter.as_deref(),
+            )
             .await?;
 
         *self.state.write() = WifiAwareState::Subscribing;
-        info!("Subscribed to WiFi Aware service: {}", self.config.service_name);
+        info!(
+            "Subscribed to WiFi Aware service: {}",
+            self.config.service_name
+        );
         Ok(())
     }
 
@@ -417,10 +403,7 @@ impl WifiAwareTransport {
         }
 
         // Create data path via platform bridge
-        let socket_addr = self
-            .bridge
-            .create_data_path(&peer_id_str, pmk)
-            .await?;
+        let socket_addr = self.bridge.create_data_path(&peer_id_str, pmk).await?;
 
         let data_path_info = DataPathInfo {
             peer_id,
@@ -445,9 +428,7 @@ impl WifiAwareTransport {
     pub async fn close_data_path(&self, peer_id: PeerId) -> Result<(), WifiAwareError> {
         let peer_id_str = peer_id.to_string();
 
-        self.bridge
-            .close_data_path(&peer_id_str)
-            .await?;
+        self.bridge.close_data_path(&peer_id_str).await?;
 
         self.data_paths.write().remove(&peer_id_str);
 
@@ -457,28 +438,17 @@ impl WifiAwareTransport {
 
     /// Get information about an active data path
     pub fn get_data_path(&self, peer_id: &PeerId) -> Option<DataPathInfo> {
-        self.data_paths
-            .read()
-            .get(&peer_id.to_string())
-            .cloned()
+        self.data_paths.read().get(&peer_id.to_string()).cloned()
     }
 
     /// Get all active data paths
     pub fn get_active_data_paths(&self) -> Vec<DataPathInfo> {
-        self.data_paths
-            .read()
-            .values()
-            .cloned()
-            .collect()
+        self.data_paths.read().values().cloned().collect()
     }
 
     /// Get discovered peers
     pub fn get_discovered_peers(&self) -> Vec<DiscoveredPeer> {
-        self.discovered_peers
-            .read()
-            .values()
-            .cloned()
-            .collect()
+        self.discovered_peers.read().values().cloned().collect()
     }
 
     /// Register a discovered peer
@@ -491,12 +461,7 @@ impl WifiAwareTransport {
     /// Shutdown WiFi Aware transport
     pub async fn shutdown(&self) -> Result<(), WifiAwareError> {
         // Close all data paths
-        let paths: Vec<_> = self
-            .data_paths
-            .read()
-            .values()
-            .map(|p| p.peer_id)
-            .collect();
+        let paths: Vec<_> = self.data_paths.read().values().map(|p| p.peer_id).collect();
 
         for peer_id in paths {
             let _ = self.close_data_path(peer_id).await;
@@ -530,8 +495,7 @@ fn estimate_bandwidth_from_rssi(rssi: i32) -> u64 {
 
     let rssi = rssi.max(RSSI_POOR).min(RSSI_EXCELLENT);
     let ratio = (rssi - RSSI_POOR) as f64 / (RSSI_EXCELLENT - RSSI_POOR) as f64;
-    let bandwidth = MIN_BANDWIDTH as f64
-        + (MAX_BANDWIDTH - MIN_BANDWIDTH) as f64 * ratio;
+    let bandwidth = MIN_BANDWIDTH as f64 + (MAX_BANDWIDTH - MIN_BANDWIDTH) as f64 * ratio;
 
     bandwidth as u64
 }
@@ -592,8 +556,8 @@ mod tests {
         config.publish_enabled = false;
 
         let bridge = Arc::new(MockWifiAwareBridge::new(true));
-        let transport = WifiAwareTransport::new(config, bridge)
-            .expect("Failed to create transport");
+        let transport =
+            WifiAwareTransport::new(config, bridge).expect("Failed to create transport");
 
         transport.initialize().await.unwrap();
         assert!(transport.publish_service().await.is_err());
@@ -708,8 +672,8 @@ mod tests {
         config.max_data_paths = 2;
 
         let bridge = Arc::new(MockWifiAwareBridge::new(true));
-        let transport = WifiAwareTransport::new(config, bridge)
-            .expect("Failed to create transport");
+        let transport =
+            WifiAwareTransport::new(config, bridge).expect("Failed to create transport");
 
         transport.initialize().await.unwrap();
 
