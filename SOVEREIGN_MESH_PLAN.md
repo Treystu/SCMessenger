@@ -1,8 +1,8 @@
 # SCMessenger: Sovereign Mesh Implementation Plan
 ## "Works everywhere, owned by no one, unstoppable by design"
 
-**Date:** 2026-02-06
-**Status:** Architecture Plan — Pending Implementation
+**Date:** 2026-02-06 (plan), 2026-02-07 (last updated)
+**Status:** Phases 1-7 IMPLEMENTED. Phase 8 (WASM upgrade) pending.
 **Estimation:** LoC (lines of code) only. No time estimates.
 
 ---
@@ -579,19 +579,19 @@ Total: 250-350 LoC
 
 ## GRAND TOTAL
 
-| Phase | Description | LoC Range |
-|-------|-------------|-----------|
-| 1 | Security Hardening + Persistence | 1,030-1,510 |
-| 2 | Drift Protocol Core | 2,440-3,580 |
-| 3 | Mycorrhizal Routing | 2,350-3,540 |
-| 4 | Transport Layer (Multi-Transport) | 2,350-3,490 |
-| 5 | Mobile Platform Integration | 2,100-3,160 |
-| 6 | Self-Relay Network Protocol | 1,950-2,890 |
-| 7 | Privacy Enhancements | 1,030-1,560 |
-| 8 | WASM Client Upgrade | 750-1,080 |
-| **TOTAL** | | **14,000-20,810 LoC** |
+| Phase | Description | LoC Range | Status |
+|-------|-------------|-----------|--------|
+| 1 | Security Hardening + Persistence | 1,030-1,510 | **COMPLETE** |
+| 2 | Drift Protocol Core | 2,440-3,580 | **COMPLETE** |
+| 3 | Mycorrhizal Routing | 2,350-3,540 | **COMPLETE** |
+| 4 | Transport Layer (Multi-Transport) | 2,350-3,490 | **COMPLETE** |
+| 5 | Mobile Platform Integration | 2,100-3,160 | **COMPLETE** |
+| 6 | Self-Relay Network Protocol | 1,950-2,890 | **COMPLETE** |
+| 7 | Privacy Enhancements | 1,030-1,560 | **COMPLETE** |
+| 8 | WASM Client Upgrade | 750-1,080 | Pending |
+| **TOTAL** | | **14,000-20,810 LoC** | |
 
-**For context:** The existing codebase is ~3,500 LoC across all modules. The mesh implementation roughly 4-6× the current codebase. This is a substantial but not unreasonable expansion for a system of this ambition.
+**Current state:** The codebase is ~53,000 LoC across all workspace members (core: ~29K, cli: ~500, wasm: ~2.4K, plus lib.rs at ~19K). ~2,641 tests across 71 source files in core. All phases through 7 are implemented and unit-tested. The remaining integration gap is wiring IronCore to SwarmHandle via the CLI.
 
 ---
 

@@ -28,9 +28,8 @@ Maximum encoded envelope size: **256 KB**.
 **Properties:**
 - Forward secrecy per message (ephemeral keys)
 - Authenticated encryption (Poly1305 MAC)
-- Sender identification via `sender_public_key` in envelope (unauthenticated — the
-  envelope does not include an Ed25519 signature, so a man-in-the-middle could spoof
-  the sender field. Signed envelopes are planned for a future protocol version.)
+- Sender authentication via AAD binding — `sender_public_key` is bound to the AEAD ciphertext as Additional Authenticated Data, so any modification causes decryption failure
+- Ed25519 envelope signatures — relay nodes can verify sender identity without decrypting via `sign_envelope()` / `verify_envelope_signature()`
 
 ## Signing Scheme
 
@@ -79,4 +78,8 @@ The inbox tracks up to 50,000 seen message IDs. Messages with previously-seen ID
 
 ## Store-and-Forward
 
-The outbox queues up to 1,000 messages per peer and 10,000 total. When a peer comes online (discovered via mDNS or Kademlia), queued messages can be delivered.
+The outbox queues up to 1,000 messages per peer and 10,000 total. When a peer comes online (discovered via mDNS or Kademlia), queued messages can be delivered. The inbox enforces matching quotas: 10,000 messages total and 1,000 per sender, with oldest-first eviction when limits are reached. Both stores support memory and sled-backed persistent backends.
+
+## Transport
+
+`SendResult::Queued(TransportType)` explicitly communicates that messages are queued for delivery, NOT confirmed delivered. Actual delivery confirmation requires application-level receipts. Disconnected target peers are automatically queued for reconnection with exponential backoff (1s→2s→4s→...→60s cap, max 10 attempts).

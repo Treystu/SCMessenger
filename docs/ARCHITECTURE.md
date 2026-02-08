@@ -2,39 +2,104 @@
 
 ## Design Principles
 
-1. **No middleman.** Messages go directly between devices. No servers relay, store, or inspect them.
-2. **Crypto-first.** Every message is encrypted before it touches the network. Identity is a keypair, not an account.
-3. **Minimal viable scope.** Phase 0 is the messaging spine: identity, encryption, transport. Everything else comes later.
+1. **No middleman.** Every node IS the network. No third-party relays, no external infrastructure.
+2. **Crypto-first.** Every message is encrypted before it touches the network. Identity is a keypair, not an account. Key material zeroized on drop.
+3. **Relay = Messaging.** You cannot message without relaying. You cannot relay without messaging. Single toggle. This IS the incentive model.
+4. **Internet is a transport, not a dependency.** BLE, WiFi Direct, WiFi Aware, and physical proximity are equal transports.
 
 ## Module Map
 
 ```
-scmessenger-core/
+scmessenger-core/ (~29K LoC, 71 files, ~2,641 tests)
+
   identity/
-    keys.rs       Ed25519 keypair generation, signing, verification
+    keys.rs       Ed25519 keypair generation, signing, verification, Zeroize-on-Drop
     store.rs      Sled-backed persistent key storage
     mod.rs        IdentityManager (generate/load/sign/verify)
 
   crypto/
-    encrypt.rs    Per-message encryption: X25519 ECDH + XChaCha20-Poly1305
+    encrypt.rs    X25519 ECDH + XChaCha20-Poly1305, AAD-bound sender auth, envelope signatures
     mod.rs        Re-exports
 
   message/
-    types.rs      Message, Envelope, Receipt, DeliveryStatus
+    types.rs      Message, Envelope, SignedEnvelope, Receipt, DeliveryStatus
     codec.rs      Bincode encode/decode with size limits (256KB max)
     mod.rs        Re-exports
 
   store/
-    outbox.rs     Per-peer message queue for store-and-forward
-    inbox.rs      Message deduplication (50K ID tracking)
+    outbox.rs     Per-peer message queue with quotas (10K total, 1K/peer)
+    inbox.rs      Message dedup (50K IDs) + storage quotas (10K total, 1K/sender) with eviction
     mod.rs        Re-exports
 
   transport/
-    behaviour.rs  Combined libp2p NetworkBehaviour (request-response, gossipsub, kad, mdns, identify)
-    swarm.rs      Swarm lifecycle, command/event channels, SwarmHandle API
-    mod.rs        Re-exports
+    abstraction.rs  TransportTrait, TransportEvent, TransportType, TransportCapabilities
+    behaviour.rs    Combined libp2p NetworkBehaviour
+    swarm.rs        Swarm lifecycle, command/event channels, SwarmHandle API
+    manager.rs      Transport multiplexer, reconnection with exponential backoff, SendResult
+    discovery.rs    DiscoveryMode (Open/Manual/Dark/Silent)
+    escalation.rs   Transport escalation protocol (BLE→WiFi→Internet)
+    internet.rs     Internet relay mode
+    nat.rs          NAT traversal helpers
+    wifi_aware.rs   WiFi Aware transport (Android)
+    ble/            BLE transport (beacon, GATT, L2CAP, scanner)
+    mod.rs          Re-exports
 
-  lib.rs          IronCore facade: lifecycle, identity, messaging, delegate
+  drift/
+    envelope.rs   DriftEnvelope (compact binary, 154 bytes overhead)
+    frame.rs      DriftFrame (transport framing with CRC32)
+    compress.rs   LZ4 compress/decompress
+    sketch.rs     Bloom filter / Minisketch for set reconciliation
+    sync.rs       SyncProtocol (handshake, sketch exchange, transfer)
+    store.rs      CRDT MeshStore with priority-based eviction
+    relay.rs      RelayService (receive→store→forward)
+    policy.rs     RelayPolicy (auto-adjust, battery awareness)
+    mod.rs        Module root
+
+  routing/
+    local.rs        Layer 1 — Local cell topology (full adjacency)
+    neighborhood.rs Layer 2 — Neighborhood gossip (summarized awareness)
+    global.rs       Layer 3 — Global route table (internet-connected nodes)
+    engine.rs       Routing decision engine (layer cascade, multi-path, reputation)
+    mod.rs          Module root
+
+  relay/
+    server.rs         RelayServer (accept connections, store-and-forward)
+    client.rs         RelayClient (connect to known relays, push/pull sync)
+    protocol.rs       Relay wire protocol (handshake, auth, sync)
+    peer_exchange.rs  Exchange known relay addresses
+    bootstrap.rs      Bootstrap protocol (QR code, invite link, BLE discovery)
+    invite.rs         Invite system (friend introduces friend)
+    findmy.rs         Find My beacon integration (emergency backhaul)
+    mod.rs            Module root
+
+  privacy/
+    onion.rs    OnionEnvelope (layer, peel, construct)
+    circuit.rs  Circuit construction (select N hops, build onion)
+    cover.rs    Cover traffic generation
+    padding.rs  Message padding to fixed sizes
+    timing.rs   Randomized relay delays
+    mod.rs      Module root
+
+  mobile/
+    service.rs       Mobile service lifecycle
+    auto_adjust.rs   Smart auto-adjust (battery, charging, motion)
+    ios_strategy.rs  iOS composite background strategy
+    settings.rs      MeshSettings (serializable config)
+    mod.rs           Module root
+
+  platform/
+    service.rs       Platform service management
+    auto_adjust.rs   Platform-specific auto-adjust
+    settings.rs      Platform settings
+    mod.rs           Module root
+
+  wasm_support/
+    mesh.rs       Full mesh participation while tab open
+    transport.rs  WebRTC/WebSocket transport
+    storage.rs    OPFS-backed message store
+    mod.rs        Module root
+
+  lib.rs          IronCore facade: lifecycle, identity, messaging, delegate (~19K LoC)
   api.udl         UniFFI interface definition for mobile bindings
 ```
 

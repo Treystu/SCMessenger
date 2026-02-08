@@ -1389,7 +1389,7 @@ MCP servers wrap the Rust core via UniFFI bindings, exposing mesh operations as 
 
 ## 15. IMPLEMENTATION ROADMAP {#15-roadmap}
 
-### Phase 0: Foundation (Current State)
+### Phase 0: Foundation — COMPLETE
 - [x] X25519 + XChaCha20-Poly1305 encryption
 - [x] Ed25519 identity management
 - [x] libp2p transport (TCP + mDNS)
@@ -1397,58 +1397,69 @@ MCP servers wrap the Rust core via UniFFI bindings, exposing mesh operations as 
 - [x] WASM bindings
 - [x] UniFFI mobile bindings
 
-### Phase 1: Hardening (2-3 weeks)
-- [ ] Ed25519 envelope signatures (Section 1.1 of previous audit)
-- [ ] AAD binding for sender authentication
-- [ ] Persist outbox/inbox to sled
-- [ ] Discovery mode enum (Open/Manual/Dark/Silent)
-- [ ] Drift Envelope format (compact binary, Section 5.2)
-- [ ] LZ4 compression on plaintext before encryption
+### Phase 1: Hardening — COMPLETE
+- [x] Ed25519 envelope signatures
+- [x] AAD binding for sender authentication
+- [x] Persist outbox/inbox to sled
+- [x] Discovery mode enum (Open/Manual/Dark/Silent)
+- [x] Drift Envelope format (compact binary)
+- [x] LZ4 compression on plaintext before encryption
+- [x] Zeroize-on-Drop for all key material (KeyPair, IdentityKeys)
+- [x] Inbox storage quotas (10K total, 1K/sender) with oldest-first eviction
+- [x] Reconnection with exponential backoff (1s→60s cap, 10 max failures)
+- [x] SendResult::Queued — explicit non-delivery-confirmation type
+- [x] Full unwrap/expect/panic sweep — production code clean
 
-### Phase 2: Drift Protocol Core (4-6 weeks)
-- [ ] Bloom filter sync protocol (Section 5.4)
-- [ ] CRDT message store (Section 7.1)
-- [ ] Spray-and-Wait + PRoPHET routing (Section 6.1)
-- [ ] Priority scoring for sync (Section 5.4)
-- [ ] Transport escalation protocol (Section 4.4)
-- [ ] Vector clocks for message ordering
+### Phase 2: Drift Protocol Core — COMPLETE
+- [x] Bloom filter sync protocol
+- [x] CRDT message store
+- [x] Spray-and-Wait + PRoPHET routing
+- [x] Priority scoring for sync
+- [x] Transport escalation protocol
+- [x] Vector clocks for message ordering
 
-### Phase 3: Android Mesh Transport (3-4 weeks)
-- [ ] BLE L2CAP transport
-- [ ] Encrypted BLE discovery beacons (Section 3.1)
-- [ ] WiFi Aware discovery + data paths
-- [ ] Foreground service with mesh relay
-- [ ] VPN service alternative mode
-- [ ] Companion Device Manager for BLE keepalive
-- [ ] Drift GATT service (fallback, Section 13.2)
+### Phase 3: Transport Layer — COMPLETE
+- [x] BLE L2CAP transport
+- [x] Encrypted BLE discovery beacons
+- [x] WiFi Aware discovery + data paths
+- [x] Transport abstraction layer
+- [x] Transport manager (multiplexer)
+- [x] Drift GATT service (fallback)
 
-### Phase 4: iOS Mesh Transport (3-4 weeks)
-- [ ] CoreBluetooth background scanning + advertising
-- [ ] L2CAP channel data transfer
-- [ ] Composite background strategy (Section 9.1)
-- [ ] State preservation and restoration
-- [ ] Significant location change triggers
-- [ ] BGProcessingTask mesh sync
+### Phase 4: Mobile Platform — COMPLETE
+- [x] CoreBluetooth background scanning + advertising
+- [x] L2CAP channel data transfer
+- [x] Composite background strategy
+- [x] Foreground service with mesh relay
+- [x] Smart auto-adjust (battery, charging, motion)
+- [x] iOS-specific background strategy
+- [x] MeshSettings (serializable config)
 
-### Phase 5: Internet Bridge (2-3 weeks)
-- [ ] Nostr relay client (Rust)
-- [ ] Drift ↔ Nostr event conversion (Section 8.2)
-- [ ] Bridge trigger on connectivity change
-- [ ] Relay health monitoring
-- [ ] Multi-relay redundancy
+### Phase 5: Self-Relay Network — COMPLETE
+- [x] Relay server (accept connections, store-and-forward)
+- [x] Relay client (connect to known relays, push/pull sync)
+- [x] Relay wire protocol (handshake, auth, sync)
+- [x] Peer exchange (bootstrap)
+- [x] Invite system
+- [x] Find My beacon integration
 
-### Phase 6: MCP Servers (2 weeks)
-- [ ] mesh-node MCP server
-- [ ] mesh-bridge MCP server
-- [ ] mesh-monitor MCP server
-- [ ] AI agent integration examples
+### Phase 6: Privacy — COMPLETE
+- [x] Onion-layered relay (N layers of encryption)
+- [x] Circuit construction (select N hops)
+- [x] Cover traffic generation
+- [x] Message padding to fixed sizes
+- [x] Randomized relay delays (timing obfuscation)
 
-### Phase 7: Dedicated Hardware (4 weeks, parallel)
-- [ ] ESP32-S3 relay firmware (BLE + WiFi)
-- [ ] Solar power management
-- [ ] LoRa transport (optional, for long-range)
-- [ ] Weatherproof enclosure design
-- [ ] Deploy scripts for community relay stations
+### Phase 7: WASM Support — COMPLETE
+- [x] Browser mesh participation
+- [x] WebRTC/WebSocket transport
+- [x] OPFS-backed message store
+
+### Remaining Work
+- [ ] Wire IronCore (crypto/storage) to SwarmHandle (network) via CLI
+- [ ] MCP servers (mesh-node, mesh-bridge, mesh-monitor)
+- [ ] Dedicated hardware relay (ESP32/RPi)
+- [ ] Full integration testing across all transports
 
 ---
 

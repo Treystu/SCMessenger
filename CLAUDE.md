@@ -52,9 +52,14 @@ The gap is wiring `IronCore` (crypto/storage) to `SwarmHandle` (network) via the
 - **LoC estimates ONLY.** Never use time-based estimates (days, weeks, months). All planning uses lines-of-code estimates for effort sizing.
 - Break phases into concrete deliverables with LoC ranges.
 
+## Codebase Stats
+- 71 .rs files in core/src/ across 12 modules
+- ~53,000 lines of Rust across workspace (core: ~29K, lib.rs: ~19K, cli: ~500, wasm: ~2.4K)
+- ~2,641 test functions
+
 ## Known Technical Debt
 **unwrap() / expect() / panic!() sweep — COMPLETED**
-- Full sweep of all 68 .rs files in core/src/ (Feb 2026)
+- Full sweep of all 71 .rs files in core/src/ (Feb 2026)
 - Production code is CLEAN: only 5 issues found and fixed across 52 files
   - `transport/swarm.rs`: expect→map_err on behaviour builder, unwrap→? on address parse
   - `drift/sync.rs`: simplified map/flatten to and_then (2 locations)
