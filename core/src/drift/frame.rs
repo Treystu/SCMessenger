@@ -3,6 +3,15 @@
 use super::DriftError;
 use crc32fast::Hasher;
 
+/// Maximum time to wait for a complete frame to arrive (Slow Loris mitigation).
+/// If a sender trickles bytes slower than this deadline, the connection is dropped
+/// to prevent transport slot exhaustion.
+pub const FRAME_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Maximum allowed frame payload size (64 KB). Prevents memory exhaustion
+/// from a malicious length field claiming enormous payloads.
+pub const FRAME_MAX_PAYLOAD: usize = 65_535;
+
 /// Drift Frame wraps a payload for transport over unreliable networks
 ///
 /// Format (total overhead: 7 bytes):
@@ -111,6 +120,14 @@ impl DriftFrame {
         // Read length (2 bytes, LE)
         let length = u16::from_le_bytes([data[0], data[1]]) as usize;
 
+        // Reject oversized frames before allocating (Slow Loris / memory exhaustion mitigation)
+        if length > FRAME_MAX_PAYLOAD + 1 {
+            return Err(DriftError::BufferTooShort {
+                need: FRAME_MAX_PAYLOAD,
+                got: length,
+            });
+        }
+
         // Calculate expected total size: 2 (length) + length + 4 (CRC32)
         let expected_total = 2 + length + 4;
         if data.len() != expected_total {
@@ -148,6 +165,58 @@ impl DriftFrame {
             frame_type,
             payload,
         })
+    }
+
+    /// Read a complete frame from an async byte stream with timeout.
+    ///
+    /// Enforces `FRAME_READ_TIMEOUT` on the entire read operation to prevent
+    /// Slow Loris attacks where a malicious peer trickles bytes to tie up
+    /// transport slots indefinitely.
+    ///
+    /// # Arguments
+    /// * `reader` - Any async reader (socket, BLE stream, etc.)
+    ///
+    /// # Returns
+    /// * `Ok(DriftFrame)` if a valid frame was read within the deadline
+    /// * `Err(DriftError::Timeout)` if the deadline expired
+    /// * `Err(DriftError::*)` for protocol/IO errors
+    #[cfg(feature = "tokio")]
+    pub async fn read_with_timeout<R: tokio::io::AsyncReadExt + Unpin>(
+        reader: &mut R,
+    ) -> Result<Self, DriftError> {
+        use tokio::time::timeout;
+
+        timeout(FRAME_READ_TIMEOUT, async {
+            // Read length header (2 bytes)
+            let mut len_buf = [0u8; 2];
+            reader.read_exact(&mut len_buf).await
+                .map_err(|e| DriftError::IoError(e.to_string()))?;
+
+            let length = u16::from_le_bytes(len_buf) as usize;
+
+            // Validate payload size before allocating
+            if length > FRAME_MAX_PAYLOAD + 1 {
+                return Err(DriftError::BufferTooShort {
+                    need: FRAME_MAX_PAYLOAD,
+                    got: length,
+                });
+            }
+
+            // Read remaining: type + payload + CRC32
+            let remaining = length + 4; // length field value + 4 bytes CRC32
+            let mut rest = vec![0u8; remaining];
+            reader.read_exact(&mut rest).await
+                .map_err(|e| DriftError::IoError(e.to_string()))?;
+
+            // Reassemble full frame buffer and parse
+            let mut full = Vec::with_capacity(2 + remaining);
+            full.extend_from_slice(&len_buf);
+            full.extend_from_slice(&rest);
+
+            Self::from_bytes(&full)
+        })
+        .await
+        .map_err(|_| DriftError::Timeout)?
     }
 }
 

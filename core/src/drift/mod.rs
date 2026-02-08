@@ -26,7 +26,7 @@ pub mod relay;
 pub mod policy;
 
 pub use envelope::{DriftEnvelope, EnvelopeType};
-pub use frame::{DriftFrame, FrameType};
+pub use frame::{DriftFrame, FrameType, FRAME_READ_TIMEOUT, FRAME_MAX_PAYLOAD};
 pub use store::{MeshStore, MessageId, StoredEnvelope};
 pub use sketch::IBLT;
 pub use sync::{SyncMessage, SyncSession, SyncState, merge_envelopes};
@@ -58,6 +58,12 @@ pub enum DriftError {
 
     #[error("Invalid frame type: {0}")]
     InvalidFrameType(u8),
+
+    #[error("Frame read timeout — possible Slow Loris attack")]
+    Timeout,
+
+    #[error("IO error: {0}")]
+    IoError(String),
 }
 
 /// Current Drift Protocol version

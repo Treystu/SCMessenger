@@ -102,8 +102,10 @@ pub fn encrypt_message(
     // ECDH: ephemeral_secret × recipient_public → shared_secret
     let shared_secret = ephemeral_secret.diffie_hellman(&recipient_x25519);
 
-    // KDF: derive symmetric key
-    let mut symmetric_key = derive_key(shared_secret.as_bytes());
+    // KDF: derive symmetric key (copy shared secret bytes so we can zeroize)
+    let mut shared_secret_bytes = *shared_secret.as_bytes();
+    let mut symmetric_key = derive_key(&shared_secret_bytes);
+    shared_secret_bytes.zeroize(); // Clear ECDH shared secret
 
     // Generate random nonce (24 bytes for XChaCha20)
     let mut nonce_bytes = [0u8; 24];
@@ -126,15 +128,19 @@ pub fn encrypt_message(
         .encrypt(nonce, payload)
         .map_err(|e| anyhow::anyhow!("Encryption failed: {}", e))?;
 
-    // Zeroize key material
-    symmetric_key.zeroize();
-
-    Ok(crate::message::Envelope {
+    // Build envelope before zeroizing
+    let envelope = crate::message::Envelope {
         sender_public_key: sender_public_key_bytes.to_vec(),
         ephemeral_public_key: ephemeral_public.to_bytes().to_vec(),
         nonce: nonce_bytes.to_vec(),
         ciphertext,
-    })
+    };
+
+    // Zeroize all key material and intermediates
+    symmetric_key.zeroize();
+    nonce_bytes.zeroize();
+
+    Ok(envelope)
 }
 
 /// Decrypt an envelope using the recipient's signing key.
@@ -171,12 +177,15 @@ pub fn decrypt_message(
     let mut ephemeral_bytes = [0u8; 32];
     ephemeral_bytes.copy_from_slice(&envelope.ephemeral_public_key);
     let ephemeral_public = X25519PublicKey::from(ephemeral_bytes);
+    ephemeral_bytes.zeroize(); // Clear intermediate buffer
 
     // ECDH: recipient_secret × ephemeral_public → shared_secret
     let shared_secret = recipient_x25519_secret.diffie_hellman(&ephemeral_public);
 
     // KDF: same derivation as encryption
-    let mut symmetric_key = derive_key(shared_secret.as_bytes());
+    let mut shared_secret_bytes = *shared_secret.as_bytes();
+    let mut symmetric_key = derive_key(&shared_secret_bytes);
+    shared_secret_bytes.zeroize(); // Clear ECDH shared secret
 
     // Reconstruct nonce
     let nonce = XNonce::from_slice(&envelope.nonce);

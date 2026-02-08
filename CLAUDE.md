@@ -45,8 +45,8 @@ All core modules are built and unit-tested through Phase 7 (Privacy):
 - **Mobile** (UniFFI bindings) — complete
 - **WASM** (browser bindings) — complete
 
-The gap is wiring `IronCore` (crypto/storage) to `SwarmHandle` (network) via the CLI.
-`prepare_message()` outputs encrypted bytes. `SwarmHandle.send_message()` sends bytes. Connect them.
+**Integration gap resolved:** CLI now passes `DiscoveryConfig::default()` to `start_swarm()`,
+completing the IronCore → SwarmHandle wiring. `prepare_message()` → encrypted bytes → `send_message()`.
 
 ## Planning & Estimation
 - **LoC estimates ONLY.** Never use time-based estimates (days, weeks, months). All planning uses lines-of-code estimates for effort sizing.
@@ -56,6 +56,13 @@ The gap is wiring `IronCore` (crypto/storage) to `SwarmHandle` (network) via the
 - 71 .rs files in core/src/ across 12 modules
 - ~53,000 lines of Rust across workspace (core: ~29K, lib.rs: ~19K, cli: ~500, wasm: ~2.4K)
 - ~2,641 test functions
+
+## Hardening (Feb 2026)
+**Dynamic analysis fixes — COMPLETED**
+- **Resume Storm** (HIGH): `peers_needing_reconnect()` now rate-limited to `RECONNECT_MAX_CONCURRENT` (3) peers per tick with stagger, preventing OS kill on app resume
+- **Zombie Loop** (HIGH): Inbox `eviction_high_water_mark` rejects messages older than most-recently-evicted, preventing infinite re-sync from peers. Persisted in sled for SledInbox.
+- **Slow Loris** (MEDIUM): `FRAME_READ_TIMEOUT` (5s) constant + `FRAME_MAX_PAYLOAD` (64KB) limit + async `read_with_timeout()` on DriftFrame, plus `Timeout` and `IoError` variants on DriftError
+- **Key Leak** (LOW): All intermediate crypto buffers zeroized — `shared_secret_bytes`, `ephemeral_bytes`, `nonce_bytes` in encrypt.rs (encrypt + decrypt paths)
 
 ## Known Technical Debt
 **unwrap() / expect() / panic!() sweep — COMPLETED**
