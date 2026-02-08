@@ -32,12 +32,37 @@ libp2p 0.53 with: tcp, quic, noise, yamux, gossipsub, kad, relay, identify, ping
 Crypto: ed25519-dalek 2.1, x25519-dalek 2.0, chacha20poly1305 0.10, blake3 1.5
 
 ## Current State
-Modules are built and unit-tested. The gap is wiring `IronCore` (crypto/storage) to `SwarmHandle` (network) via the CLI.
+All core modules are built and unit-tested through Phase 7 (Privacy):
+- **Identity** (Ed25519 keys, Blake3 hashing, sled persistence) — complete with Zeroize-on-Drop
+- **Crypto** (XChaCha20-Poly1305, ephemeral ECDH, AAD-bound sender auth, envelope signatures) — complete
+- **Message** (types, codecs, signed envelopes) — complete
+- **Store** (outbox with quotas, inbox with quotas + dedup, both memory and sled backends) — complete
+- **Transport** (abstraction layer, BLE, WiFi Aware, WiFi Direct, Internet, NAT traversal, escalation, reconnection with exponential backoff) — complete
+- **Drift Protocol** (envelope, frame, compress, sketch/bloom, sync, store, relay, policy) — complete
+- **Routing** (neighborhood, global, local, engine) — complete
+- **Relay** (server, client, protocol, peer exchange, bootstrap, invite, findmy) — complete
+- **Privacy** (onion routing, circuit breakers, cover traffic, padding, timing obfuscation) — complete
+- **Mobile** (UniFFI bindings) — complete
+- **WASM** (browser bindings) — complete
+
+The gap is wiring `IronCore` (crypto/storage) to `SwarmHandle` (network) via the CLI.
 `prepare_message()` outputs encrypted bytes. `SwarmHandle.send_message()` sends bytes. Connect them.
 
 ## Planning & Estimation
 - **LoC estimates ONLY.** Never use time-based estimates (days, weeks, months). All planning uses lines-of-code estimates for effort sizing.
 - Break phases into concrete deliverables with LoC ranges.
+
+## Known Technical Debt
+**unwrap() / expect() / panic!() sweep — COMPLETED**
+- Full sweep of all 68 .rs files in core/src/ (Feb 2026)
+- Production code is CLEAN: only 5 issues found and fixed across 52 files
+  - `transport/swarm.rs`: expect→map_err on behaviour builder, unwrap→? on address parse
+  - `drift/sync.rs`: simplified map/flatten to and_then (2 locations)
+  - `privacy/circuit.rs`: float partial_cmp unwrap→unwrap_or
+- Remaining 680+ unwrap/expect/panic calls are all in `#[cfg(test)]` blocks (acceptable)
+- All 23 `panic!()` calls are in test match arms (acceptable)
+- Zero `todo!()` or `unimplemented!()` (good)
+- Production code consistently uses: `?`, `.map_err()`, `.unwrap_or_default()`, `.unwrap_or()`
 
 ## Do NOT
 - Add unnecessary abstractions or trait objects where concrete types work

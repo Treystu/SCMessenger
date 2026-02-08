@@ -53,7 +53,7 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 
 # Crypto & Identity
 cesride = "0.3"
-ed25519-dalek = { version = "2.1", features = ["serde"] }
+ed25519-dalek = { version = "2.1", features = ["serde", "zeroize"] }
 x25519-dalek = { version = "2.0", features = ["static_secrets"] }
 curve25519-dalek = "4.1"
 chacha20poly1305 = "0.10"

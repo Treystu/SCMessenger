@@ -222,7 +222,7 @@ impl CircuitBuilder {
             let best_peer = peers_in_segment
                 .iter()
                 .filter(|p| !used_peers.contains(&p.peer_id))
-                .max_by(|a, b| a.reliability_score.partial_cmp(&b.reliability_score).unwrap());
+                .max_by(|a, b| a.reliability_score.partial_cmp(&b.reliability_score).unwrap_or(std::cmp::Ordering::Equal));
 
             if let Some(peer) = best_peer {
                 selected.push((peer.peer_id.clone(), peer.public_key.clone()));

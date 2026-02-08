@@ -173,7 +173,7 @@ pub async fn start_swarm(
         )?
         .with_behaviour(|key| {
             IronCoreBehaviour::new(key, &discovery_config)
-                .expect("Failed to create network behaviour")
+                .map_err(|e| anyhow::anyhow!("Failed to create network behaviour: {}", e))
         })?
         .with_swarm_config(|cfg| {
             cfg.with_idle_connection_timeout(std::time::Duration::from_secs(300))
@@ -181,7 +181,11 @@ pub async fn start_swarm(
         .build();
 
     // Start listening
-    let addr = listen_addr.unwrap_or_else(|| "/ip4/0.0.0.0/tcp/0".parse().unwrap());
+    let addr = match listen_addr {
+        Some(addr) => addr,
+        None => "/ip4/0.0.0.0/tcp/0".parse()
+            .map_err(|e| anyhow::anyhow!("Failed to parse default listen address: {}", e))?,
+    };
     swarm.listen_on(addr)?;
 
     // Set Kademlia to server mode (so we can be found)

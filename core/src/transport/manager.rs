@@ -9,8 +9,8 @@ use crate::transport::abstraction::{
 use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::SystemTime;
-use tracing::{debug, info};
+use std::time::{Duration, SystemTime};
+use tracing::{debug, info, warn};
 
 /// State of a registered transport
 #[derive(Debug, Clone)]
@@ -99,6 +99,87 @@ impl Default for OutgoingQueue {
     }
 }
 
+// ============================================================================
+// RECONNECTION WITH EXPONENTIAL BACKOFF
+// ============================================================================
+
+/// Minimum backoff interval for reconnection attempts
+const RECONNECT_BASE_INTERVAL: Duration = Duration::from_secs(1);
+
+/// Maximum backoff interval (capped to prevent absurd waits)
+const RECONNECT_MAX_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Backoff multiplier per failed attempt
+const RECONNECT_BACKOFF_MULTIPLIER: u32 = 2;
+
+/// Maximum consecutive failures before giving up on a peer
+const RECONNECT_MAX_FAILURES: u32 = 10;
+
+/// Per-peer reconnection state with exponential backoff
+#[derive(Debug, Clone)]
+pub struct ReconnectionState {
+    /// The peer we want to reconnect to
+    pub peer_id: [u8; 32],
+    /// Last known transport(s) for this peer
+    pub last_transports: HashSet<TransportType>,
+    /// Last known address bytes (opaque to manager, passed through to transport)
+    pub last_addr: Vec<u8>,
+    /// Number of consecutive failed reconnection attempts
+    pub failures: u32,
+    /// When the next reconnection attempt is allowed
+    pub next_attempt_at: SystemTime,
+    /// When this peer was first lost
+    pub disconnected_at: SystemTime,
+}
+
+impl ReconnectionState {
+    fn new(peer_id: [u8; 32], transports: HashSet<TransportType>, addr: Vec<u8>) -> Self {
+        Self {
+            peer_id,
+            last_transports: transports,
+            last_addr: addr,
+            failures: 0,
+            next_attempt_at: SystemTime::now() + RECONNECT_BASE_INTERVAL,
+            disconnected_at: SystemTime::now(),
+        }
+    }
+
+    /// Calculate the next backoff interval after a failed attempt
+    fn backoff_interval(&self) -> Duration {
+        let base = RECONNECT_BASE_INTERVAL.as_millis() as u64;
+        let multiplier = RECONNECT_BACKOFF_MULTIPLIER
+            .checked_pow(self.failures)
+            .unwrap_or(u32::MAX) as u64;
+        let interval_ms = base.saturating_mul(multiplier);
+        let capped = Duration::from_millis(interval_ms).min(RECONNECT_MAX_INTERVAL);
+        capped
+    }
+
+    /// Record a failed reconnection attempt, advancing the backoff
+    pub fn record_failure(&mut self) {
+        self.failures += 1;
+        self.next_attempt_at = SystemTime::now() + self.backoff_interval();
+    }
+
+    /// Whether this peer has exceeded the maximum failure count
+    pub fn is_exhausted(&self) -> bool {
+        self.failures >= RECONNECT_MAX_FAILURES
+    }
+
+    /// Whether enough time has passed to attempt reconnection
+    pub fn is_ready(&self) -> bool {
+        SystemTime::now() >= self.next_attempt_at
+    }
+}
+
+/// Result of queuing a send — explicitly NOT a delivery confirmation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SendResult {
+    /// Message queued for delivery via the specified transport.
+    /// This does NOT mean the peer received it.
+    Queued(TransportType),
+}
+
 /// Manages multiple transports and provides intelligent transport selection
 pub struct TransportManager {
     /// Transport state per transport type
@@ -112,6 +193,12 @@ pub struct TransportManager {
 
     /// Last time each peer was seen
     peer_last_seen: Arc<RwLock<HashMap<[u8; 32], SystemTime>>>,
+
+    /// Peers we want to stay connected to (survive disconnects)
+    target_peers: Arc<RwLock<HashMap<[u8; 32], Vec<u8>>>>,
+
+    /// Peers awaiting reconnection with backoff state
+    reconnection_queue: Arc<RwLock<HashMap<[u8; 32], ReconnectionState>>>,
 }
 
 impl TransportManager {
@@ -122,6 +209,8 @@ impl TransportManager {
             peer_transports: Arc::new(RwLock::new(HashMap::new())),
             outgoing: Arc::new(RwLock::new(OutgoingQueue::new())),
             peer_last_seen: Arc::new(RwLock::new(HashMap::new())),
+            target_peers: Arc::new(RwLock::new(HashMap::new())),
+            reconnection_queue: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -160,6 +249,24 @@ impl TransportManager {
                     transports.remove(&transport);
                     if transports.is_empty() {
                         peer_transports.remove(&peer_id);
+
+                        // If this was a target peer, queue for reconnection
+                        let target_peers = self.target_peers.read();
+                        if let Some(addr) = target_peers.get(&peer_id) {
+                            let mut reconnect_queue = self.reconnection_queue.write();
+                            if !reconnect_queue.contains_key(&peer_id) {
+                                let mut known_transports = HashSet::new();
+                                known_transports.insert(transport);
+                                reconnect_queue.insert(
+                                    peer_id,
+                                    ReconnectionState::new(peer_id, known_transports, addr.clone()),
+                                );
+                                info!(
+                                    "Peer {:x?} lost on {} — queued for reconnection",
+                                    &peer_id[..8], transport
+                                );
+                            }
+                        }
                     }
                 }
                 debug!("Peer {:x?} disconnected from {}", &peer_id[..8], transport);
@@ -181,8 +288,12 @@ impl TransportManager {
         }
     }
 
-    /// Send data to a peer using best available transport
-    pub fn send_to_peer(&self, peer_id: [u8; 32], data: Vec<u8>, priority: u8) -> Result<TransportType, TransportError> {
+    /// Queue data for delivery to a peer via the best available transport.
+    ///
+    /// **Important:** Returns `SendResult::Queued`, which means the message is
+    /// in the outgoing queue — NOT that the peer has received it. Actual delivery
+    /// confirmation requires an application-level receipt (see `CoreDelegate::on_receipt_received`).
+    pub fn send_to_peer(&self, peer_id: [u8; 32], data: Vec<u8>, priority: u8) -> Result<SendResult, TransportError> {
         let best = self.best_transport_for_peer(peer_id)?;
 
         let mut outgoing = self.outgoing.write();
@@ -194,7 +305,7 @@ impl TransportManager {
             created_at: SystemTime::now(),
         });
 
-        Ok(best)
+        Ok(SendResult::Queued(best))
     }
 
     /// Determine the best transport for a peer
@@ -288,7 +399,71 @@ impl TransportManager {
         outgoing.items.clone()
     }
 
-    /// Maintenance: clean up stale peer entries
+    // --------------------------------------------------------------------
+    // RECONNECTION MANAGEMENT
+    // --------------------------------------------------------------------
+
+    /// Register a peer as a "target peer" — one we want to stay connected to.
+    /// When a target peer disconnects, it's automatically queued for reconnection
+    /// with exponential backoff.
+    pub fn add_target_peer(&self, peer_id: [u8; 32], addr: Vec<u8>) {
+        self.target_peers.write().insert(peer_id, addr);
+        debug!("Added target peer {:x?}", &peer_id[..8]);
+    }
+
+    /// Remove a peer from the target set. Stops reconnection attempts.
+    pub fn remove_target_peer(&self, peer_id: &[u8; 32]) {
+        self.target_peers.write().remove(peer_id);
+        self.reconnection_queue.write().remove(peer_id);
+        debug!("Removed target peer {:x?}", &peer_id[..8]);
+    }
+
+    /// Returns peers that are due for a reconnection attempt.
+    /// The caller is responsible for actually dialing these peers and then
+    /// calling `record_reconnect_success` or `record_reconnect_failure`.
+    pub fn peers_needing_reconnect(&self) -> Vec<ReconnectionState> {
+        let queue = self.reconnection_queue.read();
+        queue
+            .values()
+            .filter(|state| state.is_ready() && !state.is_exhausted())
+            .cloned()
+            .collect()
+    }
+
+    /// Record a successful reconnection — removes from reconnect queue.
+    pub fn record_reconnect_success(&self, peer_id: &[u8; 32]) {
+        self.reconnection_queue.write().remove(peer_id);
+        info!("Reconnected to peer {:x?}", &peer_id[..8]);
+    }
+
+    /// Record a failed reconnection attempt — advances the backoff timer.
+    pub fn record_reconnect_failure(&self, peer_id: &[u8; 32]) {
+        let mut queue = self.reconnection_queue.write();
+        if let Some(state) = queue.get_mut(peer_id) {
+            state.record_failure();
+            if state.is_exhausted() {
+                warn!(
+                    "Peer {:x?} exhausted {} reconnection attempts — giving up",
+                    &peer_id[..8],
+                    RECONNECT_MAX_FAILURES
+                );
+            } else {
+                debug!(
+                    "Reconnection to {:x?} failed (attempt {}), next try in {:?}",
+                    &peer_id[..8],
+                    state.failures,
+                    state.backoff_interval()
+                );
+            }
+        }
+    }
+
+    /// How many peers are currently in the reconnection queue
+    pub fn reconnection_queue_len(&self) -> usize {
+        self.reconnection_queue.read().len()
+    }
+
+    /// Maintenance: clean up stale peer entries and prune exhausted reconnections
     pub fn tick(&self) {
         let now = SystemTime::now();
         let mut last_seen = self.peer_last_seen.write();
@@ -303,6 +478,16 @@ impl TransportManager {
                 }
                 Err(_) => false,
                 Ok(_) => true,
+            }
+        });
+
+        // Prune exhausted reconnection entries
+        self.reconnection_queue.write().retain(|peer_id, state| {
+            if state.is_exhausted() {
+                info!("Pruning exhausted reconnection entry for {:x?}", &peer_id[..8]);
+                false
+            } else {
+                true
             }
         });
     }
@@ -655,7 +840,7 @@ mod tests {
 
         let result = manager.send_to_peer(peer_id, vec![1, 2, 3], 5);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), TransportType::BLE);
+        assert_eq!(result.unwrap(), SendResult::Queued(TransportType::BLE));
 
         let pending = manager.pending_sends();
         assert_eq!(pending.len(), 1);
@@ -755,5 +940,186 @@ mod tests {
 
         let peers = manager.connected_peers();
         assert_eq!(peers.len(), 1);
+    }
+
+    // ====================================================================
+    // RECONNECTION TESTS
+    // ====================================================================
+
+    #[test]
+    fn test_target_peer_queued_for_reconnect_on_disconnect() {
+        let manager = TransportManager::new();
+        let peer_id = create_peer_id(1);
+
+        // Register as target peer
+        manager.add_target_peer(peer_id, vec![1, 2, 3]);
+
+        // Discover and then disconnect
+        let discovered = TransportEvent::PeerDiscovered {
+            peer_id,
+            transport: TransportType::BLE,
+            addr: vec![1, 2, 3],
+        };
+        manager.handle_event(discovered);
+        assert_eq!(manager.connected_peers().len(), 1);
+
+        let disconnected = TransportEvent::PeerDisconnected {
+            peer_id,
+            transport: TransportType::BLE,
+        };
+        manager.handle_event(disconnected);
+
+        // Should be in reconnection queue
+        assert_eq!(manager.reconnection_queue_len(), 1);
+    }
+
+    #[test]
+    fn test_non_target_peer_not_queued_for_reconnect() {
+        let manager = TransportManager::new();
+        let peer_id = create_peer_id(1);
+
+        // Discover WITHOUT registering as target
+        let discovered = TransportEvent::PeerDiscovered {
+            peer_id,
+            transport: TransportType::BLE,
+            addr: vec![1],
+        };
+        manager.handle_event(discovered);
+
+        let disconnected = TransportEvent::PeerDisconnected {
+            peer_id,
+            transport: TransportType::BLE,
+        };
+        manager.handle_event(disconnected);
+
+        // Should NOT be in reconnection queue
+        assert_eq!(manager.reconnection_queue_len(), 0);
+    }
+
+    #[test]
+    fn test_reconnection_backoff_increases() {
+        let mut state = ReconnectionState::new(
+            create_peer_id(1),
+            HashSet::new(),
+            vec![],
+        );
+
+        let first = state.backoff_interval();
+        state.record_failure();
+        let second = state.backoff_interval();
+        state.record_failure();
+        let third = state.backoff_interval();
+
+        // Each interval should be larger (exponential backoff)
+        assert!(second > first);
+        assert!(third > second);
+    }
+
+    #[test]
+    fn test_reconnection_backoff_capped_at_max() {
+        let mut state = ReconnectionState::new(
+            create_peer_id(1),
+            HashSet::new(),
+            vec![],
+        );
+
+        // Hit it many times to saturate
+        for _ in 0..20 {
+            state.record_failure();
+        }
+
+        assert!(state.backoff_interval() <= RECONNECT_MAX_INTERVAL);
+    }
+
+    #[test]
+    fn test_reconnection_exhaustion() {
+        let mut state = ReconnectionState::new(
+            create_peer_id(1),
+            HashSet::new(),
+            vec![],
+        );
+
+        assert!(!state.is_exhausted());
+
+        for _ in 0..RECONNECT_MAX_FAILURES {
+            state.record_failure();
+        }
+
+        assert!(state.is_exhausted());
+    }
+
+    #[test]
+    fn test_reconnect_success_removes_from_queue() {
+        let manager = TransportManager::new();
+        let peer_id = create_peer_id(1);
+
+        manager.add_target_peer(peer_id, vec![1]);
+
+        let discovered = TransportEvent::PeerDiscovered {
+            peer_id,
+            transport: TransportType::BLE,
+            addr: vec![1],
+        };
+        manager.handle_event(discovered);
+
+        let disconnected = TransportEvent::PeerDisconnected {
+            peer_id,
+            transport: TransportType::BLE,
+        };
+        manager.handle_event(disconnected);
+
+        assert_eq!(manager.reconnection_queue_len(), 1);
+
+        manager.record_reconnect_success(&peer_id);
+        assert_eq!(manager.reconnection_queue_len(), 0);
+    }
+
+    #[test]
+    fn test_remove_target_peer_stops_reconnection() {
+        let manager = TransportManager::new();
+        let peer_id = create_peer_id(1);
+
+        manager.add_target_peer(peer_id, vec![1]);
+
+        let discovered = TransportEvent::PeerDiscovered {
+            peer_id,
+            transport: TransportType::BLE,
+            addr: vec![1],
+        };
+        manager.handle_event(discovered);
+
+        let disconnected = TransportEvent::PeerDisconnected {
+            peer_id,
+            transport: TransportType::BLE,
+        };
+        manager.handle_event(disconnected);
+
+        assert_eq!(manager.reconnection_queue_len(), 1);
+
+        manager.remove_target_peer(&peer_id);
+        assert_eq!(manager.reconnection_queue_len(), 0);
+    }
+
+    #[test]
+    fn test_send_result_is_queued_not_delivered() {
+        let manager = TransportManager::new();
+        let peer_id = create_peer_id(1);
+
+        let caps = TransportCapabilities::for_transport(TransportType::BLE);
+        manager.register_transport(TransportType::BLE, caps);
+
+        let event = TransportEvent::PeerDiscovered {
+            peer_id,
+            transport: TransportType::BLE,
+            addr: vec![1],
+        };
+        manager.handle_event(event);
+
+        let result = manager.send_to_peer(peer_id, vec![1, 2, 3], 5).unwrap();
+
+        // Explicitly verify it's Queued, not some "Delivered" status
+        match result {
+            SendResult::Queued(transport) => assert_eq!(transport, TransportType::BLE),
+        }
     }
 }

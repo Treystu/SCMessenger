@@ -10,6 +10,12 @@ use tracing::debug;
 /// Maximum tracked message IDs (for deduplication)
 const MAX_SEEN_IDS: usize = 50_000;
 
+/// Maximum stored messages across all senders (matches outbox MAX_TOTAL_QUEUED)
+const MAX_STORED_MESSAGES: usize = 10_000;
+
+/// Maximum stored messages per sender
+const MAX_MESSAGES_PER_SENDER: usize = 1_000;
+
 #[derive(Debug, Error, Clone)]
 pub enum InboxError {
     #[error("Storage error: {0}")]
@@ -59,6 +65,12 @@ impl MemoryInbox {
     }
 
     /// Record a received message. Returns false if duplicate.
+    ///
+    /// Enforces storage quotas:
+    /// - `MAX_STORED_MESSAGES` (10,000) total across all senders
+    /// - `MAX_MESSAGES_PER_SENDER` (1,000) per individual sender
+    ///
+    /// When quotas are hit, the oldest messages are evicted to make room.
     pub fn receive(&mut self, msg: ReceivedMessage) -> bool {
         if self.seen_ids.contains(&msg.message_id) {
             return false; // Duplicate
@@ -75,14 +87,48 @@ impl MemoryInbox {
             }
         }
 
+        // Evict oldest message globally if at total capacity
+        if self.total >= MAX_STORED_MESSAGES {
+            self.evict_oldest_message();
+        }
+
+        // Evict oldest from this sender if at per-sender capacity
+        let sender_msgs = self.messages.entry(msg.sender_id.clone()).or_default();
+        if sender_msgs.len() >= MAX_MESSAGES_PER_SENDER {
+            sender_msgs.remove(0); // Remove oldest (front of vec)
+            self.total -= 1;
+        }
+
         // Store message
-        self.messages
-            .entry(msg.sender_id.clone())
-            .or_default()
-            .push(msg);
+        sender_msgs.push(msg);
         self.total += 1;
 
         true // New message
+    }
+
+    /// Evict the single oldest message across all senders
+    fn evict_oldest_message(&mut self) {
+        let mut oldest_sender: Option<String> = None;
+        let mut oldest_time = u64::MAX;
+
+        for (sender, msgs) in &self.messages {
+            if let Some(first) = msgs.first() {
+                if first.received_at < oldest_time {
+                    oldest_time = first.received_at;
+                    oldest_sender = Some(sender.clone());
+                }
+            }
+        }
+
+        if let Some(sender) = oldest_sender {
+            if let Some(msgs) = self.messages.get_mut(&sender) {
+                msgs.remove(0);
+                self.total -= 1;
+                if msgs.is_empty() {
+                    self.messages.remove(&sender);
+                }
+            }
+        }
     }
 
     /// Get all messages from a specific sender
@@ -165,6 +211,10 @@ impl SledInbox {
     }
 
     /// Record a received message. Returns false if duplicate.
+    ///
+    /// Enforces the same storage quotas as MemoryInbox:
+    /// - `MAX_STORED_MESSAGES` (10,000) total
+    /// - `MAX_MESSAGES_PER_SENDER` (1,000) per sender
     pub fn receive(&self, msg: ReceivedMessage) -> Result<bool, InboxError> {
         if self.is_duplicate(&msg.message_id) {
             return Ok(false); // Duplicate
@@ -179,6 +229,24 @@ impl SledInbox {
             .insert(msg.message_id.as_bytes(), timestamp_bytes)
             .map_err(|e| InboxError::StorageError(e.to_string()))?;
 
+        // Evict oldest globally if at capacity
+        let current_total = self.total.load(std::sync::atomic::Ordering::Relaxed);
+        if current_total >= MAX_STORED_MESSAGES {
+            self.evict_oldest_message()?;
+        }
+
+        // Evict oldest from this sender if at per-sender capacity
+        let sender_prefix = format!("{}:", msg.sender_id);
+        let sender_count = self.messages_tree.scan_prefix(sender_prefix.as_bytes()).count();
+        if sender_count >= MAX_MESSAGES_PER_SENDER {
+            // Remove the first (oldest) entry for this sender
+            if let Some(Ok((oldest_key, _))) = self.messages_tree.scan_prefix(sender_prefix.as_bytes()).next() {
+                self.messages_tree.remove(oldest_key)
+                    .map_err(|e| InboxError::StorageError(e.to_string()))?;
+                self.total.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+
         // Store message
         let key = Self::make_messages_key(&msg.sender_id, &msg.message_id);
         let value = bincode::serialize(&msg)
@@ -192,6 +260,30 @@ impl SledInbox {
         debug!("Received message {} from {}", msg.message_id, msg.sender_id);
 
         Ok(true) // New message
+    }
+
+    /// Evict the single oldest message across all senders
+    fn evict_oldest_message(&self) -> Result<(), InboxError> {
+        let mut oldest_key: Option<sled::IVec> = None;
+        let mut oldest_time = u64::MAX;
+
+        for entry in self.messages_tree.iter() {
+            let (key, value) = entry.map_err(|e| InboxError::StorageError(e.to_string()))?;
+            if let Ok(msg) = bincode::deserialize::<ReceivedMessage>(&value) {
+                if msg.received_at < oldest_time {
+                    oldest_time = msg.received_at;
+                    oldest_key = Some(key);
+                }
+            }
+        }
+
+        if let Some(key) = oldest_key {
+            self.messages_tree.remove(key)
+                .map_err(|e| InboxError::StorageError(e.to_string()))?;
+            self.total.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        }
+
+        Ok(())
     }
 
     /// Get all messages from a specific sender

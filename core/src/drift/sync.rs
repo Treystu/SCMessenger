@@ -203,13 +203,10 @@ impl SyncSession {
         let missing_envelopes: Vec<Vec<u8>> = they_have_not
             .iter()
             .filter_map(|msg_id| {
-                store.get(msg_id).map(|env| {
-                    bincode::serialize(env)
-                        .map_err(|_| ())
-                        .ok()
+                store.get(msg_id).and_then(|env| {
+                    bincode::serialize(env).ok()
                 })
             })
-            .flatten()
             .collect();
 
         self.state = SyncState::ProcessingResponse;
@@ -281,13 +278,10 @@ impl SyncSession {
         let missing_envelopes: Vec<Vec<u8>> = we_have_only
             .iter()
             .filter_map(|msg_id| {
-                store.get(msg_id).map(|env| {
-                    bincode::serialize(env)
-                        .map_err(|_| ())
-                        .ok()
+                store.get(msg_id).and_then(|env| {
+                    bincode::serialize(env).ok()
                 })
             })
-            .flatten()
             .collect();
 
         self.state = SyncState::Complete;

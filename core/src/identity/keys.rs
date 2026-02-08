@@ -4,7 +4,9 @@ use anyhow::Result;
 use ed25519_dalek::{Signature as Ed25519Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use zeroize::{Zeroize, Zeroizing};
 
-/// Key pair for signing and verification
+/// Key pair for signing and verification.
+///
+/// Implements Drop to zeroize the signing key material from memory.
 #[derive(Clone)]
 pub struct KeyPair {
     pub signing_key: SigningKey,
@@ -27,7 +29,15 @@ impl KeyPair {
     }
 }
 
-/// Identity keys (signing + optional encryption)
+impl Drop for KeyPair {
+    fn drop(&mut self) {
+        self.signing_key.zeroize();
+    }
+}
+
+/// Identity keys (signing + optional encryption).
+///
+/// Implements Drop to zeroize the signing key material from memory.
 #[derive(Clone)]
 pub struct IdentityKeys {
     pub signing_key: SigningKey,
@@ -93,6 +103,12 @@ impl IdentityKeys {
                 .map_err(|_| anyhow::anyhow!("Invalid key bytes"))?,
         );
         Ok(Self { signing_key })
+    }
+}
+
+impl Drop for IdentityKeys {
+    fn drop(&mut self) {
+        self.signing_key.zeroize();
     }
 }
 
