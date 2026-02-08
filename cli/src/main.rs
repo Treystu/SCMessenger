@@ -4,7 +4,7 @@
 
 use clap::{Parser, Subcommand};
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
-use scmessenger_core::transport::{self, SwarmEvent};
+use scmessenger_core::transport::{self, DiscoveryConfig, SwarmEvent};
 use scmessenger_core::IronCore;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -119,7 +119,13 @@ async fn cmd_listen(core: IronCore, port: u16) -> anyhow::Result<()> {
     // Start the swarm
     let listen_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse()?;
     let (event_tx, mut event_rx) = mpsc::channel::<SwarmEvent>(256);
-    let swarm_handle = transport::start_swarm(net_keypair, Some(listen_addr), event_tx).await?;
+    let swarm_handle = transport::start_swarm(
+        net_keypair,
+        Some(listen_addr),
+        DiscoveryConfig::default(),
+        event_tx,
+    )
+    .await?;
 
     let peers: PeerMap = Arc::new(Mutex::new(HashMap::new()));
 
@@ -247,7 +253,7 @@ async fn cmd_listen(core: IronCore, port: u16) -> anyhow::Result<()> {
                     .await
                 {
                     Ok(()) => {
-                        println!("[sent] Message delivered to {}", target_peer_id);
+                        println!("[sent] Message queued for {}", target_peer_id);
                     }
                     Err(e) => {
                         println!("[err] Send failed: {}", e);

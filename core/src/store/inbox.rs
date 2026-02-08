@@ -47,6 +47,10 @@ pub struct MemoryInbox {
     messages: HashMap<String, Vec<ReceivedMessage>>,
     /// Total stored messages
     total: usize,
+    /// High water mark: timestamp of the most recently evicted message.
+    /// Messages older than this are silently rejected to prevent Zombie Loop —
+    /// where peers endlessly re-sync messages that were already evicted.
+    eviction_high_water_mark: u64,
 }
 
 impl MemoryInbox {
@@ -56,6 +60,7 @@ impl MemoryInbox {
             seen_order: VecDeque::new(),
             messages: HashMap::new(),
             total: 0,
+            eviction_high_water_mark: 0,
         }
     }
 
@@ -74,6 +79,17 @@ impl MemoryInbox {
     pub fn receive(&mut self, msg: ReceivedMessage) -> bool {
         if self.seen_ids.contains(&msg.message_id) {
             return false; // Duplicate
+        }
+
+        // Zombie Loop prevention: reject messages older than the high water mark.
+        // Once we evict a message due to capacity, any re-sync of that message
+        // (or older) from peers is silently dropped to prevent infinite re-sync cycles.
+        if self.eviction_high_water_mark > 0 && msg.received_at <= self.eviction_high_water_mark {
+            debug!(
+                "Rejecting message {} — older than eviction high water mark ({})",
+                msg.message_id, self.eviction_high_water_mark
+            );
+            return false;
         }
 
         // Track for dedup
@@ -106,7 +122,8 @@ impl MemoryInbox {
         true // New message
     }
 
-    /// Evict the single oldest message across all senders
+    /// Evict the single oldest message across all senders.
+    /// Updates the high water mark to prevent Zombie Loop re-sync.
     fn evict_oldest_message(&mut self) {
         let mut oldest_sender: Option<String> = None;
         let mut oldest_time = u64::MAX;
@@ -126,6 +143,11 @@ impl MemoryInbox {
                 self.total -= 1;
                 if msgs.is_empty() {
                     self.messages.remove(&sender);
+                }
+                // Advance high water mark — any message at or before this timestamp
+                // is now considered "already processed and evicted"
+                if oldest_time > self.eviction_high_water_mark {
+                    self.eviction_high_water_mark = oldest_time;
                 }
             }
         }
@@ -177,6 +199,9 @@ pub struct SledInbox {
     seen_tree: sled::Tree,
     messages_tree: sled::Tree,
     total: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    /// High water mark: timestamp of the most recently evicted message.
+    /// Messages older than this are silently rejected (Zombie Loop prevention).
+    eviction_high_water_mark: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl SledInbox {
@@ -193,11 +218,19 @@ impl SledInbox {
         // Count existing messages
         let total = messages_tree.iter().count();
 
+        // Load persisted high water mark if it exists
+        let hwm = db.open_tree("inbox_meta")
+            .ok()
+            .and_then(|tree| tree.get(b"high_water_mark").ok().flatten())
+            .and_then(|bytes| bincode::deserialize::<u64>(&bytes).ok())
+            .unwrap_or(0);
+
         Ok(Self {
             db,
             seen_tree,
             messages_tree,
             total: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(total)),
+            eviction_high_water_mark: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(hwm)),
         })
     }
 
@@ -218,6 +251,16 @@ impl SledInbox {
     pub fn receive(&self, msg: ReceivedMessage) -> Result<bool, InboxError> {
         if self.is_duplicate(&msg.message_id) {
             return Ok(false); // Duplicate
+        }
+
+        // Zombie Loop prevention: reject messages older than the high water mark
+        let hwm = self.eviction_high_water_mark.load(std::sync::atomic::Ordering::Relaxed);
+        if hwm > 0 && msg.received_at <= hwm {
+            debug!(
+                "Rejecting message {} — older than eviction high water mark ({})",
+                msg.message_id, hwm
+            );
+            return Ok(false);
         }
 
         // Store seen ID with timestamp
@@ -262,7 +305,8 @@ impl SledInbox {
         Ok(true) // New message
     }
 
-    /// Evict the single oldest message across all senders
+    /// Evict the single oldest message across all senders.
+    /// Updates the high water mark to prevent Zombie Loop re-sync.
     fn evict_oldest_message(&self) -> Result<(), InboxError> {
         let mut oldest_key: Option<sled::IVec> = None;
         let mut oldest_time = u64::MAX;
@@ -281,6 +325,18 @@ impl SledInbox {
             self.messages_tree.remove(key)
                 .map_err(|e| InboxError::StorageError(e.to_string()))?;
             self.total.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+
+            // Advance high water mark and persist it
+            let current_hwm = self.eviction_high_water_mark.load(std::sync::atomic::Ordering::Relaxed);
+            if oldest_time > current_hwm {
+                self.eviction_high_water_mark.store(oldest_time, std::sync::atomic::Ordering::Relaxed);
+                // Persist to sled so it survives restarts
+                if let Ok(meta_tree) = self.db.open_tree("inbox_meta") {
+                    if let Ok(bytes) = bincode::serialize(&oldest_time) {
+                        let _ = meta_tree.insert(b"high_water_mark", bytes);
+                    }
+                }
+            }
         }
 
         Ok(())

@@ -115,6 +115,13 @@ const RECONNECT_BACKOFF_MULTIPLIER: u32 = 2;
 /// Maximum consecutive failures before giving up on a peer
 const RECONNECT_MAX_FAILURES: u32 = 10;
 
+/// Maximum peers to reconnect per tick cycle (prevents Resume Storm —
+/// all peers reconnecting simultaneously after app wake, overwhelming the OS)
+const RECONNECT_MAX_CONCURRENT: usize = 3;
+
+/// Minimum interval between successive reconnection dials (stagger)
+const RECONNECT_STAGGER_INTERVAL: Duration = Duration::from_millis(200);
+
 /// Per-peer reconnection state with exponential backoff
 #[derive(Debug, Clone)]
 pub struct ReconnectionState {
@@ -421,12 +428,44 @@ impl TransportManager {
     /// Returns peers that are due for a reconnection attempt.
     /// The caller is responsible for actually dialing these peers and then
     /// calling `record_reconnect_success` or `record_reconnect_failure`.
+    /// Returns peers ready for reconnection, rate-limited to prevent Resume Storm.
+    ///
+    /// After app resume, all disconnected peers become ready simultaneously.
+    /// This method caps the batch to `RECONNECT_MAX_CONCURRENT` peers per tick,
+    /// with staggered `next_attempt_at` times applied to remaining peers so they
+    /// spread across subsequent ticks instead of all firing at once.
     pub fn peers_needing_reconnect(&self) -> Vec<ReconnectionState> {
-        let queue = self.reconnection_queue.read();
-        queue
-            .values()
-            .filter(|state| state.is_ready() && !state.is_exhausted())
-            .cloned()
+        let mut queue = self.reconnection_queue.write();
+
+        let mut ready: Vec<[u8; 32]> = queue
+            .iter()
+            .filter(|(_, state)| state.is_ready() && !state.is_exhausted())
+            .map(|(id, _)| *id)
+            .collect();
+
+        // If more peers are ready than our concurrency limit, stagger the excess
+        if ready.len() > RECONNECT_MAX_CONCURRENT {
+            // Sort by disconnected_at so longest-waiting peers go first
+            ready.sort_by(|a, b| {
+                let a_disc = queue.get(a).map(|s| s.disconnected_at).unwrap_or(SystemTime::UNIX_EPOCH);
+                let b_disc = queue.get(b).map(|s| s.disconnected_at).unwrap_or(SystemTime::UNIX_EPOCH);
+                a_disc.cmp(&b_disc)
+            });
+
+            // Stagger the ones we're NOT returning this tick
+            for (i, peer_id) in ready[RECONNECT_MAX_CONCURRENT..].iter().enumerate() {
+                if let Some(state) = queue.get_mut(peer_id) {
+                    state.next_attempt_at = SystemTime::now()
+                        + RECONNECT_STAGGER_INTERVAL * (i as u32 + 1);
+                }
+            }
+
+            ready.truncate(RECONNECT_MAX_CONCURRENT);
+        }
+
+        ready
+            .iter()
+            .filter_map(|id| queue.get(id).cloned())
             .collect()
     }
 
