@@ -1,12 +1,8 @@
 [workspace]
-members = [
-    "core",
-    "mobile",
-    "cli",
-]
+members = ["core", "mobile", "cli", "wasm"]
 # wasm excluded from default members: requires wasm32 target
 # Build with: cargo build -p scmessenger-wasm --target wasm32-unknown-unknown
-exclude = ["wasm"]
+# exclude = ["wasm"]
 resolver = "2"
 
 [workspace.package]
@@ -17,7 +13,7 @@ authors = ["SC Team"]
 
 [workspace.dependencies]
 # Async Runtime
-tokio = { version = "1.35", features = ["full"] }
+tokio = { version = "1.35", features = ["sync", "macros", "rt", "time"] }
 async-trait = "0.1"
 futures = "0.3"
 
@@ -25,21 +21,16 @@ futures = "0.3"
 # Phase 0: TCP + QUIC for native, mDNS for LAN, Kademlia for WAN
 # websocket deferred to Phase 1 (browser interop)
 libp2p = { version = "0.53", features = [
-    "tcp",
-    "quic",
-    "dns",
-    "noise",
-    "yamux",
-    "gossipsub",
-    "kad",
-    "relay",
-    "identify",
-    "ping",
-    "mdns",
-    "macros",
-    "request-response",
-    "cbor",
-    "tokio",
+  "noise",
+  "yamux",
+  "gossipsub",
+  "kad",
+  "relay",
+  "identify",
+  "ping",
+  "macros",
+  "request-response",
+  "cbor",
 ] }
 
 # Serialization

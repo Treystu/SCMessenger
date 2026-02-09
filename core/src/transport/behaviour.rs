@@ -8,8 +8,10 @@
 // - identify: exchange peer metadata
 // - relay: NAT traversal for mobile nodes
 
+#[cfg(not(target_arch = "wasm32"))]
+use libp2p::mdns;
 use libp2p::{
-    gossipsub, identify, kad, mdns,
+    gossipsub, identify, kad,
     request_response::{self, ProtocolSupport},
     swarm::NetworkBehaviour,
     StreamProtocol,
@@ -26,6 +28,7 @@ pub struct IronCoreBehaviour {
     /// DHT for WAN peer discovery
     pub kademlia: kad::Behaviour<kad::store::MemoryStore>,
     /// LAN peer discovery
+    #[cfg(not(target_arch = "wasm32"))]
     pub mdns: mdns::tokio::Behaviour,
     /// Peer identification
     pub identify: identify::Behaviour,
@@ -58,8 +61,7 @@ impl IronCoreBehaviour {
                 StreamProtocol::new("/sc/message/1.0.0"),
                 ProtocolSupport::Full,
             )],
-            request_response::Config::default()
-                .with_request_timeout(Duration::from_secs(30)),
+            request_response::Config::default().with_request_timeout(Duration::from_secs(30)),
         );
 
         // Gossipsub for pub/sub (future group messaging)
@@ -76,31 +78,24 @@ impl IronCoreBehaviour {
         .map_err(|e| anyhow::anyhow!("Gossipsub error: {}", e))?;
 
         // Kademlia DHT for peer discovery
-        let kademlia = kad::Behaviour::new(
-            peer_id,
-            kad::store::MemoryStore::new(peer_id),
-        );
+        let kademlia = kad::Behaviour::new(peer_id, kad::store::MemoryStore::new(peer_id));
 
         // mDNS for LAN discovery
-        let mdns = mdns::tokio::Behaviour::new(
-            mdns::Config::default(),
-            peer_id,
-        )?;
+        #[cfg(not(target_arch = "wasm32"))]
+        let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id)?;
 
         // Identify protocol
         let identify = identify::Behaviour::new(
-            identify::Config::new(
-                "/sc/id/1.0.0".to_string(),
-                keypair.public(),
-            )
-            .with_push_listen_addr_updates(true)
-            .with_interval(Duration::from_secs(60)),
+            identify::Config::new("/sc/id/1.0.0".to_string(), keypair.public())
+                .with_push_listen_addr_updates(true)
+                .with_interval(Duration::from_secs(60)),
         );
 
         Ok(Self {
             messaging,
             gossipsub,
             kademlia,
+            #[cfg(not(target_arch = "wasm32"))]
             mdns,
             identify,
         })

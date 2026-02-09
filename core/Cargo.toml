@@ -38,6 +38,21 @@ tracing-subscriber = { workspace = true }
 # Additional dependencies
 parking_lot = "0.12"
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { workspace = true, features = ["js"] }
+getrandom = { version = "0.3", features = ["wasm_js"] }
+getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["full"] }
+libp2p = { workspace = true, features = [
+  "tcp",
+  "quic",
+  "dns",
+  "mdns",
+  "tokio",
+] }
+
 [dev-dependencies]
 mockall = { workspace = true }
 tokio-test = "0.4"
