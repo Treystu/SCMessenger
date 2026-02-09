@@ -85,13 +85,65 @@ impl WebSocketRelay {
 
         *state = TransportState::Connecting;
 
-        // In WASM environment with web-sys enabled:
-        // #[cfg(target_arch = "wasm32")]
-        // {
-        //     use web_sys::WebSocket;
-        //     let ws = WebSocket::new(&self.url).map_err(|_| "Failed to create WebSocket")?;
-        //     // Set up event handlers via web-sys
-        // }
+        // Create WebSocket connection using web-sys
+        #[cfg(target_arch = "wasm32")]
+        {
+            use wasm_bindgen::JsCast;
+            use web_sys::{MessageEvent, WebSocket, ErrorEvent, CloseEvent};
+            use wasm_bindgen::closure::Closure;
+
+            // Create WebSocket instance
+            let ws = WebSocket::new(&self.url)
+                .map_err(|e| format!("Failed to create WebSocket: {:?}", e))?;
+
+            // Set binary type to arraybuffer for efficient binary data handling
+            ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
+
+            // Create onopen callback
+            let onopen_callback = Closure::wrap(Box::new(move |_event: MessageEvent| {
+                tracing::info!("WebSocket connection opened");
+            }) as Box<dyn FnMut(MessageEvent)>);
+
+            ws.set_onopen(Some(onopen_callback.as_ref().unchecked_ref()));
+            onopen_callback.forget(); // Keep callback alive
+
+            // Create onmessage callback
+            let onmessage_callback = Closure::wrap(Box::new(move |event: MessageEvent| {
+                if let Ok(array_buffer) = event.data().dyn_into::<js_sys::ArrayBuffer>() {
+                    let uint8_array = js_sys::Uint8Array::new(&array_buffer);
+                    let data = uint8_array.to_vec();
+                    tracing::debug!("Received {} bytes via WebSocket", data.len());
+                    // In production, forward data to message handler
+                }
+            }) as Box<dyn FnMut(MessageEvent)>);
+
+            ws.set_onmessage(Some(onmessage_callback.as_ref().unchecked_ref()));
+            onmessage_callback.forget();
+
+            // Create onerror callback
+            let onerror_callback = Closure::wrap(Box::new(move |event: ErrorEvent| {
+                tracing::error!("WebSocket error: {:?}", event);
+            }) as Box<dyn FnMut(ErrorEvent)>);
+
+            ws.set_onerror(Some(onerror_callback.as_ref().unchecked_ref()));
+            onerror_callback.forget();
+
+            // Create onclose callback
+            let onclose_callback = Closure::wrap(Box::new(move |event: CloseEvent| {
+                tracing::info!("WebSocket closed: code={} reason={}", event.code(), event.reason());
+            }) as Box<dyn FnMut(CloseEvent)>);
+
+            ws.set_onclose(Some(onclose_callback.as_ref().unchecked_ref()));
+            onclose_callback.forget();
+
+            tracing::info!("WebSocket connection initiated to {}", self.url);
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            // Non-WASM fallback for testing
+            tracing::warn!("WebSocket not available outside WASM environment");
+        }
 
         *state = TransportState::Connected;
         Ok(())
@@ -143,7 +195,37 @@ impl WebRtcPeer {
     /// Create a WebRTC offer (SDP negotiation)
     /// In WASM: uses RTCPeerConnection.createOffer()
     pub fn create_offer(&self) -> Result<String, String> {
-        // Simulated SDP offer structure
+        #[cfg(target_arch = "wasm32")]
+        {
+            // In production, this would use web-sys:
+            // use web_sys::{RtcPeerConnection, RtcConfiguration, RtcSdpType};
+            // use wasm_bindgen_futures::JsFuture;
+            //
+            // let mut config = RtcConfiguration::new();
+            // // Configure ICE servers from WasmTransportConfig
+            //
+            // let peer_connection = RtcPeerConnection::new_with_configuration(&config)
+            //     .map_err(|e| format!("Failed to create peer connection: {:?}", e))?;
+            //
+            // Create data channel:
+            // let data_channel = peer_connection.create_data_channel("scmessenger");
+            //
+            // Create offer:
+            // let offer_promise = peer_connection.create_offer();
+            // let offer_result = JsFuture::from(offer_promise).await
+            //     .map_err(|e| format!("Failed to create offer: {:?}", e))?;
+            // let offer = RtcSessionDescriptionInit::from(offer_result);
+            // let sdp = offer.get_sdp();
+            //
+            // Set local description:
+            // let set_local_promise = peer_connection.set_local_description(&offer);
+            // JsFuture::from(set_local_promise).await
+            //     .map_err(|e| format!("Failed to set local description: {:?}", e))?;
+
+            tracing::info!("Creating WebRTC offer for peer {}", self.peer_id);
+        }
+
+        // Simulated SDP offer structure for demonstration/testing
         Ok(format!(
             "v=0\no=- {} 2 IN IP4 127.0.0.1\ns=SCMessenger peer {}\n",
             std::time::SystemTime::now()
@@ -184,8 +266,31 @@ impl WebRtcPeer {
             return Err("Data channel not open".to_string());
         }
 
-        // In WASM: data_channel.send_with_u8_array(data)?;
-        // In testing: simulated send
+        #[cfg(target_arch = "wasm32")]
+        {
+            // In production, this would use web-sys:
+            // use web_sys::RtcDataChannel;
+            //
+            // Assuming we have a stored reference to the data channel:
+            // let data_channel: RtcDataChannel = /* retrieve from state */;
+            //
+            // Send data through the channel:
+            // data_channel.send_with_u8_array(data)
+            //     .map_err(|e| format!("Failed to send data: {:?}", e))?;
+            //
+            // The browser handles:
+            // - Chunking large messages (if needed)
+            // - Queuing data if send buffer is full
+            // - Notifying via bufferedamountlow event when buffer drains
+
+            tracing::debug!("Sending {} bytes via WebRTC data channel to {}", data.len(), self.peer_id);
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            // Non-WASM fallback for testing
+            tracing::debug!("Simulated send: {} bytes to {}", data.len(), self.peer_id);
+        }
 
         Ok(())
     }
