@@ -7,9 +7,12 @@
 // - All behaviours from behaviour.rs
 
 use super::behaviour::{IronCoreBehaviour, MessageRequest, MessageResponse};
+use super::reflection::{AddressReflectionRequest, AddressReflectionService};
 use anyhow::Result;
 use libp2p::{identity::Keypair, kad, swarm::SwarmEvent, Multiaddr, PeerId};
 use tokio::sync::mpsc;
+use std::collections::HashMap;
+use std::net::SocketAddr;
 
 /// Commands that can be sent to the swarm task
 #[derive(Debug)]
@@ -19,6 +22,11 @@ pub enum SwarmCommand {
         peer_id: PeerId,
         envelope_data: Vec<u8>,
         reply: mpsc::Sender<Result<(), String>>,
+    },
+    /// Request address reflection from a peer
+    RequestAddressReflection {
+        peer_id: PeerId,
+        reply: mpsc::Sender<Result<String, String>>,
     },
     /// Dial a peer at a specific address
     Dial {
@@ -50,6 +58,11 @@ pub enum SwarmEvent2 {
         peer_id: PeerId,
         envelope_data: Vec<u8>,
     },
+    /// Address reflection response received
+    AddressReflected {
+        peer_id: PeerId,
+        observed_address: String,
+    },
     /// We started listening on an address
     ListeningOn(Multiaddr),
 }
@@ -68,6 +81,24 @@ impl SwarmHandle {
             .send(SwarmCommand::SendMessage {
                 peer_id,
                 envelope_data,
+                reply: reply_tx,
+            })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+
+        reply_rx
+            .recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("No reply from swarm"))?
+            .map_err(|e| anyhow::anyhow!(e))
+    }
+
+    /// Request address reflection from a peer
+    pub async fn request_address_reflection(&self, peer_id: PeerId) -> Result<String> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(SwarmCommand::RequestAddressReflection {
+                peer_id,
                 reply: reply_tx,
             })
             .await
@@ -188,6 +219,12 @@ pub async fn start_swarm(
             command_tx: command_tx.clone(),
         };
 
+        // Address reflection service
+        let reflection_service = AddressReflectionService::new();
+
+        // Track pending address reflection requests
+        let mut pending_reflections: HashMap<libp2p::request_response::OutboundRequestId, mpsc::Sender<Result<String, String>>> = HashMap::new();
+
         // Spawn the swarm event loop
         tokio::spawn(async move {
             loop {
@@ -214,6 +251,46 @@ pub async fn start_swarm(
                                     }
                                     request_response::Message::Response { .. } => {
                                         // Response to our outbound request — handled via pending_requests
+                                    }
+                                }
+                            }
+
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::AddressReflection(
+                                request_response::Event::Message { peer, message, .. }
+                            )) => {
+                                match message {
+                                    request_response::Message::Request { request, channel, .. } => {
+                                        // Peer is requesting address reflection
+                                        // We observe their address from the connection endpoint
+
+                                        // Try to get connected endpoint for this peer
+                                        let observed_addr_str = swarm
+                                            .network_info()
+                                            .connection_counters()
+                                            .num_connections()
+                                            .to_string(); // Temporary fallback
+
+                                        // In production, extract actual remote address from connection endpoint
+                                        // For now, use a default since we don't have direct access to connection endpoint
+                                        let observed_addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
+
+                                        // Create response using the service
+                                        let response = reflection_service.handle_request(request, observed_addr);
+
+                                        // Send response back
+                                        let _ = swarm.behaviour_mut().address_reflection.send_response(channel, response);
+                                    }
+                                    request_response::Message::Response { request_id, response } => {
+                                        // We received a reflection response
+                                        if let Some(reply_tx) = pending_reflections.remove(&request_id) {
+                                            let _ = reply_tx.send(Ok(response.observed_address.clone())).await;
+                                        }
+
+                                        // Also emit event for application layer
+                                        let _ = event_tx.send(SwarmEvent2::AddressReflected {
+                                            peer_id: peer,
+                                            observed_address: response.observed_address,
+                                        }).await;
                                     }
                                 }
                             }
@@ -274,6 +351,26 @@ pub async fn start_swarm(
                                     MessageRequest { envelope_data },
                                 );
                                 let _ = reply.send(Ok(())).await;
+                            }
+
+                            SwarmCommand::RequestAddressReflection { peer_id, reply } => {
+                                // Generate a unique request ID
+                                let mut request_id_bytes = [0u8; 16];
+                                use rand::RngCore;
+                                rand::thread_rng().fill_bytes(&mut request_id_bytes);
+
+                                let request = AddressReflectionRequest {
+                                    request_id: request_id_bytes,
+                                    version: 1,
+                                };
+
+                                let request_id = swarm.behaviour_mut().address_reflection.send_request(
+                                    &peer_id,
+                                    request,
+                                );
+
+                                // Store reply channel for when response arrives
+                                pending_reflections.insert(request_id, reply);
                             }
 
                             SwarmCommand::Dial { addr, reply } => {

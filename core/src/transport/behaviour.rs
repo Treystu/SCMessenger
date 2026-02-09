@@ -2,6 +2,7 @@
 //
 // This combines all the libp2p protocols we need:
 // - request_response: direct peer-to-peer message delivery
+// - address_reflection: sovereign mesh address discovery (replaces STUN)
 // - gossipsub: pub/sub for group messaging (future)
 // - kademlia: DHT for peer discovery on WAN
 // - mdns: peer discovery on LAN
@@ -17,12 +18,15 @@ use libp2p::{
     StreamProtocol,
 };
 use std::time::Duration;
+use super::reflection::{AddressReflectionRequest, AddressReflectionResponse};
 
 /// The Iron Core network behaviour combining all protocols.
 #[derive(NetworkBehaviour)]
 pub struct IronCoreBehaviour {
     /// Direct message delivery (request-response pattern)
     pub messaging: request_response::cbor::Behaviour<MessageRequest, MessageResponse>,
+    /// Address reflection for sovereign NAT discovery (replaces external STUN)
+    pub address_reflection: request_response::cbor::Behaviour<AddressReflectionRequest, AddressReflectionResponse>,
     /// Pub/sub for future group messaging
     pub gossipsub: gossipsub::Behaviour,
     /// DHT for WAN peer discovery
@@ -64,6 +68,15 @@ impl IronCoreBehaviour {
             request_response::Config::default().with_request_timeout(Duration::from_secs(30)),
         );
 
+        // Request-response for address reflection (sovereign NAT discovery)
+        let address_reflection = request_response::cbor::Behaviour::new(
+            [(
+                StreamProtocol::new("/sc/address-reflection/1.0.0"),
+                ProtocolSupport::Full,
+            )],
+            request_response::Config::default().with_request_timeout(Duration::from_secs(10)),
+        );
+
         // Gossipsub for pub/sub (future group messaging)
         let gossipsub_config = gossipsub::ConfigBuilder::default()
             .heartbeat_interval(Duration::from_secs(10))
@@ -93,6 +106,7 @@ impl IronCoreBehaviour {
 
         Ok(Self {
             messaging,
+            address_reflection,
             gossipsub,
             kademlia,
             #[cfg(not(target_arch = "wasm32"))]

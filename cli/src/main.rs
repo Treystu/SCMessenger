@@ -296,6 +296,11 @@ async fn cmd_listen(core: IronCore, port: u16) -> anyhow::Result<()> {
                     print!("> ");
                     let _ = std::io::Write::flush(&mut std::io::stdout());
                 }
+                SwarmEvent::AddressReflected { peer_id, observed_address } => {
+                    println!("[*] Address reflection from {}: {}", peer_id, observed_address);
+                    print!("> ");
+                    let _ = std::io::Write::flush(&mut std::io::stdout());
+                }
             }
         }
     });
