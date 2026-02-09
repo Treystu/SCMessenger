@@ -27,3 +27,13 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+colored = "2.1"
+dirs = "5.0"
+sled = { workspace = true }
+chrono = "0.4"
+uuid = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.8"
