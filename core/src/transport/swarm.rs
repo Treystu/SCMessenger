@@ -8,6 +8,7 @@
 
 use super::behaviour::{IronCoreBehaviour, MessageRequest, MessageResponse};
 use super::reflection::{AddressReflectionRequest, AddressReflectionService};
+use super::observation::{AddressObserver, ConnectionTracker};
 use anyhow::Result;
 use libp2p::{identity::Keypair, kad, swarm::SwarmEvent, Multiaddr, PeerId};
 use tokio::sync::mpsc;
@@ -27,6 +28,10 @@ pub enum SwarmCommand {
     RequestAddressReflection {
         peer_id: PeerId,
         reply: mpsc::Sender<Result<String, String>>,
+    },
+    /// Get external addresses based on peer observations
+    GetExternalAddresses {
+        reply: mpsc::Sender<Vec<SocketAddr>>,
     },
     /// Dial a peer at a specific address
     Dial {
@@ -161,6 +166,20 @@ impl SwarmHandle {
             .map_err(|e| anyhow::anyhow!(e))
     }
 
+    /// Get external addresses based on peer observations
+    pub async fn get_external_addresses(&self) -> Result<Vec<SocketAddr>> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(SwarmCommand::GetExternalAddresses { reply: reply_tx })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+
+        reply_rx
+            .recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("No reply from swarm"))
+    }
+
     /// Add a known address for a peer in the DHT
     pub async fn add_kad_address(&self, peer_id: PeerId, addr: Multiaddr) -> Result<()> {
         self.command_tx
@@ -225,6 +244,10 @@ pub async fn start_swarm(
         // Track pending address reflection requests
         let mut pending_reflections: HashMap<libp2p::request_response::OutboundRequestId, mpsc::Sender<Result<String, String>>> = HashMap::new();
 
+        // Track connections and address observations
+        let mut connection_tracker = ConnectionTracker::new();
+        let mut address_observer = AddressObserver::new();
+
         // Spawn the swarm event loop
         tokio::spawn(async move {
             loop {
@@ -263,9 +286,13 @@ pub async fn start_swarm(
                                         // Peer is requesting address reflection
                                         // We observe their address from the connection endpoint
 
-                                        // In production, extract actual remote address from connection endpoint
-                                        // For now, use a default since we don't have direct access to connection endpoint
-                                        let observed_addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
+                                        // Get the remote address from our connection tracker
+                                        let observed_addr = connection_tracker
+                                            .get_connection(&peer)
+                                            .and_then(|conn| ConnectionTracker::extract_socket_addr(&conn.remote_addr))
+                                            .unwrap_or_else(|| "0.0.0.0:0".parse().unwrap());
+
+                                        tracing::debug!("Observed address for {}: {}", peer, observed_addr);
 
                                         // Create response using the service
                                         let response = reflection_service.handle_request(request, observed_addr);
@@ -274,7 +301,20 @@ pub async fn start_swarm(
                                         let _ = swarm.behaviour_mut().address_reflection.send_response(channel, response);
                                     }
                                     request_response::Message::Response { request_id, response } => {
-                                        // We received a reflection response
+                                        // We received a reflection response from a peer
+                                        tracing::info!("Address reflection from {}: {}", peer, response.observed_address);
+
+                                        // Parse and record the observation
+                                        if let Ok(observed_addr) = response.observed_address.parse::<SocketAddr>() {
+                                            address_observer.record_observation(peer, observed_addr);
+
+                                            // Log consensus
+                                            if let Some(primary) = address_observer.primary_external_address() {
+                                                tracing::info!("Consensus external address: {}", primary);
+                                            }
+                                        }
+
+                                        // Reply to pending request
                                         if let Some(reply_tx) = pending_reflections.remove(&request_id) {
                                             let _ = reply_tx.send(Ok(response.observed_address.clone())).await;
                                         }
@@ -321,13 +361,23 @@ pub async fn start_swarm(
                                 let _ = event_tx.send(SwarmEvent2::ListeningOn(address)).await;
                             }
 
-                            SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                                tracing::info!("Connected to {}", peer_id);
+                            SwarmEvent::ConnectionEstablished { peer_id, endpoint, connection_id, .. } => {
+                                tracing::info!("Connected to {} via {}", peer_id, endpoint.get_remote_address());
+
+                                // Track this connection for address observation
+                                connection_tracker.add_connection(
+                                    peer_id,
+                                    endpoint.get_remote_address().clone(),
+                                    endpoint.get_local_address().clone(),
+                                    connection_id.to_string(),
+                                );
+
                                 let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
                             }
 
                             SwarmEvent::ConnectionClosed { peer_id, .. } => {
                                 tracing::info!("Disconnected from {}", peer_id);
+                                connection_tracker.remove_connection(&peer_id);
                                 let _ = event_tx.send(SwarmEvent2::PeerDisconnected(peer_id)).await;
                             }
 
@@ -364,6 +414,11 @@ pub async fn start_swarm(
 
                                 // Store reply channel for when response arrives
                                 pending_reflections.insert(request_id, reply);
+                            }
+
+                            SwarmCommand::GetExternalAddresses { reply } => {
+                                let addresses = address_observer.external_addresses().to_vec();
+                                let _ = reply.send(addresses).await;
                             }
 
                             SwarmCommand::Dial { addr, reply } => {
