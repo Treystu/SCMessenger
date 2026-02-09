@@ -107,22 +107,28 @@ CRDTs (Conflict-free Replicated Data Types) give you:
 - No mining, no proof-of-work → zero wasted energy
 - Works offline → no internet required for merge
 
-For the specific "which messages do you have that I don't?" problem, the research is definitive: **Minisketch** (Bitcoin's PinSketch algorithm) is near-optimal:
+For the specific "which messages do you have that I don't?" problem, we evaluated several approaches:
 
 ```
-BLOOM FILTER (current plan):
+BLOOM FILTER:
   8,192 bits = 1 KB
   Tells you: "these items MIGHT be different" (probabilistic, false positives)
   You still need to exchange IDs to confirm
   Total bandwidth for 1,000 diffs: ~1 KB filter + ~32 KB IDs = ~33 KB
 
-MINISKETCH (replacement):
+IBLT (Invertible Bloom Lookup Table) — IMPLEMENTED:
+  Size = cells × cell_size = 3,000 cells × ~40 bytes = ~120 KB
+  Tells you: EXACTLY which items differ (deterministic, no false positives)
+  ONE round-trip. No follow-up needed.
+  Peeling algorithm runs in O(d) time where d = set difference
+  Simpler to implement than Minisketch (no finite field arithmetic)
+  Proven effective for set reconciliation in distributed systems
+
+MINISKETCH (alternative considered):
   Sketch size = element_bits × capacity = 256 × 1,000 = 32 KB
   Tells you: EXACTLY which items differ (deterministic, guaranteed)
-  ONE round-trip. No follow-up needed.
-  Total bandwidth for 1,000 diffs: 32 KB (and that's it)
-  Transmission at 1 Mbps BLE: 256 milliseconds
   Battle-tested: Powers Bitcoin Erlay (handling millions of transactions)
+  More bandwidth-efficient than IBLT but requires finite field operations
 
 NEGENTROPY (for timestamp-ordered data):
   Uses range-based binary search on ordered sets
@@ -131,7 +137,7 @@ NEGENTROPY (for timestamp-ordered data):
   Could use for internet-transport sync where latency is low
 ```
 
-**The plan:** Minisketch for BLE/WiFi sync (single round-trip, fits in 5-second window). Negentropy for internet-transport sync (multiple round-trips ok, minimal bandwidth). Bloom filters retired.
+**Implementation choice:** IBLT for BLE/WiFi sync (single round-trip, deterministic, simpler implementation). While Minisketch is more bandwidth-efficient, IBLT provides excellent performance with less implementation complexity. Bloom filters retired in favor of deterministic reconciliation.
 
 ### "BitChat is not the same"
 
@@ -239,16 +245,16 @@ New dependency: lz4_flex (pure Rust LZ4)
 Total: 610-830 LoC
 ```
 
-**2B. Minisketch Set Reconciliation**
-Replace bloom filters with Minisketch for deterministic, near-optimal sync.
+**2B. IBLT Set Reconciliation**
+Replace bloom filters with IBLT (Invertible Bloom Lookup Table) for deterministic, efficient sync.
 
 ```
 Files:
-  core/src/drift/sketch.rs       — NEW: Minisketch wrapper (create, merge, decode) (~200-300 LoC)
-  core/src/drift/sync.rs         — NEW: SyncProtocol (handshake, sketch exchange, transfer) (~300-450 LoC)
+  core/src/drift/sketch.rs       — NEW: IBLT implementation (insert, subtract, decode) (~200-300 LoC)
+  core/src/drift/sync.rs         — NEW: SyncProtocol (handshake, IBLT exchange, transfer) (~300-450 LoC)
   core/src/drift/tests_sync.rs   — Sync correctness tests (identical sets, disjoint, partial) (~200-300 LoC)
 
-New dependency: minisketch-rs (Rust bindings to libminisketch) or pure-Rust implementation
+Implementation note: IBLT is implemented from scratch using blake3 hashing (no external dependencies required beyond what's already in the project).
 
 Total: 700-1,050 LoC
 ```
@@ -591,7 +597,7 @@ Total: 250-350 LoC
 | 8 | WASM Client Upgrade | 750-1,080 | Pending |
 | **TOTAL** | | **14,000-20,810 LoC** | |
 
-**Current state:** The codebase is ~53,000 LoC across all workspace members (core: ~29K, cli: ~500, wasm: ~2.4K, plus lib.rs at ~19K). ~2,641 tests across 71 source files in core. All phases through 7 are implemented and unit-tested. The remaining integration gap is wiring IronCore to SwarmHandle via the CLI.
+**Current state:** The codebase is ~53,000 LoC across all workspace members (core: ~29K, cli: ~500, wasm: ~2.4K, plus lib.rs at ~19K). ~638 tests across 71 source files in core. All phases through 7 are implemented and unit-tested. The remaining integration gap is wiring IronCore to SwarmHandle via the CLI.
 
 ---
 
@@ -623,7 +629,7 @@ Phases 5, 6, 7, 8 can proceed in parallel once Phases 2-4 are complete.
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Sync algorithm | Minisketch (BLE) + Negentropy (internet) | Near-optimal bandwidth, deterministic, battle-tested |
+| Sync algorithm | IBLT (Invertible Bloom Lookup Table) | Deterministic, O(d) reconciliation, simpler implementation |
 | Message store | CRDT (G-Set) | Conflict-free merge, no consensus needed, works offline |
 | Routing model | Mycorrhizal (3-layer hierarchical) | Dense local, sparse global, demand-driven, self-healing |
 | Relay model | Every node = relay (no third parties) | Sovereign by design, no external dependencies |

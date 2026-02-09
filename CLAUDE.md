@@ -55,7 +55,7 @@ completing the IronCore → SwarmHandle wiring. `prepare_message()` → encrypte
 ## Codebase Stats
 - 71 .rs files in core/src/ across 12 modules
 - ~53,000 lines of Rust across workspace (core: ~29K, lib.rs: ~19K, cli: ~500, wasm: ~2.4K)
-- ~2,641 test functions
+- ~638 test functions
 
 ## Hardening (Feb 2026)
 **Dynamic analysis fixes — COMPLETED**

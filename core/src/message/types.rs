@@ -71,6 +71,20 @@ pub struct Envelope {
     pub ciphertext: Vec<u8>,
 }
 
+/// A signed envelope — adds Ed25519 signature for relay verification.
+///
+/// This allows relays to verify that the envelope was genuinely created by
+/// the sender without decrypting the ciphertext. Relays can reject forged
+/// or tampered envelopes before forwarding them.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignedEnvelope {
+    /// The encrypted envelope
+    pub envelope: Envelope,
+    /// Ed25519 signature over the canonical serialization of the envelope
+    /// (64 bytes)
+    pub signature: Vec<u8>,
+}
+
 impl Message {
     /// Create a new text message
     pub fn text(sender_id: String, recipient_id: String, text: &str) -> Self {

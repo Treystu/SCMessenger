@@ -19,7 +19,7 @@ use chacha20poly1305::{
     aead::{Aead, KeyInit},
     XChaCha20Poly1305, XNonce,
 };
-use ed25519_dalek::SigningKey;
+use ed25519_dalek::{Signer, Verifier, SigningKey, VerifyingKey, Signature as Ed25519Signature};
 use rand::RngCore;
 use x25519_dalek::{EphemeralSecret, PublicKey as X25519PublicKey, StaticSecret};
 use zeroize::Zeroize;
@@ -105,12 +105,14 @@ pub fn encrypt_message(
     rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
     let nonce = XNonce::from_slice(&nonce_bytes);
 
-    // Encrypt
+    // Encrypt with AAD (Additional Authenticated Data)
+    // Bind sender public key as AAD to prevent sender spoofing
+    let sender_public_bytes = sender_signing_key.verifying_key().to_bytes();
     let cipher = XChaCha20Poly1305::new_from_slice(&symmetric_key)
         .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
 
     let ciphertext = cipher
-        .encrypt(nonce, plaintext)
+        .encrypt_with_aad(nonce, &sender_public_bytes, plaintext)
         .map_err(|e| anyhow::anyhow!("Encryption failed: {}", e))?;
 
     // Zeroize key material
@@ -161,18 +163,96 @@ pub fn decrypt_message(
     // Reconstruct nonce
     let nonce = XNonce::from_slice(&envelope.nonce);
 
-    // Decrypt
+    // Decrypt with AAD (must match the sender public key used during encryption)
+    // This prevents sender spoofing attacks
+    if envelope.sender_public_key.len() != 32 {
+        bail!("Invalid sender public key length");
+    }
     let cipher = XChaCha20Poly1305::new_from_slice(&symmetric_key)
         .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
 
     let plaintext = cipher
-        .decrypt(nonce, envelope.ciphertext.as_ref())
-        .map_err(|_| anyhow::anyhow!("Decryption failed: invalid ciphertext or wrong key"))?;
+        .decrypt_with_aad(nonce, envelope.sender_public_key.as_ref(), envelope.ciphertext.as_ref())
+        .map_err(|_| anyhow::anyhow!("Decryption failed: invalid ciphertext, wrong key, or tampered sender public key"))?;
 
     // Zeroize key material
     symmetric_key.zeroize();
 
     Ok(plaintext)
+}
+
+/// Sign an envelope with the sender's signing key.
+///
+/// Creates a canonical serialization of the envelope and signs it with Ed25519.
+/// This allows relays to verify envelope authenticity without decryption.
+///
+/// # Arguments
+/// * `envelope` - The encrypted envelope to sign
+/// * `sender_signing_key` - Sender's Ed25519 signing key
+///
+/// # Returns
+/// A `SignedEnvelope` containing the envelope and its signature.
+pub fn sign_envelope(
+    envelope: crate::message::Envelope,
+    sender_signing_key: &SigningKey,
+) -> Result<crate::message::SignedEnvelope> {
+    // Create canonical representation for signing
+    // We sign the serialized envelope to cover all fields
+    let envelope_bytes = bincode::serialize(&envelope)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize envelope: {}", e))?;
+
+    // Sign the envelope bytes
+    let signature = sender_signing_key.sign(&envelope_bytes);
+
+    Ok(crate::message::SignedEnvelope {
+        envelope,
+        signature: signature.to_bytes().to_vec(),
+    })
+}
+
+/// Verify a signed envelope's signature.
+///
+/// Checks that the signature matches the envelope content and was created
+/// by the sender whose public key is in the envelope. This allows relays
+/// to reject forged envelopes without decrypting them.
+///
+/// # Arguments
+/// * `signed_envelope` - The signed envelope to verify
+///
+/// # Returns
+/// `Ok(())` if signature is valid, `Err` otherwise.
+pub fn verify_envelope(signed_envelope: &crate::message::SignedEnvelope) -> Result<()> {
+    // Extract sender's public key from envelope
+    if signed_envelope.envelope.sender_public_key.len() != 32 {
+        bail!("Invalid sender public key length");
+    }
+
+    let mut sender_public_bytes = [0u8; 32];
+    sender_public_bytes.copy_from_slice(&signed_envelope.envelope.sender_public_key);
+
+    let verifying_key = VerifyingKey::from_bytes(&sender_public_bytes)
+        .map_err(|e| anyhow::anyhow!("Invalid sender public key: {}", e))?;
+
+    // Verify signature length
+    if signed_envelope.signature.len() != 64 {
+        bail!("Invalid signature length");
+    }
+
+    let mut signature_bytes = [0u8; 64];
+    signature_bytes.copy_from_slice(&signed_envelope.signature);
+
+    let signature = Ed25519Signature::from_bytes(&signature_bytes);
+
+    // Create canonical representation (same as signing)
+    let envelope_bytes = bincode::serialize(&signed_envelope.envelope)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize envelope: {}", e))?;
+
+    // Verify signature
+    verifying_key
+        .verify(&envelope_bytes, &signature)
+        .map_err(|e| anyhow::anyhow!("Signature verification failed: {}", e))?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -301,5 +381,100 @@ mod tests {
 
         let result = decrypt_message(&recipient_key, &envelope);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_aad_binding_prevents_sender_spoofing() {
+        let sender_key = generate_keypair();
+        let recipient_key = generate_keypair();
+        let attacker_key = generate_keypair();
+        let recipient_public = recipient_key.verifying_key().to_bytes();
+
+        let plaintext = b"Secret message";
+        let mut envelope = encrypt_message(&sender_key, &recipient_public, plaintext).unwrap();
+
+        // Attacker tries to replace sender public key with their own
+        envelope.sender_public_key = attacker_key.verifying_key().to_bytes().to_vec();
+
+        // Decryption should fail due to AAD mismatch
+        let result = decrypt_message(&recipient_key, &envelope);
+        assert!(result.is_err(), "AAD binding should prevent sender spoofing");
+    }
+
+    #[test]
+    fn test_sign_and_verify_envelope() {
+        let sender_key = generate_keypair();
+        let recipient_key = generate_keypair();
+        let recipient_public = recipient_key.verifying_key().to_bytes();
+
+        let plaintext = b"Test message for signing";
+        let envelope = encrypt_message(&sender_key, &recipient_public, plaintext).unwrap();
+
+        // Sign the envelope
+        let signed_envelope = sign_envelope(envelope, &sender_key).unwrap();
+
+        // Verify the signature
+        let result = verify_envelope(&signed_envelope);
+        assert!(result.is_ok(), "Valid signature should verify successfully");
+    }
+
+    #[test]
+    fn test_tampered_envelope_fails_verification() {
+        let sender_key = generate_keypair();
+        let recipient_key = generate_keypair();
+        let recipient_public = recipient_key.verifying_key().to_bytes();
+
+        let plaintext = b"Test message";
+        let envelope = encrypt_message(&sender_key, &recipient_public, plaintext).unwrap();
+        let mut signed_envelope = sign_envelope(envelope, &sender_key).unwrap();
+
+        // Tamper with the ciphertext
+        if let Some(byte) = signed_envelope.envelope.ciphertext.last_mut() {
+            *byte ^= 0xFF;
+        }
+
+        // Verification should fail
+        let result = verify_envelope(&signed_envelope);
+        assert!(result.is_err(), "Tampered envelope should fail verification");
+    }
+
+    #[test]
+    fn test_forged_signature_fails_verification() {
+        let sender_key = generate_keypair();
+        let attacker_key = generate_keypair();
+        let recipient_key = generate_keypair();
+        let recipient_public = recipient_key.verifying_key().to_bytes();
+
+        let plaintext = b"Test message";
+        let envelope = encrypt_message(&sender_key, &recipient_public, plaintext).unwrap();
+
+        // Attacker signs with their own key
+        let mut signed_envelope = sign_envelope(envelope.clone(), &attacker_key).unwrap();
+
+        // Replace sender public key with original sender (attempting forgery)
+        signed_envelope.envelope.sender_public_key = sender_key.verifying_key().to_bytes().to_vec();
+
+        // Verification should fail (signature doesn't match sender_public_key)
+        let result = verify_envelope(&signed_envelope);
+        assert!(result.is_err(), "Forged signature should fail verification");
+    }
+
+    #[test]
+    fn test_relay_can_verify_without_decrypting() {
+        let sender_key = generate_keypair();
+        let recipient_key = generate_keypair();
+        let recipient_public = recipient_key.verifying_key().to_bytes();
+
+        let plaintext = b"Secret message that relay can't read";
+        let envelope = encrypt_message(&sender_key, &recipient_public, plaintext).unwrap();
+        let signed_envelope = sign_envelope(envelope, &sender_key).unwrap();
+
+        // Relay can verify authenticity without knowing recipient's key
+        let verification = verify_envelope(&signed_envelope);
+        assert!(verification.is_ok(), "Relay should be able to verify envelope");
+
+        // But relay still can't decrypt (would need recipient's key)
+        // This demonstrates the purpose: relays can reject forged messages
+        // without being able to read the content
     }
 }

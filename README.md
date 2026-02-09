@@ -8,7 +8,7 @@ The world's first truly sovereign messenger — works everywhere, owned by no on
 # Build
 cargo build --workspace
 
-# Run tests (~2,641 tests across all modules)
+# Run tests (~638 tests across all modules)
 cargo test --workspace
 
 # Two-terminal demo
@@ -55,7 +55,7 @@ docs/        —                   Architecture, protocol, and design docs
 
 ### Key Stats
 
-~53,000 lines of Rust across the workspace. ~2,641 tests. 71 source files in core alone. All modules built and tested through Phase 7 (Privacy).
+~53,000 lines of Rust across the workspace. ~638 tests. 71 source files in core alone. All modules built and tested through Phase 7 (Privacy).
 
 ## Cryptography
 
