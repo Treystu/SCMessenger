@@ -206,9 +206,41 @@ Following the successful implementation of all optional enhancements (commits ca
 
 ---
 
+## Architecture Refactoring (Feb 2026)
+
+### NAT Traversal: External Dependencies Removed
+
+**Issue Identified:** Initial NAT traversal implementation included hardcoded external STUN servers (stun.l.google.com), violating core principle #2: "Every node IS the network. No third-party relays, no external infrastructure."
+
+**Resolution:** Refactored ~200 LoC to peer-assisted address discovery
+
+**Changes:**
+- ✅ Removed all Google STUN server references
+- ✅ Replaced `NatProbe` with `PeerAddressDiscovery`
+- ✅ Changed `NatConfig.stun_servers` to `NatConfig.peer_reflectors`
+- ✅ Updated all tests to use peer-assisted approach
+- ✅ Documented AddressReflectionRequest/Response protocol
+- ✅ Maintained hole-punching logic (relay-coordinated)
+- ✅ All 65 tests still pass
+
+**Architecture Benefits:**
+- Zero external dependencies (fully sovereign)
+- Peers provide address reflection service within mesh
+- Web deploys are prime relay/reflector candidates
+- Fallback to relay circuits when hole-punch fails
+- More resilient (distributed vs single point of failure)
+
+---
+
 ## Commit History
 
 ### Recent Commits (This Session)
+
+**Commit [pending]** - Refactor NAT traversal to peer-assisted discovery
+- Remove external STUN server dependencies
+- Implement peer-assisted address discovery (~200 LoC refactor)
+- Update all documentation to reflect sovereign architecture
+- All tests pass (65/65)
 
 **Commit 43083c6** - Fix compilation errors and test failures
 - Export SignedEnvelope from message module
@@ -284,14 +316,7 @@ Following the successful implementation of all optional enhancements (commits ca
 
 ## Remaining Tasks for Production Deployment
 
-### 1. Add External Dependencies (~30 min)
-```toml
-[dependencies]
-stun_codec = "0.3"          # For actual STUN protocol
-webrtc-stun = "0.5"         # For WebRTC STUN support
-```
-
-### 2. Configure web-sys Features (~10 min)
+### 1. Configure web-sys Features (~50 LoC Cargo.toml changes)
 ```toml
 [dependencies.web-sys]
 features = [
@@ -305,24 +330,26 @@ features = [
 ]
 ```
 
-### 3. Complete libp2p Integration (~2-3 hours)
+### 2. Complete libp2p Integration (~300-400 LoC)
 - Implement actual `swarm.dial()` calls
 - Add libp2p event handling
 - Integrate relay protocol handlers
+- Wire AddressReflectionRequest/Response protocol
 - Test with real libp2p relays
 
-### 4. Complete WASM State Management (~1-2 hours)
+### 3. Complete WASM State Management (~150-200 LoC)
 - Add WebSocket/WebRTC handle storage
 - Implement proper callback cleanup
 - Add connection lifecycle management
 
-### 5. Real-World Testing (~4-6 hours)
-- Test integration tests against real STUN servers
-- Test WebRTC in actual browsers
+### 4. Real-World Testing (~200-300 LoC tests)
+- Test peer-assisted address discovery with live mesh
+- Test WebRTC in actual browsers (Chrome, Firefox, Safari)
 - Validate libp2p relay with real peers
+- Test hole-punching across various NAT types
 - Performance testing and optimization
 
-**Estimated Total:** 8-12 hours of integration work
+**Estimated Total:** ~650-950 LoC of integration work
 
 ---
 

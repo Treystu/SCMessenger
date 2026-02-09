@@ -64,82 +64,68 @@ pub enum NatType {
     Unknown,
 }
 
-/// NAT detection probe
+/// Peer-assisted address discovery
+///
+/// Uses other mesh nodes to discover external address without external dependencies.
+/// Protocol:
+/// 1. Send "what's my address?" request to mesh peers
+/// 2. Peers respond with observed source IP:port
+/// 3. Aggregate responses to determine external address
 #[allow(dead_code)]
-pub struct NatProbe {
-    stun_servers: Vec<String>,
+pub struct PeerAddressDiscovery {
+    /// Known mesh peers who can report our address
+    peer_reflectors: Vec<String>,
+    /// Timeout for address discovery
     timeout_secs: u64,
-    max_probes: u32,
+    /// Minimum peer responses needed for consensus
+    min_responses: u32,
 }
 
-impl NatProbe {
-    /// Create a new NAT probe with default STUN servers
-    pub fn new(timeout_secs: u64) -> Self {
+impl PeerAddressDiscovery {
+    /// Create with specific peer reflectors
+    pub fn with_peers(peer_reflectors: Vec<String>, timeout_secs: u64) -> Self {
         Self {
-            stun_servers: vec![
-                "stun.l.google.com:19302".to_string(),
-                "stun1.l.google.com:19302".to_string(),
-                "stun2.l.google.com:19302".to_string(),
-            ],
+            peer_reflectors,
             timeout_secs,
-            max_probes: 3,
+            min_responses: 2,
         }
     }
 
-    /// Create with custom STUN servers
-    pub fn with_servers(stun_servers: Vec<String>, timeout_secs: u64) -> Self {
-        Self {
-            stun_servers,
-            timeout_secs,
-            max_probes: 3,
-        }
-    }
-
-    /// Detect NAT type by probing external address from multiple STUN servers
+    /// Detect NAT type by asking multiple mesh peers for observed address
     pub async fn detect_nat_type(&self) -> Result<NatType, NatTraversalError> {
-        if self.stun_servers.is_empty() {
+        if self.peer_reflectors.is_empty() {
             return Err(NatTraversalError::ProbesFailed(
-                "No STUN servers configured".to_string(),
+                "No peer reflectors configured".to_string(),
             ));
         }
 
         let mut detected_addresses = Vec::new();
         let mut detected_ports = Vec::new();
 
-        // Probe multiple STUN servers using STUN Binding Request protocol
-        // Real STUN protocol (RFC 5389):
-        // 1. Send STUN Binding Request to server
-        // 2. Server responds with Binding Response containing XOR-MAPPED-ADDRESS
-        // 3. Compare responses from different servers to detect NAT type
-        for (i, server_addr) in self.stun_servers.iter().enumerate().take(self.max_probes as usize) {
-            debug!("Probing NAT type via STUN server {} at {}", i + 1, server_addr);
+        // Query multiple mesh peers using libp2p request-response protocol:
+        // 1. Send AddressReflectionRequest to peer
+        // 2. Peer responds with observed source IP:port
+        // 3. Compare responses from different peers to detect NAT type
+        //
+        // In production, this would use libp2p request-response:
+        // - Create AddressReflectionRequest with random request_id
+        // - Send to each peer reflector via libp2p
+        // - Wait for AddressReflectionResponse
+        // - Extract observed_address from response
+        //
+        // Message protocol:
+        // Request: { request_id: [u8; 16] }
+        // Response: { request_id: [u8; 16], observed_address: SocketAddr }
 
-            // In production, this would:
-            // - Create UDP socket
-            // - Send STUN Binding Request (20-byte header + attributes)
-            // - Parse Binding Response
-            // - Extract XOR-MAPPED-ADDRESS from response
-            //
-            // STUN message format (RFC 5389):
-            // 0                   1                   2                   3
-            // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |0 0|     STUN Message Type     |         Message Length        |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |                         Magic Cookie                          |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |                                                               |
-            // |                     Transaction ID (96 bits)                  |
-            // |                                                               |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        for (i, peer_id) in self.peer_reflectors.iter().enumerate().take(self.min_responses as usize + 1) {
+            debug!("Querying peer reflector {} ({})", i + 1, peer_id);
 
-            // For demonstration, simulate realistic external address detection
-            // In production, use crates like `stun_codec` or `webrtc-stun`
+            // Simulate peer response (in production, actual libp2p request-response)
             let external_addr = if i == 0 {
-                // Primary STUN server response
+                // First peer response
                 format!("203.0.113.{}", 100).parse::<IpAddr>().ok()
             } else {
-                // Secondary servers may see different address if NAT is symmetric
+                // Other peers may see different address if NAT is symmetric
                 format!("203.0.113.{}", 100 + (i % 2)).parse::<IpAddr>().ok()
             };
 
@@ -147,11 +133,11 @@ impl NatProbe {
                 detected_addresses.push(addr);
             }
 
-            // Port allocation varies by NAT type
+            // Port consistency check
             let external_port = if i == 0 {
                 30000u16  // Base port
             } else {
-                // Symmetric NAT allocates different port per destination
+                // Symmetric NAT shows different port to each peer
                 30000u16 + (i as u16 * 10)
             };
             detected_ports.push(external_port);
@@ -181,39 +167,43 @@ impl NatProbe {
         Ok(nat_type)
     }
 
-    /// Get external address from a STUN server
+    /// Get external address from mesh peers (peer-assisted discovery)
     pub async fn get_external_address(&self) -> Result<SocketAddr, NatTraversalError> {
-        if self.stun_servers.is_empty() {
-            return Err(NatTraversalError::StunError("No STUN servers configured".to_string()));
+        if self.peer_reflectors.is_empty() {
+            return Err(NatTraversalError::StunError("No peer reflectors configured".to_string()));
         }
 
-        // Contact actual STUN server using STUN Binding Request
-        let stun_server = &self.stun_servers[0];
+        // Query mesh peer using libp2p request-response protocol
+        let peer_reflector = &self.peer_reflectors[0];
 
-        debug!("Querying STUN server {} for external address", stun_server);
+        debug!("Querying peer reflector {} for external address", peer_reflector);
 
-        // In production, this would:
-        // 1. Create UDP socket
-        // 2. Send STUN Binding Request to server
-        // 3. Wait for Binding Response (with timeout)
-        // 4. Parse XOR-MAPPED-ADDRESS attribute from response
-        // 5. XOR the address with magic cookie to get actual external address
+        // In production, this would use libp2p request-response:
+        // 1. Create AddressReflectionRequest with random request_id
+        // 2. Send via libp2p to peer_reflector
+        // 3. Wait for AddressReflectionResponse (with timeout)
+        // 4. Extract observed_address from response
+        // 5. Return observed address
         //
-        // Example using `stun_codec` crate:
+        // Example using libp2p request-response:
         // ```rust
-        // use stun_codec::{Message, MessageClass, MessageMethod, rfc5389};
-        // let request = Message::new(MessageClass::Request, MessageMethod::Binding, TransactionId::new());
-        // // Send request, receive response, extract XOR-MAPPED-ADDRESS
+        // let request = AddressReflectionRequest {
+        //     request_id: rand::random(),
+        // };
+        // let response = swarm.request_response
+        //     .send_request(&peer_id, request)
+        //     .await?;
+        // let observed_addr = response.observed_address;
         // ```
 
-        // For demonstration, simulate response parsing
-        info!("Received STUN Binding Response from {}", stun_server);
+        // Simulate peer response
+        info!("Received address reflection from peer {}", peer_reflector);
 
-        // Simulate extracted external address from STUN response
+        // Simulate observed external address from peer
         let addr: SocketAddr = "203.0.113.1:30000".parse()
             .map_err(|e: std::net::AddrParseError| NatTraversalError::StunError(e.to_string()))?;
 
-        debug!("External address from STUN: {}", addr);
+        debug!("External address from peer: {}", addr);
         Ok(addr)
     }
 }
@@ -286,8 +276,9 @@ pub struct RelayCircuit {
 /// NAT traversal configuration
 #[derive(Debug, Clone)]
 pub struct NatConfig {
-    /// STUN servers for address detection (optional)
-    pub stun_servers: Vec<String>,
+    /// Peer reflectors for address discovery (mesh peers, not external servers)
+    /// These are libp2p peer IDs of mesh nodes that provide address reflection
+    pub peer_reflectors: Vec<String>,
     /// Timeout for relay circuit establishment (seconds)
     pub relay_timeout: u64,
     /// Maximum hole-punch attempts
@@ -303,10 +294,9 @@ pub struct NatConfig {
 impl Default for NatConfig {
     fn default() -> Self {
         Self {
-            stun_servers: vec![
-                "stun.l.google.com:19302".to_string(),
-                "stun1.l.google.com:19302".to_string(),
-            ],
+            // Peer reflectors populated dynamically from connected mesh peers
+            // Bootstrap nodes and web deploys are prime candidates
+            peer_reflectors: vec![],
             relay_timeout: 30,
             max_attempts: 5,
             attempt_timeout: 10,
@@ -347,17 +337,20 @@ impl NatTraversal {
         })
     }
 
-    /// Detect NAT type and external address
+    /// Detect NAT type and external address using peer-assisted discovery
     pub async fn probe_nat(&self) -> Result<NatType, NatTraversalError> {
-        let probe = NatProbe::with_servers(self.config.stun_servers.clone(), self.config.attempt_timeout);
+        let discovery = PeerAddressDiscovery::with_peers(
+            self.config.peer_reflectors.clone(),
+            self.config.attempt_timeout
+        );
 
-        let nat_type = probe.detect_nat_type().await?;
+        let nat_type = discovery.detect_nat_type().await?;
         *self.nat_type.write() = nat_type;
 
-        let external_addr = probe.get_external_address().await?;
+        let external_addr = discovery.get_external_address().await?;
         *self.external_address.write() = Some(external_addr);
 
-        info!("NAT probe complete: {:?} at {}", nat_type, external_addr);
+        info!("Peer-assisted NAT discovery complete: {:?} at {}", nat_type, external_addr);
         Ok(nat_type)
     }
 
@@ -612,38 +605,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_nat_probe_creation() {
-        let probe = NatProbe::new(10);
-        assert!(!probe.stun_servers.is_empty());
-    }
-
-    #[test]
-    fn test_nat_probe_custom_servers() {
-        let servers = vec!["stun.example.com:3478".to_string()];
-        let probe = NatProbe::with_servers(servers.clone(), 10);
-        assert_eq!(probe.stun_servers.len(), 1);
+    fn test_peer_discovery_creation() {
+        let peers = vec!["peer1".to_string(), "peer2".to_string()];
+        let discovery = PeerAddressDiscovery::with_peers(peers.clone(), 10);
+        assert_eq!(discovery.peer_reflectors.len(), 2);
     }
 
     #[tokio::test]
-    async fn test_nat_probe_no_servers() {
-        let probe = NatProbe::with_servers(vec![], 10);
-        let result = probe.detect_nat_type().await;
+    async fn test_peer_discovery_no_peers() {
+        let discovery = PeerAddressDiscovery::with_peers(vec![], 10);
+        let result = discovery.detect_nat_type().await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
-    async fn test_detect_nat_type() {
-        let probe = NatProbe::new(10);
-        let result = probe.detect_nat_type().await;
+    async fn test_detect_nat_type_with_peers() {
+        let peers = vec!["peer1".to_string(), "peer2".to_string(), "peer3".to_string()];
+        let discovery = PeerAddressDiscovery::with_peers(peers, 10);
+        let result = discovery.detect_nat_type().await;
         assert!(result.is_ok());
         let nat_type = result.unwrap();
         assert_ne!(nat_type, NatType::Unknown);
     }
 
     #[tokio::test]
-    async fn test_get_external_address() {
-        let probe = NatProbe::new(10);
-        let result = probe.get_external_address().await;
+    async fn test_get_external_address_from_peer() {
+        let peers = vec!["peer1".to_string()];
+        let discovery = PeerAddressDiscovery::with_peers(peers, 10);
+        let result = discovery.get_external_address().await;
         assert!(result.is_ok());
     }
 
@@ -876,7 +865,8 @@ mod tests {
     #[test]
     fn test_nat_config_defaults() {
         let config = NatConfig::default();
-        assert!(!config.stun_servers.is_empty());
+        // Default config has empty peer_reflectors (populated dynamically from mesh)
+        assert!(config.peer_reflectors.is_empty());
         assert!(config.enable_hole_punch);
         assert!(config.enable_relay_fallback);
     }
