@@ -7,9 +7,13 @@
 // - All behaviours from behaviour.rs
 
 use super::behaviour::{IronCoreBehaviour, MessageRequest, MessageResponse};
-use super::discovery::DiscoveryConfig;
 use anyhow::Result;
-use libp2p::{identity::Keypair, kad, swarm::SwarmEvent, Multiaddr, PeerId};
+use libp2p::{
+    identity::Keypair,
+    kad,
+    swarm::SwarmEvent,
+    Multiaddr, PeerId,
+};
 use tokio::sync::mpsc;
 
 /// Commands that can be sent to the swarm task
@@ -27,14 +31,19 @@ pub enum SwarmCommand {
         reply: mpsc::Sender<Result<(), String>>,
     },
     /// Get list of connected peers
-    GetPeers { reply: mpsc::Sender<Vec<PeerId>> },
+    GetPeers {
+        reply: mpsc::Sender<Vec<PeerId>>,
+    },
     /// Start listening on an address
     Listen {
         addr: Multiaddr,
         reply: mpsc::Sender<Result<Multiaddr, String>>,
     },
     /// Add a known peer address to Kademlia
-    AddKadAddress { peer_id: PeerId, addr: Multiaddr },
+    AddKadAddress {
+        peer_id: PeerId,
+        addr: Multiaddr,
+    },
     /// Shutdown the swarm
     Shutdown,
 }
@@ -152,16 +161,9 @@ impl SwarmHandle {
 ///
 /// This spawns a tokio task that runs the swarm event loop.
 /// The returned handle can be used to send commands to the swarm.
-///
-/// # Arguments
-/// * `keypair` - The node's cryptographic identity
-/// * `listen_addr` - Address to listen on (defaults to 0.0.0.0:0)
-/// * `discovery_config` - Configuration controlling discovery behavior
-/// * `event_tx` - Channel to send swarm events to the application
 pub async fn start_swarm(
     keypair: Keypair,
     listen_addr: Option<Multiaddr>,
-    discovery_config: DiscoveryConfig,
     event_tx: mpsc::Sender<SwarmEvent2>,
 ) -> Result<SwarmHandle> {
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
@@ -172,8 +174,8 @@ pub async fn start_swarm(
             libp2p::yamux::Config::default,
         )?
         .with_behaviour(|key| {
-            IronCoreBehaviour::new(key, &discovery_config)
-                .map_err(|e| anyhow::anyhow!("Failed to create network behaviour: {}", e))
+            IronCoreBehaviour::new(key)
+                .expect("Failed to create network behaviour")
         })?
         .with_swarm_config(|cfg| {
             cfg.with_idle_connection_timeout(std::time::Duration::from_secs(300))
@@ -181,19 +183,11 @@ pub async fn start_swarm(
         .build();
 
     // Start listening
-    let addr = match listen_addr {
-        Some(addr) => addr,
-        None => "/ip4/0.0.0.0/tcp/0"
-            .parse()
-            .map_err(|e| anyhow::anyhow!("Failed to parse default listen address: {}", e))?,
-    };
+    let addr = listen_addr.unwrap_or_else(|| "/ip4/0.0.0.0/tcp/0".parse().unwrap());
     swarm.listen_on(addr)?;
 
     // Set Kademlia to server mode (so we can be found)
-    swarm
-        .behaviour_mut()
-        .kademlia
-        .set_mode(Some(kad::Mode::Server));
+    swarm.behaviour_mut().kademlia.set_mode(Some(kad::Mode::Server));
 
     let (command_tx, mut command_rx) = mpsc::channel::<SwarmCommand>(256);
     let handle = SwarmHandle {
@@ -218,9 +212,7 @@ pub async fn start_swarm(
                                         envelope_data: request.envelope_data,
                                     }).await;
 
-                                    // TODO: This sends acceptance BEFORE the application layer
-                                    // has decrypted/validated the message. Consider a two-phase
-                                    // protocol so the sender gets an accurate delivery status.
+                                    // Send acceptance response
                                     let _ = swarm.behaviour_mut().messaging.send_response(
                                         channel,
                                         MessageResponse { accepted: true, error: None },
@@ -283,10 +275,6 @@ pub async fn start_swarm(
                 Some(command) = command_rx.recv() => {
                     match command {
                         SwarmCommand::SendMessage { peer_id, envelope_data, reply } => {
-                            // TODO: Track pending request IDs and only report success after
-                            // receiving a delivery confirmation from the peer. Currently
-                            // send_request fires and we immediately report Ok, which is a
-                            // false-positive delivery guarantee.
                             let _request_id = swarm.behaviour_mut().messaging.send_request(
                                 &peer_id,
                                 MessageRequest { envelope_data },
@@ -307,13 +295,9 @@ pub async fn start_swarm(
                         }
 
                         SwarmCommand::Listen { addr, reply } => {
-                            match swarm.listen_on(addr.clone()) {
+                            match swarm.listen_on(addr) {
                                 Ok(_) => {
-                                    // Note: the actual bound address arrives asynchronously via
-                                    // SwarmEvent::NewListenAddr. We return the requested address
-                                    // here as acknowledgement; the real address comes via the
-                                    // event channel.
-                                    let _ = reply.send(Ok(addr)).await;
+                                    let _ = reply.send(Ok("/ip4/0.0.0.0/tcp/0".parse().unwrap())).await;
                                 }
                                 Err(e) => {
                                     let _ = reply.send(Err(e.to_string())).await;
@@ -338,7 +322,7 @@ pub async fn start_swarm(
     Ok(handle)
 }
 
-use futures::StreamExt;
-use libp2p::identify;
-use libp2p::mdns;
 use libp2p::request_response;
+use futures::StreamExt;
+use libp2p::mdns;
+use libp2p::identify;

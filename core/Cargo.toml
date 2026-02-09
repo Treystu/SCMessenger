@@ -34,8 +34,6 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-lz4_flex = { workspace = true }
-crc32fast = { workspace = true }
 
 # Additional dependencies
 parking_lot = "0.12"

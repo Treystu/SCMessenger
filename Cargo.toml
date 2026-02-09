@@ -21,15 +21,12 @@ tokio = { version = "1.35", features = ["full"] }
 async-trait = "0.1"
 futures = "0.3"
 
-# Drift Protocol compression and checksums
-lz4_flex = "0.11"
-crc32fast = "1.4"
-
 # libp2p for peer-to-peer networking
-# Phase 0: TCP for native, mDNS for LAN, Kademlia for WAN
-# QUIC and websocket deferred to Phase 1 (QUIC needs .with_quic(), websocket for browser interop)
+# Phase 0: TCP + QUIC for native, mDNS for LAN, Kademlia for WAN
+# websocket deferred to Phase 1 (browser interop)
 libp2p = { version = "0.53", features = [
     "tcp",
+    "quic",
     "dns",
     "noise",
     "yamux",
@@ -53,7 +50,7 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 
 # Crypto & Identity
 cesride = "0.3"
-ed25519-dalek = { version = "2.1", features = ["serde", "zeroize"] }
+ed25519-dalek = { version = "2.1", features = ["serde"] }
 x25519-dalek = { version = "2.0", features = ["static_secrets"] }
 curve25519-dalek = "4.1"
 chacha20poly1305 = "0.10"

@@ -1,10 +1,10 @@
 // Identity & Crypto - Foundation for KERI support (Phase 4)
 
-mod keys;
 mod store;
+mod keys;
 
-pub use keys::{IdentityKeys, KeyPair};
 pub use store::IdentityStore;
+pub use keys::{KeyPair, IdentityKeys};
 
 use anyhow::Result;
 
@@ -129,9 +129,7 @@ mod tests {
         assert!(valid);
 
         // Test invalid signature
-        let invalid = manager
-            .verify(b"wrong data", &signature, &public_key)
-            .unwrap();
+        let invalid = manager.verify(b"wrong data", &signature, &public_key).unwrap();
         assert!(!invalid);
     }
 
@@ -140,12 +138,7 @@ mod tests {
         use tempfile::tempdir;
 
         let dir = tempdir().unwrap();
-        let path = dir
-            .path()
-            .join("test_identity")
-            .to_str()
-            .unwrap()
-            .to_string();
+        let path = dir.path().join("test_identity").to_str().unwrap().to_string();
 
         // Create and initialize
         let mut manager1 = IdentityManager::with_path(&path).unwrap();

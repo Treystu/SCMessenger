@@ -5,29 +5,19 @@
 //
 // If the answer is no, it doesn't belong in Phase 0.
 
-// Allow clippy lint triggered by UniFFI-generated scaffolding code
-#![allow(clippy::empty_line_after_doc_comments)]
-
-pub mod crypto;
-pub mod drift;
 pub mod identity;
+pub mod crypto;
 pub mod message;
-pub mod mobile;
-pub mod platform;
-pub mod privacy;
-pub mod relay;
-pub mod routing;
-pub mod store;
 pub mod transport;
-pub mod wasm_support;
+pub mod store;
 
-use parking_lot::RwLock;
 use std::sync::Arc;
+use parking_lot::RwLock;
 use thiserror::Error;
 
-pub use crypto::{decrypt_message, encrypt_message};
 pub use identity::IdentityManager;
-pub use message::{DeliveryStatus, Envelope, Message, MessageType, Receipt};
+pub use message::{Message, MessageType, Receipt, DeliveryStatus, Envelope};
+pub use crypto::{encrypt_message, decrypt_message};
 
 // UniFFI exports
 uniffi::include_scaffolding!("api");
@@ -77,30 +67,6 @@ pub struct IdentityInfo {
 pub struct SignatureResult {
     pub signature: Vec<u8>,
     pub public_key_hex: String,
-}
-
-/// Message info for UniFFI export (simplified view of Message)
-#[derive(Clone)]
-pub struct MessageInfo {
-    pub id: String,
-    pub sender_id: String,
-    pub recipient_id: String,
-    pub message_type: String,
-    pub payload: Vec<u8>,
-    pub timestamp: u64,
-}
-
-impl From<Message> for MessageInfo {
-    fn from(msg: Message) -> Self {
-        Self {
-            id: msg.id,
-            sender_id: msg.sender_id,
-            recipient_id: msg.recipient_id,
-            message_type: format!("{:?}", msg.message_type),
-            payload: msg.payload,
-            timestamp: msg.timestamp,
-        }
-    }
 }
 
 // ============================================================================
@@ -156,55 +122,18 @@ impl IronCore {
             )
             .try_init();
 
-        let identity = if let Some(path) = storage_path.as_ref() {
+        let identity = if let Some(path) = storage_path {
             Arc::new(RwLock::new(
-                IdentityManager::with_path(path).unwrap_or_else(|e| {
-                    tracing::warn!(
-                        "Failed to open persistent storage at '{}': {}. Falling back to in-memory storage. \
-                         Identity keys will NOT persist across restarts.",
-                        path, e
-                    );
-                    IdentityManager::new()
-                }),
+                IdentityManager::with_path(&path).unwrap_or_else(|_| IdentityManager::new()),
             ))
         } else {
             Arc::new(RwLock::new(IdentityManager::new()))
         };
 
-        let (outbox, inbox) = if let Some(path) = storage_path {
-            // Open sled database for outbox and inbox
-            match sled::open(&path) {
-                Ok(db) => {
-                    let outbox = store::Outbox::with_storage(db.clone())
-                        .unwrap_or_else(|e| {
-                            tracing::warn!("Failed to open persistent outbox: {}. Using in-memory outbox.", e);
-                            store::Outbox::new()
-                        });
-
-                    let inbox = store::Inbox::with_storage(db)
-                        .unwrap_or_else(|e| {
-                            tracing::warn!("Failed to open persistent inbox: {}. Using in-memory inbox.", e);
-                            store::Inbox::new()
-                        });
-
-                    (outbox, inbox)
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to open sled database at '{}': {}. Using in-memory stores.",
-                        path, e
-                    );
-                    (store::Outbox::new(), store::Inbox::new())
-                }
-            }
-        } else {
-            (store::Outbox::new(), store::Inbox::new())
-        };
-
         Self {
             identity,
-            outbox: Arc::new(RwLock::new(outbox)),
-            inbox: Arc::new(RwLock::new(inbox)),
+            outbox: Arc::new(RwLock::new(store::Outbox::new())),
+            inbox: Arc::new(RwLock::new(store::Inbox::new())),
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
         }
@@ -222,14 +151,12 @@ impl IronCore {
 
         tracing::info!("Iron Core V2 starting...");
 
-        // Initialize identity if not already done (single write lock to avoid TOCTOU race)
-        {
-            let mut identity = self.identity.write();
-            if identity.keys().is_none() {
-                identity
-                    .initialize()
-                    .map_err(|e| IronCoreError::StorageError(e.to_string()))?;
-            }
+        // Initialize identity if not already done
+        if self.identity.read().keys().is_none() {
+            self.identity
+                .write()
+                .initialize()
+                .map_err(|e| IronCoreError::StorageError(e.to_string()))?;
         }
 
         *running = true;
@@ -350,8 +277,8 @@ impl IronCore {
         let msg = Message::text(sender_id, recipient_public_key_hex.clone(), &text);
 
         // Serialize the message
-        let plaintext =
-            message::encode_message(&msg).map_err(|e| IronCoreError::Internal(e.to_string()))?;
+        let plaintext = message::encode_message(&msg)
+            .map_err(|e| IronCoreError::Internal(e.to_string()))?;
 
         // Encrypt
         let envelope = crypto::encrypt_message(&keys.signing_key, &recipient_bytes, &plaintext)
@@ -365,7 +292,7 @@ impl IronCore {
     }
 
     /// Decrypt a received envelope and return the plaintext message.
-    pub fn receive_message(&self, envelope_bytes: Vec<u8>) -> Result<MessageInfo, IronCoreError> {
+    pub fn receive_message(&self, envelope_bytes: Vec<u8>) -> Result<Message, IronCoreError> {
         let identity = self.identity.read();
         let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
 
@@ -381,14 +308,6 @@ impl IronCore {
         let msg = message::decode_message(&plaintext)
             .map_err(|e| IronCoreError::Internal(e.to_string()))?;
 
-        // Reject messages with stale or future timestamps (5-minute window)
-        const MESSAGE_TIMESTAMP_WINDOW_SECS: u64 = 300;
-        if !msg.is_recent(MESSAGE_TIMESTAMP_WINDOW_SECS) {
-            return Err(IronCoreError::InvalidInput(
-                "Message timestamp outside acceptable window (±5 minutes)".to_string(),
-            ));
-        }
-
         // Dedup check
         let mut inbox = self.inbox.write();
         let is_new = inbox.receive(store::ReceivedMessage {
@@ -402,10 +321,12 @@ impl IronCore {
         });
 
         if !is_new {
-            return Err(IronCoreError::InvalidInput("Duplicate message".to_string()));
+            return Err(IronCoreError::InvalidInput(
+                "Duplicate message".to_string(),
+            ));
         }
 
-        Ok(msg.into())
+        Ok(msg)
     }
 
     /// Get the number of queued outbound messages
@@ -493,21 +414,13 @@ mod tests {
         assert_eq!(sig_result.signature.len(), 64); // Ed25519
 
         let valid = core
-            .verify_signature(
-                data.clone(),
-                sig_result.signature.clone(),
-                sig_result.public_key_hex.clone(),
-            )
+            .verify_signature(data.clone(), sig_result.signature.clone(), sig_result.public_key_hex.clone())
             .unwrap();
         assert!(valid);
 
         // Wrong data should fail verification
         let invalid = core
-            .verify_signature(
-                b"wrong data".to_vec(),
-                sig_result.signature,
-                sig_result.public_key_hex,
-            )
+            .verify_signature(b"wrong data".to_vec(), sig_result.signature, sig_result.public_key_hex)
             .unwrap();
         assert!(!invalid);
     }
@@ -517,8 +430,11 @@ mod tests {
         let core = IronCore::new();
         core.initialize_identity().unwrap();
 
-        let result =
-            core.verify_signature(b"data".to_vec(), vec![0u8; 64], hex::encode(vec![0u8; 16]));
+        let result = core.verify_signature(
+            b"data".to_vec(),
+            vec![0u8; 64],
+            hex::encode(vec![0u8; 16]),
+        );
         assert!(result.is_err());
     }
 
@@ -537,13 +453,10 @@ mod tests {
             .prepare_message(bob_public_key, "Hello Bob!".to_string())
             .unwrap();
 
-        let msg_info = bob.receive_message(envelope_bytes).unwrap();
+        let msg = bob.receive_message(envelope_bytes).unwrap();
 
-        assert_eq!(String::from_utf8(msg_info.payload).unwrap(), "Hello Bob!");
-        assert_eq!(
-            msg_info.sender_id,
-            alice.get_identity_info().identity_id.unwrap()
-        );
+        assert_eq!(msg.text_content().unwrap(), "Hello Bob!");
+        assert_eq!(msg.sender_id, alice.get_identity_info().identity_id.unwrap());
     }
 
     #[test]

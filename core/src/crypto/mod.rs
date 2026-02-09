@@ -2,4 +2,4 @@
 
 pub mod encrypt;
 
-pub use encrypt::{decrypt_message, encrypt_message, sign_envelope, verify_envelope_signature};
+pub use encrypt::{encrypt_message, decrypt_message};

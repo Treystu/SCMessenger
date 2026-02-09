@@ -1,12 +1,10 @@
 // Cryptographic key management
 
+use ed25519_dalek::{Signer, Verifier, SigningKey, VerifyingKey, Signature as Ed25519Signature};
 use anyhow::Result;
-use ed25519_dalek::{Signature as Ed25519Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroize;
 
-/// Key pair for signing and verification.
-///
-/// Implements Drop to zeroize the signing key material from memory.
+/// Key pair for signing and verification
 #[derive(Clone)]
 pub struct KeyPair {
     pub signing_key: SigningKey,
@@ -29,15 +27,7 @@ impl KeyPair {
     }
 }
 
-impl Drop for KeyPair {
-    fn drop(&mut self) {
-        self.signing_key.zeroize();
-    }
-}
-
-/// Identity keys (signing + optional encryption).
-///
-/// Implements Drop to zeroize the signing key material from memory.
+/// Identity keys (signing + optional encryption)
 #[derive(Clone)]
 pub struct IdentityKeys {
     pub signing_key: SigningKey,
@@ -75,40 +65,27 @@ impl IdentityKeys {
     /// Verify signature
     pub fn verify(data: &[u8], signature: &[u8], public_key: &[u8]) -> Result<bool> {
         let verifying_key = VerifyingKey::from_bytes(
-            public_key
-                .try_into()
-                .map_err(|_| anyhow::anyhow!("Invalid public key"))?,
+            public_key.try_into().map_err(|_| anyhow::anyhow!("Invalid public key"))?
         )?;
 
         let sig = Ed25519Signature::from_bytes(
-            signature
-                .try_into()
-                .map_err(|_| anyhow::anyhow!("Invalid signature"))?,
+            signature.try_into().map_err(|_| anyhow::anyhow!("Invalid signature"))?
         );
 
         Ok(verifying_key.verify(data, &sig).is_ok())
     }
 
-    /// Serialize keys to bytes.
-    /// Returns a `Zeroizing<Vec<u8>>` that automatically wipes secret key material on drop.
-    pub fn to_bytes(&self) -> Zeroizing<Vec<u8>> {
-        Zeroizing::new(self.signing_key.to_bytes().to_vec())
+    /// Serialize keys to bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.signing_key.to_bytes().to_vec()
     }
 
     /// Deserialize keys from bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         let signing_key = SigningKey::from_bytes(
-            bytes
-                .try_into()
-                .map_err(|_| anyhow::anyhow!("Invalid key bytes"))?,
+            bytes.try_into().map_err(|_| anyhow::anyhow!("Invalid key bytes"))?
         );
         Ok(Self { signing_key })
-    }
-}
-
-impl Drop for IdentityKeys {
-    fn drop(&mut self) {
-        self.signing_key.zeroize();
     }
 }
 

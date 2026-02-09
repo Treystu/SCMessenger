@@ -16,15 +16,6 @@ dictionary SignatureResult {
     string public_key_hex;
 };
 
-dictionary MessageInfo {
-    string id;
-    string sender_id;
-    string recipient_id;
-    string message_type;
-    bytes payload;
-    u64 timestamp;
-};
-
 // ============================================================================
 // MAIN INTERFACE
 // ============================================================================
@@ -52,8 +43,6 @@ interface IronCore {
     // Messaging
     [Throws=IronCoreError]
     bytes prepare_message(string recipient_public_key_hex, string text);
-    [Throws=IronCoreError]
-    MessageInfo receive_message(bytes envelope_bytes);
     u32 outbox_count();
     u32 inbox_count();
 
@@ -65,9 +54,6 @@ interface IronCore {
 // CALLBACKS
 // ============================================================================
 
-// TODO: `callback interface` is deprecated in UniFFI 0.28+.
-// Migrate to `trait` interface when upgrading UniFFI.
-// See: https://mozilla.github.io/uniffi-rs/latest/foreign_traits.html
 callback interface CoreDelegate {
     void on_peer_discovered(string peer_id);
     void on_peer_disconnected(string peer_id);
@@ -79,10 +65,6 @@ callback interface CoreDelegate {
 // ERROR HANDLING
 // ============================================================================
 
-// TODO: These error variants are simple enums but the Rust IronCoreError
-// carries String payloads. UniFFI cannot serialize error messages to mobile
-// clients. Migrate to [Error] interface with associated data when upgrading
-// to UniFFI 0.28+.
 [Error]
 enum IronCoreError {
     "NotInitialized",

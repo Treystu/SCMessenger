@@ -1,15 +1,12 @@
 // scmessenger-cli — SCMessenger CLI
 //
-// Encrypted P2P messaging over libp2p with mDNS discovery.
+// Identity management, offline encryption, and live P2P messaging.
 
-use clap::{Parser, Subcommand};
-use libp2p::{identity::Keypair, Multiaddr, PeerId};
-use scmessenger_core::transport::{self, DiscoveryConfig, SwarmEvent};
 use scmessenger_core::IronCore;
+use scmessenger_core::transport::{self, SwarmEvent};
+use clap::{Parser, Subcommand};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::sync::mpsc;
+use std::sync::Arc;
 
 #[derive(Parser)]
 #[command(name = "scmessenger-cli")]
@@ -30,7 +27,7 @@ enum Commands {
         #[command(subcommand)]
         action: IdentityAction,
     },
-    /// Send an encrypted message (outputs envelope bytes)
+    /// Send an encrypted message (outputs envelope bytes, offline mode)
     Send {
         /// Recipient's public key (hex)
         #[arg()]
@@ -41,9 +38,9 @@ enum Commands {
     },
     /// Run end-to-end messaging test (two in-memory nodes)
     Test,
-    /// Start listening for peers and messages
+    /// Start listening for P2P connections (mDNS discovery + messaging)
     Listen {
-        /// Port to listen on
+        /// Port to listen on (default: random)
         #[arg(short, long, default_value = "0")]
         port: u16,
     },
@@ -87,195 +84,6 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Truncate a string for display (avoids panic on short strings)
-fn truncate_id(s: &str, max_len: usize) -> &str {
-    if s.len() >= max_len {
-        &s[..max_len]
-    } else {
-        s
-    }
-}
-
-/// Peer info: maps libp2p PeerId to optional crypto public key hex
-type PeerMap = Arc<Mutex<HashMap<PeerId, Option<String>>>>;
-
-async fn cmd_listen(core: IronCore, port: u16) -> anyhow::Result<()> {
-    // Initialize crypto identity
-    core.initialize_identity()
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
-
-    let info = core.get_identity_info();
-    let public_key_hex = info.public_key_hex.unwrap();
-
-    println!("=== SCMessenger ===");
-    println!("Crypto Public Key: {}", public_key_hex);
-
-    // Create a SEPARATE libp2p keypair for networking
-    let net_keypair = Keypair::generate_ed25519();
-    let local_peer_id = net_keypair.public().to_peer_id();
-    println!("Network Peer ID:   {}", local_peer_id);
-    println!();
-
-    // Start the swarm
-    let listen_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse()?;
-    let (event_tx, mut event_rx) = mpsc::channel::<SwarmEvent>(256);
-    let swarm_handle = transport::start_swarm(
-        net_keypair,
-        Some(listen_addr),
-        DiscoveryConfig::default(),
-        event_tx,
-    )
-    .await?;
-
-    let peers: PeerMap = Arc::new(Mutex::new(HashMap::new()));
-
-    println!("Waiting for peers via mDNS...");
-    println!("Commands:");
-    println!("  send <peer_id> <crypto_pubkey_hex> <message>");
-    println!("  peers");
-    println!("  quit");
-    println!();
-
-    // Spawn event handler task
-    let event_peers = peers.clone();
-    let event_core = Arc::new(core);
-    let event_core_clone = event_core.clone();
-
-    let event_task = tokio::spawn(async move {
-        while let Some(event) = event_rx.recv().await {
-            match event {
-                SwarmEvent::PeerDiscovered(peer_id) => {
-                    let mut map = event_peers.lock().unwrap();
-                    if let std::collections::hash_map::Entry::Vacant(e) = map.entry(peer_id) {
-                        println!("[+] Peer discovered: {}", e.key());
-                        e.insert(None);
-                    }
-                }
-                SwarmEvent::PeerDisconnected(peer_id) => {
-                    event_peers.lock().unwrap().remove(&peer_id);
-                    println!("[-] Peer disconnected: {}", peer_id);
-                }
-                SwarmEvent::MessageReceived {
-                    peer_id,
-                    envelope_data,
-                } => match event_core_clone.receive_message(envelope_data) {
-                    Ok(msg_info) => {
-                        let text = String::from_utf8(msg_info.payload)
-                            .unwrap_or_else(|_| "<binary>".to_string());
-                        println!();
-                        println!(
-                            "[msg] From {}... (peer {}): {}",
-                            truncate_id(&msg_info.sender_id, 16),
-                            peer_id,
-                            text
-                        );
-                    }
-                    Err(e) => {
-                        println!("[err] Failed to decrypt from {}: {}", peer_id, e);
-                    }
-                },
-                SwarmEvent::ListeningOn(addr) => {
-                    println!("[*] Listening on {}", addr);
-                }
-            }
-        }
-    });
-
-    // Spawn stdin reader task
-    let stdin_core = event_core.clone();
-    let stdin_swarm = swarm_handle.clone();
-    let stdin_peers = peers.clone();
-
-    let stdin_task = tokio::spawn(async move {
-        let stdin = tokio::io::stdin();
-        let reader = BufReader::new(stdin);
-        let mut lines = reader.lines();
-
-        while let Ok(Some(line)) = lines.next_line().await {
-            let line = line.trim().to_string();
-            if line.is_empty() {
-                continue;
-            }
-
-            if line == "quit" || line == "exit" {
-                println!("Shutting down...");
-                let _ = stdin_swarm.shutdown().await;
-                break;
-            }
-
-            if line == "peers" {
-                let map = stdin_peers.lock().unwrap();
-                if map.is_empty() {
-                    println!("No peers connected.");
-                } else {
-                    println!("Connected peers:");
-                    for (peer_id, _) in map.iter() {
-                        println!("  {}", peer_id);
-                    }
-                }
-                continue;
-            }
-
-            if line.starts_with("send ") {
-                let parts: Vec<&str> = line.splitn(4, ' ').collect();
-                if parts.len() < 4 {
-                    println!("Usage: send <peer_id> <crypto_pubkey_hex> <message>");
-                    continue;
-                }
-
-                let peer_id_str = parts[1];
-                let recipient_pubkey_hex = parts[2];
-                let message_text = parts[3];
-
-                // Parse peer ID
-                let target_peer_id: PeerId = match peer_id_str.parse() {
-                    Ok(id) => id,
-                    Err(e) => {
-                        println!("Invalid peer ID: {}", e);
-                        continue;
-                    }
-                };
-
-                // Prepare encrypted message
-                let envelope_bytes = match stdin_core
-                    .prepare_message(recipient_pubkey_hex.to_string(), message_text.to_string())
-                {
-                    Ok(bytes) => bytes,
-                    Err(e) => {
-                        println!("Encryption failed: {}", e);
-                        continue;
-                    }
-                };
-
-                // Send via swarm
-                match stdin_swarm
-                    .send_message(target_peer_id, envelope_bytes)
-                    .await
-                {
-                    Ok(()) => {
-                        println!("[sent] Message queued for {}", target_peer_id);
-                    }
-                    Err(e) => {
-                        println!("[err] Send failed: {}", e);
-                    }
-                }
-
-                continue;
-            }
-
-            println!("Unknown command. Try: send, peers, quit");
-        }
-    });
-
-    // Wait for either task to complete
-    tokio::select! {
-        _ = event_task => {},
-        _ = stdin_task => {},
-    }
-
-    Ok(())
-}
-
 fn cmd_identity_generate(core: &IronCore) -> anyhow::Result<()> {
     println!("Generating identity...\n");
     core.initialize_identity()
@@ -308,14 +116,8 @@ fn cmd_send(core: &IronCore, recipient_hex: &str, text: &str) -> anyhow::Result<
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     let sender_info = core.get_identity_info();
-    println!(
-        "Sender: {}...",
-        truncate_id(&sender_info.public_key_hex.unwrap_or_default(), 16)
-    );
-    println!(
-        "Recipient: {}...",
-        &recipient_hex[..std::cmp::min(16, recipient_hex.len())]
-    );
+    println!("Sender: {}...", &sender_info.public_key_hex.unwrap_or_default()[..16]);
+    println!("Recipient: {}...", &recipient_hex[..std::cmp::min(16, recipient_hex.len())]);
     println!("Message: {}\n", text);
 
     let envelope_bytes = core
@@ -334,77 +136,45 @@ fn cmd_test() -> anyhow::Result<()> {
     let alice = IronCore::new();
     let bob = IronCore::new();
 
-    alice
-        .initialize_identity()
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
-    bob.initialize_identity()
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    alice.initialize_identity().map_err(|e| anyhow::anyhow!("{}", e))?;
+    bob.initialize_identity().map_err(|e| anyhow::anyhow!("{}", e))?;
 
     let alice_info = alice.get_identity_info();
     let bob_info = bob.get_identity_info();
 
-    println!(
-        "Alice: {}...",
-        truncate_id(alice_info.public_key_hex.as_ref().unwrap(), 16)
-    );
-    println!(
-        "Bob:   {}...\n",
-        truncate_id(bob_info.public_key_hex.as_ref().unwrap(), 16)
-    );
+    println!("Alice: {}...", &alice_info.public_key_hex.as_ref().unwrap()[..16]);
+    println!("Bob:   {}...\n", &bob_info.public_key_hex.as_ref().unwrap()[..16]);
 
     // Test 1: Alice sends to Bob
     println!("Test 1: Alice -> Bob (text message)");
     let envelope = alice
-        .prepare_message(
-            bob_info.public_key_hex.clone().unwrap(),
-            "Hello Bob! This is a secret message.".to_string(),
-        )
+        .prepare_message(bob_info.public_key_hex.clone().unwrap(), "Hello Bob! This is a secret message.".to_string())
         .map_err(|e| anyhow::anyhow!("{}", e))?;
     println!("  Encrypted: {} bytes", envelope.len());
 
-    let msg_info = bob
-        .receive_message(envelope)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
-    println!(
-        "  Decrypted: \"{}\"",
-        String::from_utf8_lossy(&msg_info.payload)
-    );
-    println!(
-        "  Sender ID matches: {}",
-        msg_info.sender_id == alice_info.identity_id.clone().unwrap()
-    );
+    let msg = bob.receive_message(envelope).map_err(|e| anyhow::anyhow!("{}", e))?;
+    println!("  Decrypted: \"{}\"", msg.text_content().unwrap());
+    println!("  Sender ID matches: {}", msg.sender_id == alice_info.identity_id.clone().unwrap());
     println!("  PASS\n");
 
     // Test 2: Bob sends to Alice
     println!("Test 2: Bob -> Alice (text message)");
     let envelope = bob
-        .prepare_message(
-            alice_info.public_key_hex.clone().unwrap(),
-            "Hey Alice! Got your message.".to_string(),
-        )
+        .prepare_message(alice_info.public_key_hex.clone().unwrap(), "Hey Alice! Got your message.".to_string())
         .map_err(|e| anyhow::anyhow!("{}", e))?;
     println!("  Encrypted: {} bytes", envelope.len());
 
-    let msg_info = alice
-        .receive_message(envelope)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
-    println!(
-        "  Decrypted: \"{}\"",
-        String::from_utf8_lossy(&msg_info.payload)
-    );
+    let msg = alice.receive_message(envelope).map_err(|e| anyhow::anyhow!("{}", e))?;
+    println!("  Decrypted: \"{}\"", msg.text_content().unwrap());
     println!("  PASS\n");
 
     // Test 3: Eve cannot decrypt
     println!("Test 3: Eve cannot decrypt Alice's message to Bob");
     let eve = IronCore::new();
-    eve.initialize_identity()
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    eve.initialize_identity().map_err(|e| anyhow::anyhow!("{}", e))?;
 
     let envelope = alice
-        .prepare_message(
-            bob_info.public_key_hex.clone().unwrap(),
-            "This is only for Bob".to_string(),
-        )
+        .prepare_message(bob_info.public_key_hex.clone().unwrap(), "This is only for Bob".to_string())
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     match eve.receive_message(envelope) {
@@ -416,14 +186,10 @@ fn cmd_test() -> anyhow::Result<()> {
     // Test 4: Replay protection
     println!("Test 4: Replay protection");
     let envelope = alice
-        .prepare_message(
-            bob_info.public_key_hex.unwrap(),
-            "No replays allowed".to_string(),
-        )
+        .prepare_message(bob_info.public_key_hex.unwrap(), "No replays allowed".to_string())
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    bob.receive_message(envelope.clone())
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    bob.receive_message(envelope.clone()).map_err(|e| anyhow::anyhow!("{}", e))?;
     println!("  First receive: OK");
 
     match bob.receive_message(envelope) {
@@ -435,16 +201,10 @@ fn cmd_test() -> anyhow::Result<()> {
     // Test 5: Digital signatures
     println!("Test 5: Digital signatures");
     let data = b"Important document content".to_vec();
-    let sig = alice
-        .sign_data(data.clone())
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    let sig = alice.sign_data(data.clone()).map_err(|e| anyhow::anyhow!("{}", e))?;
 
     let valid = alice
-        .verify_signature(
-            data.clone(),
-            sig.signature.clone(),
-            sig.public_key_hex.clone(),
-        )
+        .verify_signature(data.clone(), sig.signature.clone(), sig.public_key_hex.clone())
         .map_err(|e| anyhow::anyhow!("{}", e))?;
     println!("  Valid signature: {}", valid);
 
@@ -456,6 +216,179 @@ fn cmd_test() -> anyhow::Result<()> {
 
     println!("=========================================");
     println!("All tests passed.");
+
+    Ok(())
+}
+
+/// Live P2P listen mode: mDNS discovery + encrypted messaging over libp2p.
+async fn cmd_listen(core: IronCore, port: u16) -> anyhow::Result<()> {
+    // Initialize identity
+    core.initialize_identity()
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    let info = core.get_identity_info();
+    let my_pubkey = info.public_key_hex.clone().unwrap();
+
+    println!("SCMessenger — Live P2P Mode");
+    println!("===========================");
+    println!("Crypto Public Key: {}", my_pubkey);
+
+    // Create a separate libp2p keypair for networking (independent from crypto identity)
+    let network_keypair = libp2p::identity::Keypair::generate_ed25519();
+    let local_peer_id = network_keypair.public().to_peer_id();
+    println!("Network Peer ID:   {}", local_peer_id);
+    println!();
+
+    // Start the swarm
+    let listen_addr: libp2p::Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse()?;
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);
+    let swarm_handle = transport::start_swarm(network_keypair, Some(listen_addr), event_tx).await?;
+
+    // Shared state: map PeerId -> crypto public key (learned via discovery metadata)
+    // For POC: users manually specify both PeerId and crypto pubkey in send command
+    let core = Arc::new(core);
+    let peers: Arc<tokio::sync::Mutex<HashMap<libp2p::PeerId, Option<String>>>> =
+        Arc::new(tokio::sync::Mutex::new(HashMap::new()));
+
+    println!("Waiting for peers via mDNS...");
+    println!("Commands:");
+    println!("  send <peer_id> <crypto_pubkey_hex> <message>");
+    println!("  peers");
+    println!("  quit");
+    println!();
+
+    // Spawn event handler
+    let core_rx = core.clone();
+    let peers_rx = peers.clone();
+    let event_task = tokio::spawn(async move {
+        while let Some(event) = event_rx.recv().await {
+            match event {
+                SwarmEvent::PeerDiscovered(peer_id) => {
+                    let mut p = peers_rx.lock().await;
+                    if !p.contains_key(&peer_id) {
+                        p.insert(peer_id, None);
+                        println!("\n[+] Peer discovered: {}", peer_id);
+                        print!("> ");
+                        let _ = std::io::Write::flush(&mut std::io::stdout());
+                    }
+                }
+                SwarmEvent::PeerDisconnected(peer_id) => {
+                    peers_rx.lock().await.remove(&peer_id);
+                    println!("\n[-] Peer disconnected: {}", peer_id);
+                    print!("> ");
+                    let _ = std::io::Write::flush(&mut std::io::stdout());
+                }
+                SwarmEvent::MessageReceived { peer_id, envelope_data } => {
+                    match core_rx.receive_message(envelope_data) {
+                        Ok(msg) => {
+                            let text = msg.text_content().unwrap_or_else(|| "<non-text>".into());
+                            println!("\n[msg from {}] {}", peer_id, text);
+                        }
+                        Err(e) => {
+                            println!("\n[err] Failed to decrypt message from {}: {}", peer_id, e);
+                        }
+                    }
+                    print!("> ");
+                    let _ = std::io::Write::flush(&mut std::io::stdout());
+                }
+                SwarmEvent::ListeningOn(addr) => {
+                    println!("[*] Listening on {}", addr);
+                    print!("> ");
+                    let _ = std::io::Write::flush(&mut std::io::stdout());
+                }
+            }
+        }
+    });
+
+    // Stdin reader
+    let stdin_task = tokio::spawn(async move {
+        let stdin = tokio::io::AsyncBufReadExt::lines(tokio::io::BufReader::new(tokio::io::stdin()));
+        tokio::pin!(stdin);
+
+        print!("> ");
+        let _ = std::io::Write::flush(&mut std::io::stdout());
+
+        while let Ok(Some(line)) = stdin.next_line().await {
+            let line = line.trim().to_string();
+            if line.is_empty() {
+                print!("> ");
+                let _ = std::io::Write::flush(&mut std::io::stdout());
+                continue;
+            }
+
+            if line == "quit" || line == "exit" {
+                println!("Shutting down...");
+                let _ = swarm_handle.shutdown().await;
+                break;
+            }
+
+            if line == "peers" {
+                let p = peers.lock().await;
+                if p.is_empty() {
+                    println!("No peers discovered yet.");
+                } else {
+                    println!("Discovered peers:");
+                    for (pid, pubkey) in p.iter() {
+                        let pk_display = pubkey.as_deref().unwrap_or("(unknown crypto key)");
+                        println!("  {} — {}", pid, pk_display);
+                    }
+                }
+                print!("> ");
+                let _ = std::io::Write::flush(&mut std::io::stdout());
+                continue;
+            }
+
+            if line.starts_with("send ") {
+                let parts: Vec<&str> = line.splitn(4, ' ').collect();
+                if parts.len() < 4 {
+                    println!("Usage: send <peer_id> <crypto_pubkey_hex> <message>");
+                    print!("> ");
+                    let _ = std::io::Write::flush(&mut std::io::stdout());
+                    continue;
+                }
+
+                let peer_id_str = parts[1];
+                let crypto_pubkey_hex = parts[2];
+                let message_text = parts[3];
+
+                // Parse PeerId
+                let peer_id: libp2p::PeerId = match peer_id_str.parse() {
+                    Ok(pid) => pid,
+                    Err(e) => {
+                        println!("Invalid peer ID: {}", e);
+                        print!("> ");
+                        let _ = std::io::Write::flush(&mut std::io::stdout());
+                        continue;
+                    }
+                };
+
+                // Encrypt the message
+                match core.prepare_message(crypto_pubkey_hex.to_string(), message_text.to_string()) {
+                    Ok(envelope_bytes) => {
+                        match swarm_handle.send_message(peer_id, envelope_bytes).await {
+                            Ok(_) => println!("[sent] Message delivered to {}", peer_id),
+                            Err(e) => println!("[err] Failed to send: {}", e),
+                        }
+                    }
+                    Err(e) => println!("[err] Failed to encrypt: {}", e),
+                }
+
+                print!("> ");
+                let _ = std::io::Write::flush(&mut std::io::stdout());
+                continue;
+            }
+
+            println!("Unknown command. Try: send, peers, quit");
+            print!("> ");
+            let _ = std::io::Write::flush(&mut std::io::stdout());
+        }
+    });
+
+    // Wait for either task to complete
+    tokio::select! {
+        _ = event_task => {}
+        _ = stdin_task => {}
+    }
 
     Ok(())
 }

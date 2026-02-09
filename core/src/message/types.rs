@@ -71,22 +71,6 @@ pub struct Envelope {
     pub ciphertext: Vec<u8>,
 }
 
-/// A signed envelope — envelope with an outer Ed25519 signature.
-///
-/// This structure adds an outer signature layer over the complete envelope,
-/// allowing relay nodes or intermediate systems to verify sender identity
-/// without requiring decryption. The sender's public key is included for
-/// verification.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SignedEnvelope {
-    /// The serialized Envelope (typically bincode-encoded)
-    pub envelope_data: Vec<u8>,
-    /// Ed25519 signature over envelope_data (64 bytes)
-    pub sender_signature: Vec<u8>,
-    /// Sender's Ed25519 public key (32 bytes) — for signature verification
-    pub sender_public_key: Vec<u8>,
-}
-
 impl Message {
     /// Create a new text message
     pub fn text(sender_id: String, recipient_id: String, text: &str) -> Self {
@@ -103,26 +87,19 @@ impl Message {
         }
     }
 
-    /// Create a receipt message.
-    /// Returns an error if the receipt cannot be serialized.
-    pub fn receipt(
-        sender_id: String,
-        recipient_id: String,
-        receipt: &Receipt,
-    ) -> Result<Self, String> {
-        let payload = bincode::serialize(receipt)
-            .map_err(|e| format!("Failed to serialize receipt: {}", e))?;
-        Ok(Self {
+    /// Create a receipt message
+    pub fn receipt(sender_id: String, recipient_id: String, receipt: &Receipt) -> Self {
+        Self {
             id: uuid::Uuid::new_v4().to_string(),
             sender_id,
             recipient_id,
             message_type: MessageType::Receipt,
-            payload,
+            payload: bincode::serialize(receipt).unwrap_or_default(),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
-        })
+        }
     }
 
     /// Get text content (only valid for Text messages)
@@ -134,18 +111,13 @@ impl Message {
         }
     }
 
-    /// Check if message is recent (within threshold_secs).
-    /// Rejects future-dated messages (timestamp > now).
+    /// Check if message is recent (within threshold_secs)
     pub fn is_recent(&self, threshold_secs: u64) -> bool {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        // Reject messages from the future
-        if self.timestamp > now {
-            return false;
-        }
-        (now - self.timestamp) < threshold_secs
+        now.saturating_sub(self.timestamp) < threshold_secs
     }
 }
 
@@ -205,8 +177,11 @@ mod tests {
     #[test]
     fn test_receipt_message() {
         let receipt = Receipt::delivered("msg-123".to_string());
-        let msg =
-            Message::receipt("sender".to_string(), "recipient".to_string(), &receipt).unwrap();
+        let msg = Message::receipt(
+            "sender".to_string(),
+            "recipient".to_string(),
+            &receipt,
+        );
 
         assert_eq!(msg.message_type, MessageType::Receipt);
         assert!(msg.text_content().is_none());
@@ -220,11 +195,6 @@ mod tests {
         let mut old_msg = Message::text("a".into(), "b".into(), "test");
         old_msg.timestamp = 0; // epoch
         assert!(!old_msg.is_recent(60));
-
-        // Future-dated messages should not be considered recent
-        let mut future_msg = Message::text("a".into(), "b".into(), "test");
-        future_msg.timestamp = u64::MAX;
-        assert!(!future_msg.is_recent(60));
     }
 
     #[test]

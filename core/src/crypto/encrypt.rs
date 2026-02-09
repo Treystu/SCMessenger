@@ -16,10 +16,10 @@
 
 use anyhow::{bail, Result};
 use chacha20poly1305::{
-    aead::{Aead, KeyInit, Payload},
+    aead::{Aead, KeyInit},
     XChaCha20Poly1305, XNonce,
 };
-use ed25519_dalek::{Signature, SigningKey, Signer, VerifyingKey};
+use ed25519_dalek::SigningKey;
 use rand::RngCore;
 use x25519_dalek::{EphemeralSecret, PublicKey as X25519PublicKey, StaticSecret};
 use zeroize::Zeroize;
@@ -82,11 +82,6 @@ fn derive_key(shared_secret: &[u8]) -> [u8; 32] {
 ///
 /// # Returns
 /// An `Envelope` containing everything needed for decryption.
-///
-/// # Security
-/// The sender's public key is bound to the ciphertext via AEAD authentication,
-/// preventing sender substitution attacks. The sender's identity cannot be
-/// modified without detection.
 pub fn encrypt_message(
     sender_signing_key: &SigningKey,
     recipient_public_key: &[u8; 32],
@@ -102,45 +97,31 @@ pub fn encrypt_message(
     // ECDH: ephemeral_secret × recipient_public → shared_secret
     let shared_secret = ephemeral_secret.diffie_hellman(&recipient_x25519);
 
-    // KDF: derive symmetric key (copy shared secret bytes so we can zeroize)
-    let mut shared_secret_bytes = *shared_secret.as_bytes();
-    let mut symmetric_key = derive_key(&shared_secret_bytes);
-    shared_secret_bytes.zeroize(); // Clear ECDH shared secret
+    // KDF: derive symmetric key
+    let mut symmetric_key = derive_key(shared_secret.as_bytes());
 
     // Generate random nonce (24 bytes for XChaCha20)
     let mut nonce_bytes = [0u8; 24];
     rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
     let nonce = XNonce::from_slice(&nonce_bytes);
 
-    // Get sender's public key as AAD (Additional Authenticated Data)
-    let sender_public_key_bytes = sender_signing_key.verifying_key().to_bytes();
-
-    // Encrypt with sender public key bound as AAD
+    // Encrypt
     let cipher = XChaCha20Poly1305::new_from_slice(&symmetric_key)
         .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
 
-    let payload = Payload {
-        msg: plaintext,
-        aad: &sender_public_key_bytes,
-    };
-
     let ciphertext = cipher
-        .encrypt(nonce, payload)
+        .encrypt(nonce, plaintext)
         .map_err(|e| anyhow::anyhow!("Encryption failed: {}", e))?;
 
-    // Build envelope before zeroizing
-    let envelope = crate::message::Envelope {
-        sender_public_key: sender_public_key_bytes.to_vec(),
+    // Zeroize key material
+    symmetric_key.zeroize();
+
+    Ok(crate::message::Envelope {
+        sender_public_key: sender_signing_key.verifying_key().to_bytes().to_vec(),
         ephemeral_public_key: ephemeral_public.to_bytes().to_vec(),
         nonce: nonce_bytes.to_vec(),
         ciphertext,
-    };
-
-    // Zeroize all key material and intermediates
-    symmetric_key.zeroize();
-    nonce_bytes.zeroize();
-
-    Ok(envelope)
+    })
 }
 
 /// Decrypt an envelope using the recipient's signing key.
@@ -151,10 +132,6 @@ pub fn encrypt_message(
 ///
 /// # Returns
 /// The decrypted plaintext bytes.
-///
-/// # Security
-/// Verification fails if the sender's public key in the envelope has been
-/// modified, as it is authenticated as AAD in the AEAD scheme.
 pub fn decrypt_message(
     recipient_signing_key: &SigningKey,
     envelope: &crate::message::Envelope,
@@ -166,9 +143,6 @@ pub fn decrypt_message(
     if envelope.nonce.len() != 24 {
         bail!("Invalid nonce length");
     }
-    if envelope.sender_public_key.len() != 32 {
-        bail!("Invalid sender public key length");
-    }
 
     // Convert recipient's Ed25519 signing key to X25519 static secret
     let recipient_x25519_secret = ed25519_to_x25519_secret(recipient_signing_key);
@@ -177,82 +151,28 @@ pub fn decrypt_message(
     let mut ephemeral_bytes = [0u8; 32];
     ephemeral_bytes.copy_from_slice(&envelope.ephemeral_public_key);
     let ephemeral_public = X25519PublicKey::from(ephemeral_bytes);
-    ephemeral_bytes.zeroize(); // Clear intermediate buffer
 
     // ECDH: recipient_secret × ephemeral_public → shared_secret
     let shared_secret = recipient_x25519_secret.diffie_hellman(&ephemeral_public);
 
     // KDF: same derivation as encryption
-    let mut shared_secret_bytes = *shared_secret.as_bytes();
-    let mut symmetric_key = derive_key(&shared_secret_bytes);
-    shared_secret_bytes.zeroize(); // Clear ECDH shared secret
+    let mut symmetric_key = derive_key(shared_secret.as_bytes());
 
     // Reconstruct nonce
     let nonce = XNonce::from_slice(&envelope.nonce);
 
-    // Decrypt with sender public key as AAD (must match what was encrypted)
+    // Decrypt
     let cipher = XChaCha20Poly1305::new_from_slice(&symmetric_key)
         .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
 
-    let payload = Payload {
-        msg: &envelope.ciphertext,
-        aad: &envelope.sender_public_key,
-    };
-
     let plaintext = cipher
-        .decrypt(nonce, payload)
-        .map_err(|_| anyhow::anyhow!("Decryption failed: invalid ciphertext, wrong key, or sender public key was tampered with"))?;
+        .decrypt(nonce, envelope.ciphertext.as_ref())
+        .map_err(|_| anyhow::anyhow!("Decryption failed: invalid ciphertext or wrong key"))?;
 
     // Zeroize key material
     symmetric_key.zeroize();
 
     Ok(plaintext)
-}
-
-/// Sign an envelope with the sender's Ed25519 signing key.
-///
-/// This creates an outer signature over the complete envelope bytes,
-/// allowing relay nodes to verify sender identity without decrypting.
-///
-/// # Arguments
-/// * `signing_key` - Sender's Ed25519 signing key
-/// * `envelope_bytes` - Serialized envelope bytes (typically from bincode::serialize)
-///
-/// # Returns
-/// A 64-byte Ed25519 signature.
-pub fn sign_envelope(signing_key: &SigningKey, envelope_bytes: &[u8]) -> [u8; 64] {
-    signing_key.sign(envelope_bytes).to_bytes()
-}
-
-/// Verify an envelope signature.
-///
-/// Checks that the signature was created by the owner of the public key.
-///
-/// # Arguments
-/// * `envelope_bytes` - Serialized envelope bytes (same bytes that were signed)
-/// * `signature` - The 64-byte Ed25519 signature to verify
-/// * `sender_public_key` - The sender's 32-byte Ed25519 public key
-///
-/// # Returns
-/// Ok(()) if signature is valid, Err otherwise.
-pub fn verify_envelope_signature(
-    envelope_bytes: &[u8],
-    signature: &[u8; 64],
-    sender_public_key: &[u8; 32],
-) -> Result<()> {
-    // Reconstruct the public key from bytes
-    let verifying_key = VerifyingKey::from_bytes(sender_public_key)
-        .map_err(|_| anyhow::anyhow!("Invalid sender public key"))?;
-
-    // Reconstruct the signature from bytes
-    let sig = Signature::from_bytes(signature);
-
-    // Verify the signature
-    verifying_key
-        .verify_strict(envelope_bytes, &sig)
-        .map_err(|_| anyhow::anyhow!("Envelope signature verification failed"))?;
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -381,114 +301,5 @@ mod tests {
 
         let result = decrypt_message(&recipient_key, &envelope);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_sender_public_key_aad_binding() {
-        let sender_key = generate_keypair();
-        let recipient_key = generate_keypair();
-        let recipient_public = recipient_key.verifying_key().to_bytes();
-
-        let plaintext = b"Secret message";
-        let mut envelope = encrypt_message(&sender_key, &recipient_public, plaintext).unwrap();
-
-        // Decrypt should work with original sender public key
-        let decrypted = decrypt_message(&recipient_key, &envelope).unwrap();
-        assert_eq!(plaintext.to_vec(), decrypted);
-
-        // Tamper with sender public key by flipping a byte
-        if let Some(byte) = envelope.sender_public_key.first_mut() {
-            *byte ^= 0xFF;
-        }
-
-        // Decryption should fail because sender public key is now invalid as AAD
-        let result = decrypt_message(&recipient_key, &envelope);
-        assert!(result.is_err(), "Should fail when sender public key is tampered");
-    }
-
-    #[test]
-    fn test_sign_envelope_roundtrip() {
-        let sender_key = generate_keypair();
-        let recipient_key = generate_keypair();
-        let recipient_public = recipient_key.verifying_key().to_bytes();
-
-        let plaintext = b"Message to sign";
-        let envelope = encrypt_message(&sender_key, &recipient_public, plaintext).unwrap();
-
-        // Sign the envelope
-        let envelope_bytes = bincode::serialize(&envelope).unwrap();
-        let signature = sign_envelope(&sender_key, &envelope_bytes);
-        let sender_public_key_bytes = sender_key.verifying_key().to_bytes();
-
-        // Verify signature should succeed
-        let result = verify_envelope_signature(&envelope_bytes, &signature, &sender_public_key_bytes);
-        assert!(result.is_ok(), "Signature verification should succeed");
-    }
-
-    #[test]
-    fn test_sign_envelope_wrong_key_fails() {
-        let sender_key = generate_keypair();
-        let wrong_key = generate_keypair();
-        let recipient_key = generate_keypair();
-        let recipient_public = recipient_key.verifying_key().to_bytes();
-
-        let plaintext = b"Message to sign";
-        let envelope = encrypt_message(&sender_key, &recipient_public, plaintext).unwrap();
-
-        // Sign with sender key
-        let envelope_bytes = bincode::serialize(&envelope).unwrap();
-        let signature = sign_envelope(&sender_key, &envelope_bytes);
-
-        // Try to verify with wrong key
-        let wrong_public_key = wrong_key.verifying_key().to_bytes();
-        let result = verify_envelope_signature(&envelope_bytes, &signature, &wrong_public_key);
-        assert!(result.is_err(), "Verification with wrong key should fail");
-    }
-
-    #[test]
-    fn test_sign_envelope_tampered_signature_fails() {
-        let sender_key = generate_keypair();
-        let recipient_key = generate_keypair();
-        let recipient_public = recipient_key.verifying_key().to_bytes();
-
-        let plaintext = b"Message to sign";
-        let envelope = encrypt_message(&sender_key, &recipient_public, plaintext).unwrap();
-
-        // Sign the envelope
-        let envelope_bytes = bincode::serialize(&envelope).unwrap();
-        let mut signature = sign_envelope(&sender_key, &envelope_bytes);
-        let sender_public_key_bytes = sender_key.verifying_key().to_bytes();
-
-        // Tamper with signature
-        signature[0] ^= 0xFF;
-
-        // Verification should fail
-        let result = verify_envelope_signature(&envelope_bytes, &signature, &sender_public_key_bytes);
-        assert!(result.is_err(), "Verification of tampered signature should fail");
-    }
-
-    #[test]
-    fn test_sign_envelope_tampered_data_fails() {
-        let sender_key = generate_keypair();
-        let recipient_key = generate_keypair();
-        let recipient_public = recipient_key.verifying_key().to_bytes();
-
-        let plaintext = b"Message to sign";
-        let mut envelope = encrypt_message(&sender_key, &recipient_public, plaintext).unwrap();
-
-        // Sign the envelope
-        let envelope_bytes = bincode::serialize(&envelope).unwrap();
-        let signature = sign_envelope(&sender_key, &envelope_bytes);
-        let sender_public_key_bytes = sender_key.verifying_key().to_bytes();
-
-        // Tamper with envelope (change ciphertext)
-        if let Some(byte) = envelope.ciphertext.first_mut() {
-            *byte ^= 0xFF;
-        }
-
-        // Try to verify tampered envelope with original signature
-        let tampered_bytes = bincode::serialize(&envelope).unwrap();
-        let result = verify_envelope_signature(&tampered_bytes, &signature, &sender_public_key_bytes);
-        assert!(result.is_err(), "Verification of tampered envelope should fail");
     }
 }
