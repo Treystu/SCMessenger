@@ -263,13 +263,6 @@ pub async fn start_swarm(
                                         // Peer is requesting address reflection
                                         // We observe their address from the connection endpoint
 
-                                        // Try to get connected endpoint for this peer
-                                        let observed_addr_str = swarm
-                                            .network_info()
-                                            .connection_counters()
-                                            .num_connections()
-                                            .to_string(); // Temporary fallback
-
                                         // In production, extract actual remote address from connection endpoint
                                         // For now, use a default since we don't have direct access to connection endpoint
                                         let observed_addr: SocketAddr = "0.0.0.0:0".parse().unwrap();

@@ -12,7 +12,7 @@
 
 use libp2p::PeerId;
 use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use parking_lot::RwLock;

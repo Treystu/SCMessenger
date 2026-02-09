@@ -133,7 +133,7 @@ async fn cmd_init() -> Result<()> {
     println!("{}", "Initializing SCMessenger...".bold());
     println!();
 
-    let config = config::Config::load()?;
+    let _config = config::Config::load()?;
     println!("  {} Configuration", "✓".green());
 
     let data_dir = config::Config::data_dir()?;
@@ -641,7 +641,7 @@ async fn cmd_test() -> Result<()> {
     alice.initialize_identity()?;
     bob.initialize_identity()?;
 
-    let alice_info = alice.get_identity_info();
+    let _alice_info = alice.get_identity_info();
     let bob_info = bob.get_identity_info();
 
     println!("{} Identity generation", "✓".green());

@@ -283,7 +283,6 @@ impl Outbox {
                 removed
             }
             OutboxBackend::Persistent(db) => {
-                let mut removed = 0;
                 let mut keys_to_remove = Vec::new();
 
                 for result in db.scan_prefix(QUEUE_PREFIX) {
@@ -296,7 +295,7 @@ impl Outbox {
                     }
                 }
 
-                removed = keys_to_remove.len();
+                let removed = keys_to_remove.len();
                 for key in keys_to_remove {
                     let _ = db.remove(key);
                 }

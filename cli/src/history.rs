@@ -90,7 +90,7 @@ impl MessageHistory {
     }
 
     /// Add a message to history
-    pub fn add(&self, mut record: MessageRecord) -> Result<()> {
+    pub fn add(&self, record: MessageRecord) -> Result<()> {
         // Generate key: timestamp_id for chronological ordering
         let key = format!("{:020}_{}", record.timestamp, record.id);
 
