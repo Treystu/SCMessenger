@@ -9,6 +9,7 @@
 use super::behaviour::{IronCoreBehaviour, MessageRequest, MessageResponse};
 use super::reflection::{AddressReflectionRequest, AddressReflectionService};
 use super::observation::{AddressObserver, ConnectionTracker};
+use super::multiport::{self, MultiPortConfig, BindResult};
 use anyhow::Result;
 use libp2p::{identity::Keypair, kad, swarm::SwarmEvent, Multiaddr, PeerId};
 use tokio::sync::mpsc;
@@ -201,10 +202,23 @@ impl SwarmHandle {
 ///
 /// This spawns a tokio task that runs the swarm event loop.
 /// The returned handle can be used to send commands to the swarm.
+///
+/// If `multiport_config` is provided, the swarm will attempt to bind to multiple
+/// ports for maximum connectivity. Otherwise, it uses the single `listen_addr`.
 pub async fn start_swarm(
     keypair: Keypair,
     listen_addr: Option<Multiaddr>,
     event_tx: mpsc::Sender<SwarmEvent2>,
+) -> Result<SwarmHandle> {
+    start_swarm_with_config(keypair, listen_addr, event_tx, None).await
+}
+
+/// Build and start the libp2p swarm with custom multi-port configuration.
+pub async fn start_swarm_with_config(
+    keypair: Keypair,
+    listen_addr: Option<Multiaddr>,
+    event_tx: mpsc::Sender<SwarmEvent2>,
+    multiport_config: Option<MultiPortConfig>,
 ) -> Result<SwarmHandle> {
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -223,9 +237,40 @@ pub async fn start_swarm(
             })
             .build();
 
-        // Start listening
-        let addr = listen_addr.unwrap_or_else(|| "/ip4/0.0.0.0/tcp/0".parse().unwrap());
-        swarm.listen_on(addr)?;
+        // Start listening on ports
+        let mut bind_results = Vec::new();
+
+        if let Some(config) = multiport_config {
+            // Multi-port mode: Try binding to all configured ports
+            tracing::info!("Starting multi-port adaptive listening");
+            let addresses = multiport::generate_listen_addresses(&config);
+
+            for (addr, port) in addresses {
+                match swarm.listen_on(addr.clone()) {
+                    Ok(_) => {
+                        tracing::info!("✓ Bound to {}", addr);
+                        bind_results.push(BindResult::Success { addr, port });
+                    }
+                    Err(e) => {
+                        let error = e.to_string();
+                        tracing::warn!("✗ Failed to bind to {} (port {}): {}", addr, port, error);
+                        bind_results.push(BindResult::Failed { port, error });
+                    }
+                }
+            }
+
+            // Analyze and report results
+            let analysis = multiport::analyze_bind_results(&bind_results);
+            tracing::info!("\n{}", analysis.report());
+
+            if analysis.successful.is_empty() {
+                return Err(anyhow::anyhow!("Failed to bind to any port"));
+            }
+        } else {
+            // Single port mode (legacy behavior)
+            let addr = listen_addr.unwrap_or_else(|| "/ip4/0.0.0.0/tcp/0".parse().unwrap());
+            swarm.listen_on(addr)?;
+        }
 
         // Set Kademlia to server mode (so we can be found)
         swarm
