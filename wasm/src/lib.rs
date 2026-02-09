@@ -1,5 +1,8 @@
 // scmessenger-wasm — WebAssembly bindings for browser environments
 
+pub mod transport;
+pub mod connection_state;
+
 use wasm_bindgen::prelude::*;
 use scmessenger_core::{IronCore as RustIronCore, IdentityInfo, SignatureResult};
 use std::sync::Arc;

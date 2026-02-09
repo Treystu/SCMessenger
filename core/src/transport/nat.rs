@@ -652,7 +652,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_probe_nat() {
-        let config = NatConfig::default();
+        let mut config = NatConfig::default();
+        config.peer_reflectors = vec!["peer1".to_string(), "peer2".to_string()];
         let traversal = NatTraversal::new(config).expect("Failed to create");
 
         assert!(traversal.probe_nat().await.is_ok());
@@ -662,7 +663,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_hole_punch_start() {
-        let config = NatConfig::default();
+        let mut config = NatConfig::default();
+        config.peer_reflectors = vec!["peer1".to_string(), "peer2".to_string()];
         let traversal = NatTraversal::new(config).expect("Failed to create");
 
         traversal.probe_nat().await.unwrap();
@@ -680,6 +682,7 @@ mod tests {
     #[tokio::test]
     async fn test_hole_punch_disabled() {
         let mut config = NatConfig::default();
+        config.peer_reflectors = vec!["peer1".to_string(), "peer2".to_string()];
         config.enable_hole_punch = false;
 
         let traversal = NatTraversal::new(config).expect("Failed to create");
@@ -697,7 +700,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_hole_punch_status() {
-        let config = NatConfig::default();
+        let mut config = NatConfig::default();
+        config.peer_reflectors = vec!["peer1".to_string(), "peer2".to_string()];
         let traversal = NatTraversal::new(config).expect("Failed to create");
 
         traversal.probe_nat().await.unwrap();

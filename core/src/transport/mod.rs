@@ -2,6 +2,10 @@
 
 pub mod behaviour;
 pub mod swarm;
+pub mod reflection;
+pub mod nat;
+pub mod internet;
 
 pub use swarm::{start_swarm, SwarmHandle, SwarmEvent2 as SwarmEvent, SwarmCommand};
 pub use behaviour::{MessageRequest, MessageResponse};
+pub use reflection::{AddressReflectionRequest, AddressReflectionResponse, AddressReflectionService};

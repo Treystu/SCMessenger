@@ -42,6 +42,8 @@ pub enum InternetTransportError {
     NatStatusUnknown,
     #[error("Bandwidth exceeded for peer: {0}")]
     BandwidthExceeded(String),
+    #[error("{0}")]
+    Other(String),
 }
 
 // ============================================================================
@@ -200,13 +202,11 @@ impl InternetRelay {
         );
 
         // Create libp2p peer ID and multiaddr for the relay
-        let libp2p_peer_id = libp2p::PeerId::from_bytes(&relay_peer_id.as_bytes())
+        let libp2p_peer_id = libp2p::PeerId::from_bytes(&relay_peer_id.to_bytes())
             .map_err(|e| InternetTransportError::Other(format!("Invalid peer ID: {}", e)))?;
 
-        // Parse the relay address into a multiaddr
-        let multiaddr: libp2p::Multiaddr = relay_addr
-            .parse()
-            .map_err(|e| InternetTransportError::Other(format!("Invalid multiaddr: {}", e)))?;
+        // Use the provided multiaddr directly (clone to avoid move)
+        let multiaddr = relay_addr.clone();
 
         // In a production implementation, this would dial the relay using libp2p's swarm
         // For now, we log the connection attempt and store the relay info
@@ -420,18 +420,7 @@ impl InternetRelay {
 // NAT TRAVERSAL (for future enhancement)
 // ============================================================================
 
-/// NAT traversal helper for hole punching and relay circuits
-#[allow(dead_code)]
-pub struct NatTraversal {
-    config: InternetTransportConfig,
-}
-
-impl NatTraversal {
-    /// Create NAT traversal helper
-    pub fn new(config: InternetTransportConfig) -> Self {
-        Self { config }
-    }
-
+impl InternetRelay {
     /// Attempt hole-punch between two peers through a relay
     pub async fn attempt_hole_punch(
         &self,
@@ -792,13 +781,19 @@ mod tests {
     #[tokio::test]
     async fn test_nat_traversal_hole_punch() {
         let config = InternetTransportConfig::default();
-        let traversal = NatTraversal::new(config);
+        let relay_inst = InternetRelay::new(config).expect("Failed to create relay");
 
         let local = PeerId::random();
         let remote = PeerId::random();
         let relay = PeerId::random();
 
-        assert!(traversal
+        // First add the relay to active relays
+        relay_inst
+            .connect_to_relay(relay, "/ip4/127.0.0.1/tcp/9000".parse().unwrap())
+            .await
+            .unwrap();
+
+        assert!(relay_inst
             .attempt_hole_punch(local, remote, relay)
             .await
             .is_ok());
@@ -807,13 +802,19 @@ mod tests {
     #[tokio::test]
     async fn test_nat_traversal_relay_circuit() {
         let config = InternetTransportConfig::default();
-        let traversal = NatTraversal::new(config);
+        let relay_inst = InternetRelay::new(config).expect("Failed to create relay");
 
         let initiator = PeerId::random();
         let target = PeerId::random();
         let relay = PeerId::random();
 
-        assert!(traversal
+        // First add the relay to active relays
+        relay_inst
+            .connect_to_relay(relay, "/ip4/127.0.0.1/tcp/9000".parse().unwrap())
+            .await
+            .unwrap();
+
+        assert!(relay_inst
             .establish_relay_circuit(initiator, target, relay)
             .await
             .is_ok());

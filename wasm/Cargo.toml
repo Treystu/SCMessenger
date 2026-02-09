@@ -19,6 +19,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 tracing-wasm = "0.2"
+parking_lot = "0.12"
 
 # WASM-specific dependencies
 console_error_panic_hook = "0.1"
