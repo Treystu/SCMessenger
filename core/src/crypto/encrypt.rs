@@ -16,7 +16,7 @@
 
 use anyhow::{bail, Result};
 use chacha20poly1305::{
-    aead::{Aead, KeyInit},
+    aead::{Aead, KeyInit, Payload},
     XChaCha20Poly1305, XNonce,
 };
 use ed25519_dalek::{Signer, Verifier, SigningKey, VerifyingKey, Signature as Ed25519Signature};
@@ -112,7 +112,10 @@ pub fn encrypt_message(
         .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
 
     let ciphertext = cipher
-        .encrypt_with_aad(nonce, &sender_public_bytes, plaintext)
+        .encrypt(nonce, Payload {
+            msg: plaintext,
+            aad: &sender_public_bytes,
+        })
         .map_err(|e| anyhow::anyhow!("Encryption failed: {}", e))?;
 
     // Zeroize key material
@@ -172,7 +175,10 @@ pub fn decrypt_message(
         .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
 
     let plaintext = cipher
-        .decrypt_with_aad(nonce, envelope.sender_public_key.as_ref(), envelope.ciphertext.as_ref())
+        .decrypt(nonce, Payload {
+            msg: envelope.ciphertext.as_ref(),
+            aad: envelope.sender_public_key.as_ref(),
+        })
         .map_err(|_| anyhow::anyhow!("Decryption failed: invalid ciphertext, wrong key, or tampered sender public key"))?;
 
     // Zeroize key material

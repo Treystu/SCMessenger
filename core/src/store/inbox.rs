@@ -162,7 +162,7 @@ impl Inbox {
                 .map(|msgs| msgs.clone())
                 .unwrap_or_default(),
             InboxBackend::Persistent(db) => {
-                let prefix = format!("{}{}_ ", String::from_utf8_lossy(MESSAGES_PREFIX), sender_id);
+                let prefix = format!("{}{}_", String::from_utf8_lossy(MESSAGES_PREFIX), sender_id);
                 db.scan_prefix(prefix.as_bytes())
                     .filter_map(|result| result.ok())
                     .filter_map(|(_, value)| bincode::deserialize(&value).ok())

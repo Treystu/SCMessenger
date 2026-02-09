@@ -3,5 +3,5 @@
 pub mod types;
 pub mod codec;
 
-pub use types::{Message, MessageType, Receipt, DeliveryStatus, Envelope};
+pub use types::{Message, MessageType, Receipt, DeliveryStatus, Envelope, SignedEnvelope};
 pub use codec::{encode_message, decode_message, encode_envelope, decode_envelope};

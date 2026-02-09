@@ -9,10 +9,10 @@
 //!
 //! Run with: cargo test --test integration_e2e
 
-use iron_core::crypto::encrypt::{encrypt_message, decrypt_message, sign_envelope, verify_envelope};
-use iron_core::identity::{IdentityKeys, IdentityManager, IdentityStore};
-use iron_core::message::{Message, MessageType, Envelope};
-use iron_core::store::{Inbox, Outbox, QueuedMessage};
+use scmessenger_core::crypto::encrypt::{encrypt_message, decrypt_message, sign_envelope, verify_envelope};
+use scmessenger_core::identity::{IdentityKeys, IdentityManager, IdentityStore};
+use scmessenger_core::message::{Message, MessageType, Envelope};
+use scmessenger_core::store::{Inbox, Outbox, QueuedMessage};
 use tempfile::tempdir;
 
 #[test]
@@ -77,7 +77,7 @@ fn test_e2e_message_flow_two_peers() {
     assert_eq!(bob_messages.len(), 1);
 
     let received_envelope_data = &bob_messages[0].envelope_data;
-    let received_signed_envelope: iron_core::message::SignedEnvelope =
+    let received_signed_envelope: scmessenger_core::message::SignedEnvelope =
         bincode::deserialize(received_envelope_data).expect("Failed to deserialize envelope");
 
     // Step 7: Verify envelope signature (relay would do this)
@@ -92,7 +92,7 @@ fn test_e2e_message_flow_two_peers() {
 
     // Step 9: Store in inbox (Bob's side)
     let mut bob_inbox = Inbox::new();
-    let received_msg = iron_core::store::ReceivedMessage {
+    let received_msg = scmessenger_core::store::ReceivedMessage {
         message_id: received_message.id.clone(),
         sender_id: received_message.sender_id.clone(),
         payload: received_message.payload.clone(),
@@ -115,7 +115,7 @@ fn test_e2e_message_flow_two_peers() {
     );
 
     // Step 11: Verify deduplication
-    let duplicate_msg = iron_core::store::ReceivedMessage {
+    let duplicate_msg = scmessenger_core::store::ReceivedMessage {
         message_id: received_message.id.clone(),
         sender_id: received_message.sender_id.clone(),
         payload: received_message.payload.clone(),
@@ -223,7 +223,7 @@ fn test_e2e_persistent_message_flow() {
 
         // Deliver message to Bob
         let envelope_data = &queued_messages[0].envelope_data;
-        let signed_envelope: iron_core::message::SignedEnvelope =
+        let signed_envelope: scmessenger_core::message::SignedEnvelope =
             bincode::deserialize(envelope_data).unwrap();
 
         let decrypted_bytes = decrypt_message(&bob_keys.signing_key, &signed_envelope.envelope)
@@ -234,7 +234,7 @@ fn test_e2e_persistent_message_flow() {
         let mut inbox = Inbox::persistent(inbox_path.to_str().unwrap())
             .expect("Failed to create persistent inbox");
 
-        let received_msg = iron_core::store::ReceivedMessage {
+        let received_msg = scmessenger_core::store::ReceivedMessage {
             message_id: received_message.id.clone(),
             sender_id: received_message.sender_id.clone(),
             payload: received_message.payload.clone(),
@@ -409,7 +409,7 @@ fn test_e2e_relay_verification() {
     )
     .unwrap();
 
-    let signed_envelope = sign_envelope(envelope, &alice_keys.signing_key).unwrap();
+    let signed_envelope = sign_envelope(envelope.clone(), &alice_keys.signing_key).unwrap();
 
     // Relay verifies signature (without decryption)
     assert!(

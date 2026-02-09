@@ -92,7 +92,7 @@ impl Outbox {
                 }
 
                 // Check per-peer limit
-                let peer_prefix = format!("{}{}_ ", String::from_utf8_lossy(QUEUE_PREFIX), msg.recipient_id);
+                let peer_prefix = format!("{}{}_", String::from_utf8_lossy(QUEUE_PREFIX), msg.recipient_id);
                 let peer_count = db.scan_prefix(peer_prefix.as_bytes()).count();
                 if peer_count >= MAX_QUEUE_PER_PEER {
                     return Err(format!(
@@ -124,7 +124,7 @@ impl Outbox {
                 .map(|q| q.iter().cloned().collect())
                 .unwrap_or_default(),
             OutboxBackend::Persistent(db) => {
-                let prefix = format!("{}{}_ ", String::from_utf8_lossy(QUEUE_PREFIX), recipient_id);
+                let prefix = format!("{}{}_", String::from_utf8_lossy(QUEUE_PREFIX), recipient_id);
                 db.scan_prefix(prefix.as_bytes())
                     .filter_map(|result| result.ok())
                     .filter_map(|(_, value)| bincode::deserialize(&value).ok())
@@ -177,7 +177,7 @@ impl Outbox {
                 }
             }
             OutboxBackend::Persistent(db) => {
-                let prefix = format!("{}{}_ ", String::from_utf8_lossy(QUEUE_PREFIX), recipient_id);
+                let prefix = format!("{}{}_", String::from_utf8_lossy(QUEUE_PREFIX), recipient_id);
                 let mut messages = Vec::new();
                 let mut keys_to_remove = Vec::new();
 
