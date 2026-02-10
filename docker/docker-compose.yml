@@ -1,0 +1,65 @@
+version: "3.8"
+
+services:
+  # The Relay Node (Bootstrap)
+  # Acts as the rendezvous point for other nodes.
+  relay:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: scmessenger:latest
+    container_name: scm-relay
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=4001
+      # No bootstrap nodes for the relay itself
+    ports:
+      - "4001:4001"
+    networks:
+      - network-a
+      - network-b
+
+  # Alice Node
+  # Simulates a user on Network A
+  alice:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: scmessenger:latest
+    container_name: scm-alice
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=0
+      # Bootstrap via the relay node
+      # Docker DNS resolves 'relay' to the relay container's IP
+      # Format: /ip4/<ip>/tcp/<port>
+      # But we need the IP. In strict mode we might need static IPs or DNS resolution.
+      # libp2p supports dns multiaddrs: /dns/relay/tcp/4001
+      - BOOTSTRAP_NODES=/dns/relay/tcp/4001
+    depends_on:
+      - relay
+    networks:
+      - network-a
+
+  # Bob Node
+  # Simulates a user on Network B
+  bob:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: scmessenger:latest
+    container_name: scm-bob
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=0
+      - BOOTSTRAP_NODES=/dns/relay/tcp/4001
+    depends_on:
+      - relay
+    networks:
+      - network-b
+
+networks:
+  network-a:
+    driver: bridge
+  network-b:
+    driver: bridge

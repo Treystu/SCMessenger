@@ -1,0 +1,49 @@
+# Build stage
+FROM rust:latest as builder
+
+WORKDIR /usr/src/scmessenger
+
+# Copy manifests
+COPY Cargo.toml Cargo.lock ./
+COPY core/Cargo.toml core/
+COPY cli/Cargo.toml cli/
+COPY mobile/Cargo.toml mobile/
+COPY wasm/Cargo.toml wasm/
+
+# Copy source code
+COPY core/src core/src
+COPY cli/src cli/src
+COPY mobile/src mobile/src
+COPY wasm/src wasm/src
+
+# Build the CLI
+RUN cargo build --release --bin scmessenger-cli
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+# Install runtime dependencies and network tools for simulation
+RUN apt-get update && apt-get install -y \
+    openssl \
+    ca-certificates \
+    iproute2 \
+    iputils-ping \
+    curl \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy binary from builder
+COPY --from=builder /usr/src/scmessenger/target/release/scmessenger-cli /usr/local/bin/scm
+
+# Copy entrypoint script
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Environment variables
+ENV RUST_LOG=info
+ENV SCM_CONFIG_DIR=/root/.config/scmessenger
+
+ENTRYPOINT ["entrypoint.sh"]
+CMD ["scm", "start"]

@@ -6,17 +6,19 @@
 // - Yamux multiplexing
 // - All behaviours from behaviour.rs
 
-use super::behaviour::{IronCoreBehaviour, MessageRequest, MessageResponse, RelayRequest, RelayResponse};
-use super::reflection::{AddressReflectionRequest, AddressReflectionService};
+use super::behaviour::{
+    IronCoreBehaviour, MessageRequest, MessageResponse, RelayRequest, RelayResponse,
+};
+use super::mesh_routing::{BootstrapCapability, MultiPathDelivery};
+use super::multiport::{self, BindResult, MultiPortConfig};
 use super::observation::{AddressObserver, ConnectionTracker};
-use super::multiport::{self, MultiPortConfig, BindResult};
-use super::mesh_routing::{MultiPathDelivery, BootstrapCapability};
+use super::reflection::{AddressReflectionRequest, AddressReflectionService};
 use anyhow::Result;
 use libp2p::{identity::Keypair, kad, swarm::SwarmEvent, Multiaddr, PeerId};
-use tokio::sync::mpsc;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::sync::mpsc;
 
 /// Pending message delivery tracking
 #[derive(Debug)]
@@ -300,7 +302,10 @@ pub async fn start_swarm_with_config(
         let reflection_service = AddressReflectionService::new();
 
         // Track pending address reflection requests
-        let mut pending_reflections: HashMap<libp2p::request_response::OutboundRequestId, mpsc::Sender<Result<String, String>>> = HashMap::new();
+        let mut pending_reflections: HashMap<
+            libp2p::request_response::OutboundRequestId,
+            mpsc::Sender<Result<String, String>>,
+        > = HashMap::new();
 
         // Track connections and address observations (Phase 1 & 2)
         let mut connection_tracker = ConnectionTracker::new();
@@ -314,10 +319,14 @@ pub async fn start_swarm_with_config(
         let mut pending_messages: HashMap<String, PendingMessage> = HashMap::new();
 
         // Track outbound request IDs to message IDs for direct sends
-        let mut request_to_message: HashMap<libp2p::request_response::OutboundRequestId, String> = HashMap::new();
+        let mut request_to_message: HashMap<libp2p::request_response::OutboundRequestId, String> =
+            HashMap::new();
 
         // Track outbound relay request IDs
-        let mut pending_relay_requests: HashMap<libp2p::request_response::OutboundRequestId, String> = HashMap::new();
+        let mut pending_relay_requests: HashMap<
+            libp2p::request_response::OutboundRequestId,
+            String,
+        > = HashMap::new();
 
         // Spawn the swarm event loop
         tokio::spawn(async move {
@@ -620,7 +629,10 @@ pub async fn start_swarm_with_config(
                                 connection_tracker.add_connection(
                                     peer_id,
                                     endpoint.get_remote_address().clone(),
-                                    endpoint.get_local_address().clone(),
+                                    match endpoint {
+                                        libp2p::core::ConnectedPoint::Listener { local_addr, .. } => local_addr.clone(),
+                                        libp2p::core::ConnectedPoint::Dialer { .. } => "/ip4/0.0.0.0/tcp/0".parse().unwrap(),
+                                    },
                                     connection_id.to_string(),
                                 );
 

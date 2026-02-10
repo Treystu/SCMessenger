@@ -5,15 +5,15 @@
 // are prioritized for firewall traversal.
 
 use libp2p::Multiaddr;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-use tracing::{info, warn};
+// use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+// use tracing::{info, warn};
 
 /// Common ports to try for maximum connectivity
 pub const COMMON_PORTS: &[u16] = &[
-    443,   // HTTPS (most likely to be allowed outbound)
-    80,    // HTTP (widely allowed)
-    8080,  // HTTP alternate (common proxy port)
-    9090,  // Common alternative
+    443,  // HTTPS (most likely to be allowed outbound)
+    80,   // HTTP (widely allowed)
+    8080, // HTTP alternate (common proxy port)
+    9090, // Common alternative
 ];
 
 /// Configuration for multi-port listening
@@ -134,7 +134,9 @@ pub fn analyze_bind_results(results: &[BindResult]) -> BindAnalysis {
     let has_common_port = successful
         .iter()
         .any(|(_, port)| COMMON_PORTS.contains(port));
-    let has_random_port = successful.iter().any(|(_, port)| *port == 0 || *port > 10000);
+    let has_random_port = successful
+        .iter()
+        .any(|(_, port)| *port == 0 || *port > 10000);
 
     let status = match (has_common_port, has_random_port, successful.len()) {
         (true, true, _) => ConnectivityStatus::Excellent,
@@ -173,7 +175,10 @@ impl BindAnalysis {
     pub fn report(&self) -> String {
         let mut report = String::new();
 
-        report.push_str(&format!("✓ Listening on {} address(es)\n", self.successful.len()));
+        report.push_str(&format!(
+            "✓ Listening on {} address(es)\n",
+            self.successful.len()
+        ));
 
         for (addr, port) in &self.successful {
             let priority = if COMMON_PORTS.contains(port) {
