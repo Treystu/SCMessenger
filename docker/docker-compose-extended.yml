@@ -1,0 +1,206 @@
+version: '3.8'
+
+# Extended Docker Compose for comprehensive SCMessenger feature testing
+#
+# Network topology:
+# - network-a: alice, carol, relay1
+# - network-b: bob, david, relay1, relay2
+# - network-c: eve, relay2
+#
+# This setup tests:
+# - Direct peer-to-peer messaging (same network)
+# - Single-relay routing (different networks via relay1)
+# - Multi-hop relay (network-a -> relay1 -> relay2 -> network-c)
+# - Mesh routing with multiple paths
+# - DHT/Kademlia discovery
+# - NAT traversal simulation
+
+services:
+  # Primary Relay Node (Bootstrap)
+  relay1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: scmessenger:latest
+    container_name: scm-relay1
+    hostname: relay1
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=4001
+      - NODE_NAME=relay1
+    ports:
+      - "4001:4001"
+    networks:
+      - network-a
+      - network-b
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # Secondary Relay Node
+  relay2:
+    image: scmessenger:latest
+    container_name: scm-relay2
+    hostname: relay2
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=4002
+      - BOOTSTRAP_NODES=/dns/relay1/tcp/4001
+      - NODE_NAME=relay2
+    ports:
+      - "4002:4002"
+    depends_on:
+      relay1:
+        condition: service_healthy
+    networks:
+      - network-b
+      - network-c
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Alice - Network A user
+  alice:
+    image: scmessenger:latest
+    container_name: scm-alice
+    hostname: alice
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=0
+      - BOOTSTRAP_NODES=/dns/relay1/tcp/4001
+      - NODE_NAME=alice
+    depends_on:
+      relay1:
+        condition: service_healthy
+    networks:
+      - network-a
+    tty: true
+    stdin_open: true
+
+  # Bob - Network B user
+  bob:
+    image: scmessenger:latest
+    container_name: scm-bob
+    hostname: bob
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=0
+      - BOOTSTRAP_NODES=/dns/relay1/tcp/4001
+      - NODE_NAME=bob
+    depends_on:
+      relay1:
+        condition: service_healthy
+    networks:
+      - network-b
+    tty: true
+    stdin_open: true
+
+  # Carol - Network A user (same network as Alice)
+  carol:
+    image: scmessenger:latest
+    container_name: scm-carol
+    hostname: carol
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=0
+      - BOOTSTRAP_NODES=/dns/relay1/tcp/4001
+      - NODE_NAME=carol
+    depends_on:
+      relay1:
+        condition: service_healthy
+    networks:
+      - network-a
+    tty: true
+    stdin_open: true
+
+  # David - Network B user (same network as Bob)
+  david:
+    image: scmessenger:latest
+    container_name: scm-david
+    hostname: david
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=0
+      - BOOTSTRAP_NODES=/dns/relay1/tcp/4001
+      - NODE_NAME=david
+    depends_on:
+      relay1:
+        condition: service_healthy
+    networks:
+      - network-b
+    tty: true
+    stdin_open: true
+
+  # Eve - Network C user (requires multi-hop routing)
+  eve:
+    image: scmessenger:latest
+    container_name: scm-eve
+    hostname: eve
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=0
+      - BOOTSTRAP_NODES=/dns/relay2/tcp/4002
+      - NODE_NAME=eve
+    depends_on:
+      relay2:
+        condition: service_healthy
+    networks:
+      - network-c
+    tty: true
+    stdin_open: true
+
+  # Test Orchestrator - runs automated feature tests
+  test-runner:
+    image: scmessenger:latest
+    container_name: scm-test-runner
+    hostname: test-runner
+    environment:
+      - RUST_LOG=info
+      - TEST_MODE=true
+    depends_on:
+      alice:
+        condition: service_started
+      bob:
+        condition: service_started
+      carol:
+        condition: service_started
+      david:
+        condition: service_started
+      eve:
+        condition: service_started
+    networks:
+      - network-a
+      - network-b
+      - network-c
+    volumes:
+      - ./test-scripts:/tests:ro
+      - ./test-results:/results:rw
+    command: ["/tests/run-integration-tests.sh"]
+    profiles:
+      - test
+
+networks:
+  network-a:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+  network-b:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/24
+  network-c:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.22.0.0/24
+
+volumes:
+  test-results:
