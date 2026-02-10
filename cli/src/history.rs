@@ -102,6 +102,7 @@ impl MessageHistory {
     }
 
     /// Get a specific message by ID
+    #[allow(dead_code)]
     pub fn get(&self, id: &str) -> Result<Option<MessageRecord>> {
         for item in self.db.iter() {
             let (_, value) = item?;
@@ -166,11 +167,13 @@ impl MessageHistory {
     }
 
     /// Count total messages
+    #[allow(dead_code)]
     pub fn count(&self) -> usize {
         self.db.len()
     }
 
     /// Count messages with a specific peer
+    #[allow(dead_code)]
     pub fn count_with_peer(&self, peer_id: &str) -> Result<usize> {
         let mut count = 0;
 
@@ -186,6 +189,7 @@ impl MessageHistory {
     }
 
     /// Mark message as delivered
+    #[allow(dead_code)]
     pub fn mark_delivered(&self, id: &str) -> Result<()> {
         if let Some(mut record) = self.get(id)? {
             record.delivered = true;
@@ -195,12 +199,14 @@ impl MessageHistory {
     }
 
     /// Delete all messages
+    #[allow(dead_code)]
     pub fn clear(&self) -> Result<()> {
         self.db.clear()?;
         Ok(())
     }
 
     /// Delete messages with a specific peer
+    #[allow(dead_code)]
     pub fn clear_conversation(&self, peer_id: &str) -> Result<usize> {
         let mut deleted = 0;
         let mut keys_to_delete = Vec::new();

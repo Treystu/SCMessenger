@@ -50,6 +50,7 @@ pub enum UiCommand {
         name: Option<String>,
         public_key: Option<String>,
     },
+    #[allow(dead_code)]
     ConfigSet {
         key: String,
         value: String,

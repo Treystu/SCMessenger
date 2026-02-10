@@ -59,8 +59,11 @@ impl Default for WasmTransportConfig {
 /// WebSocket relay connection to a known relay node
 #[derive(Debug, Clone)]
 pub struct WebSocketRelay {
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     url: String,
     state: Arc<RwLock<TransportState>>,
+    // Buffer for queueing messages when disconnected (unused in current implementation)
+    #[allow(dead_code)]
     message_buffer: Arc<RwLock<Vec<Vec<u8>>>>,
 }
 
@@ -150,7 +153,7 @@ impl WebSocketRelay {
     }
 
     /// Send an envelope via WebSocket
-    pub fn send_envelope(&self, data: &[u8]) -> Result<(), String> {
+    pub fn send_envelope(&self, _data: &[u8]) -> Result<(), String> {
         let state = self.state.read();
         if *state != TransportState::Connected {
             return Err("Not connected".to_string());
