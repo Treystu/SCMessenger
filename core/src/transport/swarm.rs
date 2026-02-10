@@ -23,7 +23,6 @@ use tokio::sync::mpsc;
 /// Pending message delivery tracking
 #[derive(Debug)]
 struct PendingMessage {
-    message_id: String,
     target_peer: PeerId,
     envelope_data: Vec<u8>,
     reply_tx: mpsc::Sender<Result<(), String>>,
@@ -701,7 +700,6 @@ pub async fn start_swarm_with_config(
 
                                 // Store pending message for retry handling
                                 pending_messages.insert(message_id.clone(), PendingMessage {
-                                    message_id: message_id.clone(),
                                     target_peer: peer_id,
                                     envelope_data,
                                     reply_tx: reply,

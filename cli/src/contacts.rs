@@ -144,6 +144,7 @@ impl ContactList {
     }
 
     /// Set contact nickname
+    #[allow(dead_code)]
     pub fn set_nickname(&self, peer_id: &str, nickname: Option<String>) -> Result<()> {
         if let Some(mut contact) = self.get(peer_id)? {
             contact.nickname = nickname;
@@ -155,6 +156,7 @@ impl ContactList {
     }
 
     /// Set contact notes
+    #[allow(dead_code)]
     pub fn set_notes(&self, peer_id: &str, notes: Option<String>) -> Result<()> {
         if let Some(mut contact) = self.get(peer_id)? {
             contact.notes = notes;

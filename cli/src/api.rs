@@ -124,6 +124,7 @@ pub async fn add_contact_via_api(peer_id: &str, public_key: &str, name: Option<S
     }
 }
 
+#[allow(dead_code)]
 pub async fn get_peers_via_api() -> Result<Vec<String>> {
     let client = hyper::Client::new();
     let req = Request::builder()
@@ -138,6 +139,7 @@ pub async fn get_peers_via_api() -> Result<Vec<String>> {
     Ok(response.peers)
 }
 
+#[allow(dead_code)]
 pub async fn get_history_via_api(peer_id: Option<String>, limit: Option<usize>) -> Result<Vec<HistoryMessage>> {
     let client = hyper::Client::new();
     let req_body = GetHistoryRequest { peer_id, limit };
