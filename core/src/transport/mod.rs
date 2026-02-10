@@ -10,7 +10,7 @@ pub mod multiport;
 pub mod mesh_routing;
 
 pub use swarm::{start_swarm, start_swarm_with_config, SwarmHandle, SwarmEvent2 as SwarmEvent, SwarmCommand};
-pub use behaviour::{MessageRequest, MessageResponse};
+pub use behaviour::{MessageRequest, MessageResponse, RelayRequest, RelayResponse};
 pub use reflection::{AddressReflectionRequest, AddressReflectionResponse, AddressReflectionService};
 pub use observation::{AddressObserver, ConnectionTracker, AddressObservation};
 pub use multiport::{MultiPortConfig, BindResult, BindAnalysis, ConnectivityStatus};

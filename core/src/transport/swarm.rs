@@ -6,15 +6,28 @@
 // - Yamux multiplexing
 // - All behaviours from behaviour.rs
 
-use super::behaviour::{IronCoreBehaviour, MessageRequest, MessageResponse};
+use super::behaviour::{IronCoreBehaviour, MessageRequest, MessageResponse, RelayRequest, RelayResponse};
 use super::reflection::{AddressReflectionRequest, AddressReflectionService};
 use super::observation::{AddressObserver, ConnectionTracker};
 use super::multiport::{self, MultiPortConfig, BindResult};
+use super::mesh_routing::{MultiPathDelivery, BootstrapCapability};
 use anyhow::Result;
 use libp2p::{identity::Keypair, kad, swarm::SwarmEvent, Multiaddr, PeerId};
 use tokio::sync::mpsc;
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::time::{SystemTime, UNIX_EPOCH, Duration};
+
+/// Pending message delivery tracking
+#[derive(Debug)]
+struct PendingMessage {
+    message_id: String,
+    target_peer: PeerId,
+    envelope_data: Vec<u8>,
+    reply_tx: mpsc::Sender<Result<(), String>>,
+    current_path_index: usize,
+    attempt_start: SystemTime,
+}
 
 /// Commands that can be sent to the swarm task
 #[derive(Debug)]
@@ -289,14 +302,95 @@ pub async fn start_swarm_with_config(
         // Track pending address reflection requests
         let mut pending_reflections: HashMap<libp2p::request_response::OutboundRequestId, mpsc::Sender<Result<String, String>>> = HashMap::new();
 
-        // Track connections and address observations
+        // Track connections and address observations (Phase 1 & 2)
         let mut connection_tracker = ConnectionTracker::new();
         let mut address_observer = AddressObserver::new();
 
+        // Mesh routing components (Phase 3-6)
+        let mut multi_path_delivery = MultiPathDelivery::new();
+        let mut bootstrap_capability = BootstrapCapability::new();
+
+        // Track pending message deliveries
+        let mut pending_messages: HashMap<String, PendingMessage> = HashMap::new();
+
+        // Track outbound request IDs to message IDs for direct sends
+        let mut request_to_message: HashMap<libp2p::request_response::OutboundRequestId, String> = HashMap::new();
+
+        // Track outbound relay request IDs
+        let mut pending_relay_requests: HashMap<libp2p::request_response::OutboundRequestId, String> = HashMap::new();
+
         // Spawn the swarm event loop
         tokio::spawn(async move {
+            // PHASE 6: Retry interval for failed deliveries
+            let mut retry_interval = tokio::time::interval(Duration::from_millis(500));
+
             loop {
                 tokio::select! {
+                    // PHASE 6: Periodic retry check
+                    _ = retry_interval.tick() => {
+                        // Check for messages that need retry
+                        let mut to_retry = Vec::new();
+
+                        for (msg_id, pending) in pending_messages.iter() {
+                            if let Some(attempt) = multi_path_delivery.pending_attempts().iter().find(|a| &a.message_id == msg_id) {
+                                if attempt.should_retry() {
+                                    let elapsed = pending.attempt_start.elapsed().unwrap_or_default();
+                                    let retry_delay = attempt.next_retry_delay();
+
+                                    if elapsed >= retry_delay {
+                                        to_retry.push(msg_id.clone());
+                                    }
+                                }
+                            }
+                        }
+
+                        // Process retries
+                        for msg_id in to_retry {
+                            if let Some(mut pending) = pending_messages.remove(&msg_id) {
+                                pending.current_path_index += 1;
+                                let paths = multi_path_delivery.get_best_paths(&pending.target_peer, 3);
+
+                                if pending.current_path_index < paths.len() {
+                                    let path = &paths[pending.current_path_index];
+                                    tracing::info!("RETRY: Attempting delivery via path {:?}", path);
+
+                                    pending.attempt_start = SystemTime::now();
+
+                                    if path.len() == 1 {
+                                        // Direct retry
+                                        let request_id = swarm.behaviour_mut().messaging.send_request(
+                                            &pending.target_peer,
+                                            MessageRequest { envelope_data: pending.envelope_data.clone() },
+                                        );
+                                        request_to_message.insert(request_id, msg_id.clone());
+                                    } else {
+                                        // Relay retry
+                                        let relay_peer = path[0];
+                                        let destination_peer_bytes = pending.target_peer.to_bytes();
+
+                                        let relay_request = RelayRequest {
+                                            destination_peer: destination_peer_bytes,
+                                            envelope_data: pending.envelope_data.clone(),
+                                            message_id: msg_id.clone(),
+                                        };
+
+                                        let request_id = swarm.behaviour_mut().relay.send_request(
+                                            &relay_peer,
+                                            relay_request,
+                                        );
+                                        pending_relay_requests.insert(request_id, msg_id.clone());
+                                    }
+
+                                    pending_messages.insert(msg_id, pending);
+                                } else {
+                                    // All paths exhausted
+                                    tracing::error!("All delivery paths exhausted for message {}", msg_id);
+                                    let _ = pending.reply_tx.send(Err("All delivery paths exhausted".to_string())).await;
+                                }
+                            }
+                        }
+                    }
+
                     // Process incoming swarm events
                     event = swarm.select_next_some() => {
                         match event {
@@ -317,8 +411,32 @@ pub async fn start_swarm_with_config(
                                             MessageResponse { accepted: true, error: None },
                                         );
                                     }
-                                    request_response::Message::Response { .. } => {
-                                        // Response to our outbound request — handled via pending_requests
+                                    request_response::Message::Response { request_id, response } => {
+                                        // Response to our outbound message request
+                                        if let Some(message_id) = request_to_message.remove(&request_id) {
+                                            if let Some(pending) = pending_messages.remove(&message_id) {
+                                                if response.accepted {
+                                                    // PHASE 5: Track successful delivery
+                                                    let latency_ms = pending.attempt_start.elapsed().unwrap_or_default().as_millis() as u64;
+                                                    multi_path_delivery.record_success(&message_id, vec![pending.target_peer], latency_ms);
+                                                    tracing::info!("✓ Message delivered successfully to {} ({}ms)", pending.target_peer, latency_ms);
+                                                    let _ = pending.reply_tx.send(Ok(())).await;
+                                                } else {
+                                                    // Message rejected, trigger retry
+                                                    tracing::warn!("✗ Message rejected by {}: {:?}", pending.target_peer, response.error);
+                                                    multi_path_delivery.record_failure(&message_id, vec![pending.target_peer]);
+
+                                                    // Try next path
+                                                    let paths = multi_path_delivery.get_best_paths(&pending.target_peer, 3);
+                                                    if pending.current_path_index + 1 < paths.len() {
+                                                        // Retry with next path will be handled by retry task
+                                                        pending_messages.insert(message_id, pending);
+                                                    } else {
+                                                        let _ = pending.reply_tx.send(Err(response.error.unwrap_or("Rejected".to_string()))).await;
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -373,12 +491,101 @@ pub async fn start_swarm_with_config(
                                 }
                             }
 
+                            // PHASE 3: Relay Protocol Handler
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Relay(
+                                request_response::Event::Message { peer, message, .. }
+                            )) => {
+                                match message {
+                                    request_response::Message::Request { request, channel, .. } => {
+                                        // PHASE 3: Peer is asking us to relay a message
+                                        tracing::info!("Relay request from {} for message {}", peer, request.message_id);
+
+                                        // Parse destination peer
+                                        match PeerId::from_bytes(&request.destination_peer) {
+                                            Ok(destination) => {
+                                                // Check if we're connected to the destination
+                                                if swarm.is_connected(&destination) {
+                                                    // Forward the message
+                                                    let _forward_id = swarm.behaviour_mut().messaging.send_request(
+                                                        &destination,
+                                                        MessageRequest { envelope_data: request.envelope_data },
+                                                    );
+
+                                                    // Send acceptance response
+                                                    let _ = swarm.behaviour_mut().relay.send_response(
+                                                        channel,
+                                                        RelayResponse {
+                                                            accepted: true,
+                                                            error: None,
+                                                            message_id: request.message_id.clone(),
+                                                        },
+                                                    );
+
+                                                    tracing::info!("✓ Relaying message {} to {}", request.message_id, destination);
+                                                } else {
+                                                    // Not connected to destination
+                                                    let _ = swarm.behaviour_mut().relay.send_response(
+                                                        channel,
+                                                        RelayResponse {
+                                                            accepted: false,
+                                                            error: Some("Destination not connected".to_string()),
+                                                            message_id: request.message_id,
+                                                        },
+                                                    );
+                                                }
+                                            }
+                                            Err(e) => {
+                                                tracing::error!("Invalid destination peer ID: {}", e);
+                                                let _ = swarm.behaviour_mut().relay.send_response(
+                                                    channel,
+                                                    RelayResponse {
+                                                        accepted: false,
+                                                        error: Some("Invalid destination peer ID".to_string()),
+                                                        message_id: request.message_id,
+                                                    },
+                                                );
+                                            }
+                                        }
+                                    }
+                                    request_response::Message::Response { request_id, response } => {
+                                        // Response to our relay request
+                                        if let Some(message_id) = pending_relay_requests.remove(&request_id) {
+                                            if let Some(pending) = pending_messages.remove(&message_id) {
+                                                if response.accepted {
+                                                    // PHASE 5: Track successful relay delivery
+                                                    let latency_ms = pending.attempt_start.elapsed().unwrap_or_default().as_millis() as u64;
+                                                    multi_path_delivery.record_success(&message_id, vec![peer, pending.target_peer], latency_ms);
+                                                    tracing::info!("✓ Message relayed successfully via {} to {} ({}ms)", peer, pending.target_peer, latency_ms);
+                                                    let _ = pending.reply_tx.send(Ok(())).await;
+                                                } else {
+                                                    // Relay failed, try next path
+                                                    tracing::warn!("✗ Relay via {} failed: {:?}", peer, response.error);
+                                                    multi_path_delivery.record_failure(&message_id, vec![peer, pending.target_peer]);
+
+                                                    // Try next path
+                                                    let paths = multi_path_delivery.get_best_paths(&pending.target_peer, 3);
+                                                    if pending.current_path_index + 1 < paths.len() {
+                                                        pending_messages.insert(message_id, pending);
+                                                    } else {
+                                                        let _ = pending.reply_tx.send(Err(response.error.unwrap_or("All paths failed".to_string()))).await;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Mdns(
                                 mdns::Event::Discovered(peers)
                             )) => {
                                 for (peer_id, addr) in peers {
                                     tracing::info!("mDNS discovered peer: {} at {}", peer_id, addr);
                                     swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+
+                                    // PHASE 4: Add to bootstrap capability
+                                    bootstrap_capability.add_peer(peer_id);
+
                                     let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
                                 }
                             }
@@ -417,6 +624,9 @@ pub async fn start_swarm_with_config(
                                     connection_id.to_string(),
                                 );
 
+                                // PHASE 4: Add to bootstrap capability (potential relay node)
+                                bootstrap_capability.add_peer(peer_id);
+
                                 let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
                             }
 
@@ -434,11 +644,58 @@ pub async fn start_swarm_with_config(
                     Some(command) = command_rx.recv() => {
                         match command {
                             SwarmCommand::SendMessage { peer_id, envelope_data, reply } => {
-                                let _request_id = swarm.behaviour_mut().messaging.send_request(
-                                    &peer_id,
-                                    MessageRequest { envelope_data },
-                                );
-                                let _ = reply.send(Ok(())).await;
+                                // PHASE 6: Multi-path delivery with retry logic
+                                let message_id = format!("{}-{}", peer_id, SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis());
+
+                                // Start delivery tracking
+                                multi_path_delivery.start_delivery(message_id.clone(), peer_id);
+
+                                // Get best paths (direct + relay options)
+                                let paths = multi_path_delivery.get_best_paths(&peer_id, 3);
+
+                                if paths.is_empty() {
+                                    let _ = reply.send(Err("No paths available".to_string())).await;
+                                    continue;
+                                }
+
+                                // Try first path (direct or via relay)
+                                let path = &paths[0];
+                                tracing::info!("Attempting delivery via path: {:?}", path);
+
+                                if path.len() == 1 {
+                                    // Direct send
+                                    let request_id = swarm.behaviour_mut().messaging.send_request(
+                                        &peer_id,
+                                        MessageRequest { envelope_data: envelope_data.clone() },
+                                    );
+                                    request_to_message.insert(request_id, message_id.clone());
+                                } else {
+                                    // Relay via intermediate peer
+                                    let relay_peer = path[0];
+                                    let destination_peer_bytes = peer_id.to_bytes();
+
+                                    let relay_request = RelayRequest {
+                                        destination_peer: destination_peer_bytes,
+                                        envelope_data: envelope_data.clone(),
+                                        message_id: message_id.clone(),
+                                    };
+
+                                    let request_id = swarm.behaviour_mut().relay.send_request(
+                                        &relay_peer,
+                                        relay_request,
+                                    );
+                                    pending_relay_requests.insert(request_id, message_id.clone());
+                                }
+
+                                // Store pending message for retry handling
+                                pending_messages.insert(message_id.clone(), PendingMessage {
+                                    message_id: message_id.clone(),
+                                    target_peer: peer_id,
+                                    envelope_data,
+                                    reply_tx: reply,
+                                    current_path_index: 0,
+                                    attempt_start: SystemTime::now(),
+                                });
                             }
 
                             SwarmCommand::RequestAddressReflection { peer_id, reply } => {

@@ -27,6 +27,8 @@ pub struct IronCoreBehaviour {
     pub messaging: request_response::cbor::Behaviour<MessageRequest, MessageResponse>,
     /// Address reflection for sovereign NAT discovery (replaces external STUN)
     pub address_reflection: request_response::cbor::Behaviour<AddressReflectionRequest, AddressReflectionResponse>,
+    /// Relay protocol for mesh routing (Phase 3)
+    pub relay: request_response::cbor::Behaviour<RelayRequest, RelayResponse>,
     /// Pub/sub for future group messaging
     pub gossipsub: gossipsub::Behaviour,
     /// DHT for WAN peer discovery
@@ -54,6 +56,28 @@ pub struct MessageResponse {
     pub error: Option<String>,
 }
 
+/// A relay request (asking a peer to forward a message to another peer)
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RelayRequest {
+    /// The final destination peer ID (serialized)
+    pub destination_peer: Vec<u8>,
+    /// Serialized Envelope bytes to relay
+    pub envelope_data: Vec<u8>,
+    /// Unique message ID for tracking
+    pub message_id: String,
+}
+
+/// Response to a relay request
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RelayResponse {
+    /// Whether the relay was accepted
+    pub accepted: bool,
+    /// Optional error message
+    pub error: Option<String>,
+    /// Message ID being acknowledged
+    pub message_id: String,
+}
+
 impl IronCoreBehaviour {
     /// Create a new behaviour with the given keypair
     pub fn new(keypair: &libp2p::identity::Keypair) -> anyhow::Result<Self> {
@@ -75,6 +99,15 @@ impl IronCoreBehaviour {
                 ProtocolSupport::Full,
             )],
             request_response::Config::default().with_request_timeout(Duration::from_secs(10)),
+        );
+
+        // Request-response for relay (mesh routing - Phase 3)
+        let relay = request_response::cbor::Behaviour::new(
+            [(
+                StreamProtocol::new("/sc/relay/1.0.0"),
+                ProtocolSupport::Full,
+            )],
+            request_response::Config::default().with_request_timeout(Duration::from_secs(30)),
         );
 
         // Gossipsub for pub/sub (future group messaging)
@@ -107,6 +140,7 @@ impl IronCoreBehaviour {
         Ok(Self {
             messaging,
             address_reflection,
+            relay,
             gossipsub,
             kademlia,
             #[cfg(not(target_arch = "wasm32"))]
