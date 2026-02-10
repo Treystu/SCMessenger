@@ -1,0 +1,170 @@
+version: '3.8'
+
+services:
+  # The Relay Node (Bootstrap) - Public relay with good connectivity
+  relay:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: scmessenger:latest
+    container_name: scm-relay
+    hostname: relay
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - RUST_LOG=info,scmessenger=debug,libp2p=debug
+      - LISTEN_PORT=4001
+      - ENABLE_RELAY=true
+      - ENABLE_DCUTR=true
+    ports:
+      - "4001:4001"
+      - "4001:4001/udp"
+    networks:
+      public:
+        ipv4_address: 10.1.0.10
+      network-a:
+        ipv4_address: 10.2.0.10
+      network-b:
+        ipv4_address: 10.3.0.10
+    command: >
+      sh -c "
+        # No traffic control on relay - it's the public node
+        exec /usr/local/bin/entrypoint.sh
+      "
+
+  # Alice Node - Behind NAT with bandwidth limits
+  alice:
+    image: scmessenger:latest
+    container_name: scm-alice
+    hostname: alice
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - RUST_LOG=info,scmessenger=debug,libp2p=debug,libp2p_dcutr=debug,libp2p_relay=debug
+      - LISTEN_PORT=0
+      - BOOTSTRAP_NODES=/ip4/10.2.0.10/tcp/4001
+      - ENABLE_DCUTR=true
+      - ENABLE_HOLE_PUNCHING=true
+    depends_on:
+      - relay
+    networks:
+      network-a:
+        ipv4_address: 10.2.0.20
+    tty: true
+    stdin_open: true
+    command: >
+      sh -c "
+        # Simulate bandwidth constraints (10 Mbps)
+        tc qdisc add dev eth0 root tbf rate 10mbit burst 32kbit latency 400ms || true
+        # Add latency (50ms)
+        tc qdisc add dev eth0 parent 1:1 handle 10: netem delay 50ms 10ms || true
+        exec /usr/local/bin/entrypoint.sh
+      "
+
+  # Bob Node - Behind stricter NAT with packet loss
+  bob:
+    image: scmessenger:latest
+    container_name: scm-bob
+    hostname: bob
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - RUST_LOG=info,scmessenger=debug,libp2p=debug,libp2p_dcutr=debug,libp2p_relay=debug
+      - LISTEN_PORT=0
+      - BOOTSTRAP_NODES=/ip4/10.3.0.10/tcp/4001
+      - ENABLE_DCUTR=true
+      - ENABLE_HOLE_PUNCHING=true
+    depends_on:
+      - relay
+    networks:
+      network-b:
+        ipv4_address: 10.3.0.20
+    tty: true
+    stdin_open: true
+    command: >
+      sh -c "
+        # Simulate bandwidth constraints (5 Mbps - slower than Alice)
+        tc qdisc add dev eth0 root tbf rate 5mbit burst 32kbit latency 400ms || true
+        # Add higher latency and packet loss (100ms + 2% loss)
+        tc qdisc add dev eth0 parent 1:1 handle 10: netem delay 100ms 20ms loss 2% || true
+        exec /usr/local/bin/entrypoint.sh
+      "
+
+  # NAT Gateway for Network A (simulates Alice's NAT)
+  nat-gateway-a:
+    image: alpine:latest
+    container_name: scm-nat-a
+    hostname: nat-a
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.route_localnet=1
+    networks:
+      public:
+        ipv4_address: 10.1.0.100
+      network-a:
+        ipv4_address: 10.2.0.1
+    command: >
+      sh -c "
+        apk add --no-cache iptables iproute2 &&
+        # Enable IP forwarding
+        echo 1 > /proc/sys/net/ipv4/ip_forward &&
+        # Setup NAT (masquerading)
+        iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE &&
+        iptables -A FORWARD -i eth1 -o eth0 -j ACCEPT &&
+        iptables -A FORWARD -i eth0 -o eth1 -m state --state RELATED,ESTABLISHED -j ACCEPT &&
+        # Simulate cone NAT (allows return traffic)
+        iptables -t nat -A PREROUTING -i eth0 -p tcp -j DNAT --to-destination 10.2.0.20 &&
+        iptables -t nat -A PREROUTING -i eth0 -p udp -j DNAT --to-destination 10.2.0.20 &&
+        echo 'NAT Gateway A started (Cone NAT)' &&
+        tail -f /dev/null
+      "
+
+  # NAT Gateway for Network B (simulates Bob's NAT - more restrictive)
+  nat-gateway-b:
+    image: alpine:latest
+    container_name: scm-nat-b
+    hostname: nat-b
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.route_localnet=1
+    networks:
+      public:
+        ipv4_address: 10.1.0.200
+      network-b:
+        ipv4_address: 10.3.0.1
+    command: >
+      sh -c "
+        apk add --no-cache iptables iproute2 &&
+        # Enable IP forwarding
+        echo 1 > /proc/sys/net/ipv4/ip_forward &&
+        # Setup symmetric NAT (more restrictive - only allows established connections)
+        iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE &&
+        iptables -A FORWARD -i eth1 -o eth0 -j ACCEPT &&
+        iptables -A FORWARD -i eth0 -o eth1 -m state --state RELATED,ESTABLISHED -j ACCEPT &&
+        # Symmetric NAT - no inbound port mapping
+        echo 'NAT Gateway B started (Symmetric NAT)' &&
+        tail -f /dev/null
+      "
+
+networks:
+  public:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.1.0.0/24
+  network-a:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.2.0.0/24
+  network-b:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.3.0.0/24

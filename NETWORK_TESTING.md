@@ -4,10 +4,34 @@ This document explains how to use the comprehensive network testing tools for SC
 
 ## Overview
 
-SCMessenger includes two complementary testing scripts:
+SCMessenger includes three levels of testing scripts:
 
-1. **`verify_simulation.sh`** - Core functionality and quick network validation
-2. **`test_network_scenarios.sh`** - Advanced network scenario testing
+1. **`verify_simulation.sh`** - Core functionality and quick network validation (basic Docker network)
+2. **`run_comprehensive_network_tests.sh`** - **NEW!** Enhanced testing with real network conditions (NAT, latency, packet loss)
+3. **`test_network_scenarios.sh`** - Advanced network scenario testing with detailed pass/fail reporting
+
+## 🆕 Enhanced Network Testing (Recommended)
+
+### What's New
+
+The enhanced testing suite simulates **real-world network conditions**:
+
+- ✅ **NAT Simulation**: Cone NAT for Alice, Symmetric NAT for Bob
+- ✅ **Bandwidth Limits**: 10 Mbps for Alice, 5 Mbps for Bob
+- ✅ **Network Latency**: 50ms for Alice, 100ms for Bob
+- ✅ **Packet Loss**: 2% packet loss for Bob
+- ✅ **Network Isolation**: Separate networks with NAT gateways
+- ✅ **Traffic Control**: Real `tc` and `iptables` rules
+
+### Why This Matters
+
+The basic Docker network (bridge mode) doesn't test:
+- NAT hole punching (no actual NAT)
+- Transport escalation (no network constraints)
+- Circuit relay fallback (direct connections always work)
+- Address reflection (no external addresses to observe)
+
+The enhanced setup creates **realistic conditions** where these features are actually needed and tested.
 
 ## Prerequisites
 
@@ -17,9 +41,32 @@ SCMessenger includes two complementary testing scripts:
 
 ## Quick Start
 
-### 1. Basic Simulation & Validation
+### Option A: Enhanced Network Testing (Recommended)
 
-Run the basic simulation to verify core functionality:
+Run the enhanced simulation with real network conditions:
+
+```bash
+./run_comprehensive_network_tests.sh
+```
+
+This will:
+- ✅ Set up NAT gateways and network isolation
+- ✅ Apply bandwidth limits and latency
+- ✅ Configure traffic control rules
+- ✅ Start all nodes with realistic constraints
+- ✅ Run connectivity verification
+
+**Duration:** ~60 seconds setup + testing
+
+Then run the comprehensive scenarios:
+
+```bash
+./test_network_scenarios.sh
+```
+
+### Option B: Basic Simulation & Validation
+
+Run the basic simulation (simpler, but less realistic):
 
 ```bash
 ./verify_simulation.sh
