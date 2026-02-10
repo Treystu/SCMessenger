@@ -28,7 +28,7 @@ FROM debian:bookworm-slim
 
 WORKDIR /app
 
-# Install runtime dependencies and network tools for simulation
+# Install runtime dependencies and network tools
 RUN apt-get update && apt-get install -y \
     openssl \
     ca-certificates \
@@ -48,7 +48,11 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Environment variables
 ENV RUST_LOG=info
 ENV SCM_CONFIG_DIR=/root/.config/scmessenger
-ENV PORT=8080
+ENV SCM_DATA_DIR=/root/.local/share/scmessenger
+ENV LISTEN_PORT=9000
+
+# Expose ports
+EXPOSE 9000 9001
 
 ENTRYPOINT ["entrypoint.sh"]
-CMD ["sh", "-c", "scm start --port $PORT"]
+CMD ["scm", "start"]
