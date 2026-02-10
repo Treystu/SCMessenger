@@ -11,6 +11,7 @@ mod server;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use colored::*;
+use libp2p::Multiaddr;
 use scmessenger_core::transport::{self, SwarmEvent};
 use scmessenger_core::IronCore;
 use std::collections::HashMap;
