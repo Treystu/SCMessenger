@@ -2,6 +2,7 @@
 //
 // Cross-platform (macOS, Linux, Windows) command-line interface for SCMessenger.
 
+mod api;
 mod config;
 mod contacts;
 mod history;
@@ -219,16 +220,25 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
 }
 
 async fn cmd_contact(action: ContactAction) -> Result<()> {
-    let data_dir = config::Config::data_dir()?;
-    let contacts_db = data_dir.join("contacts");
-    let contacts = contacts::ContactList::open(contacts_db)?;
-
     match action {
-        ContactAction::Add {
-            peer_id,
-            public_key,
-            name,
-        } => {
+        ContactAction::Add { peer_id, public_key, name } => {
+            // Try to use API if a node is running
+            if api::is_api_available().await {
+                api::add_contact_via_api(&peer_id, &public_key, name.clone()).await
+                    .context("Failed to add contact via API")?;
+                println!("{} Contact added:", "✓".green());
+                if let Some(nickname) = &name {
+                    println!("  Name: {}", nickname.bright_cyan());
+                }
+                println!("  Peer ID: {}", peer_id);
+                return Ok(());
+            }
+
+            // Fallback to direct database access
+            let data_dir = config::Config::data_dir()?;
+            let contacts_db = data_dir.join("contacts");
+            let contacts = contacts::ContactList::open(contacts_db)?;
+
             let contact = contacts::Contact::new(peer_id.clone(), public_key)
                 .with_nickname(name.clone().unwrap_or_else(|| peer_id.clone()));
 
@@ -241,61 +251,64 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             println!("  Peer ID: {}", peer_id);
         }
 
-        ContactAction::List => {
-            let list = contacts.list()?;
+        _ => {
+            // For other contact operations, use direct database access
+            let data_dir = config::Config::data_dir()?;
+            let contacts_db = data_dir.join("contacts");
+            let contacts = contacts::ContactList::open(contacts_db)?;
 
-            if list.is_empty() {
-                println!("{}", "No contacts yet.".dimmed());
-            } else {
-                println!("{} ({} total)", "Contacts".bold(), list.len());
-                println!();
+            match action {
+                ContactAction::List => {
+                    let list = contacts.list()?;
 
-                for contact in list {
-                    println!(
-                        "  {} {}",
-                        "•".bright_green(),
-                        contact.display_name().bright_cyan()
-                    );
-                    println!("    Peer ID: {}", contact.peer_id.dimmed());
+                    if list.is_empty() {
+                        println!("{}", "No contacts yet.".dimmed());
+                    } else {
+                        println!("{} ({} total)", "Contacts".bold(), list.len());
+                        println!();
+
+                        for contact in list {
+                            println!("  {} {}", "•".bright_green(), contact.display_name().bright_cyan());
+                            println!("    Peer ID: {}", contact.peer_id.dimmed());
+                        }
+                    }
                 }
-            }
-        }
 
-        ContactAction::Show { contact: query } => {
-            let contact = find_contact(&contacts, &query)?;
+                ContactAction::Show { contact: query } => {
+                    let contact = find_contact(&contacts, &query)?;
 
-            println!("{}", "Contact Details".bold());
-            println!("  Name:       {}", contact.display_name().bright_cyan());
-            println!("  Peer ID:    {}", contact.peer_id);
-            println!("  Public Key: {}", contact.public_key.bright_yellow());
-            println!("  Added:      {}", format_timestamp(contact.added_at));
-        }
-
-        ContactAction::Remove { contact: query } => {
-            let contact = find_contact(&contacts, &query)?;
-            let name = contact.display_name().to_string();
-
-            contacts.remove(&contact.peer_id)?;
-            println!("{} Removed contact: {}", "✓".green(), name.bright_cyan());
-        }
-
-        ContactAction::Search { query } => {
-            let results = contacts.search(&query)?;
-
-            if results.is_empty() {
-                println!("{}", "No matching contacts.".dimmed());
-            } else {
-                println!("{} ({} matches)", "Search Results".bold(), results.len());
-                println!();
-
-                for contact in results {
-                    println!(
-                        "  {} {}",
-                        "•".bright_green(),
-                        contact.display_name().bright_cyan()
-                    );
-                    println!("    {}", contact.peer_id.dimmed());
+                    println!("{}", "Contact Details".bold());
+                    println!("  Name:       {}", contact.display_name().bright_cyan());
+                    println!("  Peer ID:    {}", contact.peer_id);
+                    println!("  Public Key: {}", contact.public_key.bright_yellow());
+                    println!("  Added:      {}", format_timestamp(contact.added_at));
                 }
+
+                ContactAction::Remove { contact: query } => {
+                    let contact = find_contact(&contacts, &query)?;
+                    let name = contact.display_name().to_string();
+
+                    contacts.remove(&contact.peer_id)?;
+                    println!("{} Removed contact: {}", "✓".green(), name.bright_cyan());
+                }
+
+                ContactAction::Search { query } => {
+                    let results = contacts.search(&query)?;
+
+                    if results.is_empty() {
+                        println!("{}", "No matching contacts.".dimmed());
+                    } else {
+                        println!("{} ({} matches)", "Search Results".bold(), results.len());
+                        println!();
+
+                        for contact in results {
+                            println!("  {} {}", "•".bright_green(), contact.display_name().bright_cyan());
+                            println!("    {}", contact.peer_id.dimmed());
+                        }
+                    }
+                }
+
+                ContactAction::Add { .. } => unreachable!(),
             }
         }
     }
@@ -474,7 +487,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let peers: Arc<tokio::sync::Mutex<HashMap<libp2p::PeerId, Option<String>>>> =
         Arc::new(tokio::sync::Mutex::new(HashMap::new()));
 
-    // Broadcast status loop
+    // Broadcast status loop for WebSocket UI
     let ui_broadcast_clone = ui_broadcast.clone();
     let peers_clone_status = peers.clone();
     tokio::spawn(async move {
@@ -488,6 +501,23 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
             });
         }
     });
+
+    // Start control API server
+    let api_ctx = api::ApiContext {
+        core: core.clone(),
+        contacts: contacts.clone(),
+        history: history.clone(),
+        swarm_handle: Arc::new(swarm_handle.clone()),
+        peers: peers.clone(),
+    };
+
+    tokio::spawn(async move {
+        if let Err(e) = api::start_api_server(api_ctx).await {
+            tracing::error!("API server error: {}", e);
+        }
+    });
+
+    println!("{} Control API: {}", "✓".green(), format!("http://127.0.0.1:{}", api::API_PORT).dimmed());
 
     let core_rx = core.clone();
     let contacts_rx = contacts.clone();
@@ -664,6 +694,15 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 }
 
 async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
+    // Try to use API if a node is running
+    if api::is_api_available().await {
+        api::send_message_via_api(&recipient, &message).await
+            .context("Failed to send message via API")?;
+        println!("{} Message sent via running node", "✓".green());
+        return Ok(());
+    }
+
+    // Fallback to offline mode (encrypt only, no actual send)
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
@@ -679,16 +718,8 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
         .prepare_message(contact.public_key.clone(), message.clone())
         .context("Failed to encrypt message")?;
 
-    println!(
-        "{} Message encrypted: {} bytes",
-        "✓".green(),
-        envelope_bytes.len()
-    );
-    println!(
-        "{} Message queued for {}",
-        "✓".green(),
-        contact.display_name().bright_cyan()
-    );
+    println!("{} Message encrypted: {} bytes", "✓".green(), envelope_bytes.len());
+    println!("{} Message queued for {} {}", "✓".green(), contact.display_name().bright_cyan(), "(offline mode)".dimmed());
 
     Ok(())
 }

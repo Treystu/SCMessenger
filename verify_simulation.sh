@@ -229,17 +229,13 @@ echo "---------------------------------------------------"
 echo "🌐 Test 2: Peer Discovery Verification"
 echo "---------------------------------------------------"
 
-# Wait a bit more for peers to fully connect
+# Wait for peers to fully connect
 echo "⏳ Waiting for peer connections to establish (10s)..."
 sleep 10
 
 echo -e "${GREEN}✓ Network topology established${NC}"
 echo "  Charlie (Relay) is bridging Network A and Network B"
 echo "  Alice and Bob can discover each other through Charlie"
-
-# Note: Due to sled database locking, we cannot run separate CLI commands
-# while scm start is running. This is a known limitation.
-# For full network testing, use the interactive mode or manual testing.
 
 echo ""
 echo "---------------------------------------------------"
@@ -255,6 +251,52 @@ else
     exit 1
 fi
 
+echo ""
+echo "---------------------------------------------------"
+echo "📨 Test 4: Network Message Delivery (AUTOMATED)"
+echo "---------------------------------------------------"
+
+# Add Bob as a contact to Alice via API
+echo "Adding Bob to Alice's contacts via Control API..."
+docker exec scm-alice scm contact add "$BOB_ID" "$BOB_KEY" --name Bob > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✓ Contact added via API${NC}"
+else
+    echo -e "${RED}✗ Failed to add contact${NC}"
+    exit 1
+fi
+
+# Send message from Alice to Bob via API
+MESSAGE="Hello Bob from Alice! $(date +%s)"
+echo "Sending message from Alice to Bob via Control API..."
+echo "Message: '$MESSAGE'"
+docker exec scm-alice scm send "$BOB_ID" "$MESSAGE" > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✓ Message sent via API${NC}"
+else
+    echo -e "${RED}✗ Failed to send message${NC}"
+    docker compose -f docker/docker-compose.yml logs scm-alice
+    exit 1
+fi
+
+# Wait for message to be delivered
+echo "⏳ Waiting for message delivery (5s)..."
+sleep 5
+
+# Check if Bob received the message by looking at logs
+echo "Verifying message receipt on Bob's node..."
+BOB_LOGS=$(docker logs scm-bob 2>&1 | tail -50)
+
+if echo "$BOB_LOGS" | grep -q "$MESSAGE"; then
+    echo -e "${GREEN}✓ Message delivered successfully!${NC}"
+    echo "  Bob received: '$MESSAGE'"
+else
+    echo -e "${RED}✗ Message not found in Bob's logs${NC}"
+    echo "Bob's recent logs:"
+    echo "$BOB_LOGS"
+    exit 1
+fi
+
 echo "---------------------------------------------------"
 echo -e "${GREEN}✅ Simulation Verified Successfully${NC}"
 echo "---------------------------------------------------"
@@ -265,6 +307,7 @@ echo "  2. Isolated Instances:     3 unique nodes (Charlie/Relay, Alice, Bob)"
 echo "  3. Network Topology:       Charlie bridges Network A ↔ Network B"
 echo "  4. Peer Discovery:         Success (All nodes connected)"
 echo "  5. Crypto Verification:    Success (Encryption/Decryption working)"
+echo "  6. Message Delivery:       Success (Fully automated via Control API)"
 echo ""
 echo -e "${GREEN}Node Isolation Verified:${NC}"
 echo "  • Each container has its own identity, data, and storage"
@@ -273,10 +316,11 @@ echo "  • Charlie (Relay): Has unique identity, relays for others"
 echo "  • Alice: Network A participant with unique identity"
 echo "  • Bob: Network B participant with unique identity"
 echo ""
-echo -e "${YELLOW}Note:${NC} Full network message delivery testing requires interactive mode"
-echo "      due to sled database locking limitations. To test message delivery:"
-echo "      1. Run: docker exec -it scm-alice sh"
-echo "      2. Use the interactive CLI to send messages"
+echo -e "${GREEN}Control API Enabled:${NC}"
+echo "  • Running nodes expose HTTP API on localhost:9876"
+echo "  • CLI commands automatically use API when available"
+echo "  • Enables fully automated testing without database conflicts"
+echo "  • Successful automated message delivery: Alice → Bob"
 echo ""
 echo "---------------------------------------------------"
 
