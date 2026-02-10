@@ -32,12 +32,19 @@ pub enum UiEvent {
         peer_id: String,
         public_key: String,
     },
+    IdentityExportData {
+        identity_id: String,
+        public_key: String,
+        private_key: String,
+        storage_path: String,
+    },
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum UiCommand {
     IdentityShow,
+    IdentityExport,
     ContactList,
     Status,
     Send {
@@ -50,11 +57,23 @@ pub enum UiCommand {
         name: Option<String>,
         public_key: Option<String>,
     },
-    #[allow(dead_code)]
+    ContactRemove {
+        contact: String,
+    },
     ConfigSet {
         key: String,
         value: String,
-    }, // Placeholder
+    },
+    ConfigGet {
+        key: String,
+    },
+    ConfigList,
+    ConfigBootstrapAdd {
+        multiaddr: String,
+    },
+    ConfigBootstrapRemove {
+        multiaddr: String,
+    },
 }
 
 pub async fn start(port: u16) -> (broadcast::Sender<UiEvent>, mpsc::Receiver<UiCommand>) {

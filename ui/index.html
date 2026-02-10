@@ -281,6 +281,31 @@
         color: var(--text-dim);
       }
 
+      .contact-actions {
+        margin-left: 8px;
+        opacity: 0;
+        transition: opacity 0.2s;
+        display: flex;
+        align-items: center;
+      }
+      .contact-item:hover .contact-actions {
+        opacity: 1;
+      }
+
+      .btn-icon-sm {
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 4px;
+        font-size: 1.4rem;
+        line-height: 1;
+        transition: color 0.1s;
+      }
+      .btn-icon-sm:hover {
+        color: var(--danger);
+      }
+
       .unread-badge {
         background: var(--accent);
         color: white;
@@ -999,6 +1024,57 @@ Loading...</textarea
           >
             Identity is managed by the core node. Keys are stored securely.
           </div>
+          <div style="margin-top: 20px; text-align: right">
+            <button
+              class="btn btn-secondary"
+              onclick="SCM.actions.exportIdentity()"
+            >
+              Export Identity (Backup)
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export Identity Modal -->
+    <div id="modal-export" class="modal-overlay">
+      <div class="modal glass" style="width: 500px">
+        <div class="modal-header">
+          <h3>Identity Backup</h3>
+          <button class="close-btn" onclick="SCM.ui.closeModals()">×</button>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Storage Path</label>
+          <input id="export-path" class="form-input mono" readonly />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Public Key</label>
+          <textarea
+            id="export-pub"
+            class="form-input mono"
+            rows="2"
+            readonly
+          ></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Private Key / Secret</label>
+          <textarea
+            id="export-priv"
+            class="form-input mono"
+            rows="3"
+            readonly
+          ></textarea>
+        </div>
+        <p
+          style="font-size: 0.8rem; color: var(--warning); margin-bottom: 1rem"
+        >
+          ⚠️ Keep your private key and storage file secure. Anyone with access
+          can impersonate you.
+        </p>
+        <div class="modal-actions">
+          <button class="btn btn-primary" onclick="SCM.ui.closeModals()">
+            Close
+          </button>
         </div>
       </div>
     </div>
@@ -1232,6 +1308,13 @@ Loading...</textarea
               }
               break;
 
+            case "identity_export_data":
+              document.getElementById("export-path").value = data.storage_path;
+              document.getElementById("export-pub").value = data.public_key;
+              document.getElementById("export-priv").value = data.private_key;
+              document.getElementById("modal-export").classList.add("visible");
+              break;
+
             case "message_status":
               // { message_id: "...", status: "delivered" }
               this.updateMessageStatus(data.message_id, data.status);
@@ -1243,6 +1326,16 @@ Loading...</textarea
               if (data.peer_count !== undefined)
                 document.getElementById("peer-count").textContent =
                   data.peer_count;
+              break;
+
+            case "identity_export_data":
+              document.getElementById("export-path").value =
+                data.storage_path || "N/A";
+              document.getElementById("export-pub").value =
+                data.public_key || "N/A";
+              document.getElementById("export-priv").value =
+                data.private_key || "Protected";
+              document.getElementById("modal-export").classList.add("visible");
               break;
 
             case "identity_info":
@@ -1343,6 +1436,29 @@ Loading...</textarea
             }
           },
 
+          exportIdentity() {
+            this.sendCommand("identity_export");
+          },
+
+          removeContact(peerId) {
+            if (confirm("Are you sure you want to remove this contact?")) {
+              this.sendCommand("contact_remove", { contact: peerId });
+              delete SCM.state.contacts[peerId];
+
+              if (SCM.state.activeChat === peerId) {
+                SCM.state.activeChat = null;
+                document
+                  .getElementById("chat-interface")
+                  .classList.add("hidden");
+                document
+                  .getElementById("empty-state")
+                  .classList.remove("hidden");
+              }
+
+              SCM.ui.renderContacts();
+            }
+          },
+
           selectContact(peerId) {
             SCM.state.activeChat = peerId;
 
@@ -1434,6 +1550,9 @@ Loading...</textarea
                             </div>
                             <div class="contact-meta">
                                 <div>${SCM.utils.formatTime(contact.last_seen)}</div>
+                                <div class="contact-actions">
+                                    <button class="btn-icon-sm" onclick="event.stopPropagation(); SCM.actions.removeContact('${contact.peer_id}')" title="Remove Contact">×</button>
+                                </div>
                             </div>
                         `;
               list.appendChild(el);

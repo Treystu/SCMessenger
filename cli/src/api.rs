@@ -94,11 +94,20 @@ pub async fn send_message_via_api(recipient: &str, message: &str) -> Result<()> 
     if response.success {
         Ok(())
     } else {
-        anyhow::bail!("Failed to send message: {}", response.error.unwrap_or_else(|| "Unknown error".to_string()))
+        anyhow::bail!(
+            "Failed to send message: {}",
+            response
+                .error
+                .unwrap_or_else(|| "Unknown error".to_string())
+        )
     }
 }
 
-pub async fn add_contact_via_api(peer_id: &str, public_key: &str, name: Option<String>) -> Result<()> {
+pub async fn add_contact_via_api(
+    peer_id: &str,
+    public_key: &str,
+    name: Option<String>,
+) -> Result<()> {
     let client = hyper::Client::new();
     let req_body = AddContactRequest {
         peer_id: peer_id.to_string(),
@@ -120,7 +129,12 @@ pub async fn add_contact_via_api(peer_id: &str, public_key: &str, name: Option<S
     if response.success {
         Ok(())
     } else {
-        anyhow::bail!("Failed to add contact: {}", response.error.unwrap_or_else(|| "Unknown error".to_string()))
+        anyhow::bail!(
+            "Failed to add contact: {}",
+            response
+                .error
+                .unwrap_or_else(|| "Unknown error".to_string())
+        )
     }
 }
 
@@ -140,7 +154,10 @@ pub async fn get_peers_via_api() -> Result<Vec<String>> {
 }
 
 #[allow(dead_code)]
-pub async fn get_history_via_api(peer_id: Option<String>, limit: Option<usize>) -> Result<Vec<HistoryMessage>> {
+pub async fn get_history_via_api(
+    peer_id: Option<String>,
+    limit: Option<usize>,
+) -> Result<Vec<HistoryMessage>> {
     let client = hyper::Client::new();
     let req_body = GetHistoryRequest { peer_id, limit };
 
@@ -168,7 +185,10 @@ pub struct ApiContext {
     pub peers: Arc<tokio::sync::Mutex<std::collections::HashMap<libp2p::PeerId, Option<String>>>>,
 }
 
-async fn handle_request(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<Response<Body>, Infallible> {
+async fn handle_request(
+    req: Request<Body>,
+    ctx: Arc<ApiContext>,
+) -> Result<Response<Body>, Infallible> {
     let response = match (req.method(), req.uri().path()) {
         (&Method::POST, "/api/send") => handle_send_message(req, ctx).await,
         (&Method::POST, "/api/contacts") => handle_add_contact(req, ctx).await,
@@ -199,8 +219,12 @@ async fn handle_send_message(req: Request<Body>, ctx: Arc<ApiContext>) -> Result
     let peer_id = contact.peer_id.parse::<libp2p::PeerId>()?;
 
     // Prepare and send message
-    let envelope_bytes = ctx.core.prepare_message(contact.public_key.clone(), request.message.clone())?;
-    ctx.swarm_handle.send_message(peer_id, envelope_bytes).await?;
+    let envelope_bytes = ctx
+        .core
+        .prepare_message(contact.public_key.clone(), request.message.clone())?;
+    ctx.swarm_handle
+        .send_message(peer_id, envelope_bytes)
+        .await?;
 
     // Record in history
     let record = crate::history::MessageRecord::new_sent(contact.peer_id.clone(), request.message);
@@ -241,9 +265,7 @@ async fn handle_get_peers(_req: Request<Body>, ctx: Arc<ApiContext>) -> Result<R
     let peers = ctx.peers.lock().await;
     let peer_ids: Vec<String> = peers.keys().map(|p| p.to_string()).collect();
 
-    let response = GetPeersResponse {
-        peers: peer_ids,
-    };
+    let response = GetPeersResponse { peers: peer_ids };
 
     Ok(Response::builder()
         .status(StatusCode::OK)
@@ -256,13 +278,15 @@ async fn handle_get_history(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<
     let request: GetHistoryRequest = serde_json::from_slice(&body_bytes)?;
 
     let messages = if let Some(peer_id) = request.peer_id {
-        ctx.history.conversation(&peer_id, request.limit.unwrap_or(20))?
+        ctx.history
+            .conversation(&peer_id, request.limit.unwrap_or(20))?
     } else {
         ctx.history.recent(None, request.limit.unwrap_or(20))?
     };
 
-    let history_messages: Vec<HistoryMessage> = messages.into_iter().map(|m| {
-        HistoryMessage {
+    let history_messages: Vec<HistoryMessage> = messages
+        .into_iter()
+        .map(|m| HistoryMessage {
             peer_id: m.peer().to_string(),
             content: m.content,
             direction: match m.direction {
@@ -270,8 +294,8 @@ async fn handle_get_history(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<
                 crate::history::Direction::Received => "received".to_string(),
             },
             timestamp: m.timestamp,
-        }
-    }).collect();
+        })
+        .collect();
 
     let response = GetHistoryResponse {
         messages: history_messages,
@@ -289,11 +313,7 @@ pub async fn start_api_server(ctx: ApiContext) -> Result<()> {
 
     let make_svc = make_service_fn(move |_conn| {
         let ctx = ctx.clone();
-        async move {
-            Ok::<_, Infallible>(service_fn(move |req| {
-                handle_request(req, ctx.clone())
-            }))
-        }
+        async move { Ok::<_, Infallible>(service_fn(move |req| handle_request(req, ctx.clone()))) }
     });
 
     let server = Server::bind(&addr).serve(make_svc);

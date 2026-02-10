@@ -221,10 +221,15 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
 
 async fn cmd_contact(action: ContactAction) -> Result<()> {
     match action {
-        ContactAction::Add { peer_id, public_key, name } => {
+        ContactAction::Add {
+            peer_id,
+            public_key,
+            name,
+        } => {
             // Try to use API if a node is running
             if api::is_api_available().await {
-                api::add_contact_via_api(&peer_id, &public_key, name.clone()).await
+                api::add_contact_via_api(&peer_id, &public_key, name.clone())
+                    .await
                     .context("Failed to add contact via API")?;
                 println!("{} Contact added:", "✓".green());
                 if let Some(nickname) = &name {
@@ -268,7 +273,11 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                         println!();
 
                         for contact in list {
-                            println!("  {} {}", "•".bright_green(), contact.display_name().bright_cyan());
+                            println!(
+                                "  {} {}",
+                                "•".bright_green(),
+                                contact.display_name().bright_cyan()
+                            );
                             println!("    Peer ID: {}", contact.peer_id.dimmed());
                         }
                     }
@@ -302,7 +311,11 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                         println!();
 
                         for contact in results {
-                            println!("  {} {}", "•".bright_green(), contact.display_name().bright_cyan());
+                            println!(
+                                "  {} {}",
+                                "•".bright_green(),
+                                contact.display_name().bright_cyan()
+                            );
                             println!("    {}", contact.peer_id.dimmed());
                         }
                     }
@@ -517,7 +530,11 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         }
     });
 
-    println!("{} Control API: {}", "✓".green(), format!("http://127.0.0.1:{}", api::API_PORT).dimmed());
+    println!(
+        "{} Control API: {}",
+        "✓".green(),
+        format!("http://127.0.0.1:{}", api::API_PORT).dimmed()
+    );
 
     let core_rx = core.clone();
     let contacts_rx = contacts.clone();
@@ -586,6 +603,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                 }
             }
 
+
+
             // 2. UI Commands (UI -> App -> Network)
             Some(cmd) = ui_cmd_rx.recv() => {
                 match cmd {
@@ -594,6 +613,18 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                         let _ = ui_broadcast.send(server::UiEvent::IdentityInfo {
                             peer_id: i.identity_id.unwrap_or_default(),
                             public_key: i.public_key_hex.unwrap_or_default(),
+                        });
+                    }
+                    server::UiCommand::IdentityExport => {
+                        let i = core_rx.get_identity_info();
+                        let data_dir = config::Config::data_dir().unwrap_or_default();
+                        let storage_path = data_dir.join("storage");
+
+                        let _ = ui_broadcast.send(server::UiEvent::IdentityExportData {
+                            identity_id: i.identity_id.unwrap_or_default(),
+                            public_key: i.public_key_hex.unwrap_or_default(),
+                            private_key: "Keys are stored securely in the data directory.".to_string(),
+                            storage_path: storage_path.display().to_string(),
                         });
                     }
                     server::UiCommand::ContactList => {
@@ -652,7 +683,40 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                             }
                         }
                     }
-                    _ => {}
+                    server::UiCommand::ContactRemove { contact } => {
+                         // remove by peer_id (assuming contact arg is peer_id for now, or resolving nickname)
+                         // contacts.remove takes peer_id string
+                         if let Ok(_) = contacts_rx.remove(&contact) {
+                             if let Ok(list) = contacts_rx.list() {
+                                 let _ = ui_broadcast.send(server::UiEvent::ContactList { contacts: list });
+                             }
+                         }
+                    }
+                    server::UiCommand::ConfigGet { key } => {
+                        // Send simple value back? Or need a ConfigValue event?
+                        // For now, simpler to just List all on ConfigList
+                    }
+                    server::UiCommand::ConfigList => {
+                         // We might need a ConfigList event.
+                         // For MVP, maybe just log or ignore if no event type.
+                    }
+                    server::UiCommand::ConfigSet { key, value } => {
+                        if let Ok(mut cfg) = config::Config::load() {
+                            if cfg.set(&key, &value).is_ok() {
+                                // Config updated
+                            }
+                        }
+                    }
+                    server::UiCommand::ConfigBootstrapAdd { multiaddr } => {
+                         if let Ok(mut cfg) = config::Config::load() {
+                            let _ = cfg.add_bootstrap_node(multiaddr);
+                        }
+                    }
+                    server::UiCommand::ConfigBootstrapRemove { multiaddr } => {
+                         if let Ok(mut cfg) = config::Config::load() {
+                            let _ = cfg.remove_bootstrap_node(&multiaddr);
+                        }
+                    }
                 }
             }
 
@@ -696,7 +760,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
     // Try to use API if a node is running
     if api::is_api_available().await {
-        api::send_message_via_api(&recipient, &message).await
+        api::send_message_via_api(&recipient, &message)
+            .await
             .context("Failed to send message via API")?;
         println!("{} Message sent via running node", "✓".green());
         return Ok(());
@@ -718,8 +783,17 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
         .prepare_message(contact.public_key.clone(), message.clone())
         .context("Failed to encrypt message")?;
 
-    println!("{} Message encrypted: {} bytes", "✓".green(), envelope_bytes.len());
-    println!("{} Message queued for {} {}", "✓".green(), contact.display_name().bright_cyan(), "(offline mode)".dimmed());
+    println!(
+        "{} Message encrypted: {} bytes",
+        "✓".green(),
+        envelope_bytes.len()
+    );
+    println!(
+        "{} Message queued for {} {}",
+        "✓".green(),
+        contact.display_name().bright_cyan(),
+        "(offline mode)".dimmed()
+    );
 
     Ok(())
 }
