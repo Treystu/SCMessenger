@@ -79,8 +79,7 @@ impl Config {
             .join("scmessenger");
 
         // Create directory if it doesn't exist
-        std::fs::create_dir_all(&config_dir)
-            .context("Failed to create config directory")?;
+        std::fs::create_dir_all(&config_dir).context("Failed to create config directory")?;
 
         Ok(config_dir)
     }
@@ -92,8 +91,7 @@ impl Config {
             .join("scmessenger");
 
         // Create directory if it doesn't exist
-        std::fs::create_dir_all(&data_dir)
-            .context("Failed to create data directory")?;
+        std::fs::create_dir_all(&data_dir).context("Failed to create data directory")?;
 
         Ok(data_dir)
     }
@@ -108,10 +106,10 @@ impl Config {
         let config_file = Self::config_file()?;
 
         if config_file.exists() {
-            let contents = std::fs::read_to_string(&config_file)
-                .context("Failed to read config file")?;
-            let config: Config = serde_json::from_str(&contents)
-                .context("Failed to parse config file")?;
+            let contents =
+                std::fs::read_to_string(&config_file).context("Failed to read config file")?;
+            let config: Config =
+                serde_json::from_str(&contents).context("Failed to parse config file")?;
             Ok(config)
         } else {
             // Create default config
@@ -124,10 +122,8 @@ impl Config {
     /// Save config to file
     pub fn save(&self) -> Result<()> {
         let config_file = Self::config_file()?;
-        let contents = serde_json::to_string_pretty(self)
-            .context("Failed to serialize config")?;
-        std::fs::write(&config_file, contents)
-            .context("Failed to write config file")?;
+        let contents = serde_json::to_string_pretty(self).context("Failed to serialize config")?;
+        std::fs::write(&config_file, contents).context("Failed to write config file")?;
         Ok(())
     }
 
@@ -151,16 +147,13 @@ impl Config {
     pub fn set(&mut self, key: &str, value: &str) -> Result<()> {
         match key {
             "listen_port" => {
-                self.listen_port = value.parse()
-                    .context("Invalid port number")?;
+                self.listen_port = value.parse().context("Invalid port number")?;
             }
             "enable_mdns" => {
-                self.enable_mdns = value.parse()
-                    .context("Invalid boolean value")?;
+                self.enable_mdns = value.parse().context("Invalid boolean value")?;
             }
             "enable_dht" => {
-                self.enable_dht = value.parse()
-                    .context("Invalid boolean value")?;
+                self.enable_dht = value.parse().context("Invalid boolean value")?;
             }
             "storage_path" => {
                 self.storage_path = if value.is_empty() {
@@ -170,20 +163,17 @@ impl Config {
                 };
             }
             "max_peers" => {
-                self.network.max_peers = value.parse()
-                    .context("Invalid number")?;
+                self.network.max_peers = value.parse().context("Invalid number")?;
             }
             "connection_timeout" => {
-                self.network.connection_timeout = value.parse()
-                    .context("Invalid number")?;
+                self.network.connection_timeout = value.parse().context("Invalid number")?;
             }
             "enable_nat_traversal" => {
-                self.network.enable_nat_traversal = value.parse()
-                    .context("Invalid boolean value")?;
+                self.network.enable_nat_traversal =
+                    value.parse().context("Invalid boolean value")?;
             }
             "enable_relay" => {
-                self.network.enable_relay = value.parse()
-                    .context("Invalid boolean value")?;
+                self.network.enable_relay = value.parse().context("Invalid boolean value")?;
             }
             _ => anyhow::bail!("Unknown config key: {}", key),
         }
@@ -212,12 +202,29 @@ impl Config {
             ("listen_port".to_string(), self.listen_port.to_string()),
             ("enable_mdns".to_string(), self.enable_mdns.to_string()),
             ("enable_dht".to_string(), self.enable_dht.to_string()),
-            ("storage_path".to_string(), self.storage_path.clone().unwrap_or_else(|| "(auto)".to_string())),
+            (
+                "storage_path".to_string(),
+                self.storage_path
+                    .clone()
+                    .unwrap_or_else(|| "(auto)".to_string()),
+            ),
             ("max_peers".to_string(), self.network.max_peers.to_string()),
-            ("connection_timeout".to_string(), format!("{}s", self.network.connection_timeout)),
-            ("enable_nat_traversal".to_string(), self.network.enable_nat_traversal.to_string()),
-            ("enable_relay".to_string(), self.network.enable_relay.to_string()),
-            ("bootstrap_nodes".to_string(), self.bootstrap_nodes.len().to_string()),
+            (
+                "connection_timeout".to_string(),
+                format!("{}s", self.network.connection_timeout),
+            ),
+            (
+                "enable_nat_traversal".to_string(),
+                self.network.enable_nat_traversal.to_string(),
+            ),
+            (
+                "enable_relay".to_string(),
+                self.network.enable_relay.to_string(),
+            ),
+            (
+                "bootstrap_nodes".to_string(),
+                self.bootstrap_nodes.len().to_string(),
+            ),
         ]
     }
 }

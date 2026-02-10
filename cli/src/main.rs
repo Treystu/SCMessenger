@@ -5,14 +5,15 @@
 mod config;
 mod contacts;
 mod history;
+mod server;
 
-use scmessenger_core::IronCore;
-use scmessenger_core::transport::{self, SwarmEvent};
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use colored::*;
+use scmessenger_core::transport::{self, SwarmEvent};
+use scmessenger_core::IronCore;
 use std::collections::HashMap;
 use std::sync::Arc;
-use anyhow::{Context, Result};
 
 #[derive(Parser)]
 #[command(name = "scm")]
@@ -57,10 +58,7 @@ enum Commands {
         port: Option<u16>,
     },
     /// Send a message (offline mode)
-    Send {
-        recipient: String,
-        message: String,
-    },
+    Send { recipient: String, message: String },
     /// Show network status
     Status,
     /// Run self-tests
@@ -82,15 +80,26 @@ enum ContactAction {
         name: Option<String>,
     },
     List,
-    Show { contact: String },
-    Remove { contact: String },
-    Search { query: String },
+    Show {
+        contact: String,
+    },
+    Remove {
+        contact: String,
+    },
+    Search {
+        query: String,
+    },
 }
 
 #[derive(Subcommand)]
 enum ConfigAction {
-    Set { key: String, value: String },
-    Get { key: String },
+    Set {
+        key: String,
+        value: String,
+    },
+    Get {
+        key: String,
+    },
     List,
     Bootstrap {
         #[command(subcommand)]
@@ -121,7 +130,11 @@ async fn main() -> Result<()> {
         Commands::Identity { action } => cmd_identity(action).await,
         Commands::Contact { action } => cmd_contact(action).await,
         Commands::Config { action } => cmd_config(action).await,
-        Commands::History { peer, search, limit } => cmd_history(peer, search, limit).await,
+        Commands::History {
+            peer,
+            search,
+            limit,
+        } => cmd_history(peer, search, limit).await,
         Commands::Start { port } => cmd_start(port).await,
         Commands::Send { recipient, message } => cmd_send_offline(recipient, message).await,
         Commands::Status => cmd_status().await,
@@ -141,7 +154,8 @@ async fn cmd_init() -> Result<()> {
 
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
-    core.initialize_identity().context("Failed to initialize identity")?;
+    core.initialize_identity()
+        .context("Failed to initialize identity")?;
 
     let info = core.get_identity_info();
     println!("  {} Identity created", "✓".green());
@@ -149,11 +163,17 @@ async fn cmd_init() -> Result<()> {
 
     println!("{}", "Identity Information:".bold());
     println!("  ID:         {}", info.identity_id.unwrap().bright_cyan());
-    println!("  Public Key: {}", info.public_key_hex.unwrap().bright_yellow());
+    println!(
+        "  Public Key: {}",
+        info.public_key_hex.unwrap().bright_yellow()
+    );
     println!();
 
     println!("{}", "Next steps:".bold());
-    println!("  • Add contacts: {}", "scm contact add <peer-id> <public-key> --name <nickname>".bright_green());
+    println!(
+        "  • Add contacts: {}",
+        "scm contact add <peer-id> <public-key> --name <nickname>".bright_green()
+    );
     println!("  • Start node:   {}", "scm start".bright_green());
 
     Ok(())
@@ -163,7 +183,8 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
-    core.initialize_identity().context("Failed to load identity")?;
+    core.initialize_identity()
+        .context("Failed to load identity")?;
 
     let info = core.get_identity_info();
 
@@ -171,17 +192,26 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
         None | Some(IdentityAction::Show) => {
             println!("{}", "Identity Information".bold());
             println!("  ID:         {}", info.identity_id.unwrap().bright_cyan());
-            println!("  Public Key: {}", info.public_key_hex.unwrap().bright_yellow());
+            println!(
+                "  Public Key: {}",
+                info.public_key_hex.unwrap().bright_yellow()
+            );
         }
         Some(IdentityAction::Export) => {
             println!("{}", "Export Identity (Backup)".bold());
             println!();
-            println!("{}", "⚠️  WARNING: Keep your keys secure!".bright_red().bold());
+            println!(
+                "{}",
+                "⚠️  WARNING: Keep your keys secure!".bright_red().bold()
+            );
             println!();
             println!("Identity ID: {}", info.identity_id.unwrap());
             println!("Public Key:  {}", info.public_key_hex.unwrap());
             println!();
-            println!("Keys stored in: {}", storage_path.display().to_string().bright_cyan());
+            println!(
+                "Keys stored in: {}",
+                storage_path.display().to_string().bright_cyan()
+            );
         }
     }
 
@@ -194,7 +224,11 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
     let contacts = contacts::ContactList::open(contacts_db)?;
 
     match action {
-        ContactAction::Add { peer_id, public_key, name } => {
+        ContactAction::Add {
+            peer_id,
+            public_key,
+            name,
+        } => {
             let contact = contacts::Contact::new(peer_id.clone(), public_key)
                 .with_nickname(name.clone().unwrap_or_else(|| peer_id.clone()));
 
@@ -217,7 +251,11 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                 println!();
 
                 for contact in list {
-                    println!("  {} {}", "•".bright_green(), contact.display_name().bright_cyan());
+                    println!(
+                        "  {} {}",
+                        "•".bright_green(),
+                        contact.display_name().bright_cyan()
+                    );
                     println!("    Peer ID: {}", contact.peer_id.dimmed());
                 }
             }
@@ -251,7 +289,11 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                 println!();
 
                 for contact in results {
-                    println!("  {} {}", "•".bright_green(), contact.display_name().bright_cyan());
+                    println!(
+                        "  {} {}",
+                        "•".bright_green(),
+                        contact.display_name().bright_cyan()
+                    );
                     println!("    {}", contact.peer_id.dimmed());
                 }
             }
@@ -324,7 +366,11 @@ async fn cmd_config(action: ConfigAction) -> Result<()> {
     Ok(())
 }
 
-async fn cmd_history(peer_filter: Option<String>, search_query: Option<String>, limit: usize) -> Result<()> {
+async fn cmd_history(
+    peer_filter: Option<String>,
+    search_query: Option<String>,
+    limit: usize,
+) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let history_db = data_dir.join("history");
     let history = history::MessageHistory::open(history_db)?;
@@ -373,12 +419,14 @@ async fn cmd_history(peer_filter: Option<String>, search_query: Option<String>, 
 
 async fn cmd_start(port: Option<u16>) -> Result<()> {
     let config = config::Config::load()?;
-    let port = port.unwrap_or(config.listen_port);
+    let ws_port = port.unwrap_or(config.listen_port);
+    let p2p_port = ws_port + 1; // P2P port shifted by 1 to allow UI on default port
 
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
-    core.initialize_identity().context("Failed to load identity")?;
+    core.initialize_identity()
+        .context("Failed to load identity")?;
 
     let info = core.get_identity_info();
 
@@ -390,15 +438,22 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
     println!("{}", "SCMessenger — Starting...".bold());
     println!();
-    println!("Identity: {}", info.public_key_hex.clone().unwrap().bright_cyan());
-    println!("Peer ID:  {}", info.identity_id.clone().unwrap().bright_yellow());
+    println!(
+        "Identity: {}",
+        info.identity_id.clone().unwrap().bright_cyan()
+    );
+    println!("Web Interface: ws://localhost:{}/ws", ws_port);
+    println!("P2P Listener:  /ip4/0.0.0.0/tcp/{}", p2p_port);
     println!();
 
     let network_keypair = libp2p::identity::Keypair::generate_ed25519();
     let local_peer_id = network_keypair.public().to_peer_id();
     println!("{} Network peer ID: {}", "✓".green(), local_peer_id);
 
-    let listen_addr: libp2p::Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse()?;
+    // Start WebSocket Server
+    let (ui_broadcast, mut ui_cmd_rx) = server::start(ws_port).await;
+
+    let listen_addr: libp2p::Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", p2p_port).parse()?;
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);
     let swarm_handle = transport::start_swarm(network_keypair, Some(listen_addr), event_tx).await?;
 
@@ -412,184 +467,197 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     println!("  {}                        ", "quit".bright_green());
     println!();
 
+    // Auto-open UI instructions?
+    // println!("Open ui/index.html in your browser to restart.");
+
     let core = Arc::new(core);
     let peers: Arc<tokio::sync::Mutex<HashMap<libp2p::PeerId, Option<String>>>> =
         Arc::new(tokio::sync::Mutex::new(HashMap::new()));
+
+    // Broadcast status loop
+    let ui_broadcast_clone = ui_broadcast.clone();
+    let peers_clone_status = peers.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            let count = peers_clone_status.lock().await.len();
+            // Don't crash if no subscribers
+            let _ = ui_broadcast_clone.send(server::UiEvent::NetworkStatus {
+                status: "online".to_string(),
+                peer_count: count,
+            });
+        }
+    });
 
     let core_rx = core.clone();
     let contacts_rx = contacts.clone();
     let history_rx = history.clone();
     let peers_rx = peers.clone();
 
-    let event_task = tokio::spawn(async move {
-        while let Some(event) = event_rx.recv().await {
-            match event {
-                SwarmEvent::PeerDiscovered(peer_id) => {
-                    let mut p = peers_rx.lock().await;
-                    if !p.contains_key(&peer_id) {
-                        p.insert(peer_id, None);
-                        println!("\n{} Peer: {}", "✓".green(), peer_id);
-                        print!("> ");
-                        let _ = std::io::Write::flush(&mut std::io::stdout());
-                        let _ = contacts_rx.update_last_seen(&peer_id.to_string());
+    // Stdin handling
+    let stdin = tokio::io::BufReader::new(tokio::io::stdin());
+    let mut stdin_lines = tokio::io::AsyncBufReadExt::lines(stdin);
+
+    loop {
+        tokio::select! {
+            // 1. Swarm Events (Network -> App -> UI)
+            Some(event) = event_rx.recv() => {
+                match event {
+                    SwarmEvent::PeerDiscovered(peer_id) => {
+                         let mut p = peers_rx.lock().await;
+                         if !p.contains_key(&peer_id) {
+                             p.insert(peer_id, None);
+                             println!("\n{} Peer: {}", "✓".green(), peer_id);
+                             print!("> ");
+                             let _ = std::io::Write::flush(&mut std::io::stdout());
+                             let _ = contacts_rx.update_last_seen(&peer_id.to_string());
+
+                             let _ = ui_broadcast.send(server::UiEvent::PeerDiscovered {
+                                 peer_id: peer_id.to_string(),
+                                 transport: "tcp".to_string()
+                             });
+                         }
                     }
-                }
-                SwarmEvent::PeerDisconnected(peer_id) => {
-                    peers_rx.lock().await.remove(&peer_id);
-                }
-                SwarmEvent::MessageReceived { peer_id, envelope_data } => {
-                    match core_rx.receive_message(envelope_data) {
-                        Ok(msg) => {
-                            let text = msg.text_content().unwrap_or_else(|| "<binary>".into());
+                    SwarmEvent::PeerDisconnected(peer_id) => {
+                        peers_rx.lock().await.remove(&peer_id);
+                    }
+                    SwarmEvent::MessageReceived { peer_id, envelope_data } => {
+                        match core_rx.receive_message(envelope_data) {
+                             Ok(msg) => {
+                                 let text = msg.text_content().unwrap_or_else(|| "<binary>".into());
+                                 let sender_name = contacts_rx.get(&peer_id.to_string())
+                                     .ok().flatten()
+                                     .map(|c| c.display_name().to_string())
+                                     .unwrap_or_else(|| peer_id.to_string());
 
-                            let sender_name = contacts_rx
-                                .get(&peer_id.to_string())
-                                .ok()
-                                .flatten()
-                                .map(|c| c.display_name().to_string())
-                                .unwrap_or_else(|| peer_id.to_string());
+                                 println!("\n{} {}: {}", "←".bright_blue(), sender_name.bright_cyan(), text);
+                                 print!("> ");
+                                 let _ = std::io::Write::flush(&mut std::io::stdout());
 
-                            println!("\n{} {}: {}", "←".bright_blue(), sender_name.bright_cyan(), text);
+                                 let record = history::MessageRecord::new_received(peer_id.to_string(), text.clone());
+                                 let _ = history_rx.add(record);
 
-                            let record = history::MessageRecord::new_received(peer_id.to_string(), text);
-                            let _ = history_rx.add(record);
+                                 // Update UI
+                                 // Note: timestamps in Rust are u64, MessageReceived expects u64
+                                 let _ = ui_broadcast.send(server::UiEvent::MessageReceived {
+                                     from: peer_id.to_string(),
+                                     content: text,
+                                     timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+                                     message_id: uuid::Uuid::new_v4().to_string(),
+                                 });
+                             }
+                             Err(_) => {}
                         }
-                        Err(_) => {}
                     }
-                    print!("> ");
-                    let _ = std::io::Write::flush(&mut std::io::stdout());
+                    SwarmEvent::ListeningOn(addr) => {
+                        println!("{} Listening on {}", "✓".green(), addr);
+                    }
+                    _ => {}
                 }
-                SwarmEvent::ListeningOn(addr) => {
-                    println!("{} Listening on {}", "✓".green(), addr);
-                }
-                SwarmEvent::AddressReflected { .. } => {}
-            }
-        }
-    });
-
-    let stdin_task = tokio::spawn(async move {
-        use tokio::io::AsyncBufReadExt;
-
-        let stdin = tokio::io::BufReader::new(tokio::io::stdin());
-        let mut lines = stdin.lines();
-
-        print!("> ");
-        let _ = std::io::Write::flush(&mut std::io::stdout());
-
-        while let Ok(Some(line)) = lines.next_line().await {
-            let line = line.trim();
-
-            if line.is_empty() {
-                print!("> ");
-                let _ = std::io::Write::flush(&mut std::io::stdout());
-                continue;
             }
 
-            if line == "quit" || line == "exit" {
-                println!("Shutting down...");
-                let _ = swarm_handle.shutdown().await;
-                break;
-            }
+            // 2. UI Commands (UI -> App -> Network)
+            Some(cmd) = ui_cmd_rx.recv() => {
+                match cmd {
+                    server::UiCommand::IdentityShow => {
+                        let i = core_rx.get_identity_info();
+                        let _ = ui_broadcast.send(server::UiEvent::IdentityInfo {
+                            peer_id: i.identity_id.unwrap_or_default(),
+                            public_key: i.public_key_hex.unwrap_or_default(),
+                        });
+                    }
+                    server::UiCommand::ContactList => {
+                        if let Ok(list) = contacts_rx.list() {
+                            let _ = ui_broadcast.send(server::UiEvent::ContactList { contacts: list });
+                        }
+                    }
+                    server::UiCommand::Status => {
+                        let count = peers_rx.lock().await.len();
+                        let _ = ui_broadcast.send(server::UiEvent::NetworkStatus {
+                            status: "online".to_string(),
+                            peer_count: count
+                        });
+                    }
+                    server::UiCommand::Send { recipient, message, id } => {
+                        // Resolve recipient to PeerID and PublicKey
+                        let peer_id_res = recipient.parse::<libp2p::PeerId>();
+                        let contact_res = contacts_rx.get(&recipient);
 
-            if line == "contacts" {
-                match contacts.list() {
-                    Ok(list) => {
-                        if list.is_empty() {
-                            println!("No contacts.");
+                        let target_peer = if let Ok(pid) = peer_id_res {
+                            Some(pid)
+                        } else if let Ok(Some(contact)) = contact_res {
+                            contact.peer_id.parse().ok()
                         } else {
-                            for c in list {
-                                println!("  • {}", c.display_name().bright_cyan());
+                            None
+                        };
+
+                        if let Some(target) = target_peer {
+                             // Try to find public key
+                             let pk_opt = if let Ok(Some(c)) = contacts_rx.get(&target.to_string()) {
+                                 Some(c.public_key)
+                             } else { None };
+
+                             if let Some(pk) = pk_opt {
+                                 if let Ok(env) = core_rx.prepare_message(pk, message.clone()) {
+                                     if swarm_handle.send_message(target, env).await.is_ok() {
+                                         let _ = ui_broadcast.send(server::UiEvent::MessageStatus {
+                                             message_id: id.unwrap_or_default(),
+                                             status: "sent".to_string()
+                                         });
+                                         let record = history::MessageRecord::new_sent(target.to_string(), message);
+                                         let _ = history_rx.add(record);
+                                     }
+                                 }
+                             }
+                        }
+                    }
+                    server::UiCommand::ContactAdd { peer_id, name, public_key } => {
+                        // Assuming public key is provided or we can fetch it? MVP assumes provided.
+                        if let Some(pk) = public_key {
+                            let contact = contacts::Contact::new(peer_id.clone(), pk)
+                                .with_nickname(name.unwrap_or(peer_id));
+                            let _ = contacts_rx.add(contact);
+                            if let Ok(list) = contacts_rx.list() {
+                                let _ = ui_broadcast.send(server::UiEvent::ContactList { contacts: list });
                             }
                         }
                     }
-                    Err(_) => {}
+                    _ => {}
                 }
-                print!("> ");
-                let _ = std::io::Write::flush(&mut std::io::stdout());
-                continue;
             }
 
-            if line == "peers" {
-                let p = peers.lock().await;
-                if p.is_empty() {
-                    println!("No peers.");
-                } else {
-                    for pid in p.keys() {
-                        println!("  • {}", pid);
+            // 3. Stdin (User -> App)
+            Ok(Some(line)) = stdin_lines.next_line() => {
+                let line = line.trim();
+                if line.is_empty() {
+                     print!("> ");
+                     let _ = std::io::Write::flush(&mut std::io::stdout());
+                     continue;
+                }
+                if line == "quit" || line == "exit" {
+                    println!("Shutting down...");
+                    let _ = swarm_handle.shutdown().await;
+                    break;
+                }
+                // (Implement simple CLI commands if needed, mirroring old logic)
+                if line == "status" {
+                     let c = peers_rx.lock().await.len();
+                     println!("Peers: {}", c);
+                }
+                if line == "peers" {
+                     let p = peers_rx.lock().await;
+                     for k in p.keys() { println!("  {}", k); }
+                }
+                if line == "contacts" {
+                    if let Ok(l) = contacts_rx.list() {
+                        for c in l { println!("  {}", c.display_name()); }
                     }
                 }
-                print!("> ");
-                let _ = std::io::Write::flush(&mut std::io::stdout());
-                continue;
-            }
-
-            if line == "status" {
-                let peer_count = peers.lock().await.len();
-                let contact_count = contacts.count();
-                let msg_count = history.count();
-
-                println!("Peers:    {}", peer_count);
-                println!("Contacts: {}", contact_count);
-                println!("Messages: {}", msg_count);
-                print!("> ");
-                let _ = std::io::Write::flush(&mut std::io::stdout());
-                continue;
-            }
-
-            if line.starts_with("send ") {
-                let parts: Vec<&str> = line.splitn(3, ' ').collect();
-                if parts.len() < 3 {
-                    println!("Usage: send <contact> <message>");
-                    print!("> ");
-                    let _ = std::io::Write::flush(&mut std::io::stdout());
-                    continue;
-                }
-
-                let contact_query = parts[1];
-                let message_text = parts[2];
-
-                match find_contact(&contacts, contact_query) {
-                    Ok(contact) => {
-                        match contact.peer_id.parse::<libp2p::PeerId>() {
-                            Ok(peer_id) => {
-                                match core.prepare_message(contact.public_key.clone(), message_text.to_string()) {
-                                    Ok(envelope_bytes) => {
-                                        match swarm_handle.send_message(peer_id, envelope_bytes).await {
-                                            Ok(_) => {
-                                                println!("{} Sent", "✓".green());
-
-                                                let record = history::MessageRecord::new_sent(
-                                                    contact.peer_id.clone(),
-                                                    message_text.to_string()
-                                                );
-                                                let _ = history.add(record);
-                                            }
-                                            Err(_) => {}
-                                        }
-                                    }
-                                    Err(_) => {}
-                                }
-                            }
-                            Err(_) => {}
-                        }
-                    }
-                    Err(_) => println!("{} Contact not found", "✗".red()),
-                }
 
                 print!("> ");
                 let _ = std::io::Write::flush(&mut std::io::stdout());
-                continue;
             }
-
-            println!("Try: send, contacts, peers, status, quit");
-            print!("> ");
-            let _ = std::io::Write::flush(&mut std::io::stdout());
         }
-    });
-
-    tokio::select! {
-        _ = event_task => {}
-        _ = stdin_task => {}
     }
 
     Ok(())
@@ -599,112 +667,28 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
-    core.initialize_identity().context("Failed to load identity")?;
+    core.initialize_identity()
+        .context("Failed to load identity")?;
 
     let contacts_db = data_dir.join("contacts");
     let contacts = contacts::ContactList::open(contacts_db)?;
 
-    let contact = find_contact(&contacts, &recipient)
-        .context("Contact not found")?;
+    let contact = find_contact(&contacts, &recipient).context("Contact not found")?;
 
     let envelope_bytes = core
         .prepare_message(contact.public_key.clone(), message.clone())
         .context("Failed to encrypt message")?;
 
-    println!("{} Message encrypted: {} bytes", "✓".green(), envelope_bytes.len());
-    println!("{} Message queued for {}", "✓".green(), contact.display_name().bright_cyan());
-
-    Ok(())
-}
-
-async fn cmd_status() -> Result<()> {
-    let data_dir = config::Config::data_dir()?;
-    let contacts_db = data_dir.join("contacts");
-    let history_db = data_dir.join("history");
-
-    let contacts = contacts::ContactList::open(contacts_db)?;
-    let history = history::MessageHistory::open(history_db)?;
-    let stats = history.stats()?;
-
-    println!("{}", "SCMessenger Status".bold());
-    println!();
-
-    println!("Contacts: {}", contacts.count());
-    println!("Messages: {} (sent: {}, received: {})",
-        stats.total_messages,
-        stats.sent_messages,
-        stats.received_messages
+    println!(
+        "{} Message encrypted: {} bytes",
+        "✓".green(),
+        envelope_bytes.len()
+    );
+    println!(
+        "{} Message queued for {}",
+        "✓".green(),
+        contact.display_name().bright_cyan()
     );
 
     Ok(())
-}
-
-async fn cmd_test() -> Result<()> {
-    println!("{}", "Running self-tests...".bold());
-    println!();
-
-    let alice = IronCore::new();
-    let bob = IronCore::new();
-
-    alice.initialize_identity()?;
-    bob.initialize_identity()?;
-
-    let _alice_info = alice.get_identity_info();
-    let bob_info = bob.get_identity_info();
-
-    println!("{} Identity generation", "✓".green());
-
-    let envelope = alice.prepare_message(
-        bob_info.public_key_hex.clone().unwrap(),
-        "Test message".to_string()
-    )?;
-
-    println!("{} Message encryption ({} bytes)", "✓".green(), envelope.len());
-
-    let msg = bob.receive_message(envelope)?;
-    assert_eq!(msg.text_content().unwrap(), "Test message");
-
-    println!("{} Message decryption", "✓".green());
-
-    let eve = IronCore::new();
-    eve.initialize_identity()?;
-
-    let envelope = alice.prepare_message(
-        bob_info.public_key_hex.unwrap(),
-        "Secret".to_string()
-    )?;
-
-    assert!(eve.receive_message(envelope).is_err());
-    println!("{} Encryption security", "✓".green());
-
-    println!();
-    println!("{}", "All tests passed!".green().bold());
-
-    Ok(())
-}
-
-fn find_contact(contacts: &contacts::ContactList, query: &str) -> Result<contacts::Contact> {
-    if let Ok(Some(contact)) = contacts.get(query) {
-        return Ok(contact);
-    }
-
-    if let Ok(Some(contact)) = contacts.find_by_nickname(query) {
-        return Ok(contact);
-    }
-
-    if let Ok(Some(contact)) = contacts.find_by_public_key(query) {
-        return Ok(contact);
-    }
-
-    anyhow::bail!("Contact not found: {}", query)
-}
-
-fn format_timestamp(timestamp: u64) -> String {
-    use chrono::{DateTime, Local, Utc};
-
-    let dt = DateTime::from_timestamp(timestamp as i64, 0)
-        .unwrap_or_else(|| Utc::now());
-    let local: DateTime<Local> = dt.into();
-
-    local.format("%Y-%m-%d %H:%M:%S").to_string()
 }

@@ -64,8 +64,7 @@ impl MessageRecord {
     }
 
     pub fn formatted_time(&self) -> String {
-        let dt = DateTime::from_timestamp(self.timestamp as i64, 0)
-            .unwrap_or_else(|| Utc::now());
+        let dt = DateTime::from_timestamp(self.timestamp as i64, 0).unwrap_or_else(|| Utc::now());
         dt.format("%Y-%m-%d %H:%M:%S").to_string()
     }
 
@@ -84,8 +83,7 @@ pub struct MessageHistory {
 impl MessageHistory {
     /// Open or create message history database
     pub fn open(path: PathBuf) -> Result<Self> {
-        let db = sled::open(path)
-            .context("Failed to open message history database")?;
+        let db = sled::open(path).context("Failed to open message history database")?;
         Ok(Self { db })
     }
 
@@ -94,10 +92,10 @@ impl MessageHistory {
         // Generate key: timestamp_id for chronological ordering
         let key = format!("{:020}_{}", record.timestamp, record.id);
 
-        let value = serde_json::to_vec(&record)
-            .context("Failed to serialize message record")?;
+        let value = serde_json::to_vec(&record).context("Failed to serialize message record")?;
 
-        self.db.insert(key.as_bytes(), value)
+        self.db
+            .insert(key.as_bytes(), value)
             .context("Failed to insert message record")?;
 
         Ok(())
@@ -275,10 +273,7 @@ mod tests {
 
     #[test]
     fn test_message_record() {
-        let msg = MessageRecord::new_sent(
-            "peer123".to_string(),
-            "Hello!".to_string()
-        );
+        let msg = MessageRecord::new_sent("peer123".to_string(), "Hello!".to_string());
 
         assert_eq!(msg.direction, Direction::Sent);
         assert_eq!(msg.peer(), "peer123");
@@ -293,17 +288,11 @@ mod tests {
         let history = MessageHistory::open(db_path)?;
 
         // Add sent message
-        let msg1 = MessageRecord::new_sent(
-            "peer1".to_string(),
-            "Hello".to_string()
-        );
+        let msg1 = MessageRecord::new_sent("peer1".to_string(), "Hello".to_string());
         history.add(msg1)?;
 
         // Add received message
-        let msg2 = MessageRecord::new_received(
-            "peer1".to_string(),
-            "Hi there".to_string()
-        );
+        let msg2 = MessageRecord::new_received("peer1".to_string(), "Hi there".to_string());
         history.add(msg2)?;
 
         // Check count

@@ -60,18 +60,17 @@ pub struct ContactList {
 impl ContactList {
     /// Open or create contact list database
     pub fn open(path: PathBuf) -> Result<Self> {
-        let db = sled::open(path)
-            .context("Failed to open contacts database")?;
+        let db = sled::open(path).context("Failed to open contacts database")?;
         Ok(Self { db })
     }
 
     /// Add a new contact
     pub fn add(&self, contact: Contact) -> Result<()> {
         let key = contact.peer_id.as_bytes();
-        let value = serde_json::to_vec(&contact)
-            .context("Failed to serialize contact")?;
+        let value = serde_json::to_vec(&contact).context("Failed to serialize contact")?;
 
-        self.db.insert(key, value)
+        self.db
+            .insert(key, value)
             .context("Failed to insert contact")?;
 
         Ok(())
@@ -80,8 +79,8 @@ impl ContactList {
     /// Get a contact by peer ID
     pub fn get(&self, peer_id: &str) -> Result<Option<Contact>> {
         if let Some(data) = self.db.get(peer_id.as_bytes())? {
-            let contact: Contact = serde_json::from_slice(&data)
-                .context("Failed to deserialize contact")?;
+            let contact: Contact =
+                serde_json::from_slice(&data).context("Failed to deserialize contact")?;
             Ok(Some(contact))
         } else {
             Ok(None)
@@ -100,15 +99,13 @@ impl ContactList {
 
         for item in self.db.iter() {
             let (_, value) = item?;
-            let contact: Contact = serde_json::from_slice(&value)
-                .context("Failed to deserialize contact")?;
+            let contact: Contact =
+                serde_json::from_slice(&value).context("Failed to deserialize contact")?;
             contacts.push(contact);
         }
 
         // Sort by nickname, then by peer_id
-        contacts.sort_by(|a, b| {
-            a.display_name().cmp(b.display_name())
-        });
+        contacts.sort_by(|a, b| a.display_name().cmp(b.display_name()));
 
         Ok(contacts)
     }
@@ -184,8 +181,14 @@ impl ContactList {
 
             let matches = contact.peer_id.to_lowercase().contains(&query_lower)
                 || contact.public_key.to_lowercase().contains(&query_lower)
-                || contact.nickname.as_ref().map_or(false, |n| n.to_lowercase().contains(&query_lower))
-                || contact.notes.as_ref().map_or(false, |n| n.to_lowercase().contains(&query_lower));
+                || contact
+                    .nickname
+                    .as_ref()
+                    .map_or(false, |n| n.to_lowercase().contains(&query_lower))
+                || contact
+                    .notes
+                    .as_ref()
+                    .map_or(false, |n| n.to_lowercase().contains(&query_lower));
 
             if matches {
                 results.push(contact);
@@ -210,10 +213,8 @@ mod tests {
 
     #[test]
     fn test_contact_creation() {
-        let contact = Contact::new(
-            "12D3KooTest".to_string(),
-            "abcd1234".to_string()
-        ).with_nickname("Alice".to_string());
+        let contact = Contact::new("12D3KooTest".to_string(), "abcd1234".to_string())
+            .with_nickname("Alice".to_string());
 
         assert_eq!(contact.display_name(), "Alice");
         assert_eq!(contact.peer_id, "12D3KooTest");
@@ -227,10 +228,8 @@ mod tests {
         let contacts = ContactList::open(db_path)?;
 
         // Add contact
-        let contact = Contact::new(
-            "12D3KooTest1".to_string(),
-            "pubkey1".to_string()
-        ).with_nickname("Alice".to_string());
+        let contact = Contact::new("12D3KooTest1".to_string(), "pubkey1".to_string())
+            .with_nickname("Alice".to_string());
 
         contacts.add(contact)?;
 
