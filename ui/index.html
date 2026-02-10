@@ -952,25 +952,6 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label">Relay Mode</label>
-            <div
-              class="flex"
-              style="align-items: center; gap: 10px; opacity: 0.7"
-            >
-              <input
-                type="checkbox"
-                id="setting-relay"
-                checked
-                disabled
-                style="width: 20px; height: 20px"
-              />
-              <span class="text-sm text-muted"
-                >Mesh Relaying Always Active (Core Feature)</span
-              >
-            </div>
-          </div>
-
-          <div class="form-group">
             <label class="form-label">Bootstrap Nodes</label>
             <textarea
               id="setting-bootstrap"
@@ -1430,13 +1411,8 @@ Loading...</textarea
 
           saveSettings() {
             const port = document.getElementById("setting-port").value;
-            const relay = document.getElementById("setting-relay").checked;
 
             this.sendCommand("config_set", { key: "listen_port", value: port });
-            this.sendCommand("config_set", {
-              key: "relay_enabled",
-              value: String(relay),
-            });
 
             SCM.ui.closeModals();
             alert("Settings saved!");
