@@ -16,6 +16,10 @@ COPY cli/src cli/src
 COPY mobile/src mobile/src
 COPY wasm/src wasm/src
 
+# Copy build scripts
+COPY core/build.rs core/
+COPY mobile/build.rs mobile/
+
 # Build the CLI
 RUN cargo build --release --bin scmessenger-cli
 

@@ -29,7 +29,30 @@ install_docker_macos() {
     fi
     
     echo "Installing Docker Desktop via Homebrew..."
-    brew install --cask docker
+    
+    # Attempt installation, handle conflicts (like hub-tool) by forcing if standard install fails
+    if ! brew install --cask docker; then
+        echo -e "${YELLOW}Standard installation encountered an issue. Retrying with --force to resolve conflicts...${NC}"
+        
+        # Specific fix for reported hub-tool conflict
+        if [ -f "/usr/local/bin/hub-tool" ]; then
+            echo "Detected potential conflict with /usr/local/bin/hub-tool. Attempting to move it setup..."
+            mv /usr/local/bin/hub-tool /usr/local/bin/hub-tool.bak 2>/dev/null || \
+            echo "Could not auto-move hub-tool. The --force install below might handle it or fail."
+        fi
+
+        if ! brew install --cask --force docker; then
+            # If force failed, check if the App exists anyway (sometimes post-install steps fail but App is there)
+            if [ -d "/Applications/Docker.app" ]; then
+                 echo -e "${YELLOW}Homebrew reported an error, but Docker.app was found in /Applications.${NC}"
+                 echo "Assuming installation was successful enough to proceed."
+            else
+                 echo -e "${RED}Critical: Docker installation failed.${NC}"
+                 echo "Please manually install Docker Desktop and re-run this script."
+                 exit 1
+            fi
+        fi
+    fi
     
     echo "Starting Docker Desktop..."
     open -a Docker
@@ -105,8 +128,14 @@ get_peer_id() {
     local container=$1
     local id
     # Try multiple times to get ID in case service is slow
-    for i in {1..3}; do
-        id=$(docker exec $container scm identity show 2>/dev/null | grep "ID:" | awk '{print $2}')
+    for i in {1..5}; do
+        # Extract ID from container logs instead of exec (avoids locking/startup issues)
+        # 1. Get logs
+        # 2. Grep for the specific line
+        # 3. Strip ANSI color codes
+        # 4. Extract the ID (last field)
+        id=$(docker logs $container 2>&1 | grep "Network peer ID:" | tail -n 1 | sed 's/\x1b\[[0-9;]*m//g' | awk '{print $NF}')
+        
         if [ ! -z "$id" ]; then
             echo "$id"
             return
@@ -115,14 +144,41 @@ get_peer_id() {
     done
 }
 
+# Helper function to get Identity Key (Hex)
+get_identity_key() {
+    local container=$1
+    local key
+    for i in {1..5}; do
+        # Extract the Key following "Identity: "
+        # 1. capture logs
+        # 2. grep line
+        # 3. strip ansi colors
+        # 4. get 2nd field (the key)
+        # 5. remove ANY whitespace/newlines/carriage returns
+        key=$(docker logs $container 2>&1 | grep "Identity:" | tail -n 1 | sed 's/\x1b\[[0-9;]*m//g' | awk '{print $2}' | tr -d '[:space:]')
+        
+        # Verify it looks like a hex key (non-empty)
+        if [ ! -z "$key" ] && [ ${#key} -ge 32 ]; then
+            echo "$key"
+            return
+        fi
+        sleep 2
+    done
+}
+
 ALICE_ID=$(get_peer_id scm-alice)
 BOB_ID=$(get_peer_id scm-bob)
+BOB_KEY=$(get_identity_key scm-bob)
 
 echo "👤 Alice ID: $ALICE_ID"
 echo "👤 Bob ID:   $BOB_ID"
+echo "🔑 Bob Key:  '$BOB_KEY'"
 
-if [ -z "$ALICE_ID" ] || [ -z "$BOB_ID" ]; then
-    echo -e "${RED}✗ Failed to retrieve Peer IDs. Check container logs.${NC}"
+if [ -z "$ALICE_ID" ] || [ -z "$BOB_ID" ] || [ -z "$BOB_KEY" ]; then
+    echo -e "${RED}✗ Failed to retrieve Check container logs.${NC}"
+    echo "Alice ID: $ALICE_ID"
+    echo "Bob ID: $BOB_ID"
+    echo "Bob Key: $BOB_KEY"
     docker compose -f docker/docker-compose.yml logs
     exit 1
 fi
@@ -131,8 +187,8 @@ echo "---------------------------------------------------"
 echo "📨 Test 1: Alice -> Bob (Message Send)"
 echo "---------------------------------------------------"
 
-# Add Bob as contact
-docker exec scm-alice scm contact add "$BOB_ID" "test-key-placeholder" --name Bob > /dev/null 2>&1 || true
+# Add Bob as contact with REAL public key
+docker exec scm-alice scm contact add "$BOB_ID" "$BOB_KEY" --name Bob > /dev/null 2>&1 || true
 
 # Send message
 MESSAGE="Hello from Alice $(date +%s)"
@@ -160,6 +216,14 @@ fi
 
 echo "---------------------------------------------------"
 echo -e "${GREEN}✅ Simulation Verified Successfully${NC}"
+echo "---------------------------------------------------"
+echo ""
+echo -e "${GREEN}Summary:${NC}"
+echo "  1. Docker Environment:   Healthy"
+echo "  2. Network Simulation:   Started (Relay + 2 Peers)"
+echo "  3. Peer Discovery:       Success ($ALICE_ID <-> $BOB_ID)"
+echo "  4. Message Delivery:     Success (Alice -> Bob)"
+echo ""
 echo "---------------------------------------------------"
 
 # --- Cleanup Logic ---
