@@ -609,6 +609,26 @@
         transition: transform 0.3s;
       }
 
+      /* Tabs */
+      .tab-content.hidden {
+        display: none;
+      }
+      .tab-btn {
+        background: none;
+        border: none;
+        padding-bottom: 8px;
+        cursor: pointer;
+        color: var(--text-muted);
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+        font-size: 1rem;
+        font-weight: 500;
+      }
+      .tab-btn.active {
+        color: var(--primary);
+        border-bottom-color: var(--primary);
+      }
+
       /* Scrollbar */
       ::-webkit-scrollbar {
         width: 6px;
@@ -860,74 +880,107 @@
           "
         >
           <button
+            id="tab-btn-network"
             class="tab-btn active"
-            style="
-              background: none;
-              border: none;
-              color: var(--primary);
-              padding-bottom: 8px;
-              border-bottom: 2px solid var(--primary);
-            "
+            onclick="app.ui.switchTab('network')"
           >
             Network
           </button>
           <button
+            id="tab-btn-identity"
             class="tab-btn"
-            style="
-              background: none;
-              border: none;
-              color: var(--text-muted);
-              padding-bottom: 8px;
-            "
+            onclick="app.ui.switchTab('identity')"
           >
             Identity
           </button>
         </div>
 
-        <div class="form-group">
-          <label class="form-label">Listen Port</label>
-          <input
-            type="number"
-            id="setting-port"
-            class="form-input"
-            value="9000"
-          />
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Relay Mode</label>
-          <div class="flex" style="align-items: center; gap: 10px">
+        <!-- Network Tab -->
+        <div id="tab-content-network" class="tab-content">
+          <div class="form-group">
+            <label class="form-label">Listen Port</label>
             <input
-              type="checkbox"
-              id="setting-relay"
-              checked
-              style="width: 20px; height: 20px"
+              type="number"
+              id="setting-port"
+              class="form-input"
+              value="9000"
             />
-            <span class="text-sm text-muted"
-              >Enable mesh relaying (Help the network)</span
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Relay Mode</label>
+            <div
+              class="flex"
+              style="align-items: center; gap: 10px; opacity: 0.7"
+            >
+              <input
+                type="checkbox"
+                id="setting-relay"
+                checked
+                disabled
+                style="width: 20px; height: 20px"
+              />
+              <span class="text-sm text-muted"
+                >Mesh Relaying Always Active (Core Feature)</span
+              >
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Bootstrap Nodes</label>
+            <textarea
+              id="setting-bootstrap"
+              class="form-input"
+              rows="3"
+              style="font-family: monospace; font-size: 0.8rem"
+            >
+/ip4/bootstrap.example.com/tcp/4001</textarea
             >
           </div>
+
+          <button
+            class="btn btn-primary"
+            style="width: 100%"
+            onclick="app.actions.saveSettings()"
+          >
+            Save Configuration
+          </button>
         </div>
 
-        <div class="form-group">
-          <label class="form-label">Bootstrap Nodes</label>
-          <textarea
-            id="setting-bootstrap"
-            class="form-input"
-            rows="3"
-            style="font-family: monospace; font-size: 0.8rem"
+        <!-- Identity Tab -->
+        <div id="tab-content-identity" class="tab-content hidden">
+          <div class="form-group">
+            <label class="form-label">My Peer ID</label>
+            <input
+              type="text"
+              id="setting-peer-id"
+              class="form-input mono"
+              readonly
+              value="Loading..."
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Public Key</label>
+            <textarea
+              id="setting-pub-key"
+              class="form-input mono"
+              readonly
+              rows="3"
+            >
+Loading...</textarea
+            >
+          </div>
+          <div
+            style="
+              font-size: 0.75rem;
+              color: var(--text-muted);
+              text-align: center;
+              margin-top: 20px;
+            "
           >
-/ip4/bootstrap.example.com/tcp/4001</textarea
-          >
+            Identity is managed by the core node. Keys are stored securely.
+          </div>
         </div>
-
-        <button
-          class="btn btn-primary"
-          style="width: 100%"
-          onclick="app.actions.saveSettings()"
-        >
-          Save Configuration
-        </button>
       </div>
     </div>
 
@@ -979,14 +1032,16 @@
 
         // Environment Detection
         env: {
-          isDocker:
-            window.location.hostname && window.location.hostname !== "localhost" &&
-            window.location.hostname !== "127.0.0.1",
+          get isDocker() {
+            const h = window.location.hostname;
+            return h && h !== "localhost" && h !== "127.0.0.1";
+          },
           getWsUrl() {
             const port = 9000; // Default
             if (this.isDocker) {
               return `ws://${window.location.hostname}:${port}/ws`;
             }
+            // For local CLI or file://, use 127.0.0.1 to avoid "invalid URL" errors with empty hostname
             return `ws://127.0.0.1:${port}/ws`;
           },
         },
@@ -1415,12 +1470,35 @@
 
           openSettings() {
             document.getElementById("modal-settings").classList.add("visible");
+            // Populate Identity fields
+            if (SCM.state.myself) {
+              const pid = document.getElementById("setting-peer-id");
+              const pub = document.getElementById("setting-pub-key");
+              if (pid) pid.value = SCM.state.myself.peer_id || "Loading...";
+              if (pub) pub.value = SCM.state.myself.public_key || "Loading...";
+            }
           },
 
           closeModals() {
             document
               .querySelectorAll(".modal-overlay")
               .forEach((el) => el.classList.remove("visible"));
+          },
+
+          switchTab(tabName) {
+            // Update Buttons
+            document
+              .querySelectorAll(".tab-btn")
+              .forEach((b) => b.classList.remove("active"));
+            const btn = document.getElementById(`tab-btn-${tabName}`);
+            if (btn) btn.classList.add("active");
+
+            // Update Content
+            document
+              .querySelectorAll(".tab-content")
+              .forEach((c) => c.classList.add("hidden"));
+            const content = document.getElementById(`tab-content-${tabName}`);
+            if (content) content.classList.remove("hidden");
           },
 
           filterContacts(query) {

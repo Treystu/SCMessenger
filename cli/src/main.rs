@@ -692,3 +692,94 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
 
     Ok(())
 }
+
+async fn cmd_status() -> Result<()> {
+    let data_dir = config::Config::data_dir()?;
+    let contacts_db = data_dir.join("contacts");
+    let history_db = data_dir.join("history");
+
+    let contacts = contacts::ContactList::open(contacts_db)?;
+    let history = history::MessageHistory::open(history_db)?;
+    let stats = history.stats()?;
+
+    println!("{}", "SCMessenger Status".bold());
+    println!();
+
+    println!("Contacts: {}", contacts.count());
+    println!(
+        "Messages: {} (sent: {}, received: {})",
+        stats.total_messages, stats.sent_messages, stats.received_messages
+    );
+
+    Ok(())
+}
+
+async fn cmd_test() -> Result<()> {
+    println!("{}", "Running self-tests...".bold());
+    println!();
+
+    let alice = IronCore::new();
+    let bob = IronCore::new();
+
+    alice.initialize_identity()?;
+    bob.initialize_identity()?;
+
+    let _alice_info = alice.get_identity_info();
+    let bob_info = bob.get_identity_info();
+
+    println!("{} Identity generation", "✓".green());
+
+    let envelope = alice.prepare_message(
+        bob_info.public_key_hex.clone().unwrap(),
+        "Test message".to_string(),
+    )?;
+
+    println!(
+        "{} Message encryption ({} bytes)",
+        "✓".green(),
+        envelope.len()
+    );
+
+    let msg = bob.receive_message(envelope)?;
+    assert_eq!(msg.text_content().unwrap(), "Test message");
+
+    println!("{} Message decryption", "✓".green());
+
+    let eve = IronCore::new();
+    eve.initialize_identity()?;
+
+    let envelope = alice.prepare_message(bob_info.public_key_hex.unwrap(), "Secret".to_string())?;
+
+    assert!(eve.receive_message(envelope).is_err());
+    println!("{} Encryption security", "✓".green());
+
+    println!();
+    println!("{}", "All tests passed!".green().bold());
+
+    Ok(())
+}
+
+fn find_contact(contacts: &contacts::ContactList, query: &str) -> Result<contacts::Contact> {
+    if let Ok(Some(contact)) = contacts.get(query) {
+        return Ok(contact);
+    }
+
+    if let Ok(Some(contact)) = contacts.find_by_nickname(query) {
+        return Ok(contact);
+    }
+
+    if let Ok(Some(contact)) = contacts.find_by_public_key(query) {
+        return Ok(contact);
+    }
+
+    anyhow::bail!("Contact not found: {}", query)
+}
+
+fn format_timestamp(timestamp: u64) -> String {
+    use chrono::{DateTime, Local, Utc};
+
+    let dt = DateTime::from_timestamp(timestamp as i64, 0).unwrap_or_else(|| Utc::now());
+    let local: DateTime<Local> = dt.into();
+
+    local.format("%Y-%m-%d %H:%M:%S").to_string()
+}
