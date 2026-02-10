@@ -74,6 +74,8 @@ pub enum UiCommand {
     ConfigBootstrapRemove {
         multiaddr: String,
     },
+    FactoryReset,
+    Restart,
 }
 
 pub async fn start(port: u16) -> (broadcast::Sender<UiEvent>, mpsc::Receiver<UiCommand>) {

@@ -48,6 +48,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Environment variables
 ENV RUST_LOG=info
 ENV SCM_CONFIG_DIR=/root/.config/scmessenger
+ENV PORT=8080
 
 ENTRYPOINT ["entrypoint.sh"]
-CMD ["scm", "start"]
+CMD ["sh", "-c", "scm start --port $PORT"]

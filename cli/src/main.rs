@@ -717,6 +717,21 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                             let _ = cfg.remove_bootstrap_node(&multiaddr);
                         }
                     }
+                    server::UiCommand::FactoryReset => {
+                        println!("{} Factory Reset initiated from UI...", "⚠".yellow());
+                        // Attempt to clean data dir. This is aggressive.
+                        if let Ok(data_dir) = config::Config::data_dir() {
+                             // On unix we can delete even if open? Sometimes.
+                             // Best effort: Log and Exit
+                             println!("Process will exit to clear data.");
+                             let _ = std::fs::remove_dir_all(&data_dir);
+                        }
+                        std::process::exit(0);
+                    }
+                    server::UiCommand::Restart => {
+                        println!("Restart requested from UI - shutting down...");
+                        std::process::exit(0);
+                    }
                 }
             }
 

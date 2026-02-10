@@ -989,6 +989,31 @@
           >
             Save Configuration
           </button>
+
+          <!-- Danger Zone -->
+          <div
+            style="
+              margin-top: 30px;
+              border-top: 1px solid var(--glass-border);
+              padding-top: 20px;
+            "
+          >
+            <h5 style="color: var(--danger); margin: 0 0 10px 0">
+              Danger Zone
+            </h5>
+            <button
+              class="btn btn-secondary"
+              onclick="SCM.actions.factoryReset()"
+              style="
+                width: 100%;
+                border-color: var(--danger);
+                color: var(--danger);
+                opacity: 0.8;
+              "
+            >
+              Factory Reset (Delete Data & Exit)
+            </button>
+          </div>
         </div>
 
         <!-- Identity Tab -->
@@ -1132,12 +1157,19 @@ Loading...</textarea
             return h && h !== "localhost" && h !== "127.0.0.1";
           },
           getWsUrl() {
-            const port = 9000; // Default
-            if (this.isDocker) {
-              return `ws://${window.location.hostname}:${port}/ws`;
+            // If served via HTTPS, use wss://. Otherwise ws://
+            const protocol =
+              window.location.protocol === "https:" ? "wss:" : "ws:";
+            const host = window.location.hostname;
+            const port = window.location.port ? `:${window.location.port}` : "";
+
+            // If running locally (file:// or localhost), default to CLI port 9000
+            if (!host || host === "localhost" || host === "127.0.0.1") {
+              return `ws://127.0.0.1:9000/ws`;
             }
-            // For local CLI or file://, use 127.0.0.1 to avoid "invalid URL" errors with empty hostname
-            return `ws://127.0.0.1:${port}/ws`;
+
+            // Otherwise use the current host/port (GCP Cloud Run, Docker, etc.)
+            return `${protocol}//${host}${port}/ws`;
           },
         },
 
@@ -1408,6 +1440,17 @@ Loading...</textarea
 
             SCM.ui.closeModals();
             alert("Settings saved!");
+          },
+
+          factoryReset() {
+            if (
+              confirm(
+                "DANGER: This will delete ALL data (Identity, Contacts, History) and stop the app.\n\nYou must manually restart the app after this.",
+              )
+            ) {
+              this.sendCommand("factory_reset");
+              setTimeout(() => window.location.reload(), 1000);
+            }
           },
 
           addContact() {

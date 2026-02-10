@@ -22,8 +22,11 @@ fi
 # The 'scm start' command handles initialization if identity is missing.
 
 # Set listen port if provided
-if [ ! -z "$LISTEN_PORT" ]; then
-    echo "Setting listen port to $LISTEN_PORT"
+# Set listen port from Cloud Run's $PORT or custom $LISTEN_PORT
+PORT="${PORT:-${LISTEN_PORT}}"
+
+if [ ! -z "$PORT" ]; then
+    echo "Setting listen port to $PORT"
     # We can use sed to patch config.json since it's simple JSON
     # Or better, run scm commands if they support non-interactive setup
 fi
@@ -44,7 +47,7 @@ if [ ! -s "$CONFIG_FILE" ] || [ "$(cat "$CONFIG_FILE")" = "{}" ]; then
     cat > "$CONFIG_FILE" <<EOF
 {
   "bootstrap_nodes": [],
-  "listen_port": ${LISTEN_PORT:-0},
+  "listen_port": ${PORT:-0},
   "enable_mdns": true,
   "enable_dht": true,
   "storage_path": null,
@@ -71,9 +74,10 @@ if [ ! -z "$BOOTSTRAP_NODES" ]; then
 fi
 
 # Update listen port if specified
-if [ ! -z "$LISTEN_PORT" ]; then
+# Update listen port if specified
+if [ ! -z "$PORT" ]; then
     tmp=$(mktemp)
-    jq --arg port "$LISTEN_PORT" '.listen_port = ($port | tonumber)' "$CONFIG_FILE" > "$tmp" && mv "$tmp" "$CONFIG_FILE"
+    jq --arg port "$PORT" '.listen_port = ($port | tonumber)' "$CONFIG_FILE" > "$tmp" && mv "$tmp" "$CONFIG_FILE"
 fi
 
 echo "Configuration complete:"
