@@ -33,23 +33,22 @@ async fn test_address_observation_between_peers() {
         alice.identity().keypair().clone(),
         Some("/ip4/127.0.0.1/tcp/0".parse().unwrap()),
         alice_event_tx,
-    )
-    .await
-    .expect("Failed to start Alice's swarm");
+    ).await
+        .expect("Failed to start Alice's swarm");
 
     let bob_swarm = transport::start_swarm(
         bob.identity().keypair().clone(),
         Some("/ip4/127.0.0.1/tcp/0".parse().unwrap()),
         bob_event_tx,
-    )
-    .await
-    .expect("Failed to start Bob's swarm");
+    ).await
+        .expect("Failed to start Bob's swarm");
 
     // Give nodes time to start listening
     sleep(Duration::from_millis(500)).await;
 
     // Get Alice's listen addresses
-    let alice_peers = alice_swarm.get_peers().await.expect("Failed to get Alice's peers");
+    let alice_peers = alice_swarm.get_peers().await
+        .expect("Failed to get Alice's peers");
     println!("Alice peers: {:?}", alice_peers);
 
     // Connect Bob to Alice
