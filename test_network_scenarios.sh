@@ -8,6 +8,33 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Test result tracking
+declare -A TEST_RESULTS
+TOTAL_TESTS=0
+PASSED_TESTS=0
+FAILED_TESTS=0
+WARNING_TESTS=0
+
+# Function to record test result
+record_test() {
+    local test_name="$1"
+    local status="$2"  # pass, fail, warn
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    TEST_RESULTS["$test_name"]="$status"
+
+    case "$status" in
+        pass)
+            PASSED_TESTS=$((PASSED_TESTS + 1))
+            ;;
+        fail)
+            FAILED_TESTS=$((FAILED_TESTS + 1))
+            ;;
+        warn)
+            WARNING_TESTS=$((WARNING_TESTS + 1))
+            ;;
+    esac
+}
+
 echo -e "${BLUE}═══════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}   SCMessenger - Comprehensive Network Testing${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════${NC}"
@@ -112,8 +139,10 @@ if [ "$RECOVERY_PEERS_ALICE" -gt 0 ] && [ "$RECOVERY_PEERS_BOB" -gt 0 ]; then
     echo -e "${GREEN}✓ Network recovered successfully${NC}"
     echo "  Alice reconnected: $RECOVERY_PEERS_ALICE peers"
     echo "  Bob reconnected: $RECOVERY_PEERS_BOB peers"
+    record_test "Network Partition Recovery" "pass"
 else
     echo -e "${RED}✗ Network recovery failed${NC}"
+    record_test "Network Partition Recovery" "fail"
 fi
 
 # Check if queued message was delivered
@@ -121,8 +150,10 @@ sleep 3
 BOB_LOGS=$(docker logs scm-bob 2>&1 | tail -100)
 if echo "$BOB_LOGS" | grep -q "$MESSAGE_PARTITION"; then
     echo -e "${GREEN}✓ Queued message delivered after recovery${NC}"
+    record_test "Partition Message Delivery" "pass"
 else
     echo -e "${YELLOW}⚠ Queued message delivery pending or failed${NC}"
+    record_test "Partition Message Delivery" "warn"
 fi
 
 echo ""
@@ -148,8 +179,10 @@ echo "   Relay observations: $RELAY_OBS"
 
 if [ "$ALICE_OBS" -gt 0 ] || [ "$BOB_OBS" -gt 0 ]; then
     echo -e "${GREEN}✓ Address observation protocol working${NC}"
+    record_test "Address Observation" "pass"
 else
     echo -e "${YELLOW}⚠ Limited address observations (symmetric NAT?)${NC}"
+    record_test "Address Observation" "warn"
 fi
 
 # Check for hole punching attempts
@@ -162,8 +195,10 @@ if [ "$HOLE_PUNCH_ALICE" -gt 0 ] || [ "$HOLE_PUNCH_BOB" -gt 0 ]; then
     echo -e "${GREEN}✓ NAT hole punching attempted${NC}"
     echo "   Alice attempts: $HOLE_PUNCH_ALICE"
     echo "   Bob attempts: $HOLE_PUNCH_BOB"
+    record_test "NAT Hole Punching" "pass"
 else
-    echo -e "${BLUE}ℹ No hole punching needed (direct connectivity or using relay)${NC}"
+    echo -e "${YELLOW}⚠ No hole punching detected${NC}"
+    record_test "NAT Hole Punching" "warn"
 fi
 
 # Analyze connection types
@@ -203,8 +238,10 @@ echo "   Circuit reservations: $RELAY_RESERVATIONS"
 
 if [ "$RELAY_FORWARDS" -gt 0 ]; then
     echo -e "${GREEN}✓ Circuit relay is actively forwarding${NC}"
+    record_test "Circuit Relay Activity" "pass"
 else
-    echo -e "${BLUE}ℹ Direct connections may be used (no relay needed)${NC}"
+    echo -e "${YELLOW}⚠ No circuit relay activity detected${NC}"
+    record_test "Circuit Relay Activity" "warn"
 fi
 
 # Test message through relay
@@ -217,6 +254,7 @@ sleep 5
 BOB_RELAY_LOG=$(docker logs scm-bob 2>&1 | tail -50)
 if echo "$BOB_RELAY_LOG" | grep -q "$RELAY_TEST_MSG"; then
     echo -e "${GREEN}✓ Message successfully relayed${NC}"
+    record_test "Relay Message Delivery" "pass"
 
     # Check if it was relayed or direct
     RELAY_LOG=$(docker logs scm-relay 2>&1 | tail -100)
@@ -226,7 +264,8 @@ if echo "$BOB_RELAY_LOG" | grep -q "$RELAY_TEST_MSG"; then
         echo -e "${BLUE}  → Message may have used direct connection${NC}"
     fi
 else
-    echo -e "${YELLOW}⚠ Message delivery delayed or failed${NC}"
+    echo -e "${RED}✗ Message delivery failed${NC}"
+    record_test "Relay Message Delivery" "fail"
 fi
 
 echo ""
@@ -288,11 +327,25 @@ echo "   TCP connections: $TCP_USAGE"
 echo "   QUIC connections: $QUIC_USAGE"
 echo "   WebSocket usage: $WS_USAGE"
 
+TRANSPORT_ACTIVE=false
 if [ "$TCP_USAGE" -gt 0 ]; then
     echo -e "${GREEN}✓ TCP transport active${NC}"
+    TRANSPORT_ACTIVE=true
 fi
 if [ "$QUIC_USAGE" -gt 0 ]; then
     echo -e "${GREEN}✓ QUIC transport active${NC}"
+    TRANSPORT_ACTIVE=true
+fi
+if [ "$WS_USAGE" -gt 0 ]; then
+    echo -e "${GREEN}✓ WebSocket transport active${NC}"
+    TRANSPORT_ACTIVE=true
+fi
+
+if [ "$TRANSPORT_ACTIVE" = true ]; then
+    record_test "Transport Protocols" "pass"
+else
+    echo -e "${RED}✗ No transport protocol activity detected${NC}"
+    record_test "Transport Protocols" "fail"
 fi
 
 # Check for protocol upgrades
@@ -301,8 +354,10 @@ echo "2. Transport escalation..."
 ESCALATION=$(docker logs scm-alice scm-bob 2>&1 | grep -i "escalat\|upgrade" | wc -l)
 if [ "$ESCALATION" -gt 0 ]; then
     echo -e "${GREEN}✓ Transport escalation detected: $ESCALATION events${NC}"
+    record_test "Transport Escalation" "pass"
 else
-    echo -e "${BLUE}ℹ Using stable transport (no escalation needed)${NC}"
+    echo -e "${YELLOW}⚠ No transport escalation detected${NC}"
+    record_test "Transport Escalation" "warn"
 fi
 
 echo ""
@@ -441,29 +496,68 @@ echo ""
 # Final Summary
 # ==============================================================================
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo -e "${GREEN}✅ Comprehensive Network Testing Complete${NC}"
+if [ "$FAILED_TESTS" -eq 0 ]; then
+    echo -e "${GREEN}✅ Comprehensive Network Testing Complete${NC}"
+else
+    echo -e "${YELLOW}⚠️  Network Testing Complete with Issues${NC}"
+fi
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo -e "${GREEN}Test Results Summary:${NC}"
-echo "  1. Network Partition Recovery  ✓ Tested"
-echo "  2. NAT Traversal & Discovery   ✓ Tested"
-echo "  3. Circuit Relay Protocol      ✓ Tested"
-echo "  4. Mesh Routing & Multi-hop    ✓ Tested"
-echo "  5. Transport Layer Analysis    ✓ Tested"
-echo "  6. Privacy & Onion Routing     ✓ Tested"
-echo "  7. Drift Protocol & Offline    ✓ Tested"
-echo "  8. Performance Metrics         ✓ Tested"
+echo -e "${BLUE}Test Statistics:${NC}"
+echo "  Total Tests:    $TOTAL_TESTS"
+echo -e "  ${GREEN}✓ Passed:       $PASSED_TESTS${NC}"
+echo -e "  ${YELLOW}⚠ Warnings:     $WARNING_TESTS${NC}"
+echo -e "  ${RED}✗ Failed:       $FAILED_TESTS${NC}"
 echo ""
-echo -e "${BLUE}Network Scenarios Verified:${NC}"
-echo "  • Network partitions and recovery"
-echo "  • NAT hole punching and address reflection"
-echo "  • Circuit relay forwarding"
-echo "  • Mycorrhizal mesh routing"
-echo "  • TCP/QUIC transport protocols"
-echo "  • Onion routing circuits (when available)"
-echo "  • Drift synchronization for offline messages"
-echo "  • Store-and-forward reliability"
+
+# Calculate success rate
+if [ "$TOTAL_TESTS" -gt 0 ]; then
+    SUCCESS_RATE=$((PASSED_TESTS * 100 / TOTAL_TESTS))
+    echo -e "${BLUE}Success Rate:   ${SUCCESS_RATE}%${NC}"
+    echo ""
+fi
+
+echo -e "${BLUE}Detailed Test Results:${NC}"
+for test_name in "${!TEST_RESULTS[@]}"; do
+    status="${TEST_RESULTS[$test_name]}"
+    case "$status" in
+        pass)
+            echo -e "  ${GREEN}✓${NC} $test_name"
+            ;;
+        fail)
+            echo -e "  ${RED}✗${NC} $test_name"
+            ;;
+        warn)
+            echo -e "  ${YELLOW}⚠${NC} $test_name"
+            ;;
+    esac
+done | sort
+
 echo ""
-echo -e "${GREEN}All network capabilities tested successfully!${NC}"
+if [ "$FAILED_TESTS" -gt 0 ]; then
+    echo -e "${RED}⚠️  ATTENTION: $FAILED_TESTS test(s) failed!${NC}"
+    echo ""
+    echo "Failed tests indicate missing or non-functional network capabilities."
+    echo "This may be due to:"
+    echo "  • Missing libp2p features in the implementation"
+    echo "  • Network configuration issues in Docker"
+    echo "  • Insufficient wait time for feature initialization"
+    echo ""
+    echo "Run with enhanced network simulation:"
+    echo "  docker compose -f docker/docker-compose.network-test.yml up -d"
+    echo ""
+fi
+
+if [ "$WARNING_TESTS" -gt 0 ]; then
+    echo -e "${YELLOW}Note: $WARNING_TESTS warning(s) detected${NC}"
+    echo "Warnings may indicate optional features not enabled in test mode."
+    echo ""
+fi
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
+
+# Exit with error if tests failed
+if [ "$FAILED_TESTS" -gt 0 ]; then
+    exit 1
+fi
