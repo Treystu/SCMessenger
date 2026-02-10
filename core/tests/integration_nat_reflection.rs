@@ -25,8 +25,7 @@ async fn test_two_node_address_reflection() {
     let (event_tx2, mut _event_rx2) = mpsc::channel(256);
 
     // Start first node (will be the reflector)
-    let swarm1 = start_swarm(keypair1, None, event_tx1)
-        .await
+    let swarm1 = start_swarm(keypair1, None, event_tx1).await
         .expect("Failed to start swarm1");
 
     // Wait for first node to start listening
@@ -49,20 +48,21 @@ async fn test_two_node_address_reflection() {
     let node1_addr = listen_addr.unwrap();
 
     // Start second node
-    let swarm2 = start_swarm(keypair2, None, event_tx2)
-        .await
+    let swarm2 = start_swarm(keypair2, None, event_tx2).await
         .expect("Failed to start swarm2");
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Node 2 dials node 1
-    swarm2.dial(node1_addr.clone()).await.expect("Failed to dial");
+    swarm2.dial(node1_addr.clone()).await
+        .expect("Failed to dial");
 
     // Wait for connection
     tokio::time::sleep(Duration::from_secs(2)).await;
 
     // Get peer IDs
-    let peers = swarm2.get_peers().await.expect("Failed to get peers");
+    let peers = swarm2.get_peers().await
+        .expect("Failed to get peers");
     assert!(!peers.is_empty(), "Node 2 should be connected to node 1");
 
     let peer1_id = peers[0];
@@ -89,8 +89,7 @@ async fn test_peer_address_discovery_with_live_swarm() {
     let (event_tx2, mut _event_rx2) = mpsc::channel(256);
 
     // Start reflector node
-    let swarm_reflector = start_swarm(keypair_reflector.clone(), None, event_tx1)
-        .await
+    let swarm_reflector = start_swarm(keypair_reflector.clone(), None, event_tx1).await
         .expect("Failed to start reflector swarm");
 
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -111,18 +110,19 @@ async fn test_peer_address_discovery_with_live_swarm() {
     assert!(reflector_addr.is_some());
 
     // Start requester node
-    let swarm_requester = start_swarm(keypair_requester.clone(), None, event_tx2)
-        .await
+    let swarm_requester = start_swarm(keypair_requester.clone(), None, event_tx2).await
         .expect("Failed to start requester swarm");
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Connect requester to reflector
-    swarm_requester.dial(reflector_addr.unwrap()).await.expect("Failed to dial");
+    swarm_requester.dial(reflector_addr.unwrap()).await
+        .expect("Failed to dial");
     tokio::time::sleep(Duration::from_secs(2)).await;
 
     // Get reflector peer ID
-    let peers = swarm_requester.get_peers().await.expect("Failed to get peers");
+    let peers = swarm_requester.get_peers().await
+        .expect("Failed to get peers");
     assert!(!peers.is_empty());
     let reflector_peer_id = peers[0];
 
@@ -154,20 +154,17 @@ async fn test_nat_traversal_with_live_swarms() {
     let (event_tx3, mut _event_rx3) = mpsc::channel(256);
 
     // Start all three nodes
-    let swarm1 = start_swarm(keypair1.clone(), None, event_tx1)
-        .await
+    let swarm1 = start_swarm(keypair1.clone(), None, event_tx1).await
         .expect("Failed to start swarm1");
 
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let swarm2 = start_swarm(keypair2.clone(), None, event_tx2)
-        .await
+    let swarm2 = start_swarm(keypair2.clone(), None, event_tx2).await
         .expect("Failed to start swarm2");
 
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let swarm3 = start_swarm(keypair3.clone(), None, event_tx3)
-        .await
+    let swarm3 = start_swarm(keypair3.clone(), None, event_tx3).await
         .expect("Failed to start swarm3");
 
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -201,14 +198,17 @@ async fn test_nat_traversal_with_live_swarms() {
     assert!(addr1.is_some() && addr2.is_some());
 
     // Node 3 connects to nodes 1 and 2
-    swarm3.dial(addr1.unwrap()).await.expect("Failed to dial node 1");
+    swarm3.dial(addr1.unwrap()).await
+        .expect("Failed to dial node 1");
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    swarm3.dial(addr2.unwrap()).await.expect("Failed to dial node 2");
+    swarm3.dial(addr2.unwrap()).await
+        .expect("Failed to dial node 2");
     tokio::time::sleep(Duration::from_secs(2)).await;
 
     // Get peer IDs
-    let peers = swarm3.get_peers().await.expect("Failed to get peers");
+    let peers = swarm3.get_peers().await
+        .expect("Failed to get peers");
     assert!(peers.len() >= 2, "Node 3 should be connected to at least 2 peers");
 
     let peer1_id = peers[0];
@@ -247,8 +247,7 @@ async fn test_multiple_address_reflections() {
     let (event_tx1, mut event_rx1) = mpsc::channel(256);
     let (event_tx2, mut _event_rx2) = mpsc::channel(256);
 
-    let swarm1 = start_swarm(keypair1, None, event_tx1)
-        .await
+    let swarm1 = start_swarm(keypair1, None, event_tx1).await
         .expect("Failed to start swarm1");
 
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -273,10 +272,12 @@ async fn test_multiple_address_reflections() {
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    swarm2.dial(addr1.unwrap()).await.expect("Failed to dial");
+    swarm2.dial(addr1.unwrap()).await
+        .expect("Failed to dial");
     tokio::time::sleep(Duration::from_secs(2)).await;
 
-    let peers = swarm2.get_peers().await.expect("Failed to get peers");
+    let peers = swarm2.get_peers().await
+        .expect("Failed to get peers");
     assert!(!peers.is_empty());
     let peer1 = peers[0];
 
@@ -302,8 +303,7 @@ async fn test_address_reflection_timeout() {
     let (event_tx1, mut event_rx1) = mpsc::channel(256);
     let (event_tx2, mut _event_rx2) = mpsc::channel(256);
 
-    let swarm1 = start_swarm(keypair1, None, event_tx1)
-        .await
+    let swarm1 = start_swarm(keypair1, None, event_tx1).await
         .expect("Failed to start swarm1");
 
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -326,10 +326,12 @@ async fn test_address_reflection_timeout() {
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    swarm2.dial(addr1.unwrap()).await.expect("Failed to dial");
+    swarm2.dial(addr1.unwrap()).await
+        .expect("Failed to dial");
     tokio::time::sleep(Duration::from_secs(2)).await;
 
-    let peers = swarm2.get_peers().await.expect("Failed to get peers");
+    let peers = swarm2.get_peers().await
+        .expect("Failed to get peers");
     assert!(!peers.is_empty());
     let peer1 = peers[0];
 
