@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  # Single SCMessenger node - simplest deployment
+  scmessenger:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: scmessenger-node
+    ports:
+      - "9000:9000"  # WebSocket UI port
+      - "9001:9001"  # P2P network port
+    environment:
+      - RUST_LOG=info
+      - LISTEN_PORT=9000
+      # Add bootstrap nodes as comma-separated multiaddrs
+      # Example: BOOTSTRAP_NODES=/ip4/136.117.121.95/tcp/9001/p2p/12D3KooW...
+      - BOOTSTRAP_NODES=${BOOTSTRAP_NODES:-}
+    volumes:
+      - scm-data:/root/.local/share/scmessenger
+      - scm-config:/root/.config/scmessenger
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+
+volumes:
+  scm-data:
+    driver: local
+  scm-config:
+    driver: local

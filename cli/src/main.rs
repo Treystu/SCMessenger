@@ -445,7 +445,13 @@ async fn cmd_history(
 
 async fn cmd_start(port: Option<u16>) -> Result<()> {
     let config = config::Config::load()?;
-    let ws_port = port.unwrap_or(config.listen_port);
+    let ws_port = port.unwrap_or_else(|| {
+        if config.listen_port == 0 {
+            9000 // Default to 9000 if config has random port
+        } else {
+            config.listen_port
+        }
+    });
     let p2p_port = ws_port + 1; // P2P port shifted by 1 to allow UI on default port
 
     let data_dir = config::Config::data_dir()?;
@@ -472,7 +478,18 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     println!("P2P Listener:  /ip4/0.0.0.0/tcp/{}", p2p_port);
     println!();
 
-    let network_keypair = libp2p::identity::Keypair::generate_ed25519();
+    // Load or generate persistent network keypair
+    let keypair_path = data_dir.join("network_keypair.dat");
+    let network_keypair = if keypair_path.exists() {
+        let bytes = std::fs::read(&keypair_path).context("Failed to read network keypair")?;
+        libp2p::identity::Keypair::from_protobuf_encoding(&bytes)
+            .context("Failed to decode network keypair")?
+    } else {
+        let keypair = libp2p::identity::Keypair::generate_ed25519();
+        let bytes = keypair.to_protobuf_encoding().context("Failed to encode keypair")?;
+        std::fs::write(&keypair_path, bytes).context("Failed to save network keypair")?;
+        keypair
+    };
     let local_peer_id = network_keypair.public().to_peer_id();
     println!("{} Network peer ID: {}", "✓".green(), local_peer_id);
 
@@ -535,6 +552,43 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         "✓".green(),
         format!("http://127.0.0.1:{}", api::API_PORT).dimmed()
     );
+
+    // Dial bootstrap nodes with retry
+    if !config.bootstrap_nodes.is_empty() {
+        println!();
+        println!("{} Connecting to bootstrap nodes...", "⚙".yellow());
+        let swarm_clone = swarm_handle.clone();
+        let bootstrap_nodes = config.bootstrap_nodes.clone();
+        tokio::spawn(async move {
+            for (i, node) in bootstrap_nodes.iter().enumerate() {
+                match node.parse::<Multiaddr>() {
+                    Ok(addr) => {
+                        println!("  {}. Dialing {} ...", i + 1, addr);
+                        // Try to dial with retry (3 attempts, 5 seconds apart)
+                        for attempt in 1..=3 {
+                            match swarm_clone.dial(addr.clone()).await {
+                                Ok(_) => {
+                                    println!("  {} Connected to bootstrap node {}", "✓".green(), i + 1);
+                                    break;
+                                }
+                                Err(e) => {
+                                    if attempt < 3 {
+                                        tracing::warn!("Bootstrap connection attempt {} failed: {}. Retrying in 5s...", attempt, e);
+                                        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                    } else {
+                                        tracing::error!("Failed to connect to bootstrap node {}: {}", i + 1, e);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Invalid bootstrap node address: {} - {}", node, e);
+                    }
+                }
+            }
+        });
+    }
 
     let core_rx = core.clone();
     let contacts_rx = contacts.clone();

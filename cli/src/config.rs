@@ -49,9 +49,12 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             bootstrap_nodes: vec![
-                // Empty by default - users add their own
+                // Default public relay for bootstrapping
+                // Users can add their own via `scm config bootstrap add <addr>`
+                // Note: These will be populated once we deploy public relay nodes
+                // For now, users manually add their first bootstrap node
             ],
-            listen_port: 0, // Random port
+            listen_port: 9000, // Default to 9000 instead of random
             enable_mdns: true,
             enable_dht: true,
             storage_path: None,
