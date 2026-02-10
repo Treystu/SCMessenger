@@ -198,14 +198,16 @@ fn test_e2e_persistent_message_flow() {
         // Load Alice's identity
         let alice_identity_store = IdentityStore::persistent(alice_store_path.to_str().unwrap())
             .expect("Failed to open Alice's identity store");
-        let alice_keys = alice_identity_store.load_keys()
+        let alice_keys = alice_identity_store
+            .load_keys()
             .expect("Failed to load keys")
             .expect("Alice's keys not found");
 
         // Load Bob's identity
         let bob_identity_store = IdentityStore::persistent(bob_store_path.to_str().unwrap())
             .expect("Failed to open Bob's identity store");
-        let bob_keys = bob_identity_store.load_keys()
+        let bob_keys = bob_identity_store
+            .load_keys()
             .expect("Failed to load keys")
             .expect("Bob's keys not found");
 
