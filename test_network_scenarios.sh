@@ -8,8 +8,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Test result tracking
-declare -A TEST_RESULTS
+# Test result tracking (bash 3.2 compatible - no associative arrays)
+TEST_NAMES=()
+TEST_STATUSES=()
 TOTAL_TESTS=0
 PASSED_TESTS=0
 FAILED_TESTS=0
@@ -19,8 +20,10 @@ WARNING_TESTS=0
 record_test() {
     local test_name="$1"
     local status="$2"  # pass, fail, warn
+
+    TEST_NAMES+=("$test_name")
+    TEST_STATUSES+=("$status")
     TOTAL_TESTS=$((TOTAL_TESTS + 1))
-    TEST_RESULTS["$test_name"]="$status"
 
     case "$status" in
         pass)
@@ -518,8 +521,9 @@ if [ "$TOTAL_TESTS" -gt 0 ]; then
 fi
 
 echo -e "${BLUE}Detailed Test Results:${NC}"
-for test_name in "${!TEST_RESULTS[@]}"; do
-    status="${TEST_RESULTS[$test_name]}"
+for i in "${!TEST_NAMES[@]}"; do
+    test_name="${TEST_NAMES[$i]}"
+    status="${TEST_STATUSES[$i]}"
     case "$status" in
         pass)
             echo -e "  ${GREEN}✓${NC} $test_name"
