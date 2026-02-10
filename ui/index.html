@@ -1,0 +1,1464 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SCMessenger | Sovereign Communication</title>
+    <style>
+      :root {
+        /* Colors */
+        --bg-dark: #0f172a;
+        --bg-card: #1e293b;
+        --bg-input: #334155;
+
+        --primary: #00ced1; /* Deep Cyan/Teal - Trust */
+        --primary-dim: rgba(0, 206, 209, 0.1);
+        --accent: #9d4edd; /* Electric Purple - Sovereignty */
+        --accent-dim: rgba(157, 78, 221, 0.1);
+
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+
+        --text-main: #f1f5f9;
+        --text-muted: #94a3b8;
+        --text-dim: #64748b;
+
+        --glass-bg: rgba(30, 41, 59, 0.7);
+        --glass-border: rgba(255, 255, 255, 0.08);
+        --glass-blur: blur(12px);
+
+        /* Spacing & Radius */
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-lg: 16px;
+        --radius-full: 9999px;
+
+        /* Transitions */
+        --ease-out: cubic-bezier(0.215, 0.61, 0.355, 1);
+      }
+
+      /* Reset & Base */
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        outline: none;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto,
+          sans-serif;
+        background-color: var(--bg-dark);
+        color: var(--text-main);
+        height: 100vh;
+        overflow: hidden;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Typography */
+      h1,
+      h2,
+      h3 {
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .mono {
+        font-family: "JetBrains Mono", "SF Mono", monospace;
+      }
+      .text-sm {
+        font-size: 0.875rem;
+      }
+      .text-xs {
+        font-size: 0.75rem;
+      }
+      .text-muted {
+        color: var(--text-muted);
+      }
+      .text-accent {
+        color: var(--accent);
+      }
+      .text-primary {
+        color: var(--primary);
+      }
+
+      /* Layout */
+      #app {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        grid-template-rows: 1fr 32px;
+        height: 100vh;
+        width: 100vw;
+        background:
+          radial-gradient(
+            circle at top right,
+            rgba(157, 78, 221, 0.15),
+            transparent 40%
+          ),
+          radial-gradient(
+            circle at bottom left,
+            rgba(0, 206, 209, 0.1),
+            transparent 40%
+          );
+      }
+
+      /* Glassmorphism Utilities */
+      .glass {
+        background: var(--glass-bg);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        border: 1px solid var(--glass-border);
+      }
+
+      /* Sidebar */
+      #sidebar {
+        grid-row: 1 / 2;
+        border-right: 1px solid var(--glass-border);
+        display: flex;
+        flex-direction: column;
+        background: rgba(15, 23, 42, 0.6);
+      }
+
+      .sidebar-header {
+        padding: 20px;
+        border-bottom: 1px solid var(--glass-border);
+      }
+
+      .app-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 1.1rem;
+        color: var(--text-main);
+      }
+
+      .title-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .app-logo {
+        width: 24px;
+        height: 24px;
+        background: linear-gradient(135deg, var(--primary), var(--accent));
+        border-radius: 6px;
+        display: grid;
+        place-items: center;
+        font-weight: bold;
+        font-size: 14px;
+      }
+
+      .search-container {
+        padding: 12px 16px;
+      }
+
+      .search-input {
+        width: 100%;
+        background: var(--bg-input);
+        border: 1px solid transparent;
+        color: var(--text-main);
+        padding: 8px 12px;
+        border-radius: var(--radius-md);
+        transition: all 0.2s;
+      }
+
+      .search-input:focus {
+        border-color: var(--primary);
+        background: var(--bg-card);
+      }
+
+      #contact-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px;
+      }
+
+      .contact-item {
+        display: flex;
+        align-items: center;
+        padding: 10px;
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        border: 1px solid transparent; /* Reserve space for border */
+        transition: all 0.2s var(--ease-out);
+        margin-bottom: 4px;
+      }
+
+      .contact-item:hover {
+        background: rgba(255, 255, 255, 0.03);
+        border-color: rgba(255, 255, 255, 0.05); /* Slight border on hover */
+      }
+
+      .contact-item.active {
+        background: var(--primary-dim);
+        border-color: rgba(0, 206, 209, 0.3);
+      }
+
+      .avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-full);
+        background: var(--bg-input);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 12px;
+        font-weight: 600;
+        position: relative;
+        flex-shrink: 0;
+        border: 1px solid var(--glass-border);
+      }
+
+      /* Status Dot on Avatar */
+      .status-dot {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        border: 2px solid var(--bg-dark);
+      }
+      .status-online {
+        background: var(--success);
+        box-shadow: 0 0 4px var(--success);
+      }
+      .status-mesh {
+        background: var(--primary);
+      }
+      .status-offline {
+        background: var(--text-muted);
+      }
+
+      .contact-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .contact-name {
+        font-weight: 500;
+        margin-bottom: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .last-msg {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .contact-meta {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        font-size: 0.7rem;
+        color: var(--text-dim);
+      }
+
+      .unread-badge {
+        background: var(--accent);
+        color: white;
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        border-radius: 10px;
+        margin-top: 4px;
+        font-weight: bold;
+      }
+
+      /* Main Chat Area */
+      #main {
+        grid-column: 2 / 3;
+        grid-row: 1 / 2;
+        display: flex;
+        flex-direction: column;
+        background: rgba(15, 23, 42, 0.3);
+        position: relative;
+      }
+
+      /* Empty State */
+      #empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: var(--text-muted);
+        text-align: center;
+        padding: 20px;
+      }
+
+      #empty-state h2 {
+        margin-bottom: 10px;
+        color: var(--text-main);
+      }
+
+      .logo-large {
+        width: 80px;
+        height: 80px;
+        background: linear-gradient(135deg, var(--primary), var(--accent));
+        border-radius: 20px;
+        margin-bottom: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 40px;
+        box-shadow: 0 10px 30px rgba(0, 206, 209, 0.2);
+      }
+
+      /* Chat Components */
+      .chat-header {
+        padding: 16px 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--glass-border);
+        z-index: 10;
+      }
+
+      .chat-header-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .peer-id-badge {
+        background: rgba(255, 255, 255, 0.05);
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        cursor: pointer;
+      }
+      .peer-id-badge:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      #messages-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        scroll-behavior: smooth;
+      }
+
+      .message-group {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        max-width: 70%;
+      }
+
+      .message-group.mine {
+        align-self: flex-end;
+        align-items: flex-end;
+      }
+
+      .message-group.theirs {
+        align-self: flex-start;
+        align-items: flex-start;
+      }
+
+      .message-bubble {
+        padding: 10px 16px;
+        border-radius: 18px;
+        font-size: 0.95rem;
+        position: relative;
+        word-wrap: break-word;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .mine .message-bubble {
+        background: linear-gradient(135deg, var(--accent), #7b2cbf);
+        color: white;
+        border-bottom-right-radius: 4px;
+      }
+
+      .theirs .message-bubble {
+        background: var(--bg-card);
+        color: var(--text-main);
+        border-bottom-left-radius: 4px;
+        border: 1px solid var(--glass-border);
+      }
+
+      .message-meta {
+        font-size: 0.7rem;
+        margin-top: 4px;
+        opacity: 0.7;
+        display: flex;
+        gap: 4px;
+        align-items: center;
+      }
+
+      .mine .message-meta {
+        justify-content: flex-end;
+      }
+
+      /* Input Area */
+      .chat-input-area {
+        padding: 20px;
+        border-top: 1px solid var(--glass-border);
+        background: rgba(15, 23, 42, 0.8);
+      }
+
+      .input-wrapper {
+        display: flex;
+        gap: 10px;
+        background: var(--bg-input);
+        padding: 6px;
+        border-radius: 24px;
+        border: 1px solid transparent;
+        transition: all 0.2s;
+      }
+
+      .input-wrapper:focus-within {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 2px rgba(0, 206, 209, 0.2);
+      }
+
+      #message-input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: white;
+        padding: 10px 16px;
+        font-size: 0.95rem;
+        min-height: 44px;
+      }
+
+      .send-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--primary);
+        border: none;
+        color: var(--bg-dark);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.1s;
+      }
+
+      .send-btn:hover {
+        background: #00e5e8;
+        transform: scale(1.05);
+      }
+      .send-btn:active {
+        transform: scale(0.95);
+      }
+
+      /* Status Bar */
+      #status-bar {
+        grid-column: 1 / 3;
+        grid-row: 2 / 3;
+        background: var(--bg-card);
+        border-top: 1px solid var(--glass-border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+      }
+
+      .status-pill {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 8px;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid transparent;
+        transition: all 0.3s;
+      }
+
+      /* Modals */
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s;
+      }
+
+      .modal-overlay.visible {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .modal {
+        background: var(--bg-card);
+        border: 1px solid var(--glass-border);
+        width: 400px;
+        max-width: 90%;
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        transform: translateY(20px);
+        transition: transform 0.2s var(--ease-out);
+      }
+
+      .modal-overlay.visible .modal {
+        transform: translateY(0);
+      }
+
+      .modal-header {
+        display: flex;
+        justify-content: space-between; /* align-items: center; */
+        margin-bottom: 20px;
+      }
+
+      .close-btn {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 1.2rem;
+      }
+
+      .btn {
+        padding: 10px 20px;
+        border-radius: var(--radius-md);
+        border: none;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .btn-primary {
+        background: var(--primary);
+        color: var(--bg-dark);
+      }
+      .btn-primary:hover {
+        filter: brightness(1.1);
+      }
+
+      .form-group {
+        margin-bottom: 16px;
+      }
+      .form-label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+      }
+      .form-input {
+        width: 100%;
+        background: var(--bg-input);
+        border: 1px solid var(--glass-border);
+        padding: 10px;
+        border-radius: var(--radius-sm);
+        color: white;
+      }
+
+      /* Animations */
+      @keyframes pulse-green {
+        0% {
+          box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+        }
+        70% {
+          box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+        }
+      }
+
+      .pulse {
+        animation: pulse-green 2s infinite;
+      }
+
+      /* Utility */
+      .hidden {
+        display: none !important;
+      }
+      .flex {
+        display: flex;
+      }
+      .gap-2 {
+        gap: 8px;
+      }
+
+      /* Icons */
+      .icon {
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
+      }
+
+      #settings-trigger:hover {
+        color: var(--text-main);
+        transform: rotate(45deg);
+        transition: transform 0.3s;
+      }
+
+      /* Scrollbar */
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <!-- Sidebar -->
+      <aside id="sidebar" class="glass">
+        <div class="sidebar-header">
+          <div class="app-title">
+            <div class="title-wrapper">
+              <div class="app-logo">SC</div>
+              <span style="font-weight: 600">SCMessenger</span>
+            </div>
+          </div>
+          <div style="margin-top: 16px; display: flex; gap: 8px">
+            <button
+              class="btn-primary"
+              style="
+                width: 100%;
+                padding: 8px;
+                border-radius: 8px;
+                font-size: 0.9rem;
+              "
+              onclick="app.ui.openAddContact()"
+            >
+              + Add Contact
+            </button>
+          </div>
+        </div>
+
+        <div class="search-container">
+          <input
+            type="text"
+            class="search-input"
+            placeholder="Search contacts..."
+            onkeyup="app.ui.filterContacts(this.value)"
+          />
+        </div>
+
+        <div id="contact-list">
+          <!-- Contacts rendered here -->
+        </div>
+
+        <!-- My Identity Mini-Card -->
+        <div
+          style="
+            padding: 16px;
+            border-top: 1px solid var(--glass-border);
+            background: rgba(0, 0, 0, 0.2);
+          "
+        >
+          <div class="flex" style="align-items: center; gap: 10px">
+            <div
+              class="avatar"
+              style="
+                width: 32px;
+                height: 32px;
+                font-size: 0.8rem;
+                background: var(--accent);
+              "
+            >
+              ME
+            </div>
+            <div style="overflow: hidden">
+              <div class="text-sm font-bold">My Identity</div>
+              <div
+                class="text-xs text-muted mono"
+                id="my-peer-id"
+                style="
+                  text-overflow: ellipsis;
+                  overflow: hidden;
+                  white-space: nowrap;
+                "
+              >
+                Loading...
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Chat Area -->
+      <main id="main">
+        <!-- Empty State -->
+        <div id="empty-state">
+          <div class="logo-large">SC</div>
+          <h2>Sovereign Communication</h2>
+          <p style="max-width: 400px; line-height: 1.6">
+            Connect freely. No servers. No masters.<br />
+            Select a contact to start messaging or add a new peer to the mesh.
+          </p>
+        </div>
+
+        <!-- Active Chat -->
+        <div
+          id="chat-interface"
+          class="hidden"
+          style="display: flex; flex-direction: column; height: 100%"
+        >
+          <header class="chat-header glass">
+            <div class="chat-header-info">
+              <div class="avatar" id="current-chat-avatar">A</div>
+              <div>
+                <h3 id="current-chat-name">Alice</h3>
+                <div class="text-xs text-muted flex gap-2">
+                  <span
+                    id="current-chat-status"
+                    class="flex"
+                    style="align-items: center; gap: 4px"
+                  >
+                    <span
+                      class="status-dot status-online"
+                      style="
+                        position: static;
+                        width: 6px;
+                        height: 6px;
+                        border: none;
+                      "
+                    ></span>
+                    Online
+                  </span>
+                  <span class="mono peer-id-badge" id="current-chat-id"
+                    >ID: 12D3...</span
+                  >
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <div id="messages-container">
+            <!-- Messages go here -->
+          </div>
+
+          <div class="chat-input-area glass">
+            <div class="input-wrapper">
+              <input
+                type="text"
+                id="message-input"
+                placeholder="Type a secure message..."
+                autocomplete="off"
+              />
+              <button class="send-btn" id="send-btn">
+                <svg viewBox="0 0 24 24" class="icon" style="margin-left: 2px">
+                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                </svg>
+              </button>
+            </div>
+            <div
+              class="text-xs text-muted"
+              style="margin-top: 8px; text-align: center"
+            >
+              <span style="color: var(--primary)">🔒 End-to-End Encrypted</span>
+              • Relayed via Minimal Hops
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Status Bar -->
+      <footer id="status-bar">
+        <div class="flex gap-2">
+          <div class="status-pill" id="network-status-pill">
+            <span
+              class="status-dot status-offline"
+              id="net-dot"
+              style="position: static; width: 8px; height: 8px; border: none"
+            ></span>
+            <span id="net-text">Initializing...</span>
+          </div>
+          <div class="status-pill">
+            <span class="text-muted">Peers:</span>
+            <span id="peer-count">0</span>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <div
+            class="status-pill"
+            style="border: 1px solid var(--glass-border)"
+          >
+            ⚡ Relay Active
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-add-contact" class="modal-overlay">
+      <div class="modal glass">
+        <div class="modal-header">
+          <h3>Add Contact</h3>
+          <button class="close-btn" onclick="app.ui.closeModals()">×</button>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Contact Name</label>
+          <input
+            type="text"
+            id="add-name"
+            class="form-input"
+            placeholder="e.g. Bob"
+          />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Peer ID</label>
+          <input
+            type="text"
+            id="add-peer-id"
+            class="form-input mono"
+            placeholder="12D3Koo..."
+          />
+        </div>
+        <button
+          class="btn btn-primary"
+          style="width: 100%"
+          onclick="app.actions.addContact()"
+        >
+          Add to Mesh
+        </button>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="modal-settings" class="modal-overlay">
+      <div class="modal glass" style="width: 500px">
+        <div class="modal-header">
+          <h3>Settings</h3>
+          <button class="close-btn" onclick="app.ui.closeModals()">×</button>
+        </div>
+
+        <div
+          class="tabs"
+          style="
+            display: flex;
+            gap: 16px;
+            border-bottom: 1px solid var(--glass-border);
+            margin-bottom: 20px;
+          "
+        >
+          <button
+            class="tab-btn active"
+            style="
+              background: none;
+              border: none;
+              color: var(--primary);
+              padding-bottom: 8px;
+              border-bottom: 2px solid var(--primary);
+            "
+          >
+            Network
+          </button>
+          <button
+            class="tab-btn"
+            style="
+              background: none;
+              border: none;
+              color: var(--text-muted);
+              padding-bottom: 8px;
+            "
+          >
+            Identity
+          </button>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Listen Port</label>
+          <input
+            type="number"
+            id="setting-port"
+            class="form-input"
+            value="9000"
+          />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Relay Mode</label>
+          <div class="flex" style="align-items: center; gap: 10px">
+            <input
+              type="checkbox"
+              id="setting-relay"
+              checked
+              style="width: 20px; height: 20px"
+            />
+            <span class="text-sm text-muted"
+              >Enable mesh relaying (Help the network)</span
+            >
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Bootstrap Nodes</label>
+          <textarea
+            id="setting-bootstrap"
+            class="form-input"
+            rows="3"
+            style="font-family: monospace; font-size: 0.8rem"
+          >
+/ip4/bootstrap.example.com/tcp/4001</textarea
+          >
+        </div>
+
+        <button
+          class="btn btn-primary"
+          style="width: 100%"
+          onclick="app.actions.saveSettings()"
+        >
+          Save Configuration
+        </button>
+      </div>
+    </div>
+
+    <script>
+      /**
+       * SCMessenger Core Logic
+       * strict adherence to GEMINI_UI_GUIDE.md protocol.
+       */
+
+      // Connection Error Overlay Logic
+      const errorOverlay = document.createElement("div");
+      errorOverlay.id = "connection-error";
+      errorOverlay.className = "modal-overlay";
+      errorOverlay.innerHTML = `
+            <div class="modal glass" style="text-align: center; max-width: 450px;">
+                <div class="logo-large" style="margin: 0 auto 20px auto; width: 60px; height: 60px; font-size: 30px;">SC</div>
+                <h3 style="margin-bottom: 10px;">Connection Failed</h3>
+                <p class="text-muted" style="margin-bottom: 20px;">
+                    Could not connect to the SCMessenger node.<br>
+                    Please ensure the core is running:
+                </p>
+                <div style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; font-family: monospace; margin-bottom: 20px; text-align: left; font-size: 0.85rem; overflow-x: auto;">
+                    $ cargo run -p scmessenger-cli -- start --port 9000
+                </div>
+                <button class="btn btn-primary" onclick="window.location.reload()">Retry Connection</button>
+            </div>
+        `;
+      document.body.appendChild(errorOverlay);
+
+      const SCM = {
+        state: {
+          socket: null,
+          connected: false,
+          contacts: {}, // Map<peer_id, Contact>
+          messages: {}, // Map<peer_id, Message[]>
+          activeChat: null, // peer_id
+          myself: {
+            peer_id: "Loading...",
+            public_key: "",
+          },
+          network: {
+            peers: 0,
+            status: "offline",
+            relay_active: false,
+          },
+          reconnectTimer: null,
+          messageQueue: [], // For offline storage
+        },
+
+        // Environment Detection
+        env: {
+          isDocker:
+            window.location.hostname && window.location.hostname !== "localhost" &&
+            window.location.hostname !== "127.0.0.1",
+          getWsUrl() {
+            const port = 9000; // Default
+            if (this.isDocker) {
+              return `ws://${window.location.hostname}:${port}/ws`;
+            }
+            return `ws://127.0.0.1:${port}/ws`;
+          },
+        },
+
+        init() {
+          console.log("SCMessenger Initializing...");
+          console.log(
+            `Environment: ${this.env.isDocker ? "Docker" : "Local CLI"}`,
+          );
+
+          this.connect();
+
+          // Event Listeners
+          document
+            .getElementById("send-btn")
+            .addEventListener("click", () => this.actions.sendMessage());
+          document
+            .getElementById("message-input")
+            .addEventListener("keypress", (e) => {
+              if (e.key === "Enter") this.actions.sendMessage();
+            });
+
+          // Periodic status check
+          setInterval(() => {
+            if (this.state.connected) this.actions.sendCommand("status");
+          }, 5000);
+        },
+
+        connect() {
+          const url = this.env.getWsUrl();
+          console.log(`Connecting to backend at ${url}...`);
+
+          try {
+            this.state.socket = new WebSocket(url);
+
+            this.state.socket.onopen = () => {
+              console.log("✅ WebSocket Connected");
+              this.state.connected = true;
+              this.ui.updateNetworkStatus("online");
+
+              // Hide error overlay if visible
+              document
+                .getElementById("connection-error")
+                .classList.remove("visible");
+
+              // Initial Hydration
+              this.actions.sendCommand("identity_show");
+              this.actions.sendCommand("contact_list");
+              this.actions.sendCommand("status");
+
+              // Process Queue
+              this.processQueue();
+
+              clearInterval(this.state.reconnectTimer);
+              this.state.reconnectTimer = null;
+
+              // Clear offline indicator
+              const dot = document.getElementById("net-dot");
+              if (dot) dot.classList.remove("status-offline");
+            };
+
+            this.state.socket.onclose = () => {
+              console.warn("❌ WebSocket Disconnected");
+              this.state.connected = false;
+              this.ui.updateNetworkStatus("offline");
+
+              // Retry logic
+              if (!this.state.reconnectTimer) {
+                this.state.reconnectTimer = setInterval(() => {
+                  console.log("Retrying connection...");
+                  this.connect();
+                }, 3000);
+              }
+            };
+
+            this.state.socket.onmessage = (event) => {
+              try {
+                const data = JSON.parse(event.data);
+                this.handleEvent(data);
+              } catch (e) {
+                console.error("Failed to parse WS message:", event.data);
+              }
+            };
+
+            this.state.socket.onerror = (err) => {
+              console.error("WebSocket Error:", err);
+              // Show error overlay instantly if offline
+              if (
+                !this.state.connected &&
+                Object.keys(this.state.contacts).length === 0
+              ) {
+                document
+                  .getElementById("connection-error")
+                  .classList.add("visible");
+              }
+            };
+          } catch (e) {
+            console.error("Connection setup failed", e);
+            document
+              .getElementById("connection-error")
+              .classList.add("visible");
+          }
+        },
+
+        processQueue() {
+          if (this.state.messageQueue.length > 0 && this.state.connected) {
+            console.log(
+              `Processing ${this.state.messageQueue.length} queued messages...`,
+            );
+            const queue = [...this.state.messageQueue];
+            this.state.messageQueue = [];
+            queue.forEach((msg) => this.actions.sendCommand("send", msg));
+          }
+        },
+
+        handleEvent(data) {
+          console.log("📩 IN:", data);
+
+          switch (data.type) {
+            case "peer_discovered":
+              // { type: "peer_discovered", peer_id: "...", transport: "..." }
+              console.log(
+                `Discovered peer: ${data.peer_id} via ${data.transport}`,
+              );
+              break;
+
+            case "contact_list": // Assuming list response is wrapped like this
+              if (data.contacts) {
+                data.contacts.forEach((c) => {
+                  this.state.contacts[c.peer_id] = c;
+                });
+                this.ui.renderContacts();
+              }
+              break;
+
+            case "message_received":
+              // { from: "...", content: "...", timestamp: ... }
+              this.storeMessage(data.from, {
+                id: data.message_id || `msg-${Date.now()}`,
+                direction: "received",
+                content: data.content,
+                timestamp: data.timestamp || Date.now(),
+                status: "read",
+              });
+              break;
+
+            case "message_status":
+              // { message_id: "...", status: "delivered" }
+              this.updateMessageStatus(data.message_id, data.status);
+              break;
+
+            case "network_status":
+              // { status: "online", peer_count: 12, relay_active: true }
+              if (data.status) this.ui.updateNetworkStatus(data.status);
+              if (data.peer_count !== undefined)
+                document.getElementById("peer-count").textContent =
+                  data.peer_count;
+              break;
+
+            case "identity_info":
+              this.state.myself = data;
+              document.getElementById("my-peer-id").textContent = data.peer_id;
+              break;
+          }
+        },
+
+        actions: {
+          // Wrapper to match Guide's command structure
+          sendCommand(cmd, params = {}) {
+            if (SCM.state.connected) {
+              const payload = JSON.stringify({ cmd, ...params });
+              console.log("bw OUT:", payload);
+              SCM.state.socket.send(payload);
+            } else {
+              console.warn("Offline: Queuing command", cmd);
+              if (cmd === "send") {
+                SCM.state.messageQueue.push(params);
+              }
+            }
+          },
+
+          sendMessage() {
+            const input = document.getElementById("message-input");
+            const text = input.value.trim();
+            const peerId = SCM.state.activeChat;
+
+            if (!text || !peerId) return;
+
+            const msgId = `msg-${Date.now()}`;
+
+            // 1. Send Command
+            this.sendCommand("send", {
+              recipient: peerId,
+              message: text,
+              id: msgId,
+            });
+
+            // 2. Optimistic UI Update
+            SCM.storeMessage(peerId, {
+              id: msgId,
+              direction: "sent",
+              content: text,
+              timestamp: Date.now(),
+              status: SCM.state.connected ? "sent" : "queued",
+            });
+
+            input.value = "";
+          },
+
+          saveSettings() {
+            const port = document.getElementById("setting-port").value;
+            const relay = document.getElementById("setting-relay").checked;
+
+            this.sendCommand("config_set", { key: "listen_port", value: port });
+            this.sendCommand("config_set", {
+              key: "relay_enabled",
+              value: String(relay),
+            });
+
+            SCM.ui.closeModals();
+            alert("Settings saved!");
+          },
+
+          addContact() {
+            const name = document.getElementById("add-name").value;
+            const peerId = document.getElementById("add-peer-id").value;
+
+            if (name && peerId) {
+              this.sendCommand("contact_add", {
+                peer_id: peerId,
+                name: name,
+                public_key: "", // Would handle key input in real app
+              });
+
+              // Optimistic Add
+              SCM.state.contacts[peerId] = {
+                peer_id: peerId,
+                nickname: name,
+                status: "offline", // Until confirmed
+                last_seen: Date.now(),
+              };
+              SCM.state.messages[peerId] = [];
+
+              SCM.ui.renderContacts();
+              SCM.ui.closeModals();
+            }
+          },
+
+          selectContact(peerId) {
+            SCM.state.activeChat = peerId;
+
+            // UI Updates
+            const contact = SCM.state.contacts[peerId];
+            document.getElementById("empty-state").classList.add("hidden");
+            const chatInterface = document.getElementById("chat-interface");
+            chatInterface.classList.remove("hidden");
+            chatInterface.style.display = "flex";
+
+            // Update Header
+            document.getElementById("current-chat-name").textContent =
+              contact.nickname || peerId.substring(0, 8);
+            document.getElementById("current-chat-id").textContent =
+              "ID: " + peerId.substring(0, 12) + "...";
+
+            const avatar = document.getElementById("current-chat-avatar");
+            avatar.textContent = (contact.nickname || "U")[0].toUpperCase();
+
+            SCM.ui.renderMessages(peerId);
+
+            // Update Active Class
+            document
+              .querySelectorAll(".contact-item")
+              .forEach((el) => el.classList.remove("active"));
+            const activeEl = document.getElementById(`contact-${peerId}`);
+            if (activeEl) activeEl.classList.add("active");
+
+            document.getElementById("message-input").focus();
+          },
+        },
+
+        storeMessage(peerId, msg) {
+          if (!this.state.messages[peerId]) this.state.messages[peerId] = [];
+
+          // Avoid duplicates
+          if (this.state.messages[peerId].find((m) => m.id === msg.id)) return;
+
+          this.state.messages[peerId].push(msg);
+
+          // Update UI if active
+          if (this.state.activeChat === peerId) {
+            this.ui.appendMessage(msg);
+            this.ui.scrollToBottom();
+          }
+
+          // Update Sidebar
+          this.ui.updateContactPreview(peerId, msg);
+        },
+
+        updateMessageStatus(msgId, status) {
+          // Find message across all chats (inefficient but fine for UI demo)
+          for (const peerId in this.state.messages) {
+            const msg = this.state.messages[peerId].find((m) => m.id === msgId);
+            if (msg) {
+              msg.status = status;
+              // Re-render if active
+              if (this.state.activeChat === peerId)
+                this.ui.renderMessages(peerId);
+              break;
+            }
+          }
+        },
+
+        ui: {
+          renderContacts() {
+            const list = document.getElementById("contact-list");
+            list.innerHTML = "";
+
+            Object.values(SCM.state.contacts).forEach((contact) => {
+              const el = document.createElement("div");
+              el.className = `contact-item ${SCM.state.activeChat === contact.peer_id ? "active" : ""}`;
+              el.id = `contact-${contact.peer_id}`;
+              el.onclick = () => SCM.actions.selectContact(contact.peer_id);
+
+              const lastMsg = SCM.state.messages[contact.peer_id]?.slice(-1)[0];
+              const lastMsgText = lastMsg ? lastMsg.content : "No messages yet";
+              const initial = (contact.nickname || "?")[0].toUpperCase();
+
+              el.innerHTML = `
+                            <div class="avatar">
+                                ${initial}
+                                <div class="status-dot status-${contact.status}"></div>
+                            </div>
+                            <div class="contact-info">
+                                <div class="contact-name">${contact.nickname}</div>
+                                <div class="last-msg">${lastMsgText}</div>
+                            </div>
+                            <div class="contact-meta">
+                                <div>${new Date(contact.last_seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                            </div>
+                        `;
+              list.appendChild(el);
+            });
+          },
+
+          renderMessages(peerId) {
+            const container = document.getElementById("messages-container");
+            container.innerHTML = "";
+            const messages = SCM.state.messages[peerId] || [];
+            messages.forEach((msg) => this.appendMessage(msg, false));
+            this.scrollToBottom();
+          },
+
+          appendMessage(msg, scroll = true) {
+            const container = document.getElementById("messages-container");
+            const isMine = msg.direction === "sent";
+
+            const div = document.createElement("div");
+            div.className = `message-group ${isMine ? "mine" : "theirs"}`;
+
+            // Status indicator
+            let statusIcon = "";
+            if (isMine) {
+              if (msg.status === "queued") statusIcon = "◷";
+              else if (msg.status === "sent") statusIcon = "➤";
+              else if (msg.status === "delivered") statusIcon = "✓";
+              else if (msg.status === "read") statusIcon = "✓✓";
+            }
+
+            div.innerHTML = `
+                        <div class="message-bubble" title="ID: ${msg.id}">
+                            ${msg.content}
+                        </div>
+                        <div class="message-meta">
+                            ${new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            <span>${statusIcon}</span>
+                        </div>
+                    `;
+
+            container.appendChild(div);
+            if (scroll) this.scrollToBottom();
+          },
+
+          scrollToBottom() {
+            const container = document.getElementById("messages-container");
+            container.scrollTop = container.scrollHeight;
+          },
+
+          updateContactPreview(peerId, lastMsg) {
+            const el = document.getElementById(`contact-${peerId}`);
+            if (el) {
+              const msgEl = el.querySelector(".last-msg");
+              if (msgEl) msgEl.textContent = lastMsg.content;
+            }
+          },
+
+          updateNetworkStatus(status) {
+            const dot = document.getElementById("net-dot");
+            const text = document.getElementById("net-text");
+            const pill = document.getElementById("network-status-pill");
+
+            // Reset
+            dot.className = "status-dot";
+
+            if (status === "online") {
+              text.textContent = "Network Online";
+              dot.classList.add("status-online");
+              dot.classList.add("pulse");
+              pill.style.borderColor = "var(--success)";
+            } else if (status === "mesh") {
+              text.textContent = "Local Mesh Only";
+              dot.classList.add("status-mesh");
+              pill.style.borderColor = "var(--primary)";
+            } else {
+              text.textContent = "Offline";
+              dot.classList.add("status-offline");
+              pill.style.borderColor = "var(--danger)";
+            }
+          },
+
+          openAddContact() {
+            document
+              .getElementById("modal-add-contact")
+              .classList.add("visible");
+            document.getElementById("add-name").focus();
+          },
+
+          openSettings() {
+            document.getElementById("modal-settings").classList.add("visible");
+          },
+
+          closeModals() {
+            document
+              .querySelectorAll(".modal-overlay")
+              .forEach((el) => el.classList.remove("visible"));
+          },
+
+          filterContacts(query) {
+            const term = query.toLowerCase();
+            document.querySelectorAll(".contact-item").forEach((el) => {
+              const name = el
+                .querySelector(".contact-name")
+                .textContent.toLowerCase();
+              el.style.display = name.includes(term) ? "flex" : "none";
+            });
+          },
+        },
+      };
+
+      // Initialize App
+      window.app = SCM;
+
+      // Add settings button handler since we added the modal
+      // We need to inject the settings button into the UI
+      window.addEventListener("DOMContentLoaded", () => {
+        // Add Settings Button to Sidebar Header
+        const header = document.querySelector(".sidebar-header .app-title");
+        if (header && !document.getElementById("settings-trigger")) {
+          const btn = document.createElement("button");
+          btn.id = "settings-trigger";
+          btn.innerHTML = "⚙";
+          btn.style.background = "none";
+          btn.style.border = "none";
+          btn.style.color = "var(--text-muted)";
+          btn.style.fontSize = "1.2rem";
+          btn.style.cursor = "pointer";
+          btn.style.marginLeft = "auto";
+          btn.onclick = () => SCM.ui.openSettings();
+          header.appendChild(btn);
+        }
+
+        SCM.init();
+      });
+    </script>
+  </body>
+</html>
