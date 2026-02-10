@@ -390,7 +390,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
     println!("{}", "SCMessenger — Starting...".bold());
     println!();
-    println!("Identity: {}", info.identity_id.clone().unwrap().bright_cyan());
+    println!("Identity: {}", info.public_key_hex.clone().unwrap().bright_cyan());
+    println!("Peer ID:  {}", info.identity_id.clone().unwrap().bright_yellow());
     println!();
 
     let network_keypair = libp2p::identity::Keypair::generate_ed25519();
@@ -600,11 +601,18 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
     core.initialize_identity().context("Failed to load identity")?;
 
+    let contacts_db = data_dir.join("contacts");
+    let contacts = contacts::ContactList::open(contacts_db)?;
+
+    let contact = find_contact(&contacts, &recipient)
+        .context("Contact not found")?;
+
     let envelope_bytes = core
-        .prepare_message(recipient.clone(), message.clone())
+        .prepare_message(contact.public_key.clone(), message.clone())
         .context("Failed to encrypt message")?;
 
     println!("{} Message encrypted: {} bytes", "✓".green(), envelope_bytes.len());
+    println!("{} Message queued for {}", "✓".green(), contact.display_name().bright_cyan());
 
     Ok(())
 }
