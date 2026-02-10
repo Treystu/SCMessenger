@@ -23,6 +23,55 @@ echo -e "${GREEN}Starting comprehensive network scenario tests...${NC}"
 echo ""
 
 # ==============================================================================
+# Get Node Information
+# ==============================================================================
+echo "📋 Retrieving node identities..."
+
+# Helper function to get Network Peer ID
+get_peer_id() {
+    local container=$1
+    local id
+    for i in {1..3}; do
+        id=$(docker logs $container 2>&1 | grep "Network peer ID:" | tail -n 1 | sed 's/\x1b\[[0-9;]*m//g' | awk '{print $NF}')
+        if [ ! -z "$id" ]; then
+            echo "$id"
+            return
+        fi
+        sleep 1
+    done
+}
+
+# Helper function to get Identity Key
+get_identity_key() {
+    local container=$1
+    local key
+    for i in {1..3}; do
+        key=$(docker logs $container 2>&1 | grep "Identity:" | tail -n 1 | sed 's/\x1b\[[0-9;]*m//g' | awk '{print $2}' | tr -d '[:space:]')
+        if [ ! -z "$key" ] && [ ${#key} -ge 32 ]; then
+            echo "$key"
+            return
+        fi
+        sleep 1
+    done
+}
+
+# Get Bob's ID for message sending tests
+BOB_ID=$(get_peer_id scm-bob)
+ALICE_ID=$(get_peer_id scm-alice)
+RELAY_ID=$(get_peer_id scm-relay)
+
+if [ -z "$BOB_ID" ] || [ -z "$ALICE_ID" ]; then
+    echo -e "${RED}✗ Failed to retrieve node IDs. Ensure containers are running.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Node IDs retrieved${NC}"
+echo "  Alice: $ALICE_ID"
+echo "  Bob: $BOB_ID"
+echo "  Relay: $RELAY_ID"
+echo ""
+
+# ==============================================================================
 # Scenario 1: Network Partition Recovery
 # ==============================================================================
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
