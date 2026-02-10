@@ -693,12 +693,21 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                          }
                     }
                     server::UiCommand::ConfigGet { key } => {
-                        // Send simple value back? Or need a ConfigValue event?
-                        // For now, simpler to just List all on ConfigList
+                        if let Ok(cfg) = config::Config::load() {
+                            let value = cfg.get(&key);
+                            let _ = ui_broadcast.send(server::UiEvent::ConfigValue {
+                                key: key.clone(),
+                                value,
+                            });
+                        }
                     }
                     server::UiCommand::ConfigList => {
-                         // We might need a ConfigList event.
-                         // For MVP, maybe just log or ignore if no event type.
+                        if let Ok(cfg) = config::Config::load() {
+                            let config_data = cfg.list();
+                            let _ = ui_broadcast.send(server::UiEvent::ConfigData {
+                                config: config_data,
+                            });
+                        }
                     }
                     server::UiCommand::ConfigSet { key, value } => {
                         if let Ok(mut cfg) = config::Config::load() {
