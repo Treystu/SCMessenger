@@ -2,3 +2,19 @@
 **/*.rs.bk
 *.pdb
 reference/rust-1.92.0-aarch64-unknown-linux-gnu.tar.gz
+
+# SCMessenger Runtime
+scm.log
+.scm.pid
+ds_store
+.DS_Store
+
+# Local Data (Should not be committed)
+contacts.db
+history.db
+identity.json
+config.json
+
+# IDEs
+.idea/
+.vscode/
