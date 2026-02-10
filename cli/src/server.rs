@@ -38,6 +38,13 @@ pub enum UiEvent {
         private_key: String,
         storage_path: String,
     },
+    ConfigValue {
+        key: String,
+        value: Option<String>,
+    },
+    ConfigData {
+        config: Vec<(String, String)>,
+    },
 }
 
 #[derive(Deserialize, Debug)]
