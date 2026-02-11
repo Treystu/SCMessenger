@@ -3,9 +3,9 @@
 // Messages are stored locally and retried when the peer comes online.
 // This is the foundation for store-and-forward delivery.
 
-use std::collections::{HashMap, VecDeque};
-use serde::{Deserialize, Serialize};
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
 
 /// Maximum messages queued per peer
 const MAX_QUEUE_PER_PEER: usize = 1000;
@@ -92,7 +92,11 @@ impl Outbox {
                 }
 
                 // Check per-peer limit
-                let peer_prefix = format!("{}{}_", String::from_utf8_lossy(QUEUE_PREFIX), msg.recipient_id);
+                let peer_prefix = format!(
+                    "{}{}_",
+                    String::from_utf8_lossy(QUEUE_PREFIX),
+                    msg.recipient_id
+                );
                 let peer_count = db.scan_prefix(peer_prefix.as_bytes()).count();
                 if peer_count >= MAX_QUEUE_PER_PEER {
                     return Err(format!(
@@ -102,13 +106,15 @@ impl Outbox {
                 }
 
                 // Store message
-                let key = format!("{}{}_{}",
+                let key = format!(
+                    "{}{}_{}",
                     String::from_utf8_lossy(QUEUE_PREFIX),
                     msg.recipient_id,
                     msg.message_id
                 );
                 if let Ok(bytes) = bincode::serialize(&msg) {
-                    db.insert(key.as_bytes(), bytes).map_err(|e| e.to_string())?;
+                    db.insert(key.as_bytes(), bytes)
+                        .map_err(|e| e.to_string())?;
                     db.flush().map_err(|e| e.to_string())?;
                 }
                 Ok(())
@@ -401,7 +407,12 @@ mod tests {
         use tempfile::tempdir;
 
         let dir = tempdir().unwrap();
-        let path = dir.path().join("outbox_store").to_str().unwrap().to_string();
+        let path = dir
+            .path()
+            .join("outbox_store")
+            .to_str()
+            .unwrap()
+            .to_string();
 
         let mut outbox = Outbox::persistent(&path).unwrap();
 
@@ -427,7 +438,12 @@ mod tests {
         use tempfile::tempdir;
 
         let dir = tempdir().unwrap();
-        let path = dir.path().join("outbox_store").to_str().unwrap().to_string();
+        let path = dir
+            .path()
+            .join("outbox_store")
+            .to_str()
+            .unwrap()
+            .to_string();
 
         // First instance: enqueue messages
         {
@@ -453,7 +469,12 @@ mod tests {
         use tempfile::tempdir;
 
         let dir = tempdir().unwrap();
-        let path = dir.path().join("outbox_store").to_str().unwrap().to_string();
+        let path = dir
+            .path()
+            .join("outbox_store")
+            .to_str()
+            .unwrap()
+            .to_string();
 
         let mut outbox = Outbox::persistent(&path).unwrap();
 

@@ -2,9 +2,9 @@
 //
 // Tracks seen message IDs to prevent replay attacks and duplicate delivery.
 
-use std::collections::{HashMap, HashSet};
-use serde::{Deserialize, Serialize};
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
 /// Maximum tracked message IDs (for deduplication)
 const MAX_SEEN_IDS: usize = 50_000;
@@ -139,7 +139,8 @@ impl Inbox {
                 }
 
                 // Store message
-                let key = format!("{}{}_{}",
+                let key = format!(
+                    "{}{}_{}",
                     String::from_utf8_lossy(MESSAGES_PREFIX),
                     msg.sender_id,
                     msg.message_id
@@ -189,9 +190,7 @@ impl Inbox {
     pub fn total_count(&self) -> usize {
         match &self.backend {
             InboxBackend::Memory { total, .. } => *total,
-            InboxBackend::Persistent(db) => {
-                db.scan_prefix(MESSAGES_PREFIX).count()
-            }
+            InboxBackend::Persistent(db) => db.scan_prefix(MESSAGES_PREFIX).count(),
         }
     }
 
@@ -216,7 +215,9 @@ impl Inbox {
     /// Clear all messages (but keep dedup IDs)
     pub fn clear_messages(&mut self) {
         match &mut self.backend {
-            InboxBackend::Memory { messages, total, .. } => {
+            InboxBackend::Memory {
+                messages, total, ..
+            } => {
                 messages.clear();
                 *total = 0;
             }

@@ -10,7 +10,7 @@ use std::sync::Arc;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::closure::Closure;
 #[cfg(target_arch = "wasm32")]
-use web_sys::{WebSocket, RtcPeerConnection, MessageEvent, ErrorEvent, CloseEvent};
+use web_sys::{CloseEvent, ErrorEvent, MessageEvent, RtcPeerConnection, WebSocket};
 
 /// Managed WebSocket connection with proper callback lifecycle
 #[cfg(target_arch = "wasm32")]
@@ -28,8 +28,8 @@ pub struct ManagedWebSocket {
 impl ManagedWebSocket {
     /// Create a new managed WebSocket connection
     pub fn new(url: &str) -> Result<Self, String> {
-        let websocket = WebSocket::new(url)
-            .map_err(|e| format!("Failed to create WebSocket: {:?}", e))?;
+        let websocket =
+            WebSocket::new(url).map_err(|e| format!("Failed to create WebSocket: {:?}", e))?;
 
         websocket.set_binary_type(web_sys::BinaryType::Arraybuffer);
 
@@ -159,9 +159,8 @@ impl ManagedRtcConnection {
     where
         F: FnMut(web_sys::RtcDataChannelEvent) + 'static,
     {
-        let closure = Closure::wrap(
-            Box::new(callback) as Box<dyn FnMut(web_sys::RtcDataChannelEvent)>
-        );
+        let closure =
+            Closure::wrap(Box::new(callback) as Box<dyn FnMut(web_sys::RtcDataChannelEvent)>);
         self.peer_connection
             .set_ondatachannel(Some(closure.as_ref().unchecked_ref()));
         self.ondatachannel = Some(closure);
@@ -172,9 +171,8 @@ impl ManagedRtcConnection {
     where
         F: FnMut(web_sys::RtcPeerConnectionIceEvent) + 'static,
     {
-        let closure = Closure::wrap(
-            Box::new(callback) as Box<dyn FnMut(web_sys::RtcPeerConnectionIceEvent)>
-        );
+        let closure =
+            Closure::wrap(Box::new(callback) as Box<dyn FnMut(web_sys::RtcPeerConnectionIceEvent)>);
         self.peer_connection
             .set_onicecandidate(Some(closure.as_ref().unchecked_ref()));
         self.onicecandidate = Some(closure);
@@ -236,7 +234,8 @@ pub struct ConnectionManager {
     websockets: Arc<RwLock<std::collections::HashMap<String, Arc<RwLock<ManagedWebSocket>>>>>,
     /// Active WebRTC peer connections by peer ID
     #[cfg(target_arch = "wasm32")]
-    rtc_connections: Arc<RwLock<std::collections::HashMap<String, Arc<RwLock<ManagedRtcConnection>>>>>,
+    rtc_connections:
+        Arc<RwLock<std::collections::HashMap<String, Arc<RwLock<ManagedRtcConnection>>>>>,
     /// Connection count for statistics
     connection_count: Arc<RwLock<u64>>,
 }
