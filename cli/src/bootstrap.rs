@@ -45,7 +45,18 @@ pub const MESH_TOPIC: &str = "sc-mesh";
 
 /// Get default bootstrap nodes, with optional build-time override
 pub fn default_bootstrap_nodes() -> Vec<String> {
-    // Check for build-time override first
+    // 1. Check runtime environment variable (for Docker/Cloud)
+    if let Ok(nodes_str) = std::env::var("SCMESSENGER_BOOTSTRAP_NODES") {
+        if !nodes_str.trim().is_empty() {
+            return nodes_str
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+        }
+    }
+
+    // 2. Check build-time override
     let build_time_nodes = option_env!("SCMESSENGER_BOOTSTRAP_NODES");
 
     if let Some(nodes_str) = build_time_nodes {
@@ -77,6 +88,7 @@ pub fn default_bootstrap_nodes() -> Vec<String> {
 /// This is the core of aggressive discovery: we dial the IP:Port ONLY.
 /// libp2p will accept whatever PeerID the remote presents during the
 /// Noise handshake. No identity validation occurs at this stage.
+#[allow(dead_code)]
 pub fn promiscuous_bootstrap_addrs() -> Vec<String> {
     default_bootstrap_nodes()
         .into_iter()
@@ -86,6 +98,7 @@ pub fn promiscuous_bootstrap_addrs() -> Vec<String> {
 
 /// Extract the expected PeerID from a bootstrap multiaddr (if present).
 /// Returns (stripped_addr, optional_expected_peer_id)
+#[allow(dead_code)]
 pub fn parse_bootstrap_addr(multiaddr: &str) -> (String, Option<String>) {
     let stripped = ledger::strip_peer_id(multiaddr);
     let peer_id = if let Some(idx) = multiaddr.find("/p2p/") {

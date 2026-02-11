@@ -251,6 +251,8 @@ pub async fn start(
     // 6. Install Script (Docker Auto)
     let install_docker_route = warp::path!("api" / "install" / "docker")
         .and(warp::get())
+        .and(ctx_filter.clone())
+        .and(warp::query::<InstallParams>())
         .and_then(handle_install_docker)
         .boxed();
 
@@ -442,13 +444,21 @@ cat > "$CONFIG_DIR/config.json" <<EOF
 {{
   "listen_port": 9000,
   "bootstrap_nodes": {nodes_json},
-  "mdns": true,
-  "relay": true
+  "enable_mdns": true,
+  "enable_dht": true,
+  "network": {{
+      "enable_relay": true,
+      "enable_nat_traversal": true
+  }}
 }}
 EOF
 
 echo "✅ Installed & Configured!"
 echo "👉 Run 'scm start' to join the mesh."
+if [ ! -f /usr/local/bin/scm ]; then
+    echo "⚠️  Note: 'scm' was not moved to /usr/local/bin."
+    echo "    You may need to add current directory to PATH or run as ./scm"
+fi
 "#
     );
 
@@ -459,8 +469,18 @@ echo "👉 Run 'scm start' to join the mesh."
     ))
 }
 
-async fn handle_install_docker() -> Result<impl warp::Reply, warp::Rejection> {
-    let script = r#"#!/bin/bash
+async fn handle_install_docker(
+    ctx: Arc<WebContext>,
+    params: InstallParams,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // Construct comma-separated bootstrap string for the env var
+    let nodes_str = ctx.bootstrap_nodes.join(",");
+    let host = params.host.unwrap_or_else(|| "localhost:9000".to_string());
+    // Extract just the hostname/IP from host (remove port if present)
+    let hostname = host.split(':').next().unwrap_or("localhost");
+
+    let script = format!(
+        r#"#!/bin/bash
 set -e
 echo "🐳 SCMessenger Docker Installer"
 
@@ -473,9 +493,24 @@ else
 fi
 
 echo "🚀 Starting Node..."
-docker run -d --restart always --name scmessenger -p 9000:9000 -p 9001:9001 testbotz/scmessenger:latest
+echo "Running on host: {hostname}"
+
+# Stop existing container if running
+docker rm -f scmessenger 2>/dev/null || true
+
+# Run with bootstrap nodes injected
+docker run -d \
+  --restart always \
+  --name scmessenger \
+  -p 9000:9000 \
+  -p 9001:9001 \
+  -e SCMESSENGER_BOOTSTRAP_NODES="{nodes_str}" \
+  testbotz/scmessenger:latest
+
 echo "✅ Node running."
-"#;
+echo "👉 UI Available at: http://{hostname}:9000"
+"#
+    );
     Ok(warp::reply::with_header(
         script,
         "content-type",

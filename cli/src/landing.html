@@ -595,7 +595,6 @@
         <div class="section-title">⚡ Join the Mesh</div>
 
         <div class="install-grid">
-          
           <!-- Auto-Install (Native) -->
           <div class="install-card recommended">
             <div class="card-header">
@@ -607,37 +606,70 @@
             </div>
             <div class="card-title">Auto-Install & Join</div>
             <div class="card-desc">
-              Installs the binary (if missing) and configures your node to join this mesh instantly.
+              Installs the binary (if missing) and configures your node to join
+              this mesh instantly.
             </div>
             <div class="card-best">
               <strong>Best for:</strong> Mac, Linux, Power Users
             </div>
             <div class="code-block">
-              <code id="native-cmd">curl -sL http://localhost:9000/api/install | bash</code>
+              <code id="native-cmd"
+                >curl -sL http://localhost:9000/api/install | bash</code
+              >
               <button class="copy-btn" onclick="copyCode('native-cmd', this)">
                 Copy
               </button>
             </div>
             <details style="margin-top: 12px">
               <summary>Manual Downloads & Details</summary>
-              <div style="text-align: center; margin: 12px 0; display: flex; flex-direction: column; gap: 8px; align-items: center;">
-                  <a href="/api/download/scm-linux-amd64" class="btn btn-outline btn-sm" style="width: 200px; justify-content: center;">
-                      ↓ Linux (x64)
+              <div
+                style="
+                  text-align: center;
+                  margin: 12px 0;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 8px;
+                  align-items: center;
+                "
+              >
+                <a
+                  href="/api/download/scm-linux-amd64"
+                  class="btn btn-outline btn-sm"
+                  style="width: 200px; justify-content: center"
+                >
+                  ↓ Linux (x64)
+                </a>
+                <div style="display: flex; gap: 8px">
+                  <a
+                    href="https://github.com/Treystu/SCMessenger/releases/latest/download/scm-macos-arm64"
+                    class="btn btn-outline btn-sm"
+                    style="font-size: 0.75rem"
+                  >
+                    ↓ Mac (ARM)
                   </a>
-                  <div style="display: flex; gap: 8px;">
-                      <a href="https://github.com/Treystu/SCMessenger/releases/latest/download/scm-macos-arm64" class="btn btn-outline btn-sm" style="font-size: 0.75rem;">
-                          ↓ Mac (ARM)
-                      </a>
-                      <a href="https://github.com/Treystu/SCMessenger/releases/latest/download/scm-macos-amd64" class="btn btn-outline btn-sm" style="font-size: 0.75rem;">
-                          ↓ Mac (Intel)
-                      </a>
-                  </div>
-                   <a href="https://github.com/Treystu/SCMessenger/releases/latest/download/scm-windows-amd64.exe" class="btn btn-outline btn-sm" style="font-size: 0.75rem; width: 140px; justify-content: center;">
-                      ↓ Windows (x64)
+                  <a
+                    href="https://github.com/Treystu/SCMessenger/releases/latest/download/scm-macos-amd64"
+                    class="btn btn-outline btn-sm"
+                    style="font-size: 0.75rem"
+                  >
+                    ↓ Mac (Intel)
                   </a>
+                </div>
+                <a
+                  href="https://github.com/Treystu/SCMessenger/releases/latest/download/scm-windows-amd64.exe"
+                  class="btn btn-outline btn-sm"
+                  style="
+                    font-size: 0.75rem;
+                    width: 140px;
+                    justify-content: center;
+                  "
+                >
+                  ↓ Windows (x64)
+                </a>
               </div>
-              <p style="font-size: 0.75rem; color: var(--text-dim);">
-                  The script backs up your config, installs 'scm' to /usr/local/bin, and joins the mesh.
+              <p style="font-size: 0.75rem; color: var(--text-dim)">
+                The script backs up your config, installs 'scm' to
+                /usr/local/bin, and joins the mesh.
               </p>
             </details>
             <div class="pros-cons">
@@ -656,13 +688,16 @@
             </div>
             <div class="card-title">Run with Docker</div>
             <div class="card-desc">
-              Auto-detects Docker. Installs it if missing (slight overhead). Runs as a container.
+              Auto-detects Docker. Installs it if missing (slight overhead).
+              Runs as a container.
             </div>
             <div class="card-best">
               <strong>Best for:</strong> Servers, VPS, Clean Environments
             </div>
             <div class="code-block">
-              <code id="docker-cmd">curl -sL http://localhost:9000/api/install/docker | bash</code>
+              <code id="docker-cmd"
+                >curl -sL http://localhost:9000/api/install/docker | bash</code
+              >
               <button class="copy-btn" onclick="copyCode('docker-cmd', this)">
                 Copy
               </button>
@@ -683,13 +718,16 @@
             </div>
             <div class="card-title">Build from Source</div>
             <div class="card-desc">
-              Checks for Rust. Installs if needed. Clones and builds from source.
+              Checks for Rust. Installs if needed. Clones and builds from
+              source.
             </div>
             <div class="card-best">
               <strong>Best for:</strong> Developers, Custom Builds
             </div>
             <div class="code-block">
-              <code id="source-cmd">curl -sL http://localhost:9000/api/install/source | bash</code>
+              <code id="source-cmd"
+                >curl -sL http://localhost:9000/api/install/source | bash</code
+              >
               <button class="copy-btn" onclick="copyCode('source-cmd', this)">
                 Copy
               </button>
@@ -943,10 +981,51 @@
           ? document.getElementById(id)
           : btn.previousElementSibling;
         const text = el ? el.textContent : "";
-        navigator.clipboard.writeText(text).then(() => {
-          btn.textContent = "Copied!";
+
+        // Try modern API first
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard
+            .writeText(text)
+            .then(() => {
+              showCopied(btn);
+            })
+            .catch(() => {
+              fallbackCopy(text, btn);
+            });
+        } else {
+          fallbackCopy(text, btn);
+        }
+      }
+
+      function fallbackCopy(text, btn) {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+
+        // Ensure it's not visible but part of DOM
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "0";
+        document.body.appendChild(textArea);
+
+        textArea.focus();
+        textArea.select();
+
+        try {
+          document.execCommand("copy");
+          showCopied(btn);
+        } catch (err) {
+          console.error("Fallback copy failed", err);
+          btn.textContent = "Error";
           setTimeout(() => (btn.textContent = "Copy"), 1500);
-        });
+        }
+
+        document.body.removeChild(textArea);
+      }
+
+      function showCopied(btn) {
+        const original = btn.textContent;
+        btn.textContent = "Copied!";
+        setTimeout(() => (btn.textContent = "Copy"), 1500);
       }
 
       // === Platform Detection ===

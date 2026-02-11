@@ -185,6 +185,17 @@ pub struct ApiContext {
     pub peers: Arc<tokio::sync::Mutex<std::collections::HashMap<libp2p::PeerId, Option<String>>>>,
 }
 
+pub async fn stop_node_via_api() -> Result<()> {
+    let client = hyper::Client::new();
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("http://{}/api/shutdown", API_ADDR))
+        .body(Body::empty())?;
+
+    let _res = client.request(req).await?;
+    Ok(())
+}
+
 async fn handle_request(
     req: Request<Body>,
     ctx: Arc<ApiContext>,
@@ -194,6 +205,17 @@ async fn handle_request(
         (&Method::POST, "/api/contacts") => handle_add_contact(req, ctx).await,
         (&Method::GET, "/api/peers") => handle_get_peers(req, ctx).await,
         (&Method::POST, "/api/history") => handle_get_history(req, ctx).await,
+        (&Method::POST, "/api/shutdown") => {
+            // Spawn a task to exit after a brief delay to allow response to send
+            tokio::spawn(async {
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                std::process::exit(0);
+            });
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .body(Body::from("Stopping..."))
+                .unwrap())
+        }
         _ => Ok(Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::from("Not found"))

@@ -65,6 +65,8 @@ enum Commands {
     Send { recipient: String, message: String },
     /// Show network status
     Status,
+    /// Stop the running node
+    Stop,
     /// Run self-tests
     Test,
 }
@@ -140,10 +142,25 @@ async fn main() -> Result<()> {
             limit,
         } => cmd_history(peer, search, limit).await,
         Commands::Start { port } => cmd_start(port).await,
+        Commands::Stop => cmd_stop().await,
         Commands::Send { recipient, message } => cmd_send_offline(recipient, message).await,
         Commands::Status => cmd_status().await,
         Commands::Test => cmd_test().await,
     }
+}
+
+async fn cmd_stop() -> Result<()> {
+    if !api::is_api_available().await {
+        println!("{}", "No SCMessenger node is running.".yellow());
+        return Ok(());
+    }
+
+    print!("Stopping SCMessenger node... ");
+    match api::stop_node_via_api().await {
+        Ok(_) => println!("{}", "Done.".green()),
+        Err(e) => println!("{} {}", "Error:".red(), e),
+    }
+    Ok(())
 }
 
 async fn cmd_init() -> Result<()> {

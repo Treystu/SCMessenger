@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Config {
     /// Bootstrap nodes for initial network connection
     pub bootstrap_nodes: Vec<String>,
@@ -18,6 +19,7 @@ pub struct Config {
     pub listen_port: u16,
 
     /// Enable mDNS for local network discovery
+    #[serde(alias = "mdns")]
     pub enable_mdns: bool,
 
     /// Enable DHT for wide area network discovery
@@ -31,6 +33,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct NetworkConfig {
     /// Maximum number of peers to maintain
     pub max_peers: usize,

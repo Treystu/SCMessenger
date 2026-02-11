@@ -94,10 +94,10 @@ pub fn generate_listen_addresses(config: &MultiPortConfig) -> Vec<(Multiaddr, u1
 }
 
 /// Check if a port requires elevated privileges (ports < 1024 on Unix)
-pub fn requires_elevated_privileges(port: u16) -> bool {
+pub fn requires_elevated_privileges(_port: u16) -> bool {
     #[cfg(unix)]
     {
-        port > 0 && port < 1024
+        _port > 0 && _port < 1024
     }
     #[cfg(not(unix))]
     {
