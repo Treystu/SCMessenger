@@ -3,6 +3,7 @@
 // Cross-platform (macOS, Linux, Windows) command-line interface for SCMessenger.
 
 mod api;
+mod bootstrap;
 mod config;
 mod contacts;
 mod history;

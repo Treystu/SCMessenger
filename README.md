@@ -4,6 +4,23 @@ The world's first truly sovereign messenger — works everywhere, owned by no on
 
 ## Quick Start
 
+### 🚀 Zero-Config Deployment (Recommended)
+
+**Bootstrap nodes are now embedded in all builds!** Just run and connect to the mesh instantly:
+
+```bash
+# Docker (easiest)
+docker run -d -p 9000:9000 -p 9001:9001 testbotz/scmessenger:latest
+
+# Native binary
+cargo build --release --bin scmessenger-cli
+./target/release/scmessenger-cli start
+```
+
+No manual configuration needed. See [QUICKCONNECT.md](QUICKCONNECT.md) for details.
+
+### Development Build
+
 ```bash
 # Build
 cargo build --workspace

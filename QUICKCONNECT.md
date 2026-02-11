@@ -2,6 +2,10 @@
 
 Get two nodes talking in under 2 minutes!
 
+## 🎉 Zero Configuration Required!
+
+**Bootstrap nodes are now embedded in all downloads.** Just run the app and you're connected to the mesh instantly. No manual setup needed!
+
 ## Your Nodes Are Already Running!
 
 **GCP Node:** `34.168.102.7`
@@ -20,7 +24,9 @@ docker logs scmessenger | grep "Network peer ID"
 
 ## Connect From Another Machine
 
-### Method 1: Docker with Bootstrap (Easiest)
+### Method 1: Docker with Embedded Bootstraps (Easiest!)
+
+**Bootstrap nodes are already configured!** Just run:
 
 ```bash
 docker run -d \
@@ -29,31 +35,28 @@ docker run -d \
   -p 9000:9000 \
   -p 9001:9001 \
   -v ~/scm_data:/root/.local/share/scmessenger \
-  -e BOOTSTRAP_NODES="/ip4/34.168.102.7/tcp/9001/p2p/12D3KooWGGdvGNJb3JwkNpmYuapgk7SAZ4DsBmQsU989yhvnTB8W" \
   testbotz/scmessenger:latest
 
-# Watch connection happen
+# Watch automatic connection happen
 docker logs -f scmessenger-local
 ```
 
-### Method 2: Add Bootstrap After Starting
+That's it! The node automatically connects to embedded bootstrap nodes.
+
+### Method 2: Add Additional Bootstrap Nodes (Optional)
+
+To connect to specific nodes in addition to defaults:
 
 ```bash
-# Start node normally
-docker run -d --name scmessenger -p 9000:9000 -p 9001:9001 testbotz/scmessenger:latest
-
-# Stop it
-docker stop scmessenger
-docker rm scmessenger
-
-# Restart with bootstrap
 docker run -d \
-  --name scmessenger \
+  --name scmessenger-local \
   -p 9000:9000 -p 9001:9001 \
   -v ~/scm_data:/root/.local/share/scmessenger \
-  -e BOOTSTRAP_NODES="/ip4/34.168.102.7/tcp/9001/p2p/12D3KooWGGdvGNJb3JwkNpmYuapgk7SAZ4DsBmQsU989yhvnTB8W" \
+  -e BOOTSTRAP_NODES="/ip4/1.2.3.4/tcp/9001/p2p/12D3KooW..." \
   testbotz/scmessenger:latest
 ```
+
+This adds your custom node to the embedded defaults.
 
 ## Verify Connection
 

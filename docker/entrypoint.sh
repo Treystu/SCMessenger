@@ -9,37 +9,33 @@ CONFIG_FILE="$SCM_CONFIG_DIR/config.json"
 # Determine the port to use (priority: LISTEN_PORT > PORT > default 9000)
 FINAL_PORT="${LISTEN_PORT:-${PORT:-9000}}"
 
-# Create or update config if needed
-if [ ! -f "$CONFIG_FILE" ] || [ ! -s "$CONFIG_FILE" ] || [ "$(cat "$CONFIG_FILE")" = "{}" ]; then
-    echo "Creating default configuration..."
-    cat > "$CONFIG_FILE" <<EOF
-{
-  "bootstrap_nodes": [],
-  "listen_port": ${FINAL_PORT},
-  "enable_mdns": true,
-  "enable_dht": true,
-  "storage_path": null,
-  "network": {
-    "max_peers": 50,
-    "connection_timeout": 30,
-    "enable_nat_traversal": true,
-    "enable_relay": true
-  }
-}
-EOF
-else
-    # Update existing config with environment variables
+# Note: Bootstrap nodes are now embedded in the binary at build time
+# The SCM CLI will automatically load these defaults when creating new config
+# This entrypoint only needs to handle port configuration and environment overrides
+
+# Create initial config if it doesn't exist (CLI will populate with defaults)
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Initializing configuration with embedded bootstrap nodes..."
+    # Let the CLI create the default config with embedded bootstraps
+    scm config list > /dev/null 2>&1 || true
+fi
+
+# Update port from environment if specified
+if [ -f "$CONFIG_FILE" ]; then
     tmp=$(mktemp)
     jq --arg port "$FINAL_PORT" '.listen_port = ($port | tonumber)' "$CONFIG_FILE" > "$tmp" && mv "$tmp" "$CONFIG_FILE"
 fi
 
-# Add bootstrap nodes from environment variable (comma separated)
+# Add additional bootstrap nodes from environment variable (merged with defaults)
 if [ ! -z "$BOOTSTRAP_NODES" ]; then
-    echo "Configuring bootstrap nodes..."
+    echo "Adding environment bootstrap nodes to defaults..."
     IFS=',' read -ra ADDR <<< "$BOOTSTRAP_NODES"
     for i in "${ADDR[@]}"; do
-        tmp=$(mktemp)
-        jq --arg node "$i" '.bootstrap_nodes += [$node] | .bootstrap_nodes |= unique' "$CONFIG_FILE" > "$tmp" && mv "$tmp" "$CONFIG_FILE"
+        node=$(echo "$i" | xargs)  # Trim whitespace
+        if [ ! -z "$node" ]; then
+            tmp=$(mktemp)
+            jq --arg node "$node" '.bootstrap_nodes += [$node] | .bootstrap_nodes |= unique' "$CONFIG_FILE" > "$tmp" && mv "$tmp" "$CONFIG_FILE"
+        fi
     done
 fi
 
