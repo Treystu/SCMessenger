@@ -26,7 +26,8 @@ mod tests {
         let info_before = core.get_identity_info();
         assert!(!info_before.initialized);
 
-        core.initialize_identity().expect("Failed to initialize identity");
+        core.initialize_identity()
+            .expect("Failed to initialize identity");
 
         let info_after = core.get_identity_info();
         assert!(info_after.initialized);

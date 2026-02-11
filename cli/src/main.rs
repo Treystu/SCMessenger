@@ -488,7 +488,9 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
             .context("Failed to decode network keypair")?
     } else {
         let keypair = libp2p::identity::Keypair::generate_ed25519();
-        let bytes = keypair.to_protobuf_encoding().context("Failed to encode keypair")?;
+        let bytes = keypair
+            .to_protobuf_encoding()
+            .context("Failed to encode keypair")?;
         std::fs::write(&keypair_path, bytes).context("Failed to save network keypair")?;
         keypair
     };
@@ -570,15 +572,24 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                         for attempt in 1..=3 {
                             match swarm_clone.dial(addr.clone()).await {
                                 Ok(_) => {
-                                    println!("  {} Connected to bootstrap node {}", "✓".green(), i + 1);
+                                    println!(
+                                        "  {} Connected to bootstrap node {}",
+                                        "✓".green(),
+                                        i + 1
+                                    );
                                     break;
                                 }
                                 Err(e) => {
                                     if attempt < 3 {
                                         tracing::warn!("Bootstrap connection attempt {} failed: {}. Retrying in 5s...", attempt, e);
-                                        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                        tokio::time::sleep(tokio::time::Duration::from_secs(5))
+                                            .await;
                                     } else {
-                                        tracing::error!("Failed to connect to bootstrap node {}: {}", i + 1, e);
+                                        tracing::error!(
+                                            "Failed to connect to bootstrap node {}: {}",
+                                            i + 1,
+                                            e
+                                        );
                                     }
                                 }
                             }
@@ -615,11 +626,11 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                              let _ = std::io::Write::flush(&mut std::io::stdout());
                              let _ = contacts_rx.update_last_seen(&peer_id.to_string());
 
-                             // Try to get public key from existing contact, if available
+                             // Try to get public key and a human-friendly identity (display name) from existing contact, if available
                              let (public_key, identity) = contacts_rx.get(&peer_id.to_string())
                                  .ok()
                                  .flatten()
-                                 .map(|c| (Some(c.public_key), Some(c.peer_id.clone())))
+                                 .map(|c| (Some(c.public_key.clone()), Some(c.display_name().to_string())))
                                  .unwrap_or((None, None));
 
                              let _ = ui_broadcast.send(server::UiEvent::PeerDiscovered {

@@ -191,11 +191,7 @@ mod tests {
     #[test]
     fn test_receipt_message() {
         let receipt = Receipt::delivered("msg-123".to_string());
-        let msg = Message::receipt(
-            "sender".to_string(),
-            "recipient".to_string(),
-            &receipt,
-        );
+        let msg = Message::receipt("sender".to_string(), "recipient".to_string(), &receipt);
 
         assert_eq!(msg.message_type, MessageType::Receipt);
         assert!(msg.text_content().is_none());

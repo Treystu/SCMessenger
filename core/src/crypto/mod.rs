@@ -2,4 +2,4 @@
 
 pub mod encrypt;
 
-pub use encrypt::{encrypt_message, decrypt_message};
+pub use encrypt::{decrypt_message, encrypt_message};

@@ -9,9 +9,11 @@
 //!
 //! Run with: cargo test --test integration_e2e
 
-use scmessenger_core::crypto::encrypt::{encrypt_message, decrypt_message, sign_envelope, verify_envelope};
+use scmessenger_core::crypto::encrypt::{
+    decrypt_message, encrypt_message, sign_envelope, verify_envelope,
+};
 use scmessenger_core::identity::{IdentityKeys, IdentityManager, IdentityStore};
-use scmessenger_core::message::{Message, MessageType, Envelope};
+use scmessenger_core::message::{Envelope, Message, MessageType};
 use scmessenger_core::store::{Inbox, Outbox, QueuedMessage};
 use tempfile::tempdir;
 
@@ -48,8 +50,8 @@ fn test_e2e_message_flow_two_peers() {
     assert!(!envelope.ciphertext.is_empty());
 
     // Step 4: Sign the envelope for relay verification
-    let signed_envelope = sign_envelope(envelope.clone(), &alice_keys.signing_key)
-        .expect("Failed to sign envelope");
+    let signed_envelope =
+        sign_envelope(envelope.clone(), &alice_keys.signing_key).expect("Failed to sign envelope");
 
     // Verify signature
     verify_envelope(&signed_envelope).expect("Signature verification failed");
@@ -69,7 +71,9 @@ fn test_e2e_message_flow_two_peers() {
         attempts: 0,
     };
 
-    alice_outbox.enqueue(queued_msg).expect("Failed to enqueue message");
+    alice_outbox
+        .enqueue(queued_msg)
+        .expect("Failed to enqueue message");
     assert_eq!(alice_outbox.total_count(), 1);
 
     // Step 6: Simulate delivery - Bob receives the envelope
@@ -84,11 +88,12 @@ fn test_e2e_message_flow_two_peers() {
     verify_envelope(&received_signed_envelope).expect("Received envelope signature invalid");
 
     // Step 8: Bob decrypts the message
-    let decrypted_bytes = decrypt_message(&bob_keys.signing_key, &received_signed_envelope.envelope)
-        .expect("Failed to decrypt message");
+    let decrypted_bytes =
+        decrypt_message(&bob_keys.signing_key, &received_signed_envelope.envelope)
+            .expect("Failed to decrypt message");
 
-    let received_message: Message = bincode::deserialize(&decrypted_bytes)
-        .expect("Failed to deserialize message");
+    let received_message: Message =
+        bincode::deserialize(&decrypted_bytes).expect("Failed to deserialize message");
 
     // Step 9: Store in inbox (Bob's side)
     let mut bob_inbox = Inbox::new();
@@ -109,10 +114,7 @@ fn test_e2e_message_flow_two_peers() {
     assert_eq!(received_message.sender_id, alice_id);
     assert_eq!(received_message.recipient_id, bob_id);
     assert_eq!(received_message.message_type, MessageType::Text);
-    assert_eq!(
-        received_message.text_content().unwrap(),
-        message_text
-    );
+    assert_eq!(received_message.text_content().unwrap(), message_text);
 
     // Step 11: Verify deduplication
     let duplicate_msg = scmessenger_core::store::ReceivedMessage {
@@ -151,13 +153,15 @@ fn test_e2e_persistent_message_flow() {
         // Persist Alice's identity
         let alice_identity_store = IdentityStore::persistent(alice_store_path.to_str().unwrap())
             .expect("Failed to create Alice's identity store");
-        alice_identity_store.save_keys(&alice_keys)
+        alice_identity_store
+            .save_keys(&alice_keys)
             .expect("Failed to save Alice's keys");
 
         // Persist Bob's identity
         let bob_identity_store = IdentityStore::persistent(bob_store_path.to_str().unwrap())
             .expect("Failed to create Bob's identity store");
-        bob_identity_store.save_keys(&bob_keys)
+        bob_identity_store
+            .save_keys(&bob_keys)
             .expect("Failed to save Bob's keys");
 
         // Create and encrypt message
@@ -170,8 +174,8 @@ fn test_e2e_persistent_message_flow() {
 
         let message_bytes = bincode::serialize(&message).unwrap();
         let bob_public = bob_keys.signing_key.verifying_key().to_bytes();
-        let envelope = encrypt_message(&alice_keys.signing_key, &bob_public, &message_bytes)
-            .unwrap();
+        let envelope =
+            encrypt_message(&alice_keys.signing_key, &bob_public, &message_bytes).unwrap();
         let signed_envelope = sign_envelope(envelope, &alice_keys.signing_key).unwrap();
         let envelope_data = bincode::serialize(&signed_envelope).unwrap();
 
@@ -212,8 +216,8 @@ fn test_e2e_persistent_message_flow() {
             .expect("Bob's keys not found");
 
         // Reopen persistent outbox
-        let outbox = Outbox::persistent(outbox_path.to_str().unwrap())
-            .expect("Failed to reopen outbox");
+        let outbox =
+            Outbox::persistent(outbox_path.to_str().unwrap()).expect("Failed to reopen outbox");
 
         // Verify message still in outbox
         assert_eq!(outbox.total_count(), 1);
@@ -228,8 +232,8 @@ fn test_e2e_persistent_message_flow() {
         let signed_envelope: scmessenger_core::message::SignedEnvelope =
             bincode::deserialize(envelope_data).unwrap();
 
-        let decrypted_bytes = decrypt_message(&bob_keys.signing_key, &signed_envelope.envelope)
-            .unwrap();
+        let decrypted_bytes =
+            decrypt_message(&bob_keys.signing_key, &signed_envelope.envelope).unwrap();
         let received_message: Message = bincode::deserialize(&decrypted_bytes).unwrap();
 
         // Store in persistent inbox
@@ -249,8 +253,8 @@ fn test_e2e_persistent_message_flow() {
 
     // Step 3: Simulate another restart - Verify inbox persistence
     {
-        let inbox = Inbox::persistent(inbox_path.to_str().unwrap())
-            .expect("Failed to reopen inbox");
+        let inbox =
+            Inbox::persistent(inbox_path.to_str().unwrap()).expect("Failed to reopen inbox");
 
         // Message should still be there
         assert_eq!(inbox.total_count(), 1);
@@ -375,7 +379,11 @@ fn test_e2e_sender_spoofing_prevention() {
     .unwrap();
 
     // Attacker intercepts and tries to replace sender public key
-    envelope.sender_public_key = attacker_keys.signing_key.verifying_key().to_bytes().to_vec();
+    envelope.sender_public_key = attacker_keys
+        .signing_key
+        .verifying_key()
+        .to_bytes()
+        .to_vec();
 
     // Bob tries to decrypt - should fail due to AAD mismatch
     let result = decrypt_message(&bob_keys.signing_key, &envelope);

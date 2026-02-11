@@ -20,6 +20,16 @@ if [ ! -f "$CONFIG_FILE" ]; then
     scm config list > /dev/null 2>&1 || true
 fi
 
+# Validate and fix config if it exists but is empty/invalid
+if [ -f "$CONFIG_FILE" ]; then
+    # Check if file is empty or contains only whitespace/braces
+    if ! jq -e . "$CONFIG_FILE" > /dev/null 2>&1; then
+        echo "Invalid config detected, regenerating..."
+        rm -f "$CONFIG_FILE"
+        scm config list > /dev/null 2>&1 || true
+    fi
+fi
+
 # Update port from environment if specified
 if [ -f "$CONFIG_FILE" ]; then
     tmp=$(mktemp)

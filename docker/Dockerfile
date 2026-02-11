@@ -4,8 +4,7 @@ FROM rust:latest AS builder
 # Optional: Override bootstrap nodes at build time
 # Format: comma-separated multiaddrs
 # Example: /ip4/1.2.3.4/tcp/9001/p2p/12D3Koo...,/ip4/5.6.7.8/tcp/9001/p2p/12D3Koo...
-ARG SCMESSENGER_BOOTSTRAP_NODES=""
-ENV SCMESSENGER_BOOTSTRAP_NODES=${SCMESSENGER_BOOTSTRAP_NODES}
+ARG SCMESSENGER_BOOTSTRAP_NODES
 
 WORKDIR /usr/src/scmessenger
 
@@ -27,7 +26,10 @@ COPY core/build.rs core/
 COPY mobile/build.rs mobile/
 
 # Build the CLI
-RUN cargo build --release --bin scmessenger-cli
+RUN if [ -n "$SCMESSENGER_BOOTSTRAP_NODES" ]; then \
+        export SCMESSENGER_BOOTSTRAP_NODES="$SCMESSENGER_BOOTSTRAP_NODES"; \
+    fi && \
+    cargo build --release --bin scmessenger-cli
 
 # Runtime stage
 FROM debian:bookworm-slim

@@ -2,8 +2,8 @@
 //
 // Tests relay capability, reputation tracking, retry logic, and mesh discovery
 
-use scmessenger_core::transport::mesh_routing::*;
 use libp2p::PeerId;
+use scmessenger_core::transport::mesh_routing::*;
 use std::time::Duration;
 
 #[test]
@@ -45,7 +45,10 @@ fn test_reputation_calculation_high_quality() {
     assert!(rep.score > 80.0, "High quality relay should score > 80");
     assert!(rep.is_reliable, "Should be marked reliable");
 
-    println!("✓ High-quality relay gets good reputation score: {:.2}", rep.score);
+    println!(
+        "✓ High-quality relay gets good reputation score: {:.2}",
+        rep.score
+    );
 }
 
 #[test]
@@ -69,7 +72,10 @@ fn test_reputation_calculation_low_quality() {
     assert!(rep.score < 50.0, "Low quality relay should score < 50");
     assert!(!rep.is_reliable, "Should NOT be marked reliable");
 
-    println!("✓ Low-quality relay gets poor reputation score: {:.2}", rep.score);
+    println!(
+        "✓ Low-quality relay gets poor reputation score: {:.2}",
+        rep.score
+    );
 }
 
 #[test]
@@ -111,8 +117,10 @@ fn test_retry_strategy_exponential_backoff() {
     assert!(delay2 > delay1, "Delay should keep increasing");
     assert!(delay5 < strategy.max_delay, "Should not exceed max");
 
-    println!("✓ Exponential backoff: {:?} → {:?} → {:?} → {:?}",
-             delay0, delay1, delay2, delay5);
+    println!(
+        "✓ Exponential backoff: {:?} → {:?} → {:?} → {:?}",
+        delay0, delay1, delay2, delay5
+    );
 }
 
 #[test]
@@ -157,8 +165,12 @@ fn test_multi_path_delivery_manager() {
     let relay2 = PeerId::random();
 
     // Record some relay performance
-    delivery.reputation.record_relay_attempt(relay1, true, 100, 1024);
-    delivery.reputation.record_relay_attempt(relay2, true, 50, 1024);
+    delivery
+        .reputation
+        .record_relay_attempt(relay1, true, 100, 1024);
+    delivery
+        .reputation
+        .record_relay_attempt(relay2, true, 50, 1024);
 
     // Start a delivery
     let msg_id = "test-msg".to_string();
@@ -188,9 +200,15 @@ fn test_multi_path_best_paths_include_relays() {
     let relay2 = PeerId::random();
 
     // Record successful relays
-    delivery.reputation.record_relay_attempt(relay1, true, 100, 1024);
-    delivery.reputation.record_relay_attempt(relay1, true, 110, 1024);
-    delivery.reputation.record_relay_attempt(relay2, true, 200, 1024);
+    delivery
+        .reputation
+        .record_relay_attempt(relay1, true, 100, 1024);
+    delivery
+        .reputation
+        .record_relay_attempt(relay1, true, 110, 1024);
+    delivery
+        .reputation
+        .record_relay_attempt(relay2, true, 200, 1024);
 
     let paths = delivery.get_best_paths(&target, 5);
 
@@ -256,12 +274,14 @@ fn test_continuous_retry_never_gives_up() {
 
     // Test many retry attempts
     for attempt in 0..50 {
-        assert!(strategy.should_retry(attempt),
-                "Should keep retrying (attempt {})", attempt);
+        assert!(
+            strategy.should_retry(attempt),
+            "Should keep retrying (attempt {})",
+            attempt
+        );
 
         let delay = strategy.calculate_delay(attempt);
-        assert!(delay <= strategy.max_delay,
-                "Delay should never exceed max");
+        assert!(delay <= strategy.max_delay, "Delay should never exceed max");
     }
 
     println!("✓ Continuous retry strategy persists through many attempts");

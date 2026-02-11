@@ -14,6 +14,10 @@ pub struct Config {
     /// Bootstrap nodes for initial network connection
     pub bootstrap_nodes: Vec<String>,
 
+    /// Explicitly removed bootstrap nodes (to prevent re-adding on merge)
+    #[serde(default)]
+    pub removed_bootstrap_nodes: Vec<String>,
+
     /// Default port for listening
     pub listen_port: u16,
 
@@ -49,6 +53,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             bootstrap_nodes: crate::bootstrap::default_bootstrap_nodes(),
+            removed_bootstrap_nodes: Vec::new(),
             listen_port: 9000, // Default to 9000 instead of random
             enable_mdns: true,
             enable_dht: true,
@@ -109,8 +114,16 @@ impl Config {
             let mut config: Config =
                 serde_json::from_str(&contents).context("Failed to parse config file")?;
 
-            // Merge with default bootstrap nodes (in case new defaults were added)
-            config.bootstrap_nodes = crate::bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes);
+            // Merge with default bootstrap nodes, but only add NEW defaults that weren't previously removed
+            let defaults = crate::bootstrap::default_bootstrap_nodes();
+            for default_node in defaults {
+                // Only add if not already present AND not explicitly removed
+                if !config.bootstrap_nodes.contains(&default_node)
+                    && !config.removed_bootstrap_nodes.contains(&default_node)
+                {
+                    config.bootstrap_nodes.push(default_node);
+                }
+            }
 
             Ok(config)
         } else {
@@ -141,6 +154,10 @@ impl Config {
     /// Remove a bootstrap node
     pub fn remove_bootstrap_node(&mut self, node: &str) -> Result<()> {
         self.bootstrap_nodes.retain(|n| n != node);
+        // Track removal to prevent re-adding on next load
+        if !self.removed_bootstrap_nodes.contains(&node.to_string()) {
+            self.removed_bootstrap_nodes.push(node.to_string());
+        }
         self.save()?;
         Ok(())
     }
@@ -242,7 +259,10 @@ mod tests {
         assert!(config.enable_mdns);
         assert!(config.enable_dht);
         // Should have embedded bootstrap nodes
-        assert!(!config.bootstrap_nodes.is_empty(), "Default config should include bootstrap nodes");
+        assert!(
+            !config.bootstrap_nodes.is_empty(),
+            "Default config should include bootstrap nodes"
+        );
     }
 
     #[test]

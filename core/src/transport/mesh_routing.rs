@@ -7,9 +7,9 @@
 // - Any node can bootstrap from any other node (Phase 4)
 
 use libp2p::PeerId;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use serde::{Serialize, Deserialize};
 
 // ============================================================================
 // PHASE 3: RELAY CAPABILITY
@@ -71,8 +71,8 @@ impl RelayReputation {
             return;
         }
 
-        let success_rate = self.stats.successful_deliveries as f64
-            / self.stats.messages_relayed as f64;
+        let success_rate =
+            self.stats.successful_deliveries as f64 / self.stats.messages_relayed as f64;
 
         // Score factors:
         // - Success rate (70% weight)
@@ -221,8 +221,8 @@ impl RetryStrategy {
             return self.initial_delay;
         }
 
-        let delay_ms = self.initial_delay.as_millis() as f64
-            * self.backoff_multiplier.powi(attempt as i32);
+        let delay_ms =
+            self.initial_delay.as_millis() as f64 * self.backoff_multiplier.powi(attempt as i32);
 
         let delay = Duration::from_millis(delay_ms as u64);
 
@@ -432,7 +432,10 @@ mod tests {
 
         rep.calculate_score();
 
-        assert!(rep.score > 80.0, "High success rate should yield high score");
+        assert!(
+            rep.score > 80.0,
+            "High success rate should yield high score"
+        );
         assert!(rep.is_reliable, "Should be marked as reliable");
     }
 
