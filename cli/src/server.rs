@@ -465,7 +465,7 @@ fi
     Ok(warp::reply::with_header(
         script,
         "content-type",
-        "text/x-shellscript",
+        "text/x-shellscript; charset=utf-8",
     ))
 }
 
@@ -514,7 +514,7 @@ echo "👉 UI Available at: http://{hostname}:9000"
     Ok(warp::reply::with_header(
         script,
         "content-type",
-        "text/x-shellscript",
+        "text/x-shellscript; charset=utf-8",
     ))
 }
 
@@ -544,7 +544,7 @@ echo "👉 Run: ./target/release/scmessenger-cli start"
     Ok(warp::reply::with_header(
         script,
         "content-type",
-        "text/x-shellscript",
+        "text/x-shellscript; charset=utf-8",
     ))
 }
 
