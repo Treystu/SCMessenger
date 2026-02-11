@@ -575,7 +575,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     });
 
     // Start WebSocket + HTTP Server (serves landing page at /)
-    let (ui_broadcast, mut ui_cmd_rx) = server::start(ws_port, web_ctx).await;
+    let (ui_broadcast, mut ui_cmd_rx) = server::start(ws_port, web_ctx).await?;
 
     let listen_addr: libp2p::Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", p2p_port).parse()?;
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);

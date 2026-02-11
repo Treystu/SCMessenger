@@ -1,10 +1,13 @@
+use anyhow::Context;
+use colored::*;
+use futures::FutureExt; // for catch_unwind
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{broadcast, mpsc};
-use warp::Filter;
+use warp::Filter; // for .red() logic (already in cargo.toml)
 
 // ============================================================================
 // UI EVENT / COMMAND TYPES (unchanged)
@@ -181,7 +184,7 @@ const LANDING_HTML: &str = include_str!("landing.html");
 pub async fn start(
     port: u16,
     web_ctx: Arc<WebContext>,
-) -> (broadcast::Sender<UiEvent>, mpsc::Receiver<UiCommand>) {
+) -> anyhow::Result<(broadcast::Sender<UiEvent>, mpsc::Receiver<UiCommand>)> {
     let (broadcast_tx, _br_rx) = broadcast::channel::<UiEvent>(100);
     let (cmd_tx, cmd_rx) = mpsc::channel::<UiCommand>(100);
 
@@ -289,13 +292,32 @@ pub async fn start(
         .with(cors)
         .boxed();
 
-    println!("Starting WebSocket + HTTP server on 0.0.0.0:{}", port);
+    // Attempt to bind explicitly to catch usage errors, but DROP it so warp can bind.
+    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+    {
+        tokio::net::TcpListener::bind(addr)
+            .await
+            .with_context(|| format!("Failed to bind web server to {}", addr))?;
+    }
+
+    println!("Starting WebSocket + HTTP server on {}", addr);
 
     tokio::spawn(async move {
-        warp::serve(routes).run(([0, 0, 0, 0], port)).await;
+        // Use AssertUnwindSafe to catch panics from warp::run (e.g. "Address already in use")
+        // preventing the whole runtime from crashing with a stack trace.
+        // Note: We use .run() which panics on bind error.
+        let server = warp::serve(routes).run(addr);
+        if let Err(_) = std::panic::AssertUnwindSafe(server).catch_unwind().await {
+            eprintln!(
+                "{} Failed to start web server on {}: Address potentially already in use.",
+                "Error:".red(),
+                addr
+            );
+            std::process::exit(1);
+        }
     });
 
-    (broadcast_tx, cmd_rx)
+    Ok((broadcast_tx, cmd_rx))
 }
 
 // ============================================================================
