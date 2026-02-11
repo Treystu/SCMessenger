@@ -626,7 +626,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                              let _ = std::io::Write::flush(&mut std::io::stdout());
                              let _ = contacts_rx.update_last_seen(&peer_id.to_string());
 
-                             // Try to get public key and a human-friendly identity (display name) from existing contact, if available
+                             // Try to get public key and display name from existing contact, if available
                              let (public_key, identity) = contacts_rx.get(&peer_id.to_string())
                                  .ok()
                                  .flatten()
