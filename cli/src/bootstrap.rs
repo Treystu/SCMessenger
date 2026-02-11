@@ -25,7 +25,7 @@ use crate::ledger;
 /// All nodes relay for the mesh. Connection attempts fail over automatically.
 pub const DEFAULT_BOOTSTRAP_NODES: &[&str] = &[
     // Node 1: Primary GCP bootstrap (North America) - High availability
-    "/ip4/34.168.102.7/tcp/9001/p2p/12D3KooWGGdvGNJb3JwkNpmYuapgk7SAZ4DsBmQsU989yhvnTB8W",
+    "/ip4/34.168.102.7/tcp/9001/p2p/12D3KooWNfD7cdquDq26B7NmHmE49wcca6NgY7DJVksBdXYJs49h",
     // Node 2: Secondary relay (add when deployed)
     // "/ip4/<IP>/tcp/9001/p2p/<PEER_ID>",
 
@@ -49,12 +49,20 @@ pub fn default_bootstrap_nodes() -> Vec<String> {
     let build_time_nodes = option_env!("SCMESSENGER_BOOTSTRAP_NODES");
 
     if let Some(nodes_str) = build_time_nodes {
-        // Parse comma-separated multiaddrs
-        nodes_str
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect()
+        if nodes_str.trim().is_empty() {
+            // Empty string means use defaults (treat as if env var was unset)
+            DEFAULT_BOOTSTRAP_NODES
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
+        } else {
+            // Parse comma-separated multiaddrs
+            nodes_str
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        }
     } else {
         // Use hardcoded defaults
         DEFAULT_BOOTSTRAP_NODES
