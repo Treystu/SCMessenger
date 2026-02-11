@@ -8,9 +8,8 @@
 // - Phase 5: Reputation tracking works (peers scored on performance)
 // - Phase 6: Retry logic works (failed messages retry with exponential backoff)
 
-use core::crypto::Identity;
-use core::transport::{start_swarm_with_config, MultiPortConfig, SwarmEvent};
-use libp2p::{Multiaddr, PeerId};
+use libp2p::{identity::Keypair, Multiaddr, PeerId};
+use scmessenger_core::transport::{start_swarm_with_config, MultiPortConfig, SwarmEvent};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -27,31 +26,29 @@ async fn test_all_six_phases_integrated() {
     println!("========================================\n");
 
     // Create three nodes: Alice, Bob, and Charlie
-    // Charlie will be offline, so messages will need relay through Bob
-    let alice_identity = Identity::generate();
-    let bob_identity = Identity::generate();
-    let charlie_identity = Identity::generate();
+    let alice_keypair = Keypair::generate_ed25519();
+    let bob_keypair = Keypair::generate_ed25519();
 
-    let alice_peer_id = alice_identity.peer_id();
-    let bob_peer_id = bob_identity.peer_id();
-    let charlie_peer_id = charlie_identity.peer_id();
+    let alice_peer_id = alice_keypair.public().to_peer_id();
+    let bob_peer_id = bob_keypair.public().to_peer_id();
 
     println!("✓ Created identities:");
     println!("  Alice:   {}", alice_peer_id);
     println!("  Bob:     {}", bob_peer_id);
-    println!("  Charlie: {}", charlie_peer_id);
 
     // PHASE 2: Multi-port configuration
     let multiport_config = MultiPortConfig {
-        enable_common_ports: true,
+        enable_common_ports: false,
         enable_random_port: true,
-        bind_all_interfaces: false,
+        additional_ports: vec![],
+        enable_ipv4: true,
+        enable_ipv6: false,
     };
 
     // Start Alice with multi-port
     let (alice_event_tx, mut alice_event_rx) = mpsc::channel(100);
     let alice_handle = start_swarm_with_config(
-        alice_identity.keypair().clone(),
+        alice_keypair,
         None,
         alice_event_tx,
         Some(multiport_config.clone()),
@@ -77,12 +74,12 @@ async fn test_all_six_phases_integrated() {
         }
     }
 
-    let alice_addr = alice_addr.expect("No valid Alice address");
+    let _alice_addr = alice_addr.expect("No valid Alice address");
 
     // Start Bob with multi-port
     let (bob_event_tx, mut bob_event_rx) = mpsc::channel(100);
     let bob_handle = start_swarm_with_config(
-        bob_identity.keypair().clone(),
+        bob_keypair,
         None,
         bob_event_tx,
         Some(multiport_config.clone()),
@@ -125,6 +122,7 @@ async fn test_all_six_phases_integrated() {
     let mut alice_connected_to_bob = false;
     let mut bob_connected_to_alice = false;
 
+    let connect_deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     loop {
         tokio::select! {
             event = alice_event_rx.recv() => {
@@ -144,6 +142,9 @@ async fn test_all_six_phases_integrated() {
                     }
                     _ => {}
                 }
+            }
+            _ = tokio::time::sleep_until(connect_deadline) => {
+                panic!("Timed out waiting for connection");
             }
         }
 
@@ -168,23 +169,6 @@ async fn test_all_six_phases_integrated() {
         }
         Ok(Err(e)) => println!("⚠ Address reflection failed: {}", e),
         Err(_) => println!("⚠ Address reflection timeout"),
-    }
-
-    // Get external addresses (should have consensus)
-    match timeout(
-        Duration::from_secs(2),
-        alice_handle.get_external_addresses(),
-    )
-    .await
-    {
-        Ok(Ok(addrs)) => {
-            if !addrs.is_empty() {
-                println!("✓ Alice has consensus external addresses: {:?}", addrs);
-            } else {
-                println!("⚠ No consensus external addresses yet");
-            }
-        }
-        _ => println!("⚠ Failed to get external addresses"),
     }
 
     // PHASE 6 & 3: Test message delivery with retry and relay
@@ -237,12 +221,6 @@ async fn test_all_six_phases_integrated() {
     println!("  - Recency: weighted 10%");
     println!("  Bob's reputation increased due to successful delivery");
 
-    // Test relay capability by simulating a scenario where Charlie is not directly connected
-    // but Alice tries to send through Bob as a relay
-    println!("\n=== PHASE 3: Testing Relay Through Bob ===");
-    println!("(Note: In production, this would require Charlie to be running)");
-    println!("The relay protocol is active and will handle relay requests");
-
     // Verify all phases are active
     println!("\n========================================");
     println!("VERIFICATION SUMMARY");
@@ -272,26 +250,23 @@ async fn test_message_retry_on_failure() {
     println!("TESTING PHASE 6: RETRY LOGIC");
     println!("========================================\n");
 
-    let alice_identity = Identity::generate();
-    let bob_identity = Identity::generate();
-
-    let bob_peer_id = bob_identity.peer_id();
+    let alice_keypair = Keypair::generate_ed25519();
+    let bob_keypair = Keypair::generate_ed25519();
+    let bob_peer_id = bob_keypair.public().to_peer_id();
 
     let multiport_config = MultiPortConfig {
         enable_common_ports: false,
         enable_random_port: true,
-        bind_all_interfaces: false,
+        additional_ports: vec![],
+        enable_ipv4: true,
+        enable_ipv6: false,
     };
 
     let (alice_event_tx, _alice_event_rx) = mpsc::channel(100);
-    let alice_handle = start_swarm_with_config(
-        alice_identity.keypair().clone(),
-        None,
-        alice_event_tx,
-        Some(multiport_config),
-    )
-    .await
-    .expect("Failed to start Alice");
+    let alice_handle =
+        start_swarm_with_config(alice_keypair, None, alice_event_tx, Some(multiport_config))
+            .await
+            .expect("Failed to start Alice");
 
     println!("✓ Alice started");
     println!("✓ Bob is offline (not started)");
@@ -341,13 +316,13 @@ async fn test_relay_protocol() {
 
     // Create three nodes in a chain: Alice <-> Bob <-> Charlie
     // Alice will send to Charlie via Bob relay
-    let alice_identity = Identity::generate();
-    let bob_identity = Identity::generate();
-    let charlie_identity = Identity::generate();
+    let alice_keypair = Keypair::generate_ed25519();
+    let bob_keypair = Keypair::generate_ed25519();
+    let charlie_keypair = Keypair::generate_ed25519();
 
-    let alice_peer_id = alice_identity.peer_id();
-    let bob_peer_id = bob_identity.peer_id();
-    let charlie_peer_id = charlie_identity.peer_id();
+    let alice_peer_id = alice_keypair.public().to_peer_id();
+    let bob_peer_id = bob_keypair.public().to_peer_id();
+    let charlie_peer_id = charlie_keypair.public().to_peer_id();
 
     println!("✓ Three nodes created:");
     println!("  Alice:   {}", alice_peer_id);
@@ -357,13 +332,15 @@ async fn test_relay_protocol() {
     let multiport_config = MultiPortConfig {
         enable_common_ports: false,
         enable_random_port: true,
-        bind_all_interfaces: false,
+        additional_ports: vec![],
+        enable_ipv4: true,
+        enable_ipv6: false,
     };
 
     // Start all three nodes
-    let (alice_event_tx, mut alice_event_rx) = mpsc::channel(100);
+    let (alice_event_tx, mut _alice_event_rx) = mpsc::channel(100);
     let alice_handle = start_swarm_with_config(
-        alice_identity.keypair().clone(),
+        alice_keypair,
         None,
         alice_event_tx,
         Some(multiport_config.clone()),
@@ -373,7 +350,7 @@ async fn test_relay_protocol() {
 
     let (bob_event_tx, mut bob_event_rx) = mpsc::channel(100);
     let bob_handle = start_swarm_with_config(
-        bob_identity.keypair().clone(),
+        bob_keypair,
         None,
         bob_event_tx,
         Some(multiport_config.clone()),
@@ -383,7 +360,7 @@ async fn test_relay_protocol() {
 
     let (charlie_event_tx, mut charlie_event_rx) = mpsc::channel(100);
     let charlie_handle = start_swarm_with_config(
-        charlie_identity.keypair().clone(),
+        charlie_keypair,
         None,
         charlie_event_tx,
         Some(multiport_config),
@@ -427,17 +404,14 @@ async fn test_relay_protocol() {
     let charlie_addr = charlie_addr.unwrap();
 
     // Connect Alice to Bob
-    let bob_full_addr: Multiaddr = format!("{}/p2p/{}", bob_addr, bob_peer_id)
-        .parse()
-        .unwrap();
+    let bob_full_addr: Multiaddr = format!("{}/p2p/{}", bob_addr, bob_peer_id).parse().unwrap();
 
     alice_handle.dial(bob_full_addr).await.ok();
 
     // Connect Bob to Charlie
-    let charlie_full_addr: Multiaddr =
-        format!("{}/p2p/{}", charlie_addr, charlie_peer_id)
-            .parse()
-            .unwrap();
+    let charlie_full_addr: Multiaddr = format!("{}/p2p/{}", charlie_addr, charlie_peer_id)
+        .parse()
+        .unwrap();
 
     bob_handle.dial(charlie_full_addr).await.ok();
 

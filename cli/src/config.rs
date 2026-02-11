@@ -110,7 +110,8 @@ impl Config {
                 serde_json::from_str(&contents).context("Failed to parse config file")?;
 
             // Merge with default bootstrap nodes (in case new defaults were added)
-            config.bootstrap_nodes = crate::bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes);
+            config.bootstrap_nodes =
+                crate::bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes);
 
             Ok(config)
         } else {
@@ -242,7 +243,10 @@ mod tests {
         assert!(config.enable_mdns);
         assert!(config.enable_dht);
         // Should have embedded bootstrap nodes
-        assert!(!config.bootstrap_nodes.is_empty(), "Default config should include bootstrap nodes");
+        assert!(
+            !config.bootstrap_nodes.is_empty(),
+            "Default config should include bootstrap nodes"
+        );
     }
 
     #[test]

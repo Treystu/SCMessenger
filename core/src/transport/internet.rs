@@ -11,10 +11,10 @@
 // - Relay circuit establishment using libp2p's relay protocol
 
 use libp2p::{Multiaddr, PeerId};
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use parking_lot::RwLock;
 use thiserror::Error;
 use tracing::{debug, info};
 
@@ -275,9 +275,7 @@ impl InternetRelay {
             if conn_duration > 0 {
                 let avg_bandwidth = (stat.bytes_transferred * 8) / conn_duration;
                 if avg_bandwidth > self.config.relay_bandwidth_limit_bps {
-                    return Err(InternetTransportError::BandwidthExceeded(
-                        peer_key.clone(),
-                    ));
+                    return Err(InternetTransportError::BandwidthExceeded(peer_key.clone()));
                 }
             }
         }
@@ -298,7 +296,10 @@ impl InternetRelay {
     }
 
     /// Disconnect from a relay
-    pub async fn disconnect_relay(&self, relay_peer_id: PeerId) -> Result<(), InternetTransportError> {
+    pub async fn disconnect_relay(
+        &self,
+        relay_peer_id: PeerId,
+    ) -> Result<(), InternetTransportError> {
         let peer_key = relay_peer_id.to_string();
 
         self.active_relays.write().remove(&peer_key);
@@ -350,27 +351,17 @@ impl InternetRelay {
 
     /// Get relay information for a peer
     pub fn get_peer_relay_info(&self, peer_id: &PeerId) -> Option<PeerRelayInfo> {
-        self.active_relays
-            .read()
-            .get(&peer_id.to_string())
-            .cloned()
+        self.active_relays.read().get(&peer_id.to_string()).cloned()
     }
 
     /// Get all registered relay peers
     pub fn get_relay_peers(&self) -> Vec<PeerRelayInfo> {
-        self.active_relays
-            .read()
-            .values()
-            .cloned()
-            .collect()
+        self.active_relays.read().values().cloned().collect()
     }
 
     /// Get relay statistics for a peer
     pub fn get_relay_stats(&self, peer_id: &PeerId) -> Option<RelayStats> {
-        self.relay_stats
-            .read()
-            .get(&peer_id.to_string())
-            .cloned()
+        self.relay_stats.read().get(&peer_id.to_string()).cloned()
     }
 
     /// Get all relay statistics

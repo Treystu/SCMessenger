@@ -105,13 +105,11 @@ impl AddressObserver {
         let mut address_counts: HashMap<SocketAddr, u32> = HashMap::new();
 
         for obs in self.observations.values() {
-            *address_counts.entry(obs.address).or_insert(0) +=
-                obs.confirmation_count;
+            *address_counts.entry(obs.address).or_insert(0) += obs.confirmation_count;
         }
 
         // Sort by count (most observed first)
-        let mut addresses: Vec<(SocketAddr, u32)> =
-            address_counts.into_iter().collect();
+        let mut addresses: Vec<(SocketAddr, u32)> = address_counts.into_iter().collect();
         addresses.sort_by(|a, b| b.1.cmp(&a.1));
 
         // Cache the sorted addresses
@@ -262,9 +260,6 @@ mod tests {
     fn test_extract_socket_addr() {
         let addr: Multiaddr = "/ip4/1.2.3.4/tcp/1234".parse().unwrap();
         let socket_addr = ConnectionTracker::extract_socket_addr(&addr);
-        assert_eq!(
-            socket_addr,
-            Some("1.2.3.4:1234".parse().unwrap())
-        );
+        assert_eq!(socket_addr, Some("1.2.3.4:1234".parse().unwrap()));
     }
 }

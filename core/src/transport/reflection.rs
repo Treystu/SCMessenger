@@ -211,8 +211,7 @@ pub mod codec {
 
     /// Decode response from bytes
     pub fn decode_response(bytes: &[u8]) -> Result<AddressReflectionResponse> {
-        bincode::deserialize(bytes)
-            .map_err(|e| anyhow::anyhow!("Failed to decode response: {}", e))
+        bincode::deserialize(bytes).map_err(|e| anyhow::anyhow!("Failed to decode response: {}", e))
     }
 }
 
@@ -330,10 +329,8 @@ mod tests {
 
     #[test]
     fn test_codec_response_roundtrip() {
-        let response = AddressReflectionResponse::new(
-            [6u8; 16],
-            "198.51.100.42:7777".parse().unwrap(),
-        );
+        let response =
+            AddressReflectionResponse::new([6u8; 16], "198.51.100.42:7777".parse().unwrap());
 
         let encoded = codec::encode_response(&response).unwrap();
         let decoded = codec::decode_response(&encoded).unwrap();

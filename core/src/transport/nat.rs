@@ -10,15 +10,15 @@
 // - STUN server support for external address discovery
 // - Configurable timeouts and retry logic
 
+use super::swarm::SwarmHandle;
 use libp2p::PeerId;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use parking_lot::RwLock;
 use thiserror::Error;
 use tracing::{debug, info};
-use super::swarm::SwarmHandle;
 
 // ============================================================================
 // ERROR TYPES
@@ -93,7 +93,10 @@ impl PeerAddressDiscovery {
     }
 
     /// Detect NAT type by asking multiple mesh peers for observed address
-    pub async fn detect_nat_type(&self, swarm_handle: &SwarmHandle) -> Result<NatType, NatTraversalError> {
+    pub async fn detect_nat_type(
+        &self,
+        swarm_handle: &SwarmHandle,
+    ) -> Result<NatType, NatTraversalError> {
         if self.peer_reflectors.is_empty() {
             return Err(NatTraversalError::ProbesFailed(
                 "No peer reflectors configured".to_string(),
@@ -104,7 +107,12 @@ impl PeerAddressDiscovery {
         let mut detected_ports = Vec::new();
 
         // Query multiple mesh peers using libp2p request-response protocol
-        for (i, peer_id_str) in self.peer_reflectors.iter().enumerate().take(self.min_responses as usize + 1) {
+        for (i, peer_id_str) in self
+            .peer_reflectors
+            .iter()
+            .enumerate()
+            .take(self.min_responses as usize + 1)
+        {
             debug!("Querying peer reflector {} ({})", i + 1, peer_id_str);
 
             // Parse peer ID
@@ -129,7 +137,10 @@ impl PeerAddressDiscovery {
                     }
                 }
                 Err(e) => {
-                    debug!("Address reflection request to {} failed: {}", peer_id_str, e);
+                    debug!(
+                        "Address reflection request to {} failed: {}",
+                        peer_id_str, e
+                    );
                     // Continue with other peers
                 }
             }
@@ -142,7 +153,10 @@ impl PeerAddressDiscovery {
         // Determine NAT type based on address/port consistency
         let nat_type = if detected_addresses.len() == 1 && detected_ports.len() == 1 {
             NatType::Open
-        } else if detected_addresses.iter().all(|a| a == &detected_addresses[0]) {
+        } else if detected_addresses
+            .iter()
+            .all(|a| a == &detected_addresses[0])
+        {
             // All addresses same, check ports
             if detected_ports.iter().all(|p| p == &detected_ports[0]) {
                 NatType::FullCone
@@ -160,29 +174,49 @@ impl PeerAddressDiscovery {
     }
 
     /// Get external address from mesh peers (peer-assisted discovery)
-    pub async fn get_external_address(&self, swarm_handle: &SwarmHandle) -> Result<SocketAddr, NatTraversalError> {
+    pub async fn get_external_address(
+        &self,
+        swarm_handle: &SwarmHandle,
+    ) -> Result<SocketAddr, NatTraversalError> {
         if self.peer_reflectors.is_empty() {
-            return Err(NatTraversalError::StunError("No peer reflectors configured".to_string()));
+            return Err(NatTraversalError::StunError(
+                "No peer reflectors configured".to_string(),
+            ));
         }
 
         // Query mesh peer using libp2p request-response protocol
         let peer_id_str = &self.peer_reflectors[0];
 
-        debug!("Querying peer reflector {} for external address", peer_id_str);
+        debug!(
+            "Querying peer reflector {} for external address",
+            peer_id_str
+        );
 
         // Parse peer ID
-        let peer_id = peer_id_str.parse::<PeerId>()
+        let peer_id = peer_id_str
+            .parse::<PeerId>()
             .map_err(|e| NatTraversalError::StunError(format!("Invalid peer ID: {}", e)))?;
 
         // Make actual libp2p request-response call
-        let observed_addr_str = swarm_handle.request_address_reflection(peer_id).await
-            .map_err(|e| NatTraversalError::StunError(format!("Address reflection failed: {}", e)))?;
+        let observed_addr_str = swarm_handle
+            .request_address_reflection(peer_id)
+            .await
+            .map_err(|e| {
+                NatTraversalError::StunError(format!("Address reflection failed: {}", e))
+            })?;
 
         // Parse the observed address
-        let addr: SocketAddr = observed_addr_str.parse()
-            .map_err(|e: std::net::AddrParseError| NatTraversalError::StunError(format!("Failed to parse address: {}", e)))?;
+        let addr: SocketAddr =
+            observed_addr_str
+                .parse()
+                .map_err(|e: std::net::AddrParseError| {
+                    NatTraversalError::StunError(format!("Failed to parse address: {}", e))
+                })?;
 
-        info!("Received address reflection from peer {}: {}", peer_id_str, addr);
+        info!(
+            "Received address reflection from peer {}: {}",
+            peer_id_str, addr
+        );
         debug!("External address from peer: {}", addr);
         Ok(addr)
     }
@@ -318,10 +352,13 @@ impl NatTraversal {
     }
 
     /// Detect NAT type and external address using peer-assisted discovery
-    pub async fn probe_nat(&self, swarm_handle: &SwarmHandle) -> Result<NatType, NatTraversalError> {
+    pub async fn probe_nat(
+        &self,
+        swarm_handle: &SwarmHandle,
+    ) -> Result<NatType, NatTraversalError> {
         let discovery = PeerAddressDiscovery::with_peers(
             self.config.peer_reflectors.clone(),
-            self.config.attempt_timeout
+            self.config.attempt_timeout,
         );
 
         let nat_type = discovery.detect_nat_type(swarm_handle).await?;
@@ -330,7 +367,10 @@ impl NatTraversal {
         let external_addr = discovery.get_external_address(swarm_handle).await?;
         *self.external_address.write() = Some(external_addr);
 
-        info!("Peer-assisted NAT discovery complete: {:?} at {}", nat_type, external_addr);
+        info!(
+            "Peer-assisted NAT discovery complete: {:?} at {}",
+            nat_type, external_addr
+        );
         Ok(nat_type)
     }
 
@@ -757,14 +797,8 @@ mod tests {
                 status: HolePunchStatus::Failed,
             };
 
-            let key = format!(
-                "{}-{}",
-                attempt.local_peer_id, attempt.remote_peer_id
-            );
-            traversal
-                .hole_punch_attempts
-                .write()
-                .insert(key, attempt);
+            let key = format!("{}-{}", attempt.local_peer_id, attempt.remote_peer_id);
+            traversal.hole_punch_attempts.write().insert(key, attempt);
         }
 
         assert_eq!(traversal.hole_punch_attempts.read().len(), 1);

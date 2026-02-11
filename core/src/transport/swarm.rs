@@ -1,13 +1,21 @@
-// libp2p swarm setup — the actual running network node
+// libp2p swarm setup — Aggressive Discovery Mode
+//
+// Philosophy: "A node is a node." All nodes are mandatory relays.
+// Connectivity takes priority over strict identity or topic matching.
 //
 // This creates and manages the libp2p Swarm with:
-// - TCP + QUIC transports
+// - TCP transport (QUIC can be added later)
 // - Noise encryption (transport-level, separate from message encryption)
 // - Yamux multiplexing
+// - Promiscuous peer acceptance (any PeerID is valid)
+// - Dynamic Gossipsub topic negotiation
+// - Automatic ledger exchange on connect
+// - Mandatory relay for all connections
 // - All behaviours from behaviour.rs
 
 use super::behaviour::{
-    IronCoreBehaviour, MessageRequest, MessageResponse, RelayRequest, RelayResponse,
+    IronCoreBehaviour, LedgerExchangeRequest, LedgerExchangeResponse, MessageRequest,
+    MessageResponse, RelayRequest, RelayResponse, SharedPeerEntry,
 };
 use super::mesh_routing::{BootstrapCapability, MultiPathDelivery};
 use super::multiport::{self, BindResult, MultiPortConfig};
@@ -15,7 +23,7 @@ use super::observation::{AddressObserver, ConnectionTracker};
 use super::reflection::{AddressReflectionRequest, AddressReflectionService};
 use anyhow::Result;
 use libp2p::{identity::Keypair, kad, swarm::SwarmEvent, Multiaddr, PeerId};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
@@ -62,6 +70,15 @@ pub enum SwarmCommand {
     },
     /// Add a known peer address to Kademlia
     AddKadAddress { peer_id: PeerId, addr: Multiaddr },
+    /// Subscribe to a Gossipsub topic
+    SubscribeTopic { topic: String },
+    /// Get currently subscribed topics
+    GetTopics { reply: mpsc::Sender<Vec<String>> },
+    /// Share our ledger with a specific peer
+    ShareLedger {
+        peer_id: PeerId,
+        entries: Vec<SharedPeerEntry>,
+    },
     /// Shutdown the swarm
     Shutdown,
 }
@@ -85,6 +102,20 @@ pub enum SwarmEvent2 {
     },
     /// We started listening on an address
     ListeningOn(Multiaddr),
+    /// A peer's identity was confirmed (after Identify protocol)
+    PeerIdentified {
+        peer_id: PeerId,
+        agent_version: String,
+        listen_addrs: Vec<Multiaddr>,
+        protocols: Vec<String>,
+    },
+    /// A new Gossipsub topic was discovered from a peer
+    TopicDiscovered { peer_id: PeerId, topic: String },
+    /// Received peer list from a connected peer (ledger exchange)
+    LedgerReceived {
+        from_peer: PeerId,
+        entries: Vec<SharedPeerEntry>,
+    },
 }
 
 /// Handle to communicate with the running swarm task
@@ -203,6 +234,36 @@ impl SwarmHandle {
             .map_err(|_| anyhow::anyhow!("Swarm task not running"))
     }
 
+    /// Subscribe to a Gossipsub topic
+    pub async fn subscribe_topic(&self, topic: String) -> Result<()> {
+        self.command_tx
+            .send(SwarmCommand::SubscribeTopic { topic })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))
+    }
+
+    /// Get currently subscribed topics
+    pub async fn get_topics(&self) -> Result<Vec<String>> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(SwarmCommand::GetTopics { reply: reply_tx })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+
+        reply_rx
+            .recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("No reply from swarm"))
+    }
+
+    /// Share our ledger with a specific peer
+    pub async fn share_ledger(&self, peer_id: PeerId, entries: Vec<SharedPeerEntry>) -> Result<()> {
+        self.command_tx
+            .send(SwarmCommand::ShareLedger { peer_id, entries })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))
+    }
+
     /// Shut down the swarm
     pub async fn shutdown(&self) -> Result<()> {
         self.command_tx
@@ -236,6 +297,8 @@ pub async fn start_swarm_with_config(
 ) -> Result<SwarmHandle> {
     #[cfg(not(target_arch = "wasm32"))]
     {
+        let local_peer_id = keypair.public().to_peer_id();
+
         let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
             .with_tcp(
@@ -247,7 +310,8 @@ pub async fn start_swarm_with_config(
                 IronCoreBehaviour::new(key).expect("Failed to create network behaviour")
             })?
             .with_swarm_config(|cfg| {
-                cfg.with_idle_connection_timeout(std::time::Duration::from_secs(300))
+                cfg.with_idle_connection_timeout(std::time::Duration::from_secs(600))
+                // 10 min idle (was 5 min)
             })
             .build();
 
@@ -286,11 +350,29 @@ pub async fn start_swarm_with_config(
             swarm.listen_on(addr)?;
         }
 
-        // Set Kademlia to server mode (so we can be found)
+        // Kademlia already set to Server mode in behaviour constructor,
+        // but set it again here for belt-and-suspenders:
         swarm
             .behaviour_mut()
             .kademlia
             .set_mode(Some(kad::Mode::Server));
+
+        // Subscribe to default topics immediately (lobby + mesh)
+        // The lobby topic is the wildcard discovery channel
+        let lobby_topic = libp2p::gossipsub::IdentTopic::new("sc-lobby");
+        let mesh_topic = libp2p::gossipsub::IdentTopic::new("sc-mesh");
+
+        if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&lobby_topic) {
+            tracing::warn!("Failed to subscribe to lobby topic: {}", e);
+        } else {
+            tracing::info!("📡 Subscribed to lobby topic: sc-lobby");
+        }
+
+        if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&mesh_topic) {
+            tracing::warn!("Failed to subscribe to mesh topic: {}", e);
+        } else {
+            tracing::info!("📡 Subscribed to mesh topic: sc-mesh");
+        }
 
         let (command_tx, mut command_rx) = mpsc::channel::<SwarmCommand>(256);
         let handle = SwarmHandle {
@@ -326,6 +408,14 @@ pub async fn start_swarm_with_config(
             libp2p::request_response::OutboundRequestId,
             String,
         > = HashMap::new();
+
+        // Track subscribed topics for dynamic negotiation
+        let mut subscribed_topics: HashSet<String> = HashSet::new();
+        subscribed_topics.insert("sc-lobby".to_string());
+        subscribed_topics.insert("sc-mesh".to_string());
+
+        // Track peers we've already exchanged ledgers with (avoid spamming)
+        let mut ledger_exchanged_peers: HashSet<PeerId> = HashSet::new();
 
         // Spawn the swarm event loop
         tokio::spawn(async move {
@@ -455,9 +545,6 @@ pub async fn start_swarm_with_config(
                                 match message {
                                     request_response::Message::Request { request, channel, .. } => {
                                         // Peer is requesting address reflection
-                                        // We observe their address from the connection endpoint
-
-                                        // Get the remote address from our connection tracker
                                         let observed_addr = connection_tracker
                                             .get_connection(&peer)
                                             .and_then(|conn| ConnectionTracker::extract_socket_addr(&conn.remote_addr))
@@ -465,32 +552,24 @@ pub async fn start_swarm_with_config(
 
                                         tracing::debug!("Observed address for {}: {}", peer, observed_addr);
 
-                                        // Create response using the service
                                         let response = reflection_service.handle_request(request, observed_addr);
-
-                                        // Send response back
                                         let _ = swarm.behaviour_mut().address_reflection.send_response(channel, response);
                                     }
                                     request_response::Message::Response { request_id, response } => {
-                                        // We received a reflection response from a peer
                                         tracing::info!("Address reflection from {}: {}", peer, response.observed_address);
 
-                                        // Parse and record the observation
                                         if let Ok(observed_addr) = response.observed_address.parse::<SocketAddr>() {
                                             address_observer.record_observation(peer, observed_addr);
 
-                                            // Log consensus
                                             if let Some(primary) = address_observer.primary_external_address() {
                                                 tracing::info!("Consensus external address: {}", primary);
                                             }
                                         }
 
-                                        // Reply to pending request
                                         if let Some(reply_tx) = pending_reflections.remove(&request_id) {
                                             let _ = reply_tx.send(Ok(response.observed_address.clone())).await;
                                         }
 
-                                        // Also emit event for application layer
                                         let _ = event_tx.send(SwarmEvent2::AddressReflected {
                                             peer_id: peer,
                                             observed_address: response.observed_address,
@@ -499,19 +578,18 @@ pub async fn start_swarm_with_config(
                                 }
                             }
 
-                            // PHASE 3: Relay Protocol Handler
+                            // PHASE 3: Relay Protocol Handler — MANDATORY RELAY
+                            // All nodes MUST relay. We never refuse a relay request
+                            // (except for invalid destination).
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Relay(
                                 request_response::Event::Message { peer, message, .. }
                             )) => {
                                 match message {
                                     request_response::Message::Request { request, channel, .. } => {
-                                        // PHASE 3: Peer is asking us to relay a message
-                                        tracing::info!("Relay request from {} for message {}", peer, request.message_id);
+                                        tracing::info!("🔄 Relay request from {} for message {}", peer, request.message_id);
 
-                                        // Parse destination peer
                                         match PeerId::from_bytes(&request.destination_peer) {
                                             Ok(destination) => {
-                                                // Check if we're connected to the destination
                                                 if swarm.is_connected(&destination) {
                                                     // Forward the message
                                                     let _forward_id = swarm.behaviour_mut().messaging.send_request(
@@ -519,7 +597,6 @@ pub async fn start_swarm_with_config(
                                                         MessageRequest { envelope_data: request.envelope_data },
                                                     );
 
-                                                    // Send acceptance response
                                                     let _ = swarm.behaviour_mut().relay.send_response(
                                                         channel,
                                                         RelayResponse {
@@ -532,6 +609,7 @@ pub async fn start_swarm_with_config(
                                                     tracing::info!("✓ Relaying message {} to {}", request.message_id, destination);
                                                 } else {
                                                     // Not connected to destination
+                                                    tracing::warn!("⚠ Destination {} not connected, relay cannot proceed", destination);
                                                     let _ = swarm.behaviour_mut().relay.send_response(
                                                         channel,
                                                         RelayResponse {
@@ -556,21 +634,17 @@ pub async fn start_swarm_with_config(
                                         }
                                     }
                                     request_response::Message::Response { request_id, response } => {
-                                        // Response to our relay request
                                         if let Some(message_id) = pending_relay_requests.remove(&request_id) {
                                             if let Some(pending) = pending_messages.remove(&message_id) {
                                                 if response.accepted {
-                                                    // PHASE 5: Track successful relay delivery
                                                     let latency_ms = pending.attempt_start.elapsed().unwrap_or_default().as_millis() as u64;
                                                     multi_path_delivery.record_success(&message_id, vec![peer, pending.target_peer], latency_ms);
                                                     tracing::info!("✓ Message relayed successfully via {} to {} ({}ms)", peer, pending.target_peer, latency_ms);
                                                     let _ = pending.reply_tx.send(Ok(())).await;
                                                 } else {
-                                                    // Relay failed, try next path
                                                     tracing::warn!("✗ Relay via {} failed: {:?}", peer, response.error);
                                                     multi_path_delivery.record_failure(&message_id, vec![peer, pending.target_peer]);
 
-                                                    // Try next path
                                                     let paths = multi_path_delivery.get_best_paths(&pending.target_peer, 3);
                                                     if pending.current_path_index + 1 < paths.len() {
                                                         pending_messages.insert(message_id, pending);
@@ -584,6 +658,136 @@ pub async fn start_swarm_with_config(
                                 }
                             }
 
+                            // LEDGER EXCHANGE — Automatic peer list sharing
+                            // When a peer sends us their known peers, we merge them into our
+                            // knowledge and respond with our own list. This creates a viral
+                            // discovery mechanism where connecting to ONE peer bootstraps
+                            // knowledge of the ENTIRE mesh.
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::LedgerExchange(
+                                request_response::Event::Message { peer, message, .. }
+                            )) => {
+                                match message {
+                                    request_response::Message::Request { request, channel, .. } => {
+                                        tracing::info!(
+                                            "📒 Ledger exchange from {}: received {} peer entries (v{})",
+                                            peer,
+                                            request.peers.len(),
+                                            request.version,
+                                        );
+
+                                        // Forward received entries to the application layer
+                                        // The app will merge them into its persistent ledger
+                                        let _ = event_tx.send(SwarmEvent2::LedgerReceived {
+                                            from_peer: peer,
+                                            entries: request.peers.clone(),
+                                        }).await;
+
+                                        // Also add any addresses with known PeerIDs to Kademlia RIGHT NOW
+                                        // for immediate discoverability
+                                        let mut new_count = 0u32;
+                                        for entry in &request.peers {
+                                            if let Some(ref pid_str) = entry.last_peer_id {
+                                                if let Ok(pid) = pid_str.parse::<PeerId>() {
+                                                    if let Ok(addr) = entry.multiaddr.parse::<Multiaddr>() {
+                                                        swarm.behaviour_mut().kademlia.add_address(&pid, addr);
+                                                        new_count += 1;
+                                                    }
+                                                }
+                                            }
+
+                                            // Auto-subscribe to any topics from the shared entries
+                                            for topic_str in &entry.known_topics {
+                                                if !subscribed_topics.contains(topic_str) {
+                                                    let ident_topic = libp2p::gossipsub::IdentTopic::new(topic_str.clone());
+                                                    if swarm.behaviour_mut().gossipsub.subscribe(&ident_topic).is_ok() {
+                                                        tracing::info!("📡 Auto-subscribed to topic from ledger: {}", topic_str);
+                                                        subscribed_topics.insert(topic_str.clone());
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Respond with an empty list — the application layer
+                                        // will send our full ledger via ShareLedger command
+                                        // after processing the received entries.
+                                        let _ = swarm.behaviour_mut().ledger_exchange.send_response(
+                                            channel,
+                                            LedgerExchangeResponse {
+                                                peers: Vec::new(), // App layer fills this via ShareLedger
+                                                new_peers_learned: new_count,
+                                                version: 1,
+                                            },
+                                        );
+
+                                        ledger_exchanged_peers.insert(peer);
+                                    }
+                                    request_response::Message::Response { response, .. } => {
+                                        tracing::info!(
+                                            "📒 Ledger exchange response from {}: they learned {} new peers, sent {} back",
+                                            peer,
+                                            response.new_peers_learned,
+                                            response.peers.len(),
+                                        );
+
+                                        // If they sent peers back in the response, merge those too
+                                        if !response.peers.is_empty() {
+                                            let _ = event_tx.send(SwarmEvent2::LedgerReceived {
+                                                from_peer: peer,
+                                                entries: response.peers.clone(),
+                                            }).await;
+
+                                            // Add to Kademlia immediately
+                                            for entry in &response.peers {
+                                                if let Some(ref pid_str) = entry.last_peer_id {
+                                                    if let Ok(pid) = pid_str.parse::<PeerId>() {
+                                                        if let Ok(addr) = entry.multiaddr.parse::<Multiaddr>() {
+                                                            swarm.behaviour_mut().kademlia.add_address(&pid, addr);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Gossipsub events — Dynamic Topic Negotiation
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Gossipsub(
+                                gossipsub::Event::Subscribed { peer_id, topic }
+                            )) => {
+                                let topic_str = topic.to_string();
+                                tracing::info!("📡 Peer {} subscribed to topic: {}", peer_id, topic_str);
+
+                                // AUTO-NEGOTIATE: If a peer subscribes to a topic we don't know,
+                                // subscribe to it ourselves. "A node is a node."
+                                if !subscribed_topics.contains(&topic_str) {
+                                    tracing::info!("🔄 Auto-subscribing to discovered topic: {}", topic_str);
+                                    let ident_topic = libp2p::gossipsub::IdentTopic::new(topic_str.clone());
+                                    if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&ident_topic) {
+                                        tracing::warn!("Failed to auto-subscribe to {}: {}", topic_str, e);
+                                    } else {
+                                        subscribed_topics.insert(topic_str.clone());
+                                    }
+                                }
+
+                                let _ = event_tx.send(SwarmEvent2::TopicDiscovered {
+                                    peer_id,
+                                    topic: topic_str,
+                                }).await;
+                            }
+
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Gossipsub(
+                                gossipsub::Event::Message { propagation_source, message, .. }
+                            )) => {
+                                // Accept all gossipsub messages — log and forward
+                                tracing::debug!(
+                                    "📨 Gossipsub message from {} on topic {:?} ({} bytes)",
+                                    propagation_source,
+                                    message.topic,
+                                    message.data.len()
+                                );
+                            }
+
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Mdns(
                                 mdns::Event::Discovered(peers)
                             )) => {
@@ -591,9 +795,7 @@ pub async fn start_swarm_with_config(
                                     tracing::info!("mDNS discovered peer: {} at {}", peer_id, addr);
                                     swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
 
-                                    // PHASE 4: Add to bootstrap capability
                                     bootstrap_capability.add_peer(peer_id);
-
                                     let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
                                 }
                             }
@@ -607,13 +809,39 @@ pub async fn start_swarm_with_config(
                                 }
                             }
 
+                            // Identify — PROMISCUOUS peer acceptance
+                            // Accept ANY peer identity, regardless of expected PeerID.
+                            // Log the identity and add all addresses to Kademlia.
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Identify(
                                 identify::Event::Received { peer_id, info, .. }
                             )) => {
-                                tracing::debug!("Identified peer {} with {} addresses", peer_id, info.listen_addrs.len());
-                                for addr in info.listen_addrs {
-                                    swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+                                tracing::info!(
+                                    "🆔 Identified peer {} — agent: {}, protocols: {}, addrs: {}",
+                                    peer_id,
+                                    info.agent_version,
+                                    info.protocols.len(),
+                                    info.listen_addrs.len()
+                                );
+
+                                // Add ALL reported addresses to Kademlia — no filtering
+                                for addr in &info.listen_addrs {
+                                    swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
                                 }
+
+                                // Check if peer advertises relay capability
+                                let is_relay = info.agent_version.contains("relay");
+                                if is_relay {
+                                    tracing::info!("🔄 Peer {} is a relay node", peer_id);
+                                    bootstrap_capability.add_peer(peer_id);
+                                }
+
+                                // Emit event for application layer
+                                let _ = event_tx.send(SwarmEvent2::PeerIdentified {
+                                    peer_id,
+                                    agent_version: info.agent_version.clone(),
+                                    listen_addrs: info.listen_addrs.clone(),
+                                    protocols: info.protocols.iter().map(|p| p.to_string()).collect(),
+                                }).await;
                             }
 
                             SwarmEvent::NewListenAddr { address, .. } => {
@@ -622,7 +850,11 @@ pub async fn start_swarm_with_config(
                             }
 
                             SwarmEvent::ConnectionEstablished { peer_id, endpoint, connection_id, .. } => {
-                                tracing::info!("Connected to {} via {}", peer_id, endpoint.get_remote_address());
+                                tracing::info!(
+                                    "🔗 Connected to {} via {} (promiscuous mode — any PeerID accepted)",
+                                    peer_id,
+                                    endpoint.get_remote_address()
+                                );
 
                                 // Track this connection for address observation
                                 connection_tracker.add_connection(
@@ -635,16 +867,43 @@ pub async fn start_swarm_with_config(
                                     connection_id.to_string(),
                                 );
 
-                                // PHASE 4: Add to bootstrap capability (potential relay node)
+                                // Add to bootstrap capability (potential relay node)
+                                // ALL peers are mandatory relays
                                 bootstrap_capability.add_peer(peer_id);
 
                                 let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
+
+                                // AUTO LEDGER EXCHANGE: On every new connection, share our
+                                // known peers. The application layer will receive
+                                // SwarmEvent2::PeerDiscovered and trigger ShareLedger.
+                                // This is handled in main.rs to keep swarm.rs agnostic
+                                // about the persistent ledger format.
                             }
 
                             SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                                tracing::info!("Disconnected from {}", peer_id);
+                                tracing::info!("❌ Disconnected from {}", peer_id);
                                 connection_tracker.remove_connection(&peer_id);
+                                // Allow re-exchange if they reconnect
+                                ledger_exchanged_peers.remove(&peer_id);
                                 let _ = event_tx.send(SwarmEvent2::PeerDisconnected(peer_id)).await;
+                            }
+
+                            // Handle outgoing connection errors gracefully — don't panic
+                            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                                if let Some(pid) = peer_id {
+                                    tracing::warn!("⚠ Outgoing connection error to {}: {}", pid, error);
+                                } else {
+                                    tracing::warn!("⚠ Outgoing connection error: {}", error);
+                                }
+                            }
+
+                            SwarmEvent::IncomingConnectionError { local_addr, send_back_addr, error, .. } => {
+                                tracing::warn!(
+                                    "⚠ Incoming connection error from {} -> {}: {}",
+                                    send_back_addr,
+                                    local_addr,
+                                    error
+                                );
                             }
 
                             _ => {}
@@ -709,7 +968,6 @@ pub async fn start_swarm_with_config(
                             }
 
                             SwarmCommand::RequestAddressReflection { peer_id, reply } => {
-                                // Generate a unique request ID
                                 let mut request_id_bytes = [0u8; 16];
                                 use rand::RngCore;
                                 rand::thread_rng().fill_bytes(&mut request_id_bytes);
@@ -724,7 +982,6 @@ pub async fn start_swarm_with_config(
                                     request,
                                 );
 
-                                // Store reply channel for when response arrives
                                 pending_reflections.insert(request_id, reply);
                             }
 
@@ -734,6 +991,7 @@ pub async fn start_swarm_with_config(
                             }
 
                             SwarmCommand::Dial { addr, reply } => {
+                                tracing::info!("📞 Dialing {} (promiscuous — accepting any PeerID)", addr);
                                 match swarm.dial(addr) {
                                     Ok(_) => { let _ = reply.send(Ok(())).await; }
                                     Err(e) => { let _ = reply.send(Err(e.to_string())).await; }
@@ -760,6 +1018,49 @@ pub async fn start_swarm_with_config(
                                 swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
                             }
 
+                            SwarmCommand::SubscribeTopic { topic } => {
+                                if !subscribed_topics.contains(&topic) {
+                                    let ident_topic = libp2p::gossipsub::IdentTopic::new(topic.clone());
+                                    if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&ident_topic) {
+                                        tracing::warn!("Failed to subscribe to topic {}: {}", topic, e);
+                                    } else {
+                                        tracing::info!("📡 Subscribed to topic: {}", topic);
+                                        subscribed_topics.insert(topic);
+                                    }
+                                }
+                            }
+
+                            SwarmCommand::GetTopics { reply } => {
+                                let topics: Vec<String> = subscribed_topics.iter().cloned().collect();
+                                let _ = reply.send(topics).await;
+                            }
+
+                            SwarmCommand::ShareLedger { peer_id, entries } => {
+                                // Send our known peer list to the specified peer
+                                if !ledger_exchanged_peers.contains(&peer_id) {
+                                    tracing::info!(
+                                        "📒 Sharing ledger with {} ({} entries)",
+                                        peer_id,
+                                        entries.len()
+                                    );
+
+                                    let request = LedgerExchangeRequest {
+                                        peers: entries,
+                                        sender_peer_id: local_peer_id.to_string(),
+                                        version: 1,
+                                    };
+
+                                    let _request_id = swarm.behaviour_mut().ledger_exchange.send_request(
+                                        &peer_id,
+                                        request,
+                                    );
+
+                                    ledger_exchanged_peers.insert(peer_id);
+                                } else {
+                                    tracing::debug!("📒 Already exchanged ledger with {}, skipping", peer_id);
+                                }
+                            }
+
                             SwarmCommand::Shutdown => {
                                 tracing::info!("Swarm shutting down");
                                 break;
@@ -783,4 +1084,4 @@ use futures::StreamExt;
 use libp2p::identify;
 #[cfg(not(target_arch = "wasm32"))]
 use libp2p::mdns;
-use libp2p::request_response;
+use libp2p::{gossipsub, request_response};

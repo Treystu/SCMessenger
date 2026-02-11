@@ -7,6 +7,7 @@ mod bootstrap;
 mod config;
 mod contacts;
 mod history;
+mod ledger;
 mod server;
 
 use anyhow::{Context, Result};
@@ -470,6 +471,18 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let history_db = data_dir.join("history");
     let history = Arc::new(history::MessageHistory::open(history_db)?);
 
+    // ── Connection Ledger — persistent peer memory ──────────────────────
+    let mut connection_ledger = ledger::ConnectionLedger::load(&data_dir)?;
+
+    // Seed ledger with bootstrap nodes (both from defaults and config)
+    let all_bootstrap = bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes.clone());
+    for node in &all_bootstrap {
+        connection_ledger.add_bootstrap(node);
+    }
+
+    // Subscribe to any topics discovered in the ledger from past sessions
+    let known_topics = connection_ledger.all_known_topics();
+
     println!("{}", "SCMessenger — Starting...".bold());
     println!();
     println!(
@@ -478,6 +491,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     );
     println!("Web Interface: ws://localhost:{}/ws", ws_port);
     println!("P2P Listener:  /ip4/0.0.0.0/tcp/{}", p2p_port);
+    println!("📒 {}", connection_ledger.summary());
     println!();
 
     // Load or generate persistent network keypair
@@ -488,7 +502,9 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
             .context("Failed to decode network keypair")?
     } else {
         let keypair = libp2p::identity::Keypair::generate_ed25519();
-        let bytes = keypair.to_protobuf_encoding().context("Failed to encode keypair")?;
+        let bytes = keypair
+            .to_protobuf_encoding()
+            .context("Failed to encode keypair")?;
         std::fs::write(&keypair_path, bytes).context("Failed to save network keypair")?;
         keypair
     };
@@ -503,6 +519,17 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let swarm_handle = transport::start_swarm(network_keypair, Some(listen_addr), event_tx).await?;
 
     println!("{} Network started", "✓".green());
+
+    // Subscribe to any topics from the ledger
+    for topic in known_topics {
+        let _ = swarm_handle.subscribe_topic(topic).await;
+    }
+
+    // Subscribe to default topics
+    for topic in bootstrap::default_topics() {
+        let _ = swarm_handle.subscribe_topic(topic).await;
+    }
+
     println!();
     println!("{}", "Commands:".bold());
     println!("  {} <contact> <message>", "send".bright_green());
@@ -512,12 +539,63 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     println!("  {}                        ", "quit".bright_green());
     println!();
 
-    // Auto-open UI instructions?
-    // println!("Open ui/index.html in your browser to restart.");
-
     let core = Arc::new(core);
     let peers: Arc<tokio::sync::Mutex<HashMap<libp2p::PeerId, Option<String>>>> =
         Arc::new(tokio::sync::Mutex::new(HashMap::new()));
+
+    // Wrap ledger in Arc<Mutex> for sharing between tasks
+    let ledger = Arc::new(tokio::sync::Mutex::new(connection_ledger));
+
+    // ── Promiscuous Bootstrap Dialing ────────────────────────────────────
+    // Dial bootstrap nodes by IP:Port ONLY (stripped of PeerID).
+    // Also dial any peers from the persistent ledger that pass backoff.
+    {
+        println!();
+        println!(
+            "{} Aggressive Discovery — dialing known peers...",
+            "⚙".yellow()
+        );
+        let swarm_clone = swarm_handle.clone();
+        let ledger_clone = ledger.clone();
+
+        tokio::spawn(async move {
+            let addrs = {
+                let l = ledger_clone.lock().await;
+                l.dialable_addresses()
+            };
+
+            // Dial all known addresses (bootstrap + discovered)
+            for (i, (multiaddr_str, _peer_id_opt)) in addrs.iter().enumerate() {
+                // Strip PeerID for promiscuous dialing
+                let stripped = ledger::strip_peer_id(multiaddr_str);
+                match stripped.parse::<Multiaddr>() {
+                    Ok(addr) => {
+                        let label = ledger::extract_ip_port(multiaddr_str)
+                            .unwrap_or_else(|| multiaddr_str.clone());
+                        println!("  {}. 📞 Dialing {} (promiscuous)...", i + 1, label);
+
+                        // Single attempt — the swarm will handle retries
+                        match swarm_clone.dial(addr).await {
+                            Ok(_) => {
+                                println!("  {} Dial initiated to {}", "✓".green(), label);
+                            }
+                            Err(e) => {
+                                tracing::warn!("Dial failed to {}: {}", label, e);
+                                let mut l = ledger_clone.lock().await;
+                                l.record_failure(multiaddr_str);
+                            }
+                        }
+
+                        // Brief pause between dials to avoid overwhelming
+                        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+                    }
+                    Err(e) => {
+                        tracing::error!("Invalid multiaddr: {} - {}", stripped, e);
+                    }
+                }
+            }
+        });
+    }
 
     // Broadcast status loop for WebSocket UI
     let ui_broadcast_clone = ui_broadcast.clone();
@@ -531,6 +609,19 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                 status: "online".to_string(),
                 peer_count: count,
             });
+        }
+    });
+
+    // Periodic ledger save (every 60 seconds)
+    let ledger_save_clone = ledger.clone();
+    let data_dir_save = data_dir.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+            let mut l = ledger_save_clone.lock().await;
+            if let Err(e) = l.save(&data_dir_save) {
+                tracing::error!("Failed to save ledger: {}", e);
+            }
         }
     });
 
@@ -555,47 +646,11 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         format!("http://127.0.0.1:{}", api::API_PORT).dimmed()
     );
 
-    // Dial bootstrap nodes with retry
-    if !config.bootstrap_nodes.is_empty() {
-        println!();
-        println!("{} Connecting to bootstrap nodes...", "⚙".yellow());
-        let swarm_clone = swarm_handle.clone();
-        let bootstrap_nodes = config.bootstrap_nodes.clone();
-        tokio::spawn(async move {
-            for (i, node) in bootstrap_nodes.iter().enumerate() {
-                match node.parse::<Multiaddr>() {
-                    Ok(addr) => {
-                        println!("  {}. Dialing {} ...", i + 1, addr);
-                        // Try to dial with retry (3 attempts, 5 seconds apart)
-                        for attempt in 1..=3 {
-                            match swarm_clone.dial(addr.clone()).await {
-                                Ok(_) => {
-                                    println!("  {} Connected to bootstrap node {}", "✓".green(), i + 1);
-                                    break;
-                                }
-                                Err(e) => {
-                                    if attempt < 3 {
-                                        tracing::warn!("Bootstrap connection attempt {} failed: {}. Retrying in 5s...", attempt, e);
-                                        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                                    } else {
-                                        tracing::error!("Failed to connect to bootstrap node {}: {}", i + 1, e);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!("Invalid bootstrap node address: {} - {}", node, e);
-                    }
-                }
-            }
-        });
-    }
-
     let core_rx = core.clone();
     let contacts_rx = contacts.clone();
     let history_rx = history.clone();
     let peers_rx = peers.clone();
+    let ledger_rx = ledger.clone();
 
     // Stdin handling
     let stdin = tokio::io::BufReader::new(tokio::io::stdin());
@@ -628,11 +683,82 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                  public_key,
                                  identity,
                              });
+
+                             // AUTO LEDGER EXCHANGE: Share our known peers with the new connection
+                             let entries = {
+                                 let l = ledger_rx.lock().await;
+                                 l.to_shared_entries()
+                             };
+                             if let Err(e) = swarm_handle.share_ledger(peer_id, entries).await {
+                                 tracing::warn!("Failed to share ledger with {}: {}", peer_id, e);
+                             }
                          }
                     }
                     SwarmEvent::PeerDisconnected(peer_id) => {
                         peers_rx.lock().await.remove(&peer_id);
+
+                        // Record disconnect in ledger (useful for backoff tracking)
+                        // We find the entry by PeerID and record failure
+                        let mut l = ledger_rx.lock().await;
+                        if let Some(entry) = l.find_by_peer_id(&peer_id.to_string()) {
+                            let multiaddr = entry.multiaddr.clone();
+                            l.record_failure(&multiaddr);
+                        }
                     }
+
+                    // LEDGER EXCHANGE: Received peer list from a connected peer
+                    SwarmEvent::LedgerReceived { from_peer, entries } => {
+                        let mut l = ledger_rx.lock().await;
+                        let new_count = l.merge_shared_entries(&entries);
+
+                        if new_count > 0 {
+                            println!(
+                                "\n{} 📒 Learned {} new peers from {}",
+                                "✓".green(),
+                                new_count,
+                                from_peer
+                            );
+                            print!("> ");
+                            let _ = std::io::Write::flush(&mut std::io::stdout());
+
+                            // Save immediately after learning new peers
+                            if let Err(e) = l.save(&data_dir) {
+                                tracing::error!("Failed to save ledger: {}", e);
+                            }
+
+                            // Dial newly discovered peers
+                            let new_addrs: Vec<String> = entries.iter()
+                                .map(|e| ledger::strip_peer_id(&e.multiaddr))
+                                .collect();
+                            drop(l); // release lock before dialing
+
+                            for addr_str in new_addrs {
+                                if let Ok(addr) = addr_str.parse::<Multiaddr>() {
+                                    let _ = swarm_handle.dial(addr).await;
+                                }
+                            }
+                        }
+                    }
+
+                    // IDENTIFY: Peer identity confirmed — update ledger
+                    SwarmEvent::PeerIdentified { peer_id, listen_addrs, .. } => {
+                        let mut l = ledger_rx.lock().await;
+                        for addr in &listen_addrs {
+                            l.record_connection(&addr.to_string(), &peer_id.to_string());
+                        }
+                    }
+
+                    // GOSSIPSUB: New topic discovered
+                    SwarmEvent::TopicDiscovered { peer_id, topic } => {
+                        tracing::info!("Topic discovered from {}: {}", peer_id, topic);
+                        // Record the topic in the ledger for this peer
+                        let mut l = ledger_rx.lock().await;
+                        if let Some(entry) = l.find_by_peer_id(&peer_id.to_string()) {
+                            let multiaddr = entry.multiaddr.clone();
+                            l.record_topic(&multiaddr, &topic);
+                        }
+                    }
+
                     SwarmEvent::MessageReceived { peer_id, envelope_data } => {
                         match core_rx.receive_message(envelope_data) {
                              Ok(msg) => {
