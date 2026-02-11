@@ -3,6 +3,7 @@
 // Cross-platform (macOS, Linux, Windows) command-line interface for SCMessenger.
 
 mod api;
+mod bootstrap;
 mod config;
 mod contacts;
 mod history;
@@ -614,9 +615,18 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                              let _ = std::io::Write::flush(&mut std::io::stdout());
                              let _ = contacts_rx.update_last_seen(&peer_id.to_string());
 
+                             // Try to get public key from existing contact, if available
+                             let (public_key, identity) = contacts_rx.get(&peer_id.to_string())
+                                 .ok()
+                                 .flatten()
+                                 .map(|c| (Some(c.public_key), Some(c.peer_id.clone())))
+                                 .unwrap_or((None, None));
+
                              let _ = ui_broadcast.send(server::UiEvent::PeerDiscovered {
                                  peer_id: peer_id.to_string(),
-                                 transport: "tcp".to_string()
+                                 transport: "tcp".to_string(),
+                                 public_key,
+                                 identity,
                              });
                          }
                     }

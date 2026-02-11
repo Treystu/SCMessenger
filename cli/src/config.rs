@@ -48,12 +48,7 @@ pub struct NetworkConfig {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            bootstrap_nodes: vec![
-                // Default public relay for bootstrapping
-                // Users can add their own via `scm config bootstrap add <addr>`
-                // Note: These will be populated once we deploy public relay nodes
-                // For now, users manually add their first bootstrap node
-            ],
+            bootstrap_nodes: crate::bootstrap::default_bootstrap_nodes(),
             listen_port: 9000, // Default to 9000 instead of random
             enable_mdns: true,
             enable_dht: true,
@@ -111,8 +106,12 @@ impl Config {
         if config_file.exists() {
             let contents =
                 std::fs::read_to_string(&config_file).context("Failed to read config file")?;
-            let config: Config =
+            let mut config: Config =
                 serde_json::from_str(&contents).context("Failed to parse config file")?;
+
+            // Merge with default bootstrap nodes (in case new defaults were added)
+            config.bootstrap_nodes = crate::bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes);
+
             Ok(config)
         } else {
             // Create default config
@@ -239,9 +238,11 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = Config::default();
-        assert_eq!(config.listen_port, 0);
+        assert_eq!(config.listen_port, 9000);
         assert!(config.enable_mdns);
         assert!(config.enable_dht);
+        // Should have embedded bootstrap nodes
+        assert!(!config.bootstrap_nodes.is_empty(), "Default config should include bootstrap nodes");
     }
 
     #[test]

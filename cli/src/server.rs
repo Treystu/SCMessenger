@@ -9,6 +9,10 @@ pub enum UiEvent {
     PeerDiscovered {
         peer_id: String,
         transport: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        public_key: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        identity: Option<String>,
     },
     ContactList {
         contacts: Vec<crate::contacts::Contact>,
