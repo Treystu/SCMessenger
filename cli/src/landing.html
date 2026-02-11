@@ -595,239 +595,110 @@
         <div class="section-title">⚡ Join the Mesh</div>
 
         <div class="install-grid">
-          <!-- Docker -->
+          
+          <!-- Auto-Install (Native) -->
           <div class="install-card recommended">
             <div class="card-header">
-              <span class="card-icon">🐳</span>
+              <span class="card-icon">⚡</span>
               <div>
-                <span class="badge badge-easy">Easy</span>
+                <span class="badge badge-easy">Fastest</span>
                 <span class="badge badge-rec">Recommended</span>
               </div>
             </div>
-            <div class="card-title">Run a Node (Docker)</div>
+            <div class="card-title">Auto-Install & Join</div>
             <div class="card-desc">
-              One command. Runs as a persistent relay that strengthens the mesh
-              for everyone.
+              Installs the binary (if missing) and configures your node to join this mesh instantly.
             </div>
             <div class="card-best">
-              <strong>Best for:</strong> Servers, always-on machines, VPS
+              <strong>Best for:</strong> Mac, Linux, Power Users
             </div>
             <div class="code-block">
-              <!-- One-liner for easy copy-paste -->
-              <code id="docker-cmd"
-                >docker run -d --restart always --name scmessenger -p 9000:9000
-                -p 9001:9001 testbotz/scmessenger:latest</code
-              >
-              <button class="copy-btn" onclick="copyCode('docker-cmd', this)">
-                Copy
-              </button>
-            </div>
-            <details>
-              <summary>Setup steps &amp; details</summary>
-              <div class="steps">
-                <ol>
-                  <li>
-                    Install
-                    <a
-                      href="https://docs.docker.com/get-docker/"
-                      target="_blank"
-                      >Docker</a
-                    >
-                  </li>
-                  <li>Run the command above</li>
-                  <li>
-                    Your node auto-discovers the mesh via built-in bootstrap
-                    nodes
-                  </li>
-                  <li>
-                    Optional: add <code>Watchtower</code> for auto-updates
-                  </li>
-                </ol>
-              </div>
-            </details>
-            <div class="pros-cons">
-              <div class="pro">✓ Easiest setup</div>
-              <div class="con">✗ Requires Docker</div>
-              <div class="pro">✓ Auto-restarts</div>
-              <div class="con">✗ Slight overhead</div>
-            </div>
-          </div>
-
-          <!-- Native Binary -->
-          <div class="install-card">
-            <div class="card-header">
-              <span class="card-icon">📦</span>
-              <span class="badge badge-medium">Fast</span>
-            </div>
-            <div class="card-title">Native Binary</div>
-            <div class="card-desc">
-              Download the standalone executable. No containers, no
-              dependencies. Maximum performance.
-            </div>
-            <div class="card-best">
-              <strong>Best for:</strong> Linux servers, power users
-            </div>
-
-            <div
-              style="
-                text-align: center;
-                margin: 16px 0;
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-                align-items: center;
-              "
-            >
-              <a
-                href="/api/download/scm-linux-amd64"
-                class="btn btn-outline btn-sm"
-                style="width: 200px; justify-content: center"
-              >
-                ↓ Linux (x64)
-              </a>
-              <div style="display: flex; gap: 8px">
-                <a
-                  href="https://github.com/Treystu/SCMessenger/releases/latest/download/scm-macos-arm64"
-                  class="btn btn-outline btn-sm"
-                  style="font-size: 0.75rem"
-                >
-                  ↓ Mac (ARM)
-                </a>
-                <a
-                  href="https://github.com/Treystu/SCMessenger/releases/latest/download/scm-macos-amd64"
-                  class="btn btn-outline btn-sm"
-                  style="font-size: 0.75rem"
-                >
-                  ↓ Mac (Intel)
-                </a>
-              </div>
-              <a
-                href="https://github.com/Treystu/SCMessenger/releases/latest/download/scm-windows-amd64.exe"
-                class="btn btn-outline btn-sm"
-                style="
-                  font-size: 0.75rem;
-                  width: 140px;
-                  justify-content: center;
-                "
-              >
-                ↓ Windows (x64)
-              </a>
-            </div>
-
-            <div class="code-block">
-              <code id="binary-setup"
-                >chmod +x scm-* # (Rename to scm and move to PATH) ./scm
-                start</code
-              >
-              <button class="copy-btn" onclick="copyCode('binary-setup', this)">
-                Copy
-              </button>
-            </div>
-
-            <div class="pros-cons">
-              <div class="pro">✓ Native performance</div>
-              <div class="con">✗ Manual updates</div>
-              <div class="pro">✓ Single binary</div>
-              <div class="con">✗ Platform specific</div>
-            </div>
-          </div>
-
-          <!-- Join (Auto-Config) -->
-          <div class="install-card">
-            <div class="card-header">
-              <span class="card-icon">⚡</span>
-              <span class="badge badge-medium">Fast</span>
-            </div>
-            <div class="card-title">Quick Connect (Auto-Config)</div>
-            <div class="card-desc">
-              Already have the <code>scm</code> binary? Configure it to join
-              this specific mesh instantly.
-            </div>
-            <div class="card-best">
-              <strong>Best for:</strong> Quickly joining a new mesh from CLI
-            </div>
-            <div class="code-block">
-              <code id="bundle-cmd"
-                >curl -sL http://localhost:9000/api/install | bash</code
-              >
-              <button class="copy-btn" onclick="copyCode('bundle-cmd', this)">
+              <code id="native-cmd">curl -sL http://localhost:9000/api/install | bash</code>
+              <button class="copy-btn" onclick="copyCode('native-cmd', this)">
                 Copy
               </button>
             </div>
             <details style="margin-top: 12px">
-              <summary>What this script does</summary>
-              <div class="steps">
-                <ol>
-                  <li>
-                    Backs up your existing <code>config.json</code> (if any)
-                  </li>
-                  <li>Writes a new config with this mesh's bootstrap nodes</li>
-                  <li>Verifies your configuration directory</li>
-                  <li>Tells you how to start the node</li>
-                </ol>
-                <p
-                  style="
-                    margin-top: 8px;
-                    font-size: 0.78rem;
-                    color: var(--text-dim);
-                  "
-                >
-                  Inspect the script first if you prefer:
-                  <a
-                    href="/api/install"
-                    target="_blank"
-                    style="color: var(--primary)"
-                    >view script</a
-                  >.
-                </p>
+              <summary>Manual Downloads & Details</summary>
+              <div style="text-align: center; margin: 12px 0; display: flex; flex-direction: column; gap: 8px; align-items: center;">
+                  <a href="/api/download/scm-linux-amd64" class="btn btn-outline btn-sm" style="width: 200px; justify-content: center;">
+                      ↓ Linux (x64)
+                  </a>
+                  <div style="display: flex; gap: 8px;">
+                      <a href="https://github.com/Treystu/SCMessenger/releases/latest/download/scm-macos-arm64" class="btn btn-outline btn-sm" style="font-size: 0.75rem;">
+                          ↓ Mac (ARM)
+                      </a>
+                      <a href="https://github.com/Treystu/SCMessenger/releases/latest/download/scm-macos-amd64" class="btn btn-outline btn-sm" style="font-size: 0.75rem;">
+                          ↓ Mac (Intel)
+                      </a>
+                  </div>
+                   <a href="https://github.com/Treystu/SCMessenger/releases/latest/download/scm-windows-amd64.exe" class="btn btn-outline btn-sm" style="font-size: 0.75rem; width: 140px; justify-content: center;">
+                      ↓ Windows (x64)
+                  </a>
               </div>
+              <p style="font-size: 0.75rem; color: var(--text-dim);">
+                  The script backs up your config, installs 'scm' to /usr/local/bin, and joins the mesh.
+              </p>
             </details>
             <div class="pros-cons">
-              <div class="pro">✓ Automated setup</div>
-              <div class="con">✗ Requires scm binary</div>
-              <div class="pro">✓ Instant join</div>
-              <div class="con">✗ Overwrites config</div>
+              <div class="pro">✓ Single command</div>
+              <div class="con">✗ Modifies system</div>
+              <div class="pro">✓ Native performance</div>
+              <div class="con">✗ Run as user</div>
             </div>
-            <div style="margin-top: 12px; text-align: center">
-              <button
-                class="btn btn-outline btn-sm"
-                onclick="downloadBundle()"
-                id="bundle-btn"
-              >
-                Manual JSON Download
+          </div>
+
+          <!-- Docker -->
+          <div class="install-card">
+            <div class="card-header">
+              <span class="card-icon">🐳</span>
+              <span class="badge badge-medium">Isolated</span>
+            </div>
+            <div class="card-title">Run with Docker</div>
+            <div class="card-desc">
+              Auto-detects Docker. Installs it if missing (slight overhead). Runs as a container.
+            </div>
+            <div class="card-best">
+              <strong>Best for:</strong> Servers, VPS, Clean Environments
+            </div>
+            <div class="code-block">
+              <code id="docker-cmd">curl -sL http://localhost:9000/api/install/docker | bash</code>
+              <button class="copy-btn" onclick="copyCode('docker-cmd', this)">
+                Copy
               </button>
+            </div>
+            <div class="pros-cons">
+              <div class="pro">✓ Auto-restarts</div>
+              <div class="con">✗ Docker overhead</div>
+              <div class="pro">✓ Isolated env</div>
+              <div class="con">✗ Complex networking</div>
             </div>
           </div>
 
           <!-- Source -->
           <div class="install-card">
             <div class="card-header">
-              <span class="card-icon">🔧</span>
-              <span class="badge badge-advanced">Advanced</span>
+              <span class="card-icon">🛠️</span>
+              <span class="badge badge-advanced">Flexible</span>
             </div>
-            <div class="card-title">Build It Yourself (Source)</div>
+            <div class="card-title">Build from Source</div>
             <div class="card-desc">
-              Clone the repo and compile. Verify every line. Maximum sovereignty
-              and trust.
+              Checks for Rust. Installs if needed. Clones and builds from source.
             </div>
             <div class="card-best">
-              <strong>Best for:</strong> Developers, security auditors,
-              contributors
+              <strong>Best for:</strong> Developers, Custom Builds
             </div>
             <div class="code-block">
-              <code id="source-cmd"
-                >git clone https://github.com/Treystu/SCMessenger.git && cd
-                SCMessenger && cargo run --bin scmessenger-cli -- start</code
-              >
+              <code id="source-cmd">curl -sL http://localhost:9000/api/install/source | bash</code>
               <button class="copy-btn" onclick="copyCode('source-cmd', this)">
                 Copy
               </button>
             </div>
             <div class="pros-cons">
-              <div class="pro">✓ Full code audit</div>
-              <div class="con">✗ Requires Rust toolchain</div>
-              <div class="pro">✓ Maximum trust</div>
-              <div class="con">✗ Longer setup</div>
+              <div class="pro">✓ Latest features</div>
+              <div class="con">✗ Long build time</div>
+              <div class="pro">✓ Full control</div>
+              <div class="con">✗ Dev dependencies</div>
             </div>
           </div>
         </div>
@@ -1094,10 +965,14 @@
       fetchInfo();
       setInterval(fetchInfo, 10000);
 
-      // Update curl command with current host
+      // Update curl commands with current host
       const host = window.location.host;
-      document.getElementById("bundle-cmd").innerText =
-        `curl -sL http://${host}/api/install | bash`;
+      document.getElementById("native-cmd").innerText =
+        `curl -sL "http://${host}/api/install?host=${host}" | bash`;
+      document.getElementById("docker-cmd").innerText =
+        `curl -sL "http://${host}/api/install/docker?host=${host}" | bash`;
+      document.getElementById("source-cmd").innerText =
+        `curl -sL "http://${host}/api/install/source?host=${host}" | bash`;
     </script>
   </body>
 </html>
