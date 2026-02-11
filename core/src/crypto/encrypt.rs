@@ -19,7 +19,7 @@ use chacha20poly1305::{
     aead::{Aead, KeyInit, Payload},
     XChaCha20Poly1305, XNonce,
 };
-use ed25519_dalek::{Signer, Verifier, SigningKey, VerifyingKey, Signature as Ed25519Signature};
+use ed25519_dalek::{Signature as Ed25519Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::RngCore;
 use x25519_dalek::{EphemeralSecret, PublicKey as X25519PublicKey, StaticSecret};
 use zeroize::Zeroize;
@@ -112,10 +112,13 @@ pub fn encrypt_message(
         .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
 
     let ciphertext = cipher
-        .encrypt(nonce, Payload {
-            msg: plaintext,
-            aad: &sender_public_bytes,
-        })
+        .encrypt(
+            nonce,
+            Payload {
+                msg: plaintext,
+                aad: &sender_public_bytes,
+            },
+        )
         .map_err(|e| anyhow::anyhow!("Encryption failed: {}", e))?;
 
     // Zeroize key material
@@ -175,11 +178,18 @@ pub fn decrypt_message(
         .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
 
     let plaintext = cipher
-        .decrypt(nonce, Payload {
-            msg: envelope.ciphertext.as_ref(),
-            aad: envelope.sender_public_key.as_ref(),
-        })
-        .map_err(|_| anyhow::anyhow!("Decryption failed: invalid ciphertext, wrong key, or tampered sender public key"))?;
+        .decrypt(
+            nonce,
+            Payload {
+                msg: envelope.ciphertext.as_ref(),
+                aad: envelope.sender_public_key.as_ref(),
+            },
+        )
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "Decryption failed: invalid ciphertext, wrong key, or tampered sender public key"
+            )
+        })?;
 
     // Zeroize key material
     symmetric_key.zeroize();
@@ -404,7 +414,10 @@ mod tests {
 
         // Decryption should fail due to AAD mismatch
         let result = decrypt_message(&recipient_key, &envelope);
-        assert!(result.is_err(), "AAD binding should prevent sender spoofing");
+        assert!(
+            result.is_err(),
+            "AAD binding should prevent sender spoofing"
+        );
     }
 
     #[test]
@@ -441,7 +454,10 @@ mod tests {
 
         // Verification should fail
         let result = verify_envelope(&signed_envelope);
-        assert!(result.is_err(), "Tampered envelope should fail verification");
+        assert!(
+            result.is_err(),
+            "Tampered envelope should fail verification"
+        );
     }
 
     #[test]
@@ -477,7 +493,10 @@ mod tests {
 
         // Relay can verify authenticity without knowing recipient's key
         let verification = verify_envelope(&signed_envelope);
-        assert!(verification.is_ok(), "Relay should be able to verify envelope");
+        assert!(
+            verification.is_ok(),
+            "Relay should be able to verify envelope"
+        );
 
         // But relay still can't decrypt (would need recipient's key)
         // This demonstrates the purpose: relays can reject forged messages

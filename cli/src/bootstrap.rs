@@ -20,7 +20,6 @@
 pub const DEFAULT_BOOTSTRAP_NODES: &[&str] = &[
     // Node 1: Primary GCP bootstrap (North America) - High availability
     "/ip4/34.168.102.7/tcp/9001/p2p/12D3KooWGGdvGNJb3JwkNpmYuapgk7SAZ4DsBmQsU989yhvnTB8W",
-
     // Node 2: Secondary relay (add when deployed)
     // "/ip4/<IP>/tcp/9001/p2p/<PEER_ID>",
 
@@ -37,12 +36,22 @@ pub fn default_bootstrap_nodes() -> Vec<String> {
     let build_time_nodes = option_env!("SCMESSENGER_BOOTSTRAP_NODES");
 
     if let Some(nodes_str) = build_time_nodes {
-        // Parse comma-separated multiaddrs
-        nodes_str
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect()
+        let trimmed = nodes_str.trim();
+
+        if trimmed.is_empty() {
+            // Treat empty/whitespace-only override as "not set" and use defaults
+            DEFAULT_BOOTSTRAP_NODES
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
+        } else {
+            // Parse comma-separated multiaddrs
+            trimmed
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        }
     } else {
         // Use hardcoded defaults
         DEFAULT_BOOTSTRAP_NODES
@@ -52,21 +61,6 @@ pub fn default_bootstrap_nodes() -> Vec<String> {
     }
 }
 
-/// Merge user-provided bootstrap nodes with defaults
-/// Ensures defaults are preserved unless explicitly removed
-pub fn merge_bootstrap_nodes(user_nodes: Vec<String>) -> Vec<String> {
-    let mut merged = default_bootstrap_nodes();
-
-    // Add user nodes that aren't already in the list
-    for node in user_nodes {
-        if !merged.contains(&node) {
-            merged.push(node);
-        }
-    }
-
-    merged
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -74,34 +68,35 @@ mod tests {
     #[test]
     fn test_default_bootstrap_nodes() {
         let nodes = default_bootstrap_nodes();
-        assert!(!nodes.is_empty(), "Should have at least one default bootstrap node");
+        assert!(
+            !nodes.is_empty(),
+            "Should have at least one default bootstrap node"
+        );
 
         // Verify format
         for node in &nodes {
-            assert!(node.starts_with("/ip4/"), "Bootstrap node should be multiaddr: {}", node);
-            assert!(node.contains("/p2p/"), "Bootstrap node should include peer ID: {}", node);
+            assert!(
+                node.starts_with("/ip4/"),
+                "Bootstrap node should be multiaddr: {}",
+                node
+            );
+            assert!(
+                node.contains("/p2p/"),
+                "Bootstrap node should include peer ID: {}",
+                node
+            );
         }
     }
 
     #[test]
-    fn test_merge_bootstrap_nodes() {
-        let user_nodes = vec![
-            "/ip4/1.2.3.4/tcp/9001/p2p/12D3KooWTestPeerID".to_string(),
-        ];
-
-        let merged = merge_bootstrap_nodes(user_nodes.clone());
-
-        // Should contain both defaults and user nodes
-        assert!(merged.len() >= default_bootstrap_nodes().len() + 1);
-        assert!(merged.contains(&user_nodes[0]));
-    }
-
-    #[test]
-    fn test_merge_deduplicates() {
-        let user_nodes = default_bootstrap_nodes(); // Same as defaults
-        let merged = merge_bootstrap_nodes(user_nodes);
-
-        // Should not duplicate
-        assert_eq!(merged.len(), default_bootstrap_nodes().len());
+    fn test_empty_override_uses_defaults() {
+        // Test that empty string is treated as "not set" and falls back to defaults
+        // This can't be tested directly here since it uses option_env! at compile time,
+        // but this documents the expected behavior
+        let nodes = default_bootstrap_nodes();
+        assert!(
+            !nodes.is_empty(),
+            "Empty override should fall back to defaults"
+        );
     }
 }

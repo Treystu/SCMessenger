@@ -4,13 +4,13 @@
 // It creates a small network of nodes and shows how they discover their
 // external addresses through peer reflection (no STUN servers needed).
 
+use libp2p::identity::Keypair;
 use scmessenger_core::transport::{
     nat::{NatConfig, NatTraversal},
     swarm::{start_swarm, SwarmEvent2},
 };
-use libp2p::identity::Keypair;
-use tokio::sync::mpsc;
 use std::time::Duration;
+use tokio::sync::mpsc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -133,10 +133,7 @@ async fn main() -> anyhow::Result<()> {
     println!("─────────────────────────────");
 
     let mut config = NatConfig::default();
-    config.peer_reflectors = vec![
-        peer1_id.to_string(),
-        peer2_id.to_string(),
-    ];
+    config.peer_reflectors = vec![peer1_id.to_string(), peer2_id.to_string()];
 
     let nat_traversal = NatTraversal::new(config)?;
 

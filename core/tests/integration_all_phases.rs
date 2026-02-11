@@ -427,17 +427,14 @@ async fn test_relay_protocol() {
     let charlie_addr = charlie_addr.unwrap();
 
     // Connect Alice to Bob
-    let bob_full_addr: Multiaddr = format!("{}/p2p/{}", bob_addr, bob_peer_id)
-        .parse()
-        .unwrap();
+    let bob_full_addr: Multiaddr = format!("{}/p2p/{}", bob_addr, bob_peer_id).parse().unwrap();
 
     alice_handle.dial(bob_full_addr).await.ok();
 
     // Connect Bob to Charlie
-    let charlie_full_addr: Multiaddr =
-        format!("{}/p2p/{}", charlie_addr, charlie_peer_id)
-            .parse()
-            .unwrap();
+    let charlie_full_addr: Multiaddr = format!("{}/p2p/{}", charlie_addr, charlie_peer_id)
+        .parse()
+        .unwrap();
 
     bob_handle.dial(charlie_full_addr).await.ok();
 

@@ -3,7 +3,7 @@
 // Tests that nodes can listen on multiple ports simultaneously for
 // maximum connectivity in restrictive network environments.
 
-use scmessenger_core::transport::{MultiPortConfig, BindResult, multiport};
+use scmessenger_core::transport::{multiport, BindResult, MultiPortConfig};
 
 #[test]
 fn test_generate_listen_addresses() {
@@ -255,8 +255,8 @@ fn test_default_multiport_config() {
 #[tokio::test]
 async fn test_multiport_swarm_integration() {
     // This test verifies that the swarm can be started with multi-port config
-    use scmessenger_core::IronCore;
     use scmessenger_core::transport::{start_swarm_with_config, MultiPortConfig};
+    use scmessenger_core::IronCore;
 
     let core = IronCore::new("test-multiport").expect("Failed to create core");
 

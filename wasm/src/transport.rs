@@ -4,10 +4,10 @@
 // through WebSocket to known relay nodes. This module is designed to work with browser
 // APIs via wasm-bindgen, with mock implementations for testing in non-WASM environments.
 
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 
 /// Transport state enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,13 +43,11 @@ impl Default for WasmTransportConfig {
     fn default() -> Self {
         Self {
             relay_urls: vec!["wss://relay.scmessenger.local".to_string()],
-            ice_servers: vec![
-                IceServer {
-                    urls: vec!["stun:stun.l.google.com:19302".to_string()],
-                    username: None,
-                    credential: None,
-                },
-            ],
+            ice_servers: vec![IceServer {
+                urls: vec!["stun:stun.l.google.com:19302".to_string()],
+                username: None,
+                credential: None,
+            }],
             reconnect_interval_ms: 5000,
             max_peers: 50,
         }
@@ -91,9 +89,9 @@ impl WebSocketRelay {
         // Create WebSocket connection using web-sys
         #[cfg(target_arch = "wasm32")]
         {
-            use wasm_bindgen::JsCast;
-            use web_sys::{MessageEvent, WebSocket, ErrorEvent, CloseEvent};
             use wasm_bindgen::closure::Closure;
+            use wasm_bindgen::JsCast;
+            use web_sys::{CloseEvent, ErrorEvent, MessageEvent, WebSocket};
 
             // Create WebSocket instance
             let ws = WebSocket::new(&self.url)
@@ -133,7 +131,11 @@ impl WebSocketRelay {
 
             // Create onclose callback
             let onclose_callback = Closure::wrap(Box::new(move |event: CloseEvent| {
-                tracing::info!("WebSocket closed: code={} reason={}", event.code(), event.reason());
+                tracing::info!(
+                    "WebSocket closed: code={} reason={}",
+                    event.code(),
+                    event.reason()
+                );
             }) as Box<dyn FnMut(CloseEvent)>);
 
             ws.set_onclose(Some(onclose_callback.as_ref().unchecked_ref()));
@@ -286,7 +288,11 @@ impl WebRtcPeer {
             // - Queuing data if send buffer is full
             // - Notifying via bufferedamountlow event when buffer drains
 
-            tracing::debug!("Sending {} bytes via WebRTC data channel to {}", data.len(), self.peer_id);
+            tracing::debug!(
+                "Sending {} bytes via WebRTC data channel to {}",
+                data.len(),
+                self.peer_id
+            );
         }
 
         #[cfg(not(target_arch = "wasm32"))]

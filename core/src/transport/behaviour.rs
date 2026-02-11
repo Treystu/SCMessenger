@@ -9,6 +9,7 @@
 // - identify: exchange peer metadata
 // - relay: NAT traversal for mobile nodes
 
+use super::reflection::{AddressReflectionRequest, AddressReflectionResponse};
 #[cfg(not(target_arch = "wasm32"))]
 use libp2p::mdns;
 use libp2p::{
@@ -18,7 +19,6 @@ use libp2p::{
     StreamProtocol,
 };
 use std::time::Duration;
-use super::reflection::{AddressReflectionRequest, AddressReflectionResponse};
 
 /// The Iron Core network behaviour combining all protocols.
 #[derive(NetworkBehaviour)]
@@ -26,7 +26,8 @@ pub struct IronCoreBehaviour {
     /// Direct message delivery (request-response pattern)
     pub messaging: request_response::cbor::Behaviour<MessageRequest, MessageResponse>,
     /// Address reflection for sovereign NAT discovery (replaces external STUN)
-    pub address_reflection: request_response::cbor::Behaviour<AddressReflectionRequest, AddressReflectionResponse>,
+    pub address_reflection:
+        request_response::cbor::Behaviour<AddressReflectionRequest, AddressReflectionResponse>,
     /// Relay protocol for mesh routing (Phase 3)
     pub relay: request_response::cbor::Behaviour<RelayRequest, RelayResponse>,
     /// Pub/sub for future group messaging

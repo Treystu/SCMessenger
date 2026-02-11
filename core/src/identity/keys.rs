@@ -1,7 +1,7 @@
 // Cryptographic key management
 
-use ed25519_dalek::{Signer, Verifier, SigningKey, VerifyingKey, Signature as Ed25519Signature};
 use anyhow::Result;
+use ed25519_dalek::{Signature as Ed25519Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use zeroize::Zeroize;
 
 /// Key pair for signing and verification
@@ -65,11 +65,15 @@ impl IdentityKeys {
     /// Verify signature
     pub fn verify(data: &[u8], signature: &[u8], public_key: &[u8]) -> Result<bool> {
         let verifying_key = VerifyingKey::from_bytes(
-            public_key.try_into().map_err(|_| anyhow::anyhow!("Invalid public key"))?
+            public_key
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Invalid public key"))?,
         )?;
 
         let sig = Ed25519Signature::from_bytes(
-            signature.try_into().map_err(|_| anyhow::anyhow!("Invalid signature"))?
+            signature
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Invalid signature"))?,
         );
 
         Ok(verifying_key.verify(data, &sig).is_ok())
@@ -83,7 +87,9 @@ impl IdentityKeys {
     /// Deserialize keys from bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         let signing_key = SigningKey::from_bytes(
-            bytes.try_into().map_err(|_| anyhow::anyhow!("Invalid key bytes"))?
+            bytes
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Invalid key bytes"))?,
         );
         Ok(Self { signing_key })
     }

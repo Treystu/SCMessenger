@@ -5,19 +5,19 @@
 //
 // If the answer is no, it doesn't belong in Phase 0.
 
-pub mod identity;
 pub mod crypto;
+pub mod identity;
 pub mod message;
-pub mod transport;
 pub mod store;
+pub mod transport;
 
-use std::sync::Arc;
 use parking_lot::RwLock;
+use std::sync::Arc;
 use thiserror::Error;
 
+pub use crypto::{decrypt_message, encrypt_message};
 pub use identity::IdentityManager;
-pub use message::{Message, MessageType, Receipt, DeliveryStatus, Envelope};
-pub use crypto::{encrypt_message, decrypt_message};
+pub use message::{DeliveryStatus, Envelope, Message, MessageType, Receipt};
 
 // UniFFI exports
 uniffi::include_scaffolding!("api");
@@ -277,8 +277,8 @@ impl IronCore {
         let msg = Message::text(sender_id, recipient_public_key_hex.clone(), &text);
 
         // Serialize the message
-        let plaintext = message::encode_message(&msg)
-            .map_err(|e| IronCoreError::Internal(e.to_string()))?;
+        let plaintext =
+            message::encode_message(&msg).map_err(|e| IronCoreError::Internal(e.to_string()))?;
 
         // Encrypt
         let envelope = crypto::encrypt_message(&keys.signing_key, &recipient_bytes, &plaintext)
@@ -321,9 +321,7 @@ impl IronCore {
         });
 
         if !is_new {
-            return Err(IronCoreError::InvalidInput(
-                "Duplicate message".to_string(),
-            ));
+            return Err(IronCoreError::InvalidInput("Duplicate message".to_string()));
         }
 
         Ok(msg)
@@ -414,13 +412,21 @@ mod tests {
         assert_eq!(sig_result.signature.len(), 64); // Ed25519
 
         let valid = core
-            .verify_signature(data.clone(), sig_result.signature.clone(), sig_result.public_key_hex.clone())
+            .verify_signature(
+                data.clone(),
+                sig_result.signature.clone(),
+                sig_result.public_key_hex.clone(),
+            )
             .unwrap();
         assert!(valid);
 
         // Wrong data should fail verification
         let invalid = core
-            .verify_signature(b"wrong data".to_vec(), sig_result.signature, sig_result.public_key_hex)
+            .verify_signature(
+                b"wrong data".to_vec(),
+                sig_result.signature,
+                sig_result.public_key_hex,
+            )
             .unwrap();
         assert!(!invalid);
     }
@@ -430,11 +436,8 @@ mod tests {
         let core = IronCore::new();
         core.initialize_identity().unwrap();
 
-        let result = core.verify_signature(
-            b"data".to_vec(),
-            vec![0u8; 64],
-            hex::encode(vec![0u8; 16]),
-        );
+        let result =
+            core.verify_signature(b"data".to_vec(), vec![0u8; 64], hex::encode(vec![0u8; 16]));
         assert!(result.is_err());
     }
 
@@ -456,7 +459,10 @@ mod tests {
         let msg = bob.receive_message(envelope_bytes).unwrap();
 
         assert_eq!(msg.text_content().unwrap(), "Hello Bob!");
-        assert_eq!(msg.sender_id, alice.get_identity_info().identity_id.unwrap());
+        assert_eq!(
+            msg.sender_id,
+            alice.get_identity_info().identity_id.unwrap()
+        );
     }
 
     #[test]

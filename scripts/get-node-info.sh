@@ -34,7 +34,11 @@ echo "📦 Container: ${CONTAINER_NAME}"
 echo ""
 
 # Get Peer ID
-PEER_ID=$(docker logs ${CONTAINER_NAME} 2>&1 | grep "Network peer ID" | tail -1 | awk '{print $NF}')
+PEER_ID=$(docker logs "${CONTAINER_NAME}" 2>&1 \
+    | sed -E $'s/\x1B\\[[0-9;]*[a-zA-Z]//g' \
+    | grep "Network peer ID:" \
+    | tail -1 \
+    | awk '{print $NF}')
 if [ -z "$PEER_ID" ]; then
     echo "⚠️  Could not find Peer ID in logs. Is the node fully started?"
     exit 1
@@ -52,10 +56,10 @@ if [ ! -z "$IDENTITY" ]; then
     echo ""
 fi
 
-# Get Public IP (try multiple methods)
+# Get Public IP (try multiple methods with timeouts)
 PUBLIC_IP=""
 if command -v curl &> /dev/null; then
-    PUBLIC_IP=$(curl -s ifconfig.me 2>/dev/null || curl -s icanhazip.com 2>/dev/null)
+    PUBLIC_IP=$(curl -s --connect-timeout 5 --max-time 10 ifconfig.me/ip 2>/dev/null || curl -s --connect-timeout 5 --max-time 10 icanhazip.com 2>/dev/null)
 fi
 
 if [ -z "$PUBLIC_IP" ]; then
@@ -66,9 +70,14 @@ else
 fi
 echo ""
 
+# Get Listen Port from config (defaults to 9000)
+CONFIG_FILE="/root/.config/scmessenger/config.json"
+LISTEN_PORT=$(docker exec "${CONTAINER_NAME}" sh -c "if [ -f ${CONFIG_FILE} ]; then cat ${CONFIG_FILE} | jq -r '.listen_port // 9000'; else echo 9000; fi" 2>/dev/null || echo 9000)
+P2P_PORT=$((LISTEN_PORT + 1))
+
 # Construct multiaddress
 if [ ! -z "$PUBLIC_IP" ]; then
-    MULTIADDR="/ip4/${PUBLIC_IP}/tcp/9001/p2p/${PEER_ID}"
+    MULTIADDR="/ip4/${PUBLIC_IP}/tcp/${P2P_PORT}/p2p/${PEER_ID}"
     echo "📡 Connection String (Share this with others):"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "${MULTIADDR}"
@@ -80,7 +89,7 @@ if [ ! -z "$PUBLIC_IP" ]; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "docker run -d \\"
     echo "  --name scmessenger-local \\"
-    echo "  -p 9000:9000 -p 9001:9001 \\"
+    echo "  -p ${LISTEN_PORT}:${LISTEN_PORT} -p ${P2P_PORT}:${P2P_PORT} \\"
     echo "  -v ~/scm_data:/root/.local/share/scmessenger \\"
     echo "  -e BOOTSTRAP_NODES=\"${MULTIADDR}\" \\"
     echo "  testbotz/scmessenger:latest"
