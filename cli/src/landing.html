@@ -668,29 +668,55 @@
               <strong>Best for:</strong> Linux servers, power users
             </div>
 
-            <div style="text-align: center; margin: 16px 0">
+            <div
+              style="
+                text-align: center;
+                margin: 16px 0;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                align-items: center;
+              "
+            >
               <a
                 href="/api/download/scm-linux-amd64"
                 class="btn btn-outline btn-sm"
-                style="width: 100%; justify-content: center"
+                style="width: 200px; justify-content: center"
               >
-                ↓ Download Linux (x64)
+                ↓ Linux (x64)
               </a>
-              <p
+              <div style="display: flex; gap: 8px">
+                <a
+                  href="https://github.com/Treystu/SCMessenger/releases/latest/download/scm-macos-arm64"
+                  class="btn btn-outline btn-sm"
+                  style="font-size: 0.75rem"
+                >
+                  ↓ Mac (ARM)
+                </a>
+                <a
+                  href="https://github.com/Treystu/SCMessenger/releases/latest/download/scm-macos-amd64"
+                  class="btn btn-outline btn-sm"
+                  style="font-size: 0.75rem"
+                >
+                  ↓ Mac (Intel)
+                </a>
+              </div>
+              <a
+                href="https://github.com/Treystu/SCMessenger/releases/latest/download/scm-windows-amd64.exe"
+                class="btn btn-outline btn-sm"
                 style="
                   font-size: 0.75rem;
-                  color: var(--text-dim);
-                  margin-top: 8px;
+                  width: 140px;
+                  justify-content: center;
                 "
               >
-                macOS & Windows binaries coming soon. Use Docker or build from
-                source.
-              </p>
+                ↓ Windows (x64)
+              </a>
             </div>
 
             <div class="code-block">
               <code id="binary-setup"
-                >chmod +x scm-linux-amd64 mv scm-linux-amd64 scm ./scm
+                >chmod +x scm-* # (Rename to scm and move to PATH) ./scm
                 start</code
               >
               <button class="copy-btn" onclick="copyCode('binary-setup', this)">
