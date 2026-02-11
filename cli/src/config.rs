@@ -13,22 +13,27 @@ use std::path::PathBuf;
 #[serde(default)]
 pub struct Config {
     /// Bootstrap nodes for initial network connection
+    #[serde(default)]
     pub bootstrap_nodes: Vec<String>,
 
     /// Default port for listening
+    #[serde(default)]
     pub listen_port: u16,
 
     /// Enable mDNS for local network discovery
-    #[serde(alias = "mdns")]
+    #[serde(alias = "mdns", default)]
     pub enable_mdns: bool,
 
     /// Enable DHT for wide area network discovery
+    #[serde(default)]
     pub enable_dht: bool,
 
     /// Storage path for messages and identity
+    #[serde(default)]
     pub storage_path: Option<String>,
 
     /// Network settings
+    #[serde(default)]
     pub network: NetworkConfig,
 }
 
@@ -36,15 +41,19 @@ pub struct Config {
 #[serde(default)]
 pub struct NetworkConfig {
     /// Maximum number of peers to maintain
+    #[serde(default)]
     pub max_peers: usize,
 
     /// Connection timeout in seconds
+    #[serde(default)]
     pub connection_timeout: u64,
 
     /// Enable NAT traversal
+    #[serde(default)]
     pub enable_nat_traversal: bool,
 
     /// Enable relay fallback
+    #[serde(default)]
     pub enable_relay: bool,
 }
 

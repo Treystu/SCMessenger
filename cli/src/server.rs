@@ -448,7 +448,9 @@ cat > "$CONFIG_DIR/config.json" <<EOF
   "enable_dht": true,
   "network": {{
       "enable_relay": true,
-      "enable_nat_traversal": true
+      "enable_nat_traversal": true,
+      "max_peers": 50,
+      "connection_timeout": 30
   }}
 }}
 EOF
