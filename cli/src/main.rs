@@ -483,20 +483,25 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         return Ok(());
     }
 
-    // 2. Check if UI port is occupied by something else
-    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], ws_port));
-    if let Err(e) = std::net::TcpListener::bind(addr) {
-        if e.kind() == std::io::ErrorKind::AddrInUse {
-            println!("{} Port {} is already in use.", "Error:".red(), ws_port);
-            println!(
-                "Try running {} or checking for other processes on this port.",
-                "scm stop".bright_green()
-            );
-            return Ok(());
+    // 2. Check if ports are occupied by something else (v4, v6, and localhost)
+    let p2p_port = ws_port + 1;
+    let check_ports = [ws_port, p2p_port];
+    for p in check_ports {
+        let addrs = [
+            std::net::SocketAddr::from(([127, 0, 0, 1], p)),
+            std::net::SocketAddr::from(([0, 0, 0, 0], p)),
+        ];
+        for addr in addrs {
+            if std::net::TcpListener::bind(addr).is_err() {
+                println!("{} Port {} is already in use.", "Error:".red(), p);
+                println!(
+                    "Try running {} or checking for other processes on this port.",
+                    "scm stop".bright_green()
+                );
+                return Ok(());
+            }
         }
     }
-
-    let p2p_port = ws_port + 1; // P2P port shifted by 1 to allow UI on default port
 
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
@@ -514,12 +519,6 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
     // ── Connection Ledger — persistent peer memory ──────────────────────
     let mut connection_ledger = ledger::ConnectionLedger::load(&data_dir)?;
-
-    // Seed ledger with bootstrap nodes (both from defaults and config)
-    let all_bootstrap = bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes.clone());
-    for node in &all_bootstrap {
-        connection_ledger.add_bootstrap(node);
-    }
 
     // Subscribe to any topics discovered in the ledger from past sessions
     let known_topics = connection_ledger.all_known_topics();
@@ -551,6 +550,13 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         keypair
     };
     let local_peer_id = network_keypair.public().to_peer_id();
+
+    // ── Seed ledger with bootstrap nodes (after local_peer_id is available) ────
+    let all_bootstrap = bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes.clone());
+    for node in &all_bootstrap {
+        connection_ledger.add_bootstrap(node, Some(&local_peer_id.to_string()));
+    }
+
     println!("{} Network peer ID: {}", "✓".green(), local_peer_id);
 
     // Create shared state BEFORE server start so landing page has access
@@ -615,12 +621,11 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         tokio::spawn(async move {
             let addrs = {
                 let l = ledger_clone.lock().await;
-                l.dialable_addresses()
+                l.dialable_addresses(Some(&local_peer_id.to_string()))
             };
 
             // Dial all known addresses (bootstrap + discovered)
             for (i, (multiaddr_str, _peer_id_opt)) in addrs.iter().enumerate() {
-                // Strip PeerID for promiscuous dialing
                 let stripped = ledger::strip_peer_id(multiaddr_str);
                 match stripped.parse::<Multiaddr>() {
                     Ok(addr) => {
@@ -726,8 +731,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
                              // Try to get public key from existing contact, if available
                              let (public_key, identity) = contacts_rx.get(&peer_id.to_string())
-                                 .ok()
-                                 .flatten()
+                                 .ok().flatten()
                                  .map(|c| (Some(c.public_key), Some(c.peer_id.clone())))
                                  .unwrap_or((None, None));
 

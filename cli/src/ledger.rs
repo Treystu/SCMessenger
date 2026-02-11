@@ -210,7 +210,12 @@ impl ConnectionLedger {
     }
 
     /// Add or update a peer entry from a bootstrap multiaddr
-    pub fn add_bootstrap(&mut self, multiaddr: &str) {
+    pub fn add_bootstrap(&mut self, multiaddr: &str, local_peer_id: Option<&str>) {
+        if let Some(local) = local_peer_id {
+            if multiaddr.contains(local) {
+                return;
+            }
+        }
         let stripped = strip_peer_id(multiaddr);
         let label = format!("Bootstrap {}", self.entries.len() + 1);
 
@@ -264,11 +269,18 @@ impl ConnectionLedger {
         }
     }
 
-    /// Get all addresses that should be dialed now
-    pub fn dialable_addresses(&self) -> Vec<(String, Option<String>)> {
+    /// Get all addresses that should be dialed now, excluding the local node
+    pub fn dialable_addresses(&self, local_peer_id: Option<&str>) -> Vec<(String, Option<String>)> {
         self.entries
             .values()
             .filter(|e| e.should_attempt())
+            .filter(|e| {
+                if let (Some(local), Some(last)) = (local_peer_id, &e.last_peer_id) {
+                    local != last
+                } else {
+                    true
+                }
+            })
             .map(|e| (e.multiaddr.clone(), e.last_peer_id.clone()))
             .collect()
     }
