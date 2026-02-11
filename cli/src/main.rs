@@ -472,6 +472,30 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
             config.listen_port
         }
     });
+
+    // 1. Check if SCMessenger is already running via Control API
+    if api::is_api_available().await {
+        println!("{}", "SCMessenger is already running!".yellow());
+        println!(
+            "Run {} to stop the existing node first.",
+            "scm stop".bright_green()
+        );
+        return Ok(());
+    }
+
+    // 2. Check if UI port is occupied by something else
+    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], ws_port));
+    if let Err(e) = std::net::TcpListener::bind(addr) {
+        if e.kind() == std::io::ErrorKind::AddrInUse {
+            println!("{} Port {} is already in use.", "Error:".red(), ws_port);
+            println!(
+                "Try running {} or checking for other processes on this port.",
+                "scm stop".bright_green()
+            );
+            return Ok(());
+        }
+    }
+
     let p2p_port = ws_port + 1; // P2P port shifted by 1 to allow UI on default port
 
     let data_dir = config::Config::data_dir()?;
