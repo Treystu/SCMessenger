@@ -489,7 +489,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         "Identity: {}",
         info.identity_id.clone().unwrap().bright_cyan()
     );
-    println!("Web Interface: ws://localhost:{}/ws", ws_port);
+    println!("Landing Page:  http://0.0.0.0:{}", ws_port);
+    println!("WebSocket:     ws://localhost:{}/ws", ws_port);
     println!("P2P Listener:  /ip4/0.0.0.0/tcp/{}", p2p_port);
     println!("📒 {}", connection_ledger.summary());
     println!();
@@ -511,8 +512,23 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let local_peer_id = network_keypair.public().to_peer_id();
     println!("{} Network peer ID: {}", "✓".green(), local_peer_id);
 
-    // Start WebSocket Server
-    let (ui_broadcast, mut ui_cmd_rx) = server::start(ws_port).await;
+    // Create shared state BEFORE server start so landing page has access
+    let peers: Arc<tokio::sync::Mutex<HashMap<libp2p::PeerId, Option<String>>>> =
+        Arc::new(tokio::sync::Mutex::new(HashMap::new()));
+    let ledger = Arc::new(tokio::sync::Mutex::new(connection_ledger));
+
+    // Build web context for landing page + public APIs
+    let web_ctx = Arc::new(server::WebContext {
+        node_peer_id: local_peer_id.to_string(),
+        node_public_key: info.public_key_hex.clone().unwrap_or_default(),
+        bootstrap_nodes: all_bootstrap.clone(),
+        ledger: ledger.clone(),
+        peers: peers.clone(),
+        start_time: std::time::Instant::now(),
+    });
+
+    // Start WebSocket + HTTP Server (serves landing page at /)
+    let (ui_broadcast, mut ui_cmd_rx) = server::start(ws_port, web_ctx).await;
 
     let listen_addr: libp2p::Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", p2p_port).parse()?;
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);
@@ -540,11 +556,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     println!();
 
     let core = Arc::new(core);
-    let peers: Arc<tokio::sync::Mutex<HashMap<libp2p::PeerId, Option<String>>>> =
-        Arc::new(tokio::sync::Mutex::new(HashMap::new()));
-
-    // Wrap ledger in Arc<Mutex> for sharing between tasks
-    let ledger = Arc::new(tokio::sync::Mutex::new(connection_ledger));
+    // Note: peers and ledger Arc<Mutex> created above (before server::start)
+    // so the landing page and API endpoints have access to them.
 
     // ── Promiscuous Bootstrap Dialing ────────────────────────────────────
     // Dial bootstrap nodes by IP:Port ONLY (stripped of PeerID).
