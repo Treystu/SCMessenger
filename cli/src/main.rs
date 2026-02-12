@@ -246,6 +246,10 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             public_key,
             name,
         } => {
+            // Validate public key format before adding
+            scmessenger_core::crypto::validate_ed25519_public_key(&public_key)
+                .context("Invalid public key")?;
+
             // Try to use API if a node is running
             if api::is_api_available().await {
                 api::add_contact_via_api(&peer_id, &public_key, name.clone())
@@ -529,35 +533,38 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         "Identity: {}",
         info.identity_id.clone().unwrap().bright_cyan()
     );
+    println!(
+        "Public Key: {}",
+        info.public_key_hex
+            .as_ref()
+            .map(|s| s.as_str())
+            .unwrap_or("(not initialized)")
+    );
     println!("Landing Page:  http://0.0.0.0:{}", ws_port);
     println!("WebSocket:     ws://localhost:{}/ws", ws_port);
     println!("P2P Listener:  /ip4/0.0.0.0/tcp/{}", p2p_port);
     println!("📒 {}", connection_ledger.summary());
     println!();
 
-    // Load or generate persistent network keypair
-    let keypair_path = data_dir.join("network_keypair.dat");
-    let network_keypair = if keypair_path.exists() {
-        let bytes = std::fs::read(&keypair_path).context("Failed to read network keypair")?;
-        libp2p::identity::Keypair::from_protobuf_encoding(&bytes)
-            .context("Failed to decode network keypair")?
-    } else {
-        let keypair = libp2p::identity::Keypair::generate_ed25519();
-        let bytes = keypair
-            .to_protobuf_encoding()
-            .context("Failed to encode keypair")?;
-        std::fs::write(&keypair_path, bytes).context("Failed to save network keypair")?;
-        keypair
-    };
+    // Use identity keypair for network (unified ID)
+    let network_keypair = core
+        .get_libp2p_keypair()
+        .context("Failed to get network keypair from identity")?;
     let local_peer_id = network_keypair.public().to_peer_id();
 
+    // NOTE: PeerId is now derived from identity keys. Existing installations that
+    // had a separate network_keypair.dat will see their PeerId change. This is
+    // intentional to unify identity and network IDs, but may require updating
+    // peer expectations/ledgers on migration.
+    
     // ── Seed ledger with bootstrap nodes (after local_peer_id is available) ────
     let all_bootstrap = bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes.clone());
     for node in &all_bootstrap {
         connection_ledger.add_bootstrap(node, Some(&local_peer_id.to_string()));
     }
 
-    println!("{} Network peer ID: {}", "✓".green(), local_peer_id);
+    println!("{} Peer ID: {}", "✓".green(), local_peer_id);
+    println!();
 
     // Create shared state BEFORE server start so landing page has access
     let peers: Arc<tokio::sync::Mutex<HashMap<libp2p::PeerId, Option<String>>>> =
@@ -924,6 +931,15 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                     server::UiCommand::ContactAdd { peer_id, name, public_key } => {
                         // Assuming public key is provided or we can fetch it? MVP assumes provided.
                         if let Some(pk) = public_key {
+                            // Validate public key before adding
+                            if let Err(e) = scmessenger_core::crypto::validate_ed25519_public_key(&pk) {
+                                tracing::warn!("Failed to add contact {}: invalid public key - {}", peer_id, e);
+                                let _ = ui_broadcast.send(server::UiEvent::Error {
+                                    message: format!("Invalid public key: {}", e)
+                                });
+                                continue;
+                            }
+                            
                             let contact = contacts::Contact::new(peer_id.clone(), pk)
                                 .with_nickname(name.unwrap_or(peer_id));
                             let _ = contacts_rx.add(contact);

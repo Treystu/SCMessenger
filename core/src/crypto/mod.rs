@@ -2,4 +2,4 @@
 
 pub mod encrypt;
 
-pub use encrypt::{decrypt_message, encrypt_message};
+pub use encrypt::{decrypt_message, encrypt_message, validate_ed25519_public_key};

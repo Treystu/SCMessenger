@@ -249,6 +249,19 @@ impl IronCore {
             .map_err(|_| IronCoreError::CryptoError)
     }
 
+    /// Get libp2p keypair derived from identity keys
+    ///
+    /// This uses the same underlying Ed25519 keypair as the node's identity
+    /// to derive the libp2p keypair (and thus its PeerId), so the cryptographic
+    /// identity and the network identity are backed by the same keys. Note that
+    /// the libp2p PeerId value is distinct from the node's `identity_id` (Blake3 hash).
+    pub fn get_libp2p_keypair(&self) -> Result<libp2p::identity::Keypair, IronCoreError> {
+        let identity = self.identity.read();
+        let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
+        keys.to_libp2p_keypair()
+            .map_err(|_| IronCoreError::CryptoError)
+    }
+
     // ------------------------------------------------------------------------
     // MESSAGING
     // ------------------------------------------------------------------------
@@ -261,6 +274,10 @@ impl IronCore {
         recipient_public_key_hex: String,
         text: String,
     ) -> Result<Vec<u8>, IronCoreError> {
+        // Validate the recipient public key at the core boundary
+        crate::crypto::validate_ed25519_public_key(&recipient_public_key_hex)
+            .map_err(|_| IronCoreError::InvalidInput)?;
+
         let identity = self.identity.read();
         let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
 
