@@ -246,6 +246,10 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             public_key,
             name,
         } => {
+            // Validate public key format before adding
+            scmessenger_core::crypto::validate_ed25519_public_key(&public_key)
+                .context("Invalid public key")?;
+
             // Try to use API if a node is running
             if api::is_api_available().await {
                 api::add_contact_via_api(&peer_id, &public_key, name.clone())
