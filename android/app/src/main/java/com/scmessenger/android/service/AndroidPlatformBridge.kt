@@ -46,6 +46,7 @@ class AndroidPlatformBridge @Inject constructor(
     
     private var batteryReceiver: BroadcastReceiver? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var motionReceiver: BroadcastReceiver? = null
     
     private val connectivityManager by lazy {
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -105,6 +106,9 @@ class AndroidPlatformBridge @Inject constructor(
         
         networkCallback?.let { connectivityManager.unregisterNetworkCallback(it) }
         networkCallback = null
+        
+        motionReceiver?.let { context.unregisterReceiver(it) }
+        motionReceiver = null
     }
     
     // ========================================================================
@@ -210,7 +214,7 @@ class AndroidPlatformBridge @Inject constructor(
             addAction(Intent.ACTION_USER_PRESENT)
         }
         
-        val motionReceiver = object : BroadcastReceiver() {
+        motionReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 when (intent.action) {
                     Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> {

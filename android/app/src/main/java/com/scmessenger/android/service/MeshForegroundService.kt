@@ -147,6 +147,9 @@ class MeshForegroundService : Service() {
             // Start periodic AutoAdjust profile computation
             startPeriodicAdjustments()
             
+            // Start periodic WakeLock renewal
+            startPeriodicWakeLockRenewal()
+            
             Timber.i("Mesh service started successfully")
         } catch (e: Exception) {
             Timber.e(e, "Failed to start mesh service")
@@ -204,11 +207,15 @@ class MeshForegroundService : Service() {
             Timber.e(e, "Failed to release WakeLock")
         }
     }
-            
-            Timber.i("Mesh service started successfully")
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to start mesh service")
-            stopSelf()
+    
+    private fun startPeriodicWakeLockRenewal() {
+        serviceScope.launch {
+            while (isActive && isRunning) {
+                delay(9 * 60 * 1000L) // Re-acquire every 9 minutes
+                if (isRunning) {
+                    acquireWakeLock()
+                }
+            }
         }
     }
     
