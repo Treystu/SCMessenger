@@ -533,26 +533,17 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         "Identity: {}",
         info.identity_id.clone().unwrap().bright_cyan()
     );
+    println!("Public Key: {}", info.public_key_hex.clone().unwrap());
     println!("Landing Page:  http://0.0.0.0:{}", ws_port);
     println!("WebSocket:     ws://localhost:{}/ws", ws_port);
     println!("P2P Listener:  /ip4/0.0.0.0/tcp/{}", p2p_port);
     println!("📒 {}", connection_ledger.summary());
     println!();
 
-    // Load or generate persistent network keypair
-    let keypair_path = data_dir.join("network_keypair.dat");
-    let network_keypair = if keypair_path.exists() {
-        let bytes = std::fs::read(&keypair_path).context("Failed to read network keypair")?;
-        libp2p::identity::Keypair::from_protobuf_encoding(&bytes)
-            .context("Failed to decode network keypair")?
-    } else {
-        let keypair = libp2p::identity::Keypair::generate_ed25519();
-        let bytes = keypair
-            .to_protobuf_encoding()
-            .context("Failed to encode keypair")?;
-        std::fs::write(&keypair_path, bytes).context("Failed to save network keypair")?;
-        keypair
-    };
+    // Use identity keypair for network (unified ID)
+    let network_keypair = core
+        .get_libp2p_keypair()
+        .context("Failed to get network keypair from identity")?;
     let local_peer_id = network_keypair.public().to_peer_id();
 
     // ── Seed ledger with bootstrap nodes (after local_peer_id is available) ────
@@ -561,7 +552,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         connection_ledger.add_bootstrap(node, Some(&local_peer_id.to_string()));
     }
 
-    println!("{} Network peer ID: {}", "✓".green(), local_peer_id);
+    println!("{} Peer ID: {}", "✓".green(), local_peer_id);
+    println!();
 
     // Create shared state BEFORE server start so landing page has access
     let peers: Arc<tokio::sync::Mutex<HashMap<libp2p::PeerId, Option<String>>>> =

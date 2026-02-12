@@ -59,7 +59,7 @@ get_peer_id() {
     local container=$1
     local id
     for i in {1..3}; do
-        id=$(docker logs $container 2>&1 | grep "Network peer ID:" | tail -n 1 | sed 's/\x1b\[[0-9;]*m//g' | awk '{print $NF}')
+        id=$(docker logs $container 2>&1 | grep "Peer ID:" | tail -n 1 | sed 's/\x1b\[[0-9;]*m//g' | awk '{print $NF}')
         if [ ! -z "$id" ]; then
             echo "$id"
             return

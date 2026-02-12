@@ -34,13 +34,13 @@ echo "📦 Container: ${CONTAINER_NAME}"
 echo ""
 
 # Get Peer ID
-PEER_ID=$(docker logs ${CONTAINER_NAME} 2>&1 | grep "Network peer ID" | tail -1 | awk '{print $NF}')
+PEER_ID=$(docker logs ${CONTAINER_NAME} 2>&1 | grep "Peer ID:" | tail -1 | awk '{print $NF}')
 if [ -z "$PEER_ID" ]; then
     echo "⚠️  Could not find Peer ID in logs. Is the node fully started?"
     exit 1
 fi
 
-echo "🆔 Peer ID:"
+echo "🆔 Peer ID (Network Identity):"
 echo "   ${PEER_ID}"
 echo ""
 

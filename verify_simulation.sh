@@ -131,10 +131,10 @@ get_peer_id() {
     for i in {1..5}; do
         # Extract Network Peer ID from container logs
         # 1. Get logs
-        # 2. Grep for "Network peer ID:"
+        # 2. Grep for "Peer ID:"
         # 3. Strip ANSI color codes
         # 4. Extract the ID (last field)
-        id=$(docker logs $container 2>&1 | grep "Network peer ID:" | tail -n 1 | sed 's/\x1b\[[0-9;]*m//g' | awk '{print $NF}')
+        id=$(docker logs $container 2>&1 | grep "Peer ID:" | tail -n 1 | sed 's/\x1b\[[0-9;]*m//g' | awk '{print $NF}')
 
         if [ ! -z "$id" ]; then
             echo "$id"

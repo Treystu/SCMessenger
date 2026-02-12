@@ -19,7 +19,7 @@ Get two nodes talking in under 2 minutes!
 ./scripts/get-node-info.sh
 
 # Or manually from Docker logs
-docker logs scmessenger | grep "Network peer ID"
+docker logs scmessenger | grep "Peer ID"
 ```
 
 ## Connect From Another Machine
