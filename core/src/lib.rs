@@ -326,6 +326,15 @@ impl IronCore {
             return Err(IronCoreError::InvalidInput);
         }
 
+        // Notify delegate
+        if let Some(delegate) = self.delegate.read().as_ref() {
+            delegate.on_message_received(
+                msg.sender_id.clone(),
+                msg.id.clone(),
+                msg.payload.clone(),
+            );
+        }
+
         Ok(msg)
     }
 

@@ -36,7 +36,10 @@ class MeshRepository(private val context: Context) {
     
     // Core & Network (lazy init)
     private var ironCore: uniffi.api.IronCore? = null
-    private var swarmBridge: uniffi.api.SwarmBridge? = null
+    // removed swarmBridge
+    
+    // Wifi Transport
+    private var wifiTransportManager: com.scmessenger.android.transport.WifiTransportManager? = null
     
     // Service state
     private val _serviceState = MutableStateFlow(uniffi.api.ServiceState.STOPPED)
@@ -49,6 +52,10 @@ class MeshRepository(private val context: Context) {
     // Core Delegate reference to prevent GC
     private var coreDelegate: uniffi.api.CoreDelegate? = null
     
+    // BLE Components
+    private var bleScanner: com.scmessenger.android.transport.ble.BleScanner? = null
+    private var bleAdvertiser: com.scmessenger.android.transport.ble.BleAdvertiser? = null
+    
     init {
         Timber.d("MeshRepository initialized with storage: $storagePath")
         initializeManagers()
@@ -56,68 +63,15 @@ class MeshRepository(private val context: Context) {
     
     private fun initializeManagers() {
         try {
-            // Initialize Core Identity
-            ironCore = uniffi.api.IronCore.withStorage(storagePath)
-            
-            // Initialize Swarm Bridge (Networking)
-            swarmBridge = uniffi.api.SwarmBridge()
-
-            // Initialize settings manager
+            // Initialize Data Managers
             settingsManager = uniffi.api.MeshSettingsManager(storagePath)
-            
-            // Initialize contact manager
-            contactManager = uniffi.api.ContactManager(storagePath)
-            
-            // Initialize history manager
             historyManager = uniffi.api.HistoryManager(storagePath)
-
-            // Set up Core Delegate for events
-            coreDelegate = object : uniffi.api.CoreDelegate {
-                override fun onPeerDiscovered(peerId: String) {
-                    Timber.d("Peer discovered via delegate: $peerId")
-                }
-
-                override fun onPeerDisconnected(peerId: String) {
-                    Timber.d("Peer disconnected via delegate: $peerId")
-                }
-
-                override fun onMessageReceived(senderId: String, messageId: String, data: ByteArray) {
-                    Timber.i("Message received from $senderId")
-                    try {
-                        val content = String(data, Charsets.UTF_8)
-                        val record = uniffi.api.MessageRecord(
-                            id = messageId,
-                            peerId = senderId,
-                            direction = uniffi.api.MessageDirection.RECEIVED,
-                            content = content,
-                            timestamp = System.currentTimeMillis().toULong(),
-                            delivered = true
-                        )
-                        historyManager?.add(record)
-                    } catch (e: Exception) {
-                        Timber.e(e, "Failed to process received message")
-                    }
-                }
-
-                override fun onReceiptReceived(messageId: String, status: String) {
-                    Timber.i("Message receipt: $messageId -> $status")
-                    try {
-                        historyManager?.markDelivered(messageId)
-                    } catch (e: Exception) {
-                        Timber.e(e, "Failed to mark message as delivered")
-                    }
-                }
-            }
-            ironCore?.setDelegate(coreDelegate)
-            
-            // Initialize ledger manager
+            contactManager = uniffi.api.ContactManager(storagePath)
             ledgerManager = uniffi.api.LedgerManager(storagePath)
-            
-            // Load ledger
-            ledgerManager?.load()
-            
-            // Initialize auto-adjust engine
             autoAdjustEngine = uniffi.api.AutoAdjustEngine()
+            
+            // Pre-load data where applicable
+            ledgerManager?.load()
             
             Timber.i("All managers initialized successfully")
         } catch (e: Exception) {
@@ -131,30 +85,128 @@ class MeshRepository(private val context: Context) {
     
     /**
      * Start the mesh service with the given configuration.
+     * This initializes the Rust core, starts BLE transport, and wires up events.
      */
     fun startMeshService(config: uniffi.api.MeshServiceConfig) {
         try {
+            Timber.d("Starting MeshService...")
             if (meshService == null) {
-                meshService = uniffi.api.MeshService(config)
+                // Use the 'withStorage' constructor to ensure DB path is correct
+                meshService = uniffi.api.MeshService.withStorage(config, storagePath)
             }
             
+            // 1. Start the Rust Core Service
             meshService?.start()
+            
+            // 2. Obtain Shared IronCore Instance (Singleton)
+            ironCore = meshService?.getCore()
+            if (ironCore == null) {
+                Timber.w("IronCore instance is null after service start!")
+            }
+            
+            // 3. Wire up CoreDelegate (Rust -> Android Events)
+            coreDelegate = object : uniffi.api.CoreDelegate {
+                override fun onPeerDiscovered(peerId: String) {
+                    Timber.d("Core notified discovery: $peerId")
+                }
+                
+                override fun onPeerDisconnected(peerId: String) {
+                    Timber.d("Core notified disconnect: $peerId")
+                }
+                
+                override fun onMessageReceived(senderId: String, messageId: String, data: ByteArray) {
+                    Timber.i("Message from $senderId: $messageId")
+                    try {
+                        val content = data.toString(Charsets.UTF_8)
+                        val record = uniffi.api.MessageRecord(
+                            id = messageId,
+                            direction = uniffi.api.MessageDirection.RECEIVED,
+                            peerId = senderId,
+                            content = content,
+                            timestamp = (System.currentTimeMillis() / 1000).toULong(), 
+                            delivered = true
+                        )
+                        historyManager?.add(record)
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to process received message")
+                    }
+                }
+                
+                override fun onReceiptReceived(messageId: String, status: String) {
+                     Timber.d("Receipt for $messageId: $status")
+                     historyManager?.markDelivered(messageId)
+                }
+            }
+            ironCore?.setDelegate(coreDelegate)
+            
+            // 4. Start Android Transports (BLE & WiFi)
+            initializeAndStartBle()
+            initializeAndStartWifi()
+
+            // 5. Update State
             _serviceState.value = uniffi.api.ServiceState.RUNNING
             updateStats()
             
-            Timber.i("Mesh service started")
+            Timber.i("Mesh service started successfully")
         } catch (e: Exception) {
             Timber.e(e, "Failed to start mesh service")
-            throw e
+            // Propagate error to UI/Service?
+            _serviceState.value = uniffi.api.ServiceState.STOPPED
         }
     }
     
+    private fun initializeAndStartBle() {
+        // BLE Scanner: Feeds discovered peers to MeshService
+        if (bleScanner == null) {
+            bleScanner = com.scmessenger.android.transport.ble.BleScanner(
+                context,
+                onPeerDiscovered = { peerId ->
+                    meshService?.onPeerDiscovered(peerId)
+                },
+                onDataReceived = { peerId, data ->
+                    meshService?.onDataReceived(peerId, data)
+                }
+            )
+        }
+        bleScanner?.startScanning()
+        
+        // BLE Advertiser: Broadcasts our presence
+        if (bleAdvertiser == null) {
+            bleAdvertiser = com.scmessenger.android.transport.ble.BleAdvertiser(context)
+        }
+        bleAdvertiser?.startAdvertising()
+    }
+    
+    private fun initializeAndStartWifi() {
+        if (wifiTransportManager == null) {
+            wifiTransportManager = com.scmessenger.android.transport.WifiTransportManager(context) { peerId ->
+                meshService?.onPeerDiscovered(peerId)
+            }
+        }
+        wifiTransportManager?.initialize()
+        wifiTransportManager?.startDiscovery()
+    }
+    
+    fun setPlatformBridge(bridge: uniffi.api.PlatformBridge) {
+        meshService?.setPlatformBridge(bridge)
+    }
+    
     /**
-     * Stop the mesh service.
+     * Stop the mesh service and all transports.
      */
     fun stopMeshService() {
         try {
+            // Stop BLE
+            bleScanner?.stopScanning()
+            bleAdvertiser?.stopAdvertising()
+            
+            // Stop WiFi
+            wifiTransportManager?.stopDiscovery()
+            
+            // Stop Rust Core
             meshService?.stop()
+            
+            // Clear State
             _serviceState.value = uniffi.api.ServiceState.STOPPED
             _serviceStats.value = null
             
@@ -252,36 +304,43 @@ class MeshRepository(private val context: Context) {
             // 2. Encrypt/Prepare message
             val encryptedData = ironCore?.prepareMessage(publicKey, content)
                 ?: throw IllegalStateException("Failed to prepare message: IronCore not initialized")
-                
-            // 3. Send over network
-            swarmBridge?.sendMessage(peerId, encryptedData)
-                 ?: throw IllegalStateException("Failed to send message: SwarmBridge not initialized")
             
-            // 4. Save to history (if network send didn't throw)
+            // Convert List<Byte> (or whatever UniFFI returns) to ByteArray
+            // UniFFI 'bytes' maps to ByteArray, so encryptedData is ByteArray.
+            
+            // 3. Send over network (Multiple transports)
+            // Attempt BLE
+            bleAdvertiser?.sendData(encryptedData)
+            
+            // Attempt WiFi
+            wifiTransportManager?.sendData(peerId, encryptedData)
+            
+            // Note: In a real mesh, we would route via MeshService/Libp2p which manages transports.
+            // Since we moved Transport logic to Kotlin for Phases 4/5, we call them here.
+            // Ideally, we get a confirmation callback.
+
+            // 4. Save to history
              val record = uniffi.api.MessageRecord(
                 id = java.util.UUID.randomUUID().toString(),
                 peerId = peerId,
                 direction = uniffi.api.MessageDirection.SENT,
                 content = content,
-                timestamp = System.currentTimeMillis().toULong(),
+                timestamp = (System.currentTimeMillis() / 1000).toULong(),
                 delivered = false // Will be updated on receipt
             )
             historyManager?.add(record)
             
-            Timber.i("Message sent encryption and network transmission successful to $peerId")
+            Timber.i("Message sent (encrypted) to $peerId")
         } catch (e: Exception) {
-            Timber.e(e, "Failed to send message logic")
+            Timber.e(e, "Failed to send message")
             throw e
         }
     }
 
-
-
     suspend fun dial(multiaddr: String) {
         try {
-            swarmBridge?.dial(multiaddr)
-                ?: throw IllegalStateException("SwarmBridge not initialized")
-            Timber.i("Dialed peer: $multiaddr")
+            // Not supported in Kotlin-only transport bridge yet (requires specific transport calls)
+            Timber.i("Dialing $multiaddr via Kotlin transports not fully implemented")
         } catch (e: Exception) {
             Timber.e(e, "Failed to dial $multiaddr")
             throw e

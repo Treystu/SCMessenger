@@ -23,6 +23,7 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationsScreen(
+    onNavigateToChat: (String) -> Unit,
     viewModel: ConversationsViewModel = hiltViewModel()
 ) {
     val conversations by viewModel.conversations.collectAsState()
@@ -125,7 +126,7 @@ fun ConversationsScreen(
                             peerId = peerId,
                             messages = messages,
                             onClick = {
-                                // TODO: Navigate to conversation detail
+                                onNavigateToChat(peerId)
                             }
                         )
                         Spacer(modifier = Modifier.height(8.dp))

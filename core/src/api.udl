@@ -110,6 +110,8 @@ dictionary ServiceStats {
 
 interface MeshService {
     constructor(MeshServiceConfig config);
+    [Name=with_storage]
+    constructor(MeshServiceConfig config, string storage_path);
 
     [Throws=IronCoreError]
     void start();
@@ -119,6 +121,12 @@ interface MeshService {
     ServiceState get_state();
     ServiceStats get_stats();
     void reset_stats();
+    void set_platform_bridge(PlatformBridge? bridge);
+
+    void on_peer_discovered(string peer_id);
+    void on_peer_disconnected(string peer_id);
+    void on_data_received(string peer_id, bytes data);
+    IronCore? get_core();
 };
 
 callback interface PlatformBridge {
@@ -128,6 +136,7 @@ callback interface PlatformBridge {
     void on_ble_data_received(string peer_id, bytes data);
     void on_entering_background();
     void on_entering_foreground();
+    void send_ble_packet(string peer_id, bytes data);
 };
 
 // ============================================================================

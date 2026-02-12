@@ -3,6 +3,7 @@ package com.scmessenger.android.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -53,9 +54,6 @@ fun MeshApp() {
     }
 }
 
-/**
- * Navigation host for the app.
- */
 @Composable
 fun MeshNavHost(
     navController: NavHostController,
@@ -67,15 +65,34 @@ fun MeshNavHost(
         modifier = modifier
     ) {
         composable(Screen.Conversations.route) {
-            ConversationsScreen()
+            ConversationsScreen(
+                onNavigateToChat = { peerId ->
+                    navController.navigate("chat/$peerId")
+                }
+            )
         }
         
         composable(Screen.Contacts.route) {
             ContactsScreen()
         }
         
+        composable(Screen.Dashboard.route) {
+            DashboardScreen()
+        }
+
         composable(Screen.Settings.route) {
             SettingsScreen()
+        }
+        
+        composable(
+            route = "chat/{peerId}",
+            arguments = listOf(androidx.navigation.navArgument("peerId") { type = androidx.navigation.NavType.StringType })
+        ) { backStackEntry ->
+            val peerId = backStackEntry.arguments?.getString("peerId") ?: return@composable
+            ChatScreen(
+                conversationId = peerId,
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
     }
 }
@@ -88,6 +105,9 @@ fun MeshBottomBar(navController: NavHostController) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     
+    // Hide bottom bar on Chat screen
+    if (currentRoute?.startsWith("chat/") == true) return
+
     NavigationBar {
         Screen.bottomNavItems.forEach { screen ->
             NavigationBarItem(
@@ -96,14 +116,10 @@ fun MeshBottomBar(navController: NavHostController) {
                 selected = currentRoute == screen.route,
                 onClick = {
                     navController.navigate(screen.route) {
-                        // Pop up to the start destination of the graph to
-                        // avoid building up a large stack of destinations
                         popUpTo(navController.graph.startDestinationId) {
                             saveState = true
                         }
-                        // Avoid multiple copies of the same destination
                         launchSingleTop = true
-                        // Restore state when reselecting a previously selected item
                         restoreState = true
                     }
                 }
@@ -118,9 +134,10 @@ fun MeshBottomBar(navController: NavHostController) {
 sealed class Screen(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     object Conversations : Screen("conversations", "Chats", androidx.compose.material.icons.Icons.Default.Chat)
     object Contacts : Screen("contacts", "Contacts", androidx.compose.material.icons.Icons.Default.People)
+    object Dashboard: Screen("dashboard", "Network", androidx.compose.material.icons.Icons.Filled.Router)
     object Settings : Screen("settings", "Settings", androidx.compose.material.icons.Icons.Default.Settings)
     
     companion object {
-        val bottomNavItems = listOf(Conversations, Contacts, Settings)
+        val bottomNavItems = listOf(Conversations, Contacts, Dashboard, Settings)
     }
 }

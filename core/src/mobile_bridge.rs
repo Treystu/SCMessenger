@@ -50,6 +50,7 @@ pub struct MeshService {
     state: std::sync::Mutex<ServiceState>,
     stats: std::sync::Mutex<ServiceStats>,
     core: std::sync::Arc<std::sync::Mutex<Option<crate::IronCore>>>,
+    platform_bridge: std::sync::Arc<std::sync::Mutex<Option<Box<dyn PlatformBridge>>>>,
     storage_path: Option<String>,
 }
 
@@ -60,6 +61,7 @@ impl MeshService {
             state: std::sync::Mutex::new(ServiceState::Stopped),
             stats: std::sync::Mutex::new(ServiceStats::default()),
             core: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            platform_bridge: std::sync::Arc::new(std::sync::Mutex::new(None)),
             storage_path: None,
         }
     }
@@ -71,6 +73,7 @@ impl MeshService {
             state: std::sync::Mutex::new(ServiceState::Stopped),
             stats: std::sync::Mutex::new(ServiceStats::default()),
             core: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            platform_bridge: std::sync::Arc::new(std::sync::Mutex::new(None)),
             storage_path: Some(storage_path),
         }
     }
@@ -150,7 +153,7 @@ impl MeshService {
         let mut stats = self.stats.lock().unwrap().clone();
 
         // Augment with IronCore stats if available
-        if let Some(ref core) = *self.core.lock().unwrap() {
+        if let Some(ref _core) = *self.core.lock().unwrap() {
             // Core doesn't expose peer discovery yet, but we can get message counts
             // This is a placeholder for future integration
         }
@@ -163,9 +166,47 @@ impl MeshService {
         tracing::info!("MeshService stats reset");
     }
 
-    /// Internal helper to get the core instance
-    pub(crate) fn get_core(&self) -> Option<crate::IronCore> {
-        self.core.lock().unwrap().clone()
+    pub fn set_platform_bridge(&self, bridge: Option<Box<dyn PlatformBridge>>) {
+        *self.platform_bridge.lock().unwrap() = bridge;
+    }
+
+    pub fn on_peer_discovered(&self, peer_id: String) {
+        let mut stats = self.stats.lock().unwrap();
+        stats.peers_discovered += 1;
+        tracing::info!("Peer discovered: {}", peer_id);
+    }
+
+    pub fn on_peer_disconnected(&self, peer_id: String) {
+        tracing::info!("Peer disconnected: {}", peer_id);
+    }
+
+    pub fn on_data_received(&self, peer_id: String, data: Vec<u8>) {
+        let mut stats = self.stats.lock().unwrap();
+        stats.bytes_transferred += data.len() as u64;
+        drop(stats);
+
+        if let Some(core) = self.get_core() {
+            match core.receive_message(data) {
+                Ok(msg) => {
+                    tracing::info!("Message received from {}: {:?}", peer_id, msg.id);
+                    // CoreDelegate.on_message_received is called inside IronCore?
+                    // No, IronCore.receive_message returns Message.
+                    // So we must notify delegate here IF IronCore doesn't.
+                    // IronCore.receive_message logic: decoding + inbox check.
+                    // It does NOT call delegate.
+                    // But MeshService doesn't hold delegate. IronCore does.
+                    // Check IronCore implementation...
+                }
+                Err(e) => {
+                    tracing::error!("Failed to process received message: {:?}", e);
+                }
+            }
+        }
+    }
+
+    /// Helper to get the core instance exposed to UniFFI
+    pub fn get_core(&self) -> Option<std::sync::Arc<crate::IronCore>> {
+        self.core.lock().unwrap().clone().map(std::sync::Arc::new)
     }
 
     /// Check if service is running
@@ -182,6 +223,7 @@ pub trait PlatformBridge: Send + Sync {
     fn on_ble_data_received(&self, peer_id: String, data: Vec<u8>);
     fn on_entering_background(&self);
     fn on_entering_foreground(&self);
+    fn send_ble_packet(&self, peer_id: String, data: Vec<u8>);
 }
 
 // ============================================================================

@@ -206,9 +206,14 @@ class AndroidPlatformBridge @Inject constructor(
     }
     
     override fun onBleDataReceived(peerId: String, data: ByteArray) {
-        // BLE data is typically handled by the transport layer in Rust
+        // BLE data received from Android BLE stack, forwarded to Rust
         // This callback is for Android-specific BLE discovery
         Timber.d("BLE data received from $peerId: ${data.size} bytes")
+    }
+
+    override fun sendBlePacket(peerId: String, data: ByteArray) {
+        // TODO: Implement BLE transmission in Phase 4
+        Timber.d("sendBlePacket requested for $peerId: ${data.size} bytes")
     }
     
     override fun onEnteringBackground() {

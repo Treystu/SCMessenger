@@ -23,11 +23,23 @@ class MainViewModel @Inject constructor(
 
     private fun checkIdentity() {
         viewModelScope.launch {
-            if (!meshRepository.isIdentityInitialized()) {
-                // If not initialized, create a new identity automatically for first run
-                meshRepository.createIdentity()
+            if (meshRepository.isIdentityInitialized()) {
+                _isReady.value = true
+            } else {
+                // Stay not ready, waiting for onboarding
+                _isReady.value = false
             }
-            _isReady.value = true
+        }
+    }
+
+    fun createIdentity() {
+        viewModelScope.launch {
+            try {
+                meshRepository.createIdentity()
+                _isReady.value = true
+            } catch (e: Exception) {
+                // Handle error
+            }
         }
     }
 }
