@@ -40,7 +40,7 @@ if [ -z "$PEER_ID" ]; then
     exit 1
 fi
 
-echo "🆔 Peer ID (Network Identity):"
+echo "🆔 Peer ID:"
 echo "   ${PEER_ID}"
 echo ""
 

@@ -533,7 +533,13 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         "Identity: {}",
         info.identity_id.clone().unwrap().bright_cyan()
     );
-    println!("Public Key: {}", info.public_key_hex.clone().unwrap());
+    println!(
+        "Public Key: {}",
+        info.public_key_hex
+            .as_ref()
+            .map(|s| s.as_str())
+            .unwrap_or("(not initialized)")
+    );
     println!("Landing Page:  http://0.0.0.0:{}", ws_port);
     println!("WebSocket:     ws://localhost:{}/ws", ws_port);
     println!("P2P Listener:  /ip4/0.0.0.0/tcp/{}", p2p_port);
