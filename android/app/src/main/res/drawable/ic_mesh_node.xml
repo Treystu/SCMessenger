@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    
+    <!-- Mesh network icon: interconnected nodes -->
+    
+    <!-- Central node -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,9.5 a2.5,2.5 0 1,0 0,5 a2.5,2.5 0 1,0 0,-5" />
+    
+    <!-- Top node -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,2 a2,2 0 1,0 0,4 a2,2 0 1,0 0,-4" />
+    
+    <!-- Bottom node -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,18 a2,2 0 1,0 0,4 a2,2 0 1,0 0,-4" />
+    
+    <!-- Left node -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M3,10 a2,2 0 1,0 0,4 a2,2 0 1,0 0,-4" />
+    
+    <!-- Right node -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M19,10 a2,2 0 1,0 0,4 a2,2 0 1,0 0,-4" />
+    
+    <!-- Top-left node -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M5.5,5.5 a1.5,1.5 0 1,0 0,3 a1.5,1.5 0 1,0 0,-3" />
+    
+    <!-- Top-right node -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M17.5,5.5 a1.5,1.5 0 1,0 0,3 a1.5,1.5 0 1,0 0,-3" />
+    
+    <!-- Connection lines -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:pathData="M12,6 L12,9.5" />
+    
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:pathData="M12,14.5 L12,18" />
+    
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:pathData="M5,12 L9.5,12" />
+    
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:pathData="M14.5,12 L19,12" />
+    
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:pathData="M7,7 L10,10" />
+    
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:pathData="M17,7 L14,10" />
+</vector>
