@@ -30,6 +30,12 @@ pub struct AddressObserver {
     cached_external_addresses: Vec<SocketAddr>,
 }
 
+impl Default for AddressObserver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AddressObserver {
     /// Create a new address observer
     pub fn new() -> Self {
@@ -137,6 +143,12 @@ pub struct ConnectionEndpoint {
 pub struct ConnectionTracker {
     /// Active connections indexed by peer ID
     connections: HashMap<PeerId, ConnectionEndpoint>,
+}
+
+impl Default for ConnectionTracker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ConnectionTracker {

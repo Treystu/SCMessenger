@@ -65,10 +65,7 @@ pub struct GetHistoryResponse {
 
 // Check if API is available
 pub async fn is_api_available() -> bool {
-    match tokio::net::TcpStream::connect(API_ADDR).await {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    tokio::net::TcpStream::connect(API_ADDR).await.is_ok()
 }
 
 // Client functions for CLI commands
