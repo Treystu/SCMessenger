@@ -1,9 +1,12 @@
 package com.scmessenger.android.data
 
 import android.content.Context
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.io.File
 
@@ -49,6 +52,12 @@ class MeshRepository(private val context: Context) {
     // Service stats
     private val _serviceStats = MutableStateFlow<uniffi.api.ServiceStats?>(null)
     val serviceStats: StateFlow<uniffi.api.ServiceStats?> = _serviceStats.asStateFlow()
+
+    // Incoming messages flow for notifications
+    private val _incomingMessages = kotlinx.coroutines.flow.MutableSharedFlow<uniffi.api.MessageRecord>(replay = 0)
+    val incomingMessages = _incomingMessages.asSharedFlow()
+
+    private val repoScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
 
     // Core Delegate reference to prevent GC
     private var coreDelegate: uniffi.api.CoreDelegate? = null
@@ -128,6 +137,11 @@ class MeshRepository(private val context: Context) {
                             delivered = true
                         )
                         historyManager?.add(record)
+                        
+                        // Emit for notifications
+                        repoScope.launch {
+                            _incomingMessages.emit(record)
+                        }
                     } catch (e: Exception) {
                         Timber.e(e, "Failed to process received message")
                     }
@@ -158,6 +172,12 @@ class MeshRepository(private val context: Context) {
     }
     
     private fun initializeAndStartBle() {
+        val settings = loadSettings()
+        if (!settings.bleEnabled) {
+            Timber.d("BLE disabled in settings")
+            return
+        }
+        
         // BLE Scanner: Feeds discovered peers to MeshService
         if (bleScanner == null) {
             bleScanner = com.scmessenger.android.transport.ble.BleScanner(
@@ -180,6 +200,16 @@ class MeshRepository(private val context: Context) {
     }
     
     private fun initializeAndStartWifi() {
+        val settings = loadSettings()
+        if (!settings.wifiAwareEnabled && !settings.wifiDirectEnabled) {
+            Timber.d("WiFi Transports disabled in settings")
+            // Note: WifiTransportManager manages both. Need granular control?
+            // For now, if either is enabled, we start it, let it handle internals?
+            // But WifiTransportManager likely starts both.
+            // Assuming strict check:
+             return
+        }
+
         if (wifiTransportManager == null) {
             wifiTransportManager = com.scmessenger.android.transport.WifiTransportManager(context) { peerId ->
                 meshService?.onPeerDiscovered(peerId)
@@ -190,6 +220,12 @@ class MeshRepository(private val context: Context) {
     }
 
     private fun initializeAndStartSwarm() {
+        val settings = loadSettings()
+        if (!settings.internetEnabled) {
+            Timber.d("Swarm/Internet disabled in settings")
+            return
+        }
+        
         try {
             if (swarmBridge == null) {
                 swarmBridge = uniffi.api.SwarmBridge()

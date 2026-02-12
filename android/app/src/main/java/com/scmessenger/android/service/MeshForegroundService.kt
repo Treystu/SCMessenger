@@ -16,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -82,6 +83,14 @@ class MeshForegroundService : Service() {
         try {
             meshRepository.startMeshService(config)
             isRunning = true
+            
+            // Listen for incoming messages and show notifications
+            serviceScope.launch {
+                meshRepository.incomingMessages.collect { message ->
+                    showMessageNotification(message)
+                }
+            }
+            
             Timber.i("Mesh service started successfully")
         } catch (e: Exception) {
             Timber.e(e, "Failed to start mesh service")
@@ -139,6 +148,34 @@ class MeshForegroundService : Service() {
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
+    }
+
+    private fun showMessageNotification(message: uniffi.api.MessageRecord) {
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        
+        // Intent that opens chat
+        val chatIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            // Ideally put extra "peerId" -> message.peerId
+            putExtra("peerId", message.peerId)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            message.peerId.hashCode(),
+            chatIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Message from " + message.peerId.take(8))
+            .setContentText(message.content)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+            
+        notificationManager.notify(message.id.hashCode(), notification)
     }
     
     private fun createNotificationChannel() {
