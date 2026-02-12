@@ -36,7 +36,8 @@ class MeshRepository(private val context: Context) {
     
     // Core & Network (lazy init)
     private var ironCore: uniffi.api.IronCore? = null
-    // removed swarmBridge
+    // Swarm Bridge (Internet/Libp2p)
+    private var swarmBridge: uniffi.api.SwarmBridge? = null
     
     // Wifi Transport
     private var wifiTransportManager: com.scmessenger.android.transport.WifiTransportManager? = null
@@ -139,9 +140,10 @@ class MeshRepository(private val context: Context) {
             }
             ironCore?.setDelegate(coreDelegate)
             
-            // 4. Start Android Transports (BLE & WiFi)
+            // 4. Start Android Transports (BLE & WiFi & Swarm)
             initializeAndStartBle()
             initializeAndStartWifi()
+            initializeAndStartSwarm()
 
             // 5. Update State
             _serviceState.value = uniffi.api.ServiceState.RUNNING
@@ -186,6 +188,18 @@ class MeshRepository(private val context: Context) {
         wifiTransportManager?.initialize()
         wifiTransportManager?.startDiscovery()
     }
+
+    private fun initializeAndStartSwarm() {
+        try {
+            if (swarmBridge == null) {
+                swarmBridge = uniffi.api.SwarmBridge()
+            }
+            // SwarmBridge starts automatically on creation or we might need to dial/listen
+            // Add known peers from Ledger optionally
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to initialize SwarmBridge")
+        }
+    }
     
     fun setPlatformBridge(bridge: uniffi.api.PlatformBridge) {
         meshService?.setPlatformBridge(bridge)
@@ -202,6 +216,9 @@ class MeshRepository(private val context: Context) {
             
             // Stop WiFi
             wifiTransportManager?.stopDiscovery()
+
+            // Stop Swarm
+            swarmBridge?.shutdown()
             
             // Stop Rust Core
             meshService?.stop()
@@ -314,6 +331,13 @@ class MeshRepository(private val context: Context) {
             
             // Attempt WiFi
             wifiTransportManager?.sendData(peerId, encryptedData)
+
+            // Attempt Swarm (Internet)
+            try {
+                swarmBridge?.sendMessage(peerId, encryptedData)
+            } catch (e: Exception) {
+                Timber.w("Failed to send via SwarmBridge: ${e.message}")
+            }
             
             // Note: In a real mesh, we would route via MeshService/Libp2p which manages transports.
             // Since we moved Transport logic to Kotlin for Phases 4/5, we call them here.
@@ -339,8 +363,9 @@ class MeshRepository(private val context: Context) {
 
     suspend fun dial(multiaddr: String) {
         try {
-            // Not supported in Kotlin-only transport bridge yet (requires specific transport calls)
-            Timber.i("Dialing $multiaddr via Kotlin transports not fully implemented")
+            // Attempt Swarm Dial
+            swarmBridge?.dial(multiaddr)
+            Timber.i("Dialed $multiaddr via SwarmBridge")
         } catch (e: Exception) {
             Timber.e(e, "Failed to dial $multiaddr")
             throw e
