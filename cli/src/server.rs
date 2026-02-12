@@ -59,6 +59,9 @@ pub enum UiEvent {
     ConfigData {
         config: Vec<(String, String)>,
     },
+    Error {
+        message: String,
+    },
 }
 
 #[derive(Deserialize, Debug)]
