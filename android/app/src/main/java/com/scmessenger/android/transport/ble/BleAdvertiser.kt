@@ -176,11 +176,10 @@ class BleAdvertiser(private val context: Context) {
     fun stopAdvertising() {
         if (advertiser == null || !isAdvertising) return
 
-        stopRotation()
-        
         try {
             advertiser.stopAdvertising(advertiseCallback)
             isAdvertising = false
+            stopRotation()
             Timber.i("BLE Advertising stopped")
         } catch (e: Exception) {
             Timber.e(e, "Failed to stop BLE advertising")
@@ -210,12 +209,12 @@ class BleAdvertiser(private val context: Context) {
              stopAdvertising()
         }
         
-        // Restart with new data
+        // Restart with new data using configured settings
         try {
             val settings = AdvertiseSettings.Builder()
-                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+                .setAdvertiseMode(advertiseMode)
                 .setConnectable(true)
-                .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+                .setTxPowerLevel(txPowerLevel)
                 .build()
                 
             advertiser?.startAdvertising(settings, advertiseData, advertiseCallback)
