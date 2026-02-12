@@ -249,6 +249,17 @@ impl IronCore {
             .map_err(|_| IronCoreError::CryptoError)
     }
 
+    /// Get libp2p keypair derived from identity keys
+    ///
+    /// This unifies the identity and network keypairs, eliminating
+    /// the confusion of having separate "Identity ID" and "Network Peer ID".
+    /// The PeerId derived from this keypair IS the node's identity.
+    pub fn get_libp2p_keypair(&self) -> Result<libp2p::identity::Keypair, IronCoreError> {
+        let identity = self.identity.read();
+        let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
+        Ok(keys.to_libp2p_keypair())
+    }
+
     // ------------------------------------------------------------------------
     // MESSAGING
     // ------------------------------------------------------------------------
