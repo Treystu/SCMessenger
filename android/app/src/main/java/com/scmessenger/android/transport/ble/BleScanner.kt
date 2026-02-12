@@ -209,7 +209,9 @@ class BleScanner(
                 }
                 
                 // Schedule next cycle
-                handler.postDelayed(this, scanIntervalMs)
+                if (isScanning) {
+                    handler.postDelayed(this, scanIntervalMs)
+                }
             }
         }
         

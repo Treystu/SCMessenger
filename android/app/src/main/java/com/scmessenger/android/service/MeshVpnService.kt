@@ -2,6 +2,7 @@ package com.scmessenger.android.service
 
 import android.content.Intent
 import android.net.VpnService
+import android.os.Build
 import android.os.ParcelFileDescriptor
 import timber.log.Timber
 import java.io.FileInputStream
@@ -49,10 +50,17 @@ class MeshVpnService : VpnService() {
             val builder = Builder()
                 .setSession("SCMessenger VPN")
                 .addAddress("10.255.255.1", 32)
-                // Removed .addRoute("0.0.0.0", 0) - would black-hole all device traffic
-                .setBlocking(false)
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                builder.setBlocking(false)
+            }
             
             vpnInterface = builder.establish()
+            if (vpnInterface == null) {
+                Timber.e("Failed to establish VPN interface")
+                isRunning = false
+                return@Thread
+            }
             isRunning = true
             
             Timber.i("VPN service started (dummy tunnel for persistence, no routing)")
@@ -61,8 +69,14 @@ class MeshVpnService : VpnService() {
             // In a real VPN, this would forward packets
             Thread {
                 try {
-                    val input = FileInputStream(vpnInterface!!.fileDescriptor)
-                    val output = FileOutputStream(vpnInterface!!.fileDescriptor)
+                    val iface = vpnInterface
+                    if (iface == null) {
+                        Timber.e("VPN interface is null, cannot start packet loop")
+                        return@Thread
+                    }
+                    
+                    val input = FileInputStream(iface.fileDescriptor)
+                    val output = FileOutputStream(iface.fileDescriptor)
                     val packet = ByteBuffer.allocate(32767)
                     
                     while (isRunning) {

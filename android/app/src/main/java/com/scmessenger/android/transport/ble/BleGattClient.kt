@@ -34,6 +34,9 @@ class BleGattClient(
     // Connection state tracking
     private val connectionStates = ConcurrentHashMap<String, ConnectionState>()
     
+    // Write queue for handling async writeCharacteristic
+    private val pendingWrites = ConcurrentHashMap<String, MutableList<ByteArray>>()
+    
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
     /**
@@ -152,20 +155,21 @@ class BleGattClient(
         mtu: Int
     ): Boolean {
         val chunkSize = mtu - 3
+        val deviceAddress = gatt.device.address
+        val chunks = mutableListOf<ByteArray>()
         var offset = 0
         
         while (offset < data.size) {
             val end = minOf(offset + chunkSize, data.size)
-            val chunk = data.copyOfRange(offset, end)
-            
-            characteristic.value = chunk
-            gatt.writeCharacteristic(characteristic)
-            
+            chunks.add(data.copyOfRange(offset, end))
             offset = end
-            Thread.sleep(10) // Small delay between writes
         }
         
-        return true
+        if (chunks.isEmpty()) return true
+        
+        pendingWrites[deviceAddress] = chunks.drop(1).toMutableList()
+        characteristic.value = chunks[0]
+        return gatt.writeCharacteristic(characteristic)
     }
     
     /**
@@ -185,17 +189,13 @@ class BleGattClient(
             
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
-                    Timber.d("Connected to $deviceAddress, discovering services...")
+                    Timber.d("Connected to $deviceAddress, requesting MTU...")
                     connectionStates[deviceAddress] = ConnectionState.DISCOVERING_SERVICES
                     
                     try {
-                        // Request MTU increase to 512
                         gatt.requestMtu(512)
-                        
-                        // Discover services
-                        gatt.discoverServices()
                     } catch (e: SecurityException) {
-                        Timber.e(e, "Security exception discovering services")
+                        Timber.e(e, "Security exception requesting MTU")
                         disconnect(deviceAddress)
                     }
                 }
@@ -276,8 +276,17 @@ class BleGattClient(
             
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Timber.d("Characteristic write successful to $deviceAddress")
+                val queue = pendingWrites[deviceAddress]
+                if (queue != null && queue.isNotEmpty()) {
+                    val nextChunk = queue.removeAt(0)
+                    characteristic.value = nextChunk
+                    gatt.writeCharacteristic(characteristic)
+                } else {
+                    pendingWrites.remove(deviceAddress)
+                }
             } else {
                 Timber.e("Characteristic write failed to $deviceAddress: $status")
+                pendingWrites.remove(deviceAddress)
             }
         }
         
@@ -301,10 +310,19 @@ class BleGattClient(
         override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
             super.onMtuChanged(gatt, mtu, status)
             
+            val deviceAddress = gatt.device.address
+            
             if (status == BluetoothGatt.GATT_SUCCESS) {
-                Timber.d("MTU changed to $mtu for ${gatt.device.address}")
+                Timber.d("MTU changed to $mtu for $deviceAddress")
+                try {
+                    gatt.discoverServices()
+                } catch (e: SecurityException) {
+                    Timber.e(e, "Security exception discovering services")
+                    disconnect(deviceAddress)
+                }
             } else {
-                Timber.w("MTU change failed for ${gatt.device.address}: $status")
+                Timber.w("MTU change failed for $deviceAddress: $status")
+                disconnect(deviceAddress)
             }
         }
     }

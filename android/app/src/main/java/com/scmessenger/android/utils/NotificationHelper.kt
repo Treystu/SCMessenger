@@ -137,12 +137,16 @@ object NotificationHelper {
         relayCount: Int
     ): Notification {
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            0,
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
+        val pendingIntent = if (intent != null) {
+            PendingIntent.getActivity(
+                context,
+                0,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        } else {
+            null
+        }
         
         val contentText = "Connected: $peerCount peers • Relayed: $relayCount messages"
         
@@ -257,12 +261,16 @@ object NotificationHelper {
         val chatIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
             putExtra(EXTRA_PEER_ID, peerId)
         }
-        val chatPendingIntent = PendingIntent.getActivity(
-            context,
-            peerId.hashCode(),
-            chatIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
+        val chatPendingIntent = if (chatIntent != null) {
+            PendingIntent.getActivity(
+                context,
+                peerId.hashCode(),
+                chatIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        } else {
+            null
+        }
         
         // Build notification
         val notification = NotificationCompat.Builder(context, CHANNEL_MESSAGES)

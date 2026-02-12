@@ -286,6 +286,7 @@ class AndroidPlatformBridge @Inject constructor(
         )
         
         val profile = meshRepository.computeAdjustmentProfile(deviceProfile)
+        meshRepository.applyAdjustmentProfile(profile)
         Timber.d("Motion changed: $motion, profile: $profile")
     }
     
@@ -320,8 +321,7 @@ class AndroidPlatformBridge @Inject constructor(
                 
                 // Fallback to advertising with data
                 if (!sent) {
-                    bleAdvertiser?.sendData(data)
-                    sent = true
+                    sent = bleAdvertiser?.sendData(data) ?: false
                 }
                 
                 if (sent) {

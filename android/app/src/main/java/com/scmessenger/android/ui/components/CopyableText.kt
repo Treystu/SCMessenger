@@ -41,7 +41,8 @@ fun CopyableText(
     val context = LocalContext.current
     var isExpanded by remember { mutableStateOf(false) }
     
-    val displayLines = if (expandable && !isExpanded) 1 else maxLines
+    val isSingleLine = text.lines().size == 1
+    val displayLines = if (expandable && !isExpanded && !isSingleLine) 1 else maxLines
     
     Column(modifier = modifier) {
         Text(
@@ -64,7 +65,7 @@ fun CopyableText(
                 )
         )
         
-        if (expandable && text.length > 50) {
+        if (expandable && !isSingleLine && text.length > 50) {
             TextButton(
                 onClick = { isExpanded = !isExpanded },
                 modifier = Modifier.align(Alignment.End)

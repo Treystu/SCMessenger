@@ -188,10 +188,12 @@ class MeshForegroundService : Service() {
     
     private fun acquireWakeLock() {
         try {
-            if (wakeLock?.isHeld == false) {
-                wakeLock?.acquire(10 * 60 * 1000L) // 10 minutes timeout
-                Timber.d("WakeLock acquired for BLE scan windows")
+            val lock = wakeLock
+            if (lock != null && lock.isHeld) {
+                lock.release()
             }
+            wakeLock?.acquire(10 * 60 * 1000L) // 10 minutes timeout
+            Timber.d("WakeLock acquired for BLE scan windows")
         } catch (e: Exception) {
             Timber.e(e, "Failed to acquire WakeLock")
         }

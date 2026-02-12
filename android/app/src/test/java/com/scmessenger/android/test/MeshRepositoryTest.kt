@@ -48,6 +48,7 @@ class MeshRepositoryTest {
     
     @Test
     fun `test getServiceState - returns STOPPED initially`() {
+        // TODO: Implement once IronCore initialization is ready
         // Given
         // repository already created in setup
         
@@ -56,11 +57,11 @@ class MeshRepositoryTest {
         
         // Then
         // assertEquals(uniffi.api.ServiceState.STOPPED, state)
-        assertTrue(true, "Placeholder - requires initialization")
     }
     
     @Test
     fun `test ledger operations`() {
+        // TODO: Implement once LedgerManager is ready
         // Given
         val multiaddr = "/ip4/192.168.1.1/tcp/4001"
         val peerId = "peer456"
@@ -71,7 +72,6 @@ class MeshRepositoryTest {
         
         // Then
         // assertNotNull(dialable)
-        assertTrue(true, "Placeholder - requires LedgerManager mock")
     }
     
     @Test

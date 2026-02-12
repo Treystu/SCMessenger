@@ -59,15 +59,16 @@ PUBLIC_IP=""
 if command -v curl &> /dev/null; then
     # Check if we're trying to reach a containerized node
     # If docker is available and scmessenger container is running, use docker exec
-    if command -v docker &> /dev/null && docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^scmessenger'; then
-        API_RESPONSE=$(docker exec scmessenger curl -s http://127.0.0.1:9876/api/external-address 2>/dev/null)
+    CONTAINER_NAME="${CONTAINER_NAME:-scmessenger}"
+    if command -v docker &> /dev/null && docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAME}"; then
+        API_RESPONSE=$(docker exec "$CONTAINER_NAME" curl -s http://127.0.0.1:9876/api/external-address 2>/dev/null)
     else
         API_RESPONSE=$(curl -s http://localhost:9876/api/external-address 2>/dev/null)
     fi
     
     if [ $? -eq 0 ] && [ ! -z "$API_RESPONSE" ]; then
-        # Parse JSON response to get first address
-        PUBLIC_IP=$(echo "$API_RESPONSE" | grep -o '"[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1 | tr -d '"')
+        # Parse JSON response to get first address (IPv4 or IPv6 with optional port)
+        PUBLIC_IP=$(echo "$API_RESPONSE" | grep -oE '"[0-9a-fA-F:.]+(/[a-z0-9]+)?(/[0-9]+)?"' | head -1 | tr -d '"')
     fi
 fi
 
