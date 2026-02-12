@@ -67,8 +67,18 @@ if command -v curl &> /dev/null; then
     fi
     
     if [ $? -eq 0 ] && [ ! -z "$API_RESPONSE" ]; then
-        # Parse JSON response to get first address (IPv4 or IPv6 with optional port)
-        PUBLIC_IP=$(echo "$API_RESPONSE" | grep -oE '"[0-9a-fA-F:.]+(/[a-z0-9]+)?(/[0-9]+)?"' | head -1 | tr -d '"')
+        # Parse JSON response to get first address
+        # Try jq first for robust parsing, fall back to regex
+        if command -v jq &> /dev/null; then
+            PUBLIC_IP=$(echo "$API_RESPONSE" | jq -r '.addresses[0]? // empty' 2>/dev/null)
+        fi
+        
+        # Fallback to regex if jq unavailable or failed
+        if [ -z "$PUBLIC_IP" ]; then
+            # Match IPv4, IPv6 (with brackets), or hostname with optional port
+            # Examples: "192.168.1.1", "[::1]", "example.com:8080"
+            PUBLIC_IP=$(echo "$API_RESPONSE" | grep -oE '"[^"]+"' | head -1 | tr -d '"')
+        fi
     fi
 fi
 
