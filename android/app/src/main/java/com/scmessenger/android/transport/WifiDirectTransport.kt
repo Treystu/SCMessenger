@@ -378,13 +378,29 @@ class WifiDirectTransport(
             scope.launch {
                 try {
                     val buffer = ByteArray(8192)
+                    val lengthBuffer = ByteArray(4)
                     
                     while (isReading && socket.isConnected) {
-                        val bytesRead = inputStream.read(buffer)
-                        if (bytesRead > 0) {
-                            val data = buffer.copyOfRange(0, bytesRead)
+                        val headerRead = inputStream.read(lengthBuffer)
+                        if (headerRead < 4) break
+                        
+                        val length = java.nio.ByteBuffer.wrap(lengthBuffer).int
+                        if (length <= 0 || length > buffer.size) {
+                            Timber.e("Invalid message length: $length")
+                            break
+                        }
+                        
+                        val data = ByteArray(length)
+                        var totalRead = 0
+                        while (totalRead < length) {
+                            val bytesRead = inputStream.read(data, totalRead, length - totalRead)
+                            if (bytesRead < 0) break
+                            totalRead += bytesRead
+                        }
+                        
+                        if (totalRead == length) {
                             onDataReceived(peerId, data)
-                        } else if (bytesRead < 0) {
+                        } else {
                             break
                         }
                     }
@@ -400,8 +416,12 @@ class WifiDirectTransport(
         
         fun send(data: ByteArray): Boolean {
             return try {
-                outputStream.write(data)
-                outputStream.flush()
+                synchronized(outputStream) {
+                    val lengthBytes = java.nio.ByteBuffer.allocate(4).putInt(data.size).array()
+                    outputStream.write(lengthBytes)
+                    outputStream.write(data)
+                    outputStream.flush()
+                }
                 true
             } catch (e: Exception) {
                 Timber.e(e, "Failed to send WiFi Direct data to $peerId")

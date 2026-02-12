@@ -53,6 +53,8 @@ class WifiAwareTransport(
     
     private var isRunning = false
     
+    private var registeredCallback: ConnectivityManager.NetworkCallback? = null
+    
     /**
      * Check if WiFi Aware is available on this device.
      */
@@ -104,6 +106,8 @@ class WifiAwareTransport(
         
         isRunning = false
         
+        scope.cancel()
+        
         // Close all connections
         activeConnections.values.forEach { it.close() }
         activeConnections.clear()
@@ -111,6 +115,16 @@ class WifiAwareTransport(
         // Stop publish/subscribe sessions
         publishSession?.close()
         subscribeSession?.close()
+        
+        // Unregister network callback
+        registeredCallback?.let { callback ->
+            try {
+                connectivityManager.unregisterNetworkCallback(callback)
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to unregister network callback")
+            }
+            registeredCallback = null
+        }
         
         // Detach from WiFi Aware
         awareSession?.close()
@@ -267,11 +281,13 @@ class WifiAwareTransport(
             }
         }
         
+        registeredCallback = callback
         connectivityManager.requestNetwork(request, callback)
     }
     
     private suspend fun createSocketConnection(network: Network, peerId: String) {
         withContext(Dispatchers.IO) {
+            var serverSocket: ServerSocket? = null
             try {
                 // TODO: FIXME - Socket role negotiation needed
                 // Currently both peers create ServerSocket and wait on accept(), causing deadlock.
@@ -283,7 +299,7 @@ class WifiAwareTransport(
                 // 4. INITIATOR connects as client: Socket().connect(InetSocketAddress(peerIp6, port))
                 //
                 // For now this is non-functional placeholder code
-                val serverSocket = ServerSocket(AWARE_PORT)
+                serverSocket = ServerSocket(AWARE_PORT)
                 network.bindSocket(serverSocket)
                 
                 Timber.d("Waiting for WiFi Aware connection from $peerId on port $AWARE_PORT")
@@ -297,6 +313,7 @@ class WifiAwareTransport(
                 
                 Timber.i("WiFi Aware socket connected to $peerId")
             } catch (e: Exception) {
+                serverSocket?.close()
                 Timber.e(e, "Failed to create WiFi Aware socket connection")
             }
         }

@@ -346,7 +346,7 @@ private suspend fun parseAndJoin(
     onError: (String) -> Unit
 ) = withContext(Dispatchers.IO) {
     try {
-        Timber.d("Parsing join bundle: $qrData")
+        Timber.d("Parsing join bundle (length: ${qrData.length})")
         
         // Parse JSON (simplified - would use kotlinx.serialization)
         val jsonRegex = """"bootstrap_peers":\s*\[(.*?)\]""".toRegex()
@@ -384,10 +384,11 @@ private suspend fun parseAndJoin(
         // Dial bootstrap peers
         var successCount = 0
         bootstrapPeers.forEachIndexed { index, peer ->
-            try {
-                repository.dialPeer(peer)
-                successCount++
-                Timber.i("Dialed peer: $peer")
+            withContext(Dispatchers.Main) {
+                try {
+                    repository.dialPeer(peer)
+                    successCount++
+                    Timber.i("Dialed peer: $peer")
                 onProgress(0.25f + (0.5f * (index + 1) / bootstrapPeers.size))
             } catch (e: Exception) {
                 Timber.w(e, "Failed to dial peer: $peer")
@@ -395,22 +396,28 @@ private suspend fun parseAndJoin(
         }
         
         if (successCount == 0) {
-            onError("Failed to connect to any bootstrap peers")
+            withContext(Dispatchers.Main) {
+                onError("Failed to connect to any bootstrap peers")
+            }
             return@withContext
         }
         
         // Subscribe to topics
         topics.forEach { topic ->
-            try {
-                // TODO: Subscribe via SwarmBridge
-                Timber.i("Subscribed to topic: $topic")
-            } catch (e: Exception) {
-                Timber.w(e, "Failed to subscribe to topic: $topic")
+            withContext(Dispatchers.Main) {
+                try {
+                    // TODO: Subscribe via SwarmBridge
+                    Timber.i("Subscribed to topic: $topic")
+                } catch (e: Exception) {
+                    Timber.w(e, "Failed to subscribe to topic: $topic")
+                }
             }
         }
         
         onProgress(1.0f)
-        onSuccess()
+        withContext(Dispatchers.Main) {
+            onSuccess()
+        }
         
     } catch (e: Exception) {
         Timber.e(e, "Failed to parse and join")

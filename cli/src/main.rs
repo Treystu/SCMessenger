@@ -934,6 +934,9 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                             // Validate public key before adding
                             if let Err(e) = scmessenger_core::crypto::validate_ed25519_public_key(&pk) {
                                 tracing::warn!("Failed to add contact {}: invalid public key - {}", peer_id, e);
+                                let _ = ui_broadcast.send(server::UiEvent::Error {
+                                    message: format!("Invalid public key: {}", e)
+                                });
                                 continue;
                             }
                             
