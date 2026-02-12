@@ -227,7 +227,7 @@ class BleGattServer(
             when (characteristic.uuid) {
                 IDENTITY_CHAR_UUID -> {
                     // Return our identity beacon
-                    // TODO: Get from IronCore
+                    // Use a placeholder beacon - in production this would come from IronCore.getIdentityInfo()
                     val identityBeacon = "SCM_IDENTITY_BEACON".toByteArray()
                     gattServer?.sendResponse(
                         device,
