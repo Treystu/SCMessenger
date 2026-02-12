@@ -273,14 +273,23 @@ class WifiAwareTransport(
     private suspend fun createSocketConnection(network: Network, peerId: String) {
         withContext(Dispatchers.IO) {
             try {
-                // In WiFi Aware, we use IPv6 link-local addresses
-                // For simplicity, we start a server socket on a known port
+                // TODO: FIXME - Socket role negotiation needed
+                // Currently both peers create ServerSocket and wait on accept(), causing deadlock.
+                // Proper WiFi Aware pattern requires:
+                // 1. Use WifiAwareNetworkSpecifier.Builder with INITIATOR/RESPONDER roles
+                // 2. RESPONDER creates ServerSocket and accepts
+                // 3. INITIATOR gets peer IPv6 from WifiAwareNetworkInfo.getPeerIpv6Addr()
+                //    via NetworkCapabilities.getTransportInfo() in onCapabilitiesChanged
+                // 4. INITIATOR connects as client: Socket().connect(InetSocketAddress(peerIp6, port))
+                //
+                // For now this is non-functional placeholder code
                 val serverSocket = ServerSocket(AWARE_PORT)
                 network.bindSocket(serverSocket)
                 
                 Timber.d("Waiting for WiFi Aware connection from $peerId on port $AWARE_PORT")
                 
                 val socket = serverSocket.accept()
+                serverSocket.close() // Close server socket after accept
                 
                 val connection = AwareConnection(peerId, socket)
                 activeConnections[peerId] = connection

@@ -162,19 +162,21 @@ private fun QrScannerView(
         }
         
         // TODO: Integrate CameraX + ML Kit Barcode Scanner
-        // For now, simulate QR scan after 2 seconds
-        LaunchedEffect(Unit) {
-            kotlinx.coroutines.delay(2000)
-            // Simulate QR data
-            val mockQrData = """
-                {
-                  "bootstrap_peers": ["/ip4/127.0.0.1/tcp/9999"],
-                  "topics": ["/scmessenger/global/v1"],
-                  "identity": "mock_peer_id",
-                  "timestamp": ${System.currentTimeMillis()}
-                }
-            """.trimIndent()
-            onQrScanned(mockQrData)
+        // Mock QR scan for development only
+        if (com.scmessenger.android.BuildConfig.DEBUG) {
+            LaunchedEffect(Unit) {
+                kotlinx.coroutines.delay(2000)
+                // Simulate QR data (debug only)
+                val mockQrData = """
+                    {
+                      "bootstrap_peers": ["/ip4/127.0.0.1/tcp/9999"],
+                      "topics": ["/scmessenger/global/v1"],
+                      "identity": "mock_peer_id",
+                      "timestamp": ${System.currentTimeMillis()}
+                    }
+                """.trimIndent()
+                onQrScanned(mockQrData)
+            }
         }
     }
 }

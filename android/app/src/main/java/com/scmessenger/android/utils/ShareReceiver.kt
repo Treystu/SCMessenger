@@ -89,17 +89,30 @@ class ShareReceiver : BroadcastReceiver() {
                 contact.nickname ?: contact.peerId.take(8)
             }.toTypedArray()
             
-            AlertDialog.Builder(context)
-                .setTitle("Share to Contact")
-                .setItems(contactNames) { dialog, which ->
-                    val selectedContact = contacts[which]
-                    sendMessageToContact(context, repository, selectedContact.peerId, content)
-                    dialog.dismiss()
-                }
-                .setNegativeButton(R.string.cancel) { dialog, _ ->
-                    dialog.dismiss()
-                }
-                .show()
+            // NOTE: Showing AlertDialog from BroadcastReceiver context can fail on newer
+            // Android versions due to background UI restrictions. For production, this should
+            // launch a transparent Activity to handle the share flow.
+            // For now, attempt dialog but catch WindowManager.BadTokenException
+            try {
+                AlertDialog.Builder(context)
+                    .setTitle("Share to Contact")
+                    .setItems(contactNames) { dialog, which ->
+                        val selectedContact = contacts[which]
+                        sendMessageToContact(context, repository, selectedContact.peerId, content)
+                        dialog.dismiss()
+                    }
+                    .setNegativeButton(R.string.cancel) { dialog, _ ->
+                        dialog.dismiss()
+                    }
+                    .show()
+            } catch (e: android.view.WindowManager.BadTokenException) {
+                Timber.w("Cannot show dialog from BroadcastReceiver context, using toast fallback")
+                Toast.makeText(
+                    context, 
+                    "Open SCMessenger to share content with contacts", 
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         } catch (e: Exception) {
             Timber.e(e, "Failed to show contact picker")
             Toast.makeText(context, "Failed to load contacts", Toast.LENGTH_SHORT).show()
