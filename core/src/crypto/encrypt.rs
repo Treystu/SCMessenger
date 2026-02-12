@@ -323,6 +323,39 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_ed25519_public_key_valid() {
+        // Generate a real Ed25519 keypair
+        let signing_key = generate_keypair();
+        let public_key_hex = hex::encode(signing_key.verifying_key().to_bytes());
+
+        // Should validate successfully
+        assert!(validate_ed25519_public_key(&public_key_hex).is_ok());
+    }
+
+    #[test]
+    fn test_validate_ed25519_public_key_invalid_hex() {
+        let invalid_hex = "not-valid-hex";
+        let result = validate_ed25519_public_key(invalid_hex);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid hex encoding"));
+    }
+
+    #[test]
+    fn test_validate_ed25519_public_key_wrong_length() {
+        // 16 bytes instead of 32
+        let too_short = "0123456789abcdef0123456789abcdef";
+        let result = validate_ed25519_public_key(too_short);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("must be exactly 32 bytes"));
+    }
+
+    #[test]
     fn test_encrypt_decrypt_roundtrip() {
         let sender_key = generate_keypair();
         let recipient_key = generate_keypair();
