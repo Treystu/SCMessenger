@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SCMessenger</string>
+    
+    <!-- Service notifications -->
+    <string name="mesh_service_notification_title">Mesh Network Active</string>
+    <string name="mesh_service_notification_text">Relaying messages and discovering peers</string>
+    <string name="mesh_service_channel_name">Mesh Service</string>
+    <string name="mesh_service_channel_description">Maintains mesh network connectivity</string>
+    
+    <!-- Permissions -->
+    <string name="permission_bluetooth_rationale">Bluetooth is required for local peer discovery and messaging</string>
+    <string name="permission_location_rationale">Location is required for WiFi Aware peer discovery</string>
+    <string name="permission_notification_rationale">Notifications keep you informed of new messages</string>
+    
+    <!-- Common -->
+    <string name="cancel">Cancel</string>
+    <string name="ok">OK</string>
+    <string name="send">Send</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="save">Save</string>
+</resources>

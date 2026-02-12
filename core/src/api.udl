@@ -75,3 +75,290 @@ enum IronCoreError {
     "InvalidInput",
     "Internal",
 };
+
+// ============================================================================
+// MOBILE SERVICE
+// ============================================================================
+
+dictionary MeshServiceConfig {
+    u32 discovery_interval_ms;
+    u32 relay_budget_per_hour;
+    u8 battery_floor_pct;
+};
+
+enum ServiceState {
+    "Stopped",
+    "Starting",
+    "Running",
+    "Stopping",
+};
+
+enum MotionState {
+    "Still",
+    "Walking",
+    "Running",
+    "Automotive",
+    "Unknown",
+};
+
+dictionary ServiceStats {
+    u32 peers_discovered;
+    u32 messages_relayed;
+    u64 bytes_transferred;
+    u64 uptime_secs;
+};
+
+interface MeshService {
+    constructor(MeshServiceConfig config);
+
+    [Throws=IronCoreError]
+    void start();
+    void stop();
+    void pause();
+    void resume();
+    ServiceState get_state();
+    ServiceStats get_stats();
+    void reset_stats();
+};
+
+callback interface PlatformBridge {
+    void on_battery_changed(u8 battery_pct, boolean is_charging);
+    void on_network_changed(boolean has_wifi, boolean has_cellular);
+    void on_motion_changed(MotionState motion);
+    void on_ble_data_received(string peer_id, bytes data);
+    void on_entering_background();
+    void on_entering_foreground();
+};
+
+// ============================================================================
+// AUTO-ADJUST ENGINE
+// ============================================================================
+
+dictionary DeviceProfile {
+    u8 battery_pct;
+    boolean is_charging;
+    boolean has_wifi;
+    MotionState motion_state;
+};
+
+enum AdjustmentProfile {
+    "Maximum",
+    "High",
+    "Standard",
+    "Reduced",
+    "Minimal",
+};
+
+dictionary BleAdjustment {
+    u32 scan_interval_ms;
+    u32 advertise_interval_ms;
+    i8 tx_power_dbm;
+};
+
+dictionary RelayAdjustment {
+    u32 max_per_hour;
+    u8 priority_threshold;
+    u32 max_payload_bytes;
+};
+
+interface AutoAdjustEngine {
+    constructor();
+
+    AdjustmentProfile compute_profile(DeviceProfile device);
+    BleAdjustment compute_ble_adjustment(AdjustmentProfile profile);
+    RelayAdjustment compute_relay_adjustment(AdjustmentProfile profile);
+
+    void override_ble_scan_interval(u32 interval_ms);
+    void override_relay_max_per_hour(u32 max);
+    void clear_overrides();
+};
+
+// ============================================================================
+// MESH SETTINGS
+// ============================================================================
+
+enum DiscoveryMode {
+    "Normal",
+    "Cautious",
+    "Paranoid",
+};
+
+dictionary MeshSettings {
+    boolean relay_enabled;
+    u32 max_relay_budget;
+    u8 battery_floor;
+    boolean ble_enabled;
+    boolean wifi_aware_enabled;
+    boolean wifi_direct_enabled;
+    boolean internet_enabled;
+    DiscoveryMode discovery_mode;
+    boolean onion_routing;
+};
+
+interface MeshSettingsManager {
+    constructor(string storage_path);
+
+    [Throws=IronCoreError]
+    MeshSettings load();
+
+    [Throws=IronCoreError]
+    void save(MeshSettings settings);
+
+    [Throws=IronCoreError]
+    void validate(MeshSettings settings);
+
+    MeshSettings default_settings();
+};
+
+// ============================================================================
+// CONTACTS
+// ============================================================================
+
+dictionary Contact {
+    string peer_id;
+    string? nickname;
+    string public_key;
+    u64 added_at;
+    u64? last_seen;
+    string? notes;
+};
+
+interface ContactManager {
+    [Throws=IronCoreError]
+    constructor(string storage_path);
+
+    [Throws=IronCoreError]
+    void add(Contact contact);
+
+    [Throws=IronCoreError]
+    Contact? get(string peer_id);
+
+    [Throws=IronCoreError]
+    void remove(string peer_id);
+
+    [Throws=IronCoreError]
+    sequence<Contact> list();
+
+    [Throws=IronCoreError]
+    sequence<Contact> search(string query);
+
+    [Throws=IronCoreError]
+    void set_nickname(string peer_id, string? nickname);
+
+    [Throws=IronCoreError]
+    void update_last_seen(string peer_id);
+
+    u32 count();
+};
+
+// ============================================================================
+// MESSAGE HISTORY
+// ============================================================================
+
+enum MessageDirection {
+    "Sent",
+    "Received",
+};
+
+dictionary MessageRecord {
+    string id;
+    MessageDirection direction;
+    string peer_id;
+    string content;
+    u64 timestamp;
+    boolean delivered;
+};
+
+dictionary HistoryStats {
+    u32 total_messages;
+    u32 sent_count;
+    u32 received_count;
+    u32 undelivered_count;
+};
+
+interface HistoryManager {
+    [Throws=IronCoreError]
+    constructor(string storage_path);
+
+    [Throws=IronCoreError]
+    void add(MessageRecord record);
+
+    [Throws=IronCoreError]
+    MessageRecord? get(string id);
+
+    [Throws=IronCoreError]
+    sequence<MessageRecord> recent(string? peer_filter, u32 limit);
+
+    [Throws=IronCoreError]
+    sequence<MessageRecord> conversation(string peer_id, u32 limit);
+
+    [Throws=IronCoreError]
+    sequence<MessageRecord> search(string query, u32 limit);
+
+    [Throws=IronCoreError]
+    void mark_delivered(string id);
+
+    [Throws=IronCoreError]
+    void clear();
+
+    [Throws=IronCoreError]
+    void clear_conversation(string peer_id);
+
+    [Throws=IronCoreError]
+    HistoryStats stats();
+
+    u32 count();
+};
+
+// ============================================================================
+// CONNECTION LEDGER
+// ============================================================================
+
+dictionary LedgerEntry {
+    string multiaddr;
+    string? peer_id;
+    u32 success_count;
+    u32 failure_count;
+    u64? last_seen;
+    sequence<string> topics;
+};
+
+interface LedgerManager {
+    constructor(string storage_path);
+
+    [Throws=IronCoreError]
+    void load();
+
+    [Throws=IronCoreError]
+    void save();
+
+    void record_connection(string multiaddr, string peer_id);
+    void record_failure(string multiaddr);
+
+    sequence<LedgerEntry> dialable_addresses();
+    sequence<string> all_known_topics();
+
+    string summary();
+};
+
+// ============================================================================
+// SWARM BRIDGE
+// ============================================================================
+
+interface SwarmBridge {
+    constructor();
+
+    [Throws=IronCoreError]
+    void send_message(string peer_id, bytes data);
+
+    [Throws=IronCoreError]
+    void dial(string multiaddr);
+
+    sequence<string> get_peers();
+    sequence<string> get_topics();
+
+    [Throws=IronCoreError]
+    void subscribe_topic(string topic);
+
+    void shutdown();
+};

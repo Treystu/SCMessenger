@@ -18,3 +18,15 @@ config.json
 # IDEs
 .idea/
 .vscode/
+
+# Android Build
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+*.apk
+*.aab
+
+# UniFFI Generated
+core/target/generated-sources/
+core/target/android-libs/

@@ -1,0 +1,209 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'kotlin-kapt'
+    id 'dagger.hilt.android.plugin'
+}
+
+android {
+    namespace 'com.scmessenger.android'
+    compileSdk rootProject.ext.compileSdk
+    
+    ndkVersion '26.1.10909125'
+    
+    defaultConfig {
+        applicationId 'com.scmessenger.android'
+        minSdk rootProject.ext.minSdk
+        targetSdk rootProject.ext.targetSdk
+        versionCode rootProject.ext.versionCode
+        versionName rootProject.ext.versionName
+        
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        
+        // Specify ABIs we're building for
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'
+        }
+    }
+    
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            minifyEnabled false
+            debuggable true
+        }
+    }
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    
+    kotlinOptions {
+        jvmTarget = '17'
+        freeCompilerArgs += [
+            '-opt-in=kotlin.RequiresOptIn',
+            '-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi',
+            '-opt-in=androidx.compose.material3.ExperimentalMaterial3Api'
+        ]
+    }
+    
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+    
+    composeOptions {
+        kotlinCompilerExtensionVersion rootProject.ext.compose_compiler_version
+    }
+    
+    packaging {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+        
+        // JNI libraries from Rust
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+    
+    sourceSets {
+        main {
+            // Include generated UniFFI Kotlin bindings
+            java.srcDirs += '../core/target/generated-sources/uniffi/kotlin'
+            
+            // JNI libraries from cargo-ndk build
+            jniLibs.srcDirs = ['../core/target/android-libs']
+        }
+    }
+}
+
+dependencies {
+    // Kotlin
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines_version"
+    
+    // AndroidX Core
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.6.2'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2'
+    implementation 'androidx.lifecycle:lifecycle-service:2.6.2'
+    implementation 'androidx.activity:activity-compose:1.8.0'
+    implementation 'androidx.work:work-runtime-ktx:2.8.1'
+    
+    // Jetpack Compose
+    implementation platform('androidx.compose:compose-bom:2023.10.01')
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.navigation:navigation-compose:2.7.5'
+    
+    // Hilt Dependency Injection
+    implementation "com.google.dagger:hilt-android:$hilt_version"
+    kapt "com.google.dagger:hilt-android-compiler:$hilt_version"
+    implementation 'androidx.hilt:hilt-navigation-compose:1.1.0'
+    
+    // DataStore for preferences
+    implementation 'androidx.datastore:datastore-preferences:1.0.0'
+    
+    // Timber logging
+    implementation 'com.jakewharton.timber:timber:5.0.1'
+    
+    // UniFFI runtime (JNA for FFI)
+    implementation 'net.java.dev.jna:jna:5.13.0@aar'
+    
+    // Permissions
+    implementation 'com.google.accompanist:accompanist-permissions:0.32.0'
+    
+    // Testing
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
+    testImplementation 'io.mockk:mockk:1.13.8'
+    testImplementation 'io.mockk:mockk-android:1.13.8'
+    testImplementation 'androidx.arch.core:core-testing:2.2.0'
+    
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+    androidTestImplementation platform('androidx.compose:compose-bom:2023.10.01')
+    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
+    
+    // Debug
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
+}
+
+// Task to build Rust library for all Android architectures
+task buildRustAndroid(type: Exec) {
+    description = 'Build Rust library for Android using cargo-ndk'
+    group = 'rust'
+    
+    workingDir '../../'
+    
+    commandLine 'sh', '-c', '''
+        set -e
+        
+        # Check if cargo-ndk is installed
+        if ! command -v cargo-ndk &> /dev/null; then
+            echo "Installing cargo-ndk..."
+            cargo install cargo-ndk
+        fi
+        
+        # Create output directory
+        mkdir -p core/target/android-libs/{arm64-v8a,armeabi-v7a,x86_64,x86}
+        
+        # Build for each architecture
+        for target in aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android; do
+            echo "Building for $target..."
+            cargo ndk -t $target build --release -p scmessenger-core
+        done
+        
+        # Copy libraries to expected locations
+        cp core/target/aarch64-linux-android/release/libscmessenger_core.so core/target/android-libs/arm64-v8a/
+        cp core/target/armv7-linux-androideabi/release/libscmessenger_core.so core/target/android-libs/armeabi-v7a/
+        cp core/target/x86_64-linux-android/release/libscmessenger_core.so core/target/android-libs/x86_64/
+        cp core/target/i686-linux-android/release/libscmessenger_core.so core/target/android-libs/x86/
+        
+        echo "Rust libraries built successfully!"
+    '''
+}
+
+// Task to generate UniFFI Kotlin bindings
+task generateUniFFIBindings(type: Exec) {
+    description = 'Generate Kotlin bindings from UniFFI'
+    group = 'rust'
+    
+    workingDir '../../core'
+    
+    commandLine 'sh', '-c', '''
+        set -e
+        
+        # Install uniffi-bindgen if not present
+        if ! command -v uniffi-bindgen &> /dev/null; then
+            echo "Installing uniffi-bindgen..."
+            cargo install uniffi-bindgen
+        fi
+        
+        # Create output directory
+        mkdir -p target/generated-sources/uniffi/kotlin
+        
+        # Generate bindings
+        uniffi-bindgen generate src/api.udl --language kotlin --out-dir target/generated-sources/uniffi/kotlin
+        
+        echo "UniFFI Kotlin bindings generated!"
+    '''
+}
+
+// Make sure Rust is built before Java compilation
+tasks.whenTaskAdded { task ->
+    if (task.name == 'preBuild') {
+        task.dependsOn buildRustAndroid
+        task.dependsOn generateUniFFIBindings
+    }
+}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- Exclude sensitive data from cloud backup -->
+        <exclude domain="file" path="identity/" />
+        <exclude domain="file" path="contacts.db/" />
+        <exclude domain="file" path="history.db/" />
+    </cloud-backup>
+    <device-transfer>
+        <!-- Allow transfer of settings but not identity -->
+        <exclude domain="file" path="identity/" />
+    </device-transfer>
+</data-extraction-rules>

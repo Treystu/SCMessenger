@@ -1,0 +1,757 @@
+// Mobile bridge types for UniFFI bindings
+//
+// This module defines all the types declared in api.udl for mobile platform integration.
+// These types are exposed via UniFFI to Android/iOS native code.
+
+use serde::{Deserialize, Serialize};
+
+// Re-export the contacts bridge
+pub use crate::contacts_bridge::{Contact, ContactManager};
+
+// ============================================================================
+// MOBILE SERVICE
+// ============================================================================
+
+#[derive(Debug, Clone)]
+pub struct MeshServiceConfig {
+    pub discovery_interval_ms: u32,
+    pub relay_budget_per_hour: u32,
+    pub battery_floor_pct: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ServiceState {
+    Stopped,
+    Starting,
+    Running,
+    Stopping,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MotionState {
+    Still,
+    Walking,
+    Running,
+    Automotive,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ServiceStats {
+    pub peers_discovered: u32,
+    pub messages_relayed: u32,
+    pub bytes_transferred: u64,
+    pub uptime_secs: u64,
+}
+
+/// Mobile mesh service wrapper integrating IronCore with mobile lifecycle
+pub struct MeshService {
+    config: std::sync::Mutex<MeshServiceConfig>,
+    state: std::sync::Mutex<ServiceState>,
+    stats: std::sync::Mutex<ServiceStats>,
+    core: std::sync::Arc<std::sync::Mutex<Option<crate::IronCore>>>,
+    storage_path: Option<String>,
+}
+
+impl MeshService {
+    pub fn new(config: MeshServiceConfig) -> Self {
+        Self {
+            config: std::sync::Mutex::new(config),
+            state: std::sync::Mutex::new(ServiceState::Stopped),
+            stats: std::sync::Mutex::new(ServiceStats::default()),
+            core: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            storage_path: None,
+        }
+    }
+
+    /// Create MeshService with persistent storage
+    pub fn with_storage(config: MeshServiceConfig, storage_path: String) -> Self {
+        Self {
+            config: std::sync::Mutex::new(config),
+            state: std::sync::Mutex::new(ServiceState::Stopped),
+            stats: std::sync::Mutex::new(ServiceStats::default()),
+            core: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            storage_path: Some(storage_path),
+        }
+    }
+
+    pub fn start(&self) -> Result<(), crate::IronCoreError> {
+        let mut state = self.state.lock().unwrap();
+
+        if *state == ServiceState::Running {
+            return Err(crate::IronCoreError::AlreadyRunning);
+        }
+
+        *state = ServiceState::Starting;
+        drop(state);
+
+        // Initialize IronCore
+        let core = if let Some(ref path) = self.storage_path {
+            crate::IronCore::with_storage(path.clone())
+        } else {
+            crate::IronCore::new()
+        };
+
+        // Start the core
+        core.start()?;
+
+        // Store the core instance
+        *self.core.lock().unwrap() = Some(core);
+
+        // Update state
+        *self.state.lock().unwrap() = ServiceState::Running;
+
+        tracing::info!("MeshService started");
+        Ok(())
+    }
+
+    pub fn stop(&self) {
+        let mut state = self.state.lock().unwrap();
+
+        if *state == ServiceState::Stopped {
+            return;
+        }
+
+        *state = ServiceState::Stopping;
+        drop(state);
+
+        // Stop the core
+        if let Some(ref core) = *self.core.lock().unwrap() {
+            core.stop();
+        }
+
+        // Clear the core instance
+        *self.core.lock().unwrap() = None;
+
+        // Update state
+        *self.state.lock().unwrap() = ServiceState::Stopped;
+
+        tracing::info!("MeshService stopped");
+    }
+
+    pub fn pause(&self) {
+        // In a full implementation, this would reduce activity:
+        // - Decrease BLE scan frequency
+        // - Reduce relay budget
+        // - Keep connections alive but minimize new discovery
+        tracing::info!("MeshService paused (activity reduced)");
+    }
+
+    pub fn resume(&self) {
+        // Restore full activity levels
+        tracing::info!("MeshService resumed (full activity)");
+    }
+
+    pub fn get_state(&self) -> ServiceState {
+        *self.state.lock().unwrap()
+    }
+
+    pub fn get_stats(&self) -> ServiceStats {
+        let mut stats = self.stats.lock().unwrap().clone();
+
+        // Augment with IronCore stats if available
+        if let Some(ref core) = *self.core.lock().unwrap() {
+            // Core doesn't expose peer discovery yet, but we can get message counts
+            // This is a placeholder for future integration
+        }
+
+        stats
+    }
+
+    pub fn reset_stats(&self) {
+        *self.stats.lock().unwrap() = ServiceStats::default();
+        tracing::info!("MeshService stats reset");
+    }
+
+    /// Internal helper to get the core instance
+    pub(crate) fn get_core(&self) -> Option<crate::IronCore> {
+        self.core.lock().unwrap().clone()
+    }
+
+    /// Check if service is running
+    pub fn is_running(&self) -> bool {
+        *self.state.lock().unwrap() == ServiceState::Running
+    }
+}
+
+// PlatformBridge callback trait (implemented by mobile platforms)
+pub trait PlatformBridge: Send + Sync {
+    fn on_battery_changed(&self, battery_pct: u8, is_charging: bool);
+    fn on_network_changed(&self, has_wifi: bool, has_cellular: bool);
+    fn on_motion_changed(&self, motion: MotionState);
+    fn on_ble_data_received(&self, peer_id: String, data: Vec<u8>);
+    fn on_entering_background(&self);
+    fn on_entering_foreground(&self);
+}
+
+// ============================================================================
+// AUTO-ADJUST ENGINE
+// ============================================================================
+
+#[derive(Debug, Clone)]
+pub struct DeviceProfile {
+    pub battery_pct: u8,
+    pub is_charging: bool,
+    pub has_wifi: bool,
+    pub motion_state: MotionState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdjustmentProfile {
+    Maximum,
+    High,
+    Standard,
+    Reduced,
+    Minimal,
+}
+
+#[derive(Debug, Clone)]
+pub struct BleAdjustment {
+    pub scan_interval_ms: u32,
+    pub advertise_interval_ms: u32,
+    pub tx_power_dbm: i8,
+}
+
+#[derive(Debug, Clone)]
+pub struct RelayAdjustment {
+    pub max_per_hour: u32,
+    pub priority_threshold: u8,
+    pub max_payload_bytes: u32,
+}
+
+pub struct AutoAdjustEngine {
+    ble_scan_override: std::sync::Mutex<Option<u32>>,
+    relay_max_override: std::sync::Mutex<Option<u32>>,
+}
+
+impl AutoAdjustEngine {
+    pub fn new() -> Self {
+        Self {
+            ble_scan_override: std::sync::Mutex::new(None),
+            relay_max_override: std::sync::Mutex::new(None),
+        }
+    }
+
+    pub fn compute_profile(&self, device: DeviceProfile) -> AdjustmentProfile {
+        // Logic from core/src/mobile/auto_adjust.rs
+        if device.is_charging && device.has_wifi {
+            AdjustmentProfile::Maximum
+        } else if device.battery_pct > 50 {
+            AdjustmentProfile::High
+        } else if device.battery_pct > 30 {
+            AdjustmentProfile::Standard
+        } else if device.battery_pct > 15 {
+            AdjustmentProfile::Reduced
+        } else {
+            AdjustmentProfile::Minimal
+        }
+    }
+
+    pub fn compute_ble_adjustment(&self, profile: AdjustmentProfile) -> BleAdjustment {
+        let (scan_interval, advertise_interval, tx_power) = match profile {
+            AdjustmentProfile::Maximum => (500, 100, 4),
+            AdjustmentProfile::High => (1000, 200, 0),
+            AdjustmentProfile::Standard => (2000, 500, -4),
+            AdjustmentProfile::Reduced => (5000, 1000, -8),
+            AdjustmentProfile::Minimal => (10000, 2000, -12),
+        };
+
+        BleAdjustment {
+            scan_interval_ms: self
+                .ble_scan_override
+                .lock()
+                .unwrap()
+                .unwrap_or(scan_interval),
+            advertise_interval_ms: advertise_interval,
+            tx_power_dbm: tx_power,
+        }
+    }
+
+    pub fn compute_relay_adjustment(&self, profile: AdjustmentProfile) -> RelayAdjustment {
+        let (max_per_hour, priority_threshold, max_payload) = match profile {
+            AdjustmentProfile::Maximum => (1000, 0, 65536),
+            AdjustmentProfile::High => (500, 50, 32768),
+            AdjustmentProfile::Standard => (200, 100, 16384),
+            AdjustmentProfile::Reduced => (100, 150, 8192),
+            AdjustmentProfile::Minimal => (50, 200, 4096),
+        };
+
+        RelayAdjustment {
+            max_per_hour: self
+                .relay_max_override
+                .lock()
+                .unwrap()
+                .unwrap_or(max_per_hour),
+            priority_threshold,
+            max_payload_bytes: max_payload,
+        }
+    }
+
+    pub fn override_ble_scan_interval(&self, interval_ms: u32) {
+        *self.ble_scan_override.lock().unwrap() = Some(interval_ms);
+    }
+
+    pub fn override_relay_max_per_hour(&self, max: u32) {
+        *self.relay_max_override.lock().unwrap() = Some(max);
+    }
+
+    pub fn clear_overrides(&self) {
+        *self.ble_scan_override.lock().unwrap() = None;
+        *self.relay_max_override.lock().unwrap() = None;
+    }
+}
+
+// ============================================================================
+// MESH SETTINGS
+// ============================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DiscoveryMode {
+    Normal,
+    Cautious,
+    Paranoid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeshSettings {
+    pub relay_enabled: bool,
+    pub max_relay_budget: u32,
+    pub battery_floor: u8,
+    pub ble_enabled: bool,
+    pub wifi_aware_enabled: bool,
+    pub wifi_direct_enabled: bool,
+    pub internet_enabled: bool,
+    pub discovery_mode: DiscoveryMode,
+    pub onion_routing: bool,
+}
+
+impl Default for MeshSettings {
+    fn default() -> Self {
+        Self {
+            relay_enabled: true,
+            max_relay_budget: 200,
+            battery_floor: 20,
+            ble_enabled: true,
+            wifi_aware_enabled: true,
+            wifi_direct_enabled: true,
+            internet_enabled: true,
+            discovery_mode: DiscoveryMode::Normal,
+            onion_routing: false,
+        }
+    }
+}
+
+pub struct MeshSettingsManager {
+    storage_path: std::path::PathBuf,
+}
+
+impl MeshSettingsManager {
+    pub fn new(storage_path: String) -> Self {
+        Self {
+            storage_path: std::path::PathBuf::from(storage_path),
+        }
+    }
+
+    pub fn load(&self) -> Result<MeshSettings, crate::IronCoreError> {
+        let settings_file = self.storage_path.join("mesh_settings.json");
+        if settings_file.exists() {
+            let data = std::fs::read_to_string(&settings_file)
+                .map_err(|_| crate::IronCoreError::StorageError)?;
+            let settings: MeshSettings =
+                serde_json::from_str(&data).map_err(|_| crate::IronCoreError::Internal)?;
+            Ok(settings)
+        } else {
+            Ok(MeshSettings::default())
+        }
+    }
+
+    pub fn save(&self, settings: MeshSettings) -> Result<(), crate::IronCoreError> {
+        self.validate(settings.clone())?;
+
+        std::fs::create_dir_all(&self.storage_path)
+            .map_err(|_| crate::IronCoreError::StorageError)?;
+
+        let settings_file = self.storage_path.join("mesh_settings.json");
+        let data =
+            serde_json::to_string_pretty(&settings).map_err(|_| crate::IronCoreError::Internal)?;
+        std::fs::write(&settings_file, data).map_err(|_| crate::IronCoreError::StorageError)?;
+
+        Ok(())
+    }
+
+    pub fn validate(&self, settings: MeshSettings) -> Result<(), crate::IronCoreError> {
+        // Enforce relay=messaging coupling
+        if settings.relay_enabled && settings.max_relay_budget == 0 {
+            return Err(crate::IronCoreError::InvalidInput);
+        }
+
+        // At least one transport must be enabled
+        if !settings.ble_enabled
+            && !settings.wifi_aware_enabled
+            && !settings.wifi_direct_enabled
+            && !settings.internet_enabled
+        {
+            return Err(crate::IronCoreError::InvalidInput);
+        }
+
+        // Battery floor must be reasonable
+        if settings.battery_floor > 50 {
+            return Err(crate::IronCoreError::InvalidInput);
+        }
+
+        Ok(())
+    }
+
+    pub fn default_settings(&self) -> MeshSettings {
+        MeshSettings::default()
+    }
+}
+
+// ============================================================================
+// MESSAGE HISTORY
+// ============================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MessageDirection {
+    Sent,
+    Received,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageRecord {
+    pub id: String,
+    pub direction: MessageDirection,
+    pub peer_id: String,
+    pub content: String,
+    pub timestamp: u64,
+    pub delivered: bool,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct HistoryStats {
+    pub total_messages: u32,
+    pub sent_count: u32,
+    pub received_count: u32,
+    pub undelivered_count: u32,
+}
+
+pub struct HistoryManager {
+    db: std::sync::Arc<std::sync::Mutex<sled::Db>>,
+}
+
+impl HistoryManager {
+    pub fn new(storage_path: String) -> Result<Self, crate::IronCoreError> {
+        let path = std::path::PathBuf::from(storage_path).join("history.db");
+        let db = sled::open(path).map_err(|_| crate::IronCoreError::StorageError)?;
+
+        Ok(Self {
+            db: std::sync::Arc::new(std::sync::Mutex::new(db)),
+        })
+    }
+
+    pub fn add(&self, record: MessageRecord) -> Result<(), crate::IronCoreError> {
+        let db = self.db.lock().unwrap();
+        let key = record.id.as_bytes();
+        let value = serde_json::to_vec(&record).map_err(|_| crate::IronCoreError::Internal)?;
+        db.insert(key, value)
+            .map_err(|_| crate::IronCoreError::StorageError)?;
+        Ok(())
+    }
+
+    pub fn get(&self, id: String) -> Result<Option<MessageRecord>, crate::IronCoreError> {
+        let db = self.db.lock().unwrap();
+        if let Some(data) = db
+            .get(id.as_bytes())
+            .map_err(|_| crate::IronCoreError::StorageError)?
+        {
+            let record: MessageRecord =
+                serde_json::from_slice(&data).map_err(|_| crate::IronCoreError::Internal)?;
+            Ok(Some(record))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn recent(
+        &self,
+        peer_filter: Option<String>,
+        limit: u32,
+    ) -> Result<Vec<MessageRecord>, crate::IronCoreError> {
+        let db = self.db.lock().unwrap();
+        let mut records = Vec::new();
+
+        for item in db.iter().rev() {
+            if records.len() >= limit as usize {
+                break;
+            }
+
+            let (_, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
+            let record: MessageRecord =
+                serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
+
+            if let Some(ref peer) = peer_filter {
+                if &record.peer_id == peer {
+                    records.push(record);
+                }
+            } else {
+                records.push(record);
+            }
+        }
+
+        Ok(records)
+    }
+
+    pub fn conversation(
+        &self,
+        peer_id: String,
+        limit: u32,
+    ) -> Result<Vec<MessageRecord>, crate::IronCoreError> {
+        self.recent(Some(peer_id), limit)
+    }
+
+    pub fn search(
+        &self,
+        query: String,
+        limit: u32,
+    ) -> Result<Vec<MessageRecord>, crate::IronCoreError> {
+        let db = self.db.lock().unwrap();
+        let query_lower = query.to_lowercase();
+        let mut results = Vec::new();
+
+        for item in db.iter() {
+            if results.len() >= limit as usize {
+                break;
+            }
+
+            let (_, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
+            let record: MessageRecord =
+                serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
+
+            if record.content.to_lowercase().contains(&query_lower) {
+                results.push(record);
+            }
+        }
+
+        Ok(results)
+    }
+
+    pub fn mark_delivered(&self, id: String) -> Result<(), crate::IronCoreError> {
+        if let Some(mut record) = self.get(id.clone())? {
+            record.delivered = true;
+            self.add(record)?;
+        }
+        Ok(())
+    }
+
+    pub fn clear(&self) -> Result<(), crate::IronCoreError> {
+        let db = self.db.lock().unwrap();
+        db.clear().map_err(|_| crate::IronCoreError::StorageError)?;
+        Ok(())
+    }
+
+    pub fn clear_conversation(&self, peer_id: String) -> Result<(), crate::IronCoreError> {
+        let db = self.db.lock().unwrap();
+        let mut to_delete = Vec::new();
+
+        for item in db.iter() {
+            let (key, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
+            let record: MessageRecord =
+                serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
+            if record.peer_id == peer_id {
+                to_delete.push(key.to_vec());
+            }
+        }
+
+        for key in to_delete {
+            db.remove(key)
+                .map_err(|_| crate::IronCoreError::StorageError)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn stats(&self) -> Result<HistoryStats, crate::IronCoreError> {
+        let db = self.db.lock().unwrap();
+        let mut stats = HistoryStats::default();
+
+        for item in db.iter() {
+            let (_, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
+            let record: MessageRecord =
+                serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
+
+            stats.total_messages += 1;
+            match record.direction {
+                MessageDirection::Sent => stats.sent_count += 1,
+                MessageDirection::Received => stats.received_count += 1,
+            }
+            if !record.delivered {
+                stats.undelivered_count += 1;
+            }
+        }
+
+        Ok(stats)
+    }
+
+    pub fn count(&self) -> u32 {
+        let db = self.db.lock().unwrap();
+        db.len() as u32
+    }
+}
+
+// ============================================================================
+// CONNECTION LEDGER
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LedgerEntry {
+    pub multiaddr: String,
+    pub peer_id: Option<String>,
+    pub success_count: u32,
+    pub failure_count: u32,
+    pub last_seen: Option<u64>,
+    pub topics: Vec<String>,
+}
+
+pub struct LedgerManager {
+    storage_path: std::path::PathBuf,
+    entries: std::sync::Arc<std::sync::Mutex<Vec<LedgerEntry>>>,
+}
+
+impl LedgerManager {
+    pub fn new(storage_path: String) -> Self {
+        Self {
+            storage_path: std::path::PathBuf::from(storage_path),
+            entries: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+        }
+    }
+
+    pub fn load(&self) -> Result<(), crate::IronCoreError> {
+        let ledger_file = self.storage_path.join("ledger.json");
+        if ledger_file.exists() {
+            let data = std::fs::read_to_string(&ledger_file)
+                .map_err(|_| crate::IronCoreError::StorageError)?;
+            let entries: Vec<LedgerEntry> =
+                serde_json::from_str(&data).map_err(|_| crate::IronCoreError::Internal)?;
+            *self.entries.lock().unwrap() = entries;
+        }
+        Ok(())
+    }
+
+    pub fn save(&self) -> Result<(), crate::IronCoreError> {
+        std::fs::create_dir_all(&self.storage_path)
+            .map_err(|_| crate::IronCoreError::StorageError)?;
+
+        let ledger_file = self.storage_path.join("ledger.json");
+        let entries = self.entries.lock().unwrap();
+        let data =
+            serde_json::to_string_pretty(&*entries).map_err(|_| crate::IronCoreError::Internal)?;
+        std::fs::write(&ledger_file, data).map_err(|_| crate::IronCoreError::StorageError)?;
+
+        Ok(())
+    }
+
+    pub fn record_connection(&self, multiaddr: String, peer_id: String) {
+        let mut entries = self.entries.lock().unwrap();
+        if let Some(entry) = entries.iter_mut().find(|e| e.multiaddr == multiaddr) {
+            entry.success_count += 1;
+            entry.peer_id = Some(peer_id);
+            entry.last_seen = Some(current_timestamp());
+        } else {
+            entries.push(LedgerEntry {
+                multiaddr,
+                peer_id: Some(peer_id),
+                success_count: 1,
+                failure_count: 0,
+                last_seen: Some(current_timestamp()),
+                topics: Vec::new(),
+            });
+        }
+    }
+
+    pub fn record_failure(&self, multiaddr: String) {
+        let mut entries = self.entries.lock().unwrap();
+        if let Some(entry) = entries.iter_mut().find(|e| e.multiaddr == multiaddr) {
+            entry.failure_count += 1;
+        }
+    }
+
+    pub fn dialable_addresses(&self) -> Vec<LedgerEntry> {
+        let entries = self.entries.lock().unwrap();
+        entries
+            .iter()
+            .filter(|e| e.success_count > 0 && e.failure_count < 5)
+            .cloned()
+            .collect()
+    }
+
+    pub fn all_known_topics(&self) -> Vec<String> {
+        let entries = self.entries.lock().unwrap();
+        let mut topics: Vec<String> = entries.iter().flat_map(|e| e.topics.clone()).collect();
+        topics.sort();
+        topics.dedup();
+        topics
+    }
+
+    pub fn summary(&self) -> String {
+        let entries = self.entries.lock().unwrap();
+        format!(
+            "Ledger: {} entries, {} dialable",
+            entries.len(),
+            entries.iter().filter(|e| e.success_count > 0).count()
+        )
+    }
+}
+
+// ============================================================================
+// SWARM BRIDGE
+// ============================================================================
+
+pub struct SwarmBridge {
+    // This will be wired to the actual SwarmHandle later
+}
+
+impl SwarmBridge {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub fn send_message(
+        &self,
+        _peer_id: String,
+        _data: Vec<u8>,
+    ) -> Result<(), crate::IronCoreError> {
+        // TODO: Wire to SwarmHandle
+        Ok(())
+    }
+
+    pub fn dial(&self, _multiaddr: String) -> Result<(), crate::IronCoreError> {
+        // TODO: Wire to SwarmHandle
+        Ok(())
+    }
+
+    pub fn get_peers(&self) -> Vec<String> {
+        // TODO: Wire to SwarmHandle
+        Vec::new()
+    }
+
+    pub fn get_topics(&self) -> Vec<String> {
+        // TODO: Wire to SwarmHandle
+        Vec::new()
+    }
+
+    pub fn subscribe_topic(&self, _topic: String) -> Result<(), crate::IronCoreError> {
+        // TODO: Wire to SwarmHandle
+        Ok(())
+    }
+
+    pub fn shutdown(&self) {
+        // TODO: Wire to SwarmHandle
+    }
+}
+
+fn current_timestamp() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}

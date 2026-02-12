@@ -11,6 +11,10 @@ pub mod message;
 pub mod store;
 pub mod transport;
 
+// Mobile bridge modules
+pub mod contacts_bridge;
+pub mod mobile_bridge;
+
 use parking_lot::RwLock;
 use std::sync::Arc;
 use thiserror::Error;
@@ -18,6 +22,10 @@ use thiserror::Error;
 pub use crypto::{decrypt_message, encrypt_message};
 pub use identity::IdentityManager;
 pub use message::{DeliveryStatus, Envelope, Message, MessageType, Receipt};
+
+// Mobile bridge exports for UniFFI
+pub use contacts_bridge::{Contact, ContactManager};
+pub use mobile_bridge::*;
 
 // UniFFI exports
 uniffi::include_scaffolding!("api");
@@ -32,21 +40,21 @@ pub enum IronCoreError {
     NotInitialized,
     #[error("Already running")]
     AlreadyRunning,
-    #[error("Storage error: {0}")]
-    StorageError(String),
-    #[error("Cryptography error: {0}")]
-    CryptoError(String),
-    #[error("Network error: {0}")]
-    NetworkError(String),
-    #[error("Invalid input: {0}")]
-    InvalidInput(String),
-    #[error("Internal error: {0}")]
-    Internal(String),
+    #[error("Storage error")]
+    StorageError,
+    #[error("Cryptography error")]
+    CryptoError,
+    #[error("Network error")]
+    NetworkError,
+    #[error("Invalid input")]
+    InvalidInput,
+    #[error("Internal error")]
+    Internal,
 }
 
 impl From<anyhow::Error> for IronCoreError {
-    fn from(err: anyhow::Error) -> Self {
-        IronCoreError::Internal(err.to_string())
+    fn from(_err: anyhow::Error) -> Self {
+        IronCoreError::Internal
     }
 }
 
@@ -89,6 +97,7 @@ pub trait CoreDelegate: Send + Sync {
 // IRON CORE IMPLEMENTATION
 // ============================================================================
 
+#[derive(Clone)]
 pub struct IronCore {
     /// Identity and key management
     identity: Arc<RwLock<identity::IdentityManager>>,
@@ -156,7 +165,7 @@ impl IronCore {
             self.identity
                 .write()
                 .initialize()
-                .map_err(|e| IronCoreError::StorageError(e.to_string()))?;
+                .map_err(|_| IronCoreError::StorageError)?;
         }
 
         *running = true;
@@ -189,7 +198,7 @@ impl IronCore {
         self.identity
             .write()
             .initialize()
-            .map_err(|e| IronCoreError::CryptoError(e.to_string()))
+            .map_err(|_| IronCoreError::CryptoError)
     }
 
     /// Get identity information
@@ -209,7 +218,7 @@ impl IronCore {
 
         let signature = identity
             .sign(&data)
-            .map_err(|e| IronCoreError::CryptoError(e.to_string()))?;
+            .map_err(|_| IronCoreError::CryptoError)?;
 
         let public_key_hex = identity
             .public_key_hex()
@@ -228,19 +237,16 @@ impl IronCore {
         signature: Vec<u8>,
         public_key_hex: String,
     ) -> Result<bool, IronCoreError> {
-        let public_key =
-            hex::decode(&public_key_hex).map_err(|e| IronCoreError::InvalidInput(e.to_string()))?;
+        let public_key = hex::decode(&public_key_hex).map_err(|_| IronCoreError::InvalidInput)?;
 
         if public_key.len() != 32 {
-            return Err(IronCoreError::InvalidInput(
-                "Public key must be 32 bytes".to_string(),
-            ));
+            return Err(IronCoreError::InvalidInput);
         }
 
         self.identity
             .read()
             .verify(&data, &signature, &public_key)
-            .map_err(|e| IronCoreError::CryptoError(e.to_string()))
+            .map_err(|_| IronCoreError::CryptoError)
     }
 
     // ------------------------------------------------------------------------
@@ -263,12 +269,10 @@ impl IronCore {
             .ok_or(IronCoreError::NotInitialized)?;
 
         // Decode recipient public key
-        let recipient_public_key = hex::decode(&recipient_public_key_hex)
-            .map_err(|e| IronCoreError::InvalidInput(e.to_string()))?;
+        let recipient_public_key =
+            hex::decode(&recipient_public_key_hex).map_err(|_| IronCoreError::InvalidInput)?;
         if recipient_public_key.len() != 32 {
-            return Err(IronCoreError::InvalidInput(
-                "Recipient public key must be 32 bytes".to_string(),
-            ));
+            return Err(IronCoreError::InvalidInput);
         }
         let mut recipient_bytes = [0u8; 32];
         recipient_bytes.copy_from_slice(&recipient_public_key);
@@ -277,16 +281,15 @@ impl IronCore {
         let msg = Message::text(sender_id, recipient_public_key_hex.clone(), &text);
 
         // Serialize the message
-        let plaintext =
-            message::encode_message(&msg).map_err(|e| IronCoreError::Internal(e.to_string()))?;
+        let plaintext = message::encode_message(&msg).map_err(|_| IronCoreError::Internal)?;
 
         // Encrypt
         let envelope = crypto::encrypt_message(&keys.signing_key, &recipient_bytes, &plaintext)
-            .map_err(|e| IronCoreError::CryptoError(e.to_string()))?;
+            .map_err(|_| IronCoreError::CryptoError)?;
 
         // Serialize envelope for wire
-        let envelope_bytes = message::encode_envelope(&envelope)
-            .map_err(|e| IronCoreError::Internal(e.to_string()))?;
+        let envelope_bytes =
+            message::encode_envelope(&envelope).map_err(|_| IronCoreError::Internal)?;
 
         Ok(envelope_bytes)
     }
@@ -297,16 +300,15 @@ impl IronCore {
         let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
 
         // Deserialize envelope
-        let envelope = message::decode_envelope(&envelope_bytes)
-            .map_err(|e| IronCoreError::Internal(e.to_string()))?;
+        let envelope =
+            message::decode_envelope(&envelope_bytes).map_err(|_| IronCoreError::Internal)?;
 
         // Decrypt
         let plaintext = crypto::decrypt_message(&keys.signing_key, &envelope)
-            .map_err(|e| IronCoreError::CryptoError(e.to_string()))?;
+            .map_err(|_| IronCoreError::CryptoError)?;
 
         // Deserialize message
-        let msg = message::decode_message(&plaintext)
-            .map_err(|e| IronCoreError::Internal(e.to_string()))?;
+        let msg = message::decode_message(&plaintext).map_err(|_| IronCoreError::Internal)?;
 
         // Dedup check
         let mut inbox = self.inbox.write();
@@ -321,7 +323,7 @@ impl IronCore {
         });
 
         if !is_new {
-            return Err(IronCoreError::InvalidInput("Duplicate message".to_string()));
+            return Err(IronCoreError::InvalidInput);
         }
 
         Ok(msg)
