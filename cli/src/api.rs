@@ -63,6 +63,11 @@ pub struct GetHistoryResponse {
     pub messages: Vec<HistoryMessage>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetExternalAddressResponse {
+    pub addresses: Vec<String>,
+}
+
 // Check if API is available
 pub async fn is_api_available() -> bool {
     match tokio::net::TcpStream::connect(API_ADDR).await {
@@ -175,6 +180,20 @@ pub async fn get_history_via_api(
     Ok(response.messages)
 }
 
+pub async fn get_external_address_via_api() -> Result<Vec<String>> {
+    let client = hyper::Client::new();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}/api/external-address", API_ADDR))
+        .body(Body::empty())?;
+
+    let resp = client.request(req).await?;
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let response: GetExternalAddressResponse = serde_json::from_slice(&body_bytes)?;
+
+    Ok(response.addresses)
+}
+
 // Server implementation
 
 pub struct ApiContext {
@@ -205,6 +224,7 @@ async fn handle_request(
         (&Method::POST, "/api/contacts") => handle_add_contact(req, ctx).await,
         (&Method::GET, "/api/peers") => handle_get_peers(req, ctx).await,
         (&Method::POST, "/api/history") => handle_get_history(req, ctx).await,
+        (&Method::GET, "/api/external-address") => handle_get_external_address(req, ctx).await,
         (&Method::POST, "/api/shutdown") => {
             // Spawn a task to exit after a brief delay to allow response to send
             tokio::spawn(async {
@@ -333,6 +353,30 @@ async fn handle_get_history(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<
 
     let response = GetHistoryResponse {
         messages: history_messages,
+    };
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&response)?))?)
+}
+
+async fn handle_get_external_address(
+    _req: Request<Body>,
+    ctx: Arc<ApiContext>,
+) -> Result<Response<Body>> {
+    // Get external addresses from swarm
+    let addresses = ctx
+        .swarm_handle
+        .get_external_addresses()
+        .await
+        .unwrap_or_default();
+
+    let response = GetExternalAddressResponse {
+        addresses: addresses
+            .into_iter()
+            .map(|addr| addr.to_string())
+            .collect(),
     };
 
     Ok(Response::builder()
