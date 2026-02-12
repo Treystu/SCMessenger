@@ -185,8 +185,22 @@ pub async fn get_external_address_via_api() -> Result<Vec<String>> {
         .body(Body::empty())?;
 
     let resp = client.request(req).await?;
+    
+    // Check HTTP status before attempting to parse
+    let status = resp.status();
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-    let response: GetExternalAddressResponse = serde_json::from_slice(&body_bytes)?;
+    
+    if !status.is_success() {
+        let error_body = String::from_utf8_lossy(&body_bytes);
+        anyhow::bail!(
+            "API request failed with status {}: {}",
+            status,
+            error_body
+        );
+    }
+    
+    let response: GetExternalAddressResponse = serde_json::from_slice(&body_bytes)
+        .context("Failed to parse external address response")?;
 
     Ok(response.addresses)
 }
@@ -363,11 +377,16 @@ async fn handle_get_external_address(
     ctx: Arc<ApiContext>,
 ) -> Result<Response<Body>> {
     // Get external addresses from swarm
-    let addresses = ctx
-        .swarm_handle
-        .get_external_addresses()
-        .await
-        .unwrap_or_default();
+    let addresses = match ctx.swarm_handle.get_external_addresses().await {
+        Ok(addresses) => addresses,
+        Err(e) => {
+            let body = format!("Failed to get external addresses: {}", e);
+            return Ok(Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .header("content-type", "text/plain; charset=utf-8")
+                .body(Body::from(body))?);
+        }
+    };
 
     let response = GetExternalAddressResponse {
         addresses: addresses

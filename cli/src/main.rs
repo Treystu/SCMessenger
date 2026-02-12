@@ -552,6 +552,11 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         .context("Failed to get network keypair from identity")?;
     let local_peer_id = network_keypair.public().to_peer_id();
 
+    // NOTE: PeerId is now derived from identity keys. Existing installations that
+    // had a separate network_keypair.dat will see their PeerId change. This is
+    // intentional to unify identity and network IDs, but may require updating
+    // peer expectations/ledgers on migration.
+    
     // ── Seed ledger with bootstrap nodes (after local_peer_id is available) ────
     let all_bootstrap = bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes.clone());
     for node in &all_bootstrap {
@@ -923,6 +928,12 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                     server::UiCommand::ContactAdd { peer_id, name, public_key } => {
                         // Assuming public key is provided or we can fetch it? MVP assumes provided.
                         if let Some(pk) = public_key {
+                            // Validate public key before adding
+                            if let Err(e) = scmessenger_core::crypto::validate_ed25519_public_key(&pk) {
+                                tracing::warn!("Failed to add contact {}: invalid public key - {}", peer_id, e);
+                                continue;
+                            }
+                            
                             let contact = contacts::Contact::new(peer_id.clone(), pk)
                                 .with_nickname(name.unwrap_or(peer_id));
                             let _ = contacts_rx.add(contact);
