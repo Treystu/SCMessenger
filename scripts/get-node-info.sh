@@ -57,7 +57,14 @@ PUBLIC_IP=""
 
 # First try: Query the node's API for its discovered external address
 if command -v curl &> /dev/null; then
-    API_RESPONSE=$(curl -s http://localhost:9876/api/external-address 2>/dev/null)
+    # Check if we're trying to reach a containerized node
+    # If docker is available and scmessenger container is running, use docker exec
+    if command -v docker &> /dev/null && docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^scmessenger'; then
+        API_RESPONSE=$(docker exec scmessenger curl -s http://127.0.0.1:9876/api/external-address 2>/dev/null)
+    else
+        API_RESPONSE=$(curl -s http://localhost:9876/api/external-address 2>/dev/null)
+    fi
+    
     if [ $? -eq 0 ] && [ ! -z "$API_RESPONSE" ]; then
         # Parse JSON response to get first address
         PUBLIC_IP=$(echo "$API_RESPONSE" | grep -o '"[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1 | tr -d '"')
