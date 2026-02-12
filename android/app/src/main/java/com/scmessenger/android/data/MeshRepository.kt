@@ -347,66 +347,72 @@ class MeshRepository(private val context: Context) {
     }
 
     suspend fun sendMessage(peerId: String, content: String) {
-        try {
-            // 1. Get recipient's public key
-            val contact = contactManager?.get(peerId)
-                ?: throw IllegalStateException("Contact not found for peer: $peerId")
-            
-            val publicKey = contact.publicKey
-            
-            // 2. Encrypt/Prepare message
-            val encryptedData = ironCore?.prepareMessage(publicKey, content)
-                ?: throw IllegalStateException("Failed to prepare message: IronCore not initialized")
-            
-            // Convert List<Byte> (or whatever UniFFI returns) to ByteArray
-            // UniFFI 'bytes' maps to ByteArray, so encryptedData is ByteArray.
-            
-            // 3. Send over network (Multiple transports)
-            // Attempt BLE
-            bleAdvertiser?.sendData(encryptedData)
-            
-            // Attempt WiFi
-            wifiTransportManager?.sendData(peerId, encryptedData)
-
-            // Attempt Swarm (Internet)
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                swarmBridge?.sendMessage(peerId, encryptedData)
-            } catch (e: Exception) {
-                Timber.w("Failed to send via SwarmBridge: ${e.message}")
-            }
-            
-            // Note: In a real mesh, we would route via MeshService/Libp2p which manages transports.
-            // Since we moved Transport logic to Kotlin for Phases 4/5, we call them here.
-            // Ideally, we get a confirmation callback.
+                // 1. Get recipient's public key
+                val contact = contactManager?.get(peerId)
+                    ?: throw IllegalStateException("Contact not found for peer: $peerId")
+                
+                val publicKey = contact.publicKey
+                
+                // 2. Encrypt/Prepare message
+                val encryptedData = ironCore?.prepareMessage(publicKey, content)
+                    ?: throw IllegalStateException("Failed to prepare message: IronCore not initialized")
+                
+                // Convert List<Byte> (or whatever UniFFI returns) to ByteArray
+                // UniFFI 'bytes' maps to ByteArray, so encryptedData is ByteArray.
+                
+                // 3. Send over network (Multiple transports)
+                // Attempt BLE
+                bleAdvertiser?.sendData(encryptedData)
+                
+                // Attempt WiFi
+                wifiTransportManager?.sendData(peerId, encryptedData)
 
-            // 4. Save to history
-             val record = uniffi.api.MessageRecord(
-                id = java.util.UUID.randomUUID().toString(),
-                peerId = peerId,
-                direction = uniffi.api.MessageDirection.SENT,
-                content = content,
-                timestamp = (System.currentTimeMillis() / 1000).toULong(),
-                delivered = false // Will be updated on receipt
-            )
-            historyManager?.add(record)
-            
-            Timber.i("Message sent (encrypted) to $peerId")
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to send message")
-            throw e
+                // Attempt Swarm (Internet)
+                try {
+                    swarmBridge?.sendMessage(peerId, encryptedData)
+                } catch (e: Exception) {
+                    Timber.w("Failed to send via SwarmBridge: ${e.message}")
+                }
+                
+                // Note: In a real mesh, we would route via MeshService/Libp2p which manages transports.
+                // Since we moved Transport logic to Kotlin for Phases 4/5, we call them here.
+                // Ideally, we get a confirmation callback.
+
+                // 4. Save to history
+                 val record = uniffi.api.MessageRecord(
+                    id = java.util.UUID.randomUUID().toString(),
+                    peerId = peerId,
+                    direction = uniffi.api.MessageDirection.SENT,
+                    content = content,
+                    timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                    delivered = false // Will be updated on receipt
+                )
+                historyManager?.add(record)
+                
+                Timber.i("Message sent (encrypted) to $peerId")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to send message")
+                throw e
+            }
         }
     }
 
     suspend fun dial(multiaddr: String) {
-        try {
-            // Attempt Swarm Dial
-            swarmBridge?.dial(multiaddr)
-            Timber.i("Dialed $multiaddr via SwarmBridge")
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to dial $multiaddr")
-            throw e
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                // Attempt Swarm Dial
+                swarmBridge?.dial(multiaddr)
+                Timber.i("Dialed $multiaddr via SwarmBridge")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to dial $multiaddr")
+                throw e
+            }
         }
     }
+    
+    suspend fun dialPeer(multiaddr: String) = dial(multiaddr)
     
     // Identity Management
     fun isIdentityInitialized(): Boolean {
@@ -414,12 +420,14 @@ class MeshRepository(private val context: Context) {
     }
     
     suspend fun createIdentity() {
-        try {
-            ironCore?.initializeIdentity()
-            Timber.i("Identity created successfully")
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to create identity")
-            throw e
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                ironCore?.initializeIdentity()
+                Timber.i("Identity created successfully")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to create identity")
+                throw e
+            }
         }
     }
 
@@ -565,6 +573,49 @@ class MeshRepository(private val context: Context) {
     
     fun clearAdjustmentOverrides() {
         autoAdjustEngine?.clearOverrides()
+    }
+    
+    // ========================================================================
+    // OBSERVABLES FOR UI (NEW)
+    // ========================================================================
+    
+    /**
+     * Observe incoming messages from MeshEventBus.
+     */
+    fun observeIncomingMessages(): kotlinx.coroutines.flow.Flow<com.scmessenger.android.service.MessageEvent> {
+        return com.scmessenger.android.service.MeshEventBus.messageEvents
+    }
+    
+    /**
+     * Observe peer events from MeshEventBus.
+     */
+    fun observePeers(): kotlinx.coroutines.flow.Flow<List<String>> {
+        return kotlinx.coroutines.flow.flow {
+            com.scmessenger.android.service.MeshEventBus.peerEvents.collect { event ->
+                // Convert peer events to peer list
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val peers = ledgerManager?.listPeers() ?: emptyList()
+                    emit(peers)
+                }
+            }
+        }
+    }
+    
+    /**
+     * Observe network stats with periodic refresh.
+     */
+    fun observeNetworkStats(): kotlinx.coroutines.flow.Flow<uniffi.api.ServiceStats> {
+        return kotlinx.coroutines.flow.flow {
+            while (true) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val stats = meshService?.getStats()
+                    if (stats != null) {
+                        emit(stats)
+                    }
+                }
+                kotlinx.coroutines.delay(2000) // Refresh every 2 seconds
+            }
+        }
     }
     
     // ========================================================================

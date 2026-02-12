@@ -141,3 +141,54 @@ fun IdenticonFromPeerId(
     val bytes = peerId.toByteArray()
     Identicon(data = bytes, size = size, modifier = modifier)
 }
+
+/**
+ * Generate identicon bitmap for notifications (non-Composable).
+ */
+fun generateIdenticonBitmap(data: ByteArray, sizePx: Int): android.graphics.Bitmap {
+    val colors = generateColors(data)
+    val pattern = generatePattern(data)
+    
+    val bitmap = android.graphics.Bitmap.createBitmap(sizePx, sizePx, android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bitmap)
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    
+    // Draw background circle
+    paint.color = colors.first.toArgb()
+    canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, paint)
+    
+    // Draw pattern
+    val centerX = sizePx / 2f
+    val centerY = sizePx / 2f
+    val radius = sizePx / 3f
+    
+    pattern.forEachIndexed { index, value ->
+        val angle = (index * 60f) * (Math.PI / 180.0)
+        val x = centerX + (radius * Math.cos(angle).toFloat())
+        val y = centerY + (radius * Math.sin(angle).toFloat())
+        
+        val shapeRadius = (value.absoluteValue % 30) + 10f
+        val color = colors[index % colors.size]
+        
+        paint.color = color.toArgb()
+        canvas.drawCircle(x, y, shapeRadius, paint)
+    }
+    
+    // Draw center circle
+    paint.color = colors.last().toArgb()
+    canvas.drawCircle(centerX, centerY, radius / 2, paint)
+    
+    return bitmap
+}
+
+/**
+ * Convert Compose Color to ARGB int.
+ */
+private fun Color.toArgb(): Int {
+    return android.graphics.Color.argb(
+        (alpha * 255).toInt(),
+        (red * 255).toInt(),
+        (green * 255).toInt(),
+        (blue * 255).toInt()
+    )
+}
