@@ -264,6 +264,18 @@ async fn handle_add_contact(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<
     let body_bytes = hyper::body::to_bytes(req.into_body()).await?;
     let request: AddContactRequest = serde_json::from_slice(&body_bytes)?;
 
+    // Validate public key format
+    if let Err(e) = scmessenger_core::crypto::validate_ed25519_public_key(&request.public_key) {
+        let response = AddContactResponse {
+            success: false,
+            error: Some(format!("Invalid public key: {}", e)),
+        };
+        return Ok(Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&response)?))?);
+    }
+
     let contact = crate::contacts::Contact::new(request.peer_id.clone(), request.public_key)
         .with_nickname(request.name.unwrap_or_else(|| request.peer_id.clone()));
 

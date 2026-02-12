@@ -50,6 +50,44 @@ fn ed25519_to_x25519_secret(signing_key: &SigningKey) -> StaticSecret {
     secret
 }
 
+/// Validate that a hex-encoded Ed25519 public key is well-formed.
+///
+/// Checks:
+/// 1. Hex decoding succeeds
+/// 2. Length is exactly 32 bytes
+/// 3. Bytes represent a valid compressed Ed25519 point
+///
+/// Returns an error with a specific message if validation fails.
+pub fn validate_ed25519_public_key(public_key_hex: &str) -> Result<()> {
+    use curve25519_dalek::edwards::CompressedEdwardsY;
+
+    // Decode hex
+    let public_key_bytes = hex::decode(public_key_hex)
+        .map_err(|_| anyhow::anyhow!("Invalid hex encoding in public key"))?;
+
+    // Check length
+    if public_key_bytes.len() != 32 {
+        bail!(
+            "Public key must be exactly 32 bytes (64 hex characters), got {} bytes ({} hex characters)",
+            public_key_bytes.len(),
+            public_key_hex.len()
+        );
+    }
+
+    // Validate Ed25519 format by attempting decompression
+    let mut key_array = [0u8; 32];
+    key_array.copy_from_slice(&public_key_bytes);
+
+    let compressed = CompressedEdwardsY::from_slice(&key_array)
+        .map_err(|_| anyhow::anyhow!("Invalid Ed25519 public key format"))?;
+
+    compressed
+        .decompress()
+        .ok_or_else(|| anyhow::anyhow!("Public key is not a valid Ed25519 point (decompression failed)"))?;
+
+    Ok(())
+}
+
 /// Convert an Ed25519 verifying (public) key to an X25519 public key.
 ///
 /// Uses the birational map from Ed25519 (twisted Edwards) to X25519 (Montgomery).
