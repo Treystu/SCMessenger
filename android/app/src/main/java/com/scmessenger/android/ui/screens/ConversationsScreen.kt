@@ -56,9 +56,9 @@ fun ConversationsScreen(
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         StatItem("Total", historyStats.totalMessages.toString())
-                        StatItem("Sent", historyStats.sent.toString())
-                        StatItem("Received", historyStats.received.toString())
-                        StatItem("Delivered", historyStats.delivered.toString())
+                        StatItem("Sent", historyStats.sentCount.toString())
+                        StatItem("Received", historyStats.receivedCount.toString())
+                        StatItem("Delivered", (historyStats.sentCount - historyStats.undeliveredCount).toString())
                     }
                 }
             }

@@ -34,6 +34,10 @@ class MeshRepository(private val context: Context) {
     private var settingsManager: uniffi.api.MeshSettingsManager? = null
     private var autoAdjustEngine: uniffi.api.AutoAdjustEngine? = null
     
+    // Core & Network (lazy init)
+    private var ironCore: uniffi.api.IronCore? = null
+    private var swarmBridge: uniffi.api.SwarmBridge? = null
+    
     // Service state
     private val _serviceState = MutableStateFlow(uniffi.api.ServiceState.STOPPED)
     val serviceState: StateFlow<uniffi.api.ServiceState> = _serviceState.asStateFlow()
@@ -41,6 +45,9 @@ class MeshRepository(private val context: Context) {
     // Service stats
     private val _serviceStats = MutableStateFlow<uniffi.api.ServiceStats?>(null)
     val serviceStats: StateFlow<uniffi.api.ServiceStats?> = _serviceStats.asStateFlow()
+
+    // Core Delegate reference to prevent GC
+    private var coreDelegate: uniffi.api.CoreDelegate? = null
     
     init {
         Timber.d("MeshRepository initialized with storage: $storagePath")
@@ -49,6 +56,12 @@ class MeshRepository(private val context: Context) {
     
     private fun initializeManagers() {
         try {
+            // Initialize Core Identity
+            ironCore = uniffi.api.IronCore.withStorage(storagePath)
+            
+            // Initialize Swarm Bridge (Networking)
+            swarmBridge = uniffi.api.SwarmBridge()
+
             // Initialize settings manager
             settingsManager = uniffi.api.MeshSettingsManager(storagePath)
             
@@ -57,6 +70,45 @@ class MeshRepository(private val context: Context) {
             
             // Initialize history manager
             historyManager = uniffi.api.HistoryManager(storagePath)
+
+            // Set up Core Delegate for events
+            coreDelegate = object : uniffi.api.CoreDelegate {
+                override fun onPeerDiscovered(peerId: String) {
+                    Timber.d("Peer discovered via delegate: $peerId")
+                }
+
+                override fun onPeerDisconnected(peerId: String) {
+                    Timber.d("Peer disconnected via delegate: $peerId")
+                }
+
+                override fun onMessageReceived(senderId: String, messageId: String, data: ByteArray) {
+                    Timber.i("Message received from $senderId")
+                    try {
+                        val content = String(data, Charsets.UTF_8)
+                        val record = uniffi.api.MessageRecord(
+                            id = messageId,
+                            peerId = senderId,
+                            direction = uniffi.api.MessageDirection.RECEIVED,
+                            content = content,
+                            timestamp = System.currentTimeMillis().toULong(),
+                            delivered = true
+                        )
+                        historyManager?.add(record)
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to process received message")
+                    }
+                }
+
+                override fun onReceiptReceived(messageId: String, status: String) {
+                    Timber.i("Message receipt: $messageId -> $status")
+                    try {
+                        historyManager?.markDelivered(messageId)
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to mark message as delivered")
+                    }
+                }
+            }
+            ironCore?.setDelegate(coreDelegate)
             
             // Initialize ledger manager
             ledgerManager = uniffi.api.LedgerManager(storagePath)
@@ -185,6 +237,73 @@ class MeshRepository(private val context: Context) {
     // MESSAGE HISTORY
     // ========================================================================
     
+    fun getIdentityInfo(): uniffi.api.IdentityInfo? {
+        return ironCore?.getIdentityInfo()
+    }
+
+    suspend fun sendMessage(peerId: String, content: String) {
+        try {
+            // 1. Get recipient's public key
+            val contact = contactManager?.get(peerId)
+                ?: throw IllegalStateException("Contact not found for peer: $peerId")
+            
+            val publicKey = contact.publicKey
+            
+            // 2. Encrypt/Prepare message
+            val encryptedData = ironCore?.prepareMessage(publicKey, content)
+                ?: throw IllegalStateException("Failed to prepare message: IronCore not initialized")
+                
+            // 3. Send over network
+            swarmBridge?.sendMessage(peerId, encryptedData)
+                 ?: throw IllegalStateException("Failed to send message: SwarmBridge not initialized")
+            
+            // 4. Save to history (if network send didn't throw)
+             val record = uniffi.api.MessageRecord(
+                id = java.util.UUID.randomUUID().toString(),
+                peerId = peerId,
+                direction = uniffi.api.MessageDirection.SENT,
+                content = content,
+                timestamp = System.currentTimeMillis().toULong(),
+                delivered = false // Will be updated on receipt
+            )
+            historyManager?.add(record)
+            
+            Timber.i("Message sent encryption and network transmission successful to $peerId")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to send message logic")
+            throw e
+        }
+    }
+
+
+
+    suspend fun dial(multiaddr: String) {
+        try {
+            swarmBridge?.dial(multiaddr)
+                ?: throw IllegalStateException("SwarmBridge not initialized")
+            Timber.i("Dialed peer: $multiaddr")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to dial $multiaddr")
+            throw e
+        }
+    }
+    
+    // Identity Management
+    fun isIdentityInitialized(): Boolean {
+        return ironCore?.getIdentityInfo()?.initialized == true
+    }
+    
+    suspend fun createIdentity() {
+        try {
+            ironCore?.initializeIdentity()
+            Timber.i("Identity created successfully")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to create identity")
+            throw e
+        }
+    }
+
+    // Keep legacy addMessage for receiving side or manual adds
     fun addMessage(record: uniffi.api.MessageRecord) {
         historyManager?.add(record)
     }

@@ -1,15 +1,22 @@
 package com.scmessenger.android.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.scmessenger.android.ui.screens.*
+import com.scmessenger.android.ui.viewmodels.MainViewModel
 
 /**
  * Root composable for the SCMessenger app.
@@ -18,15 +25,31 @@ import com.scmessenger.android.ui.screens.*
  */
 @Composable
 fun MeshApp() {
-    val navController = rememberNavController()
-    
-    Scaffold(
-        bottomBar = { MeshBottomBar(navController = navController) }
-    ) { paddingValues ->
-        MeshNavHost(
-            navController = navController,
-            modifier = Modifier.padding(paddingValues)
-        )
+    val mainViewModel: MainViewModel = hiltViewModel()
+    val isReady by mainViewModel.isReady.collectAsState()
+
+    if (!isReady) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Initializing Identity...")
+            }
+        }
+    } else {
+        val navController = rememberNavController()
+        
+        Scaffold(
+            bottomBar = { MeshBottomBar(navController = navController) }
+        ) { paddingValues ->
+            MeshNavHost(
+                navController = navController,
+                modifier = Modifier.padding(paddingValues)
+            )
+        }
     }
 }
 

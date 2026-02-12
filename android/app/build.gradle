@@ -1,7 +1,7 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
-    id 'kotlin-kapt'
+    id 'com.google.devtools.ksp'
     id 'dagger.hilt.android.plugin'
 }
 
@@ -51,6 +51,8 @@ android {
         ]
     }
     
+    // Kapt block removed in favor of KSP
+    
     buildFeatures {
         compose true
         buildConfig true
@@ -74,10 +76,10 @@ android {
     sourceSets {
         main {
             // Include generated UniFFI Kotlin bindings
-            java.srcDirs += '../core/target/generated-sources/uniffi/kotlin'
+            java.srcDirs += '../../core/target/generated-sources/uniffi/kotlin'
             
             // JNI libraries from cargo-ndk build
-            jniLibs.srcDirs = ['../core/target/android-libs']
+            jniLibs.srcDirs = ['../../core/target/android-libs']
         }
     }
 }
@@ -107,7 +109,7 @@ dependencies {
     
     // Hilt Dependency Injection
     implementation "com.google.dagger:hilt-android:$hilt_version"
-    kapt "com.google.dagger:hilt-android-compiler:$hilt_version"
+    ksp "com.google.dagger:hilt-android-compiler:$hilt_version"
     implementation 'androidx.hilt:hilt-navigation-compose:1.1.0'
     
     // DataStore for preferences
@@ -165,10 +167,10 @@ task buildRustAndroid(type: Exec) {
         done
         
         # Copy libraries to expected locations
-        cp core/target/aarch64-linux-android/release/libscmessenger_core.so core/target/android-libs/arm64-v8a/
-        cp core/target/armv7-linux-androideabi/release/libscmessenger_core.so core/target/android-libs/armeabi-v7a/
-        cp core/target/x86_64-linux-android/release/libscmessenger_core.so core/target/android-libs/x86_64/
-        cp core/target/i686-linux-android/release/libscmessenger_core.so core/target/android-libs/x86/
+        cp target/aarch64-linux-android/release/libscmessenger_core.so core/target/android-libs/arm64-v8a/
+        cp target/armv7-linux-androideabi/release/libscmessenger_core.so core/target/android-libs/armeabi-v7a/
+        cp target/x86_64-linux-android/release/libscmessenger_core.so core/target/android-libs/x86_64/
+        cp target/i686-linux-android/release/libscmessenger_core.so core/target/android-libs/x86/
         
         echo "Rust libraries built successfully!"
     '''
@@ -176,28 +178,17 @@ task buildRustAndroid(type: Exec) {
 
 // Task to generate UniFFI Kotlin bindings
 task generateUniFFIBindings(type: Exec) {
-    description = 'Generate Kotlin bindings from UniFFI'
+    description = 'Generate bindings using custom binary from core crate'
     group = 'rust'
     
     workingDir '../../core'
     
-    commandLine 'sh', '-c', '''
-        set -e
-        
-        # Install uniffi-bindgen if not present
-        if ! command -v uniffi-bindgen &> /dev/null; then
-            echo "Installing uniffi-bindgen..."
-            cargo install uniffi-bindgen
-        fi
-        
-        # Create output directory
-        mkdir -p target/generated-sources/uniffi/kotlin
-        
-        # Generate bindings
-        uniffi-bindgen generate src/api.udl --language kotlin --out-dir target/generated-sources/uniffi/kotlin
-        
-        echo "UniFFI Kotlin bindings generated!"
-    '''
+    commandLine 'cargo', 'run', '--bin', 'gen_kotlin', '--features', 'gen-bindings', '--', 'generate', 'src/api.udl', '--language', 'kotlin', '--out-dir', 'target/generated-sources/uniffi/kotlin'
+    
+    // Ensure directory exists (cargo run might create it, but good practice)
+    doFirst {
+        file('../../core/target/generated-sources/uniffi/kotlin').mkdirs()
+    }
 }
 
 // Make sure Rust is built before Java compilation

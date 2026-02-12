@@ -69,8 +69,23 @@ class SettingsViewModel @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
     
+    // Identity
+    private val _identityInfo = MutableStateFlow<uniffi.api.IdentityInfo?>(null)
+    val identityInfo: StateFlow<uniffi.api.IdentityInfo?> = _identityInfo.asStateFlow()
+    
     init {
         loadMeshSettings()
+        loadIdentity()
+    }
+    
+    fun loadIdentity() {
+        viewModelScope.launch {
+            try {
+                _identityInfo.value = meshRepository.getIdentityInfo()
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load identity")
+            }
+        }
     }
     
     // ========================================================================

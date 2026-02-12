@@ -176,9 +176,7 @@ class AndroidPlatformBridge @Inject constructor(
             batteryPct = batteryPct,
             isCharging = isCharging,
             hasWifi = hasWifi,
-            hasCellular = hasCellular,
-            motion = uniffi.api.MotionState.UNKNOWN,
-            isBackground = false  // We'll update this from activity lifecycle
+            motionState = uniffi.api.MotionState.UNKNOWN
         )
         
         val profile = meshRepository.computeAdjustmentProfile(deviceProfile)
@@ -193,9 +191,7 @@ class AndroidPlatformBridge @Inject constructor(
             batteryPct = currentBatteryPct,
             isCharging = isCharging,
             hasWifi = hasWifi,
-            hasCellular = hasCellular,
-            motion = uniffi.api.MotionState.UNKNOWN,
-            isBackground = false
+            motionState = uniffi.api.MotionState.UNKNOWN
         )
         
         val profile = meshRepository.computeAdjustmentProfile(deviceProfile)
@@ -209,7 +205,7 @@ class AndroidPlatformBridge @Inject constructor(
         Timber.d("Motion changed: $motion")
     }
     
-    override fun onBleDataReceived(peerId: String, data: List<UByte>) {
+    override fun onBleDataReceived(peerId: String, data: ByteArray) {
         // BLE data is typically handled by the transport layer in Rust
         // This callback is for Android-specific BLE discovery
         Timber.d("BLE data received from $peerId: ${data.size} bytes")

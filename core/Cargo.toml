@@ -34,6 +34,8 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+uniffi_bindgen = { version = "0.27.3", optional = true, features = ["clap"] }
+camino = { version = "1", optional = true }
 
 # Additional dependencies
 parking_lot = "0.12"
@@ -60,3 +62,7 @@ tempfile = "3.8"
 
 [build-dependencies]
 uniffi = { workspace = true, features = ["build"] }
+
+[features]
+default = []
+gen-bindings = ["dep:uniffi_bindgen", "dep:camino"]

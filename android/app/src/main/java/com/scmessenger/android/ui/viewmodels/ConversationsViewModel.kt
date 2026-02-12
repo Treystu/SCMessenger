@@ -6,6 +6,7 @@ import com.scmessenger.android.data.MeshRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -94,19 +95,16 @@ class ConversationsViewModel @Inject constructor(
     /**
      * Send a message to a peer.
      */
+    /**
+     * Send a message to a peer.
+     */
     fun sendMessage(peerId: String, content: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                val record = uniffi.api.MessageRecord(
-                    id = java.util.UUID.randomUUID().toString(),
-                    peerId = peerId,
-                    direction = uniffi.api.MessageDirection.SENT,
-                    content = content,
-                    timestamp = System.currentTimeMillis().toULong(),
-                    delivered = false
-                )
+                // Call repository to handle encryption and transmission
+                meshRepository.sendMessage(peerId, content)
                 
-                meshRepository.addMessage(record)
+                // Reload messages to show the sent message
                 loadMessages()
                 
                 Timber.i("Message sent to $peerId")
