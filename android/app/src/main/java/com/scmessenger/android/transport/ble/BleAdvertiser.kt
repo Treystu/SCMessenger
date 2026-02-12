@@ -152,14 +152,42 @@ class BleAdvertiser(private val context: Context) {
         
         rotationRunnable = object : Runnable {
             override fun run() {
-                if (isAdvertising) {
-                    // Rotate: stop and restart to trigger new advertisement
-                    stopAdvertising()
-                    startAdvertising()
+                if (isAdvertising && rotationRunnable != null) {
+                    // Rotate: restart advertising without calling full stop/start cycle
+                    // This prevents creating new rotation runnables
+                    try {
+                        advertiser?.stopAdvertising(advertiseCallback)
+                        isAdvertising = false
+                        
+                        // Restart immediately
+                        val settings = AdvertiseSettings.Builder()
+                            .setAdvertiseMode(advertiseMode)
+                            .setConnectable(true)
+                            .setTimeout(0)
+                            .setTxPowerLevel(txPowerLevel)
+                            .build()
+
+                        val dataBuilder = AdvertiseData.Builder()
+                            .setIncludeDeviceName(false)
+                            .addServiceUuid(ParcelUuid(BleScanner.SERVICE_UUID))
+                        
+                        currentIdentityData?.let { data ->
+                            if (data.size <= 24) {
+                                dataBuilder.addServiceData(ParcelUuid(BleScanner.SERVICE_UUID), data)
+                            }
+                        }
+                        
+                        advertiser?.startAdvertising(settings, dataBuilder.build(), advertiseCallback)
+                        Timber.d("Beacon rotated")
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to rotate beacon")
+                    }
+                    
+                    // Schedule next rotation only if we're still the active runnable
+                    if (rotationRunnable == this) {
+                        handler.postDelayed(this, rotationIntervalMs)
+                    }
                 }
-                
-                // Schedule next rotation
-                handler.postDelayed(this, rotationIntervalMs)
             }
         }
         

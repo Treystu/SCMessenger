@@ -4,6 +4,7 @@ import android.content.Context
 import com.scmessenger.android.data.MeshRepository
 import io.mockk.mockk
 import org.junit.Before
+import org.junit.Ignore
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -35,6 +36,7 @@ class MeshRepositoryTest {
         // repository = MeshRepository(context)
     }
     
+    @Ignore("Placeholder test - requires full mock setup")
     @Test
     fun `test sendMessage flow - success`() {
         // Given
@@ -46,6 +48,7 @@ class MeshRepositoryTest {
         assertTrue(true, "Placeholder - requires full mock setup")
     }
     
+    @Ignore("Placeholder test - requires IronCore initialization")
     @Test
     fun `test getServiceState - returns STOPPED initially`() {
         // TODO: Implement once IronCore initialization is ready
@@ -59,6 +62,7 @@ class MeshRepositoryTest {
         // assertEquals(uniffi.api.ServiceState.STOPPED, state)
     }
     
+    @Ignore("Placeholder test - requires LedgerManager mock")
     @Test
     fun `test ledger operations`() {
         // TODO: Implement once LedgerManager is ready
@@ -74,6 +78,7 @@ class MeshRepositoryTest {
         // assertNotNull(dialable)
     }
     
+    @Ignore("Placeholder test - requires MeshSettingsManager mock")
     @Test
     fun `test settings load and save`() {
         // Given
@@ -88,6 +93,7 @@ class MeshRepositoryTest {
         assertTrue(true, "Placeholder - requires MeshSettingsManager mock")
     }
     
+    @Ignore("Placeholder test - requires ContactManager mock")
     @Test
     fun `test contact management`() {
         // Given
