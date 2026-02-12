@@ -80,8 +80,8 @@ docker run -d \
   scmessenger
 
 # Get the Peer ID from logs
-docker logs scmessenger | grep "Network peer ID"
-# Example output: ✓ Network peer ID: 12D3KooWGhWrfkwWRxmskC8bfGGvhd3gHYBQgigRbJeZL9Yd3W2S
+docker logs scmessenger | grep "Peer ID"
+# Example output: ✓ Peer ID: 12D3KooWGhWrfkwWRxmskC8bfGGvhd3gHYBQgigRbJeZL9Yd3W2S
 
 # Get your public IP
 curl ifconfig.me
