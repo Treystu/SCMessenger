@@ -43,18 +43,19 @@ class MeshVpnService : VpnService() {
         }
         
         try {
-            // Create a dummy VPN interface
-            // This doesn't route any actual traffic
+            // Create a dummy VPN interface for persistence (no traffic routing)
+            // Do NOT add routes - we only want the VPN to keep the service alive,
+            // not to intercept network traffic which would break all connectivity
             val builder = Builder()
                 .setSession("SCMessenger VPN")
                 .addAddress("10.255.255.1", 32)
-                .addRoute("0.0.0.0", 0)
+                // Removed .addRoute("0.0.0.0", 0) - would black-hole all device traffic
                 .setBlocking(false)
             
             vpnInterface = builder.establish()
             isRunning = true
             
-            Timber.i("VPN service started (dummy tunnel for persistence)")
+            Timber.i("VPN service started (dummy tunnel for persistence, no routing)")
             
             // Start a thread to keep the interface alive
             // In a real VPN, this would forward packets
