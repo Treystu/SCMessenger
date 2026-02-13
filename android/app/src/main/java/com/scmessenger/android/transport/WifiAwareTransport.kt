@@ -214,8 +214,8 @@ class WifiAwareTransport(
             Timber.i("WiFi Aware publish started")
         }
         
-        override fun onSubscribeDiscovered(session: PublishDiscoverySession, peerId: PeerHandle, serviceSpecificInfo: ByteArray?, matchFilter: MutableList<ByteArray>?) {
-            super.onSubscribeDiscovered(session, peerId, serviceSpecificInfo, matchFilter)
+        override fun onServiceDiscovered(peerId: PeerHandle, serviceSpecificInfo: ByteArray?, matchFilter: MutableList<ByteArray>?) {
+            super.onServiceDiscovered(peerId, serviceSpecificInfo, matchFilter)
             
             Timber.d("Peer discovered via WiFi Aware: $peerId")
             
@@ -225,7 +225,7 @@ class WifiAwareTransport(
             
             // Initiate data path
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                initiateDataPath(session, peerId, peerIdString)
+                publishSession?.let { initiateDataPath(it, peerId, peerIdString) }
             }
         }
     }
@@ -237,8 +237,8 @@ class WifiAwareTransport(
             Timber.i("WiFi Aware subscribe started")
         }
         
-        override fun onServiceDiscovered(session: SubscribeDiscoverySession, peerId: PeerHandle, serviceSpecificInfo: ByteArray?, matchFilter: MutableList<ByteArray>?) {
-            super.onServiceDiscovered(session, peerId, serviceSpecificInfo, matchFilter)
+        override fun onServiceDiscovered(peerId: PeerHandle, serviceSpecificInfo: ByteArray?, matchFilter: MutableList<ByteArray>?) {
+            super.onServiceDiscovered(peerId, serviceSpecificInfo, matchFilter)
             
             Timber.d("Service discovered via WiFi Aware: $peerId")
             
@@ -248,7 +248,7 @@ class WifiAwareTransport(
             
             // Initiate data path
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                initiateDataPath(session, peerId, peerIdString)
+                subscribeSession?.let { initiateDataPath(it, peerId, peerIdString) }
             }
         }
     }
