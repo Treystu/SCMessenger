@@ -15,6 +15,9 @@ struct SCMessengerApp: App {
     // Background service
     @State private var backgroundService: MeshBackgroundService?
     
+    // Onboarding state
+    @State private var hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+    
     init() {
         // Initialize background service after repository
         // Will be set in onAppear
@@ -22,17 +25,26 @@ struct SCMessengerApp: App {
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(meshRepository)
-                .onAppear {
-                    setupApp()
+            Group {
+                if hasCompletedOnboarding {
+                    MainTabView()
+                } else {
+                    OnboardingFlow()
                 }
-                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
-                    handleEnteringBackground()
-                }
-                .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-                    handleEnteringForeground()
-                }
+            }
+            .environment(meshRepository)
+            .onAppear {
+                setupApp()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+                handleEnteringBackground()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                handleEnteringForeground()
+            }
+            .onChange(of: UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")) { _, newValue in
+                hasCompletedOnboarding = newValue
+            }
         }
     }
     
@@ -55,24 +67,5 @@ struct SCMessengerApp: App {
     
     private func handleEnteringForeground() {
         backgroundService?.onEnteringForeground()
-    }
-}
-
-// Placeholder ContentView - will be replaced with actual navigation
-struct ContentView: View {
-    @Environment(MeshRepository.self) private var repository
-    
-    var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("SCMessenger")
-                .font(.largeTitle)
-            Text("Sovereign Mesh Network")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .padding()
     }
 }
