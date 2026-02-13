@@ -33,6 +33,17 @@ The Android app uses UniFFI to bridge between Kotlin and the Rust core library (
 
 ## Building
 
+### Quick Setup Check
+
+Run the verification script to check if your build environment is ready:
+
+```bash
+cd android
+./verify-build-setup.sh
+```
+
+This will check for all prerequisites and test that bindings generation works.
+
 ### Prerequisites
 
 1. **Rust toolchain** (install from https://rustup.rs)
@@ -44,19 +55,18 @@ The Android app uses UniFFI to bridge between Kotlin and the Rust core library (
    ```bash
    rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android
    ```
-4. **NDK** version 26.1.10909125 (Android Studio will download this)
-5. **uniffi-bindgen** for generating Kotlin bindings:
-   ```bash
-   cargo install uniffi-bindgen
-   ```
+4. **NDK** version 26.1.10909125 (Android Studio will download this automatically)
+5. **Java 17+** (for Android Gradle builds)
+
+Note: You do **NOT** need to install `uniffi-bindgen` separately. The project uses a custom binary (`core/src/bin/gen_kotlin.rs`) that's built as part of the process.
 
 ### Build Steps
 
 The Gradle build automatically handles:
 
-1. Building Rust libraries for all Android ABIs via `cargo-ndk`
-2. Generating Kotlin bindings from `core/src/api.udl` via `uniffi-bindgen`
-3. Packaging JNI libraries into the APK
+1. **Generating Kotlin bindings** from `core/src/api.udl` using `cargo run --bin gen_kotlin`
+2. **Building Rust libraries** for all Android ABIs via `cargo-ndk`
+3. **Packaging JNI libraries** into the APK
 
 To build:
 
@@ -66,6 +76,25 @@ cd android
 ```
 
 Or use Android Studio's build button.
+
+### Troubleshooting
+
+If you encounter "unresolved reference" errors for `uniffi.api.*` types:
+
+1. Verify bindings can be generated:
+   ```bash
+   cd core
+   cargo run --bin gen_kotlin --features gen-bindings
+   ```
+
+2. Check the generated file exists:
+   ```bash
+   ls -lh core/target/generated-sources/uniffi/kotlin/uniffi/api/api.kt
+   ```
+
+3. Run the verification script: `./verify-build-setup.sh`
+
+See `BUILD_FIX_SUMMARY.md` for details on the build process.
 
 ## Project Structure
 
