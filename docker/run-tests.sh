@@ -49,8 +49,8 @@ while [[ $# -gt 0 ]]; do
             ;;
         --clean)
             echo -e "${YELLOW}Cleaning up containers and volumes...${NC}"
-            docker-compose down -v 2>/dev/null || true
-            docker-compose -f docker-compose-extended.yml down -v 2>/dev/null || true
+            docker compose down -v 2>/dev/null || true
+            docker compose -f docker compose-extended.yml down -v 2>/dev/null || true
             echo -e "${GREEN}Cleanup complete${NC}"
             exit 0
             ;;
@@ -83,24 +83,24 @@ done
 case $MODE in
     basic)
         echo -e "${YELLOW}Starting basic 3-node setup...${NC}"
-        docker-compose up --build $DETACH
+        docker compose up --build $DETACH
         ;;
     extended)
         echo -e "${YELLOW}Starting extended 7-node setup...${NC}"
-        docker-compose -f docker-compose-extended.yml up --build $DETACH
+        docker compose -f docker compose-extended.yml up --build $DETACH
         ;;
     test)
         echo -e "${YELLOW}Building containers...${NC}"
-        docker-compose -f docker-compose-extended.yml build
+        docker compose -f docker compose-extended.yml build
 
         echo -e "${YELLOW}Starting test environment...${NC}"
-        docker-compose -f docker-compose-extended.yml up -d
+        docker compose -f docker compose-extended.yml up -d
 
         echo -e "${YELLOW}Waiting for nodes to initialize...${NC}"
         sleep 20
 
         echo -e "${YELLOW}Running integration tests...${NC}"
-        docker-compose -f docker-compose-extended.yml run --rm test-runner
+        docker compose -f docker compose-extended.yml run --rm test-runner
 
         echo ""
         echo -e "${GREEN}Test results saved to: test-results/${NC}"
@@ -114,7 +114,7 @@ case $MODE in
 
         # Cleanup
         echo -e "${YELLOW}Stopping containers...${NC}"
-        docker-compose -f docker-compose-extended.yml down
+        docker compose -f docker compose-extended.yml down
         ;;
 esac
 

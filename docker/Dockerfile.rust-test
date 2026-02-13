@@ -1,0 +1,38 @@
+# Rust Test Dockerfile
+# Provides environment for running Rust core library tests
+# Includes: Rust toolchain with all required targets and tools
+
+FROM rust:latest
+
+WORKDIR /workspace
+
+# Install additional dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libssl-dev \
+    pkg-config \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install additional Rust components
+RUN rustup component add clippy rustfmt
+
+# Add Android targets (for cross-compilation testing)
+RUN rustup target add \
+    aarch64-linux-android \
+    armv7-linux-androideabi \
+    i686-linux-android \
+    x86_64-linux-android
+
+# Install cargo tools for testing
+RUN cargo install cargo-tarpaulin || true  # Code coverage
+RUN cargo install cargo-audit || true       # Security audits
+
+# Copy workspace
+COPY . .
+
+# Build dependencies first (cached layer)
+RUN cargo build --workspace --all-features --tests || true
+
+# Default command runs all tests
+CMD ["cargo", "test", "--workspace", "--all-features", "--", "--nocapture"]

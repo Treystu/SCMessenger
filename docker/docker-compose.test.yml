@@ -1,0 +1,232 @@
+version: '3.8'
+
+# Comprehensive testing infrastructure for SCMessenger
+# Includes: Android tests, Rust tests, integration tests, and mock infrastructure
+
+services:
+  # Rust Core Library Tests
+  rust-core-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rust-test
+    container_name: scm-rust-test
+    working_dir: /workspace
+    volumes:
+      - rust-test-cache:/workspace/target
+    environment:
+      - RUST_LOG=debug
+      - RUST_BACKTRACE=1
+    command: >
+      bash -c "
+        echo '=== Running Rust Core Tests ===' &&
+        cargo test --package scmessenger-core --lib --bins --tests --all-features -- --nocapture --test-threads=1 &&
+        echo '=== Rust Core Tests Complete ==='
+      "
+    profiles:
+      - test
+
+  # Android Unit Tests
+  android-unit-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.android-test
+    container_name: scm-android-test
+    working_dir: /workspace
+    volumes:
+      - android-test-cache:/workspace/android/.gradle
+      - rust-build-cache:/workspace/core/target
+      - test-results:/workspace/test-results:rw
+    environment:
+      - ANDROID_HOME=/opt/android-sdk
+      - ANDROID_NDK_HOME=/opt/android-sdk/ndk/26.1.10909125
+      - RUSTFLAGS=-C link-arg=-Wl,-z,max-page-size=16384
+    command: |
+      bash -c "
+        echo '=== Building UniFFI Bindings ===' &&
+        cargo run --manifest-path core/Cargo.toml --bin gen_kotlin --features gen-bindings &&
+        echo '=== Running Android Unit Tests ===' &&
+        cd android && ./gradlew test --info --stacktrace &&
+        cd .. &&
+        mkdir -p /workspace/test-results/android &&
+        find android -name '*.xml' -path '*/test-results/*' -exec cp {} /workspace/test-results/android/ \\; &&
+        echo '=== Android Unit Tests Complete ==='
+      "
+    profiles:
+      - test
+
+  # Mock Relay Node for Testing
+  mock-relay:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: scmessenger:latest
+    container_name: scm-mock-relay
+    hostname: mock-relay
+    environment:
+      - RUST_LOG=debug,scmessenger=trace
+      - LISTEN_PORT=4001
+      - NODE_NAME=mock-relay
+      - ENABLE_RELAY=true
+    ports:
+      - "14001:4001"
+    networks:
+      test-network-a:
+        ipv4_address: 172.30.0.10
+      test-network-b:
+        ipv4_address: 172.31.0.10
+    healthcheck:
+      test: ["CMD-SHELL", "ss -tunlp | grep 4001 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Mock Client Node A
+  mock-client-a:
+    image: scmessenger:latest
+    container_name: scm-mock-client-a
+    hostname: client-a
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=0
+      - BOOTSTRAP_NODES=/ip4/172.30.0.10/tcp/4001
+      - NODE_NAME=client-a
+    depends_on:
+      mock-relay:
+        condition: service_healthy
+    networks:
+      - test-network-a
+    tty: true
+    stdin_open: true
+
+  # Mock Client Node B (different network)
+  mock-client-b:
+    image: scmessenger:latest
+    container_name: scm-mock-client-b
+    hostname: client-b
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=0
+      - BOOTSTRAP_NODES=/ip4/172.31.0.10/tcp/4001
+      - NODE_NAME=client-b
+    depends_on:
+      mock-relay:
+        condition: service_healthy
+    networks:
+      - test-network-b
+    tty: true
+    stdin_open: true
+
+  # Integration Test Runner
+  integration-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rust-test
+    container_name: scm-integration-test
+    hostname: integration-test
+    working_dir: /workspace
+    volumes:
+      - test-results:/workspace/test-results:rw
+    environment:
+      - RUST_LOG=debug
+      - RUST_BACKTRACE=1
+      - TEST_MODE=integration
+    depends_on:
+      mock-relay:
+        condition: service_healthy
+      mock-client-a:
+        condition: service_started
+      mock-client-b:
+        condition: service_started
+    networks:
+      - test-network-a
+      - test-network-b
+    command: >
+      bash -c "
+        echo '=== Running Integration Tests ===' &&
+        cargo test --package scmessenger-core --test '*' --all-features -- --nocapture --test-threads=1 &&
+        echo '=== Integration Tests Complete ==='
+      "
+    profiles:
+      - test
+
+  # NAT Simulation Gateway A (Cone NAT)
+  nat-gateway-a:
+    image: alpine:latest
+    container_name: scm-nat-test-a
+    hostname: nat-test-a
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    sysctls:
+      - net.ipv4.ip_forward=1
+    networks:
+      test-network-a:
+        ipv4_address: 172.30.0.1
+      test-public:
+        ipv4_address: 172.32.0.100
+    command: >
+      sh -c "
+        apk add --no-cache iptables iproute2 &&
+        echo 1 > /proc/sys/net/ipv4/ip_forward &&
+        iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE &&
+        iptables -A FORWARD -i eth1 -o eth0 -j ACCEPT &&
+        iptables -A FORWARD -i eth0 -o eth1 -m state --state RELATED,ESTABLISHED -j ACCEPT &&
+        echo 'Cone NAT Gateway A ready' &&
+        tail -f /dev/null
+      "
+    profiles:
+      - test
+      - nat-test
+
+  # NAT Simulation Gateway B (Symmetric NAT)
+  nat-gateway-b:
+    image: alpine:latest
+    container_name: scm-nat-test-b
+    hostname: nat-test-b
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    sysctls:
+      - net.ipv4.ip_forward=1
+    networks:
+      test-network-b:
+        ipv4_address: 172.31.0.1
+      test-public:
+        ipv4_address: 172.32.0.200
+    command: >
+      sh -c "
+        apk add --no-cache iptables iproute2 &&
+        echo 1 > /proc/sys/net/ipv4/ip_forward &&
+        iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE &&
+        iptables -A FORWARD -i eth1 -o eth0 -j ACCEPT &&
+        iptables -A FORWARD -i eth0 -o eth1 -m state --state RELATED,ESTABLISHED -j ACCEPT &&
+        echo 'Symmetric NAT Gateway B ready' &&
+        tail -f /dev/null
+      "
+    profiles:
+      - test
+      - nat-test
+
+networks:
+  test-network-a:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+  test-network-b:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24
+  test-public:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.32.0.0/24
+
+volumes:
+  rust-test-cache:
+  android-test-cache:
+  rust-build-cache:
+  test-results:

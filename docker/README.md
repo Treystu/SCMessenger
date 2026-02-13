@@ -2,10 +2,29 @@
 
 Comprehensive Docker-based testing infrastructure for verifying all SCMessenger features in a simulated multi-network environment.
 
+## Quick Start
+
+### Run All Tests
+```bash
+./run-all-tests.sh
+```
+
+### Run Specific Tests
+```bash
+./run-all-tests.sh --rust-only      # Rust core tests
+./run-all-tests.sh --android-only   # Android unit tests
+./run-all-tests.sh --integration-only # Integration tests
+```
+
+**📖 For detailed testing guide, see [TESTING_GUIDE.md](TESTING_GUIDE.md)**
+
 ## Overview
 
 This directory contains Docker configurations and test scripts to validate SCMessenger's core functionality including:
 
+- **Unit Tests**: Rust core library and Android app with MockK
+- **Integration Tests**: Multi-node mesh networking with real containers
+- **Mock Infrastructure**: Configurable NAT, latency, and network simulation
 - Peer-to-peer messaging
 - Relay-based routing
 - Multi-hop relay chains
@@ -52,11 +71,28 @@ Multi-hop:      Alice ↔ Eve (via Relay1 → Relay2)
 
 ## Files
 
-- `Dockerfile` - Multi-stage build for SCMessenger CLI
-- `docker-compose.yml` - Basic 3-node setup (relay, alice, bob)
-- `docker-compose-extended.yml` - Full 7-node testing environment
+### Docker Images
+- `Dockerfile` - Multi-stage build for SCMessenger CLI (production)
+- `Dockerfile.android-test` - Android test environment with SDK, NDK, Rust
+- `Dockerfile.rust-test` - Rust test environment with all tooling
+
+### Docker Compose Configurations
+- `docker compose.yml` - Basic 3-node setup (relay, alice, bob)
+- `docker compose-extended.yml` - Full 7-node testing environment
+- `docker-compose.test.yml` - **NEW: Comprehensive test infrastructure**
+- `docker compose.network-test.yml` - Network simulation with NAT
+
+### Scripts
+- `run-all-tests.sh` - **NEW: Main test runner for all test suites**
+- `run-tests.sh` - Quick start script for Docker environments
+- `setup-android-test-mocks.sh` - **NEW: Set up Android test mocks**
 - `entrypoint.sh` - Container initialization script
-- `test-scripts/run-integration-tests.sh` - Comprehensive test suite
+- `manage.sh` - Docker management utilities
+
+### Documentation
+- `README.md` - This file
+- `TESTING_GUIDE.md` - **NEW: Comprehensive testing guide**
+- `test-scripts/` - Integration test scripts
 - `test-results/` - Output directory for test logs and results
 
 ## Usage
@@ -67,7 +103,7 @@ Start the basic environment with one relay and two clients:
 
 ```bash
 cd docker
-docker-compose up --build
+docker compose up --build
 ```
 
 This creates:
@@ -81,7 +117,7 @@ Start the full testing environment:
 
 ```bash
 cd docker
-docker-compose -f docker-compose-extended.yml up --build
+docker compose -f docker compose-extended.yml up --build
 ```
 
 This creates:
@@ -95,7 +131,7 @@ Execute the full integration test suite:
 
 ```bash
 cd docker
-docker-compose -f docker-compose-extended.yml --profile test up --build
+docker compose -f docker compose-extended.yml --profile test up --build
 ```
 
 The test runner will:
@@ -132,7 +168,7 @@ scm history
 Monitor logs from all nodes:
 
 ```bash
-docker-compose -f docker-compose-extended.yml logs -f
+docker compose -f docker compose-extended.yml logs -f
 ```
 
 View logs from specific node:
@@ -146,13 +182,13 @@ docker logs -f scm-alice
 Stop all containers:
 
 ```bash
-docker-compose -f docker-compose-extended.yml down
+docker compose -f docker compose-extended.yml down
 ```
 
 Clean up volumes and networks:
 
 ```bash
-docker-compose -f docker-compose-extended.yml down -v
+docker compose -f docker compose-extended.yml down -v
 ```
 
 ## Test Suite Details
@@ -219,5 +255,5 @@ cat docker/test-results/test_run_*.log
 
 ## Development
 
-- **Modify the App**: Re-run `docker-compose build` to include changes from the host source code.
-- **Logs**: Use `docker-compose logs -f` to follow logs from all nodes.
+- **Modify the App**: Re-run `docker compose build` to include changes from the host source code.
+- **Logs**: Use `docker compose logs -f` to follow logs from all nodes.
