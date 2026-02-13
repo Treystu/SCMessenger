@@ -428,7 +428,11 @@ impl MeshSettingsManager {
     }
 
     pub fn validate(&self, settings: MeshSettings) -> Result<(), crate::IronCoreError> {
-        // Enforce relay=messaging coupling
+        // NOTE: relay_enabled controls BOTH sending and receiving
+        // When false, ALL communication stops (bidirectional shutdown)
+        // This enforces the relay=messaging principle in practice
+
+        // If relay is enabled, max_relay_budget must be > 0
         if settings.relay_enabled && settings.max_relay_budget == 0 {
             return Err(crate::IronCoreError::InvalidInput);
         }

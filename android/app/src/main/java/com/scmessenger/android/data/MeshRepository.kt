@@ -127,6 +127,13 @@ class MeshRepository(private val context: Context) {
                 override fun onMessageReceived(senderId: String, messageId: String, data: ByteArray) {
                     Timber.i("Message from $senderId: $messageId")
                     try {
+                        // Check if relay/messaging is enabled (bidirectional control)
+                        val settings = settingsManager?.load()
+                        if (settings?.relayEnabled == false) {
+                            Timber.w("Dropping received message - mesh participation is disabled")
+                            return
+                        }
+                        
                         val content = data.toString(Charsets.UTF_8)
                         val record = uniffi.api.MessageRecord(
                             id = messageId,
@@ -349,6 +356,12 @@ class MeshRepository(private val context: Context) {
     suspend fun sendMessage(peerId: String, content: String) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
+                // Check if relay/messaging is enabled (bidirectional control)
+                val settings = settingsManager?.load()
+                if (settings?.relayEnabled == false) {
+                    throw IllegalStateException("Mesh participation is disabled. Cannot send messages when relay is OFF. Enable mesh participation to send and receive messages.")
+                }
+                
                 // 1. Get recipient's public key
                 val contact = contactManager?.get(peerId)
                     ?: throw IllegalStateException("Contact not found for peer: $peerId")

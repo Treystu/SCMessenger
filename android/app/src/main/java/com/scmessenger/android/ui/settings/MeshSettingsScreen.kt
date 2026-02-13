@@ -82,30 +82,30 @@ fun MeshSettingsScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                            containerColor = MaterialTheme.colorScheme.errorContainer
                         )
                     ) {
                         Column(
                             modifier = Modifier.padding(12.dp)
                         ) {
                             Text(
-                                text = "⚠️ Relay = Messaging",
+                                text = "⚠️ Relay = Messaging (Bidirectional)",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                color = MaterialTheme.colorScheme.onErrorContainer
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Turning this off disables ALL messaging. You cannot send or receive messages without participating in the mesh relay network. No relay = no app functionality.",
+                                text = "This single toggle controls ALL communication in BOTH directions. When OFF: you cannot send OR receive messages, cannot relay for others, and others cannot relay for you. Complete network shutdown. When ON: full mesh participation with bidirectional messaging.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                color = MaterialTheme.colorScheme.onErrorContainer
                             )
                         }
                     }
                     
                     SwitchSetting(
-                        title = "Enable Mesh Participation",
-                        description = "Required to send and receive messages. When enabled, you relay for others and they relay for you.",
+                        title = "Mesh Participation",
+                        description = "Controls ALL sending AND receiving. OFF = complete communication shutdown in both directions.",
                         checked = currentSettings.relayEnabled,
                         onCheckedChange = {
                             viewModel.updateSettings(currentSettings.copy(relayEnabled = it))

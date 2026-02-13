@@ -157,29 +157,29 @@ fun MeshSettingsSection(
                     .fillMaxWidth()
                     .padding(bottom = 8.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                    containerColor = MaterialTheme.colorScheme.errorContainer
                 )
             ) {
                 Column(
                     modifier = Modifier.padding(12.dp)
                 ) {
                     Text(
-                        text = "⚠️ Relay = Messaging",
+                        text = "⚠️ Relay = Messaging (Bidirectional)",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = MaterialTheme.colorScheme.onErrorContainer
                     )
                     Text(
-                        text = "Disabling mesh participation stops ALL messaging. Required to send and receive messages.",
+                        text = "OFF = no sending OR receiving. Complete shutdown both directions. ON = full participation.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = MaterialTheme.colorScheme.onErrorContainer
                     )
                 }
             }
             
             SwitchPreference(
                 title = "Mesh Participation",
-                subtitle = "Required for messaging. When on, you relay for others.",
+                subtitle = "Controls ALL communication. OFF = bidirectional shutdown.",
                 checked = settings.relayEnabled,
                 onCheckedChange = { onUpdateSetting { vm -> vm.updateRelayEnabled(it) } },
                 enabled = !isLoading
