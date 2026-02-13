@@ -149,14 +149,27 @@ echo "6. Testing static library compilation..."
 echo -e "${YELLOW}Note: This step can take several minutes...${NC}"
 
 cd "$PROJECT_ROOT/mobile" || exit 1
+
+# Set deployment target to avoid linking issues (for newer dependencies with old build env)
+export IPHONEOS_DEPLOYMENT_TARGET=14.0
+
 if cargo build --target aarch64-apple-ios --lib 2>&1 | tail -5; then
-    if [ -f "target/aarch64-apple-ios/debug/libscmessenger_mobile.a" ]; then
+    # Artifacts are in root target directory because mobile is part of workspace
+    if [ -f "../target/aarch64-apple-ios/debug/libscmessenger_mobile.a" ]; then
         echo -e "${GREEN}✓${NC} Static library compiled for aarch64-apple-ios"
-        LIB_SIZE=$(du -h "target/aarch64-apple-ios/debug/libscmessenger_mobile.a" | cut -f1)
+        LIB_SIZE=$(du -h "../target/aarch64-apple-ios/debug/libscmessenger_mobile.a" | cut -f1)
         echo "   Library size: $LIB_SIZE"
     else
-        echo -e "${RED}✗${NC} Static library not found"
-        ALL_OK=false
+        # Try local target path just in case
+        if [ -f "target/aarch64-apple-ios/debug/libscmessenger_mobile.a" ]; then
+            echo -e "${GREEN}✓${NC} Static library compiled for aarch64-apple-ios (local target)"
+            LIB_SIZE=$(du -h "target/aarch64-apple-ios/debug/libscmessenger_mobile.a" | cut -f1)
+            echo "   Library size: $LIB_SIZE"
+        else
+            echo -e "${RED}✗${NC} Static library not found"
+            echo "   Tried: ../target/aarch64-apple-ios/debug/libscmessenger_mobile.a"
+            ALL_OK=false
+        fi
     fi
 else
     echo -e "${RED}✗${NC} Static library compilation failed"
