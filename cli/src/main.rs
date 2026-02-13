@@ -469,7 +469,7 @@ async fn cmd_history(
 
 async fn cmd_start(port: Option<u16>) -> Result<()> {
     let config = config::Config::load()?;
-    let ws_port = port.unwrap_or_else(|| {
+    let ws_port = port.unwrap_or({
         if config.listen_port == 0 {
             9000 // Default to 9000 if config has random port
         } else {
@@ -729,8 +729,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                 match event {
                     SwarmEvent::PeerDiscovered(peer_id) => {
                          let mut p = peers_rx.lock().await;
-                         if !p.contains_key(&peer_id) {
-                             p.insert(peer_id, None);
+                         if let std::collections::hash_map::Entry::Vacant(e) = p.entry(peer_id) {
+                             e.insert(None);
                              println!("\n{} Peer: {}", "✓".green(), peer_id);
                              print!("> ");
                              let _ = std::io::Write::flush(&mut std::io::stdout());
@@ -825,31 +825,28 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                     }
 
                     SwarmEvent::MessageReceived { peer_id, envelope_data } => {
-                        match core_rx.receive_message(envelope_data) {
-                             Ok(msg) => {
-                                 let text = msg.text_content().unwrap_or_else(|| "<binary>".into());
-                                 let sender_name = contacts_rx.get(&peer_id.to_string())
-                                     .ok().flatten()
-                                     .map(|c| c.display_name().to_string())
-                                     .unwrap_or_else(|| peer_id.to_string());
+                        if let Ok(msg) = core_rx.receive_message(envelope_data) {
+                            let text = msg.text_content().unwrap_or_else(|| "<binary>".into());
+                            let sender_name = contacts_rx.get(&peer_id.to_string())
+                                .ok().flatten()
+                                .map(|c| c.display_name().to_string())
+                                .unwrap_or_else(|| peer_id.to_string());
 
-                                 println!("\n{} {}: {}", "←".bright_blue(), sender_name.bright_cyan(), text);
-                                 print!("> ");
-                                 let _ = std::io::Write::flush(&mut std::io::stdout());
+                            println!("\n{} {}: {}", "←".bright_blue(), sender_name.bright_cyan(), text);
+                            print!("> ");
+                            let _ = std::io::Write::flush(&mut std::io::stdout());
 
-                                 let record = history::MessageRecord::new_received(peer_id.to_string(), text.clone());
-                                 let _ = history_rx.add(record);
+                            let record = history::MessageRecord::new_received(peer_id.to_string(), text.clone());
+                            let _ = history_rx.add(record);
 
-                                 // Update UI
-                                 // Note: timestamps in Rust are u64, MessageReceived expects u64
-                                 let _ = ui_broadcast.send(server::UiEvent::MessageReceived {
-                                     from: peer_id.to_string(),
-                                     content: text,
-                                     timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
-                                     message_id: uuid::Uuid::new_v4().to_string(),
-                                 });
-                             }
-                             Err(_) => {}
+                            // Update UI
+                            // Note: timestamps in Rust are u64, MessageReceived expects u64
+                            let _ = ui_broadcast.send(server::UiEvent::MessageReceived {
+                                from: peer_id.to_string(),
+                                content: text,
+                                timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+                                message_id: uuid::Uuid::new_v4().to_string(),
+                            });
                         }
                     }
                     SwarmEvent::ListeningOn(addr) => {
@@ -951,7 +948,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                     server::UiCommand::ContactRemove { contact } => {
                          // remove by peer_id (assuming contact arg is peer_id for now, or resolving nickname)
                          // contacts.remove takes peer_id string
-                         if let Ok(_) = contacts_rx.remove(&contact) {
+                         if contacts_rx.remove(&contact).is_ok() {
                              if let Ok(list) = contacts_rx.list() {
                                  let _ = ui_broadcast.send(server::UiEvent::ContactList { contacts: list });
                              }
@@ -1172,7 +1169,7 @@ fn find_contact(contacts: &contacts::ContactList, query: &str) -> Result<contact
 fn format_timestamp(timestamp: u64) -> String {
     use chrono::{DateTime, Local, Utc};
 
-    let dt = DateTime::from_timestamp(timestamp as i64, 0).unwrap_or_else(|| Utc::now());
+    let dt = DateTime::from_timestamp(timestamp as i64, 0).unwrap_or_else(Utc::now);
     let local: DateTime<Local> = dt.into();
 
     local.format("%Y-%m-%d %H:%M:%S").to_string()

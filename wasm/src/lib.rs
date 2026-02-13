@@ -21,6 +21,7 @@ pub struct IronCore {
 #[wasm_bindgen]
 impl IronCore {
     #[wasm_bindgen(constructor)]
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         init_logging();
         Self {

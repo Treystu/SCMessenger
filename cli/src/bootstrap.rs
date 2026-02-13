@@ -101,11 +101,9 @@ pub fn promiscuous_bootstrap_addrs() -> Vec<String> {
 #[allow(dead_code)]
 pub fn parse_bootstrap_addr(multiaddr: &str) -> (String, Option<String>) {
     let stripped = ledger::strip_peer_id(multiaddr);
-    let peer_id = if let Some(idx) = multiaddr.find("/p2p/") {
-        Some(multiaddr[idx + 5..].to_string())
-    } else {
-        None
-    };
+    let peer_id = multiaddr
+        .find("/p2p/")
+        .map(|idx| multiaddr[idx + 5..].to_string());
     (stripped, peer_id)
 }
 

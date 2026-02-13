@@ -46,7 +46,7 @@ pub struct ServiceStats {
 
 /// Mobile mesh service wrapper integrating IronCore with mobile lifecycle
 pub struct MeshService {
-    config: std::sync::Mutex<MeshServiceConfig>,
+    _config: std::sync::Mutex<MeshServiceConfig>,
     state: std::sync::Mutex<ServiceState>,
     stats: std::sync::Mutex<ServiceStats>,
     core: std::sync::Arc<std::sync::Mutex<Option<crate::IronCore>>>,
@@ -57,7 +57,7 @@ pub struct MeshService {
 impl MeshService {
     pub fn new(config: MeshServiceConfig) -> Self {
         Self {
-            config: std::sync::Mutex::new(config),
+            _config: std::sync::Mutex::new(config),
             state: std::sync::Mutex::new(ServiceState::Stopped),
             stats: std::sync::Mutex::new(ServiceStats::default()),
             core: std::sync::Arc::new(std::sync::Mutex::new(None)),
@@ -69,7 +69,7 @@ impl MeshService {
     /// Create MeshService with persistent storage
     pub fn with_storage(config: MeshServiceConfig, storage_path: String) -> Self {
         Self {
-            config: std::sync::Mutex::new(config),
+            _config: std::sync::Mutex::new(config),
             state: std::sync::Mutex::new(ServiceState::Stopped),
             stats: std::sync::Mutex::new(ServiceStats::default()),
             core: std::sync::Arc::new(std::sync::Mutex::new(None)),
@@ -150,7 +150,7 @@ impl MeshService {
     }
 
     pub fn get_stats(&self) -> ServiceStats {
-        let mut stats = self.stats.lock().unwrap().clone();
+        let stats = self.stats.lock().unwrap().clone();
 
         // Augment with IronCore stats if available
         if let Some(ref _core) = *self.core.lock().unwrap() {
@@ -264,6 +264,12 @@ pub struct RelayAdjustment {
 pub struct AutoAdjustEngine {
     ble_scan_override: std::sync::Mutex<Option<u32>>,
     relay_max_override: std::sync::Mutex<Option<u32>>,
+}
+
+impl Default for AutoAdjustEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AutoAdjustEngine {
@@ -750,6 +756,12 @@ impl LedgerManager {
 
 pub struct SwarmBridge {
     // This will be wired to the actual SwarmHandle later
+}
+
+impl Default for SwarmBridge {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SwarmBridge {

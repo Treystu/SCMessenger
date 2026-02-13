@@ -158,10 +158,9 @@ impl Inbox {
     /// Get all messages from a specific sender
     pub fn messages_from(&self, sender_id: &str) -> Vec<ReceivedMessage> {
         match &self.backend {
-            InboxBackend::Memory { messages, .. } => messages
-                .get(sender_id)
-                .map(|msgs| msgs.clone())
-                .unwrap_or_default(),
+            InboxBackend::Memory { messages, .. } => {
+                messages.get(sender_id).cloned().unwrap_or_default()
+            }
             InboxBackend::Persistent(db) => {
                 let prefix = format!("{}{}_", String::from_utf8_lossy(MESSAGES_PREFIX), sender_id);
                 db.scan_prefix(prefix.as_bytes())
@@ -200,11 +199,9 @@ impl Inbox {
             InboxBackend::Memory { messages, .. } => messages.len(),
             InboxBackend::Persistent(db) => {
                 let mut senders: HashSet<String> = HashSet::new();
-                for result in db.scan_prefix(MESSAGES_PREFIX) {
-                    if let Ok((_, value)) = result {
-                        if let Ok(msg) = bincode::deserialize::<ReceivedMessage>(&value) {
-                            senders.insert(msg.sender_id);
-                        }
+                for (_, value) in db.scan_prefix(MESSAGES_PREFIX).flatten() {
+                    if let Ok(msg) = bincode::deserialize::<ReceivedMessage>(&value) {
+                        senders.insert(msg.sender_id);
                     }
                 }
                 senders.len()

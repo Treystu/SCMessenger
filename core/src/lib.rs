@@ -27,7 +27,7 @@ pub use message::{DeliveryStatus, Envelope, Message, MessageType, Receipt};
 pub use contacts_bridge::{Contact, ContactManager};
 pub use mobile_bridge::*;
 
-// UniFFI exports
+// UniFFI scaffolding - clippy warnings in generated code
 uniffi::include_scaffolding!("api");
 
 // ============================================================================
