@@ -37,9 +37,6 @@ class BleGattClient(
     // Write queue for handling async writeCharacteristic
     private val pendingWrites = ConcurrentHashMap<String, MutableList<ByteArray>>()
     
-    // Track if write is in progress per device to prevent queue overwrite
-    private val writeInProgress = ConcurrentHashMap<String, Boolean>()
-    
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
     /**
@@ -100,8 +97,6 @@ class BleGattClient(
             gatt.disconnect()
             gatt.close()
             connectionStates.remove(deviceAddress)
-            pendingWrites.remove(deviceAddress)
-            writeInProgress.remove(deviceAddress)
             Timber.d("Disconnected from $deviceAddress")
         } catch (e: SecurityException) {
             Timber.e(e, "Security exception disconnecting from $deviceAddress")
@@ -140,29 +135,9 @@ class BleGattClient(
             if (data.size > mtu - 3) {
                 sendFragmented(gatt, characteristic, data, mtu)
             } else {
-                // Non-fragmented send
-                val isWriteInProgress = writeInProgress[deviceAddress] ?: false
-                
-                if (isWriteInProgress) {
-                    // Queue this single-chunk write
-                    val existingQueue = pendingWrites[deviceAddress]
-                    if (existingQueue != null) {
-                        existingQueue.add(data)
-                        Timber.d("Queued single chunk to existing queue for $deviceAddress")
-                    } else {
-                        // Edge case: writeInProgress but no queue - treat as new write
-                        characteristic.value = data
-                        writeInProgress[deviceAddress] = true
-                        gatt.writeCharacteristic(characteristic)
-                    }
-                    true
-                } else {
-                    // No write in progress - start write immediately
-                    characteristic.value = data
-                    writeInProgress[deviceAddress] = true
-                    gatt.writeCharacteristic(characteristic)
-                    true
-                }
+                characteristic.value = data
+                gatt.writeCharacteristic(characteristic)
+                true
             }
         } catch (e: SecurityException) {
             Timber.e(e, "Security exception sending data")
@@ -192,31 +167,9 @@ class BleGattClient(
         
         if (chunks.isEmpty()) return true
         
-        // Check if a write is already in progress
-        val isWriteInProgress = writeInProgress[deviceAddress] ?: false
-        
-        if (isWriteInProgress) {
-            // Append chunks to existing queue instead of overwriting
-            val existingQueue = pendingWrites[deviceAddress]
-            if (existingQueue != null) {
-                existingQueue.addAll(chunks)
-                Timber.d("Appended ${chunks.size} chunks to existing queue for $deviceAddress")
-            } else {
-                // Edge case: writeInProgress flag is set but no queue exists
-                // Start fresh
-                pendingWrites[deviceAddress] = chunks.drop(1).toMutableList()
-                characteristic.value = chunks[0]
-                writeInProgress[deviceAddress] = true
-                return gatt.writeCharacteristic(characteristic)
-            }
-            return true
-        } else {
-            // No write in progress - start new write
-            pendingWrites[deviceAddress] = chunks.drop(1).toMutableList()
-            characteristic.value = chunks[0]
-            writeInProgress[deviceAddress] = true
-            return gatt.writeCharacteristic(characteristic)
-        }
+        pendingWrites[deviceAddress] = chunks.drop(1).toMutableList()
+        characteristic.value = chunks[0]
+        return gatt.writeCharacteristic(characteristic)
     }
     
     /**
@@ -329,14 +282,11 @@ class BleGattClient(
                     characteristic.value = nextChunk
                     gatt.writeCharacteristic(characteristic)
                 } else {
-                    // Write complete - clean up
                     pendingWrites.remove(deviceAddress)
-                    writeInProgress.remove(deviceAddress)
                 }
             } else {
                 Timber.e("Characteristic write failed to $deviceAddress: $status")
                 pendingWrites.remove(deviceAddress)
-                writeInProgress.remove(deviceAddress)
             }
         }
         
