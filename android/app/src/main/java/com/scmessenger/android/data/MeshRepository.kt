@@ -128,9 +128,10 @@ class MeshRepository(private val context: Context) {
                     Timber.i("Message from $senderId: $messageId")
                     try {
                         // Check if relay/messaging is enabled (bidirectional control)
+                        // Treat null/missing settings as disabled (fail-safe)
                         val settings = settingsManager?.load()
-                        if (settings?.relayEnabled == false) {
-                            Timber.w("Dropping received message - mesh participation is disabled")
+                        if (settings?.relayEnabled != true) {
+                            Timber.w("Dropping received message - mesh participation is disabled or settings unavailable")
                             return
                         }
                         
@@ -357,9 +358,10 @@ class MeshRepository(private val context: Context) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 // Check if relay/messaging is enabled (bidirectional control)
+                // Treat null/missing settings as disabled (fail-safe)
                 val settings = settingsManager?.load()
-                if (settings?.relayEnabled == false) {
-                    throw IllegalStateException("Mesh participation is disabled. Cannot send messages when relay is OFF. Enable mesh participation to send and receive messages.")
+                if (settings?.relayEnabled != true) {
+                    throw IllegalStateException("Cannot send messages: mesh participation is disabled. Enable mesh participation in settings to send and receive messages.")
                 }
                 
                 // 1. Get recipient's public key

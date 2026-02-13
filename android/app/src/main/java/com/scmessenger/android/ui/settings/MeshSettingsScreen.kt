@@ -96,7 +96,14 @@ fun MeshSettingsScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "This single toggle controls ALL communication in BOTH directions. When OFF: you cannot send OR receive messages, cannot relay for others, and others cannot relay for you. Complete network shutdown. When ON: full mesh participation with bidirectional messaging.",
+                                text = "This single toggle controls ALL communication in BOTH directions.",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "• When OFF: Cannot send or receive messages\n• Cannot relay for others, they cannot relay for you\n• Complete network shutdown\n\n• When ON: Full mesh participation with bidirectional messaging",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
