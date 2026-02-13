@@ -204,7 +204,14 @@ task generateUniFFIBindings(type: Exec) {
     inputs.file('../../core/Cargo.toml')
     outputs.dir('../../core/target/generated-sources/uniffi/kotlin')
     
-    commandLine 'cargo', 'run', '--bin', 'gen_kotlin', '--features', 'gen-bindings'
+    // Use sh to invoke cargo to ensure it's found in PATH (fixes issue on some environments)
+    // We also source $HOME/.cargo/env if it exists to be extra safe, though sh usually picks it up if configured in profile
+    commandLine 'sh', '-c', '''
+        if [ -f "$HOME/.cargo/env" ]; then
+            source "$HOME/.cargo/env"
+        fi
+        cargo run --bin gen_kotlin --features gen-bindings
+    '''
     
     // Ensure directory exists (cargo run might create it, but good practice)
     doFirst {
