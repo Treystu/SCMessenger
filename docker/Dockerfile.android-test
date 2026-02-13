@@ -1,0 +1,76 @@
+# Android Test Dockerfile
+# Provides complete environment for running Android unit tests with UniFFI mocks
+# Includes: Android SDK, NDK, Rust toolchain, Java 17, Gradle
+
+FROM ubuntu:22.04
+
+# Avoid interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install base dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    unzip \
+    git \
+    build-essential \
+    libssl-dev \
+    pkg-config \
+    openjdk-17-jdk \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Java environment
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV PATH=$JAVA_HOME/bin:$PATH
+
+# Install Rust toolchain
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:$PATH"
+
+# Add Android targets for Rust
+RUN rustup target add \
+    aarch64-linux-android \
+    armv7-linux-androideabi \
+    i686-linux-android \
+    x86_64-linux-android
+
+# Install cargo-ndk for Android builds
+RUN cargo install cargo-ndk
+
+# Install Android SDK
+ENV ANDROID_HOME=/opt/android-sdk
+ENV ANDROID_SDK_ROOT=$ANDROID_HOME
+ENV PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+
+RUN mkdir -p $ANDROID_HOME/cmdline-tools && \
+    cd $ANDROID_HOME/cmdline-tools && \
+    wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip && \
+    unzip -q commandlinetools-linux-9477386_latest.zip && \
+    rm commandlinetools-linux-9477386_latest.zip && \
+    mv cmdline-tools latest
+
+# Accept Android SDK licenses
+RUN yes | sdkmanager --licenses || true
+
+# Install Android SDK components
+RUN sdkmanager --update && \
+    sdkmanager \
+    "platform-tools" \
+    "platforms;android-34" \
+    "build-tools;34.0.0" \
+    "ndk;26.1.10909125" \
+    "cmake;3.22.1"
+
+ENV ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125
+
+# Set working directory
+WORKDIR /workspace
+
+# Copy workspace files
+COPY . .
+
+# Set environment for Android builds
+ENV RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=16384"
+
+# Default command runs Android unit tests
+CMD ["./gradlew", "-p", "android", "test", "--info"]

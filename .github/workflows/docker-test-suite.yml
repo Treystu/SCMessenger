@@ -1,0 +1,207 @@
+name: Docker Test Suite
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Rust Core Tests
+  rust-tests:
+    name: Rust Core Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build Rust test image
+        run: |
+          cd docker
+          docker-compose -f docker-compose.test.yml build rust-core-test
+      
+      - name: Run Rust tests
+        run: |
+          cd docker
+          docker-compose -f docker-compose.test.yml --profile test run --rm rust-core-test
+      
+      - name: Upload Rust test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rust-test-results
+          path: docker/test-results/rust/
+          retention-days: 7
+
+  # Android Unit Tests
+  android-tests:
+    name: Android Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build Android test image
+        run: |
+          cd docker
+          docker-compose -f docker-compose.test.yml build android-unit-test
+      
+      - name: Run Android tests
+        run: |
+          cd docker
+          docker-compose -f docker-compose.test.yml --profile test run --rm android-unit-test
+      
+      - name: Upload Android test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-results
+          path: docker/test-results/android/
+          retention-days: 7
+
+  # Integration Tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build test images
+        run: |
+          cd docker
+          docker-compose -f docker-compose.test.yml build
+      
+      - name: Start mock infrastructure
+        run: |
+          cd docker
+          docker-compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
+      
+      - name: Wait for infrastructure to be ready
+        run: |
+          echo "Waiting for mock relay to be healthy..."
+          for i in {1..30}; do
+            if docker-compose -f docker/docker-compose.test.yml ps mock-relay | grep -q "healthy"; then
+              echo "Mock relay is healthy"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "Mock relay failed to become healthy"
+              docker-compose -f docker/docker-compose.test.yml logs mock-relay
+              exit 1
+            fi
+            sleep 2
+          done
+      
+      - name: Run integration tests
+        run: |
+          cd docker
+          docker-compose -f docker-compose.test.yml --profile test run --rm integration-test
+      
+      - name: Show mock infrastructure logs
+        if: failure()
+        run: |
+          cd docker
+          docker-compose -f docker-compose.test.yml logs mock-relay mock-client-a mock-client-b
+      
+      - name: Stop infrastructure
+        if: always()
+        run: |
+          cd docker
+          docker-compose -f docker-compose.test.yml --profile test down
+      
+      - name: Upload integration test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-results
+          path: docker/test-results/integration/
+          retention-days: 7
+
+  # Full Test Suite (runs all tests together)
+  full-suite:
+    name: Full Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [rust-tests, android-tests, integration-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Run all tests
+        run: |
+          cd docker
+          chmod +x run-all-tests.sh
+          ./run-all-tests.sh --verbose
+      
+      - name: Upload all test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-test-results
+          path: docker/test-results/
+          retention-days: 14
+      
+      - name: Test Summary
+        if: always()
+        run: |
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Test results are available in the artifacts section." >> $GITHUB_STEP_SUMMARY
+          if [ -d docker/test-results ]; then
+            echo "### Files Generated:" >> $GITHUB_STEP_SUMMARY
+            find docker/test-results -type f | sort >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # NAT Simulation Tests (optional, runs on workflow_dispatch)
+  nat-tests:
+    name: NAT Simulation Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Run tests with NAT simulation
+        run: |
+          cd docker
+          chmod +x run-all-tests.sh
+          ./run-all-tests.sh --integration-only --with-nat --verbose
+      
+      - name: Upload NAT test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nat-test-results
+          path: docker/test-results/
+          retention-days: 7

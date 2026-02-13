@@ -2,10 +2,29 @@
 
 Comprehensive Docker-based testing infrastructure for verifying all SCMessenger features in a simulated multi-network environment.
 
+## Quick Start
+
+### Run All Tests
+```bash
+./run-all-tests.sh
+```
+
+### Run Specific Tests
+```bash
+./run-all-tests.sh --rust-only      # Rust core tests
+./run-all-tests.sh --android-only   # Android unit tests
+./run-all-tests.sh --integration-only # Integration tests
+```
+
+**📖 For detailed testing guide, see [TESTING_GUIDE.md](TESTING_GUIDE.md)**
+
 ## Overview
 
 This directory contains Docker configurations and test scripts to validate SCMessenger's core functionality including:
 
+- **Unit Tests**: Rust core library and Android app with MockK
+- **Integration Tests**: Multi-node mesh networking with real containers
+- **Mock Infrastructure**: Configurable NAT, latency, and network simulation
 - Peer-to-peer messaging
 - Relay-based routing
 - Multi-hop relay chains
@@ -52,11 +71,28 @@ Multi-hop:      Alice ↔ Eve (via Relay1 → Relay2)
 
 ## Files
 
-- `Dockerfile` - Multi-stage build for SCMessenger CLI
+### Docker Images
+- `Dockerfile` - Multi-stage build for SCMessenger CLI (production)
+- `Dockerfile.android-test` - Android test environment with SDK, NDK, Rust
+- `Dockerfile.rust-test` - Rust test environment with all tooling
+
+### Docker Compose Configurations
 - `docker-compose.yml` - Basic 3-node setup (relay, alice, bob)
 - `docker-compose-extended.yml` - Full 7-node testing environment
+- `docker-compose.test.yml` - **NEW: Comprehensive test infrastructure**
+- `docker-compose.network-test.yml` - Network simulation with NAT
+
+### Scripts
+- `run-all-tests.sh` - **NEW: Main test runner for all test suites**
+- `run-tests.sh` - Quick start script for Docker environments
+- `setup-android-test-mocks.sh` - **NEW: Set up Android test mocks**
 - `entrypoint.sh` - Container initialization script
-- `test-scripts/run-integration-tests.sh` - Comprehensive test suite
+- `manage.sh` - Docker management utilities
+
+### Documentation
+- `README.md` - This file
+- `TESTING_GUIDE.md` - **NEW: Comprehensive testing guide**
+- `test-scripts/` - Integration test scripts
 - `test-results/` - Output directory for test logs and results
 
 ## Usage
