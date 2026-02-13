@@ -20,4 +20,47 @@
     <string name="delete">Delete</string>
     <string name="edit">Edit</string>
     <string name="save">Save</string>
+    
+    <!-- Notifications -->
+    <string name="notification_channel_messages">Messages</string>
+    <string name="notification_channel_messages_desc">New messages from contacts</string>
+    <string name="notification_channel_mesh_status">Mesh Status</string>
+    <string name="notification_channel_mesh_status_desc">Mesh network connection status</string>
+    <string name="notification_channel_peer_events">Peer Events</string>
+    <string name="notification_channel_peer_events_desc">Peer discovery and connection events</string>
+    <string name="notification_channel_system">System</string>
+    <string name="notification_channel_system_desc">System notifications and updates</string>
+    <string name="notification_action_reply">Reply</string>
+    <string name="notification_action_mark_read">Mark Read</string>
+    <string name="notification_action_mute">Mute</string>
+    <string name="notification_peer_discovered">Peer Discovered</string>
+    <string name="notification_peer_discovered_via">%1$s via %2$s</string>
+    
+    <!-- Share -->
+    <string name="share_to_contact">Share to Contact</string>
+    <string name="share_no_contacts">No contacts available</string>
+    <string name="share_message_queued">Message queued for sending</string>
+    <string name="share_message_failed">Failed to send message</string>
+    <string name="share_unsupported_type">Unsupported share type: %s</string>
+    <string name="share_multiple_not_supported">Multiple items sharing not yet supported</string>
+    
+    <!-- Topics -->
+    <string name="topic_global">Global</string>
+    <string name="topic_discovery">Discovery</string>
+    <string name="topic_relay">Relay</string>
+    <string name="topic_subscribed">Subscribed to topic: %s</string>
+    <string name="topic_unsubscribed">Unsubscribed from topic: %s</string>
+    
+    <!-- Join Mesh -->
+    <string name="join_mesh_title">Join Mesh Network</string>
+    <string name="join_scan_qr">Scan QR Code</string>
+    <string name="join_scan_instructions">Position the QR code within the frame</string>
+    <string name="join_parsing">Parsing join bundle…</string>
+    <string name="join_connecting">Connecting to mesh…</string>
+    <string name="join_connected">Connected!</string>
+    <string name="join_failed">Connection Failed</string>
+    <string name="join_retry">Retry</string>
+    <string name="join_error_invalid_bundle">Invalid join bundle format</string>
+    <string name="join_error_no_peers">No bootstrap peers in bundle</string>
+    <string name="join_error_connection_failed">Failed to connect to any bootstrap peers</string>
 </resources>

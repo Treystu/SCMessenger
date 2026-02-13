@@ -576,6 +576,49 @@ class MeshRepository(private val context: Context) {
     }
     
     // ========================================================================
+    // OBSERVABLES FOR UI (NEW)
+    // ========================================================================
+    
+    /**
+     * Observe incoming messages from MeshEventBus.
+     */
+    fun observeIncomingMessages(): kotlinx.coroutines.flow.Flow<com.scmessenger.android.service.MessageEvent> {
+        return com.scmessenger.android.service.MeshEventBus.messageEvents
+    }
+    
+    /**
+     * Observe peer events from MeshEventBus.
+     */
+    fun observePeers(): kotlinx.coroutines.flow.Flow<List<String>> {
+        return kotlinx.coroutines.flow.flow {
+            com.scmessenger.android.service.MeshEventBus.peerEvents.collect { event ->
+                // Convert peer events to peer list
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val peers = ledgerManager?.listPeers() ?: emptyList()
+                    emit(peers)
+                }
+            }
+        }
+    }
+    
+    /**
+     * Observe network stats with periodic refresh.
+     */
+    fun observeNetworkStats(): kotlinx.coroutines.flow.Flow<uniffi.api.ServiceStats> {
+        return kotlinx.coroutines.flow.flow {
+            while (true) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val stats = meshService?.getStats()
+                    if (stats != null) {
+                        emit(stats)
+                    }
+                }
+                kotlinx.coroutines.delay(2000) // Refresh every 2 seconds
+            }
+        }
+    }
+    
+    // ========================================================================
     // CLEANUP
     // ========================================================================
     
