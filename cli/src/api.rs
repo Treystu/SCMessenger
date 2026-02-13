@@ -177,6 +177,7 @@ pub async fn get_history_via_api(
     Ok(response.messages)
 }
 
+#[allow(dead_code)]
 pub async fn get_external_address_via_api() -> Result<Vec<String>> {
     let client = hyper::Client::new();
     let req = Request::builder()
