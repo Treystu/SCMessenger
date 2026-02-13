@@ -53,7 +53,7 @@ class WifiAwareTransport(
     
     private var isRunning = false
     
-    private var registeredCallback: ConnectivityManager.NetworkCallback? = null
+    private val registeredCallbacks = ConcurrentHashMap<String, ConnectivityManager.NetworkCallback>()
     
     /**
      * Check if WiFi Aware is available on this device.
@@ -116,15 +116,15 @@ class WifiAwareTransport(
         publishSession?.close()
         subscribeSession?.close()
         
-        // Unregister network callback
-        registeredCallback?.let { callback ->
+        // Unregister network callbacks
+        registeredCallbacks.values.forEach { callback ->
             try {
                 connectivityManager.unregisterNetworkCallback(callback)
             } catch (e: Exception) {
                 Timber.w(e, "Failed to unregister network callback")
             }
-            registeredCallback = null
         }
+        registeredCallbacks.clear()
         
         // Detach from WiFi Aware
         awareSession?.close()
@@ -288,10 +288,23 @@ class WifiAwareTransport(
                 super.onLost(network)
                 Timber.d("WiFi Aware data path lost for $peerIdString")
                 activeConnections.remove(peerIdString)?.close()
+                registeredCallbacks.remove(peerIdString)?.let { registeredCallback ->
+                    try {
+                        connectivityManager.unregisterNetworkCallback(registeredCallback)
+                    } catch (e: Exception) {
+                        Timber.w(e, "Failed to unregister network callback for $peerIdString")
+                    }
+                }
             }
         }
-        
-        registeredCallback = callback
+
+        registeredCallbacks.put(peerIdString, callback)?.let { existingCallback ->
+            try {
+                connectivityManager.unregisterNetworkCallback(existingCallback)
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to replace existing network callback for $peerIdString")
+            }
+        }
         connectivityManager.requestNetwork(request, callback)
     }
     
