@@ -2922,4 +2922,1602 @@ Wire into tab navigation
 Test: start service → peers appear → topology renders → stats
 
 
+Phase 11: Settings Screens
+Goal: Full settings hierarchy — main settings, mesh settings (relay=messaging enforcement), privacy settings, power settings. iOS equivalent of Android's SettingsScreen.kt (311 LoC), MeshSettingsScreen.kt (348 LoC), PrivacySettingsScreen.kt (283 LoC), PowerSettingsScreen.kt (359 LoC), SettingsViewModel.kt.
 
+LoC: ~900
+
+Android → iOS Mapping
+Android File	iOS File	LoC
+SettingsScreen.kt (311 LoC)	Views/Settings/SettingsView.swift	~220
+MeshSettingsScreen.kt (348 LoC)	Views/Settings/MeshSettingsView.swift	~250
+PrivacySettingsScreen.kt (283 LoC)	Views/Settings/PrivacySettingsView.swift	~180
+PowerSettingsScreen.kt (359 LoC)	Views/Settings/PowerSettingsView.swift	~200
+SettingsViewModel.kt (~200 LoC)	ViewModels/SettingsViewModel.swift	~150
+Critical: Relay = Messaging Enforcement
+The Android app enforces the core philosophy relay = messaging bidirectionally:
+
+MeshRepository.sendMessage() checks settings?.relayEnabled != true — blocks send if relay is off
+MeshRepository.onMessageReceived() checks settings?.relayEnabled != true — drops incoming messages silently
+Uses fail-safe pattern: != true (not == false) so that null/missing settings default to disabled
+TOCTOU prevention: settings cached before relay check with val currentSettings = settingsManager?.load()
+The relay toggle uses errorContainer color to highlight criticality
+Warning cards explain bidirectional control with bullet points
+The iOS app MUST replicate this exactly.
+
+Files to Create
+ViewModels/SettingsViewModel.swift (~150 LoC)
+Swift
+import Foundation
+
+/// Settings state management
+/// Mirrors: android/.../ui/viewmodels/SettingsViewModel.kt
+@Observable
+final class SettingsViewModel {
+    private let repo: MeshRepository
+
+    var settings: MeshSettings?
+    var isLoading = false
+    var isSaving = false
+    var error: String?
+
+    // AutoAdjust
+    var autoAdjustEnabled = true
+    var adjustmentProfile: AdjustmentProfile = .standard
+
+    // Service
+    var isServiceRunning: Bool { repo.serviceState == .running }
+    var serviceStats: ServiceStats { repo.serviceStats }
+
+    init(repo: MeshRepository) {
+        self.repo = repo
+        loadSettings()
+    }
+
+    func loadSettings() {
+        isLoading = true
+        do {
+            settings = try repo.loadSettings()
+        } catch {
+            self.error = "Failed to load settings: \(error.localizedDescription)"
+        }
+        isLoading = false
+    }
+
+    func saveSettings() {
+        guard let settings else { return }
+        isSaving = true
+        do {
+            try repo.saveSettings(settings)
+        } catch {
+            self.error = "Failed to save: \(error.localizedDescription)"
+        }
+        isSaving = false
+    }
+
+    func updateRelayEnabled(_ enabled: Bool) {
+        settings?.relayEnabled = enabled
+        saveSettings()
+    }
+
+    func updateBleEnabled(_ enabled: Bool) {
+        settings?.bleEnabled = enabled
+        saveSettings()
+    }
+
+    func updateWifiAwareEnabled(_ enabled: Bool) {
+        settings?.wifiAwareEnabled = enabled
+        saveSettings()
+    }
+
+    func updateWifiDirectEnabled(_ enabled: Bool) {
+        settings?.wifiDirectEnabled = enabled
+        saveSettings()
+    }
+
+    func updateInternetEnabled(_ enabled: Bool) {
+        settings?.internetEnabled = enabled
+        saveSettings()
+    }
+
+    func updateOnionRouting(_ enabled: Bool) {
+        settings?.onionRouting = enabled
+        saveSettings()
+    }
+
+    func updateDiscoveryMode(_ mode: DiscoveryMode) {
+        settings?.discoveryMode = mode
+        saveSettings()
+    }
+
+    func updateMaxRelayBudget(_ budget: UInt32) {
+        settings?.maxRelayBudget = budget
+        saveSettings()
+    }
+
+    func updateBatteryFloor(_ floor: UInt8) {
+        settings?.batteryFloor = floor
+        saveSettings()
+    }
+
+    func toggleService() {
+        if isServiceRunning {
+            repo.stopMeshService()
+        } else {
+            do { try repo.startMeshService() } catch {
+                self.error = "Failed to start: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func resetStats() {
+        repo.meshService.resetStats()
+        repo.updateStats()
+    }
+
+    // AutoAdjust
+    func computeProfile() {
+        let profile = DeviceProfile(
+            batteryPct: UInt8(max(0, UIDevice.current.batteryLevel) * 100),
+            isCharging: UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full,
+            hasWifi: true,
+            motionState: .unknown
+        )
+        adjustmentProfile = repo.computeAdjustmentProfile(profile: profile)
+    }
+
+    func overrideBleScanInterval(_ ms: UInt32) {
+        repo.autoAdjustEngine.overrideBleScanInterval(intervalMs: ms)
+    }
+
+    func overrideRelayMaxPerHour(_ max: UInt32) {
+        repo.autoAdjustEngine.overrideRelayMaxPerHour(max: max)
+    }
+
+    func clearOverrides() {
+        repo.autoAdjustEngine.clearOverrides()
+    }
+}
+Views/Settings/SettingsView.swift (~220 LoC)
+Swift
+import SwiftUI
+
+/// Main settings screen — service control + navigation to sub-settings
+/// Mirrors: android/.../ui/screens/SettingsScreen.kt
+struct SettingsView: View {
+    @Environment(MeshRepository.self) private var repo
+    @State private var viewModel: SettingsViewModel?
+
+    var body: some View {
+        let vm = viewModel ?? SettingsViewModel(repo: repo)
+
+        List {
+            // Service Control
+            Section("Mesh Service") {
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(vm.isServiceRunning ? "Running" : "Stopped")
+                            .font(.headline)
+                        if vm.isServiceRunning {
+                            Text("\(vm.serviceStats.peersDiscovered) peers · \(vm.serviceStats.messagesRelayed) relayed")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    Button(vm.isServiceRunning ? "Stop" : "Start") {
+                        vm.toggleService()
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(vm.isServiceRunning ? .red : .green)
+                }
+            }
+
+            // Relay = Messaging Warning
+            // CRITICAL: This warning MUST match Android's MeshSettingsScreen.kt relay card
+            if let settings = vm.settings {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .foregroundStyle(settings.relayEnabled ? .green : .red)
+                            Text("Relay = Messaging")
+                                .font(.headline)
+                            Spacer()
+                            Toggle("", isOn: Binding(
+                                get: { settings.relayEnabled },
+                                set: { vm.updateRelayEnabled($0) }
+                            ))
+                            .tint(.green)
+                        }
+
+                        // Warning card — uses errorContainer equivalent color
+                        if !settings.relayEnabled {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("⚠️ Messaging Disabled")
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(.red)
+                                Text("Relay and messaging are permanently coupled:")
+                                    .font(.caption)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Label("Relay OFF → Cannot send messages", systemImage: "xmark.circle")
+                                    Label("Relay OFF → Cannot receive messages", systemImage: "xmark.circle")
+                                    Label("Relay ON → Full mesh participation", systemImage: "checkmark.circle")
+                                }
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            }
+                            .padding()
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(12)
+                        }
+                    }
+                }
+            }
+
+            // Sub-settings navigation
+            Section("Configuration") {
+                NavigationLink {
+                    MeshSettingsView()
+                } label: {
+                    Label("Mesh Settings", systemImage: "antenna.radiowaves.left.and.right")
+                }
+
+                NavigationLink {
+                    PrivacySettingsView()
+                } label: {
+                    Label("Privacy Settings", systemImage: "lock.shield")
+                }
+
+                NavigationLink {
+                    PowerSettingsView()
+                } label: {
+                    Label("Power Settings", systemImage: "bolt.fill")
+                }
+            }
+
+            // Info
+            Section("Information") {
+                HStack {
+                    Text("Contacts")
+                    Spacer()
+                    Text("\(repo.contactManager?.count() ?? 0)")
+                        .foregroundStyle(.secondary)
+                }
+                HStack {
+                    Text("Messages")
+                    Spacer()
+                    Text("\(repo.historyManager?.count() ?? 0)")
+                        .foregroundStyle(.secondary)
+                }
+                HStack {
+                    Text("Version")
+                    Spacer()
+                    Text("0.1.1")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Identity
+            Section {
+                NavigationLink {
+                    IdentityView()
+                } label: {
+                    Label("My Identity", systemImage: "person.badge.key")
+                }
+            }
+
+            // Danger Zone
+            Section {
+                Button(role: .destructive) {
+                    vm.resetStats()
+                } label: {
+                    Label("Reset Statistics", systemImage: "arrow.counterclockwise")
+                }
+            }
+        }
+        .navigationTitle("Settings")
+        .onAppear { viewModel = vm }
+    }
+}
+Views/Settings/MeshSettingsView.swift (~250 LoC)
+Swift
+import SwiftUI
+
+/// Transport and relay configuration
+/// Mirrors: android/.../ui/settings/MeshSettingsScreen.kt
+///
+/// CRITICAL: Relay toggle uses error color to highlight criticality.
+/// Warning cards explain bidirectional control with bullet points.
+/// Toggle is functional (not disabled) to make principle tangible through experience.
+struct MeshSettingsView: View {
+    @Environment(MeshRepository.self) private var repo
+    @State private var viewModel: SettingsViewModel?
+
+    var body: some View {
+        let vm = viewModel ?? SettingsViewModel(repo: repo)
+
+        List {
+            if let settings = vm.settings {
+                // Relay Section — CRITICAL SECTION
+                Section {
+                    VStack(alignment: .leading, spacing: 12) {
+                        // Relay toggle with error-colored background when OFF
+                        Toggle(isOn: Binding(
+                            get: { settings.relayEnabled },
+                            set: { vm.updateRelayEnabled($0) }
+                        )) {
+                            VStack(alignment: .leading) {
+                                Text("Relay Enabled")
+                                    .font(.headline)
+                                Text("Relay = Messaging. Both or neither.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .tint(.green)
+                        .listRowBackground(settings.relayEnabled ? Color.green.opacity(0.1) : Color.red.opacity(0.1))
+
+                        if !settings.relayEnabled {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("⚠️ All messaging is disabled")
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(.red)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("• You cannot send messages")
+                                    Text("• You cannot receive messages")
+                                    Text("• You are not participating in the mesh")
+                                    Text("• Other users cannot relay through you")
+                                }
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                                Text("This is by design: no free riders. Want to message? Relay for others.")
+                                    .font(.caption)
+                                    .italic()
+                                    .foregroundStyle(.orange)
+                            }
+                            .padding()
+                            .background(Color.red.opacity(0.08))
+                            .cornerRadius(12)
+                        }
+                    }
+                } header: {
+                    Text("Relay & Messaging")
+                } footer: {
+                    Text("Relay budget: \(settings.maxRelayBudget) messages/hour")
+                }
+
+                // Relay Budget
+                Section("Relay Budget") {
+                    Stepper("Max per hour: \(settings.maxRelayBudget)",
+                            value: Binding(
+                                get: { Int(settings.maxRelayBudget) },
+                                set: { vm.updateMaxRelayBudget(UInt32($0)) }
+                            ), in: 10...1000, step: 10)
+
+                    Stepper("Battery floor: \(settings.batteryFloor)%",
+                            value: Binding(
+                                get: { Int(settings.batteryFloor) },
+                                set: { vm.updateBatteryFloor(UInt8($0)) }
+                            ), in: 5...50, step: 5)
+                }
+
+                // Transport Toggles
+                Section("Transports") {
+                    Toggle("Bluetooth LE", isOn: Binding(
+                        get: { settings.bleEnabled },
+                        set: { vm.updateBleEnabled($0) }
+                    ))
+
+                    Toggle("Multipeer (WiFi Aware)", isOn: Binding(
+                        get: { settings.wifiAwareEnabled },
+                        set: { vm.updateWifiAwareEnabled($0) }
+                    ))
+
+                    Toggle("Multipeer (WiFi Direct)", isOn: Binding(
+                        get: { settings.wifiDirectEnabled },
+                        set: { vm.updateWifiDirectEnabled($0) }
+                    ))
+
+                    Toggle("Internet (libp2p)", isOn: Binding(
+                        get: { settings.internetEnabled },
+                        set: { vm.updateInternetEnabled($0) }
+                    ))
+                }
+
+                // Discovery Mode
+                Section("Discovery Mode") {
+                    Picker("Mode", selection: Binding(
+                        get: { settings.discoveryMode },
+                        set: { vm.updateDiscoveryMode($0) }
+                    )) {
+                        Text("Normal").tag(DiscoveryMode.normal)
+                        Text("Cautious").tag(DiscoveryMode.cautious)
+                        Text("Paranoid").tag(DiscoveryMode.paranoid)
+                    }
+                    .pickerStyle(.segmented)
+
+                    switch settings.discoveryMode {
+                    case .normal:
+                        Text("Standard peer discovery. Fastest mesh formation.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    case .cautious:
+                        Text("Reduced discovery rate. Balanced privacy/speed.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    case .paranoid:
+                        Text("Minimal discovery. Maximum privacy, slower mesh.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Mesh Settings")
+        .onAppear { viewModel = vm }
+    }
+}
+Views/Settings/PrivacySettingsView.swift (~180 LoC)
+Swift
+import SwiftUI
+
+/// Privacy controls — onion routing, cover traffic, padding, timing
+/// Mirrors: android/.../ui/settings/PrivacySettingsScreen.kt
+struct PrivacySettingsView: View {
+    @Environment(MeshRepository.self) private var repo
+    @State private var viewModel: SettingsViewModel?
+
+    var body: some View {
+        let vm = viewModel ?? SettingsViewModel(repo: repo)
+
+        List {
+            if let settings = vm.settings {
+                // Onion Routing
+                Section {
+                    Toggle("Onion Routing", isOn: Binding(
+                        get: { settings.onionRouting },
+                        set: { vm.updateOnionRouting($0) }
+                    ))
+                } header: {
+                    Label("Multi-Hop Routing", systemImage: "arrow.triangle.branch")
+                } footer: {
+                    Text("Routes messages through multiple nodes so no single node knows both sender and recipient. Increases latency but greatly enhances privacy.")
+                }
+
+                // Cover Traffic
+                Section {
+                    Toggle("Cover Traffic", isOn: .constant(true))
+                        .disabled(true)
+                } header: {
+                    Label("Traffic Analysis Resistance", systemImage: "eye.slash")
+                } footer: {
+                    Text("Generates dummy traffic to prevent observers from determining when real messages are sent. Always enabled when onion routing is active.")
+                }
+
+                // Message Padding
+                Section {
+                    Toggle("Message Padding", isOn: .constant(true))
+                        .disabled(true)
+                } header: {
+                    Label("Metadata Protection", systemImage: "shield.lefthalf.filled")
+                } footer: {
+                    Text("Pads all messages to uniform sizes to prevent message length analysis. Always enabled.")
+                }
+
+                // Timing Obfuscation
+                Section {
+                    Toggle("Timing Obfuscation", isOn: .constant(true))
+                        .disabled(true)
+                } header: {
+                    Label("Timing Protection", systemImage: "clock.arrow.circlepath")
+                } footer: {
+                    Text("Adds random delays to message forwarding to prevent timing correlation attacks. Always enabled.")
+                }
+
+                // Privacy Level Summary
+                Section("Privacy Summary") {
+                    HStack {
+                        Image(systemName: settings.onionRouting ? "lock.shield.fill" : "lock.shield")
+                            .font(.title)
+                            .foregroundStyle(settings.onionRouting ? .green : .orange)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(settings.onionRouting ? "Maximum Privacy" : "Standard Privacy")
+                                .font(.headline)
+                            Text(settings.onionRouting
+                                 ? "Onion routing + cover traffic + padding + timing obfuscation"
+                                 : "Encryption + padding + timing obfuscation (onion routing disabled)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("Privacy Settings")
+        .onAppear { viewModel = vm }
+    }
+}
+Views/Settings/PowerSettingsView.swift (~200 LoC)
+Swift
+import SwiftUI
+
+/// AutoAdjust engine and battery management
+/// Mirrors: android/.../ui/settings/PowerSettingsScreen.kt
+struct PowerSettingsView: View {
+    @Environment(MeshRepository.self) private var repo
+    @State private var viewModel: SettingsViewModel?
+    @State private var bleScanInterval: Double = 2000
+    @State private var relayMaxPerHour: Double = 200
+
+    var body: some View {
+        let vm = viewModel ?? SettingsViewModel(repo: repo)
+
+        List {
+            // AutoAdjust
+            Section {
+                Toggle("AutoAdjust Engine", isOn: Binding(
+                    get: { vm.autoAdjustEnabled },
+                    set: { vm.autoAdjustEnabled = $0 }
+                ))
+            } header: {
+                Label("Automatic Resource Management", systemImage: "gauge.with.dots.needle.33percent")
+            } footer: {
+                Text("Automatically adjusts BLE scan interval, relay budget, and transmission power based on battery level, network conditions, and device motion.")
+            }
+
+            // Current Profile
+            Section("Current Profile") {
+                HStack {
+                    Text("Adjustment Level")
+                    Spacer()
+                    Text(profileLabel(vm.adjustmentProfile))
+                        .foregroundStyle(profileColor(vm.adjustmentProfile))
+                        .fontWeight(.medium)
+                }
+
+                Button("Recompute Profile") {
+                    vm.computeProfile()
+                }
+            }
+
+            // Manual Overrides
+            Section {
+                VStack(alignment: .leading) {
+                    Text("BLE Scan Interval: \(Int(bleScanInterval))ms")
+                    Slider(value: $bleScanInterval, in: 500...10000, step: 500) {
+                        Text("BLE Scan")
+                    }
+                    .onChange(of: bleScanInterval) {
+                        vm.overrideBleScanInterval(UInt32(bleScanInterval))
+                    }
+                }
+
+                VStack(alignment: .leading) {
+                    Text("Relay Max/Hour: \(Int(relayMaxPerHour))")
+                    Slider(value: $relayMaxPerHour, in: 10...500, step: 10) {
+                        Text("Relay Budget")
+                    }
+                    .onChange(of: relayMaxPerHour) {
+                        vm.overrideRelayMaxPerHour(UInt32(relayMaxPerHour))
+                    }
+                }
+
+                Button("Clear All Overrides") {
+                    vm.clearOverrides()
+                    bleScanInterval = 2000
+                    relayMaxPerHour = 200
+                }
+                .foregroundStyle(.orange)
+            } header: {
+                Text("Manual Overrides")
+            } footer: {
+                Text("Overrides take precedence over AutoAdjust engine. Clear overrides to resume automatic management.")
+            }
+
+            // Battery Info
+            Section("Battery") {
+                let batteryLevel = max(0, UIDevice.current.batteryLevel)
+                let isCharging = UIDevice.current.batteryState == .charging
+                                || UIDevice.current.batteryState == .full
+
+                HStack {
+                    Image(systemName: isCharging ? "battery.100.bolt" : batteryIcon(batteryLevel))
+                        .font(.title2)
+                        .foregroundStyle(batteryLevel < 0.2 ? .red : .green)
+                    VStack(alignment: .leading) {
+                        Text("\(Int(batteryLevel * 100))%")
+                            .font(.headline)
+                        Text(isCharging ? "Charging" : "On Battery")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if let settings = vm.settings {
+                        Text("Floor: \(settings.batteryFloor)%")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Power Settings")
+        .onAppear {
+            viewModel = vm
+            UIDevice.current.isBatteryMonitoringEnabled = true
+        }
+    }
+
+    private func profileLabel(_ profile: AdjustmentProfile) -> String {
+        switch profile {
+        case .maximum: return "Maximum"
+        case .high: return "High"
+        case .standard: return "Standard"
+        case .reduced: return "Reduced"
+        case .minimal: return "Minimal"
+        }
+    }
+
+    private func profileColor(_ profile: AdjustmentProfile) -> Color {
+        switch profile {
+        case .maximum: return .green
+        case .high: return .blue
+        case .standard: return .primary
+        case .reduced: return .orange
+        case .minimal: return .red
+        }
+    }
+
+    private func batteryIcon(_ level: Float) -> String {
+        if level > 0.75 { return "battery.100" }
+        if level > 0.50 { return "battery.75" }
+        if level > 0.25 { return "battery.50" }
+        return "battery.25"
+    }
+}
+Steps (Execution Order)
+Create ViewModels/SettingsViewModel.swift — settings load/save, AutoAdjust, service control
+Create Views/Settings/SettingsView.swift — main settings with relay warning card + sub-navigation
+Create Views/Settings/MeshSettingsView.swift — relay toggle (error color), transports, discovery mode
+Create Views/Settings/PrivacySettingsView.swift — onion routing, cover traffic, padding, timing
+Create Views/Settings/PowerSettingsView.swift — AutoAdjust, manual overrides, battery display
+Verify relay enforcement in MeshRepository.swift: sendMessage() and incoming message handler must check settings?.relayEnabled != true using fail-safe pattern
+Test: toggle relay OFF → send fails → toggle ON → send works
+Phase 12: Notifications
+Goal: Push notification support for incoming messages, peer events, and service status. iOS equivalent of Android's NotificationHelper.kt (389 LoC).
+
+LoC: ~300
+
+Android → iOS Mapping
+Android Feature	iOS Equivalent
+4 NotificationChannels	4 UNNotificationCategory
+NotificationChannelGroup	Category grouping
+RemoteInput (reply from notification)	UNTextInputNotificationAction
+MessagingStyle (grouped)	Thread identifiers
+PendingIntent	UNNotificationContent.userInfo routing
+NotificationCompat	UNUserNotificationCenter
+Files to Create
+Utils/NotificationManager.swift (~200 LoC)
+Swift
+import UserNotifications
+import UIKit
+import os
+
+/// Notification management for mesh messaging
+/// Mirrors: android/.../utils/NotificationHelper.kt
+///
+/// Categories:
+/// - messages (high priority, grouped by sender, reply action)
+/// - mesh_status (low priority, service state updates)
+/// - peer_events (default priority, peer connect/disconnect)
+/// - system (low priority, app updates)
+final class MeshNotificationManager: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = MeshNotificationManager()
+    private let logger = Logger(subsystem: "com.scmessenger", category: "Notifications")
+
+    // Category IDs (match Android channel IDs)
+    static let categoryMessages = "messages"
+    static let categoryMeshStatus = "mesh_status"
+    static let categoryPeerEvents = "peer_events"
+    static let categorySystem = "system"
+
+    // Action IDs
+    static let actionReply = "REPLY_ACTION"
+    static let actionMarkRead = "MARK_READ_ACTION"
+    static let actionMute = "MUTE_ACTION"
+
+    override init() {
+        super.init()
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    /// Register notification categories and actions
+    func registerCategories() {
+        // Reply action (text input from notification)
+        let replyAction = UNTextInputNotificationAction(
+            identifier: Self.actionReply,
+            title: "Reply",
+            options: [],
+            textInputButtonTitle: "Send",
+            textInputPlaceholder: "Message..."
+        )
+
+        let markReadAction = UNNotificationAction(
+            identifier: Self.actionMarkRead,
+            title: "Mark Read",
+            options: []
+        )
+
+        let muteAction = UNNotificationAction(
+            identifier: Self.actionMute,
+            title: "Mute",
+            options: .destructive
+        )
+
+        // Messages category with reply + mark read + mute
+        let messagesCategory = UNNotificationCategory(
+            identifier: Self.categoryMessages,
+            actions: [replyAction, markReadAction, muteAction],
+            intentIdentifiers: [],
+            options: .customDismissAction
+        )
+
+        // Peer events category
+        let peerCategory = UNNotificationCategory(
+            identifier: Self.categoryPeerEvents,
+            actions: [],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        // Mesh status category
+        let statusCategory = UNNotificationCategory(
+            identifier: Self.categoryMeshStatus,
+            actions: [],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        // System category
+        let systemCategory = UNNotificationCategory(
+            identifier: Self.categorySystem,
+            actions: [],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        UNUserNotificationCenter.current().setNotificationCategories([
+            messagesCategory, peerCategory, statusCategory, systemCategory
+        ])
+    }
+
+    /// Show notification for incoming message
+    func showMessageNotification(senderId: String, senderNickname: String?, messageText: String) {
+        let content = UNMutableNotificationContent()
+        content.title = senderNickname ?? String(senderId.prefix(12))
+        content.body = messageText
+        content.categoryIdentifier = Self.categoryMessages
+        content.threadIdentifier = senderId  // Group by sender
+        content.sound = .default
+        content.userInfo = [
+            "type": "message",
+            "senderId": senderId
+        ]
+
+        // Badge count
+        content.badge = NSNumber(value: UIApplication.shared.applicationIconBadgeNumber + 1)
+
+        let request = UNNotificationRequest(
+            identifier: "msg_\(UUID().uuidString)",
+            content: content,
+            trigger: nil  // Deliver immediately
+        )
+
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error {
+                self.logger.error("Failed to show notification: \(error)")
+            }
+        }
+    }
+
+    /// Show notification for peer discovery
+    func showPeerNotification(peerId: String, connected: Bool) {
+        let content = UNMutableNotificationContent()
+        content.title = connected ? "Peer Connected" : "Peer Disconnected"
+        content.body = String(peerId.prefix(16))
+        content.categoryIdentifier = Self.categoryPeerEvents
+        content.sound = connected ? .default : nil
+        content.userInfo = ["type": "peer", "peerId": peerId]
+
+        let request = UNNotificationRequest(
+            identifier: "peer_\(peerId.prefix(8))",
+            content: content,
+            trigger: nil
+        )
+
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    /// Show mesh service status notification
+    func showStatusNotification(title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.categoryIdentifier = Self.categoryMeshStatus
+        content.userInfo = ["type": "status"]
+
+        let request = UNNotificationRequest(
+            identifier: "status",
+            content: content,
+            trigger: nil
+        )
+
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    // MARK: - UNUserNotificationCenterDelegate
+
+    /// Handle notification tap (foreground)
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        // Show banner even when app is in foreground
+        completionHandler([.banner, .sound, .badge])
+    }
+
+    /// Handle notification action (reply, mark read, mute)
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        let userInfo = response.notification.request.content.userInfo
+        let senderId = userInfo["senderId"] as? String
+
+        switch response.actionIdentifier {
+        case Self.actionReply:
+            if let textResponse = response as? UNTextInputNotificationResponse,
+               let senderId {
+                // Send reply via MeshRepository
+                logger.info("Reply to \(senderId): \(textResponse.userText)")
+                // repo.sendMessage(recipientPubKey: senderId, text: textResponse.userText)
+            }
+
+        case Self.actionMarkRead:
+            logger.info("Mark read for \(senderId ?? "unknown")")
+
+        case Self.actionMute:
+            logger.info("Mute \(senderId ?? "unknown")")
+
+        default:
+            // Tap on notification — navigate to chat
+            if let senderId {
+                NotificationCenter.default.post(
+                    name: .navigateToChat,
+                    object: nil,
+                    userInfo: ["peerId": senderId]
+                )
+            }
+        }
+
+        completionHandler()
+    }
+}
+
+extension Notification.Name {
+    static let navigateToChat = Notification.Name("navigateToChat")
+}
+Utils/NotificationBridge.swift (~100 LoC)
+Subscribes to MeshEventBus and routes events to notifications:
+
+Swift
+import Foundation
+import Combine
+
+/// Bridges MeshEventBus events to iOS notifications
+/// Mirrors: Android's CoreDelegate → NotificationHelper wiring in MeshForegroundService
+final class NotificationBridge {
+    private var cancellables = Set<AnyCancellable>()
+    private let notificationManager = MeshNotificationManager.shared
+    private let repo: MeshRepository
+
+    init(repo: MeshRepository) {
+        self.repo = repo
+        subscribeToEvents()
+    }
+
+    private func subscribeToEvents() {
+        // Message notifications
+        MeshEventBus.shared.messageEvents
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] event in
+                guard let self else { return }
+                switch event {
+                case .received(let senderId, _, let data):
+                    let text = String(data: Data(data), encoding: .utf8) ?? "(encrypted)"
+                    let contact = try? self.repo.getContact(peerId: senderId)
+                    self.notificationManager.showMessageNotification(
+                        senderId: senderId,
+                        senderNickname: contact?.nickname,
+                        messageText: text
+                    )
+                default:
+                    break
+                }
+            }
+            .store(in: &cancellables)
+
+        // Peer notifications
+        MeshEventBus.shared.peerEvents
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] event in
+                switch event {
+                case .discovered(let peerId):
+                    self?.notificationManager.showPeerNotification(peerId: peerId, connected: true)
+                case .disconnected(let peerId):
+                    self?.notificationManager.showPeerNotification(peerId: peerId, connected: false)
+                default:
+                    break
+                }
+            }
+            .store(in: &cancellables)
+    }
+}
+Steps (Execution Order)
+Create Utils/NotificationManager.swift — categories, actions, notification display
+Create Utils/NotificationBridge.swift — event bus → notification routing
+Register categories in SCMessengerApp.init()
+Initialize NotificationBridge in app startup
+Handle navigateToChat notification for deep linking
+Test: receive message in background → notification with reply action → tap navigates to chat
+Phase 13: Navigation & Theme
+Goal: Complete app navigation — TabView, NavigationStack routing, deep links. iOS equivalent of Android's MeshApp.kt (143 LoC), MainActivity.kt, theme files.
+
+LoC: ~400
+
+Android → iOS Mapping
+Android File	iOS File	LoC
+MeshApp.kt (143 LoC)	Views/ContentView.swift	~120
+MainActivity.kt (51 LoC)	SCMessengerApp.swift (expanded)	~80
+Screen sealed class	AppTab enum	~20
+Theme.kt (~60 LoC)	Built into SwiftUI (no separate file needed)	0
+Color.kt (~40 LoC)	Utils/Colors.swift	~30
+Type.kt (~30 LoC)	Built into SwiftUI	0
+n/a	Views/Components/IdenticonView.swift	~80
+n/a	Views/Components/QRScannerView.swift	~70
+Files to Create
+Views/ContentView.swift (~120 LoC)
+Swift
+import SwiftUI
+
+/// Root content view — TabView with 4 tabs, matching Android's MeshApp bottom nav
+/// Mirrors: android/.../ui/MeshApp.kt
+struct ContentView: View {
+    @Environment(MeshRepository.self) private var repo
+    @State private var selectedTab = AppTab.chats
+    @State private var chatNavigationPath = NavigationPath()
+    @State private var contactsNavigationPath = NavigationPath()
+    @State private var dashboardNavigationPath = NavigationPath()
+    @State private var settingsNavigationPath = NavigationPath()
+
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            // Chats tab
+            NavigationStack(path: $chatNavigationPath) {
+                ConversationsListView()
+                    .navigationDestination(for: ConversationsViewModel.Conversation.self) { convo in
+                        ChatView(peerId: convo.peerId)
+                    }
+            }
+            .tabItem {
+                Label("Chats", systemImage: "bubble.left.and.bubble.right.fill")
+            }
+            .tag(AppTab.chats)
+
+            // Contacts tab
+            NavigationStack(path: $contactsNavigationPath) {
+                ContactsListView()
+                    .navigationDestination(for: Contact.self) { contact in
+                        ContactDetailView(contact: contact)
+                    }
+            }
+            .tabItem {
+                Label("Contacts", systemImage: "person.2.fill")
+            }
+            .tag(AppTab.contacts)
+
+            // Network tab
+            NavigationStack(path: $dashboardNavigationPath) {
+                DashboardView()
+                    .navigationDestination(for: String.self) { destination in
+                        switch destination {
+                        case "peers": PeerListView()
+                        case "topology": TopologyView()
+                        default: EmptyView()
+                        }
+                    }
+            }
+            .tabItem {
+                Label("Network", systemImage: "point.3.connected.trianglepath.dotted")
+            }
+            .tag(AppTab.network)
+
+            // Settings tab
+            NavigationStack(path: $settingsNavigationPath) {
+                SettingsView()
+            }
+            .tabItem {
+                Label("Settings", systemImage: "gearshape.fill")
+            }
+            .tag(AppTab.settings)
+        }
+        // Deep link handler — navigate to chat from notification
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToChat)) { notification in
+            if let peerId = notification.userInfo?["peerId"] as? String {
+                selectedTab = .chats
+                // Push chat view
+                let convo = ConversationsViewModel.Conversation(
+                    peerId: peerId, nickname: nil, lastMessage: "",
+                    lastTimestamp: 0, unreadCount: 0, publicKey: peerId
+                )
+                chatNavigationPath.append(convo)
+            }
+        }
+    }
+}
+
+enum AppTab: Hashable {
+    case chats, contacts, network, settings
+}
+SCMessengerApp.swift (~80 LoC, expanded from Phase 2)
+Swift
+import SwiftUI
+
+/// App entry point — onboarding check, repository init, background task registration
+/// Mirrors: android/.../ui/MainActivity.kt + MeshApp.kt initialization
+@main
+struct SCMessengerApp: App {
+    @State private var repo = MeshRepository()
+    @State private var backgroundService: MeshBackgroundService?
+    @State private var notificationBridge: NotificationBridge?
+    @State private var showOnboarding: Bool
+
+    init() {
+        // Check if identity exists
+        let tempRepo = MeshRepository()
+        _showOnboarding = State(initialValue: !tempRepo.getIdentityInfo().initialized)
+        _repo = State(initialValue: tempRepo)
+
+        // Register notification categories
+        MeshNotificationManager.shared.registerCategories()
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            Group {
+                if showOnboarding {
+                    OnboardingView(onboardingComplete: $showOnboarding)
+                        .environment(repo)
+                } else {
+                    ContentView()
+                        .environment(repo)
+                }
+            }
+            .onAppear {
+                // Initialize background service
+                backgroundService = MeshBackgroundService(meshRepository: repo)
+                backgroundService?.registerBackgroundTasks()
+
+                // Initialize notification bridge
+                notificationBridge = NotificationBridge(repo: repo)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+                backgroundService?.onEnteringBackground()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                backgroundService?.onEnteringForeground()
+            }
+        }
+    }
+}
+Views/Components/IdenticonView.swift (~80 LoC)
+Swift
+import SwiftUI
+
+/// Deterministic identicon from public key hash
+/// Mirrors: android/.../ui/components/Identicon.kt
+struct IdenticonView: View {
+    let publicKey: String
+    private let gridSize = 5
+    private let colors: [Color] = [.blue, .green, .purple, .orange, .red, .teal, .pink, .indigo]
+
+    var body: some View {
+        GeometryReader { geo in
+            let cellSize = min(geo.size.width, geo.size.height) / CGFloat(gridSize)
+            let hash = simpleHash(publicKey)
+            let color = colors[abs(hash) % colors.count]
+
+            Canvas { context, size in
+                for row in 0..<gridSize {
+                    for col in 0..<gridSize {
+                        // Mirror horizontally for symmetry
+                        let mirroredCol = col < gridSize / 2 ? col : gridSize - 1 - col
+                        let index = row * (gridSize / 2 + 1) + mirroredCol
+                        let filled = (hash >> (index % 30)) & 1 == 1
+
+                        if filled {
+                            let rect = CGRect(
+                                x: CGFloat(col) * cellSize,
+                                y: CGFloat(row) * cellSize,
+                                width: cellSize,
+                                height: cellSize
+                            )
+                            context.fill(Path(rect), with: .color(color))
+                        }
+                    }
+                }
+            }
+            .background(color.opacity(0.1))
+        }
+    }
+
+    private func simpleHash(_ input: String) -> Int {
+        var hash = 0
+        for (i, char) in input.unicodeScalars.enumerated() {
+            hash = hash &+ Int(char.value) &* (i + 1)
+        }
+        return hash
+    }
+}
+Views/Components/QRScannerView.swift (~70 LoC)
+Swift
+import SwiftUI
+import AVFoundation
+
+/// QR code scanner for contact exchange
+struct QRScannerView: UIViewControllerRepresentable {
+    let onScan: (String) -> Void
+
+    func makeUIViewController(context: Context) -> QRScannerViewController {
+        let vc = QRScannerViewController()
+        vc.onScan = onScan
+        return vc
+    }
+
+    func updateUIViewController(_ uiViewController: QRScannerViewController, context: Context) {}
+}
+
+class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
+    var onScan: ((String) -> Void)?
+    private var captureSession: AVCaptureSession?
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        setupCamera()
+    }
+
+    private func setupCamera() {
+        let session = AVCaptureSession()
+        guard let device = AVCaptureDevice.default(for: .video),
+              let input = try? AVCaptureDeviceInput(device: device) else { return }
+
+        session.addInput(input)
+
+        let output = AVCaptureMetadataOutput()
+        session.addOutput(output)
+        output.setMetadataObjectsDelegate(self, queue: .main)
+        output.metadataObjectTypes = [.qr]
+
+        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
+        previewLayer.frame = view.bounds
+        previewLayer.videoGravity = .resizeAspectFill
+        view.layer.addSublayer(previewLayer)
+
+        captureSession = session
+        session.startRunning()
+    }
+
+    func metadataOutput(_ output: AVCaptureMetadataOutput,
+                        didOutput metadataObjects: [AVMetadataObject],
+                        from connection: AVCaptureConnection) {
+        guard let metadata = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
+              let value = metadata.stringValue else { return }
+
+        captureSession?.stopRunning()
+        onScan?(value)
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        captureSession?.stopRunning()
+    }
+}
+Utils/Helpers.swift (~50 LoC)
+Swift
+import Foundation
+
+/// Shared helper functions used across views
+func formatRelativeTime(_ timestamp: UInt64) -> String {
+    let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
+    let formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .abbreviated
+    return formatter.localizedString(for: date, relativeTo: Date())
+}
+Steps (Execution Order)
+Create Utils/Helpers.swift — shared formatters
+Create Views/Components/IdenticonView.swift — deterministic avatar
+Create Views/Components/QRScannerView.swift — camera QR scanner
+Create Views/ContentView.swift — TabView with 4 tabs + deep linking
+Expand SCMessengerApp.swift — onboarding check, background service, notifications
+Test: app launches → onboarding (first run) OR tab view → all 4 tabs work → notification deep links to chat
+Phase 14: Integration Testing
+Goal: XCTest unit tests for ViewModels + integration tests for UniFFI bridge. iOS equivalent of Android's 7 test files (~680 LoC).
+
+LoC: ~500
+
+Android → iOS Test Mapping
+Android Test File	iOS Test File	LoC
+SettingsViewModelTest.kt	SCMessengerTests/SettingsViewModelTests.swift	~80
+ContactsViewModelTest.kt	SCMessengerTests/ContactsViewModelTests.swift	~80
+ChatViewModelTest.kt	SCMessengerTests/ChatViewModelTests.swift	~70
+MeshRepositoryTest.kt (relay enforcement)	SCMessengerTests/MeshRepositoryTests.swift	~120
+MeshForegroundServiceTest.kt	SCMessengerTests/BackgroundServiceTests.swift	~60
+MeshServiceViewModelTest.kt	SCMessengerTests/DashboardViewModelTests.swift	~50
+UniffiIntegrationTest.kt	SCMessengerTests/UniFFIIntegrationTests.swift	~100
+Files to Create
+SCMessengerTests/UniFFIIntegrationTests.swift (~100 LoC)
+Swift
+import XCTest
+@testable import SCMessenger
+
+/// Integration tests verifying UniFFI bridge works correctly
+/// Mirrors: android/.../test/UniffiIntegrationTest.kt
+final class UniFFIIntegrationTests: XCTestCase {
+
+    func testIronCoreLifecycle() throws {
+        let core = IronCore()
+        XCTAssertFalse(core.isRunning())
+
+        try core.start()
+        XCTAssertTrue(core.isRunning())
+
+        core.stop()
+        XCTAssertFalse(core.isRunning())
+    }
+
+    func testIdentityInitialization() throws {
+        let core = IronCore()
+        let infoBefore = core.getIdentityInfo()
+        XCTAssertFalse(infoBefore.initialized)
+        XCTAssertNil(infoBefore.publicKeyHex)
+
+        try core.initializeIdentity()
+        let infoAfter = core.getIdentityInfo()
+        XCTAssertTrue(infoAfter.initialized)
+        XCTAssertNotNil(infoAfter.publicKeyHex)
+        XCTAssert(infoAfter.publicKeyHex!.count == 64) // 32 bytes hex
+    }
+
+    func testMessagePrepare() throws {
+        let core = IronCore()
+        try core.initializeIdentity()
+        try core.start()
+
+        let recipient = core.getIdentityInfo().publicKeyHex!
+        let encrypted = try core.prepareMessage(recipientPublicKeyHex: recipient, text: "Hello")
+        XCTAssertFalse(encrypted.isEmpty)
+        XCTAssertEqual(core.outboxCount(), 1)
+    }
+
+    func testSignAndVerify() throws {
+        let core = IronCore()
+        try core.initializeIdentity()
+
+        let data = Data("test data".utf8)
+        let sig = try core.signData(data: data)
+        XCTAssertFalse(sig.signature.isEmpty)
+
+        let valid = try core.verifySignature(
+            data: data, signature: sig.signature, publicKeyHex: sig.publicKeyHex)
+        XCTAssertTrue(valid)
+    }
+
+    func testMeshServiceLifecycle() throws {
+        let config = MeshServiceConfig(discoveryIntervalMs: 5000, relayBudgetPerHour: 100, batteryFloorPct: 15)
+        let service = MeshService(config: config)
+
+        XCTAssertEqual(service.getState(), .stopped)
+        try service.start()
+        XCTAssertEqual(service.getState(), .running)
+
+        let stats = service.getStats()
+        XCTAssertEqual(stats.peersDiscovered, 0)
+
+        service.stop()
+        XCTAssertEqual(service.getState(), .stopped)
+    }
+
+    func testAutoAdjustEngine() {
+        let engine = AutoAdjustEngine()
+        let profile = DeviceProfile(batteryPct: 80, isCharging: false, hasWifi: true, motionState: .still)
+
+        let adjustment = engine.computeProfile(device: profile)
+        XCTAssertEqual(adjustment, .standard)
+
+        let bleAdj = engine.computeBleAdjustment(profile: .standard)
+        XCTAssertGreaterThan(bleAdj.scanIntervalMs, 0)
+
+        let relayAdj = engine.computeRelayAdjustment(profile: .standard)
+        XCTAssertGreaterThan(relayAdj.maxPerHour, 0)
+    }
+
+    func testSwarmBridgeCreation() {
+        let bridge = SwarmBridge()
+        XCTAssertEqual(bridge.getPeers().count, 0)
+        XCTAssertEqual(bridge.getTopics().count, 0)
+        bridge.shutdown()
+    }
+
+    func testContactManager() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+
+        let manager = try ContactManager(storagePath: tempDir.path)
+        XCTAssertEqual(manager.count(), 0)
+
+        let contact = Contact(peerId: "test1", nickname: "Alice", publicKey: "abc123",
+                              addedAt: UInt64(Date().timeIntervalSince1970), lastSeen: nil, notes: nil)
+        try manager.add(contact: contact)
+        XCTAssertEqual(manager.count(), 1)
+
+        let retrieved = try manager.get(peerId: "test1")
+        XCTAssertEqual(retrieved?.nickname, "Alice")
+
+        try manager.remove(peerId: "test1")
+        XCTAssertEqual(manager.count(), 0)
+
+        try FileManager.default.removeItem(at: tempDir)
+    }
+}
+SCMessengerTests/MeshRepositoryTests.swift (~120 LoC)
+Swift
+import XCTest
+@testable import SCMessenger
+
+/// Repository tests — especially relay enforcement
+/// Mirrors: android/.../test/MeshRepositoryTest.kt
+///
+/// CRITICAL: These tests verify the relay = messaging coupling:
+/// - Send blocked when relay disabled
+/// - Receive dropped when relay disabled
+/// - Fail-safe: null/missing settings = disabled
+final class MeshRepositoryTests: XCTestCase {
+
+    // NOTE: Tests marked with comment "REQUIRES MOCK" need
+    // mock UniFFI objects which requires protocol extraction.
+    // Listed here for completeness matching Android test structure.
+
+    func testRelayEnforcementSendDisabled() {
+        // When relay_enabled = false, sendMessage() must throw
+        // REQUIRES MOCK: need to inject mock MeshSettingsManager
+        // returning MeshSettings(relayEnabled: false, ...)
+        //
+        // let repo = MeshRepository(mockSettings: disabledSettings)
+        // XCTAssertThrowsError(try repo.sendMessage(...))
+    }
+
+    func testRelayEnforcementSendEnabled() {
+        // When relay_enabled = true, sendMessage() must succeed
+        // REQUIRES MOCK
+    }
+
+    func testRelayEnforcementSendNullSettings() {
+        // When settings are nil (fail-safe), sendMessage() must throw
+        // This tests the != true pattern (nil != true → blocked)
+        // REQUIRES MOCK
+    }
+
+    func testRelayEnforcementReceiveDisabled() {
+        // When relay_enabled = false, incoming messages silently dropped
+        // REQUIRES MOCK
+    }
+
+    func testRelayEnforcementReceiveEnabled() {
+        // When relay_enabled = true, incoming messages processed
+        // REQUIRES MOCK
+    }
+
+    func testRelayEnforcementReceiveNullSettings() {
+        // Null settings → messages dropped (fail-safe)
+        // REQUIRES MOCK
+    }
+
+    func testRelayEnforcementRaceCondition() {
+        // Settings cached before relay check to prevent TOCTOU:
+        // let currentSettings = settingsManager?.load()
+        // let isRelayEnabled = currentSettings?.relayEnabled == true
+        // REQUIRES MOCK
+    }
+
+    // Non-mock tests
+    func testRepositoryInitialization() {
+        let repo = MeshRepository()
+        XCTAssertNotNil(repo.ironCore)
+        XCTAssertNotNil(repo.meshService)
+        XCTAssertNotNil(repo.autoAdjustEngine)
+    }
+
+    func testIdentitySnippet() {
+        let repo = MeshRepository()
+        try? repo.ironCore.initializeIdentity()
+        let snippet = repo.getIdentitySnippet()
+        XCTAssertEqual(snippet.count, 8)
+    }
+}
+Other test files follow the same pattern (~50-80 LoC each):
+SettingsViewModelTests.swift — loadSettings, saveSettings, toggle relay, update transport toggles
+ContactsViewModelTests.swift — addContact, removeContact, searchContacts, setNickname
+ChatViewModelTests.swift — loadMessages, sendMessage, displayName formatting
+DashboardViewModelTests.swift — refresh, toggleService, formatBytes, formatUptime
+BackgroundServiceTests.swift — registerBackgroundTasks, scheduleBackgroundRefresh
+Steps (Execution Order)
+Create SCMessengerTests/UniFFIIntegrationTests.swift — most critical, validates Rust bridge
+Create SCMessengerTests/MeshRepositoryTests.swift — relay enforcement tests
+Create remaining ViewModel test files
+Run: xcodebuild test -scheme SCMessenger -destination 'platform=iOS Simulator,name=iPhone 15'
+Verify all integration tests pass (ViewModel tests may need mock setup)
+Phase 15: Gossipsub Topic Integration
+Goal: Topic subscription, auto-subscribe, topic-based filtering, mesh join flow. iOS equivalent of Android's TopicManager.kt (158 LoC), JoinMeshScreen.kt (438 LoC), ShareReceiver.kt (142 LoC).
+
+LoC: ~550
+
+Android → iOS Mapping
+Android File	iOS File	LoC
+TopicManager.kt (158 LoC)	Data/TopicManager.swift	~130
+JoinMeshScreen.kt (438 LoC)	Views/Join/JoinMeshView.swift	~300
+ShareReceiver.kt (142 LoC)	Share Extension (or Utils/ShareHandler.swift)	~120
+Files to Create
+Data/TopicManager.swift (~130 LoC)
+Swift
+import Foundation
+import Combine
+
+/// Gossipsub topic management
+/// Mirrors: android/.../data/TopicManager.kt
+///
+/// Default Topics:
+/// - /scmessenger/global/v1 (global mesh chat)
+/// - /scmessenger/discovery/v1 (peer announcements)
+/// - /scmessenger/relay/v1 (message relaying)
+@Observable
+final class TopicManager {
+    private let repo: MeshRepository
+
+    static let topicGlobal = "/scmessenger/global/v1"
+    static let topicDiscovery = "/scmessenger/discovery/v1"
+    static let topicRelay = "/scmessenger/relay/v1"
+
+    static let defaultTopics = [topicGlobal, topicDiscovery, topicRelay]
+
+    var subscribedTopics: Set<String> = []
+    var knownTopics: Set<String> = []
+
+    init(repo: MeshRepository) {
+        self.repo = repo
+    }
+
+    /// Initialize and subscribe to default topics
+    func initialize() {
+        for topic in Self.defaultTopics {
+            subscribe(topic)
+        }
+        refreshKnownTopics()
+    }
+
+    /// Subscribe to a topic via SwarmBridge
+    func subscribe(_ topic: String) {
+        do {
+            try repo.swarmBridge?.subscribeTopic(topic: topic)
+            subscribedTopics.insert(topic)
+        } catch {
+            // Track locally even if SwarmBridge not ready
+            subscribedTopics.insert(topic)
+        }
+    }
+
+    /// Unsubscribe from a topic
+    func unsubscribe(_ topic: String) {
+        subscribedTopics.remove(topic)
+    }
+
+    /// Refresh known topics from SwarmBridge + LedgerManager
+    func refreshKnownTopics() {
+        var topics = subscribedTopics
+
+        // Add topics from SwarmBridge
+        if let swarmTopics = repo.swarmBridge?.getTopics() {
+            topics.formUnion(swarmTopics)
+        }
+
+        // Add topics from LedgerManager
+        if let ledgerTopics = repo.ledgerManager?.allKnownTopics() {
+            topics.formUnion(ledgerTopics)
+        }
+
+        knownTopics = topics
+    }
+
+    /// Auto-subscribe to peer-specific topic
+    func autoSubscribeToPeerTopics(peerId: String) {
+        let peerTopic = "/scmessenger/peer/\(peerId)/v1"
+        if !subscribedTopics.contains(peerTopic) {
+            subscribe(peerTopic)
+        }
+    }
+
+    /// Check if subscribed to a topic
+    func isSubscribed(_ topic: String) -> Bool {
+        subscribedTopics.contains(topic)
+    }
+}
+Views/Join/JoinMeshView.swift (~300 LoC)
+Swift
+import SwiftUI
+
+/// Join an existing mesh network via QR bundle or manual entry
+/// Mirrors: android/.../ui/join/JoinMeshScreen.kt
+///
+/// Join Bundle Format (JSON):
+/// {
+///   "bootstrap_peers": ["/ip4/x.x.x.x/tcp/yyyy"],
+///   "topics": ["/scmessenger/global/v1"],
+///   "identity": "base64_encoded_public_key",
+///   "timestamp": 1234567890
+/// }
+struct JoinMeshView: View {
+    @Environment(MeshRepository.self) private var repo
+    @Environment(\.dismiss) private var dismiss
+    @State private var joinState = JoinState.input
+    @State private var manualAddress = ""
+    @State private var errorMessage: String?
+    @State private var connectionProgress: Double = 0
+    @State private var connectedPeers: [String] = []
+    @State private var showScanner = false
+
+    enum JoinState {
+        case input, connecting, connected, failed
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                switch joinState {
+                case .input:
+                    inputView
+                case .connecting:
+                    connectingView
+                case .connected:
+                    connectedView
+                case .failed:
+                    failedView
+                }
+            }
+            .padding()
+            .navigationTitle("Join Mesh")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+    }
+
+    // MARK: - Input View
+
+    private var inputView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "point.3.connected.trianglepath.dotted")
+                .font(.system(size: 60))
+                .foregroundStyle(.blue)
+
+            Text("Join a Mesh Network")
+                .font(.title2.bold())
+
+            Text("Scan a QR code from an existing node or enter a bootstrap address manually
