@@ -53,6 +53,7 @@ class WifiAwareTransport(
     
     private var isRunning = false
     
+    private val callbackLock = Any()
     private val registeredCallbacks = ConcurrentHashMap<String, ConnectivityManager.NetworkCallback>()
     
     /**
@@ -117,14 +118,18 @@ class WifiAwareTransport(
         subscribeSession?.close()
         
         // Unregister network callbacks
-        registeredCallbacks.values.forEach { callback ->
+        val callbacksToUnregister = synchronized(callbackLock) {
+            val callbacks = registeredCallbacks.values.toList()
+            registeredCallbacks.clear()
+            callbacks
+        }
+        callbacksToUnregister.forEach { callback ->
             try {
                 connectivityManager.unregisterNetworkCallback(callback)
             } catch (e: Exception) {
                 Timber.w(e, "Failed to unregister network callback")
             }
         }
-        registeredCallbacks.clear()
         
         // Detach from WiFi Aware
         awareSession?.close()
@@ -288,9 +293,12 @@ class WifiAwareTransport(
                 super.onLost(network)
                 Timber.d("WiFi Aware data path lost for $peerIdString")
                 activeConnections.remove(peerIdString)?.close()
-                registeredCallbacks.remove(peerIdString)?.let { registeredCallback ->
+                val callbackToRemove = synchronized(callbackLock) {
+                    registeredCallbacks.remove(peerIdString)
+                }
+                if (callbackToRemove != null) {
                     try {
-                        connectivityManager.unregisterNetworkCallback(registeredCallback)
+                        connectivityManager.unregisterNetworkCallback(callbackToRemove)
                     } catch (e: Exception) {
                         Timber.w(e, "Failed to unregister network callback for $peerIdString")
                     }
@@ -298,9 +306,12 @@ class WifiAwareTransport(
             }
         }
 
-        registeredCallbacks.put(peerIdString, callback)?.let { existingCallback ->
+        val existingCallback = synchronized(callbackLock) {
+            registeredCallbacks.put(peerIdString, callback)
+        }
+        existingCallback?.let {
             try {
-                connectivityManager.unregisterNetworkCallback(existingCallback)
+                connectivityManager.unregisterNetworkCallback(it)
             } catch (e: Exception) {
                 Timber.w(e, "Failed to replace existing network callback for $peerIdString")
             }
