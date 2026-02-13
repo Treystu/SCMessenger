@@ -19,7 +19,6 @@ import com.scmessenger.android.ui.components.IdenticonFromPeerId
 import com.scmessenger.android.ui.theme.StatusOnline
 import com.scmessenger.android.ui.theme.StatusOffline
 import com.scmessenger.android.ui.viewmodels.ContactsViewModel
-import uniffi.api.*
 import java.text.SimpleDateFormat
 import java.util.*
 

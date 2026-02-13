@@ -2,7 +2,6 @@ package com.scmessenger.android.test
 
 import org.junit.Test
 import kotlin.test.assertTrue
-import uniffi.api.*
 
 /**
  * Integration tests for UniFFI boundary.

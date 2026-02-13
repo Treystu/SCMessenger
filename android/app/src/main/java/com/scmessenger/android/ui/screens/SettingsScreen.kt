@@ -11,7 +11,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.scmessenger.android.ui.viewmodels.MeshServiceViewModel
 import com.scmessenger.android.ui.viewmodels.SettingsViewModel
-import uniffi.api.*
 
 /**
  * Settings screen with mesh configuration and app preferences.
