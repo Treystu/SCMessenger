@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.scmessenger.android.ui.viewmodels.MeshServiceViewModel
@@ -150,9 +151,35 @@ fun MeshSettingsSection(
                 modifier = Modifier.padding(bottom = 8.dp)
             )
             
+            // Warning about relay requirement
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp)
+                ) {
+                    Text(
+                        text = "⚠️ Relay = Messaging",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = "Disabling mesh participation stops ALL messaging. Required to send and receive messages.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+            
             SwitchPreference(
-                title = "Relay Messages",
-                subtitle = "Help forward messages for others",
+                title = "Mesh Participation",
+                subtitle = "Required for messaging. When on, you relay for others.",
                 checked = settings.relayEnabled,
                 onCheckedChange = { onUpdateSetting { vm -> vm.updateRelayEnabled(it) } },
                 enabled = !isLoading
@@ -285,7 +312,7 @@ fun InfoSection(
             
             InfoRow("Contacts", contactCount.toString())
             InfoRow("Messages", messageCount.toString())
-            InfoRow("Version", "0.1.0")
+            InfoRow("Version", "0.1.1")
         }
     }
 }

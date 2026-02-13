@@ -75,10 +75,37 @@ fun MeshSettingsScreen(
                 val currentSettings = settings!!
                 
                 // Relay Settings
-                SettingsSection(title = "Relay Settings") {
+                SettingsSection(title = "Network Participation") {
+                    // Warning/Info about relay requirement
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Text(
+                                text = "⚠️ Relay = Messaging",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Turning this off disables ALL messaging. You cannot send or receive messages without participating in the mesh relay network. No relay = no app functionality.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                    
                     SwitchSetting(
-                        title = "Enable Relay",
-                        description = "Allow this device to relay messages for others",
+                        title = "Enable Mesh Participation",
+                        description = "Required to send and receive messages. When enabled, you relay for others and they relay for you.",
                         checked = currentSettings.relayEnabled,
                         onCheckedChange = {
                             viewModel.updateSettings(currentSettings.copy(relayEnabled = it))
