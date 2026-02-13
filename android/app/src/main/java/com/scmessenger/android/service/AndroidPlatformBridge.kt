@@ -218,11 +218,11 @@ class AndroidPlatformBridge @Inject constructor(
             override fun onReceive(context: Context, intent: Intent) {
                 when (intent.action) {
                     Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> {
-                        currentMotionState = uniffi.api.MotionState.MOVING
+                        currentMotionState = uniffi.api.MotionState.WALKING
                         onMotionChanged(currentMotionState)
                     }
                     Intent.ACTION_SCREEN_OFF -> {
-                        currentMotionState = uniffi.api.MotionState.STATIONARY
+                        currentMotionState = uniffi.api.MotionState.STILL
                         onMotionChanged(currentMotionState)
                     }
                 }
@@ -240,7 +240,7 @@ class AndroidPlatformBridge @Inject constructor(
     override fun onBatteryChanged(batteryPct: UByte, isCharging: Boolean) {
         // Compute and apply adjustment profile
         val deviceProfile = uniffi.api.DeviceProfile(
-            batteryLevel = batteryPct,
+            batteryPct = batteryPct,
             isCharging = isCharging,
             hasWifi = hasWifi,
             motionState = currentMotionState
@@ -259,7 +259,7 @@ class AndroidPlatformBridge @Inject constructor(
     override fun onNetworkChanged(hasWifi: Boolean, hasCellular: Boolean) {
         // Recompute and apply adjustment
         val deviceProfile = uniffi.api.DeviceProfile(
-            batteryLevel = currentBatteryPct,
+            batteryPct = currentBatteryPct,
             isCharging = isCharging,
             hasWifi = hasWifi,
             motionState = currentMotionState
@@ -279,14 +279,16 @@ class AndroidPlatformBridge @Inject constructor(
         
         // Recompute adjustment based on motion
         val deviceProfile = uniffi.api.DeviceProfile(
-            batteryLevel = currentBatteryPct,
+            batteryPct = currentBatteryPct,
             isCharging = isCharging,
             hasWifi = hasWifi,
             motionState = motion
         )
         
         val profile = meshRepository.computeAdjustmentProfile(deviceProfile)
-        meshRepository.applyAdjustmentProfile(profile)
+        val bleAdjustment = meshRepository.computeBleAdjustment(profile)
+        val relayAdjustment = meshRepository.computeRelayAdjustment(profile)
+        applyAdjustments(bleAdjustment, relayAdjustment)
         Timber.d("Motion changed: $motion, profile: $profile")
     }
     
