@@ -82,7 +82,7 @@ Shows detailed logs from all containers.
 ### Start Mock Environment
 ```bash
 cd docker
-docker-compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
+docker compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
 ```
 
 ### Access Mock Nodes
@@ -107,12 +107,12 @@ scm history
 
 ### View Logs
 ```bash
-docker-compose -f docker-compose.test.yml logs -f mock-relay
+docker compose -f docker-compose.test.yml logs -f mock-relay
 ```
 
 ### Stop Mock Environment
 ```bash
-docker-compose -f docker-compose.test.yml down
+docker compose -f docker-compose.test.yml down
 ```
 
 ## Test Results
@@ -140,7 +140,7 @@ The test infrastructure uses isolated networks and ephemeral ports, so conflicts
 If you see port conflicts, check:
 ```bash
 docker ps  # See what's already running
-docker-compose -f docker-compose.test.yml down  # Clean up
+docker compose -f docker-compose.test.yml down  # Clean up
 ```
 
 ### Out of Disk Space
@@ -156,13 +156,13 @@ docker system df
 ### Tests Hang
 ```bash
 # Check container status
-docker-compose -f docker-compose.test.yml ps
+docker compose -f docker-compose.test.yml ps
 
 # View logs
-docker-compose -f docker-compose.test.yml logs
+docker compose -f docker-compose.test.yml logs
 
 # Force cleanup
-docker-compose -f docker-compose.test.yml down -v
+docker compose -f docker-compose.test.yml down -v
 ```
 
 ## CI/CD Integration

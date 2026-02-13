@@ -66,7 +66,7 @@ test-results/
 
 ```bash
 # Start mock infrastructure
-docker-compose -f docker/docker-compose.test.yml --profile test up -d \
+docker compose -f docker/docker-compose.test.yml --profile test up -d \
   mock-relay mock-client-a mock-client-b
 
 # Access containers
@@ -75,10 +75,10 @@ docker exec -it scm-mock-client-b /bin/bash
 docker exec -it scm-mock-relay /bin/bash
 
 # View logs
-docker-compose -f docker/docker-compose.test.yml logs -f mock-relay
+docker compose -f docker/docker-compose.test.yml logs -f mock-relay
 
 # Stop
-docker-compose -f docker/docker-compose.test.yml down
+docker compose -f docker/docker-compose.test.yml down
 ```
 
 ## CI/CD
@@ -117,16 +117,16 @@ Test Code:
 | Issue | Solution |
 |-------|----------|
 | Tests won't start | `docker info` to check Docker is running |
-| Port conflicts | `docker-compose down` to clean up |
+| Port conflicts | `docker compose down` to clean up |
 | Out of space | `docker system prune -f` |
-| Tests hang | `docker-compose logs` to view errors |
+| Tests hang | `docker compose logs` to view errors |
 | Build fails | `./run-all-tests.sh --clean` for fresh build |
 
 ## Help Commands
 
 ```bash
 ./run-all-tests.sh --help            # Show all options
-docker-compose --help                # Docker Compose help
+docker compose --help                # Docker Compose help
 docker exec -it <container> bash     # Access container shell
 ```
 

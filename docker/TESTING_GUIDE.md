@@ -75,7 +75,7 @@ cd docker
 
 **How to run:**
 ```bash
-docker-compose -f docker-compose.test.yml --profile test run --rm rust-core-test
+docker compose -f docker-compose.test.yml --profile test run --rm rust-core-test
 ```
 
 **Location:** `core/src/**/*.rs` with `#[cfg(test)]` modules
@@ -91,7 +91,7 @@ docker-compose -f docker-compose.test.yml --profile test run --rm rust-core-test
 
 **How to run:**
 ```bash
-docker-compose -f docker-compose.test.yml --profile test run --rm android-unit-test
+docker compose -f docker-compose.test.yml --profile test run --rm android-unit-test
 ```
 
 **Location:** `android/app/src/test/`
@@ -111,13 +111,13 @@ docker-compose -f docker-compose.test.yml --profile test run --rm android-unit-t
 **How to run:**
 ```bash
 # Start mock infrastructure first
-docker-compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
+docker compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
 
 # Run integration tests
-docker-compose -f docker-compose.test.yml --profile test run --rm integration-test
+docker compose -f docker-compose.test.yml --profile test run --rm integration-test
 
 # Cleanup
-docker-compose -f docker-compose.test.yml down
+docker compose -f docker-compose.test.yml down
 ```
 
 **Location:** `core/tests/integration_*.rs`
@@ -148,7 +148,7 @@ docker-compose -f docker-compose.test.yml down
 
 ```bash
 # Start the infrastructure
-docker-compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
+docker compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
 
 # Access client A shell
 docker exec -it scm-mock-client-a /bin/bash
@@ -162,10 +162,10 @@ scm send <peer-id> "Hello from client A"
 docker exec -it scm-mock-client-b /bin/bash
 
 # View logs
-docker-compose -f docker-compose.test.yml logs -f mock-relay
+docker compose -f docker-compose.test.yml logs -f mock-relay
 
 # Cleanup when done
-docker-compose -f docker-compose.test.yml down
+docker compose -f docker-compose.test.yml down
 ```
 
 ## Docker Images
@@ -265,7 +265,7 @@ docker info
 netstat -an | grep LISTEN | grep 4001
 
 # Clean up everything
-docker-compose -f docker-compose.test.yml down -v
+docker compose -f docker-compose.test.yml down -v
 docker system prune -f
 ```
 
@@ -273,27 +273,27 @@ docker system prune -f
 
 ```bash
 # Verify Android SDK installation
-docker-compose -f docker-compose.test.yml run --rm android-unit-test bash -c "sdkmanager --list"
+docker compose -f docker-compose.test.yml run --rm android-unit-test bash -c "sdkmanager --list"
 
 # Check Rust toolchain
-docker-compose -f docker-compose.test.yml run --rm android-unit-test bash -c "rustup show"
+docker compose -f docker-compose.test.yml run --rm android-unit-test bash -c "rustup show"
 
 # Rebuild from scratch
-docker-compose -f docker-compose.test.yml build --no-cache android-unit-test
+docker compose -f docker-compose.test.yml build --no-cache android-unit-test
 ```
 
 ### Mock Infrastructure Not Healthy
 
 ```bash
 # Check relay logs
-docker-compose -f docker-compose.test.yml logs mock-relay
+docker compose -f docker-compose.test.yml logs mock-relay
 
 # Check network connectivity
-docker-compose -f docker-compose.test.yml exec mock-relay ss -tunlp
+docker compose -f docker-compose.test.yml exec mock-relay ss -tunlp
 
 # Restart with verbose logging
-docker-compose -f docker-compose.test.yml down
-RUST_LOG=trace docker-compose -f docker-compose.test.yml up mock-relay
+docker compose -f docker-compose.test.yml down
+RUST_LOG=trace docker compose -f docker-compose.test.yml up mock-relay
 ```
 
 ### Integration Tests Timeout
@@ -302,9 +302,9 @@ RUST_LOG=trace docker-compose -f docker-compose.test.yml up mock-relay
 # Increase wait time in run-all-tests.sh (line ~165)
 # Or manually start and verify infrastructure first
 
-docker-compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
-docker-compose -f docker-compose.test.yml ps  # Should show all healthy
-docker-compose -f docker-compose.test.yml logs  # Check for errors
+docker compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
+docker compose -f docker-compose.test.yml ps  # Should show all healthy
+docker compose -f docker-compose.test.yml logs  # Check for errors
 ```
 
 ## Best Practices
@@ -374,10 +374,10 @@ Enter running containers for interactive debugging:
 
 ```bash
 # Android test container
-docker-compose -f docker-compose.test.yml run --rm android-unit-test bash
+docker compose -f docker-compose.test.yml run --rm android-unit-test bash
 
 # Rust test container
-docker-compose -f docker-compose.test.yml run --rm rust-core-test bash
+docker compose -f docker-compose.test.yml run --rm rust-core-test bash
 
 # Mock relay
 docker exec -it scm-mock-relay /bin/bash
@@ -390,7 +390,7 @@ docker exec -it scm-mock-relay /bin/bash
 When updating Rust or Android dependencies:
 
 1. Update `Dockerfile.rust-test` and `Dockerfile.android-test`
-2. Rebuild images: `docker-compose -f docker-compose.test.yml build --no-cache`
+2. Rebuild images: `docker compose -f docker-compose.test.yml build --no-cache`
 3. Run full test suite: `./run-all-tests.sh --clean`
 
 ### Adding New Tests
@@ -403,7 +403,7 @@ When updating Rust or Android dependencies:
 
 For issues or questions:
 - Check this guide's troubleshooting section
-- Review Docker logs: `docker-compose -f docker-compose.test.yml logs`
+- Review Docker logs: `docker compose -f docker-compose.test.yml logs`
 - Check test results: `ls -R test-results/`
 - Open an issue on GitHub with logs and error messages
 

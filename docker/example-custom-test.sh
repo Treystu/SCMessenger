@@ -27,7 +27,7 @@ log_step() {
 
 # Step 1: Start mock infrastructure
 log_step "1. Starting mock infrastructure (relay + 2 clients)..."
-docker-compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
+docker compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
 
 # Step 2: Wait for infrastructure to be ready
 log_step "2. Waiting for infrastructure to initialize..."
@@ -35,13 +35,13 @@ sleep 10
 
 # Check relay health
 for i in {1..30}; do
-    if docker-compose -f docker-compose.test.yml ps mock-relay | grep -q "healthy"; then
+    if docker compose -f docker-compose.test.yml ps mock-relay | grep -q "healthy"; then
         log_info "Mock relay is healthy"
         break
     fi
     if [ $i -eq 30 ]; then
         echo "ERROR: Mock relay failed to become healthy"
-        docker-compose -f docker-compose.test.yml logs mock-relay
+        docker compose -f docker-compose.test.yml logs mock-relay
         exit 1
     fi
     sleep 2
@@ -81,7 +81,7 @@ echo "  docker exec -it scm-mock-client-b scm history"
 log_step "6. Viewing recent logs (Ctrl+C to stop)..."
 echo "Press Ctrl+C after reviewing logs..."
 sleep 2
-docker-compose -f docker-compose.test.yml logs --tail=30 mock-relay mock-client-a mock-client-b || true
+docker compose -f docker-compose.test.yml logs --tail=30 mock-relay mock-client-a mock-client-b || true
 
 # Cleanup prompt
 echo ""
@@ -93,16 +93,16 @@ echo "Mock infrastructure is still running."
 echo "Options:"
 echo "  1. Access client A: docker exec -it scm-mock-client-a /bin/bash"
 echo "  2. Access client B: docker exec -it scm-mock-client-b /bin/bash"
-echo "  3. View relay logs: docker-compose -f docker-compose.test.yml logs -f mock-relay"
-echo "  4. Stop all: docker-compose -f docker-compose.test.yml down"
+echo "  3. View relay logs: docker compose -f docker-compose.test.yml logs -f mock-relay"
+echo "  4. Stop all: docker compose -f docker-compose.test.yml down"
 echo ""
 
 read -p "Stop infrastructure now? (y/n) " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     log_info "Stopping mock infrastructure..."
-    docker-compose -f docker-compose.test.yml down
+    docker compose -f docker-compose.test.yml down
     log_info "Done!"
 else
-    log_info "Infrastructure still running. Use 'docker-compose -f docker-compose.test.yml down' to stop."
+    log_info "Infrastructure still running. Use 'docker compose -f docker-compose.test.yml down' to stop."
 fi

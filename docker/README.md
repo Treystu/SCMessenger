@@ -77,10 +77,10 @@ Multi-hop:      Alice ↔ Eve (via Relay1 → Relay2)
 - `Dockerfile.rust-test` - Rust test environment with all tooling
 
 ### Docker Compose Configurations
-- `docker-compose.yml` - Basic 3-node setup (relay, alice, bob)
-- `docker-compose-extended.yml` - Full 7-node testing environment
+- `docker compose.yml` - Basic 3-node setup (relay, alice, bob)
+- `docker compose-extended.yml` - Full 7-node testing environment
 - `docker-compose.test.yml` - **NEW: Comprehensive test infrastructure**
-- `docker-compose.network-test.yml` - Network simulation with NAT
+- `docker compose.network-test.yml` - Network simulation with NAT
 
 ### Scripts
 - `run-all-tests.sh` - **NEW: Main test runner for all test suites**
@@ -103,7 +103,7 @@ Start the basic environment with one relay and two clients:
 
 ```bash
 cd docker
-docker-compose up --build
+docker compose up --build
 ```
 
 This creates:
@@ -117,7 +117,7 @@ Start the full testing environment:
 
 ```bash
 cd docker
-docker-compose -f docker-compose-extended.yml up --build
+docker compose -f docker compose-extended.yml up --build
 ```
 
 This creates:
@@ -131,7 +131,7 @@ Execute the full integration test suite:
 
 ```bash
 cd docker
-docker-compose -f docker-compose-extended.yml --profile test up --build
+docker compose -f docker compose-extended.yml --profile test up --build
 ```
 
 The test runner will:
@@ -168,7 +168,7 @@ scm history
 Monitor logs from all nodes:
 
 ```bash
-docker-compose -f docker-compose-extended.yml logs -f
+docker compose -f docker compose-extended.yml logs -f
 ```
 
 View logs from specific node:
@@ -182,13 +182,13 @@ docker logs -f scm-alice
 Stop all containers:
 
 ```bash
-docker-compose -f docker-compose-extended.yml down
+docker compose -f docker compose-extended.yml down
 ```
 
 Clean up volumes and networks:
 
 ```bash
-docker-compose -f docker-compose-extended.yml down -v
+docker compose -f docker compose-extended.yml down -v
 ```
 
 ## Test Suite Details
@@ -255,5 +255,5 @@ cat docker/test-results/test_run_*.log
 
 ## Development
 
-- **Modify the App**: Re-run `docker-compose build` to include changes from the host source code.
-- **Logs**: Use `docker-compose logs -f` to follow logs from all nodes.
+- **Modify the App**: Re-run `docker compose build` to include changes from the host source code.
+- **Logs**: Use `docker compose logs -f` to follow logs from all nodes.

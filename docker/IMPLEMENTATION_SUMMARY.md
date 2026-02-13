@@ -214,17 +214,17 @@ cd docker
 ### Manual Mock Infrastructure
 ```bash
 # Start mock nodes
-docker-compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
+docker compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
 
 # Access containers
 docker exec -it scm-mock-client-a /bin/bash
 docker exec -it scm-mock-client-b /bin/bash
 
 # View logs
-docker-compose -f docker-compose.test.yml logs -f mock-relay
+docker compose -f docker-compose.test.yml logs -f mock-relay
 
 # Stop
-docker-compose -f docker-compose.test.yml down
+docker compose -f docker-compose.test.yml down
 ```
 
 ## Benefits

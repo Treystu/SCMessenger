@@ -120,13 +120,13 @@ fi
 # Clean up if requested
 if [ "$CLEAN" = true ]; then
     log_section "Cleaning Up Previous Test Runs"
-    docker-compose -f docker-compose.test.yml down -v 2>/dev/null || true
+    docker compose -f docker-compose.test.yml down -v 2>/dev/null || true
     log_info "Cleanup complete"
 fi
 
 # Build images
 log_section "Building Test Infrastructure"
-docker-compose -f docker-compose.test.yml build
+docker compose -f docker-compose.test.yml build
 
 # Prepare test results directory
 mkdir -p test-results/{rust,android,integration}
@@ -140,7 +140,7 @@ INTEGRATION_EXIT=0
 # Run Rust tests
 if [ "$RUN_RUST" = true ]; then
     log_section "Running Rust Core Tests"
-    docker-compose -f docker-compose.test.yml --profile test run --rm rust-core-test || RUST_EXIT=$?
+    docker compose -f docker-compose.test.yml --profile test run --rm rust-core-test || RUST_EXIT=$?
     
     if [ $RUST_EXIT -eq 0 ]; then
         log_info "Rust core tests PASSED"
@@ -152,7 +152,7 @@ fi
 # Run Android tests
 if [ "$RUN_ANDROID" = true ]; then
     log_section "Running Android Unit Tests"
-    docker-compose -f docker-compose.test.yml --profile test run --rm android-unit-test || ANDROID_EXIT=$?
+    docker compose -f docker-compose.test.yml --profile test run --rm android-unit-test || ANDROID_EXIT=$?
     
     if [ $ANDROID_EXIT -eq 0 ]; then
         log_info "Android unit tests PASSED"
@@ -173,7 +173,7 @@ if [ "$RUN_INTEGRATION" = true ]; then
     fi
     
     # Start mock infrastructure
-    docker-compose -f docker-compose.test.yml $PROFILE_ARG up -d mock-relay mock-client-a mock-client-b
+    docker compose -f docker-compose.test.yml $PROFILE_ARG up -d mock-relay mock-client-a mock-client-b
     
     # Wait for mock relay to be ready
     log_info "Waiting for mock infrastructure to initialize..."
@@ -181,13 +181,13 @@ if [ "$RUN_INTEGRATION" = true ]; then
     
     # Check if relay is healthy
     for i in {1..30}; do
-        if docker-compose -f docker-compose.test.yml ps mock-relay | grep -q "healthy"; then
+        if docker compose -f docker-compose.test.yml ps mock-relay | grep -q "healthy"; then
             log_info "Mock relay is healthy"
             break
         fi
         if [ $i -eq 30 ]; then
             log_error "Mock relay failed to become healthy"
-            docker-compose -f docker-compose.test.yml logs mock-relay
+            docker compose -f docker-compose.test.yml logs mock-relay
             INTEGRATION_EXIT=1
         fi
         sleep 2
@@ -195,7 +195,7 @@ if [ "$RUN_INTEGRATION" = true ]; then
     
     if [ $INTEGRATION_EXIT -eq 0 ]; then
         log_section "Running Integration Tests"
-        docker-compose -f docker-compose.test.yml $PROFILE_ARG run --rm integration-test || INTEGRATION_EXIT=$?
+        docker compose -f docker-compose.test.yml $PROFILE_ARG run --rm integration-test || INTEGRATION_EXIT=$?
         
         if [ $INTEGRATION_EXIT -eq 0 ]; then
             log_info "Integration tests PASSED"
@@ -207,12 +207,12 @@ if [ "$RUN_INTEGRATION" = true ]; then
     # Show logs if verbose or if tests failed
     if [ "$VERBOSE" = true ] || [ $INTEGRATION_EXIT -ne 0 ]; then
         log_section "Mock Infrastructure Logs"
-        docker-compose -f docker-compose.test.yml logs --tail=50 mock-relay mock-client-a mock-client-b
+        docker compose -f docker-compose.test.yml logs --tail=50 mock-relay mock-client-a mock-client-b
     fi
     
     # Cleanup mock infrastructure
     log_info "Stopping mock infrastructure..."
-    docker-compose -f docker-compose.test.yml $PROFILE_ARG down
+    docker compose -f docker-compose.test.yml $PROFILE_ARG down
 fi
 
 # Summary

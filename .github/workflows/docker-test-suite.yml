@@ -28,12 +28,12 @@ jobs:
       - name: Build Rust test image
         run: |
           cd docker
-          docker-compose -f docker-compose.test.yml build rust-core-test
+          docker compose -f docker-compose.test.yml build rust-core-test
       
       - name: Run Rust tests
         run: |
           cd docker
-          docker-compose -f docker-compose.test.yml --profile test run --rm rust-core-test
+          docker compose -f docker-compose.test.yml --profile test run --rm rust-core-test
       
       - name: Upload Rust test results
         uses: actions/upload-artifact@v4
@@ -59,12 +59,12 @@ jobs:
       - name: Build Android test image
         run: |
           cd docker
-          docker-compose -f docker-compose.test.yml build android-unit-test
+          docker compose -f docker-compose.test.yml build android-unit-test
       
       - name: Run Android tests
         run: |
           cd docker
-          docker-compose -f docker-compose.test.yml --profile test run --rm android-unit-test
+          docker compose -f docker-compose.test.yml --profile test run --rm android-unit-test
       
       - name: Upload Android test results
         uses: actions/upload-artifact@v4
@@ -90,24 +90,25 @@ jobs:
       - name: Build test images
         run: |
           cd docker
-          docker-compose -f docker-compose.test.yml build
+          docker compose -f docker-compose.test.yml build
       
       - name: Start mock infrastructure
         run: |
           cd docker
-          docker-compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
+          docker compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
       
       - name: Wait for infrastructure to be ready
         run: |
+          cd docker
           echo "Waiting for mock relay to be healthy..."
           for i in {1..30}; do
-            if docker-compose -f docker/docker-compose.test.yml ps mock-relay | grep -q "healthy"; then
+            if docker compose -f docker-compose.test.yml ps mock-relay | grep -q "healthy"; then
               echo "Mock relay is healthy"
               break
             fi
             if [ $i -eq 30 ]; then
               echo "Mock relay failed to become healthy"
-              docker-compose -f docker/docker-compose.test.yml logs mock-relay
+              docker compose -f docker-compose.test.yml logs mock-relay
               exit 1
             fi
             sleep 2
@@ -116,19 +117,19 @@ jobs:
       - name: Run integration tests
         run: |
           cd docker
-          docker-compose -f docker-compose.test.yml --profile test run --rm integration-test
+          docker compose -f docker-compose.test.yml --profile test run --rm integration-test
       
       - name: Show mock infrastructure logs
         if: failure()
         run: |
           cd docker
-          docker-compose -f docker-compose.test.yml logs mock-relay mock-client-a mock-client-b
+          docker compose -f docker-compose.test.yml logs mock-relay mock-client-a mock-client-b
       
       - name: Stop infrastructure
         if: always()
         run: |
           cd docker
-          docker-compose -f docker-compose.test.yml --profile test down
+          docker compose -f docker-compose.test.yml --profile test down
       
       - name: Upload integration test results
         uses: actions/upload-artifact@v4

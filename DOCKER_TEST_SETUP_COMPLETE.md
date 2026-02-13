@@ -214,7 +214,7 @@ cd docker
 Or manually:
 ```bash
 # Start infrastructure
-docker-compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
+docker compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
 
 # Access client A
 docker exec -it scm-mock-client-a /bin/bash
@@ -225,10 +225,10 @@ scm peers list
 docker exec -it scm-mock-client-b /bin/bash
 
 # View relay logs
-docker-compose -f docker-compose.test.yml logs -f mock-relay
+docker compose -f docker-compose.test.yml logs -f mock-relay
 
 # Cleanup
-docker-compose -f docker-compose.test.yml down
+docker compose -f docker-compose.test.yml down
 ```
 
 ## CI/CD Integration

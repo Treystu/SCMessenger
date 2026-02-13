@@ -12,16 +12,12 @@ services:
     container_name: scm-rust-test
     working_dir: /workspace
     volumes:
-      - ../core:/workspace/core:ro
-      - ../Cargo.toml:/workspace/Cargo.toml:ro
-      - ../Cargo.lock:/workspace/Cargo.lock:ro
       - rust-test-cache:/workspace/target
     environment:
       - RUST_LOG=debug
       - RUST_BACKTRACE=1
     command: >
       bash -c "
-        cd /workspace &&
         echo '=== Running Rust Core Tests ===' &&
         cargo test --package scmessenger-core --lib --bins --tests --all-features -- --nocapture --test-threads=1 &&
         echo '=== Rust Core Tests Complete ==='
@@ -37,10 +33,6 @@ services:
     container_name: scm-android-test
     working_dir: /workspace
     volumes:
-      - ../android:/workspace/android:ro
-      - ../core:/workspace/core:ro
-      - ../Cargo.toml:/workspace/Cargo.toml:ro
-      - ../Cargo.lock:/workspace/Cargo.lock:ro
       - android-test-cache:/workspace/android/.gradle
       - rust-build-cache:/workspace/core/target
       - test-results:/workspace/test-results:rw
@@ -50,7 +42,6 @@ services:
       - RUSTFLAGS=-C link-arg=-Wl,-z,max-page-size=16384
     command: >
       bash -c "
-        cd /workspace &&
         echo '=== Building UniFFI Bindings ===' &&
         cargo run --manifest-path core/Cargo.toml --bin gen_kotlin --features gen-bindings &&
         echo '=== Running Android Unit Tests ===' &&
@@ -134,9 +125,6 @@ services:
     hostname: integration-test
     working_dir: /workspace
     volumes:
-      - ../core:/workspace/core:ro
-      - ../Cargo.toml:/workspace/Cargo.toml:ro
-      - ../Cargo.lock:/workspace/Cargo.lock:ro
       - test-results:/workspace/test-results:rw
     environment:
       - RUST_LOG=debug
@@ -154,7 +142,6 @@ services:
       - test-network-b
     command: >
       bash -c "
-        cd /workspace &&
         echo '=== Running Integration Tests ===' &&
         cargo test --package scmessenger-core --test '*' --all-features -- --nocapture --test-threads=1 &&
         echo '=== Integration Tests Complete ==='
