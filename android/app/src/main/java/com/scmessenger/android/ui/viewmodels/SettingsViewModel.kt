@@ -142,7 +142,7 @@ class SettingsViewModel @Inject constructor(
     fun updateSettings(settings: uniffi.api.MeshSettings) {
         viewModelScope.launch {
             try {
-                // Validate first
+                // Validate settings
                 if (!meshRepository.validateSettings(settings)) {
                     _error.value = "Invalid settings configuration"
                     return@launch
@@ -164,6 +164,7 @@ class SettingsViewModel @Inject constructor(
      */
     fun updateRelayEnabled(enabled: Boolean) {
         _settings.value?.let { current ->
+            // Allow toggling - when disabled, stops ALL communication (bidirectional)
             updateSettings(current.copy(relayEnabled = enabled))
         }
     }

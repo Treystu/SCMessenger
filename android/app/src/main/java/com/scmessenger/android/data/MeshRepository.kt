@@ -131,6 +131,17 @@ class MeshRepository(private val context: Context) {
                 override fun onMessageReceived(senderId: String, messageId: String, data: ByteArray) {
                     Timber.i("Message from $senderId: $messageId")
                     try {
+                        // Check if relay/messaging is enabled (bidirectional control)
+                        // Treat null/missing settings as disabled (fail-safe)
+                        // Cache settings value to avoid race condition during check
+                        val currentSettings = settingsManager?.load()
+                        val isRelayEnabled = currentSettings?.relayEnabled == true
+                        
+                        if (!isRelayEnabled) {
+                            Timber.w("Dropping received message - mesh participation is disabled or settings unavailable")
+                            return
+                        }
+                        
                         val content = data.toString(Charsets.UTF_8)
                         val record = uniffi.api.MessageRecord(
                             id = messageId,
@@ -353,6 +364,16 @@ class MeshRepository(private val context: Context) {
     suspend fun sendMessage(peerId: String, content: String) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
+                // Check if relay/messaging is enabled (bidirectional control)
+                // Treat null/missing settings as disabled (fail-safe)
+                // Cache settings value to avoid race condition during check
+                val currentSettings = settingsManager?.load()
+                val isRelayEnabled = currentSettings?.relayEnabled == true
+                
+                if (!isRelayEnabled) {
+                    throw IllegalStateException("Cannot send messages: mesh participation is disabled. Enable mesh participation in settings to send and receive messages.")
+                }
+                
                 // 1. Get recipient's public key
                 val contact = contactManager?.get(peerId)
                     ?: throw IllegalStateException("Contact not found for peer: $peerId")
