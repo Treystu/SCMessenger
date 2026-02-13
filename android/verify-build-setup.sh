@@ -2,8 +2,6 @@
 # Android Build Verification Script
 # Checks prerequisites and verifies the build setup
 
-set -e
-
 echo "=== SCMessenger Android Build Verification ==="
 echo
 
@@ -116,8 +114,9 @@ if [ -n "$ANDROID_HOME" ] && [ -d "$ANDROID_HOME" ]; then
         echo -e "   ${YELLOW}⚠${NC} NDK 26.1.10909125 not found (Android Studio will download)"
     fi
 else
-    echo -e "${YELLOW}⚠${NC} ANDROID_HOME not set or invalid"
+    echo -e "${RED}✗${NC} ANDROID_HOME not set or invalid"
     echo "   Set ANDROID_HOME to your Android SDK location"
+    ALL_OK=false
 fi
 echo
 
@@ -133,16 +132,22 @@ echo
 # 7. Test bindings generation
 echo "7. Testing UniFFI bindings generation..."
 cd core
-if cargo run --bin gen_kotlin --features gen-bindings > /dev/null 2>&1; then
+OUTPUT=$(cargo run --bin gen_kotlin --features gen-bindings 2>&1)
+CARGO_STATUS=$?
+if [ $CARGO_STATUS -eq 0 ]; then
     if [ -f "target/generated-sources/uniffi/kotlin/uniffi/api/api.kt" ]; then
         FILE_SIZE=$(stat -f%z "target/generated-sources/uniffi/kotlin/uniffi/api/api.kt" 2>/dev/null || stat -c%s "target/generated-sources/uniffi/kotlin/uniffi/api/api.kt" 2>/dev/null)
         echo -e "${GREEN}✓${NC} Bindings generated successfully ($FILE_SIZE bytes)"
     else
         echo -e "${RED}✗${NC} Bindings generation failed - output file not found"
+        echo "   Cargo output:"
+        echo "$OUTPUT" | sed 's/^/   /'
         ALL_OK=false
     fi
 else
     echo -e "${RED}✗${NC} Bindings generation failed"
+    echo "   Cargo output:"
+    echo "$OUTPUT" | sed 's/^/   /'
     ALL_OK=false
 fi
 cd ..

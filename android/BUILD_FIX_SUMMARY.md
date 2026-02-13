@@ -121,8 +121,6 @@ ls -lh core/target/generated-sources/uniffi/kotlin/uniffi/api/api.kt
 # Should show ~230KB file
 ```
 
-**Note:** If regenerating bindings manually with `cargo run --bin gen_kotlin`, you may see a "missing field `package`" error. This is a known issue with uniffi-bindgen 0.27.3 expecting additional configuration. The Gradle build handles this correctly during the Android build process. The existing generated file is valid and will be used.
-
 ### Check JNI Libraries Built
 ```bash
 ls -lh core/target/android-libs/*/libscmessenger_core.so
