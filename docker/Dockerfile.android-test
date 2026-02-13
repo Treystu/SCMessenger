@@ -73,4 +73,4 @@ COPY . .
 ENV RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=16384"
 
 # Default command runs Android unit tests
-CMD ["./gradlew", "-p", "android", "test", "--info"]
+CMD ["bash", "-c", "cd android && ./gradlew test --info"]

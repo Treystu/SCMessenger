@@ -45,7 +45,8 @@ services:
         echo '=== Building UniFFI Bindings ===' &&
         cargo run --manifest-path core/Cargo.toml --bin gen_kotlin --features gen-bindings &&
         echo '=== Running Android Unit Tests ===' &&
-        ./gradlew -p android test --info --stacktrace &&
+        cd android && ./gradlew test --info --stacktrace &&
+        cd .. &&
         mkdir -p /workspace/test-results/android &&
         find android -name '*.xml' -path '*/test-results/*' -exec cp {} /workspace/test-results/android/ \; &&
         echo '=== Android Unit Tests Complete ==='

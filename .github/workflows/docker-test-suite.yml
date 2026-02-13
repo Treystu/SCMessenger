@@ -179,12 +179,12 @@ jobs:
             find docker/test-results -type f | sort >> $GITHUB_STEP_SUMMARY
           fi
 
-  # NAT Simulation Tests (optional, runs on workflow_dispatch)
+  # NAT Simulation Tests (runs on PRs and manual dispatch)
   nat-tests:
     name: NAT Simulation Tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     
     steps:
       - name: Checkout code
