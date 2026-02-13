@@ -536,8 +536,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     println!(
         "Public Key: {}",
         info.public_key_hex
-            .as_ref()
-            .map(|s| s.as_str())
+            .as_deref()
             .unwrap_or("(not initialized)")
     );
     println!("Landing Page:  http://0.0.0.0:{}", ws_port);
