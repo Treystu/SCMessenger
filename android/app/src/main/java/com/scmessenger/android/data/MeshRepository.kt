@@ -106,7 +106,11 @@ class MeshRepository(private val context: Context) {
             }
             
             // 1. Start the Rust Core Service
-            meshService?.start()
+            if (meshService?.getState() == uniffi.api.ServiceState.RUNNING) {
+                Timber.d("MeshService is already running")
+            } else {
+                meshService?.start()
+            }
             
             // 2. Obtain Shared IronCore Instance (Singleton)
             ironCore = meshService?.getCore()
@@ -416,18 +420,52 @@ class MeshRepository(private val context: Context) {
     
     // Identity Management
     fun isIdentityInitialized(): Boolean {
+        ensureServiceInitialized()
         return ironCore?.getIdentityInfo()?.initialized == true
     }
     
     suspend fun createIdentity() {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
+                ensureServiceInitialized()
+                if (ironCore == null) {
+                    Timber.e("IronCore is null after ensureServiceInitialized! Cannot create identity.")
+                    throw IllegalStateException("Mesh service initialization failed")
+                }
+                Timber.d("Calling ironCore.initializeIdentity()...")
                 ironCore?.initializeIdentity()
                 Timber.i("Identity created successfully")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to create identity")
                 throw e
             }
+        }
+    }
+    
+    // Helper to ensure service is initialized lazily
+    private fun ensureServiceInitialized() {
+        if (meshService == null || meshService?.getState() != uniffi.api.ServiceState.RUNNING) {
+            Timber.d("Lazy starting MeshService for Identity access...")
+            try {
+                // If service not running, launch it properly
+                val settings = loadSettings()
+                val config = uniffi.api.MeshServiceConfig(
+                    discoveryIntervalMs = 30000u,
+                    relayBudgetPerHour = settings.maxRelayBudget,
+                    batteryFloorPct = settings.batteryFloor
+                )
+                startMeshService(config)
+                
+                Timber.d("MeshService started lazily")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to start MeshService lazily")
+            }
+        }
+        
+        // Refresh ironCore reference just in case
+        if (ironCore == null) {
+            ironCore = meshService?.getCore()
+            Timber.d("IronCore reference refreshed: ${ironCore != null}")
         }
     }
 
