@@ -66,3 +66,13 @@ uniffi = { workspace = true, features = ["build"] }
 [features]
 default = []
 gen-bindings = ["dep:uniffi_bindgen", "dep:camino"]
+
+[[bin]]
+name = "gen_kotlin"
+path = "src/bin/gen_kotlin.rs"
+required-features = ["gen-bindings"]
+
+[[bin]]
+name = "gen_swift"
+path = "src/bin/gen_swift.rs"
+required-features = ["gen-bindings"]
