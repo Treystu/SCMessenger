@@ -129,8 +129,11 @@ class MeshRepository(private val context: Context) {
                     try {
                         // Check if relay/messaging is enabled (bidirectional control)
                         // Treat null/missing settings as disabled (fail-safe)
-                        val settings = settingsManager?.load()
-                        if (settings?.relayEnabled != true) {
+                        // Cache settings value to avoid race condition during check
+                        val currentSettings = settingsManager?.load()
+                        val isRelayEnabled = currentSettings?.relayEnabled == true
+                        
+                        if (!isRelayEnabled) {
                             Timber.w("Dropping received message - mesh participation is disabled or settings unavailable")
                             return
                         }
@@ -359,8 +362,11 @@ class MeshRepository(private val context: Context) {
             try {
                 // Check if relay/messaging is enabled (bidirectional control)
                 // Treat null/missing settings as disabled (fail-safe)
-                val settings = settingsManager?.load()
-                if (settings?.relayEnabled != true) {
+                // Cache settings value to avoid race condition during check
+                val currentSettings = settingsManager?.load()
+                val isRelayEnabled = currentSettings?.relayEnabled == true
+                
+                if (!isRelayEnabled) {
                     throw IllegalStateException("Cannot send messages: mesh participation is disabled. Enable mesh participation in settings to send and receive messages.")
                 }
                 
