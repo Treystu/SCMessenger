@@ -126,7 +126,7 @@ A comprehensive Docker-based test infrastructure that provides:
 - **android-tests job** - Runs Android unit tests, uploads results
 - **integration-tests job** - Starts mock infrastructure, runs integration tests
 - **full-suite job** - Runs all tests together (on main branch push)
-- **nat-tests job** - Optional NAT simulation tests (manual trigger)
+- **nat-tests job** - Optional NAT simulation tests (runs on PRs and manual trigger)
 - Artifacts uploaded for all test results (7-14 day retention)
 - Test summary in GitHub Actions UI
 

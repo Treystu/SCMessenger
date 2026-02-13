@@ -263,7 +263,7 @@ The workflow automatically runs on:
    - Generates comprehensive report
    - Uploads all results with 14-day retention
 
-5. **nat-tests** (30 min timeout, manual trigger)
+5. **nat-tests** (30 min timeout, runs on PRs and manual trigger)
    - Runs with NAT simulation enabled
    - Tests NAT traversal scenarios
 
