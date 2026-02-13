@@ -81,9 +81,9 @@ pub fn validate_ed25519_public_key(public_key_hex: &str) -> Result<()> {
     let compressed = CompressedEdwardsY::from_slice(&key_array)
         .map_err(|_| anyhow::anyhow!("Invalid Ed25519 public key format"))?;
 
-    compressed.decompress().ok_or_else(|| {
-        anyhow::anyhow!("Public key is not a valid Ed25519 point (decompression failed)")
-    })?;
+    compressed
+        .decompress()
+        .ok_or_else(|| anyhow::anyhow!("Public key is not a valid Ed25519 point (decompression failed)"))?;
 
     Ok(())
 }

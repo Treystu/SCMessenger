@@ -102,17 +102,12 @@ impl IdentityKeys {
     pub fn to_libp2p_keypair(&self) -> Result<libp2p::identity::Keypair> {
         // Extract the secret key bytes
         let secret_bytes = self.signing_key.to_bytes();
-
+        
         // Create libp2p Ed25519 keypair from the same secret
         let ed25519_secret = libp2p::identity::ed25519::SecretKey::try_from_bytes(secret_bytes)
-            .map_err(|e| {
-                anyhow::anyhow!(
-                    "Failed to convert Ed25519 secret key to libp2p format: {}",
-                    e
-                )
-            })?;
+            .map_err(|e| anyhow::anyhow!("Failed to convert Ed25519 secret key to libp2p format: {}", e))?;
         let ed25519_keypair = libp2p::identity::ed25519::Keypair::from(ed25519_secret);
-
+        
         Ok(libp2p::identity::Keypair::from(ed25519_keypair))
     }
 }

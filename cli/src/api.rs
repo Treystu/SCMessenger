@@ -177,7 +177,6 @@ pub async fn get_history_via_api(
     Ok(response.messages)
 }
 
-#[allow(dead_code)]
 pub async fn get_external_address_via_api() -> Result<Vec<String>> {
     let client = hyper::Client::new();
     let req = Request::builder()
@@ -186,18 +185,22 @@ pub async fn get_external_address_via_api() -> Result<Vec<String>> {
         .body(Body::empty())?;
 
     let resp = client.request(req).await?;
-
+    
     // Check HTTP status before attempting to parse
     let status = resp.status();
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-
+    
     if !status.is_success() {
         let error_body = String::from_utf8_lossy(&body_bytes);
-        anyhow::bail!("API request failed with status {}: {}", status, error_body);
+        anyhow::bail!(
+            "API request failed with status {}: {}",
+            status,
+            error_body
+        );
     }
-
-    let response: GetExternalAddressResponse =
-        serde_json::from_slice(&body_bytes).context("Failed to parse external address response")?;
+    
+    let response: GetExternalAddressResponse = serde_json::from_slice(&body_bytes)
+        .context("Failed to parse external address response")?;
 
     Ok(response.addresses)
 }
@@ -386,7 +389,10 @@ async fn handle_get_external_address(
     };
 
     let response = GetExternalAddressResponse {
-        addresses: addresses.into_iter().map(|addr| addr.to_string()).collect(),
+        addresses: addresses
+            .into_iter()
+            .map(|addr| addr.to_string())
+            .collect(),
     };
 
     Ok(Response::builder()
