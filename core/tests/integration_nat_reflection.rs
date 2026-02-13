@@ -357,7 +357,16 @@ async fn test_address_reflection_timeout() {
 
     // Shutdown swarm1
     swarm1.shutdown().await.ok();
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    
+    // Wait longer for disconnect to propagate (increased from 1s to 3s)
+    tokio::time::sleep(Duration::from_secs(3)).await;
+
+    // Verify peer is actually disconnected before testing timeout
+    let remaining_peers = swarm2.get_peers().await.expect("Failed to get peers");
+    assert!(
+        !remaining_peers.contains(&peer1),
+        "Peer should be disconnected before testing timeout"
+    );
 
     // Second request should timeout/fail
     let result2 = tokio::time::timeout(
