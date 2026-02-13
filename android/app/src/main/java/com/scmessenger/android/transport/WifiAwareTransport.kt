@@ -53,7 +53,8 @@ class WifiAwareTransport(
     
     private var isRunning = false
     
-    private var registeredCallback: ConnectivityManager.NetworkCallback? = null
+    private val callbackLock = Any()
+    private val registeredCallbacks = ConcurrentHashMap<String, ConnectivityManager.NetworkCallback>()
     
     /**
      * Check if WiFi Aware is available on this device.
@@ -116,14 +117,18 @@ class WifiAwareTransport(
         publishSession?.close()
         subscribeSession?.close()
         
-        // Unregister network callback
-        registeredCallback?.let { callback ->
+        // Unregister network callbacks
+        val callbacksToUnregister = synchronized(callbackLock) {
+            val callbacks = registeredCallbacks.values.toList()
+            registeredCallbacks.clear()
+            callbacks
+        }
+        callbacksToUnregister.forEach { callback ->
             try {
                 connectivityManager.unregisterNetworkCallback(callback)
             } catch (e: Exception) {
                 Timber.w(e, "Failed to unregister network callback")
             }
-            registeredCallback = null
         }
         
         // Detach from WiFi Aware
@@ -214,8 +219,8 @@ class WifiAwareTransport(
             Timber.i("WiFi Aware publish started")
         }
         
-        override fun onSubscribeDiscovered(session: PublishDiscoverySession, peerId: PeerHandle, serviceSpecificInfo: ByteArray?, matchFilter: MutableList<ByteArray>?) {
-            super.onSubscribeDiscovered(session, peerId, serviceSpecificInfo, matchFilter)
+        override fun onServiceDiscovered(peerId: PeerHandle, serviceSpecificInfo: ByteArray?, matchFilter: MutableList<ByteArray>?) {
+            super.onServiceDiscovered(peerId, serviceSpecificInfo, matchFilter)
             
             Timber.d("Peer discovered via WiFi Aware: $peerId")
             
@@ -225,7 +230,12 @@ class WifiAwareTransport(
             
             // Initiate data path
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                initiateDataPath(session, peerId, peerIdString)
+                val session = publishSession
+                if (session != null) {
+                    initiateDataPath(session, peerId, peerIdString)
+                } else {
+                    Timber.w("Publish session unavailable for WiFi Aware data path to $peerIdString")
+                }
             }
         }
     }
@@ -237,8 +247,8 @@ class WifiAwareTransport(
             Timber.i("WiFi Aware subscribe started")
         }
         
-        override fun onServiceDiscovered(session: SubscribeDiscoverySession, peerId: PeerHandle, serviceSpecificInfo: ByteArray?, matchFilter: MutableList<ByteArray>?) {
-            super.onServiceDiscovered(session, peerId, serviceSpecificInfo, matchFilter)
+        override fun onServiceDiscovered(peerId: PeerHandle, serviceSpecificInfo: ByteArray?, matchFilter: MutableList<ByteArray>?) {
+            super.onServiceDiscovered(peerId, serviceSpecificInfo, matchFilter)
             
             Timber.d("Service discovered via WiFi Aware: $peerId")
             
@@ -248,7 +258,12 @@ class WifiAwareTransport(
             
             // Initiate data path
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                initiateDataPath(session, peerId, peerIdString)
+                val session = subscribeSession
+                if (session != null) {
+                    initiateDataPath(session, peerId, peerIdString)
+                } else {
+                    Timber.w("Subscribe session unavailable for WiFi Aware data path to $peerIdString")
+                }
             }
         }
     }
@@ -278,10 +293,29 @@ class WifiAwareTransport(
                 super.onLost(network)
                 Timber.d("WiFi Aware data path lost for $peerIdString")
                 activeConnections.remove(peerIdString)?.close()
+                val callbackToRemove = synchronized(callbackLock) {
+                    registeredCallbacks.remove(peerIdString)
+                }
+                if (callbackToRemove != null) {
+                    try {
+                        connectivityManager.unregisterNetworkCallback(callbackToRemove)
+                    } catch (e: Exception) {
+                        Timber.w(e, "Failed to unregister network callback for $peerIdString")
+                    }
+                }
             }
         }
-        
-        registeredCallback = callback
+
+        val existingCallback = synchronized(callbackLock) {
+            registeredCallbacks.put(peerIdString, callback)
+        }
+        existingCallback?.let {
+            try {
+                connectivityManager.unregisterNetworkCallback(it)
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to replace existing network callback for $peerIdString")
+            }
+        }
         connectivityManager.requestNetwork(request, callback)
     }
     

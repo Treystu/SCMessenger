@@ -59,7 +59,7 @@ class MeshVpnService : VpnService() {
             if (vpnInterface == null) {
                 Timber.e("Failed to establish VPN interface")
                 isRunning = false
-                return@Thread
+                return
             }
             isRunning = true
             
