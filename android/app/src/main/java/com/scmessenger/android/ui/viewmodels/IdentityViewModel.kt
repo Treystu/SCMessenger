@@ -55,7 +55,7 @@ class IdentityViewModel @Inject constructor(
                 if (identity == null || !identity.initialized) {
                     Timber.w("Identity not initialized")
                 } else {
-                    Timber.d("Identity loaded: ${identity.peerId}")
+                    Timber.d("Identity loaded: ${identity.identityId ?: "Unknown"}")
                 }
             } catch (e: Exception) {
                 _error.value = "Failed to load identity: ${e.message}"
@@ -97,8 +97,11 @@ class IdentityViewModel @Inject constructor(
         val identity = _identityInfo.value ?: return null
         if (!identity.initialized) return null
         
+        val id = identity.identityId ?: return null
+        val pubKey = identity.publicKeyHex ?: return null
+        
         return try {
-            """{"peerId":"${identity.peerId}","publicKey":"${identity.publicKeyHex}"}"""
+            """{"peerId":"$id","publicKey":"$pubKey"}"""
         } catch (e: Exception) {
             Timber.e(e, "Failed to generate QR code data")
             null

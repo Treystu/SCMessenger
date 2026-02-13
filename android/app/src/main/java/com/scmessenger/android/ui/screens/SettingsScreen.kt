@@ -20,7 +20,7 @@ fun SettingsScreen(
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     serviceViewModel: MeshServiceViewModel = hiltViewModel()
 ) {
-    val meshSettings by settingsViewModel.meshSettings.collectAsState()
+    val meshSettings by settingsViewModel.settings.collectAsState()
     val autoStart by settingsViewModel.autoStart.collectAsState()
     val notificationsEnabled by settingsViewModel.notificationsEnabled.collectAsState()
     val isLoading by settingsViewModel.isLoading.collectAsState()

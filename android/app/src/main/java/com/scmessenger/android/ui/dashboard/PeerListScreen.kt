@@ -177,8 +177,12 @@ private fun PeerCard(
                     TransportBadge(transport = peer.transport)
                     
                     StatusIndicator(
-                        isOnline = peer.isOnline,
-                        label = if (peer.isOnline) "Online" else "Offline"
+                        isOnline = peer.isOnline
+                    )
+                    Text(
+                        text = if (peer.isOnline) "Online" else "Offline",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 

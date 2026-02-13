@@ -65,77 +65,88 @@ fun PrivacySettingsScreen(
                 )
             }
             
-            // Privacy Notice
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+            if (settings == null) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(200.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    CircularProgressIndicator()
+                }
+            } else {
+                val currentSettings = settings!!
+                
+                // Privacy Notice
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
                     )
-                    
-                    Column {
-                        Text(
-                            text = "Privacy by Design",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                         
-                        Spacer(modifier = Modifier.height(4.dp))
-                        
-                        Text(
-                            text = "SCMessenger is built with privacy at its core. All messages are end-to-end encrypted. These settings provide additional privacy protections.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        Column {
+                            Text(
+                                text = "Privacy by Design",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            
+                            Spacer(modifier = Modifier.height(4.dp))
+                            
+                            Text(
+                                text = "SCMessenger is built with privacy at its core. All messages are end-to-end encrypted. These settings provide additional privacy protections.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                     }
                 }
-            }
-            
-            // Onion Routing
-            SettingsSection(title = "Onion Routing") {
-                SwitchSetting(
-                    title = "Enable Onion Routing",
-                    description = "Route messages through multiple hops to obscure sender and receiver",
-                    checked = settings.onionRouting,
-                    onCheckedChange = {
-                        viewModel.updateSettings(settings.copy(onionRouting = it))
-                    },
-                    enabled = !isSaving
-                )
                 
-                InfoCard(
-                    message = "Onion routing provides anonymity by routing your messages through multiple peers before reaching the destination. This makes it harder to trace who is communicating with whom."
-                )
-            }
-            
-            // Future Privacy Features (Placeholders)
-            SettingsSection(title = "Additional Privacy Features") {
-                FeaturePlaceholder(
-                    title = "Cover Traffic",
-                    description = "Send dummy traffic to resist traffic analysis (Coming Soon)"
-                )
+                // Onion Routing
+                SettingsSection(title = "Onion Routing") {
+                    SwitchSetting(
+                        title = "Enable Onion Routing",
+                        description = "Route messages through multiple hops to obscure sender and receiver",
+                        checked = currentSettings.onionRouting,
+                        onCheckedChange = {
+                            viewModel.updateSettings(currentSettings.copy(onionRouting = it))
+                        },
+                        enabled = !isSaving
+                    )
+                    
+                    InfoCard(
+                        message = "Onion routing provides anonymity by routing your messages through multiple peers before reaching the destination. This makes it harder to trace who is communicating with whom."
+                    )
+                }
                 
-                FeaturePlaceholder(
-                    title = "Message Padding",
-                    description = "Pad messages to hide actual message length (Coming Soon)"
-                )
-                
-                FeaturePlaceholder(
-                    title = "Timing Obfuscation",
-                    description = "Add random delays to obscure communication patterns (Coming Soon)"
-                )
+                // Future Privacy Features (Placeholders)
+                SettingsSection(title = "Additional Privacy Features") {
+                    FeaturePlaceholder(
+                        title = "Cover Traffic",
+                        description = "Send dummy traffic to resist traffic analysis (Coming Soon)"
+                    )
+                    
+                    FeaturePlaceholder(
+                        title = "Message Padding",
+                        description = "Pad messages to hide actual message length (Coming Soon)"
+                    )
+                    
+                    FeaturePlaceholder(
+                        title = "Timing Obfuscation",
+                        description = "Add random delays to obscure communication patterns (Coming Soon)"
+                    )
+                }
             }
             
             // Best Practices

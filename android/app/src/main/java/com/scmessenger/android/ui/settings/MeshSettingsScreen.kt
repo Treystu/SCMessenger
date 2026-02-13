@@ -64,112 +64,123 @@ fun MeshSettingsScreen(
                 )
             }
             
-            // Relay Settings
-            SettingsSection(title = "Relay Settings") {
-                SwitchSetting(
-                    title = "Enable Relay",
-                    description = "Allow this device to relay messages for others",
-                    checked = settings.relayEnabled,
-                    onCheckedChange = {
-                        viewModel.updateSettings(settings.copy(relayEnabled = it))
-                    },
-                    enabled = !isSaving
-                )
+            if (settings == null) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                val currentSettings = settings!!
                 
-                if (settings.relayEnabled) {
-                    SliderSetting(
-                        title = "Relay Budget",
-                        description = "Maximum messages to relay per hour",
-                        value = settings.maxRelayBudget.toFloat(),
-                        valueRange = 0f..500f,
-                        steps = 49,
-                        onValueChange = {
-                            viewModel.updateSettings(settings.copy(maxRelayBudget = it.toUInt()))
+                // Relay Settings
+                SettingsSection(title = "Relay Settings") {
+                    SwitchSetting(
+                        title = "Enable Relay",
+                        description = "Allow this device to relay messages for others",
+                        checked = currentSettings.relayEnabled,
+                        onCheckedChange = {
+                            viewModel.updateSettings(currentSettings.copy(relayEnabled = it))
                         },
-                        valueLabel = "${settings.maxRelayBudget} msg/hr",
                         enabled = !isSaving
                     )
                     
-                    SliderSetting(
-                        title = "Battery Floor",
-                        description = "Stop relaying below this battery level",
-                        value = settings.batteryFloor.toFloat(),
-                        valueRange = 0f..50f,
-                        steps = 49,
-                        onValueChange = {
-                            viewModel.updateSettings(settings.copy(batteryFloor = it.toUInt()))
+                    if (currentSettings.relayEnabled) {
+                        SliderSetting(
+                            title = "Relay Budget",
+                            description = "Maximum messages to relay per hour",
+                            value = currentSettings.maxRelayBudget.toFloat(),
+                            valueRange = 0f..500f,
+                            steps = 49,
+                            onValueChange = {
+                                viewModel.updateSettings(currentSettings.copy(maxRelayBudget = it.toUInt()))
+                            },
+                            valueLabel = "${currentSettings.maxRelayBudget} msg/hr",
+                            enabled = !isSaving
+                        )
+                        
+                        SliderSetting(
+                            title = "Battery Floor",
+                            description = "Stop relaying below this battery level",
+                            value = currentSettings.batteryFloor.toFloat(),
+                            valueRange = 0f..50f,
+                            steps = 49,
+                            onValueChange = {
+                                viewModel.updateSettings(currentSettings.copy(batteryFloor = it.toInt().toUByte()))
+                            },
+                            valueLabel = "${currentSettings.batteryFloor}%",
+                            enabled = !isSaving
+                        )
+                    }
+                }
+                
+                // Transport Settings
+                SettingsSection(title = "Transport Settings") {
+                    SwitchSetting(
+                        title = "Bluetooth Low Energy",
+                        description = "Peer discovery and communication via BLE",
+                        checked = currentSettings.bleEnabled,
+                        onCheckedChange = {
+                            viewModel.updateSettings(currentSettings.copy(bleEnabled = it))
                         },
-                        valueLabel = "${settings.batteryFloor}%",
+                        enabled = !isSaving
+                    )
+                    
+                    SwitchSetting(
+                        title = "WiFi Aware",
+                        description = "Peer discovery using WiFi Aware (Android 8+)",
+                        checked = currentSettings.wifiAwareEnabled,
+                        onCheckedChange = {
+                            viewModel.updateSettings(currentSettings.copy(wifiAwareEnabled = it))
+                        },
+                        enabled = !isSaving
+                    )
+                    
+                    SwitchSetting(
+                        title = "WiFi Direct",
+                        description = "Direct peer-to-peer WiFi connections",
+                        checked = currentSettings.wifiDirectEnabled,
+                        onCheckedChange = {
+                            viewModel.updateSettings(currentSettings.copy(wifiDirectEnabled = it))
+                        },
+                        enabled = !isSaving
+                    )
+                    
+                    SwitchSetting(
+                        title = "Internet (libp2p)",
+                        description = "Connect to peers over the internet",
+                        checked = currentSettings.internetEnabled,
+                        onCheckedChange = {
+                            viewModel.updateSettings(currentSettings.copy(internetEnabled = it))
+                        },
                         enabled = !isSaving
                     )
                 }
-            }
-            
-            // Transport Settings
-            SettingsSection(title = "Transport Settings") {
-                SwitchSetting(
-                    title = "Bluetooth Low Energy",
-                    description = "Peer discovery and communication via BLE",
-                    checked = settings.bleEnabled,
-                    onCheckedChange = {
-                        viewModel.updateSettings(settings.copy(bleEnabled = it))
-                    },
-                    enabled = !isSaving
-                )
                 
-                SwitchSetting(
-                    title = "WiFi Aware",
-                    description = "Peer discovery using WiFi Aware (Android 8+)",
-                    checked = settings.wifiAwareEnabled,
-                    onCheckedChange = {
-                        viewModel.updateSettings(settings.copy(wifiAwareEnabled = it))
-                    },
-                    enabled = !isSaving
-                )
+                // Discovery Settings
+                SettingsSection(title = "Discovery Settings") {
+                    DiscoveryModeSetting(
+                        currentMode = currentSettings.discoveryMode,
+                        onModeChange = {
+                            viewModel.updateSettings(currentSettings.copy(discoveryMode = it))
+                        },
+                        enabled = !isSaving
+                    )
+                }
                 
-                SwitchSetting(
-                    title = "WiFi Direct",
-                    description = "Direct peer-to-peer WiFi connections",
-                    checked = settings.wifiDirectEnabled,
-                    onCheckedChange = {
-                        viewModel.updateSettings(settings.copy(wifiDirectEnabled = it))
-                    },
-                    enabled = !isSaving
-                )
-                
-                SwitchSetting(
-                    title = "Internet (libp2p)",
-                    description = "Connect to peers over the internet",
-                    checked = settings.internetEnabled,
-                    onCheckedChange = {
-                        viewModel.updateSettings(settings.copy(internetEnabled = it))
-                    },
-                    enabled = !isSaving
-                )
-            }
-            
-            // Discovery Settings
-            SettingsSection(title = "Discovery Settings") {
-                DiscoveryModeSetting(
-                    currentMode = settings.discoveryMode,
-                    onModeChange = {
-                        viewModel.updateSettings(settings.copy(discoveryMode = it))
-                    },
-                    enabled = !isSaving
-                )
-            }
-            
-            // Privacy Settings
-            SettingsSection(title = "Privacy Settings") {
-                SwitchSetting(
-                    title = "Onion Routing",
-                    description = "Route messages through multiple hops for privacy",
-                    checked = settings.onionRouting,
-                    onCheckedChange = {
-                        viewModel.updateSettings(settings.copy(onionRouting = it))
-                    },
-                    enabled = !isSaving
-                )
+                // Privacy Settings
+                SettingsSection(title = "Privacy Settings") {
+                    SwitchSetting(
+                        title = "Onion Routing",
+                        description = "Route messages through multiple hops for privacy",
+                        checked = currentSettings.onionRouting,
+                        onCheckedChange = {
+                            viewModel.updateSettings(currentSettings.copy(onionRouting = it))
+                        },
+                        enabled = !isSaving
+                    )
+                }
             }
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -312,9 +323,9 @@ private fun DiscoveryModeSetting(
         Spacer(modifier = Modifier.height(8.dp))
         
         val modes = listOf(
-            uniffi.api.DiscoveryMode.PASSIVE to "Passive",
+            uniffi.api.DiscoveryMode.CAUTIOUS to "Cautious",
             uniffi.api.DiscoveryMode.NORMAL to "Normal",
-            uniffi.api.DiscoveryMode.AGGRESSIVE to "Aggressive"
+            uniffi.api.DiscoveryMode.PARANOID to "Paranoid"
         )
         
         modes.forEach { (mode, label) ->

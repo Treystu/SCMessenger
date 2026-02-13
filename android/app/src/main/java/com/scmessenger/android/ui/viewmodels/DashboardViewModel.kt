@@ -84,11 +84,11 @@ class DashboardViewModel @Inject constructor(
             val ledgerEntries = meshRepository.getDialableAddresses()
             val peerList = ledgerEntries.map { entry ->
                 PeerInfo(
-                    peerId = entry.peerId,
+                    peerId = entry.peerId ?: "Unknown",
                     multiaddr = entry.multiaddr,
-                    lastSeen = entry.lastSuccessTime,
+                    lastSeen = entry.lastSeen,
                     transport = determineTransport(entry.multiaddr),
-                    isOnline = isRecent(entry.lastSuccessTime)
+                    isOnline = isRecent(entry.lastSeen)
                 )
             }
             _peers.value = peerList
@@ -112,7 +112,7 @@ class DashboardViewModel @Inject constructor(
             if (identityInfo != null) {
                 nodes.add(
                     TopologyNode(
-                        id = identityInfo.peerId,
+                        id = identityInfo.identityId ?: "Self",
                         isSelf = true,
                         isOnline = true
                     )
@@ -133,7 +133,7 @@ class DashboardViewModel @Inject constructor(
                 identityInfo?.let {
                     edges.add(
                         TopologyEdge(
-                            source = it.peerId,
+                            source = it.identityId ?: "Self",
                             target = peer.peerId,
                             transport = peer.transport
                         )

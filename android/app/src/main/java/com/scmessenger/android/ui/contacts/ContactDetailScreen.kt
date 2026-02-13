@@ -254,7 +254,7 @@ private fun ContactDetailContent(
                 
                 CopyableText(
                     text = contact.peerId,
-                    fontFamily = FontFamily.Monospace
+                    monospace = true
                 )
             }
         }
@@ -272,7 +272,7 @@ private fun ContactDetailContent(
                 
                 CopyableText(
                     text = contact.publicKey,
-                    fontFamily = FontFamily.Monospace
+                    monospace = true
                 )
             }
         }

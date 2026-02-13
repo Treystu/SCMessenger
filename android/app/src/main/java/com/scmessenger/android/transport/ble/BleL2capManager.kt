@@ -280,7 +280,7 @@ class BleL2capManager(
                 Timber.w(e, "Error closing L2CAP socket for $deviceAddress")
             }
             
-            activeConnections.remove(device, this)
+            activeConnections.remove(deviceAddress, this)
         }
     }
 }

@@ -235,7 +235,7 @@ private fun ConnectingView(progress: Float) {
         Spacer(modifier = Modifier.height(16.dp))
         
         LinearProgressIndicator(
-            progress = { progress },
+            progress = progress,
             modifier = Modifier
                 .fillMaxWidth(0.7f)
                 .height(8.dp),

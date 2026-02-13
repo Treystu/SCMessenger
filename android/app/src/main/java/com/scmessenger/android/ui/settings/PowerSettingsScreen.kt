@@ -153,28 +153,30 @@ fun PowerSettingsScreen(
             }
             
             // Battery Settings
-            SettingsSection(title = "Battery Management") {
-                SliderSetting(
-                    title = "Battery Floor",
-                    description = "Stop relaying when battery drops below this level",
-                    value = settings.batteryFloor.toFloat(),
-                    valueRange = 0f..50f,
-                    steps = 49,
-                    onValueChange = {
-                        viewModel.updateSettings(settings.copy(batteryFloor = it.toUInt()))
-                    },
-                    valueLabel = "${settings.batteryFloor}%"
-                )
-                
-                InfoCard(
-                    title = "Power Saving Tips",
-                    message = """
-                        • Enable AutoAdjust for automatic optimization
-                        • Increase BLE scan interval to save battery
-                        • Disable unused transports
-                        • Lower relay budget on battery power
-                    """.trimIndent()
-                )
+            settings?.let { currentSettings ->
+                SettingsSection(title = "Battery Management") {
+                    SliderSetting(
+                        title = "Battery Floor",
+                        description = "Stop relaying when battery drops below this level",
+                        value = currentSettings.batteryFloor.toFloat(),
+                        valueRange = 0f..50f,
+                        steps = 49,
+                        onValueChange = {
+                            viewModel.updateSettings(currentSettings.copy(batteryFloor = it.toInt().toUByte()))
+                        },
+                        valueLabel = "${currentSettings.batteryFloor}%"
+                    )
+                    
+                    InfoCard(
+                        title = "Power Saving Tips",
+                        message = """
+                            • Enable AutoAdjust for automatic optimization
+                            • Increase BLE scan interval to save battery
+                            • Disable unused transports
+                            • Lower relay budget on battery power
+                        """.trimIndent()
+                    )
+                }
             }
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -304,7 +306,7 @@ private fun ProfileSelector(
         val profiles = listOf(
             uniffi.api.AdjustmentProfile.MINIMAL to "Minimal (Battery Saver)",
             uniffi.api.AdjustmentProfile.STANDARD to "Standard (Balanced)",
-            uniffi.api.AdjustmentProfile.AGGRESSIVE to "Aggressive (Performance)"
+            uniffi.api.AdjustmentProfile.MAXIMUM to "Maximum (Performance)"
         )
         
         profiles.forEach { (profile, label) ->

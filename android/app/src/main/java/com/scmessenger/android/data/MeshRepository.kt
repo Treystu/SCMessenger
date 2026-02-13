@@ -594,7 +594,7 @@ class MeshRepository(private val context: Context) {
             com.scmessenger.android.service.MeshEventBus.peerEvents.collect { event ->
                 // Convert peer events to peer list
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    val peers = ledgerManager?.listPeers() ?: emptyList()
+                    val peers = ledgerManager?.dialableAddresses()?.mapNotNull { it.peerId }?.distinct() ?: emptyList()
                     emit(peers)
                 }
             }

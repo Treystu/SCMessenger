@@ -164,7 +164,7 @@ private fun IdentityContent(
         
         // Identicon
         IdenticonFromPeerId(
-            peerId = identityInfo.peerId,
+            peerId = identityInfo.identityId ?: "Unknown",
             size = 96.dp,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         )
@@ -189,8 +189,8 @@ private fun IdentityContent(
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 CopyableText(
-                    text = identityInfo.peerId,
-                    fontFamily = FontFamily.Monospace
+                    text = identityInfo.identityId ?: "Unknown",
+                    monospace = true
                 )
             }
         }
@@ -207,8 +207,8 @@ private fun IdentityContent(
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 CopyableText(
-                    text = identityInfo.publicKeyHex,
-                    fontFamily = FontFamily.Monospace
+                    text = identityInfo.publicKeyHex ?: "Unknown",
+                    monospace = true
                 )
             }
         }

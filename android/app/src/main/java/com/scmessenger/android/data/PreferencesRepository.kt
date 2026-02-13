@@ -29,6 +29,8 @@ class PreferencesRepository(private val context: Context) {
         private val THEME_MODE = stringPreferencesKey("theme_mode")
         private val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
         private val SHOW_PEER_COUNT = booleanPreferencesKey("show_peer_count")
+        private val AUTO_ADJUST_ENABLED = booleanPreferencesKey("auto_adjust_enabled")
+        private val MANUAL_ADJUSTMENT_PROFILE = stringPreferencesKey("manual_adjustment_profile")
     }
     
     // ========================================================================
@@ -115,6 +117,32 @@ class PreferencesRepository(private val context: Context) {
             prefs[SHOW_PEER_COUNT] = show
         }
         Timber.d("Show peer count: $show")
+    }
+
+    // ========================================================================
+    // POWER SETTINGS
+    // ========================================================================
+
+    val autoAdjustEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[AUTO_ADJUST_ENABLED] ?: true
+    }
+
+    suspend fun setAutoAdjustEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[AUTO_ADJUST_ENABLED] = enabled
+        }
+        Timber.d("Auto adjust: $enabled")
+    }
+
+    val manualAdjustmentProfile: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[MANUAL_ADJUSTMENT_PROFILE] ?: "STANDARD"
+    }
+
+    suspend fun setManualAdjustmentProfile(profileName: String) {
+        context.dataStore.edit { prefs ->
+            prefs[MANUAL_ADJUSTMENT_PROFILE] = profileName
+        }
+        Timber.d("Manual profile: $profileName")
     }
     
     // ========================================================================

@@ -38,7 +38,7 @@ fun Identicon(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(colors.first)
+            .background(colors.first())
     ) {
         Canvas(modifier = Modifier.size(size)) {
             val centerX = this.size.width / 2
@@ -154,7 +154,7 @@ fun generateIdenticonBitmap(data: ByteArray, sizePx: Int): android.graphics.Bitm
     val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
     
     // Draw background circle
-    paint.color = colors.first.toArgb()
+    paint.color = colors.first().toArgb()
     canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, paint)
     
     // Draw pattern

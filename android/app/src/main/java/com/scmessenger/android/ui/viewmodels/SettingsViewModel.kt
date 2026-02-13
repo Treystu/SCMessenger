@@ -22,8 +22,8 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
     
     // Mesh settings
-    private val _meshSettings = MutableStateFlow<uniffi.api.MeshSettings?>(null)
-    val meshSettings: StateFlow<uniffi.api.MeshSettings?> = _meshSettings.asStateFlow()
+    private val _settings = MutableStateFlow<uniffi.api.MeshSettings?>(null)
+    val settings: StateFlow<uniffi.api.MeshSettings?> = _settings.asStateFlow()
     
     // App preferences
     val autoStart = preferencesRepository.serviceAutoStart
@@ -60,10 +60,32 @@ class SettingsViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = true
         )
+
+    val autoAdjustEnabled = preferencesRepository.autoAdjustEnabled
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = true
+        )
+
+    val adjustmentProfile = preferencesRepository.manualAdjustmentProfile
+        .map { name ->
+            try {
+                uniffi.api.AdjustmentProfile.valueOf(name)
+            } catch (e: IllegalArgumentException) {
+                uniffi.api.AdjustmentProfile.STANDARD
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = uniffi.api.AdjustmentProfile.STANDARD
+        )
     
     // Loading state
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    val isSaving: StateFlow<Boolean> = _isLoading.asStateFlow()
     
     // Error state
     private val _error = MutableStateFlow<String?>(null)
@@ -74,7 +96,7 @@ class SettingsViewModel @Inject constructor(
     val identityInfo: StateFlow<uniffi.api.IdentityInfo?> = _identityInfo.asStateFlow()
     
     init {
-        loadMeshSettings()
+        loadSettings()
         loadIdentity()
     }
     
@@ -95,14 +117,14 @@ class SettingsViewModel @Inject constructor(
     /**
      * Load mesh settings from repository.
      */
-    fun loadMeshSettings() {
+    fun loadSettings() {
         viewModelScope.launch {
             try {
                 _isLoading.value = true
                 _error.value = null
                 
                 val settings = meshRepository.loadSettings()
-                _meshSettings.value = settings
+                _settings.value = settings
                 
                 Timber.d("Loaded mesh settings: $settings")
             } catch (e: Exception) {
@@ -115,9 +137,9 @@ class SettingsViewModel @Inject constructor(
     }
     
     /**
-     * Save mesh settings.
+     * Update mesh settings.
      */
-    fun saveMeshSettings(settings: uniffi.api.MeshSettings) {
+    fun updateSettings(settings: uniffi.api.MeshSettings) {
         viewModelScope.launch {
             try {
                 // Validate first
@@ -127,7 +149,7 @@ class SettingsViewModel @Inject constructor(
                 }
                 
                 meshRepository.saveSettings(settings)
-                _meshSettings.value = settings
+                _settings.value = settings
                 
                 Timber.i("Mesh settings saved")
             } catch (e: Exception) {
@@ -141,56 +163,56 @@ class SettingsViewModel @Inject constructor(
      * Update specific mesh setting fields.
      */
     fun updateRelayEnabled(enabled: Boolean) {
-        _meshSettings.value?.let { current ->
-            saveMeshSettings(current.copy(relayEnabled = enabled))
+        _settings.value?.let { current ->
+            updateSettings(current.copy(relayEnabled = enabled))
         }
     }
     
     fun updateMaxRelayBudget(budget: UInt) {
-        _meshSettings.value?.let { current ->
-            saveMeshSettings(current.copy(maxRelayBudget = budget))
+        _settings.value?.let { current ->
+            updateSettings(current.copy(maxRelayBudget = budget))
         }
     }
     
     fun updateBatteryFloor(floor: UByte) {
-        _meshSettings.value?.let { current ->
-            saveMeshSettings(current.copy(batteryFloor = floor))
+        _settings.value?.let { current ->
+            updateSettings(current.copy(batteryFloor = floor))
         }
     }
     
     fun updateBleEnabled(enabled: Boolean) {
-        _meshSettings.value?.let { current ->
-            saveMeshSettings(current.copy(bleEnabled = enabled))
+        _settings.value?.let { current ->
+            updateSettings(current.copy(bleEnabled = enabled))
         }
     }
     
     fun updateWifiAwareEnabled(enabled: Boolean) {
-        _meshSettings.value?.let { current ->
-            saveMeshSettings(current.copy(wifiAwareEnabled = enabled))
+        _settings.value?.let { current ->
+            updateSettings(current.copy(wifiAwareEnabled = enabled))
         }
     }
     
     fun updateWifiDirectEnabled(enabled: Boolean) {
-        _meshSettings.value?.let { current ->
-            saveMeshSettings(current.copy(wifiDirectEnabled = enabled))
+        _settings.value?.let { current ->
+            updateSettings(current.copy(wifiDirectEnabled = enabled))
         }
     }
     
     fun updateInternetEnabled(enabled: Boolean) {
-        _meshSettings.value?.let { current ->
-            saveMeshSettings(current.copy(internetEnabled = enabled))
+        _settings.value?.let { current ->
+            updateSettings(current.copy(internetEnabled = enabled))
         }
     }
     
     fun updateDiscoveryMode(mode: uniffi.api.DiscoveryMode) {
-        _meshSettings.value?.let { current ->
-            saveMeshSettings(current.copy(discoveryMode = mode))
+        _settings.value?.let { current ->
+            updateSettings(current.copy(discoveryMode = mode))
         }
     }
     
     fun updateOnionRouting(enabled: Boolean) {
-        _meshSettings.value?.let { current ->
-            saveMeshSettings(current.copy(onionRouting = enabled))
+        _settings.value?.let { current ->
+            updateSettings(current.copy(onionRouting = enabled))
         }
     }
     
@@ -226,6 +248,42 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             preferencesRepository.setShowPeerCount(show)
         }
+    }
+
+    // ========================================================================
+    // POWER SETTINGS
+    // ========================================================================
+
+    fun setAutoAdjust(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.setAutoAdjustEnabled(enabled)
+            if (enabled) {
+                meshRepository.clearAdjustmentOverrides()
+            }
+        }
+    }
+
+    fun setManualProfile(profile: uniffi.api.AdjustmentProfile) {
+        viewModelScope.launch {
+            preferencesRepository.setManualAdjustmentProfile(profile.name)
+            
+            // Apply profile settings if manual
+            // Note: In a real implementation, we might apply these to the engine directly
+            // or the engine observes this preference.
+            // For now, we just save the preference.
+        }
+    }
+
+    fun overrideBleScanInterval(intervalMs: UInt) {
+        meshRepository.overrideBleInterval(intervalMs)
+    }
+
+    fun overrideRelayMax(max: UInt) {
+        meshRepository.overrideRelayMax(max)
+    }
+
+    fun clearAdjustmentOverrides() {
+        meshRepository.clearAdjustmentOverrides()
     }
     
     // ========================================================================

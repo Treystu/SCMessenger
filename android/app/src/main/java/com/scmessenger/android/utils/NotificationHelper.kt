@@ -65,8 +65,8 @@ object NotificationHelper {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             
             // Create channel group
-            val group = NotificationChannelGroup(GROUP_MESH, "Mesh Network")
-            notificationManager.createNotificationChannelGroup(group)
+            val channelGroup = NotificationChannelGroup(GROUP_MESH, "Mesh Network")
+            notificationManager.createNotificationChannelGroup(channelGroup)
             
             // 1. Messages Channel (HIGH priority)
             val messagesChannel = NotificationChannel(

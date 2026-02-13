@@ -51,8 +51,8 @@ fun MessageInput(
             FloatingActionButton(
                 onClick = onSend,
                 modifier = Modifier.size(48.dp),
-                containerColor = MaterialTheme.colorScheme.primary,
-                enabled = enabled && value.isNotBlank()
+                containerColor = if (enabled && value.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = if (enabled && value.isNotBlank()) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
             ) {
                 Icon(
                     imageVector = Icons.Default.Send,

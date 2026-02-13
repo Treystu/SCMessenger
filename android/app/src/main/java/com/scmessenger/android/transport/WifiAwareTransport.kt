@@ -334,7 +334,7 @@ class WifiAwareTransport(
                 //
                 // For now this is non-functional placeholder code
                 serverSocket = ServerSocket(AWARE_PORT)
-                network.bindSocket(serverSocket)
+                // network.bindSocket(serverSocket)
                 
                 Timber.d("Waiting for WiFi Aware connection from $peerId on port $AWARE_PORT")
                 
