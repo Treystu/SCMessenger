@@ -754,8 +754,19 @@ impl LedgerManager {
 // SWARM BRIDGE
 // ============================================================================
 
+use crate::transport::swarm::SwarmHandle;
+use libp2p::{Multiaddr, PeerId};
+use std::str::FromStr;
+use std::sync::Arc;
+use parking_lot::Mutex;
+
+/// Bridge between UniFFI (synchronous) and SwarmHandle (async).
+/// 
+/// This bridge provides synchronous wrappers around async SwarmHandle operations
+/// using tokio::runtime::Handle to block on futures when necessary.
 pub struct SwarmBridge {
-    // This will be wired to the actual SwarmHandle later
+    handle: Arc<Mutex<Option<SwarmHandle>>>,
+    runtime_handle: Option<tokio::runtime::Handle>,
 }
 
 impl Default for SwarmBridge {
@@ -766,40 +777,122 @@ impl Default for SwarmBridge {
 
 impl SwarmBridge {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            handle: Arc::new(Mutex::new(None)),
+            runtime_handle: tokio::runtime::Handle::try_current().ok(),
+        }
     }
 
+    /// Set the SwarmHandle for this bridge.
+    /// This must be called after starting the swarm to wire up network operations.
+    pub fn set_handle(&self, handle: SwarmHandle) {
+        *self.handle.lock() = Some(handle);
+    }
+
+    /// Send an encrypted message envelope to a peer.
     pub fn send_message(
         &self,
-        _peer_id: String,
-        _data: Vec<u8>,
+        peer_id: String,
+        data: Vec<u8>,
     ) -> Result<(), crate::IronCoreError> {
-        // TODO: Wire to SwarmHandle
-        Ok(())
+        let handle_guard = self.handle.lock();
+        let handle = handle_guard
+            .as_ref()
+            .ok_or(crate::IronCoreError::NetworkError)?;
+
+        // Parse peer ID
+        let peer_id = PeerId::from_str(&peer_id)
+            .map_err(|_| crate::IronCoreError::InvalidInput)?;
+
+        // Block on async operation
+        if let Some(rt) = &self.runtime_handle {
+            rt.block_on(handle.send_message(peer_id, data))
+                .map_err(|_| crate::IronCoreError::NetworkError)
+        } else {
+            Err(crate::IronCoreError::Internal)
+        }
     }
 
-    pub fn dial(&self, _multiaddr: String) -> Result<(), crate::IronCoreError> {
-        // TODO: Wire to SwarmHandle
-        Ok(())
+    /// Dial a peer at a multiaddress.
+    pub fn dial(&self, multiaddr: String) -> Result<(), crate::IronCoreError> {
+        let handle_guard = self.handle.lock();
+        let handle = handle_guard
+            .as_ref()
+            .ok_or(crate::IronCoreError::NetworkError)?;
+
+        // Parse multiaddress
+        let addr = Multiaddr::from_str(&multiaddr)
+            .map_err(|_| crate::IronCoreError::InvalidInput)?;
+
+        // Block on async operation
+        if let Some(rt) = &self.runtime_handle {
+            rt.block_on(handle.dial(addr))
+                .map_err(|_| crate::IronCoreError::NetworkError)
+        } else {
+            Err(crate::IronCoreError::Internal)
+        }
     }
 
+    /// Get list of connected peer IDs.
     pub fn get_peers(&self) -> Vec<String> {
-        // TODO: Wire to SwarmHandle
-        Vec::new()
+        let handle_guard = self.handle.lock();
+        let handle = match handle_guard.as_ref() {
+            Some(h) => h,
+            None => return Vec::new(),
+        };
+
+        // Block on async operation
+        if let Some(rt) = &self.runtime_handle {
+            rt.block_on(handle.get_peers())
+                .unwrap_or_default()
+                .iter()
+                .map(|peer_id| peer_id.to_string())
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 
+    /// Get list of subscribed Gossipsub topics.
     pub fn get_topics(&self) -> Vec<String> {
-        // TODO: Wire to SwarmHandle
-        Vec::new()
+        let handle_guard = self.handle.lock();
+        let handle = match handle_guard.as_ref() {
+            Some(h) => h,
+            None => return Vec::new(),
+        };
+
+        // Block on async operation
+        if let Some(rt) = &self.runtime_handle {
+            rt.block_on(handle.get_topics()).unwrap_or_default()
+        } else {
+            Vec::new()
+        }
     }
 
-    pub fn subscribe_topic(&self, _topic: String) -> Result<(), crate::IronCoreError> {
-        // TODO: Wire to SwarmHandle
-        Ok(())
+    /// Subscribe to a Gossipsub topic.
+    pub fn subscribe_topic(&self, topic: String) -> Result<(), crate::IronCoreError> {
+        let handle_guard = self.handle.lock();
+        let handle = handle_guard
+            .as_ref()
+            .ok_or(crate::IronCoreError::NetworkError)?;
+
+        // Block on async operation
+        if let Some(rt) = &self.runtime_handle {
+            rt.block_on(handle.subscribe_topic(topic))
+                .map_err(|_| crate::IronCoreError::NetworkError)
+        } else {
+            Err(crate::IronCoreError::Internal)
+        }
     }
 
+    /// Shutdown the swarm gracefully.
     pub fn shutdown(&self) {
-        // TODO: Wire to SwarmHandle
+        let handle_guard = self.handle.lock();
+        if let Some(handle) = handle_guard.as_ref() {
+            if let Some(rt) = &self.runtime_handle {
+                let _ = rt.block_on(handle.shutdown());
+            }
+        }
     }
 }
 
