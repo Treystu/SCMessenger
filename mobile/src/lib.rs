@@ -52,4 +52,17 @@ mod tests {
         let msg = bob.receive_message(envelope).unwrap();
         assert_eq!(msg.text_content().unwrap(), "Hello from mobile!");
     }
+
+    #[test]
+    fn test_swarm_bridge_creation() {
+        // Test that SwarmBridge can be created and returns empty values before wiring
+        let bridge = SwarmBridge::new();
+
+        // Should return empty lists when not connected
+        assert_eq!(bridge.get_peers().len(), 0);
+        assert_eq!(bridge.get_topics().len(), 0);
+
+        // Should handle shutdown gracefully when not connected
+        bridge.shutdown();
+    }
 }

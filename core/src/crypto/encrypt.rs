@@ -50,6 +50,44 @@ fn ed25519_to_x25519_secret(signing_key: &SigningKey) -> StaticSecret {
     secret
 }
 
+/// Validate that a hex-encoded Ed25519 public key is well-formed.
+///
+/// Checks:
+/// 1. Hex decoding succeeds
+/// 2. Length is exactly 32 bytes
+/// 3. Bytes represent a valid compressed Ed25519 point
+///
+/// Returns an error with a specific message if validation fails.
+pub fn validate_ed25519_public_key(public_key_hex: &str) -> Result<()> {
+    use curve25519_dalek::edwards::CompressedEdwardsY;
+
+    // Decode hex
+    let public_key_bytes = hex::decode(public_key_hex)
+        .map_err(|_| anyhow::anyhow!("Invalid hex encoding in public key"))?;
+
+    // Check length
+    if public_key_bytes.len() != 32 {
+        bail!(
+            "Public key must be exactly 32 bytes (64 hex characters), got {} bytes ({} hex characters)",
+            public_key_bytes.len(),
+            public_key_hex.len()
+        );
+    }
+
+    // Validate Ed25519 format by attempting decompression
+    let mut key_array = [0u8; 32];
+    key_array.copy_from_slice(&public_key_bytes);
+
+    let compressed = CompressedEdwardsY::from_slice(&key_array)
+        .map_err(|_| anyhow::anyhow!("Invalid Ed25519 public key format"))?;
+
+    compressed.decompress().ok_or_else(|| {
+        anyhow::anyhow!("Public key is not a valid Ed25519 point (decompression failed)")
+    })?;
+
+    Ok(())
+}
+
 /// Convert an Ed25519 verifying (public) key to an X25519 public key.
 ///
 /// Uses the birational map from Ed25519 (twisted Edwards) to X25519 (Montgomery).
@@ -282,6 +320,39 @@ mod tests {
         let key = SigningKey::from_bytes(&secret);
         secret.zeroize();
         key
+    }
+
+    #[test]
+    fn test_validate_ed25519_public_key_valid() {
+        // Generate a real Ed25519 keypair
+        let signing_key = generate_keypair();
+        let public_key_hex = hex::encode(signing_key.verifying_key().to_bytes());
+
+        // Should validate successfully
+        assert!(validate_ed25519_public_key(&public_key_hex).is_ok());
+    }
+
+    #[test]
+    fn test_validate_ed25519_public_key_invalid_hex() {
+        let invalid_hex = "not-valid-hex";
+        let result = validate_ed25519_public_key(invalid_hex);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid hex encoding"));
+    }
+
+    #[test]
+    fn test_validate_ed25519_public_key_wrong_length() {
+        // 16 bytes instead of 32
+        let too_short = "0123456789abcdef0123456789abcdef";
+        let result = validate_ed25519_public_key(too_short);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("must be exactly 32 bytes"));
     }
 
     #[test]

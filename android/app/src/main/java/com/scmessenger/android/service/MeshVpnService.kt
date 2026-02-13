@@ -2,6 +2,7 @@ package com.scmessenger.android.service
 
 import android.content.Intent
 import android.net.VpnService
+import android.os.Build
 import android.os.ParcelFileDescriptor
 import timber.log.Timber
 import java.io.FileInputStream
@@ -43,25 +44,39 @@ class MeshVpnService : VpnService() {
         }
         
         try {
-            // Create a dummy VPN interface
-            // This doesn't route any actual traffic
+            // Create a dummy VPN interface for persistence (no traffic routing)
+            // Do NOT add routes - we only want the VPN to keep the service alive,
+            // not to intercept network traffic which would break all connectivity
             val builder = Builder()
                 .setSession("SCMessenger VPN")
                 .addAddress("10.255.255.1", 32)
-                .addRoute("0.0.0.0", 0)
-                .setBlocking(false)
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                builder.setBlocking(false)
+            }
             
             vpnInterface = builder.establish()
+            if (vpnInterface == null) {
+                Timber.e("Failed to establish VPN interface")
+                isRunning = false
+                return
+            }
             isRunning = true
             
-            Timber.i("VPN service started (dummy tunnel for persistence)")
+            Timber.i("VPN service started (dummy tunnel for persistence, no routing)")
             
             // Start a thread to keep the interface alive
             // In a real VPN, this would forward packets
             Thread {
                 try {
-                    val input = FileInputStream(vpnInterface!!.fileDescriptor)
-                    val output = FileOutputStream(vpnInterface!!.fileDescriptor)
+                    val iface = vpnInterface
+                    if (iface == null) {
+                        Timber.e("VPN interface is null, cannot start packet loop")
+                        return@Thread
+                    }
+                    
+                    val input = FileInputStream(iface.fileDescriptor)
+                    val output = FileOutputStream(iface.fileDescriptor)
                     val packet = ByteBuffer.allocate(32767)
                     
                     while (isRunning) {

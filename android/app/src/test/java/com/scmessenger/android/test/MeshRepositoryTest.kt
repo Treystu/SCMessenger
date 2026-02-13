@@ -2,10 +2,10 @@ package com.scmessenger.android.test
 
 import android.content.Context
 import com.scmessenger.android.data.MeshRepository
+import io.mockk.mockk
 import org.junit.Before
+import org.junit.Ignore
 import org.junit.Test
-import org.mockito.Mock
-import org.mockito.MockitoAnnotations
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -20,23 +20,23 @@ import kotlin.test.assertTrue
  * - Manager initialization
  * 
  * Note: These are placeholder tests. Full implementation requires:
- * - MockK or Mockito for mocking UniFFI objects
+ * - MockK for mocking UniFFI objects
  * - Coroutines test library for Flow testing
  * - Dependency injection to inject mocks
  */
 class MeshRepositoryTest {
     
-    @Mock
     private lateinit var context: Context
     
     private lateinit var repository: MeshRepository
     
     @Before
     fun setup() {
-        MockitoAnnotations.openMocks(this)
+        context = mockk(relaxed = true)
         // repository = MeshRepository(context)
     }
     
+    @Ignore("Placeholder test - requires full mock setup")
     @Test
     fun `test sendMessage flow - success`() {
         // Given
@@ -48,8 +48,10 @@ class MeshRepositoryTest {
         assertTrue(true, "Placeholder - requires full mock setup")
     }
     
+    @Ignore("Placeholder test - requires IronCore initialization")
     @Test
     fun `test getServiceState - returns STOPPED initially`() {
+        // TODO: Implement once IronCore initialization is ready
         // Given
         // repository already created in setup
         
@@ -58,11 +60,12 @@ class MeshRepositoryTest {
         
         // Then
         // assertEquals(uniffi.api.ServiceState.STOPPED, state)
-        assertTrue(true, "Placeholder - requires initialization")
     }
     
+    @Ignore("Placeholder test - requires LedgerManager mock")
     @Test
     fun `test ledger operations`() {
+        // TODO: Implement once LedgerManager is ready
         // Given
         val multiaddr = "/ip4/192.168.1.1/tcp/4001"
         val peerId = "peer456"
@@ -73,9 +76,9 @@ class MeshRepositoryTest {
         
         // Then
         // assertNotNull(dialable)
-        assertTrue(true, "Placeholder - requires LedgerManager mock")
     }
     
+    @Ignore("Placeholder test - requires MeshSettingsManager mock")
     @Test
     fun `test settings load and save`() {
         // Given
@@ -90,6 +93,7 @@ class MeshRepositoryTest {
         assertTrue(true, "Placeholder - requires MeshSettingsManager mock")
     }
     
+    @Ignore("Placeholder test - requires ContactManager mock")
     @Test
     fun `test contact management`() {
         // Given

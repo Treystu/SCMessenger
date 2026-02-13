@@ -64,7 +64,7 @@ impl MessageRecord {
     }
 
     pub fn formatted_time(&self) -> String {
-        let dt = DateTime::from_timestamp(self.timestamp as i64, 0).unwrap_or_else(|| Utc::now());
+        let dt = DateTime::from_timestamp(self.timestamp as i64, 0).unwrap_or_else(Utc::now);
         dt.format("%Y-%m-%d %H:%M:%S").to_string()
     }
 

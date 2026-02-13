@@ -246,6 +246,10 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             public_key,
             name,
         } => {
+            // Validate public key format before adding
+            scmessenger_core::crypto::validate_ed25519_public_key(&public_key)
+                .context("Invalid public key")?;
+
             // Try to use API if a node is running
             if api::is_api_available().await {
                 api::add_contact_via_api(&peer_id, &public_key, name.clone())
@@ -465,7 +469,7 @@ async fn cmd_history(
 
 async fn cmd_start(port: Option<u16>) -> Result<()> {
     let config = config::Config::load()?;
-    let ws_port = port.unwrap_or_else(|| {
+    let ws_port = port.unwrap_or({
         if config.listen_port == 0 {
             9000 // Default to 9000 if config has random port
         } else {
@@ -529,27 +533,28 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         "Identity: {}",
         info.identity_id.clone().unwrap().bright_cyan()
     );
+    println!(
+        "Public Key: {}",
+        info.public_key_hex
+            .as_deref()
+            .unwrap_or("(not initialized)")
+    );
     println!("Landing Page:  http://0.0.0.0:{}", ws_port);
     println!("WebSocket:     ws://localhost:{}/ws", ws_port);
     println!("P2P Listener:  /ip4/0.0.0.0/tcp/{}", p2p_port);
     println!("📒 {}", connection_ledger.summary());
     println!();
 
-    // Load or generate persistent network keypair
-    let keypair_path = data_dir.join("network_keypair.dat");
-    let network_keypair = if keypair_path.exists() {
-        let bytes = std::fs::read(&keypair_path).context("Failed to read network keypair")?;
-        libp2p::identity::Keypair::from_protobuf_encoding(&bytes)
-            .context("Failed to decode network keypair")?
-    } else {
-        let keypair = libp2p::identity::Keypair::generate_ed25519();
-        let bytes = keypair
-            .to_protobuf_encoding()
-            .context("Failed to encode keypair")?;
-        std::fs::write(&keypair_path, bytes).context("Failed to save network keypair")?;
-        keypair
-    };
+    // Use identity keypair for network (unified ID)
+    let network_keypair = core
+        .get_libp2p_keypair()
+        .context("Failed to get network keypair from identity")?;
     let local_peer_id = network_keypair.public().to_peer_id();
+
+    // NOTE: PeerId is now derived from identity keys. Existing installations that
+    // had a separate network_keypair.dat will see their PeerId change. This is
+    // intentional to unify identity and network IDs, but may require updating
+    // peer expectations/ledgers on migration.
 
     // ── Seed ledger with bootstrap nodes (after local_peer_id is available) ────
     let all_bootstrap = bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes.clone());
@@ -557,7 +562,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         connection_ledger.add_bootstrap(node, Some(&local_peer_id.to_string()));
     }
 
-    println!("{} Network peer ID: {}", "✓".green(), local_peer_id);
+    println!("{} Peer ID: {}", "✓".green(), local_peer_id);
+    println!();
 
     // Create shared state BEFORE server start so landing page has access
     let peers: Arc<tokio::sync::Mutex<HashMap<libp2p::PeerId, Option<String>>>> =
@@ -722,8 +728,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                 match event {
                     SwarmEvent::PeerDiscovered(peer_id) => {
                          let mut p = peers_rx.lock().await;
-                         if !p.contains_key(&peer_id) {
-                             p.insert(peer_id, None);
+                         if let std::collections::hash_map::Entry::Vacant(e) = p.entry(peer_id) {
+                             e.insert(None);
                              println!("\n{} Peer: {}", "✓".green(), peer_id);
                              print!("> ");
                              let _ = std::io::Write::flush(&mut std::io::stdout());
@@ -818,31 +824,28 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                     }
 
                     SwarmEvent::MessageReceived { peer_id, envelope_data } => {
-                        match core_rx.receive_message(envelope_data) {
-                             Ok(msg) => {
-                                 let text = msg.text_content().unwrap_or_else(|| "<binary>".into());
-                                 let sender_name = contacts_rx.get(&peer_id.to_string())
-                                     .ok().flatten()
-                                     .map(|c| c.display_name().to_string())
-                                     .unwrap_or_else(|| peer_id.to_string());
+                        if let Ok(msg) = core_rx.receive_message(envelope_data) {
+                            let text = msg.text_content().unwrap_or_else(|| "<binary>".into());
+                            let sender_name = contacts_rx.get(&peer_id.to_string())
+                                .ok().flatten()
+                                .map(|c| c.display_name().to_string())
+                                .unwrap_or_else(|| peer_id.to_string());
 
-                                 println!("\n{} {}: {}", "←".bright_blue(), sender_name.bright_cyan(), text);
-                                 print!("> ");
-                                 let _ = std::io::Write::flush(&mut std::io::stdout());
+                            println!("\n{} {}: {}", "←".bright_blue(), sender_name.bright_cyan(), text);
+                            print!("> ");
+                            let _ = std::io::Write::flush(&mut std::io::stdout());
 
-                                 let record = history::MessageRecord::new_received(peer_id.to_string(), text.clone());
-                                 let _ = history_rx.add(record);
+                            let record = history::MessageRecord::new_received(peer_id.to_string(), text.clone());
+                            let _ = history_rx.add(record);
 
-                                 // Update UI
-                                 // Note: timestamps in Rust are u64, MessageReceived expects u64
-                                 let _ = ui_broadcast.send(server::UiEvent::MessageReceived {
-                                     from: peer_id.to_string(),
-                                     content: text,
-                                     timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
-                                     message_id: uuid::Uuid::new_v4().to_string(),
-                                 });
-                             }
-                             Err(_) => {}
+                            // Update UI
+                            // Note: timestamps in Rust are u64, MessageReceived expects u64
+                            let _ = ui_broadcast.send(server::UiEvent::MessageReceived {
+                                from: peer_id.to_string(),
+                                content: text,
+                                timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+                                message_id: uuid::Uuid::new_v4().to_string(),
+                            });
                         }
                     }
                     SwarmEvent::ListeningOn(addr) => {
@@ -924,6 +927,15 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                     server::UiCommand::ContactAdd { peer_id, name, public_key } => {
                         // Assuming public key is provided or we can fetch it? MVP assumes provided.
                         if let Some(pk) = public_key {
+                            // Validate public key before adding
+                            if let Err(e) = scmessenger_core::crypto::validate_ed25519_public_key(&pk) {
+                                tracing::warn!("Failed to add contact {}: invalid public key - {}", peer_id, e);
+                                let _ = ui_broadcast.send(server::UiEvent::Error {
+                                    message: format!("Invalid public key: {}", e)
+                                });
+                                continue;
+                            }
+
                             let contact = contacts::Contact::new(peer_id.clone(), pk)
                                 .with_nickname(name.unwrap_or(peer_id));
                             let _ = contacts_rx.add(contact);
@@ -935,7 +947,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                     server::UiCommand::ContactRemove { contact } => {
                          // remove by peer_id (assuming contact arg is peer_id for now, or resolving nickname)
                          // contacts.remove takes peer_id string
-                         if let Ok(_) = contacts_rx.remove(&contact) {
+                         if contacts_rx.remove(&contact).is_ok() {
                              if let Ok(list) = contacts_rx.list() {
                                  let _ = ui_broadcast.send(server::UiEvent::ContactList { contacts: list });
                              }
@@ -1156,7 +1168,7 @@ fn find_contact(contacts: &contacts::ContactList, query: &str) -> Result<contact
 fn format_timestamp(timestamp: u64) -> String {
     use chrono::{DateTime, Local, Utc};
 
-    let dt = DateTime::from_timestamp(timestamp as i64, 0).unwrap_or_else(|| Utc::now());
+    let dt = DateTime::from_timestamp(timestamp as i64, 0).unwrap_or_else(Utc::now);
     let local: DateTime<Local> = dt.into();
 
     local.format("%Y-%m-%d %H:%M:%S").to_string()

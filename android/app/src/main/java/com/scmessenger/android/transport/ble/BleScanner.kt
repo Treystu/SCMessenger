@@ -80,6 +80,9 @@ class BleScanner(
                 // Update cache
                 recentlySeenPeers[peerId] = now
                 
+                // Prune old entries
+                pruneOldPeers(now)
+                
                 val rssi = scanResult.rssi
                 val scanRecord = scanResult.scanRecord
 
@@ -206,7 +209,9 @@ class BleScanner(
                 }
                 
                 // Schedule next cycle
-                handler.postDelayed(this, scanIntervalMs)
+                if (isScanning) {
+                    handler.postDelayed(this, scanIntervalMs)
+                }
             }
         }
         
@@ -281,5 +286,18 @@ class BleScanner(
     fun clearPeerCache() {
         recentlySeenPeers.clear()
         Timber.d("Peer cache cleared")
+    }
+    
+    /**
+     * Prune old entries from peer cache.
+     */
+    private fun pruneOldPeers(currentTimeMs: Long) {
+        val iterator = recentlySeenPeers.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if ((currentTimeMs - entry.value) > peerCacheTimeoutMs) {
+                iterator.remove()
+            }
+        }
     }
 }

@@ -63,12 +63,14 @@ pub struct GetHistoryResponse {
     pub messages: Vec<HistoryMessage>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetExternalAddressResponse {
+    pub addresses: Vec<String>,
+}
+
 // Check if API is available
 pub async fn is_api_available() -> bool {
-    match tokio::net::TcpStream::connect(API_ADDR).await {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    tokio::net::TcpStream::connect(API_ADDR).await.is_ok()
 }
 
 // Client functions for CLI commands
@@ -175,6 +177,31 @@ pub async fn get_history_via_api(
     Ok(response.messages)
 }
 
+#[allow(dead_code)]
+pub async fn get_external_address_via_api() -> Result<Vec<String>> {
+    let client = hyper::Client::new();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}/api/external-address", API_ADDR))
+        .body(Body::empty())?;
+
+    let resp = client.request(req).await?;
+
+    // Check HTTP status before attempting to parse
+    let status = resp.status();
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+
+    if !status.is_success() {
+        let error_body = String::from_utf8_lossy(&body_bytes);
+        anyhow::bail!("API request failed with status {}: {}", status, error_body);
+    }
+
+    let response: GetExternalAddressResponse =
+        serde_json::from_slice(&body_bytes).context("Failed to parse external address response")?;
+
+    Ok(response.addresses)
+}
+
 // Server implementation
 
 pub struct ApiContext {
@@ -205,6 +232,7 @@ async fn handle_request(
         (&Method::POST, "/api/contacts") => handle_add_contact(req, ctx).await,
         (&Method::GET, "/api/peers") => handle_get_peers(req, ctx).await,
         (&Method::POST, "/api/history") => handle_get_history(req, ctx).await,
+        (&Method::GET, "/api/external-address") => handle_get_external_address(req, ctx).await,
         (&Method::POST, "/api/shutdown") => {
             // Spawn a task to exit after a brief delay to allow response to send
             tokio::spawn(async {
@@ -267,6 +295,18 @@ async fn handle_add_contact(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<
     let body_bytes = hyper::body::to_bytes(req.into_body()).await?;
     let request: AddContactRequest = serde_json::from_slice(&body_bytes)?;
 
+    // Validate public key format
+    if let Err(e) = scmessenger_core::crypto::validate_ed25519_public_key(&request.public_key) {
+        let response = AddContactResponse {
+            success: false,
+            error: Some(format!("Invalid public key: {}", e)),
+        };
+        return Ok(Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&response)?))?);
+    }
+
     let contact = crate::contacts::Contact::new(request.peer_id.clone(), request.public_key)
         .with_nickname(request.name.unwrap_or_else(|| request.peer_id.clone()));
 
@@ -321,6 +361,32 @@ async fn handle_get_history(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<
 
     let response = GetHistoryResponse {
         messages: history_messages,
+    };
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&response)?))?)
+}
+
+async fn handle_get_external_address(
+    _req: Request<Body>,
+    ctx: Arc<ApiContext>,
+) -> Result<Response<Body>> {
+    // Get external addresses from swarm
+    let addresses = match ctx.swarm_handle.get_external_addresses().await {
+        Ok(addresses) => addresses,
+        Err(e) => {
+            let body = format!("Failed to get external addresses: {}", e);
+            return Ok(Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .header("content-type", "text/plain; charset=utf-8")
+                .body(Body::from(body))?);
+        }
+    };
+
+    let response = GetExternalAddressResponse {
+        addresses: addresses.into_iter().map(|addr| addr.to_string()).collect(),
     };
 
     Ok(Response::builder()

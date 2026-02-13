@@ -46,6 +46,7 @@ class AndroidPlatformBridge @Inject constructor(
     
     private var batteryReceiver: BroadcastReceiver? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var motionReceiver: BroadcastReceiver? = null
     
     private val connectivityManager by lazy {
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -105,6 +106,9 @@ class AndroidPlatformBridge @Inject constructor(
         
         networkCallback?.let { connectivityManager.unregisterNetworkCallback(it) }
         networkCallback = null
+        
+        motionReceiver?.let { context.unregisterReceiver(it) }
+        motionReceiver = null
     }
     
     // ========================================================================
@@ -210,15 +214,15 @@ class AndroidPlatformBridge @Inject constructor(
             addAction(Intent.ACTION_USER_PRESENT)
         }
         
-        val motionReceiver = object : BroadcastReceiver() {
+        motionReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 when (intent.action) {
                     Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> {
-                        currentMotionState = uniffi.api.MotionState.MOVING
+                        currentMotionState = uniffi.api.MotionState.WALKING
                         onMotionChanged(currentMotionState)
                     }
                     Intent.ACTION_SCREEN_OFF -> {
-                        currentMotionState = uniffi.api.MotionState.STATIONARY
+                        currentMotionState = uniffi.api.MotionState.STILL
                         onMotionChanged(currentMotionState)
                     }
                 }
@@ -236,7 +240,7 @@ class AndroidPlatformBridge @Inject constructor(
     override fun onBatteryChanged(batteryPct: UByte, isCharging: Boolean) {
         // Compute and apply adjustment profile
         val deviceProfile = uniffi.api.DeviceProfile(
-            batteryLevel = batteryPct,
+            batteryPct = batteryPct,
             isCharging = isCharging,
             hasWifi = hasWifi,
             motionState = currentMotionState
@@ -255,7 +259,7 @@ class AndroidPlatformBridge @Inject constructor(
     override fun onNetworkChanged(hasWifi: Boolean, hasCellular: Boolean) {
         // Recompute and apply adjustment
         val deviceProfile = uniffi.api.DeviceProfile(
-            batteryLevel = currentBatteryPct,
+            batteryPct = currentBatteryPct,
             isCharging = isCharging,
             hasWifi = hasWifi,
             motionState = currentMotionState
@@ -275,13 +279,16 @@ class AndroidPlatformBridge @Inject constructor(
         
         // Recompute adjustment based on motion
         val deviceProfile = uniffi.api.DeviceProfile(
-            batteryLevel = currentBatteryPct,
+            batteryPct = currentBatteryPct,
             isCharging = isCharging,
             hasWifi = hasWifi,
             motionState = motion
         )
         
         val profile = meshRepository.computeAdjustmentProfile(deviceProfile)
+        val bleAdjustment = meshRepository.computeBleAdjustment(profile)
+        val relayAdjustment = meshRepository.computeRelayAdjustment(profile)
+        applyAdjustments(bleAdjustment, relayAdjustment)
         Timber.d("Motion changed: $motion, profile: $profile")
     }
     
@@ -316,8 +323,7 @@ class AndroidPlatformBridge @Inject constructor(
                 
                 // Fallback to advertising with data
                 if (!sent) {
-                    bleAdvertiser?.sendData(data)
-                    sent = true
+                    sent = bleAdvertiser?.sendData(data) ?: false
                 }
                 
                 if (sent) {

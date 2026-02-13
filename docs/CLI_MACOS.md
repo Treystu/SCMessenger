@@ -40,7 +40,7 @@ cargo --version
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/SCMessenger.git
+git clone https://github.com/treystu/SCMessenger.git
 cd SCMessenger
 
 # Build release version
@@ -57,7 +57,7 @@ scm --version
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/SCMessenger.git
+git clone https://github.com/treystu/SCMessenger.git
 cd SCMessenger
 
 # Build debug version (faster compilation, slower runtime)
@@ -565,7 +565,7 @@ scm status
 ```
 
 For more help:
-- **GitHub Issues**: https://github.com/yourusername/SCMessenger/issues
+- **GitHub Issues**: https://github.com/treystu/SCMessenger/issues
 - **Documentation**: https://scmessenger.org/docs
 - **Community**: #scmessenger on Matrix
 

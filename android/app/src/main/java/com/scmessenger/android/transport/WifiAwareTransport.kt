@@ -53,6 +53,9 @@ class WifiAwareTransport(
     
     private var isRunning = false
     
+    private val callbackLock = Any()
+    private val registeredCallbacks = ConcurrentHashMap<String, ConnectivityManager.NetworkCallback>()
+    
     /**
      * Check if WiFi Aware is available on this device.
      */
@@ -104,6 +107,8 @@ class WifiAwareTransport(
         
         isRunning = false
         
+        scope.cancel()
+        
         // Close all connections
         activeConnections.values.forEach { it.close() }
         activeConnections.clear()
@@ -111,6 +116,20 @@ class WifiAwareTransport(
         // Stop publish/subscribe sessions
         publishSession?.close()
         subscribeSession?.close()
+        
+        // Unregister network callbacks
+        val callbacksToUnregister = synchronized(callbackLock) {
+            val callbacks = registeredCallbacks.values.toList()
+            registeredCallbacks.clear()
+            callbacks
+        }
+        callbacksToUnregister.forEach { callback ->
+            try {
+                connectivityManager.unregisterNetworkCallback(callback)
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to unregister network callback")
+            }
+        }
         
         // Detach from WiFi Aware
         awareSession?.close()
@@ -200,8 +219,8 @@ class WifiAwareTransport(
             Timber.i("WiFi Aware publish started")
         }
         
-        override fun onSubscribeDiscovered(session: PublishDiscoverySession, peerId: PeerHandle, serviceSpecificInfo: ByteArray?, matchFilter: MutableList<ByteArray>?) {
-            super.onSubscribeDiscovered(session, peerId, serviceSpecificInfo, matchFilter)
+        override fun onServiceDiscovered(peerId: PeerHandle, serviceSpecificInfo: ByteArray?, matchFilter: MutableList<ByteArray>?) {
+            super.onServiceDiscovered(peerId, serviceSpecificInfo, matchFilter)
             
             Timber.d("Peer discovered via WiFi Aware: $peerId")
             
@@ -211,7 +230,12 @@ class WifiAwareTransport(
             
             // Initiate data path
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                initiateDataPath(session, peerId, peerIdString)
+                val session = publishSession
+                if (session != null) {
+                    initiateDataPath(session, peerId, peerIdString)
+                } else {
+                    Timber.w("Publish session unavailable for WiFi Aware data path to $peerIdString")
+                }
             }
         }
     }
@@ -223,8 +247,8 @@ class WifiAwareTransport(
             Timber.i("WiFi Aware subscribe started")
         }
         
-        override fun onServiceDiscovered(session: SubscribeDiscoverySession, peerId: PeerHandle, serviceSpecificInfo: ByteArray?, matchFilter: MutableList<ByteArray>?) {
-            super.onServiceDiscovered(session, peerId, serviceSpecificInfo, matchFilter)
+        override fun onServiceDiscovered(peerId: PeerHandle, serviceSpecificInfo: ByteArray?, matchFilter: MutableList<ByteArray>?) {
+            super.onServiceDiscovered(peerId, serviceSpecificInfo, matchFilter)
             
             Timber.d("Service discovered via WiFi Aware: $peerId")
             
@@ -234,7 +258,12 @@ class WifiAwareTransport(
             
             // Initiate data path
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                initiateDataPath(session, peerId, peerIdString)
+                val session = subscribeSession
+                if (session != null) {
+                    initiateDataPath(session, peerId, peerIdString)
+                } else {
+                    Timber.w("Subscribe session unavailable for WiFi Aware data path to $peerIdString")
+                }
             }
         }
     }
@@ -264,23 +293,53 @@ class WifiAwareTransport(
                 super.onLost(network)
                 Timber.d("WiFi Aware data path lost for $peerIdString")
                 activeConnections.remove(peerIdString)?.close()
+                val callbackToRemove = synchronized(callbackLock) {
+                    registeredCallbacks.remove(peerIdString)
+                }
+                if (callbackToRemove != null) {
+                    try {
+                        connectivityManager.unregisterNetworkCallback(callbackToRemove)
+                    } catch (e: Exception) {
+                        Timber.w(e, "Failed to unregister network callback for $peerIdString")
+                    }
+                }
             }
         }
-        
+
+        val existingCallback = synchronized(callbackLock) {
+            registeredCallbacks.put(peerIdString, callback)
+        }
+        existingCallback?.let {
+            try {
+                connectivityManager.unregisterNetworkCallback(it)
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to replace existing network callback for $peerIdString")
+            }
+        }
         connectivityManager.requestNetwork(request, callback)
     }
     
     private suspend fun createSocketConnection(network: Network, peerId: String) {
         withContext(Dispatchers.IO) {
+            var serverSocket: ServerSocket? = null
             try {
-                // In WiFi Aware, we use IPv6 link-local addresses
-                // For simplicity, we start a server socket on a known port
-                val serverSocket = ServerSocket(AWARE_PORT)
+                // TODO: FIXME - Socket role negotiation needed
+                // Currently both peers create ServerSocket and wait on accept(), causing deadlock.
+                // Proper WiFi Aware pattern requires:
+                // 1. Use WifiAwareNetworkSpecifier.Builder with INITIATOR/RESPONDER roles
+                // 2. RESPONDER creates ServerSocket and accepts
+                // 3. INITIATOR gets peer IPv6 from WifiAwareNetworkInfo.getPeerIpv6Addr()
+                //    via NetworkCapabilities.getTransportInfo() in onCapabilitiesChanged
+                // 4. INITIATOR connects as client: Socket().connect(InetSocketAddress(peerIp6, port))
+                //
+                // For now this is non-functional placeholder code
+                serverSocket = ServerSocket(AWARE_PORT)
                 network.bindSocket(serverSocket)
                 
                 Timber.d("Waiting for WiFi Aware connection from $peerId on port $AWARE_PORT")
                 
                 val socket = serverSocket.accept()
+                serverSocket.close() // Close server socket after accept
                 
                 val connection = AwareConnection(peerId, socket)
                 activeConnections[peerId] = connection
@@ -288,6 +347,7 @@ class WifiAwareTransport(
                 
                 Timber.i("WiFi Aware socket connected to $peerId")
             } catch (e: Exception) {
+                serverSocket?.close()
                 Timber.e(e, "Failed to create WiFi Aware socket connection")
             }
         }

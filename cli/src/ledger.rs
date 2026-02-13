@@ -11,7 +11,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// A single entry in the connection ledger
@@ -174,7 +174,7 @@ impl Default for ConnectionLedger {
 
 impl ConnectionLedger {
     /// Load the ledger from disk, or create a new one
-    pub fn load(data_dir: &PathBuf) -> Result<Self> {
+    pub fn load(data_dir: &Path) -> Result<Self> {
         let ledger_path = data_dir.join("peers.json");
 
         if ledger_path.exists() {
@@ -194,7 +194,7 @@ impl ConnectionLedger {
     }
 
     /// Save the ledger to disk
-    pub fn save(&mut self, data_dir: &PathBuf) -> Result<()> {
+    pub fn save(&mut self, data_dir: &Path) -> Result<()> {
         let ledger_path = data_dir.join("peers.json");
 
         self.last_saved = SystemTime::now()
@@ -426,15 +426,11 @@ pub fn extract_ip_port(multiaddr: &str) -> Option<String> {
     let mut port = None;
 
     for i in 0..parts.len() {
-        if parts[i] == "ip4" || parts[i] == "ip6" {
-            if i + 1 < parts.len() {
-                ip = Some(parts[i + 1]);
-            }
+        if (parts[i] == "ip4" || parts[i] == "ip6") && i + 1 < parts.len() {
+            ip = Some(parts[i + 1]);
         }
-        if parts[i] == "tcp" || parts[i] == "udp" {
-            if i + 1 < parts.len() {
-                port = Some(parts[i + 1]);
-            }
+        if (parts[i] == "tcp" || parts[i] == "udp") && i + 1 < parts.len() {
+            port = Some(parts[i + 1]);
         }
     }
 
@@ -517,7 +513,7 @@ mod tests {
     fn test_ledger_crud() {
         let mut ledger = ConnectionLedger::default();
 
-        ledger.add_bootstrap("/ip4/34.168.102.7/tcp/9001/p2p/12D3KooW");
+        ledger.add_bootstrap("/ip4/34.168.102.7/tcp/9001/p2p/12D3KooW", None);
         assert_eq!(ledger.entries.len(), 1);
 
         let entry = ledger.entries.get("/ip4/34.168.102.7/tcp/9001").unwrap();
@@ -531,7 +527,7 @@ mod tests {
     #[test]
     fn test_ledger_topic_tracking() {
         let mut ledger = ConnectionLedger::default();
-        ledger.add_bootstrap("/ip4/1.2.3.4/tcp/9001");
+        ledger.add_bootstrap("/ip4/1.2.3.4/tcp/9001", None);
         ledger.record_topic("/ip4/1.2.3.4/tcp/9001", "sc-mesh");
         ledger.record_topic("/ip4/1.2.3.4/tcp/9001", "sc-lobby");
 

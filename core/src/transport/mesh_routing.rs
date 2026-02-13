@@ -16,7 +16,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 // ============================================================================
 
 /// Relay statistics for a peer
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RelayStats {
     /// Total messages relayed through this peer
     pub messages_relayed: u64,
@@ -30,19 +30,6 @@ pub struct RelayStats {
     pub avg_latency_ms: u64,
     /// When this peer was last used as a relay
     pub last_used: u64,
-}
-
-impl Default for RelayStats {
-    fn default() -> Self {
-        Self {
-            messages_relayed: 0,
-            bytes_relayed: 0,
-            successful_deliveries: 0,
-            failed_deliveries: 0,
-            avg_latency_ms: 0,
-            last_used: 0,
-        }
-    }
 }
 
 // ============================================================================
@@ -115,6 +102,12 @@ impl RelayReputation {
 #[derive(Debug, Clone)]
 pub struct ReputationTracker {
     reputations: HashMap<PeerId, RelayReputation>,
+}
+
+impl Default for ReputationTracker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ReputationTracker {
@@ -297,6 +290,12 @@ pub struct MultiPathDelivery {
     reputation: ReputationTracker,
 }
 
+impl Default for MultiPathDelivery {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MultiPathDelivery {
     pub fn new() -> Self {
         Self {
@@ -379,6 +378,12 @@ pub struct BootstrapCapability {
     pub known_peers: Vec<PeerId>,
     /// Last time we updated our peer list
     pub last_update: u64,
+}
+
+impl Default for BootstrapCapability {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl BootstrapCapability {

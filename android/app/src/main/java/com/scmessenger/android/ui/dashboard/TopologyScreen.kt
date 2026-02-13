@@ -217,10 +217,13 @@ private fun TopologyGraph(
                 nodePositions[node.id] = Offset(centerX, centerY)
             } else {
                 // Place other nodes in a circle
-                val angle = (2 * Math.PI * index) / (topology.nodes.size - 1)
-                val x = centerX + (radius * cos(angle)).toFloat()
-                val y = centerY + (radius * sin(angle)).toFloat()
-                nodePositions[node.id] = Offset(x, y)
+                val otherCount = topology.nodes.size - 1
+                if (otherCount > 0) {
+                    val angle = (2 * Math.PI * index) / otherCount
+                    val x = centerX + (radius * cos(angle)).toFloat()
+                    val y = centerY + (radius * sin(angle)).toFloat()
+                    nodePositions[node.id] = Offset(x, y)
+                }
             }
         }
         

@@ -170,9 +170,10 @@ class TransportManager(
         return when (transport) {
             TransportType.BLE -> {
                 // Try L2CAP first, then GATT client, then advertiser
-                bleL2capManager?.sendData(peerId, data) 
-                    ?: bleGattClient?.sendData(peerId, data) 
-                    ?: bleAdvertiser?.sendData(data)
+                // Each returns Boolean, so we evaluate success not just nullability
+                bleL2capManager?.sendData(peerId, data)?.takeIf { it }
+                    ?: bleGattClient?.sendData(peerId, data)?.takeIf { it }
+                    ?: bleAdvertiser?.sendData(data)?.takeIf { it }
                     ?: false
             }
             TransportType.WIFI_AWARE -> {

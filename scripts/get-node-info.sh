@@ -34,7 +34,7 @@ echo "📦 Container: ${CONTAINER_NAME}"
 echo ""
 
 # Get Peer ID
-PEER_ID=$(docker logs ${CONTAINER_NAME} 2>&1 | grep "Network peer ID" | tail -1 | awk '{print $NF}')
+PEER_ID=$(docker logs ${CONTAINER_NAME} 2>&1 | grep "Peer ID:" | tail -1 | awk '{print $NF}')
 if [ -z "$PEER_ID" ]; then
     echo "⚠️  Could not find Peer ID in logs. Is the node fully started?"
     exit 1
@@ -54,12 +54,58 @@ fi
 
 # Get Public IP (try multiple methods)
 PUBLIC_IP=""
+
+# First try: Query the node's API for its discovered external address
 if command -v curl &> /dev/null; then
-    PUBLIC_IP=$(curl -s ifconfig.me 2>/dev/null || curl -s icanhazip.com 2>/dev/null)
+    # Check if we're trying to reach a containerized node
+    # If docker is available and scmessenger container is running, use docker exec
+    CONTAINER_NAME="${CONTAINER_NAME:-scmessenger}"
+    if command -v docker &> /dev/null && docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAME}"; then
+        API_RESPONSE=$(docker exec "$CONTAINER_NAME" curl -s http://127.0.0.1:9876/api/external-address 2>/dev/null)
+    else
+        API_RESPONSE=$(curl -s http://localhost:9876/api/external-address 2>/dev/null)
+    fi
+    
+    if [ $? -eq 0 ] && [ ! -z "$API_RESPONSE" ]; then
+        # Parse JSON response to get first address
+        # Try jq first for robust parsing, fall back to regex
+        if command -v jq &> /dev/null; then
+            PUBLIC_IP=$(echo "$API_RESPONSE" | jq -r '.addresses[0]? // empty' 2>/dev/null)
+        fi
+        
+        # Fallback to regex if jq unavailable or failed
+        if [ -z "$PUBLIC_IP" ]; then
+            # Match IPv4, IPv6 (with brackets), or hostname with optional port
+            # Examples: "192.168.1.1", "[::1]", "example.com:8080"
+            PUBLIC_IP=$(echo "$API_RESPONSE" | grep -oE '"[^"]+"' | head -1 | tr -d '"')
+        fi
+    fi
+fi
+
+# Fallback: If API unavailable or returns no addresses, try local detection
+# Note: This detects the host machine's IP, not necessarily the reachable external IP
+if [ -z "$PUBLIC_IP" ]; then
+    # Try to get default route IP (works on Linux/macOS)
+    if command -v ip &> /dev/null; then
+        # Linux
+        PUBLIC_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K\S+')
+    elif command -v route &> /dev/null; then
+        # macOS
+        DEFAULT_IFACE=$(route -n get default 2>/dev/null | grep 'interface:' | awk '{print $2}')
+        if [ ! -z "$DEFAULT_IFACE" ]; then
+            PUBLIC_IP=$(ifconfig "$DEFAULT_IFACE" 2>/dev/null | grep 'inet ' | awk '{print $2}')
+        fi
+    fi
 fi
 
 if [ -z "$PUBLIC_IP" ]; then
-    echo "🌐 Public IP: (could not detect - check manually)"
+    echo "🌐 Public IP: (could not detect)"
+    echo ""
+    echo "   To share this node's connection info, you need its public IP address."
+    echo "   Options:"
+    echo "   1. If behind NAT, configure port forwarding for port 9001"
+    echo "   2. Use a cloud VM with a public IP"
+    echo "   3. Use the node's local IP for LAN-only connections"
 else
     echo "🌐 Public IP:"
     echo "   ${PUBLIC_IP}"

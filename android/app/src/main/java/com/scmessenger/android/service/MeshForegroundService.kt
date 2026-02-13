@@ -147,6 +147,9 @@ class MeshForegroundService : Service() {
             // Start periodic AutoAdjust profile computation
             startPeriodicAdjustments()
             
+            // Start periodic WakeLock renewal
+            startPeriodicWakeLockRenewal()
+            
             Timber.i("Mesh service started successfully")
         } catch (e: Exception) {
             Timber.e(e, "Failed to start mesh service")
@@ -185,10 +188,12 @@ class MeshForegroundService : Service() {
     
     private fun acquireWakeLock() {
         try {
-            if (wakeLock?.isHeld == false) {
-                wakeLock?.acquire(10 * 60 * 1000L) // 10 minutes timeout
-                Timber.d("WakeLock acquired for BLE scan windows")
+            val lock = wakeLock
+            if (lock != null && lock.isHeld) {
+                lock.release()
             }
+            wakeLock?.acquire(10 * 60 * 1000L) // 10 minutes timeout
+            Timber.d("WakeLock acquired for BLE scan windows")
         } catch (e: Exception) {
             Timber.e(e, "Failed to acquire WakeLock")
         }
@@ -202,6 +207,17 @@ class MeshForegroundService : Service() {
             }
         } catch (e: Exception) {
             Timber.e(e, "Failed to release WakeLock")
+        }
+    }
+    
+    private fun startPeriodicWakeLockRenewal() {
+        serviceScope.launch {
+            while (isActive && isRunning) {
+                delay(9 * 60 * 1000L) // Re-acquire every 9 minutes
+                if (isRunning) {
+                    acquireWakeLock()
+                }
+            }
         }
     }
     
@@ -280,25 +296,20 @@ class MeshForegroundService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.mesh_service_notification_title))
             .setContentText(contentText)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.drawable.ic_notification)  // TODO: Create icon
             .setContentIntent(pendingIntent)
+            .addAction(0, "Pause", pausePendingIntent)
+            .addAction(0, "Stop", stopPendingIntent)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .addAction(R.drawable.ic_notification, "Pause", pausePendingIntent)
-            .addAction(R.drawable.ic_notification, "Stop", stopPendingIntent)
             .build()
     }
     
     private fun updateNotification() {
-        if (!isRunning) return
-        
-        try {
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager.notify(NOTIFICATION_ID, createNotification())
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to update notification")
-        }
+        val notification = createNotification()
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager.notify(NOTIFICATION_ID, notification)
     }
 
     private fun showMessageNotification(message: uniffi.api.MessageRecord) {
@@ -350,10 +361,6 @@ class MeshForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Timber.d("MeshForegroundService destroyed")
-        
-        // Release WakeLock
-        releaseWakeLock()
-        
         serviceScope.cancel()
     }
     

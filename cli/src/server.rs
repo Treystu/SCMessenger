@@ -59,6 +59,9 @@ pub enum UiEvent {
     ConfigData {
         config: Vec<(String, String)>,
     },
+    Error {
+        message: String,
+    },
 }
 
 #[derive(Deserialize, Debug)]
@@ -307,7 +310,11 @@ pub async fn start(
         // preventing the whole runtime from crashing with a stack trace.
         // Note: We use .run() which panics on bind error.
         let server = warp::serve(routes).run(addr);
-        if let Err(_) = std::panic::AssertUnwindSafe(server).catch_unwind().await {
+        if std::panic::AssertUnwindSafe(server)
+            .catch_unwind()
+            .await
+            .is_err()
+        {
             eprintln!(
                 "{} Failed to start web server on {}: Address potentially already in use.",
                 "Error:".red(),

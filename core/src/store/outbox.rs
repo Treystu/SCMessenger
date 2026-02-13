@@ -154,14 +154,12 @@ impl Outbox {
             }
             OutboxBackend::Persistent(db) => {
                 // Find and remove the message
-                for result in db.scan_prefix(QUEUE_PREFIX) {
-                    if let Ok((key, value)) = result {
-                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
-                            if msg.message_id == message_id {
-                                let _ = db.remove(key);
-                                let _ = db.flush();
-                                return true;
-                            }
+                for (key, value) in db.scan_prefix(QUEUE_PREFIX).flatten() {
+                    if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        if msg.message_id == message_id {
+                            let _ = db.remove(key);
+                            let _ = db.flush();
+                            return true;
                         }
                     }
                 }
@@ -187,12 +185,10 @@ impl Outbox {
                 let mut messages = Vec::new();
                 let mut keys_to_remove = Vec::new();
 
-                for result in db.scan_prefix(prefix.as_bytes()) {
-                    if let Ok((key, value)) = result {
-                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
-                            messages.push(msg);
-                            keys_to_remove.push(key);
-                        }
+                for (key, value) in db.scan_prefix(prefix.as_bytes()).flatten() {
+                    if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        messages.push(msg);
+                        keys_to_remove.push(key);
                     }
                 }
 
@@ -219,17 +215,15 @@ impl Outbox {
             }
             OutboxBackend::Persistent(db) => {
                 // Find, update, and save the message
-                for result in db.scan_prefix(QUEUE_PREFIX) {
-                    if let Ok((key, value)) = result {
-                        if let Ok(mut msg) = bincode::deserialize::<QueuedMessage>(&value) {
-                            if msg.message_id == message_id {
-                                msg.attempts += 1;
-                                if let Ok(bytes) = bincode::serialize(&msg) {
-                                    let _ = db.insert(key, bytes);
-                                    let _ = db.flush();
-                                }
-                                return;
+                for (key, value) in db.scan_prefix(QUEUE_PREFIX).flatten() {
+                    if let Ok(mut msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        if msg.message_id == message_id {
+                            msg.attempts += 1;
+                            if let Ok(bytes) = bincode::serialize(&msg) {
+                                let _ = db.insert(key, bytes);
+                                let _ = db.flush();
                             }
+                            return;
                         }
                     }
                 }
@@ -252,11 +246,9 @@ impl Outbox {
             OutboxBackend::Persistent(db) => {
                 use std::collections::HashSet;
                 let mut peers: HashSet<String> = HashSet::new();
-                for result in db.scan_prefix(QUEUE_PREFIX) {
-                    if let Ok((_, value)) = result {
-                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
-                            peers.insert(msg.recipient_id);
-                        }
+                for (_, value) in db.scan_prefix(QUEUE_PREFIX).flatten() {
+                    if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        peers.insert(msg.recipient_id);
                     }
                 }
                 peers.len()
@@ -291,12 +283,10 @@ impl Outbox {
             OutboxBackend::Persistent(db) => {
                 let mut keys_to_remove = Vec::new();
 
-                for result in db.scan_prefix(QUEUE_PREFIX) {
-                    if let Ok((key, value)) = result {
-                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
-                            if now.saturating_sub(msg.queued_at) >= max_age_secs {
-                                keys_to_remove.push(key);
-                            }
+                for (key, value) in db.scan_prefix(QUEUE_PREFIX).flatten() {
+                    if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        if now.saturating_sub(msg.queued_at) >= max_age_secs {
+                            keys_to_remove.push(key);
                         }
                     }
                 }

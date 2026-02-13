@@ -138,9 +138,10 @@ class BleL2capManager(
         }
         
         scope.launch {
+            var socket: BluetoothSocket? = null
             try {
                 val device = adapter.getRemoteDevice(deviceAddress)
-                val socket = device.createInsecureL2capChannel(psm)
+                socket = device.createInsecureL2capChannel(psm)
                 
                 socket.connect()
                 
@@ -152,8 +153,10 @@ class BleL2capManager(
                 
                 Timber.i("L2CAP connected to $deviceAddress (PSM: $psm)")
             } catch (e: SecurityException) {
+                socket?.close()
                 Timber.e(e, "Security exception connecting L2CAP to $deviceAddress")
             } catch (e: Exception) {
+                socket?.close()
                 Timber.e(e, "Failed to connect L2CAP to $deviceAddress")
             }
         }
@@ -256,8 +259,10 @@ class BleL2capManager(
         
         fun send(data: ByteArray): Boolean {
             return try {
-                outputStream.write(data)
-                outputStream.flush()
+                synchronized(outputStream) {
+                    outputStream.write(data)
+                    outputStream.flush()
+                }
                 Timber.d("L2CAP sent ${data.size} bytes to $deviceAddress")
                 true
             } catch (e: Exception) {
@@ -275,7 +280,7 @@ class BleL2capManager(
                 Timber.w(e, "Error closing L2CAP socket for $deviceAddress")
             }
             
-            activeConnections.remove(deviceAddress)
+            activeConnections.remove(device, this)
         }
     }
 }

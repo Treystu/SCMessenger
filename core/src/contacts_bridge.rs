@@ -132,11 +132,11 @@ impl ContactManager {
                 || contact
                     .nickname
                     .as_ref()
-                    .map_or(false, |n| n.to_lowercase().contains(&query_lower))
+                    .is_some_and(|n| n.to_lowercase().contains(&query_lower))
                 || contact
                     .notes
                     .as_ref()
-                    .map_or(false, |n| n.to_lowercase().contains(&query_lower));
+                    .is_some_and(|n| n.to_lowercase().contains(&query_lower));
 
             if matches {
                 results.push(contact);

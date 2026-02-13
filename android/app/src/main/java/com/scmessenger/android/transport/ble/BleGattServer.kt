@@ -33,6 +33,9 @@ class BleGattServer(
     // Pending write operations (for fragmented writes)
     private val pendingWrites = ConcurrentHashMap<String, ByteArray>()
     
+    // Negotiated MTU per device
+    private val deviceMtu = ConcurrentHashMap<String, Int>()
+    
     private var isRunning = false
     
     fun start() {
@@ -153,7 +156,7 @@ class BleGattServer(
             }
             
             // Handle MTU fragmentation if needed
-            val mtu = 512 // Negotiated MTU
+            val mtu = deviceMtu[device.address] ?: 23
             if (data.size > mtu - 3) {
                 // Fragment and send in chunks
                 sendFragmented(device, characteristic, data, mtu)
@@ -321,7 +324,28 @@ class BleGattServer(
         
         override fun onMtuChanged(device: BluetoothDevice, mtu: Int) {
             super.onMtuChanged(device, mtu)
+            deviceMtu[device.address] = mtu
             Timber.d("MTU changed for ${device.address}: $mtu")
+        }
+        
+        override fun onExecuteWrite(device: BluetoothDevice, requestId: Int, execute: Boolean) {
+            super.onExecuteWrite(device, requestId, execute)
+            
+            if (execute) {
+                pendingWrites[device.address]?.let { completeData ->
+                    onDataReceived(device.address, completeData)
+                    Timber.d("Execute write completed: ${completeData.size} bytes from ${device.address}")
+                }
+            }
+            pendingWrites.remove(device.address)
+            
+            gattServer?.sendResponse(
+                device,
+                requestId,
+                BluetoothGatt.GATT_SUCCESS,
+                0,
+                null
+            )
         }
     }
     
