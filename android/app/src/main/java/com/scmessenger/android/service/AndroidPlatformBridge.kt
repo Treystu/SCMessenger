@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
+import uniffi.api.*
 
 /**
  * Android implementation of the PlatformBridge UniFFI callback interface.

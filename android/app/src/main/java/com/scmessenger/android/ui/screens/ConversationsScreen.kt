@@ -14,6 +14,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.scmessenger.android.ui.viewmodels.ConversationsViewModel
+import uniffi.api.*
 import java.text.SimpleDateFormat
 import java.util.*
 

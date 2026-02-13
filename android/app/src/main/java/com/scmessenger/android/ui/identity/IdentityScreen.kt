@@ -25,6 +25,7 @@ import com.scmessenger.android.ui.components.ErrorBanner
 import com.scmessenger.android.ui.components.IdenticonFromPeerId
 import com.scmessenger.android.ui.viewmodels.IdentityViewModel
 import timber.log.Timber
+import uniffi.api.*
 
 /**
  * Identity screen - Display public key, QR code, and export options.

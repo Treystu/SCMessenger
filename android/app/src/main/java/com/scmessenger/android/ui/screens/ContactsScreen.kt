@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.scmessenger.android.ui.viewmodels.ContactsViewModel
+import uniffi.api.*
 import java.text.SimpleDateFormat
 import java.util.*
 

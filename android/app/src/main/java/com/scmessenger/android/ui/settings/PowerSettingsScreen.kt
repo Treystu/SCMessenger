@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.scmessenger.android.ui.components.ErrorBanner
 import com.scmessenger.android.ui.viewmodels.SettingsViewModel
+import uniffi.api.*
 
 /**
  * Power Settings screen - AutoAdjust engine and battery management.

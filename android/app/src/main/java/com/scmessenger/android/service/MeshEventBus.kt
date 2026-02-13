@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import timber.log.Timber
+import uniffi.api.*
 
 /**
  * Central event dispatcher for mesh network events.
