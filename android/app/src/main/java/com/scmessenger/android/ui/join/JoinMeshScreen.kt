@@ -389,9 +389,10 @@ private suspend fun parseAndJoin(
                     repository.dialPeer(peer)
                     successCount++
                     Timber.i("Dialed peer: $peer")
-                onProgress(0.25f + (0.5f * (index + 1) / bootstrapPeers.size))
-            } catch (e: Exception) {
-                Timber.w(e, "Failed to dial peer: $peer")
+                    onProgress(0.25f + (0.5f * (index + 1) / bootstrapPeers.size))
+                } catch (e: Exception) {
+                    Timber.w(e, "Failed to dial peer: $peer")
+                }
             }
         }
         
