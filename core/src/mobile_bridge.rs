@@ -756,12 +756,12 @@ impl LedgerManager {
 
 use crate::transport::swarm::SwarmHandle;
 use libp2p::{Multiaddr, PeerId};
+use parking_lot::Mutex;
 use std::str::FromStr;
 use std::sync::Arc;
-use parking_lot::Mutex;
 
 /// Bridge between UniFFI (synchronous) and SwarmHandle (async).
-/// 
+///
 /// This bridge provides synchronous wrappers around async SwarmHandle operations
 /// using tokio::runtime::Handle to block on futures when necessary.
 pub struct SwarmBridge {
@@ -790,19 +790,14 @@ impl SwarmBridge {
     }
 
     /// Send an encrypted message envelope to a peer.
-    pub fn send_message(
-        &self,
-        peer_id: String,
-        data: Vec<u8>,
-    ) -> Result<(), crate::IronCoreError> {
+    pub fn send_message(&self, peer_id: String, data: Vec<u8>) -> Result<(), crate::IronCoreError> {
         let handle_guard = self.handle.lock();
         let handle = handle_guard
             .as_ref()
             .ok_or(crate::IronCoreError::NetworkError)?;
 
         // Parse peer ID
-        let peer_id = PeerId::from_str(&peer_id)
-            .map_err(|_| crate::IronCoreError::InvalidInput)?;
+        let peer_id = PeerId::from_str(&peer_id).map_err(|_| crate::IronCoreError::InvalidInput)?;
 
         // Block on async operation
         if let Some(rt) = &self.runtime_handle {
@@ -821,8 +816,8 @@ impl SwarmBridge {
             .ok_or(crate::IronCoreError::NetworkError)?;
 
         // Parse multiaddress
-        let addr = Multiaddr::from_str(&multiaddr)
-            .map_err(|_| crate::IronCoreError::InvalidInput)?;
+        let addr =
+            Multiaddr::from_str(&multiaddr).map_err(|_| crate::IronCoreError::InvalidInput)?;
 
         // Block on async operation
         if let Some(rt) = &self.runtime_handle {

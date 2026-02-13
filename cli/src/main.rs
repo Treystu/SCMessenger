@@ -555,7 +555,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     // had a separate network_keypair.dat will see their PeerId change. This is
     // intentional to unify identity and network IDs, but may require updating
     // peer expectations/ledgers on migration.
-    
+
     // ── Seed ledger with bootstrap nodes (after local_peer_id is available) ────
     let all_bootstrap = bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes.clone());
     for node in &all_bootstrap {
@@ -935,7 +935,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                 });
                                 continue;
                             }
-                            
+
                             let contact = contacts::Contact::new(peer_id.clone(), pk)
                                 .with_nickname(name.unwrap_or(peer_id));
                             let _ = contacts_rx.add(contact);

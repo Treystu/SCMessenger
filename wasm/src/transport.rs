@@ -543,7 +543,8 @@ mod tests {
     fn test_wasm_transport_start_stop() {
         let transport = WasmTransport::new(WasmTransportConfig::default());
         assert!(transport.start().is_ok());
-        assert_eq!(transport.state(), TransportState::Connecting);
+        // After start() completes, state should be Connected (synchronous connection)
+        assert_eq!(transport.state(), TransportState::Connected);
 
         transport.stop();
         assert_eq!(transport.state(), TransportState::Disconnected);
