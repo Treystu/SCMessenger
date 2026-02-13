@@ -1214,3 +1214,1712 @@ final class MeshRepository {
     func syncPendingMessages() throws { /* Iterate outbox, try sending */ }
     func performBulkSync() throws { /* Full ledger sync */ }
 }
+
+
+
+
+Phase 7: Identity & Onboarding UI
+Goal: First-run experience — generate keypair, show identity, request permissions. iOS equivalent of Android's OnboardingScreen.kt + IdentityScreen.kt + IdentityViewModel.kt.
+
+LoC: ~550
+
+Android → iOS Mapping
+Android File	iOS File	LoC
+OnboardingScreen.kt (~250 LoC)	Views/Onboarding/OnboardingView.swift	~200
+IdentityScreen.kt (~200 LoC)	Views/Identity/IdentityView.swift	~180
+IdentityViewModel.kt (~150 LoC)	ViewModels/IdentityViewModel.swift	~120
+Permissions.kt (~100 LoC)	Utils/PermissionsManager.swift	~50
+Files to Create
+Views/Onboarding/OnboardingView.swift (~200 LoC)
+Swift
+import SwiftUI
+
+/// First-run onboarding flow
+/// Mirrors: android/.../ui/screens/OnboardingScreen.kt
+struct OnboardingView: View {
+    @Environment(MeshRepository.self) private var repo
+    @State private var currentPage = 0
+    @State private var identityCreated = false
+    @Binding var onboardingComplete: Bool
+
+    var body: some View {
+        TabView(selection: $currentPage) {
+            // Page 1: Welcome
+            WelcomePage()
+                .tag(0)
+
+            // Page 2: Philosophy — Relay = Messaging
+            PhilosophyPage()
+                .tag(1)
+
+            // Page 3: Permissions
+            PermissionsPage()
+                .tag(2)
+
+            // Page 4: Identity Creation
+            IdentityCreationPage(
+                identityCreated: $identityCreated,
+                onComplete: { onboardingComplete = true }
+            )
+            .tag(3)
+        }
+        .tabViewStyle(.page)
+        .indexViewStyle(.page(backgroundDisplayMode: .always))
+    }
+}
+
+struct WelcomePage: View {
+    var body: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: 80))
+                .foregroundStyle(.tint)
+            Text("SCMessenger")
+                .font(.largeTitle.bold())
+            Text("Sovereign communication.\nNo servers. No accounts. No compromise.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+    }
+}
+
+struct PhilosophyPage: View {
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 60))
+                .foregroundStyle(.orange)
+            Text("Relay = Messaging")
+                .font(.title.bold())
+            Text("When you message, you relay for others.\nWhen you relay, you can message.\nThis is how the network grows — no free riders.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Label("You ARE your keypair — no phone number needed", systemImage: "key.fill")
+                Label("Works with internet, never depends on it", systemImage: "wifi.slash")
+                Label("Every node strengthens the whole network", systemImage: "point.3.connected.trianglepath.dotted")
+            }
+            .font(.subheadline)
+            .padding()
+        }
+        .padding()
+    }
+}
+
+struct PermissionsPage: View {
+    @State private var bleGranted = false
+    @State private var localNetworkGranted = false
+    @State private var notificationsGranted = false
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "checklist")
+                .font(.system(size: 60))
+                .foregroundStyle(.green)
+            Text("Permissions")
+                .font(.title.bold())
+            Text("SCMessenger needs a few permissions to connect with nearby peers.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 12) {
+                PermissionRow(title: "Bluetooth", detail: "Discover nearby mesh nodes",
+                              icon: "antenna.radiowaves.left.and.right", granted: bleGranted)
+                PermissionRow(title: "Local Network", detail: "WiFi peer discovery",
+                              icon: "wifi", granted: localNetworkGranted)
+                PermissionRow(title: "Notifications", detail: "Message alerts",
+                              icon: "bell.fill", granted: notificationsGranted)
+            }
+            .padding()
+
+            Button("Grant Permissions") {
+                // Trigger permission requests sequentially
+                requestPermissions()
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding()
+    }
+
+    private func requestPermissions() {
+        // BLE permission triggered by CBCentralManager init
+        // Local network triggered by NWBrowser/MCNearbyServiceBrowser
+        // Notifications via UNUserNotificationCenter
+        Task {
+            let center = UNUserNotificationCenter.current()
+            let granted = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+            notificationsGranted = granted ?? false
+        }
+    }
+}
+
+struct PermissionRow: View {
+    let title: String
+    let detail: String
+    let icon: String
+    let granted: Bool
+
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .frame(width: 30)
+                .foregroundStyle(granted ? .green : .secondary)
+            VStack(alignment: .leading) {
+                Text(title).font(.headline)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: granted ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(granted ? .green : .secondary)
+        }
+    }
+}
+
+struct IdentityCreationPage: View {
+    @Environment(MeshRepository.self) private var repo
+    @Binding var identityCreated: Bool
+    let onComplete: () -> Void
+    @State private var isCreating = false
+    @State private var error: String?
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "person.badge.key.fill")
+                .font(.system(size: 60))
+                .foregroundStyle(.blue)
+            Text("Create Your Identity")
+                .font(.title.bold())
+            Text("Your Ed25519 keypair is your identity.\nNo email. No phone number. Just math.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+
+            if identityCreated {
+                let info = repo.getIdentityInfo()
+                VStack(spacing: 8) {
+                    Label("Identity Created!", systemImage: "checkmark.seal.fill")
+                        .foregroundStyle(.green)
+                        .font(.headline)
+                    if let pubKey = info.publicKeyHex {
+                        Text(pubKey.prefix(16) + "...")
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Button("Enter SCMessenger") {
+                    onComplete()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            } else {
+                Button(action: createIdentity) {
+                    if isCreating {
+                        ProgressView()
+                    } else {
+                        Label("Generate Keypair", systemImage: "key.fill")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(isCreating)
+            }
+
+            if let error {
+                Text(error)
+                    .foregroundStyle(.red)
+                    .font(.caption)
+            }
+        }
+        .padding()
+    }
+
+    private func createIdentity() {
+        isCreating = true
+        error = nil
+        Task {
+            do {
+                try repo.ironCore.initializeIdentity()
+                identityCreated = true
+            } catch {
+                self.error = "Failed: \(error.localizedDescription)"
+            }
+            isCreating = false
+        }
+    }
+}
+Views/Identity/IdentityView.swift (~180 LoC)
+Swift
+import SwiftUI
+import CoreImage.CIFilterBuiltins
+
+/// Shows user's identity details — public key, QR code, peer ID
+/// Mirrors: android/.../ui/identity/IdentityScreen.kt
+struct IdentityView: View {
+    @Environment(MeshRepository.self) private var repo
+    @State private var identityInfo: IdentityInfo?
+    @State private var copied = false
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                // Identicon
+                IdenticonView(publicKey: identityInfo?.publicKeyHex ?? "")
+                    .frame(width: 120, height: 120)
+                    .clipShape(Circle())
+
+                // Public Key
+                if let pubKey = identityInfo?.publicKeyHex {
+                    VStack(spacing: 8) {
+                        Text("Your Public Key")
+                            .font(.headline)
+
+                        Text(pubKey)
+                            .font(.system(.caption2, design: .monospaced))
+                            .multilineTextAlignment(.center)
+                            .padding()
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(12)
+
+                        Button {
+                            UIPasteboard.general.string = pubKey
+                            copied = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = false }
+                        } label: {
+                            Label(copied ? "Copied!" : "Copy Key", systemImage: copied ? "checkmark" : "doc.on.doc")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    // QR Code
+                    VStack(spacing: 8) {
+                        Text("Share via QR Code")
+                            .font(.headline)
+                        if let qrImage = generateQRCode(from: pubKey) {
+                            Image(uiImage: qrImage)
+                                .interpolation(.none)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 200, height: 200)
+                                .padding()
+                                .background(.white)
+                                .cornerRadius(12)
+                        }
+                    }
+                }
+
+                // Peer ID
+                if let peerId = identityInfo?.identityId {
+                    VStack(spacing: 4) {
+                        Text("Peer ID").font(.headline)
+                        Text(peerId)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                // Stats
+                VStack(spacing: 8) {
+                    Text("Network Stats").font(.headline)
+                    let stats = repo.serviceStats
+                    HStack(spacing: 20) {
+                        StatBox(label: "Peers", value: "\(stats.peersDiscovered)")
+                        StatBox(label: "Relayed", value: "\(stats.messagesRelayed)")
+                        StatBox(label: "Uptime", value: formatUptime(stats.uptimeSecs))
+                    }
+                }
+            }
+            .padding()
+        }
+        .navigationTitle("Identity")
+        .onAppear { identityInfo = repo.getIdentityInfo() }
+    }
+
+    private func generateQRCode(from string: String) -> UIImage? {
+        let context = CIContext()
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(string.utf8)
+        filter.correctionLevel = "M"
+        guard let outputImage = filter.outputImage,
+              let cgImage = context.createCGImage(outputImage,
+                  from: outputImage.extent) else { return nil }
+        return UIImage(cgImage: cgImage)
+    }
+
+    private func formatUptime(_ secs: UInt64) -> String {
+        let hours = secs / 3600
+        let mins = (secs % 3600) / 60
+        return hours > 0 ? "\(hours)h \(mins)m" : "\(mins)m"
+    }
+}
+
+struct StatBox: View {
+    let label: String
+    let value: String
+    var body: some View {
+        VStack {
+            Text(value).font(.title2.bold())
+            Text(label).font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(minWidth: 70)
+        .padding()
+        .background(.ultraThinMaterial)
+        .cornerRadius(12)
+    }
+}
+ViewModels/IdentityViewModel.swift (~120 LoC)
+Swift
+import Foundation
+import Combine
+
+/// ViewModel for identity management
+/// Mirrors: android/.../ui/viewmodels/IdentityViewModel.kt
+@Observable
+final class IdentityViewModel {
+    private let repo: MeshRepository
+
+    var identityInfo: IdentityInfo?
+    var isLoading = false
+    var error: String?
+    var successMessage: String?
+
+    init(repo: MeshRepository) {
+        self.repo = repo
+        loadIdentity()
+    }
+
+    func loadIdentity() {
+        identityInfo = repo.getIdentityInfo()
+    }
+
+    func initializeIdentity() {
+        isLoading = true
+        error = nil
+        Task { @MainActor in
+            do {
+                try repo.ironCore.initializeIdentity()
+                identityInfo = repo.getIdentityInfo()
+                successMessage = "Identity created successfully"
+            } catch {
+                self.error = "Failed to create identity: \(error.localizedDescription)"
+            }
+            isLoading = false
+        }
+    }
+
+    func signData(_ data: Data) -> SignatureResult? {
+        do {
+            return try repo.ironCore.signData(data: data)
+        } catch {
+            self.error = "Signing failed: \(error.localizedDescription)"
+            return nil
+        }
+    }
+
+    func verifySignature(data: Data, signature: Data, publicKeyHex: String) -> Bool {
+        do {
+            return try repo.ironCore.verifySignature(
+                data: data, signature: signature, publicKeyHex: publicKeyHex)
+        } catch {
+            self.error = "Verification failed: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    var publicKeySnippet: String {
+        guard let hex = identityInfo?.publicKeyHex else { return "Unknown" }
+        return String(hex.prefix(8)) + "..." + String(hex.suffix(8))
+    }
+
+    var isInitialized: Bool {
+        identityInfo?.initialized ?? false
+    }
+}
+Utils/PermissionsManager.swift (~50 LoC)
+Swift
+import CoreBluetooth
+import UserNotifications
+import os
+
+/// Centralized permissions management
+/// Mirrors: android/.../utils/Permissions.kt
+final class PermissionsManager {
+    private let logger = Logger(subsystem: "com.scmessenger", category: "Permissions")
+
+    /// Check if Bluetooth is authorized
+    var isBluetoothAuthorized: Bool {
+        CBCentralManager.authorization == .allowedAlways
+    }
+
+    /// Check if notifications are authorized
+    func checkNotificationAuthorization() async -> Bool {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        return settings.authorizationStatus == .authorized
+    }
+
+    /// Request notification authorization
+    func requestNotifications() async -> Bool {
+        do {
+            return try await UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .sound, .badge])
+        } catch {
+            logger.error("Notification permission error: \(error)")
+            return false
+        }
+    }
+
+    /// Summary of all permissions for UI display
+    struct PermissionStatus {
+        var bluetooth: Bool
+        var notifications: Bool
+        var localNetwork: Bool  // Implicitly granted on first use
+    }
+
+    func checkAll() async -> PermissionStatus {
+        PermissionStatus(
+            bluetooth: isBluetoothAuthorized,
+            notifications: await checkNotificationAuthorization(),
+            localNetwork: true  // iOS grants on first MCSession use
+        )
+    }
+}
+Steps (Execution Order)
+Create Utils/PermissionsManager.swift — permission checks
+Create ViewModels/IdentityViewModel.swift — identity state management
+Create Views/Identity/IdentityView.swift — public key display, QR code, stats
+Create Views/Onboarding/OnboardingView.swift — 4-page TabView onboarding flow
+Wire onboarding into SCMessengerApp.swift — show onboarding if !identityInfo.initialized
+Test: fresh install shows onboarding → generates keypair → enters main app
+Phase 8: Contacts UI
+Goal: Full contact management — list, add, detail, search. iOS equivalent of Android's ContactsScreen.kt, AddContactScreen.kt, ContactDetailScreen.kt, ContactsViewModel.kt.
+
+LoC: ~600
+
+Android → iOS Mapping
+Android File	iOS File	LoC
+ContactsScreen.kt (~300 LoC)	Views/Contacts/ContactsListView.swift	~200
+AddContactScreen.kt (~150 LoC)	Views/Contacts/AddContactView.swift	~120
+ContactDetailScreen.kt (~200 LoC)	Views/Contacts/ContactDetailView.swift	~150
+ContactsViewModel.kt (~180 LoC)	ViewModels/ContactsViewModel.swift	~130
+Files to Create
+ViewModels/ContactsViewModel.swift (~130 LoC)
+Swift
+import Foundation
+
+/// Contact management state
+/// Mirrors: android/.../ui/viewmodels/ContactsViewModel.kt
+@Observable
+final class ContactsViewModel {
+    private let repo: MeshRepository
+
+    var contacts: [Contact] = []
+    var searchQuery = ""
+    var isLoading = false
+    var error: String?
+
+    var filteredContacts: [Contact] {
+        guard !searchQuery.isEmpty else { return contacts }
+        return contacts.filter {
+            ($0.nickname?.localizedCaseInsensitiveContains(searchQuery) ?? false) ||
+            $0.peerId.localizedCaseInsensitiveContains(searchQuery) ||
+            $0.publicKey.localizedCaseInsensitiveContains(searchQuery)
+        }
+    }
+
+    init(repo: MeshRepository) {
+        self.repo = repo
+        loadContacts()
+    }
+
+    func loadContacts() {
+        isLoading = true
+        do {
+            contacts = try repo.listContacts()
+        } catch {
+            self.error = "Failed to load contacts: \(error.localizedDescription)"
+        }
+        isLoading = false
+    }
+
+    func addContact(peerId: String, publicKey: String, nickname: String?) {
+        let contact = Contact(
+            peerId: peerId,
+            nickname: nickname?.isEmpty == true ? nil : nickname,
+            publicKey: publicKey,
+            addedAt: UInt64(Date().timeIntervalSince1970),
+            lastSeen: nil,
+            notes: nil
+        )
+        do {
+            try repo.addContact(contact)
+            loadContacts()
+        } catch {
+            self.error = "Failed to add contact: \(error.localizedDescription)"
+        }
+    }
+
+    func removeContact(peerId: String) {
+        do {
+            try repo.removeContact(peerId: peerId)
+            loadContacts()
+        } catch {
+            self.error = "Failed to remove contact: \(error.localizedDescription)"
+        }
+    }
+
+    func setNickname(peerId: String, nickname: String?) {
+        do {
+            try repo.setNickname(peerId: peerId, nickname: nickname)
+            loadContacts()
+        } catch {
+            self.error = "Failed to update nickname: \(error.localizedDescription)"
+        }
+    }
+
+    func searchContacts(query: String) {
+        guard !query.isEmpty else {
+            loadContacts()
+            return
+        }
+        do {
+            contacts = try repo.searchContacts(query: query)
+        } catch {
+            self.error = "Search failed: \(error.localizedDescription)"
+        }
+    }
+}
+Views/Contacts/ContactsListView.swift (~200 LoC)
+Swift
+import SwiftUI
+
+/// Contact list with search, add, delete
+/// Mirrors: android/.../ui/screens/ContactsScreen.kt
+struct ContactsListView: View {
+    @Environment(MeshRepository.self) private var repo
+    @State private var viewModel: ContactsViewModel?
+    @State private var showAddContact = false
+    @State private var contactToDelete: Contact?
+
+    var body: some View {
+        let vm = viewModel ?? ContactsViewModel(repo: repo)
+
+        List {
+            if vm.filteredContacts.isEmpty && !vm.isLoading {
+                ContentUnavailableView(
+                    "No Contacts",
+                    systemImage: "person.slash",
+                    description: Text("Add contacts by scanning QR codes or entering public keys.")
+                )
+            }
+
+            ForEach(vm.filteredContacts, id: \.peerId) { contact in
+                NavigationLink(value: contact) {
+                    ContactRow(contact: contact)
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        contactToDelete = contact
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+            }
+        }
+        .searchable(text: Binding(
+            get: { vm.searchQuery },
+            set: { vm.searchQuery = $0 }
+        ))
+        .navigationTitle("Contacts")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showAddContact = true } label: {
+                    Image(systemName: "plus")
+                }
+            }
+        }
+        .sheet(isPresented: $showAddContact) {
+            AddContactView(onAdd: { peerId, pubKey, nick in
+                vm.addContact(peerId: peerId, publicKey: pubKey, nickname: nick)
+            })
+        }
+        .alert("Delete Contact?", isPresented: .constant(contactToDelete != nil)) {
+            Button("Cancel", role: .cancel) { contactToDelete = nil }
+            Button("Delete", role: .destructive) {
+                if let c = contactToDelete {
+                    vm.removeContact(peerId: c.peerId)
+                    contactToDelete = nil
+                }
+            }
+        } message: {
+            Text("Remove \(contactToDelete?.nickname ?? contactToDelete?.peerId ?? "this contact")?")
+        }
+        .onAppear { viewModel = vm }
+        .refreshable { vm.loadContacts() }
+    }
+}
+
+struct ContactRow: View {
+    let contact: Contact
+
+    var body: some View {
+        HStack(spacing: 12) {
+            IdenticonView(publicKey: contact.publicKey)
+                .frame(width: 44, height: 44)
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(contact.nickname ?? String(contact.peerId.prefix(12)))
+                    .font(.headline)
+                Text(String(contact.publicKey.prefix(16)) + "...")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            if let lastSeen = contact.lastSeen {
+                Text(formatRelativeTime(lastSeen))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+Views/Contacts/AddContactView.swift (~120 LoC)
+Swift
+import SwiftUI
+import AVFoundation
+
+/// Add contact via public key or QR code
+/// Mirrors: android/.../ui/contacts/AddContactScreen.kt
+struct AddContactView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var publicKey = ""
+    @State private var nickname = ""
+    @State private var showScanner = false
+    let onAdd: (String, String, String?) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Public Key") {
+                    TextField("Paste public key hex", text: $publicKey)
+                        .font(.system(.body, design: .monospaced))
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+
+                    Button {
+                        showScanner = true
+                    } label: {
+                        Label("Scan QR Code", systemImage: "qrcode.viewfinder")
+                    }
+                }
+
+                Section("Nickname (Optional)") {
+                    TextField("Display name", text: $nickname)
+                }
+
+                Section {
+                    Button("Add Contact") {
+                        let peerId = String(publicKey.prefix(16))
+                        onAdd(peerId, publicKey, nickname.isEmpty ? nil : nickname)
+                        dismiss()
+                    }
+                    .disabled(publicKey.count < 32)
+                }
+            }
+            .navigationTitle("Add Contact")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .sheet(isPresented: $showScanner) {
+                QRScannerView { scannedKey in
+                    publicKey = scannedKey
+                    showScanner = false
+                }
+            }
+        }
+    }
+}
+Views/Contacts/ContactDetailView.swift (~150 LoC)
+Swift
+import SwiftUI
+
+/// Contact detail — nickname edit, key display, message history, actions
+/// Mirrors: android/.../ui/contacts/ContactDetailScreen.kt
+struct ContactDetailView: View {
+    @Environment(MeshRepository.self) private var repo
+    let contact: Contact
+    @State private var editedNickname: String
+    @State private var isEditing = false
+    @State private var messages: [MessageRecord] = []
+
+    init(contact: Contact) {
+        self.contact = contact
+        _editedNickname = State(initialValue: contact.nickname ?? "")
+    }
+
+    var body: some View {
+        List {
+            // Identity Section
+            Section {
+                HStack {
+                    Spacer()
+                    VStack(spacing: 12) {
+                        IdenticonView(publicKey: contact.publicKey)
+                            .frame(width: 80, height: 80)
+                            .clipShape(Circle())
+
+                        if isEditing {
+                            TextField("Nickname", text: $editedNickname)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 200)
+                        } else {
+                            Text(contact.nickname ?? contact.peerId)
+                                .font(.title2.bold())
+                        }
+                    }
+                    Spacer()
+                }
+            }
+            .listRowBackground(Color.clear)
+
+            // Key Info
+            Section("Public Key") {
+                Text(contact.publicKey)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+            }
+
+            Section("Peer ID") {
+                Text(contact.peerId)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+            }
+
+            if let lastSeen = contact.lastSeen {
+                Section("Last Seen") {
+                    Text(formatRelativeTime(lastSeen))
+                }
+            }
+
+            // Recent Messages
+            Section("Recent Messages") {
+                if messages.isEmpty {
+                    Text("No messages yet")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(messages.prefix(5), id: \.id) { msg in
+                        HStack {
+                            Image(systemName: msg.direction == .sent ? "arrow.up.circle" : "arrow.down.circle")
+                                .foregroundStyle(msg.direction == .sent ? .blue : .green)
+                            Text(msg.content)
+                                .lineLimit(1)
+                            Spacer()
+                            Text(formatRelativeTime(msg.timestamp))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
+            // Actions
+            Section {
+                Button {
+                    // Navigate to chat
+                } label: {
+                    Label("Send Message", systemImage: "paperplane.fill")
+                }
+
+                Button(role: .destructive) {
+                    try? repo.removeContact(peerId: contact.peerId)
+                } label: {
+                    Label("Delete Contact", systemImage: "trash")
+                }
+            }
+        }
+        .navigationTitle(contact.nickname ?? "Contact")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(isEditing ? "Save" : "Edit") {
+                    if isEditing {
+                        try? repo.setNickname(peerId: contact.peerId,
+                                              nickname: editedNickname.isEmpty ? nil : editedNickname)
+                    }
+                    isEditing.toggle()
+                }
+            }
+        }
+        .onAppear {
+            messages = (try? repo.getConversation(peerId: contact.peerId, limit: 5)) ?? []
+        }
+    }
+}
+Steps (Execution Order)
+Create ViewModels/ContactsViewModel.swift
+Create Views/Contacts/ContactsListView.swift — list with search + swipe delete
+Create Views/Contacts/AddContactView.swift — form + QR scanner
+Create Views/Contacts/ContactDetailView.swift — detail view + message history preview
+Wire into navigation (Phase 13)
+Test: add contact by key → appears in list → tap for detail → swipe to delete
+Phase 9: Messaging UI
+Goal: Full chat interface — conversation list, chat detail with message bubbles, send/receive. iOS equivalent of Android's ConversationsScreen.kt, ChatScreen.kt, ChatViewModel.kt, ConversationsViewModel.kt, MessageBubble.kt, MessageInput.kt.
+
+LoC: ~800
+
+Android → iOS Mapping
+Android File	iOS File	LoC
+ConversationsScreen.kt (~250 LoC)	Views/Conversations/ConversationsListView.swift	~180
+ConversationsViewModel.kt (~200 LoC)	ViewModels/ConversationsViewModel.swift	~150
+ChatScreen.kt (~250 LoC)	Views/Chat/ChatView.swift	~200
+ChatViewModel.kt (~200 LoC)	ViewModels/ChatViewModel.swift	~140
+MessageBubble.kt (~80 LoC)	Views/Chat/MessageBubble.swift	~60
+MessageInput.kt (~80 LoC)	Views/Chat/MessageInputView.swift	~70
+Files to Create
+ViewModels/ConversationsViewModel.swift (~150 LoC)
+Swift
+import Foundation
+
+/// Conversation list state — groups messages by peer
+/// Mirrors: android/.../ui/viewmodels/ConversationsViewModel.kt
+@Observable
+final class ConversationsViewModel {
+    private let repo: MeshRepository
+
+    var conversations: [Conversation] = []
+    var searchQuery = ""
+    var isLoading = false
+    var error: String?
+    var historyStats: HistoryStats?
+
+    struct Conversation: Identifiable {
+        var id: String { peerId }
+        let peerId: String
+        let nickname: String?
+        let lastMessage: String
+        let lastTimestamp: UInt64
+        let unreadCount: Int
+        let publicKey: String
+    }
+
+    init(repo: MeshRepository) {
+        self.repo = repo
+        loadConversations()
+    }
+
+    func loadConversations() {
+        isLoading = true
+        do {
+            let messages = try repo.getRecentMessages(peerFilter: nil, limit: 1000)
+            let contacts = try repo.listContacts()
+            let contactMap = Dictionary(uniqueKeysWithValues: contacts.map { ($0.peerId, $0) })
+
+            // Group by peer
+            var grouped: [String: [MessageRecord]] = [:]
+            for msg in messages {
+                grouped[msg.peerId, default: []].append(msg)
+            }
+
+            conversations = grouped.map { peerId, msgs in
+                let sorted = msgs.sorted { $0.timestamp > $1.timestamp }
+                let contact = contactMap[peerId]
+                let unread = msgs.filter { $0.direction == .received && !$0.delivered }.count
+                return Conversation(
+                    peerId: peerId,
+                    nickname: contact?.nickname,
+                    lastMessage: sorted.first?.content ?? "",
+                    lastTimestamp: sorted.first?.timestamp ?? 0,
+                    unreadCount: unread,
+                    publicKey: contact?.publicKey ?? peerId
+                )
+            }
+            .sorted { $0.lastTimestamp > $1.lastTimestamp }
+
+            historyStats = try repo.getHistoryStats()
+        } catch {
+            self.error = "Failed to load conversations: \(error.localizedDescription)"
+        }
+        isLoading = false
+    }
+
+    func clearConversation(peerId: String) {
+        do {
+            try repo.historyManager?.clearConversation(peerId: peerId)
+            loadConversations()
+        } catch {
+            self.error = "Failed to clear: \(error.localizedDescription)"
+        }
+    }
+
+    func clearAll() {
+        do {
+            try repo.historyManager?.clear()
+            loadConversations()
+        } catch {
+            self.error = "Failed to clear all: \(error.localizedDescription)"
+        }
+    }
+}
+Views/Conversations/ConversationsListView.swift (~180 LoC)
+Swift
+import SwiftUI
+
+/// Conversation list — grouped by peer with last message preview
+/// Mirrors: android/.../ui/screens/ConversationsScreen.kt
+struct ConversationsListView: View {
+    @Environment(MeshRepository.self) private var repo
+    @State private var viewModel: ConversationsViewModel?
+
+    var body: some View {
+        let vm = viewModel ?? ConversationsViewModel(repo: repo)
+
+        List {
+            // Stats summary
+            if let stats = vm.historyStats {
+                Section {
+                    HStack {
+                        StatPill(label: "Total", value: "\(stats.totalMessages)")
+                        StatPill(label: "Sent", value: "\(stats.sentCount)")
+                        StatPill(label: "Received", value: "\(stats.receivedCount)")
+                        if stats.undeliveredCount > 0 {
+                            StatPill(label: "Pending", value: "\(stats.undeliveredCount)", color: .orange)
+                        }
+                    }
+                }
+            }
+
+            // Conversation list
+            if vm.conversations.isEmpty && !vm.isLoading {
+                ContentUnavailableView(
+                    "No Conversations",
+                    systemImage: "bubble.left.and.bubble.right",
+                    description: Text("Start a conversation by adding a contact and sending a message.")
+                )
+            }
+
+            ForEach(vm.conversations) { convo in
+                NavigationLink(value: convo) {
+                    ConversationRow(conversation: convo)
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        vm.clearConversation(peerId: convo.peerId)
+                    } label: {
+                        Label("Clear", systemImage: "trash")
+                    }
+                }
+            }
+        }
+        .navigationTitle("Chats")
+        .onAppear { viewModel = vm }
+        .refreshable { vm.loadConversations() }
+    }
+}
+
+struct ConversationRow: View {
+    let conversation: ConversationsViewModel.Conversation
+
+    var body: some View {
+        HStack(spacing: 12) {
+            IdenticonView(publicKey: conversation.publicKey)
+                .frame(width: 48, height: 48)
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(conversation.nickname ?? String(conversation.peerId.prefix(10)))
+                        .font(.headline)
+                    Spacer()
+                    Text(formatRelativeTime(conversation.lastTimestamp))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                HStack {
+                    Text(conversation.lastMessage)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer()
+                    if conversation.unreadCount > 0 {
+                        Text("\(conversation.unreadCount)")
+                            .font(.caption2.bold())
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(.blue)
+                            .foregroundColor(.white)
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct StatPill: View {
+    let label: String
+    let value: String
+    var color: Color = .secondary
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(value).font(.headline).foregroundStyle(color)
+            Text(label).font(.caption2).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+ViewModels/ChatViewModel.swift (~140 LoC)
+Swift
+import Foundation
+import Combine
+
+/// Chat detail state — messages for a single peer
+/// Mirrors: android/.../ui/viewmodels/ChatViewModel.kt
+@Observable
+final class ChatViewModel {
+    private let repo: MeshRepository
+    let peerId: String
+
+    var messages: [MessageRecord] = []
+    var messageText = ""
+    var isSending = false
+    var error: String?
+    var contact: Contact?
+    private var cancellables = Set<AnyCancellable>()
+
+    init(repo: MeshRepository, peerId: String) {
+        self.repo = repo
+        self.peerId = peerId
+        loadMessages()
+        loadContact()
+        subscribeToEvents()
+    }
+
+    func loadMessages() {
+        do {
+            messages = try repo.getConversation(peerId: peerId, limit: 100)
+                .sorted { $0.timestamp < $1.timestamp }
+        } catch {
+            self.error = "Failed to load messages: \(error.localizedDescription)"
+        }
+    }
+
+    func loadContact() {
+        contact = try? repo.getContact(peerId: peerId)
+    }
+
+    func sendMessage() {
+        guard !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let text = messageText
+        messageText = ""
+        isSending = true
+
+        Task { @MainActor in
+            do {
+                let pubKey = contact?.publicKey ?? peerId
+                try repo.sendMessage(recipientPubKey: pubKey, text: text)
+                loadMessages()
+            } catch {
+                self.error = "Send failed: \(error.localizedDescription)"
+                messageText = text  // Restore on failure
+            }
+            isSending = false
+        }
+    }
+
+    func markDelivered(messageId: String) {
+        try? repo.historyManager?.markDelivered(id: messageId)
+    }
+
+    private func subscribeToEvents() {
+        MeshEventBus.shared.messageEvents
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] event in
+                guard let self else { return }
+                switch event {
+                case .received(let senderId, _, _) where senderId == self.peerId:
+                    self.loadMessages()
+                case .delivered(let messageId):
+                    self.markDelivered(messageId: messageId)
+                    self.loadMessages()
+                default:
+                    break
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    var displayName: String {
+        contact?.nickname ?? String(peerId.prefix(12))
+    }
+}
+Views/Chat/ChatView.swift (~200 LoC)
+Swift
+import SwiftUI
+
+/// Chat detail — message bubbles + input
+/// Mirrors: android/.../ui/screens/ChatScreen.kt
+struct ChatView: View {
+    @Environment(MeshRepository.self) private var repo
+    let peerId: String
+    @State private var viewModel: ChatViewModel?
+
+    var body: some View {
+        let vm = viewModel ?? ChatViewModel(repo: repo, peerId: peerId)
+
+        VStack(spacing: 0) {
+            // Messages
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(vm.messages, id: \.id) { message in
+                            MessageBubble(message: message)
+                                .id(message.id)
+                        }
+                    }
+                    .padding()
+                }
+                .onChange(of: vm.messages.count) {
+                    if let lastId = vm.messages.last?.id {
+                        withAnimation {
+                            scrollProxy.scrollTo(lastId, anchor: .bottom)
+                        }
+                    }
+                }
+            }
+
+            Divider()
+
+            // Input
+            MessageInputView(
+                text: Binding(
+                    get: { vm.messageText },
+                    set: { vm.messageText = $0 }
+                ),
+                isSending: vm.isSending,
+                onSend: { vm.sendMessage() }
+            )
+        }
+        .navigationTitle(vm.displayName)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 8) {
+                    IdenticonView(publicKey: vm.contact?.publicKey ?? peerId)
+                        .frame(width: 28, height: 28)
+                        .clipShape(Circle())
+                    Text(vm.displayName)
+                        .font(.headline)
+                }
+            }
+        }
+        .onAppear { viewModel = vm }
+        .alert("Error", isPresented: .constant(vm.error != nil)) {
+            Button("OK") { vm.error = nil }
+        } message: {
+            Text(vm.error ?? "")
+        }
+    }
+}
+Views/Chat/MessageBubble.swift (~60 LoC)
+Swift
+import SwiftUI
+
+/// Single message bubble
+/// Mirrors: android/.../ui/chat/MessageBubble.kt
+struct MessageBubble: View {
+    let message: MessageRecord
+
+    private var isSent: Bool { message.direction == .sent }
+
+    var body: some View {
+        HStack {
+            if isSent { Spacer(minLength: 60) }
+
+            VStack(alignment: isSent ? .trailing : .leading, spacing: 4) {
+                Text(message.content)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(isSent ? Color.blue : Color(.systemGray5))
+                    .foregroundColor(isSent ? .white : .primary)
+                    .cornerRadius(18)
+
+                HStack(spacing: 4) {
+                    Text(formatTime(message.timestamp))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    if isSent {
+                        Image(systemName: message.delivered ? "checkmark.circle.fill" : "clock")
+                            .font(.caption2)
+                            .foregroundStyle(message.delivered ? .green : .secondary)
+                    }
+                }
+            }
+
+            if !isSent { Spacer(minLength: 60) }
+        }
+    }
+
+    private func formatTime(_ timestamp: UInt64) -> String {
+        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+}
+Views/Chat/MessageInputView.swift (~70 LoC)
+Swift
+import SwiftUI
+
+/// Message input bar with send button
+/// Mirrors: android/.../ui/chat/MessageInput.kt
+struct MessageInputView: View {
+    @Binding var text: String
+    let isSending: Bool
+    let onSend: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            TextField("Message", text: $text, axis: .vertical)
+                .lineLimit(1...5)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color(.systemGray6))
+                .cornerRadius(20)
+
+            Button(action: onSend) {
+                if isSending {
+                    ProgressView()
+                        .frame(width: 36, height: 36)
+                } else {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 36))
+                        .foregroundStyle(.blue)
+                }
+            }
+            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(.bar)
+    }
+}
+Steps (Execution Order)
+Create ViewModels/ConversationsViewModel.swift — group messages by peer
+Create Views/Conversations/ConversationsListView.swift — conversation list with stats
+Create ViewModels/ChatViewModel.swift — single-peer chat state + event subscription
+Create Views/Chat/MessageBubble.swift — sent/received bubble styling
+Create Views/Chat/MessageInputView.swift — text input + send button
+Create Views/Chat/ChatView.swift — assembles bubbles + input + auto-scroll
+Wire navigation: conversation tap → ChatView(peerId:)
+Test: send message → appears as blue bubble → receipt marks checkmark
+Phase 10: Mesh Network Dashboard
+Goal: Real-time mesh network visualization — connected peers, topology, stats. iOS equivalent of Android's DashboardScreen.kt, DashboardViewModel.kt, PeerListScreen.kt, TopologyScreen.kt.
+
+LoC: ~550
+
+Android → iOS Mapping
+Android File	iOS File	LoC
+DashboardScreen.kt (~250 LoC)	Views/Dashboard/DashboardView.swift	~200
+DashboardViewModel.kt (~180 LoC)	ViewModels/DashboardViewModel.swift	~140
+PeerListScreen.kt (~150 LoC)	Views/Dashboard/PeerListView.swift	~120
+TopologyScreen.kt (~100 LoC)	Views/Dashboard/TopologyView.swift	~90
+Files to Create
+ViewModels/DashboardViewModel.swift (~140 LoC)
+Swift
+import Foundation
+import Combine
+
+/// Dashboard state — service status, peer list, network stats
+/// Mirrors: android/.../ui/viewmodels/DashboardViewModel.kt
+@Observable
+final class DashboardViewModel {
+    private let repo: MeshRepository
+    private var cancellables = Set<AnyCancellable>()
+    private var refreshTimer: Timer?
+
+    var serviceState: ServiceState = .stopped
+    var stats: ServiceStats = ServiceStats(peersDiscovered: 0, messagesRelayed: 0, bytesTransferred: 0, uptimeSecs: 0)
+    var connectedPeers: [String] = []
+    var topics: [String] = []
+    var ledgerSummary = ""
+    var dialableAddresses: [LedgerEntry] = []
+    var isRunning: Bool { serviceState == .running }
+
+    // Transport status
+    var bleActive = false
+    var multipeerActive = false
+    var internetActive = false
+
+    init(repo: MeshRepository) {
+        self.repo = repo
+        refresh()
+        subscribeToEvents()
+        startAutoRefresh()
+    }
+
+    func refresh() {
+        repo.updateStats()
+        serviceState = repo.serviceState
+        stats = repo.serviceStats
+        connectedPeers = repo.swarmBridge?.getPeers() ?? []
+        topics = repo.swarmBridge?.getTopics() ?? []
+        ledgerSummary = repo.getLedgerSummary()
+        dialableAddresses = repo.getDialableAddresses()
+
+        bleActive = repo.currentSettings?.bleEnabled ?? false
+        multipeerActive = (repo.currentSettings?.wifiAwareEnabled ?? false)
+                       || (repo.currentSettings?.wifiDirectEnabled ?? false)
+        internetActive = repo.currentSettings?.internetEnabled ?? false
+    }
+
+    func toggleService() {
+        if isRunning {
+            repo.stopMeshService()
+        } else {
+            do { try repo.startMeshService() } catch {
+                // Handle error
+            }
+        }
+        refresh()
+    }
+
+    private func subscribeToEvents() {
+        MeshEventBus.shared.peerEvents
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.refresh() }
+            .store(in: &cancellables)
+
+        MeshEventBus.shared.statusEvents
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.refresh() }
+            .store(in: &cancellables)
+    }
+
+    private func startAutoRefresh() {
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            self?.refresh()
+        }
+    }
+
+    deinit { refreshTimer?.invalidate() }
+
+    func formatBytes(_ bytes: UInt64) -> String {
+        let kb = Double(bytes) / 1024
+        let mb = kb / 1024
+        if mb >= 1 { return String(format: "%.1f MB", mb) }
+        if kb >= 1 { return String(format: "%.1f KB", kb) }
+        return "\(bytes) B"
+    }
+
+    func formatUptime(_ secs: UInt64) -> String {
+        let h = secs / 3600
+        let m = (secs % 3600) / 60
+        let s = secs % 60
+        if h > 0 { return "\(h)h \(m)m" }
+        if m > 0 { return "\(m)m \(s)s" }
+        return "\(s)s"
+    }
+}
+Views/Dashboard/DashboardView.swift (~200 LoC)
+Swift
+import SwiftUI
+
+/// Mesh network dashboard — service control, peer stats, transport status
+/// Mirrors: android/.../ui/screens/DashboardScreen.kt
+struct DashboardView: View {
+    @Environment(MeshRepository.self) private var repo
+    @State private var viewModel: DashboardViewModel?
+
+    var body: some View {
+        let vm = viewModel ?? DashboardViewModel(repo: repo)
+
+        ScrollView {
+            VStack(spacing: 16) {
+                // Service Status Card
+                GroupBox {
+                    VStack(spacing: 12) {
+                        HStack {
+                            Circle()
+                                .fill(vm.isRunning ? .green : .red)
+                                .frame(width: 12, height: 12)
+                            Text(vm.isRunning ? "Mesh Active" : "Mesh Inactive")
+                                .font(.headline)
+                            Spacer()
+                            Button(vm.isRunning ? "Stop" : "Start") {
+                                vm.toggleService()
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(vm.isRunning ? .red : .green)
+                        }
+
+                        if vm.isRunning {
+                            HStack(spacing: 20) {
+                                DashStat(icon: "person.2.fill", value: "\(vm.stats.peersDiscovered)", label: "Peers")
+                                DashStat(icon: "arrow.triangle.2.circlepath", value: "\(vm.stats.messagesRelayed)", label: "Relayed")
+                                DashStat(icon: "arrow.up.arrow.down", value: vm.formatBytes(vm.stats.bytesTransferred), label: "Data")
+                                DashStat(icon: "clock.fill", value: vm.formatUptime(vm.stats.uptimeSecs), label: "Uptime")
+                            }
+                        }
+                    }
+                } label: {
+                    Label("Service", systemImage: "antenna.radiowaves.left.and.right")
+                }
+
+                // Transport Status
+                GroupBox {
+                    VStack(spacing: 8) {
+                        TransportRow(name: "Bluetooth LE", icon: "antenna.radiowaves.left.and.right", active: vm.bleActive)
+                        TransportRow(name: "Multipeer (WiFi)", icon: "wifi", active: vm.multipeerActive)
+                        TransportRow(name: "Internet (libp2p)", icon: "globe", active: vm.internetActive)
+                    }
+                } label: {
+                    Label("Transports", systemImage: "point.3.connected.trianglepath.dotted")
+                }
+
+                // Connected Peers
+                GroupBox {
+                    if vm.connectedPeers.isEmpty {
+                        Text("No peers connected")
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding()
+                    } else {
+                        ForEach(vm.connectedPeers, id: \.self) { peer in
+                            HStack {
+                                IdenticonView(publicKey: peer)
+                                    .frame(width: 32, height: 32)
+                                    .clipShape(Circle())
+                                Text(String(peer.prefix(12)) + "...")
+                                    .font(.system(.caption, design: .monospaced))
+                                Spacer()
+                                Image(systemName: "circle.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(.green)
+                            }
+                        }
+                    }
+                } label: {
+                    Label("Connected Peers (\(vm.connectedPeers.count))", systemImage: "person.2.fill")
+                }
+
+                // Topics
+                if !vm.topics.isEmpty {
+                    GroupBox {
+                        ForEach(vm.topics, id: \.self) { topic in
+                            HStack {
+                                Image(systemName: "number")
+                                Text(topic).font(.subheadline)
+                            }
+                        }
+                    } label: {
+                        Label("Topics", systemImage: "number.circle")
+                    }
+                }
+
+                // Ledger Summary
+                GroupBox {
+                    Text(vm.ledgerSummary)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } label: {
+                    Label("Connection Ledger", systemImage: "book.closed")
+                }
+            }
+            .padding()
+        }
+        .navigationTitle("Network")
+        .onAppear { viewModel = vm }
+        .refreshable { vm.refresh() }
+    }
+}
+
+struct DashStat: View {
+    let icon: String
+    let value: String
+    let label: String
+    var body: some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon).font(.caption)
+            Text(value).font(.headline)
+            Text(label).font(.caption2).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+struct TransportRow: View {
+    let name: String
+    let icon: String
+    let active: Bool
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .frame(width: 24)
+                .foregroundStyle(active ? .green : .secondary)
+            Text(name)
+            Spacer()
+            Text(active ? "Active" : "Disabled")
+                .font(.caption)
+                .foregroundStyle(active ? .green : .secondary)
+        }
+    }
+}
+Views/Dashboard/PeerListView.swift (~120 LoC)
+Swift
+import SwiftUI
+
+/// Detailed peer list with connection info
+/// Mirrors: android/.../ui/dashboard/PeerListScreen.kt
+struct PeerListView: View {
+    @Environment(MeshRepository.self) private var repo
+    @State private var peers: [String] = []
+    @State private var ledgerEntries: [LedgerEntry] = []
+
+    var body: some View {
+        List {
+            Section("Connected (\(peers.count))") {
+                ForEach(peers, id: \.self) { peer in
+                    PeerRow(peerId: peer, ledgerEntry: ledgerEntries.first { $0.peerId == peer })
+                }
+            }
+
+            Section("Known Addresses (\(ledgerEntries.count))") {
+                ForEach(ledgerEntries, id: \.multiaddr) { entry in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(entry.multiaddr)
+                            .font(.system(.caption, design: .monospaced))
+                        HStack {
+                            Label("\(entry.successCount) ok", systemImage: "checkmark.circle")
+                                .foregroundStyle(.green)
+                            Label("\(entry.failureCount) fail", systemImage: "xmark.circle")
+                                .foregroundStyle(.red)
+                            if let lastSeen = entry.lastSeen {
+                                Text("seen \(formatRelativeTime(lastSeen))")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .font(.caption2)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Peers")
+        .onAppear {
+            peers = repo.swarmBridge?.getPeers() ?? []
+            ledgerEntries = repo.getDialableAddresses()
+        }
+        .refreshable {
+            peers = repo.swarmBridge?.getPeers() ?? []
+            ledgerEntries = repo.getDialableAddresses()
+        }
+    }
+}
+
+struct PeerRow: View {
+    let peerId: String
+    let ledgerEntry: LedgerEntry?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            IdenticonView(publicKey: peerId)
+                .frame(width: 40, height: 40)
+                .clipShape(Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(peerId.prefix(16)))
+                    .font(.system(.caption, design: .monospaced))
+                if let entry = ledgerEntry {
+                    HStack(spacing: 8) {
+                        Text("\(entry.successCount) connections")
+                        if !entry.topics.isEmpty {
+                            Text(entry.topics.joined(separator: ", "))
+                        }
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Image(systemName: "circle.fill")
+                .font(.caption2)
+                .foregroundStyle(.green)
+        }
+    }
+}
+Views/Dashboard/TopologyView.swift (~90 LoC)
+Swift
+import SwiftUI
+
+/// Simple topology visualization
+/// Mirrors: android/.../ui/dashboard/TopologyScreen.kt
+struct TopologyView: View {
+    @Environment(MeshRepository.self) private var repo
+    @State private var peers: [String] = []
+
+    var body: some View {
+        GeometryReader { geo in
+            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+
+            ZStack {
+                // Self node at center
+                Circle()
+                    .fill(.blue)
+                    .frame(width: 24, height: 24)
+                    .position(center)
+
+                Text("You")
+                    .font(.caption2)
+                    .position(x: center.x, y: center.y + 20)
+
+                // Peer nodes in circle around center
+                ForEach(Array(peers.enumerated()), id: \.element) { index, peer in
+                    let angle = (2 * .pi / Double(max(peers.count, 1))) * Double(index) - .pi / 2
+                    let radius = min(geo.size.width, geo.size.height) * 0.35
+                    let peerPos = CGPoint(
+                        x: center.x + cos(angle) * radius,
+                        y: center.y + sin(angle) * radius
+                    )
+
+                    // Connection line
+                    Path { path in
+                        path.move(to: center)
+                        path.addLine(to: peerPos)
+                    }
+                    .stroke(.green.opacity(0.4), lineWidth: 1)
+
+                    // Peer node
+                    Circle()
+                        .fill(.green)
+                        .frame(width: 16, height: 16)
+                        .position(peerPos)
+
+                    Text(String(peer.prefix(6)))
+                        .font(.system(size: 8, design: .monospaced))
+                        .position(x: peerPos.x, y: peerPos.y + 16)
+                }
+            }
+        }
+        .navigationTitle("Topology")
+        .onAppear {
+            peers = repo.swarmBridge?.getPeers() ?? []
+        }
+    }
+}
+Steps (Execution Order)
+Create ViewModels/DashboardViewModel.swift
+Create Views/Dashboard/DashboardView.swift — service control + stats cards
+Create Views/Dashboard/PeerListView.swift — detailed peer/ledger view
+Create Views/Dashboard/TopologyView.swift — visual topology map
+Wire into tab navigation
+Test: start service → peers appear → topology renders → stats
+
+
+
