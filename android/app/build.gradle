@@ -183,7 +183,7 @@ task generateUniFFIBindings(type: Exec) {
     
     workingDir '../../core'
     
-    commandLine 'cargo', 'run', '--bin', 'gen_kotlin', '--features', 'gen-bindings', '--', 'generate', 'src/api.udl', '--language', 'kotlin', '--out-dir', 'target/generated-sources/uniffi/kotlin'
+    commandLine 'cargo', 'run', '--bin', 'gen_kotlin', '--features', 'gen-bindings'
     
     // Ensure directory exists (cargo run might create it, but good practice)
     doFirst {
