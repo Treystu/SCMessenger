@@ -1,5 +1,9 @@
 # SCMessenger
 
+[![CI](https://github.com/Treystu/SCMessenger/workflows/CI/badge.svg)](https://github.com/Treystu/SCMessenger/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/rust-1.93.1+-orange.svg)](https://www.rust-lang.org/)
+
 The world's first truly sovereign messenger — works everywhere, owned by no one, unstoppable by design. End-to-end encrypted peer-to-peer messaging with no servers, no accounts, no phone numbers. Works WITH internet, never depends on it.
 
 ## Quick Start
