@@ -225,8 +225,12 @@ class WifiAwareTransport(
             
             // Initiate data path
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                publishSession?.let { initiateDataPath(it, peerId, peerIdString) }
-                    ?: Timber.w("Publish session unavailable for WiFi Aware data path to $peerIdString")
+                val session = publishSession
+                if (session != null) {
+                    initiateDataPath(session, peerId, peerIdString)
+                } else {
+                    Timber.w("Publish session unavailable for WiFi Aware data path to $peerIdString")
+                }
             }
         }
     }
@@ -249,8 +253,12 @@ class WifiAwareTransport(
             
             // Initiate data path
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                subscribeSession?.let { initiateDataPath(it, peerId, peerIdString) }
-                    ?: Timber.w("Subscribe session unavailable for WiFi Aware data path to $peerIdString")
+                val session = subscribeSession
+                if (session != null) {
+                    initiateDataPath(session, peerId, peerIdString)
+                } else {
+                    Timber.w("Subscribe session unavailable for WiFi Aware data path to $peerIdString")
+                }
             }
         }
     }
