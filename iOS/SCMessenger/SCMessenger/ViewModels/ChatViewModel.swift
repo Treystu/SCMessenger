@@ -28,7 +28,7 @@ final class ChatViewModel {
     
     func loadMessages() {
         do {
-            messages = try repository?.getMessages(peerId: conversation.peerId) ?? []
+            messages = try repository?.getConversation(peerId: conversation.peerId) ?? []
         } catch {
             self.error = error.localizedDescription
         }

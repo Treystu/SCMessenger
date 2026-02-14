@@ -15,6 +15,7 @@ import os
 /// Default settings for mesh service configuration
 private enum DefaultSettings {
     static let maxRelayBudget: UInt32 = 1000  // Messages per hour
+    static let maxRelayBudgetLimit: UInt32 = 10000  // Maximum allowed
     static let batteryFloor: UInt8 = 20       // Minimum 20% battery
 }
 
@@ -109,15 +110,16 @@ final class MeshRepository {
     /// Ensure service is initialized (lazy start if needed)
     /// This enables identity operations before full mesh service is running
     private func ensureServiceInitialized() throws {
-        // Check if we need to start/restart the service
-        if meshService == nil || serviceState != .running {
+        // Only initialize if service is completely stopped
+        // Don't interfere with transitional states (.starting, .stopping, .paused)
+        if meshService == nil || serviceState == .stopped {
             logger.info("Lazy starting MeshService for Identity access")
             
-            // Clean up existing service if in invalid state
-            if meshService != nil && serviceState != .running {
+            // Clean up existing service if stopped but not nil
+            if meshService != nil {
                 meshService?.stop()
                 meshService = nil
-                serviceState = .stopped
+                ironCore = nil
             }
             
             // Initialize managers if not already done
@@ -144,10 +146,13 @@ final class MeshRepository {
             logger.info("✓ MeshService started lazily")
         }
         
-        // Refresh ironCore reference just in case
+        // Verify ironCore is available after initialization
         if ironCore == nil {
+            logger.error("⚠️ IronCore is nil despite service running - attempting refresh")
             ironCore = meshService?.getCore()
-            logger.info("IronCore reference refreshed: \(ironCore != nil)")
+            if ironCore == nil {
+                throw MeshError.notInitialized("Failed to obtain IronCore from running service")
+            }
         }
     }
     
@@ -169,9 +174,11 @@ final class MeshRepository {
             // Create mesh service
             meshService = try MeshService(config: config)
             
-            // Initialize IronCore (but don't create identity - that's done separately)
+            // Initialize IronCore from the service
+            // Always get fresh reference from new service
+            ironCore = meshService?.getCore()
             if ironCore == nil {
-                ironCore = meshService?.getCore()
+                throw MeshError.notInitialized("Failed to obtain IronCore from MeshService")
             }
             
             // Configure platform bridge
@@ -382,7 +389,7 @@ final class MeshRepository {
     
     func validateSettings(_ settings: MeshSettings) -> Bool {
         // Validate settings constraints
-        guard settings.maxRelayBudget > 0 else { return false }
+        guard settings.maxRelayBudget > 0 && settings.maxRelayBudget <= DefaultSettings.maxRelayBudgetLimit else { return false }
         guard settings.batteryFloor >= 0 && settings.batteryFloor <= 100 else { return false }
         return true
     }
@@ -486,13 +493,6 @@ final class MeshRepository {
     }
     
     // MARK: - Message History
-    
-    func getMessages(peerId: String) throws -> [MessageRecord] {
-        guard let historyManager = historyManager else {
-            throw MeshError.notInitialized("HistoryManager not initialized")
-        }
-        return try historyManager.conversation(peerId: peerId, limit: 100)
-    }
     
     func getConversation(peerId: String, limit: UInt32 = 100) throws -> [MessageRecord] {
         guard let historyManager = historyManager else {
