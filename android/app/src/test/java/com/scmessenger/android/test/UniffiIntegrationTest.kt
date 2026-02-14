@@ -21,117 +21,68 @@ import kotlin.test.assertTrue
  */
 class UniffiIntegrationTest {
     
+    companion object {
+        @org.junit.BeforeClass
+        @JvmStatic
+        fun setupLibraryPath() {
+            // Set JNA library path for unit tests running on host JVM
+            val hostLibPath = java.io.File("../../core/target/android-libs/host").absolutePath
+            System.setProperty("jna.library.path", hostLibPath)
+            System.out.println("Set jna.library.path to: $hostLibPath")
+        }
+    }
+    
+    private val storagePath = "/tmp/scm_test_${System.currentTimeMillis()}"
+    
     @Test
     fun `test IronCore initialization`() {
-        // Given
-        val storagePath = "/tmp/test_uniffi"
+        val ironCore = uniffi.api.IronCore(storagePath)
+        ironCore.initializeIdentity()
         
-        // When
-        // val ironCore = uniffi.api.IronCore(storagePath)
-        // ironCore.initializeIdentity()
-        
-        // Then
-        // val info = ironCore.getIdentityInfo()
-        // assertTrue(info.initialized)
-        assertTrue(true, "Placeholder - requires UniFFI library")
+        val info = ironCore.getIdentityInfo()
+        assertTrue(info.initialized)
+        assertTrue(info.identityId.isNotEmpty())
     }
     
     @Test
     fun `test message encryption and decryption roundtrip`() {
-        // Given
-        val plaintext = "Hello, SCMessenger!"
-        // val senderCore = uniffi.api.IronCore(...)
-        // val receiverCore = uniffi.api.IronCore(...)
+        val aliceCore = uniffi.api.IronCore("$storagePath/alice")
+        val bobCore = uniffi.api.IronCore("$storagePath/bob")
         
-        // When
-        // val encrypted = senderCore.prepareMessage(receiverPublicKey, plaintext)
-        // val decrypted = receiverCore.decryptMessage(encrypted)
+        aliceCore.initializeIdentity()
+        bobCore.initializeIdentity()
         
-        // Then
-        // assertEquals(plaintext, String(decrypted, Charsets.UTF_8))
-        assertTrue(true, "Placeholder - requires crypto ops")
+        val bobInfo = bobCore.getIdentityInfo()
+        val plaintext = "Hello from Alice!"
+        
+        val encrypted = aliceCore.prepareMessage(bobInfo.publicKeyHex, plaintext)
+        val decrypted = bobCore.decryptMessage(encrypted)
+        
+        kotlin.test.assertEquals(plaintext, String(decrypted))
     }
     
     @Test
-    fun `test ContactManager CRUD operations`() {
-        // Given
-        val storagePath = "/tmp/test_contacts"
-        // val manager = uniffi.api.ContactManager(storagePath)
+    fun `test ContactManager persistence`() {
+        val manager = uniffi.api.ContactManager("$storagePath/contacts")
+        val peerId = "test_peer_123"
+        val nickname = "Test Friend"
         
-        // When
-        // val contact = uniffi.api.Contact(...)
-        // manager.add(contact)
-        // val retrieved = manager.get(contact.peerId)
-        // manager.remove(contact.peerId)
+        val contact = uniffi.api.Contact(
+            peerId = peerId,
+            nickname = nickname,
+            publicKey = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+            addedAt = (System.currentTimeMillis() / 1000).toULong(),
+            lastSeen = null,
+            notes = "Integration test contact"
+        )
         
-        // Then
-        // assertNotNull(retrieved)
-        // assertNull(manager.get(contact.peerId))
-        assertTrue(true, "Placeholder - requires storage")
-    }
-    
-    @Test
-    fun `test MeshSettings validation`() {
-        // Given
-        val storagePath = "/tmp/test_settings"
-        // val manager = uniffi.api.MeshSettingsManager(storagePath)
+        manager.add(contact)
+        val retrieved = manager.list().find { it.peerId == peerId }
         
-        // When
-        // val settings = uniffi.api.MeshSettings(...)
-        // manager.validate(settings)
-        // manager.save(settings)
-        // val loaded = manager.load()
+        kotlin.test.assertNotNull(retrieved)
+        kotlin.test.assertEquals(nickname, retrieved?.nickname)
         
-        // Then
-        // assertEquals(settings.relayEnabled, loaded.relayEnabled)
-        assertTrue(true, "Placeholder - requires validation logic")
-    }
-    
-    @Test
-    fun `test HistoryManager persistence`() {
-        // Given
-        val storagePath = "/tmp/test_history"
-        // val manager = uniffi.api.HistoryManager(storagePath)
-        
-        // When
-        // val record = uniffi.api.MessageRecord(...)
-        // manager.add(record)
-        // val retrieved = manager.get(record.id)
-        
-        // Then
-        // assertNotNull(retrieved)
-        // assertEquals(record.content, retrieved.content)
-        assertTrue(true, "Placeholder - requires message storage")
-    }
-    
-    @Test
-    fun `test LedgerManager connection tracking`() {
-        // Given
-        val storagePath = "/tmp/test_ledger"
-        // val manager = uniffi.api.LedgerManager(storagePath)
-        
-        // When
-        // manager.recordConnection("/ip4/1.2.3.4/tcp/4001", "peer123")
-        // manager.recordSuccess("/ip4/1.2.3.4/tcp/4001")
-        // val dialable = manager.dialableAddresses()
-        
-        // Then
-        // assertTrue(dialable.isNotEmpty())
-        assertTrue(true, "Placeholder - requires ledger ops")
-    }
-    
-    @Test
-    fun `test AutoAdjustEngine profile computation`() {
-        // Given
-        // val engine = uniffi.api.AutoAdjustEngine()
-        // val profile = uniffi.api.DeviceProfile(batteryLevel = 50u, ...)
-        
-        // When
-        // val adjustmentProfile = engine.computeProfile(profile)
-        // val bleAdjustment = engine.computeBleAdjustment(adjustmentProfile)
-        
-        // Then
-        // assertTrue(bleAdjustment.scanIntervalMs > 0u)
-        assertTrue(true, "Placeholder - requires engine logic")
+        manager.remove(peerId)
+        kotlin.test.assertFalse(manager.list().any { it.peerId == peerId })
     }
 }

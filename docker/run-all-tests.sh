@@ -16,6 +16,7 @@ NC='\033[0m' # No Color
 
 # Default options
 RUN_RUST=true
+RUN_BINDINGS=true
 RUN_ANDROID=true
 RUN_INTEGRATION=true
 RUN_NAT=false
@@ -134,6 +135,7 @@ chmod -R 777 test-results
 
 # Track test results
 RUST_EXIT=0
+BINDINGS_EXIT=0
 ANDROID_EXIT=0
 INTEGRATION_EXIT=0
 
@@ -146,6 +148,18 @@ if [ "$RUN_RUST" = true ]; then
         log_info "Rust core tests PASSED"
     else
         log_error "Rust core tests FAILED (exit code: $RUST_EXIT)"
+    fi
+fi
+
+# Run Bindings tests
+if [ "$RUN_BINDINGS" = true ]; then
+    log_section "Running UniFFI Bindings Check"
+    docker compose -f docker-compose.test.yml --profile test run --rm uniffi-bindings-check || BINDINGS_EXIT=$?
+    
+    if [ $BINDINGS_EXIT -eq 0 ]; then
+        log_info "UniFFI bindings check PASSED"
+    else
+        log_error "UniFFI bindings check FAILED (exit code: $BINDINGS_EXIT)"
     fi
 fi
 
@@ -233,6 +247,15 @@ if [ "$RUN_ANDROID" = true ]; then
         echo -e "  Android Unit Tests:  ${GREEN}✓ PASSED${NC}"
     else
         echo -e "  Android Unit Tests:  ${RED}✗ FAILED${NC}"
+        TOTAL_FAILURES=$((TOTAL_FAILURES + 1))
+    fi
+fi
+
+if [ "$RUN_BINDINGS" = true ]; then
+    if [ $BINDINGS_EXIT -eq 0 ]; then
+        echo -e "  UniFFI Bindings:     ${GREEN}✓ PASSED${NC}"
+    else
+        echo -e "  UniFFI Bindings:     ${RED}✗ FAILED${NC}"
         TOTAL_FAILURES=$((TOTAL_FAILURES + 1))
     fi
 fi

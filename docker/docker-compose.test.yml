@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 # Comprehensive testing infrastructure for SCMessenger
 # Includes: Android tests, Rust tests, integration tests, and mock infrastructure
@@ -25,6 +25,27 @@ services:
     profiles:
       - test
 
+  # UniFFI Bindings Verification (Swift & Kotlin Parity)
+  uniffi-bindings-check:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rust-test
+    container_name: scm-bindings-check
+    working_dir: /workspace
+    volumes:
+      - rust-test-cache:/workspace/target
+    command: >
+      bash -c "
+        echo '=== Generating Kotlin Bindings ===' &&
+        cargo run --manifest-path core/Cargo.toml --bin gen_kotlin --features gen-bindings &&
+        echo '=== Generating Swift Bindings ===' &&
+        cargo run --manifest-path core/Cargo.toml --bin gen_swift --features gen-bindings &&
+        echo '=== Bindings Parity Check Complete ==='
+      "
+    profiles:
+      - test
+      - bindings
+
   # Android Unit Tests
   android-unit-test:
     build:
@@ -42,10 +63,14 @@ services:
       - RUSTFLAGS=-C link-arg=-Wl,-z,max-page-size=16384
     command: |
       bash -c "
-        echo '=== Building UniFFI Bindings ===' &&
+        echo '=== Generating UniFFI Bindings ===' &&
         cargo run --manifest-path core/Cargo.toml --bin gen_kotlin --features gen-bindings &&
+        echo '=== Building Native Library for Host (Linux) ===' &&
+        cargo build --manifest-path core/Cargo.toml --release &&
+        mkdir -p core/target/android-libs/host &&
+        cp core/target/release/libscmessenger_core.so core/target/android-libs/host/libuniffi_api.so &&
         echo '=== Running Android Unit Tests ===' &&
-        cd android && ./gradlew test --info --stacktrace &&
+        cd android && ./gradlew test -Pkotlin.compiler.execution.strategy=\"out-process\" --info --stacktrace &&
         cd .. &&
         mkdir -p /workspace/test-results/android &&
         find android -name '*.xml' -path '*/test-results/*' -exec cp {} /workspace/test-results/android/ \\; &&
@@ -68,14 +93,14 @@ services:
       - NODE_NAME=mock-relay
       - ENABLE_RELAY=true
     ports:
-      - "14001:4001"
+      - 14001:4001
     networks:
       test-network-a:
         ipv4_address: 172.30.0.10
       test-network-b:
         ipv4_address: 172.31.0.10
     healthcheck:
-      test: ["CMD-SHELL", "ss -tunlp | grep 4001 || exit 1"]
+      test: [CMD-SHELL, ss -tunlp | grep 4001 || exit 1]
       interval: 5s
       timeout: 3s
       retries: 5
