@@ -393,7 +393,7 @@ final class MeshRepository {
             logger.warning("Invalid maxRelayBudget: \(settings.maxRelayBudget) (must be 1-\(DefaultSettings.maxRelayBudgetLimit))")
             return false
         }
-        if settings.batteryFloor < 0 || settings.batteryFloor > 100 {
+        if settings.batteryFloor > 100 {
             logger.warning("Invalid batteryFloor: \(settings.batteryFloor) (must be 0-100)")
             return false
         }
@@ -507,11 +507,11 @@ final class MeshRepository {
         return try historyManager.conversation(peerId: peerId, limit: limit)
     }
     
-    func getRecentMessages(peerFilter: String? = nil, limit: UInt32 = 50) throws -> [MessageRecord] {
+    func getRecentMessages(peerIdFilter: String? = nil, limit: UInt32 = 50) throws -> [MessageRecord] {
         guard let historyManager = historyManager else {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
-        return try historyManager.recent(peerFilter: peerFilter, limit: limit)
+        return try historyManager.recent(peerFilter: peerIdFilter, limit: limit)
     }
     
     func getMessage(id: String) throws -> MessageRecord? {
