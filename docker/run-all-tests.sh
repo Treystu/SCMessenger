@@ -16,7 +16,11 @@ NC='\033[0m' # No Color
 
 # Default options
 RUN_RUST=true
+RUN_LINT=true
+RUN_AUDIT=true
+RUN_COVERAGE=false
 RUN_BINDINGS=true
+RUN_WASM=true
 RUN_ANDROID=true
 RUN_INTEGRATION=true
 RUN_NAT=false
@@ -135,7 +139,11 @@ chmod -R 777 test-results
 
 # Track test results
 RUST_EXIT=0
+LINT_EXIT=0
+AUDIT_EXIT=0
+COVERAGE_EXIT=0
 BINDINGS_EXIT=0
+WASM_EXIT=0
 ANDROID_EXIT=0
 INTEGRATION_EXIT=0
 
@@ -151,6 +159,42 @@ if [ "$RUN_RUST" = true ]; then
     fi
 fi
 
+# Run Rust Quality Checks
+if [ "$RUN_LINT" = true ]; then
+    log_section "Running Rust Quality Checks (Clippy & Fmt)"
+    docker compose -f docker-compose.test.yml --profile test run --rm rust-lint || LINT_EXIT=$?
+    
+    if [ $LINT_EXIT -eq 0 ]; then
+        log_info "Rust quality checks PASSED"
+    else
+        log_error "Rust quality checks FAILED (exit code: $LINT_EXIT)"
+    fi
+fi
+
+# Run Security Audit
+if [ "$RUN_AUDIT" = true ]; then
+    log_section "Running Security Audit"
+    docker compose -f docker-compose.test.yml --profile test run --rm rust-audit || AUDIT_EXIT=$?
+    
+    if [ $AUDIT_EXIT -eq 0 ]; then
+        log_info "Security audit PASSED"
+    else
+        log_error "Security audit FAILED (exit code: $AUDIT_EXIT)"
+    fi
+fi
+
+# Run Code Coverage
+if [ "$RUN_COVERAGE" = true ]; then
+    log_section "Running Code Coverage"
+    docker compose -f docker-compose.test.yml --profile test run --rm rust-coverage || COVERAGE_EXIT=$?
+    
+    if [ $COVERAGE_EXIT -eq 0 ]; then
+        log_info "Code coverage report generated"
+    else
+        log_error "Code coverage FAILED (exit code: $COVERAGE_EXIT)"
+    fi
+fi
+
 # Run Bindings tests
 if [ "$RUN_BINDINGS" = true ]; then
     log_section "Running UniFFI Bindings Check"
@@ -160,6 +204,17 @@ if [ "$RUN_BINDINGS" = true ]; then
         log_info "UniFFI bindings check PASSED"
     else
         log_error "UniFFI bindings check FAILED (exit code: $BINDINGS_EXIT)"
+    fi
+fi
+
+if [ "$RUN_WASM" = true ]; then
+    log_section "Running WASM Component Tests"
+    docker compose -f docker-compose.test.yml --profile test run --rm wasm-test || WASM_EXIT=$?
+    
+    if [ $WASM_EXIT -eq 0 ]; then
+        log_info "WASM component tests PASSED"
+    else
+        log_error "WASM component tests FAILED (exit code: $WASM_EXIT)"
     fi
 fi
 
@@ -235,9 +290,36 @@ TOTAL_FAILURES=0
 
 if [ "$RUN_RUST" = true ]; then
     if [ $RUST_EXIT -eq 0 ]; then
-        echo -e "  Rust Core Tests:     ${GREEN}✓ PASSED${NC}"
+        echo -e "  Rust Workspace Tests: ${GREEN}✓ PASSED${NC}"
     else
-        echo -e "  Rust Core Tests:     ${RED}✗ FAILED${NC}"
+        echo -e "  Rust Workspace Tests: ${RED}✗ FAILED${NC}"
+        TOTAL_FAILURES=$((TOTAL_FAILURES + 1))
+    fi
+fi
+
+if [ "$RUN_LINT" = true ]; then
+    if [ $LINT_EXIT -eq 0 ]; then
+        echo -e "  Rust Linting:         ${GREEN}✓ PASSED${NC}"
+    else
+        echo -e "  Rust Linting:         ${RED}✗ FAILED${NC}"
+        TOTAL_FAILURES=$((TOTAL_FAILURES + 1))
+    fi
+fi
+
+if [ "$RUN_AUDIT" = true ]; then
+    if [ $AUDIT_EXIT -eq 0 ]; then
+        echo -e "  Security Audit:       ${GREEN}✓ PASSED${NC}"
+    else
+        echo -e "  Security Audit:       ${RED}✗ FAILED${NC}"
+        TOTAL_FAILURES=$((TOTAL_FAILURES + 1))
+    fi
+fi
+
+if [ "$RUN_COVERAGE" = true ]; then
+    if [ $COVERAGE_EXIT -eq 0 ]; then
+        echo -e "  Code Coverage:        ${GREEN}✓ GENERATED${NC}"
+    else
+        echo -e "  Code Coverage:        ${RED}✗ FAILED${NC}"
         TOTAL_FAILURES=$((TOTAL_FAILURES + 1))
     fi
 fi
@@ -256,6 +338,15 @@ if [ "$RUN_BINDINGS" = true ]; then
         echo -e "  UniFFI Bindings:     ${GREEN}✓ PASSED${NC}"
     else
         echo -e "  UniFFI Bindings:     ${RED}✗ FAILED${NC}"
+        TOTAL_FAILURES=$((TOTAL_FAILURES + 1))
+    fi
+fi
+
+if [ "$RUN_WASM" = true ]; then
+    if [ $WASM_EXIT -eq 0 ]; then
+        echo -e "  WASM Tests:          ${GREEN}✓ PASSED${NC}"
+    else
+        echo -e "  WASM Tests:          ${RED}✗ FAILED${NC}"
         TOTAL_FAILURES=$((TOTAL_FAILURES + 1))
     fi
 fi

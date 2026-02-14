@@ -18,12 +18,90 @@ services:
       - RUST_BACKTRACE=1
     command: >
       bash -c "
-        echo '=== Running Rust Core Tests ===' &&
-        cargo test --package scmessenger-core --lib --bins --tests --all-features -- --nocapture --test-threads=1 &&
-        echo '=== Rust Core Tests Complete ==='
+        echo '=== Running Rust Workspace Tests ===' &&
+        cargo test --workspace --exclude scmessenger-wasm --all-features -- --nocapture --test-threads=1 &&
+        echo '=== Rust Workspace Tests Complete ==='
       "
     profiles:
       - test
+
+  # Rust Code Quality (Clippy & Fmt)
+  rust-lint:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rust-test
+    container_name: scm-lint
+    working_dir: /workspace
+    volumes:
+      - rust-test-cache:/workspace/target
+    command: >
+      bash -c "
+        echo '=== Running Rustfmt Check ===' &&
+        cargo fmt --all -- --check &&
+        echo '=== Running Clippy Lints ===' &&
+        cargo clippy --workspace --all-features -- -D warnings &&
+        echo '=== Linting Complete ==='
+      "
+    profiles:
+      - test
+      - lint
+
+  # Rust Security Audit
+  rust-audit:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rust-test
+    container_name: scm-audit
+    working_dir: /workspace
+    command: >
+      bash -c "
+        echo '=== Running Security Audit ===' &&
+        cargo audit &&
+        echo '=== Audit Complete ==='
+      "
+    profiles:
+      - test
+      - audit
+
+  # Rust Code Coverage
+  rust-coverage:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rust-test
+    container_name: scm-coverage
+    working_dir: /workspace
+    volumes:
+      - rust-test-cache:/workspace/target
+      - test-results:/workspace/test-results:rw
+    command: >
+      bash -c "
+        echo '=== Generating Code Coverage Report ===' &&
+        mkdir -p test-results/coverage &&
+        cargo tarpaulin --workspace --all-features --out Xml --output-dir test-results/coverage &&
+        echo '=== Coverage Report Generated ==='
+      "
+    profiles:
+      - test
+      - coverage
+
+  # WASM Component Tests
+  wasm-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.wasm-test
+    container_name: scm-wasm-test
+    working_dir: /workspace
+    volumes:
+      - rust-test-cache:/workspace/target
+    command: >
+      bash -c "
+        echo '=== Running WASM Tests ===' &&
+        cd wasm && wasm-pack test --node &&
+        echo '=== WASM Tests Complete ==='
+      "
+    profiles:
+      - test
+      - wasm
 
   # UniFFI Bindings Verification (Swift & Kotlin Parity)
   uniffi-bindings-check:
