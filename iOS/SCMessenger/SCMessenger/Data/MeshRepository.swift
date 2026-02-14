@@ -170,11 +170,13 @@ final class MeshRepository {
         statusEvents.send(.serviceStateChanged(.starting))
         
         do {
-            // Create mesh service
-            meshService = try MeshService(config: config)
+            // Create mesh service with persistent storage (matches Android: withStorage)
+            meshService = MeshService.withStorage(config: config, storagePath: storagePath)
             
-            // Initialize IronCore from the service
-            // Always get fresh reference from new service
+            // Start service first — IronCore is created during start()
+            try meshService?.start()
+            
+            // Now obtain IronCore (only available after start())
             ironCore = meshService?.getCore()
             if ironCore == nil {
                 throw MeshError.notInitialized("Failed to obtain IronCore from MeshService")
@@ -183,9 +185,6 @@ final class MeshRepository {
             // Configure platform bridge
             platformBridge = IosPlatformBridge()
             platformBridge?.configure(repository: self)
-            
-            // Start service
-            try meshService?.start()
             
             serviceState = .running
             statusEvents.send(.serviceStateChanged(.running))
