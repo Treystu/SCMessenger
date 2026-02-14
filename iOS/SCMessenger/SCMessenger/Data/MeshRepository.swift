@@ -100,6 +100,42 @@ final class MeshRepository {
         }
     }
     
+    /// Ensure service is initialized (lazy start if needed)
+    /// This enables identity operations before full mesh service is running
+    private func ensureServiceInitialized() throws {
+        if meshService == nil || serviceState != .running {
+            logger.info("Lazy starting MeshService for Identity access")
+            
+            // Initialize managers if not already done
+            if settingsManager == nil {
+                try initialize()
+            }
+            
+            // Create minimal config for lazy start
+            let settings = (try? settingsManager?.load()) ?? MeshSettings(
+                relayEnabled: true,
+                maxRelayBudget: 1000,
+                batteryFloor: 20,
+                autoAdjust: true
+            )
+            
+            let config = MeshServiceConfig(
+                discoveryIntervalMs: 30000,
+                relayBudgetPerHour: settings.maxRelayBudget,
+                batteryFloorPct: settings.batteryFloor
+            )
+            
+            try startMeshService(config: config)
+            logger.info("✓ MeshService started lazily")
+        }
+        
+        // Refresh ironCore reference just in case
+        if ironCore == nil {
+            ironCore = meshService?.getCore()
+            logger.info("IronCore reference refreshed: \(ironCore != nil)")
+        }
+    }
+    
     // MARK: - Service Lifecycle
     
     /// Start the mesh service with configuration
@@ -118,9 +154,10 @@ final class MeshRepository {
             // Create mesh service
             meshService = try MeshService(config: config)
             
-            // Initialize IronCore
-            ironCore = IronCore()
-            try ironCore?.initializeIdentity()
+            // Initialize IronCore (but don't create identity - that's done separately)
+            if ironCore == nil {
+                ironCore = meshService?.getCore()
+            }
             
             // Configure platform bridge
             platformBridge = IosPlatformBridge()
@@ -157,6 +194,45 @@ final class MeshRepository {
         serviceState = .stopped
         statusEvents.send(.serviceStateChanged(.stopped))
         logger.info("✓ Mesh service stopped")
+    }
+    
+    // MARK: - Identity Management
+    
+    /// Get identity information
+    func getIdentityInfo() -> IdentityInfo? {
+        return ironCore?.getIdentityInfo()
+    }
+    
+    /// Check if identity is initialized
+    func isIdentityInitialized() -> Bool {
+        do {
+            try ensureServiceInitialized()
+            return ironCore?.getIdentityInfo()?.initialized == true
+        } catch {
+            logger.error("Failed to check identity status: \(error.localizedDescription)")
+            return false
+        }
+    }
+    
+    /// Create a new identity (first-time setup)
+    func createIdentity() throws {
+        logger.info("Creating identity")
+        
+        do {
+            try ensureServiceInitialized()
+            
+            guard let ironCore = ironCore else {
+                logger.error("IronCore is nil after ensureServiceInitialized! Cannot create identity.")
+                throw MeshError.notInitialized("Mesh service initialization failed")
+            }
+            
+            logger.info("Calling ironCore.initializeIdentity()...")
+            try ironCore.initializeIdentity()
+            logger.info("✓ Identity created successfully")
+        } catch {
+            logger.error("Failed to create identity: \(error.localizedDescription)")
+            throw error
+        }
     }
     
     // MARK: - Messaging (with Relay Enforcement)
