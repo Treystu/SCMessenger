@@ -129,17 +129,11 @@ final class MeshRepository {
             
             // Create minimal config for lazy start
             // Use saved settings or defaults from settings manager
-            let settings = (try? settingsManager?.load()) ?? settingsManager?.defaultSettings() ?? MeshSettings(
-                relayEnabled: true,
-                maxRelayBudget: DefaultSettings.maxRelayBudget,
-                batteryFloor: DefaultSettings.batteryFloor,
-                bleEnabled: true,
-                wifiAwareEnabled: true,
-                wifiDirectEnabled: true,
-                internetEnabled: true,
-                discoveryMode: .normal,
-                onionRouting: false
-            )
+            guard let settingsManager = settingsManager else {
+                throw MeshError.notInitialized("SettingsManager not initialized for lazy start")
+            }
+            
+            let settings = (try? settingsManager.load()) ?? settingsManager.defaultSettings()
             
             let config = MeshServiceConfig(
                 discoveryIntervalMs: 30000,
@@ -231,7 +225,9 @@ final class MeshRepository {
             return
         }
         meshService?.pause()
-        logger.info("✓ Mesh service paused (state remains .running)")
+        // Note: pause() is an internal operation that reduces activity
+        // The external serviceState remains .running (no .paused state exists)
+        logger.info("✓ Mesh service paused")
     }
     
     /// Resume the mesh service (foreground mode)
