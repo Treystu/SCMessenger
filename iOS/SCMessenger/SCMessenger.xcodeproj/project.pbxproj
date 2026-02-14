@@ -251,7 +251,6 @@
 				DDEB56BE2F3FE0BD00387CC8 /* Assets.xcassets */,
 				DDEB56BF2F3FE0BD00387CC8 /* Bridging-Header.h */,
 				DDEB56C02F3FE0BD00387CC8 /* ContentView.swift */,
-				DDEB56C12F3FE0BD00387CC8 /* Info.plist */,
 				DDEB56C22F3FE0BD00387CC8 /* SCMessengerApp.swift */,
 			);
 			path = SCMessenger;

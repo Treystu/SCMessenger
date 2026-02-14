@@ -113,10 +113,11 @@ struct MeshSettingsView: View {
     @State private var viewModel: SettingsViewModel?
     
     private var discoveryModeBinding: Binding<DiscoveryMode> {
-        Binding(
+        return Binding(
             get: { viewModel?.settings?.discoveryMode ?? .normal },
             set: { viewModel?.updateDiscoveryMode($0) }
         )
+    }
 
     var body: some View {
         Form {
