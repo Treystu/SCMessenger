@@ -110,9 +110,9 @@ final class MeshRepository {
     /// Ensure service is initialized (lazy start if needed)
     /// This enables identity operations before full mesh service is running
     private func ensureServiceInitialized() throws {
-        // Only initialize if service is completely stopped
-        // Don't interfere with transitional states (.starting, .stopping, .paused)
-        if meshService == nil || serviceState == .stopped {
+        // Initialize when service is not running (mirrors Android: state != RUNNING)
+        // This properly handles all non-running states including .stopped, .starting, .stopping, .paused
+        if meshService == nil || serviceState != .running {
             logger.info("Lazy starting MeshService for Identity access")
             
             // Clean up existing service if stopped but not nil
@@ -128,12 +128,17 @@ final class MeshRepository {
             }
             
             // Create minimal config for lazy start
-            // Use saved settings or sensible defaults
-            let settings = (try? settingsManager?.load()) ?? MeshSettings(
+            // Use saved settings or defaults from settings manager
+            let settings = (try? settingsManager?.load()) ?? settingsManager?.defaultSettings() ?? MeshSettings(
                 relayEnabled: true,
                 maxRelayBudget: DefaultSettings.maxRelayBudget,
                 batteryFloor: DefaultSettings.batteryFloor,
-                autoAdjust: true
+                bleEnabled: true,
+                wifiAwareEnabled: true,
+                wifiDirectEnabled: true,
+                internetEnabled: true,
+                discoveryMode: .normal,
+                onionRouting: false
             )
             
             let config = MeshServiceConfig(
@@ -222,16 +227,20 @@ final class MeshRepository {
     func pauseMeshService() {
         logger.info("Pausing mesh service")
         guard serviceState == .running else {
-            logger.warning("Service not running")
+            logger.warning("Service not running (current state: \(serviceState))")
             return
         }
         meshService?.pause()
-        logger.info("✓ Mesh service paused")
+        logger.info("✓ Mesh service paused (state remains .running)")
     }
     
     /// Resume the mesh service (foreground mode)
     func resumeMeshService() {
         logger.info("Resuming mesh service")
+        guard serviceState == .running else {
+            logger.warning("Cannot resume - service not in running state (current: \(serviceState))")
+            return
+        }
         meshService?.resume()
         logger.info("✓ Mesh service resumed")
     }
@@ -388,16 +397,19 @@ final class MeshRepository {
     }
     
     func validateSettings(_ settings: MeshSettings) -> Bool {
-        // Validate settings constraints
-        if settings.maxRelayBudget <= 0 || settings.maxRelayBudget > DefaultSettings.maxRelayBudgetLimit {
-            logger.warning("Invalid maxRelayBudget: \(settings.maxRelayBudget) (must be 1-\(DefaultSettings.maxRelayBudgetLimit))")
+        // Delegate to Rust-side validation via UniFFI for consistency with Android
+        guard let settingsManager = settingsManager else {
+            logger.error("SettingsManager not initialized; cannot validate settings")
             return false
         }
-        if settings.batteryFloor > 100 {
-            logger.warning("Invalid batteryFloor: \(settings.batteryFloor) (must be 0-100)")
+        
+        do {
+            try settingsManager.validate(settings: settings)
+            return true
+        } catch {
+            logger.warning("Settings validation failed: \(String(describing: error))")
             return false
         }
-        return true
     }
     
     // MARK: - Ledger Management
