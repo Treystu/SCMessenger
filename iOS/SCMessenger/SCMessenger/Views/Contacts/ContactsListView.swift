@@ -56,13 +56,13 @@ struct ContactRow: View {
                 .fill(Theme.primaryContainer)
                 .frame(width: 44, height: 44)
                 .overlay {
-                    Text(contact.nickname.prefix(1).uppercased())
+                    Text((contact.nickname ?? "?").prefix(1).uppercased())
                         .font(Theme.titleMedium)
                         .foregroundStyle(Theme.onPrimaryContainer)
                 }
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(contact.nickname)
+                Text(contact.nickname ?? "Unknown")
                     .font(Theme.titleMedium)
                 
                 Text(contact.peerId.prefix(8))
@@ -121,9 +121,11 @@ struct AddContactView: View {
     private func addContact() {
         let contact = Contact(
             peerId: publicKey.prefix(16).description,
-            publicKey: publicKey,
             nickname: nickname,
-            addedAt: UInt64(Date().timeIntervalSince1970)
+            publicKey: publicKey,
+            addedAt: UInt64(Date().timeIntervalSince1970),
+            lastSeen: nil,
+            notes: nil
         )
         
         do {

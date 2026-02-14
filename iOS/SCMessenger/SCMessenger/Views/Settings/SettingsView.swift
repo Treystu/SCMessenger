@@ -112,16 +112,19 @@ struct MeshSettingsView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var viewModel: SettingsViewModel?
     
+    private var discoveryModeBinding: Binding<DiscoveryMode> {
+        Binding(
+            get: { viewModel?.settings?.discoveryMode ?? .normal },
+            set: { viewModel?.updateDiscoveryMode($0) }
+        )
+
     var body: some View {
         Form {
             Section("Discovery") {
-                Picker("Mode", selection: Binding(
-                    get: { viewModel?.settings?.discoveryMode ?? .balanced },
-                    set: { viewModel?.updateDiscoveryMode($0) }
-                )) {
-                    Text("Aggressive").tag(DiscoveryMode.aggressive)
-                    Text("Balanced").tag(DiscoveryMode.balanced)
-                    Text("Passive").tag(DiscoveryMode.passive)
+                Picker("Mode", selection: discoveryModeBinding) {
+                    Text("Aggressive (Normal)").tag(DiscoveryMode.normal)
+                    Text("Balanced (Cautious)").tag(DiscoveryMode.cautious)
+                    Text("Passive (Paranoid)").tag(DiscoveryMode.paranoid)
                 }
             }
             
@@ -129,7 +132,7 @@ struct MeshSettingsView: View {
                 HStack {
                     Text("Minimum Level")
                     Spacer()
-                    Text("\(Int((viewModel?.settings?.batteryFloor ?? 20) * 100))%")
+                    Text("\(viewModel?.settings?.batteryFloor ?? 20)%")
                         .foregroundStyle(Theme.onSurfaceVariant)
                 }
             }

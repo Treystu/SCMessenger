@@ -206,7 +206,7 @@ final class MeshRepository {
             timestamp: UInt64(Date().timeIntervalSince1970),
             delivered: false
         )
-        try? historyManager?.addMessage(record: messageRecord)
+        try? historyManager?.add(record: messageRecord)
     }
     
     /// Handle incoming message (from CoreDelegate callback)
@@ -241,7 +241,7 @@ final class MeshRepository {
                 delivered: true
             )
             
-            try? historyManager?.addMessage(record: messageRecord)
+            try? historyManager?.add(record: messageRecord)
             
             // Notify UI
             incomingMessages.send(messageRecord)
@@ -272,7 +272,7 @@ final class MeshRepository {
         guard let contactManager = contactManager else {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
-        return try contactManager.listAll()
+        return try contactManager.list()
     }
     
     func addContact(_ contact: Contact) throws {
@@ -297,7 +297,7 @@ final class MeshRepository {
         guard let historyManager = historyManager else {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
-        return try historyManager.getForPeer(peerId: peerId)
+        return try historyManager.conversation(peerId: peerId, limit: 100)
     }
     
     // MARK: - Platform Reporting
@@ -385,7 +385,7 @@ final class MeshRepository {
     // MARK: - Identity Helpers
     
     func getIdentitySnippet() -> String {
-        guard let identity = try? ironCore?.getIdentityInfo(),
+        guard let identity = ironCore?.getIdentityInfo(),
               let publicKey = identity.publicKeyHex else {
             return "????????"
         }

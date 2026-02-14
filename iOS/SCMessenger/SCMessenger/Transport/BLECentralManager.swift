@@ -79,7 +79,7 @@ final class BLECentralManager: NSObject {
     
     func applyScanSettings(intervalMs: UInt32) {
         scanInterval = TimeInterval(intervalMs) / 1000.0
-        logger.debug("Scan interval updated: \(scanInterval)s")
+        logger.debug("Scan interval updated: \(self.scanInterval)s")
     }
     
     func sendData(to peripheralId: UUID, data: Data) {

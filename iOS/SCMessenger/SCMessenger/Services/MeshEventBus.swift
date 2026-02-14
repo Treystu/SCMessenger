@@ -72,28 +72,3 @@ final class MeshEventBus {
         case internet = "Internet"
     }
 }
-
-// MARK: - ServiceStats Equatable Conformance
-
-extension ServiceStats: Equatable {
-    public static func == (lhs: ServiceStats, rhs: ServiceStats) -> Bool {
-        lhs.peersDiscovered == rhs.peersDiscovered &&
-        lhs.messagesRelayed == rhs.messagesRelayed &&
-        lhs.bytesTransferred == rhs.bytesTransferred &&
-        lhs.uptimeSecs == rhs.uptimeSecs
-    }
-}
-
-// MARK: - ServiceState Equatable Conformance
-
-extension ServiceState: Equatable {
-    public static func == (lhs: ServiceState, rhs: ServiceState) -> Bool {
-        switch (lhs, rhs) {
-        case (.stopped, .stopped): return true
-        case (.starting, .starting): return true
-        case (.running, .running): return true
-        case (.stopping, .stopping): return true
-        default: return false
-        }
-    }
-}

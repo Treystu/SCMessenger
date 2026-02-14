@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		DDEB56C42F3FE0BD00387CC8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DDEB56BE2F3FE0BD00387CC8 /* Assets.xcassets */; };
-		DDEB56C52F3FE0BD00387CC8 /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = DDEB56C12F3FE0BD00387CC8 /* Info.plist */; };
 		DDEB56C62F3FE0BD00387CC8 /* JoinMeshView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56BB2F3FE0BD00387CC8 /* JoinMeshView.swift */; };
 		DDEB56C72F3FE0BD00387CC8 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56B72F3FE0BD00387CC8 /* OnboardingFlow.swift */; };
 		DDEB56C82F3FE0BD00387CC8 /* MeshRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56952F3FE0BD00387CC8 /* MeshRepository.swift */; };
@@ -73,16 +72,10 @@
 		DDEB56C02F3FE0BD00387CC8 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		DDEB56C12F3FE0BD00387CC8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		DDEB56C22F3FE0BD00387CC8 /* SCMessengerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SCMessengerApp.swift; sourceTree = "<group>"; };
-		DDEB56E32F3FE20E00387CC8 /* libscmessenger_mobile.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libscmessenger_mobile.a; path = "../../target/aarch64-apple-ios/debug/libscmessenger_mobile.a"; sourceTree = "<group>"; };
+		DDEB56E32F3FE20E00387CC8 /* libscmessenger_mobile.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libscmessenger_mobile.a; path = libscmessenger_mobile.a; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		DDEB56442F3FDFC500387CC8 /* SCMessenger */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = SCMessenger;
-			sourceTree = "<group>";
-		};
-/* End PBXFileSystemSynchronizedRootGroup section */
+/* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		DDEB563F2F3FDFC400387CC8 /* Frameworks */ = {
@@ -100,7 +93,6 @@
 			isa = PBXGroup;
 			children = (
 				DDEB56C32F3FE0BD00387CC8 /* SCMessenger */,
-				DDEB56442F3FDFC500387CC8 /* SCMessenger */,
 				DDEB56E22F3FE20E00387CC8 /* Frameworks */,
 				DDEB56432F3FDFC500387CC8 /* Products */,
 			);
@@ -289,9 +281,6 @@
 			);
 			dependencies = (
 			);
-			fileSystemSynchronizedGroups = (
-				DDEB56442F3FDFC500387CC8 /* SCMessenger */,
-			);
 			name = SCMessenger;
 			packageProductDependencies = (
 			);
@@ -339,7 +328,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				DDEB56C42F3FE0BD00387CC8 /* Assets.xcassets in Resources */,
-				DDEB56C52F3FE0BD00387CC8 /* Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -359,10 +347,11 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"$(CONFIGURATION_BUILD_DIR)/libscmessenger_mobile.a",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "```bash\ncd \"${SRCROOT}/../mobile\"\n\nif [ \"$PLATFORM_NAME\" = \"iphonesimulator\" ]; then\n    if [ \"$(uname -m)\" = \"arm64\" ]; then\n        RUST_TARGET=\"aarch64-apple-ios-sim\"\n    else\n        RUST_TARGET=\"x86_64-apple-ios\"\n    fi\nelse\n    RUST_TARGET=\"aarch64-apple-ios\"\nfi\n\nif [ \"$CONFIGURATION\" = \"Release\" ]; then\n    RUST_PROFILE=\"--release\"\n    RUST_DIR=\"release\"\nelse\n    RUST_PROFILE=\"\"\n    RUST_DIR=\"debug\"\nfi\n\necho \"Building Rust for target: $RUST_TARGET ($CONFIGURATION)\"\ncargo build $RUST_PROFILE --target \"$RUST_TARGET\"\n\nmkdir -p \"${CONFIGURATION_BUILD_DIR}\"\ncp \"target/${RUST_TARGET}/${RUST_DIR}/libscmessenger_mobile.a\" \\\n   \"${CONFIGURATION_BUILD_DIR}/libscmessenger_mobile.a\"\n\necho \"✓ Rust library copied to: ${CONFIGURATION_BUILD_DIR}/libscmessenger_mobile.a\"\n```\n";
+			shellScript = "set -e\nif [ -f \"$HOME/.cargo/env\" ]; then\n    source \"$HOME/.cargo/env\"\nfi\n\ncd \"${PROJECT_DIR}/../../mobile\"\n\nif [ \"$PLATFORM_NAME\" = \"iphonesimulator\" ]; then\n    if [ \"$(uname -m)\" = \"arm64\" ]; then\n        RUST_TARGET=\"aarch64-apple-ios-sim\"\n    else\n        RUST_TARGET=\"x86_64-apple-ios\"\n    fi\nelse\n    RUST_TARGET=\"aarch64-apple-ios\"\nfi\n\nif [ \"$CONFIGURATION\" = \"Release\" ]; then\n    RUST_PROFILE=\"--release\"\n    RUST_DIR=\"release\"\nelse\n    RUST_PROFILE=\"\"\n    RUST_DIR=\"debug\"\nfi\n\necho \"Building Rust library for target: $RUST_TARGET ($CONFIGURATION)\"\ncargo build $RUST_PROFILE --target \"$RUST_TARGET\"\n\nmkdir -p \"${CONFIGURATION_BUILD_DIR}\"\ncp \"../target/${RUST_TARGET}/${RUST_DIR}/libscmessenger_mobile.a\" \\\n   \"${CONFIGURATION_BUILD_DIR}/libscmessenger_mobile.a\"\n\necho \"✓ Rust library copied to: ${CONFIGURATION_BUILD_DIR}/libscmessenger_mobile.a\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -456,7 +445,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -464,6 +453,7 @@
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 			};
 			name = Debug;
 		};
@@ -513,7 +503,8 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -531,18 +522,31 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SCMessenger/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(CONFIGURATION_BUILD_DIR)";
-				MARKETING_VERSION = 1.0;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					SystemConfiguration,
+					"-framework",
+					Network,
+					"-framework",
+					CoreBluetooth,
+					"-framework",
+					MultipeerConnectivity,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = SovereignCommunications.SCMessenger;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -553,6 +557,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 			};
 			name = Debug;
 		};
@@ -564,18 +569,28 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SCMessenger/Info.plist;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(CONFIGURATION_BUILD_DIR)";
 				MARKETING_VERSION = 1.0;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					SystemConfiguration,
+					"-framework",
+					Network,
+					"-framework",
+					CoreBluetooth,
+					"-framework",
+					MultipeerConnectivity,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = SovereignCommunications.SCMessenger;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -586,6 +601,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 			};
 			name = Release;
 		};

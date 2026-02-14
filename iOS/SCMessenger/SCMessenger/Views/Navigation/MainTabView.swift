@@ -74,7 +74,7 @@ struct ConversationListView: View {
         do {
             let contacts = try repository.getContacts()
             conversations = contacts.map { contact in
-                Conversation(peerId: contact.peerId, peerNickname: contact.nickname)
+                Conversation(peerId: contact.peerId, peerNickname: contact.nickname ?? "Unknown")
             }
         } catch {
             // Handle error

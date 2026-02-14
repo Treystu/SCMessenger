@@ -6,6 +6,7 @@
 //  Transport priority: Multipeer > BLE > Internet
 //
 
+import Combine
 import MultipeerConnectivity
 import os
 

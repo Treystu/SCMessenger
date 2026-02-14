@@ -21,7 +21,7 @@ final class ContactsViewModel {
             return contacts
         }
         return contacts.filter { contact in
-            contact.nickname.localizedCaseInsensitiveContains(searchText) ||
+            (contact.nickname?.localizedCaseInsensitiveContains(searchText) ?? false) ||
             contact.peerId.localizedCaseInsensitiveContains(searchText)
         }
     }
