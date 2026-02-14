@@ -12,6 +12,12 @@ import Foundation
 import Combine
 import os
 
+/// Default settings for mesh service configuration
+private enum DefaultSettings {
+    static let maxRelayBudget: UInt32 = 1000  // Messages per hour
+    static let batteryFloor: UInt8 = 20       // Minimum 20% battery
+}
+
 /// Repository abstracting access to the Rust core via UniFFI bindings.
 ///
 /// This is the single source of truth for:
@@ -103,8 +109,16 @@ final class MeshRepository {
     /// Ensure service is initialized (lazy start if needed)
     /// This enables identity operations before full mesh service is running
     private func ensureServiceInitialized() throws {
+        // Check if we need to start/restart the service
         if meshService == nil || serviceState != .running {
             logger.info("Lazy starting MeshService for Identity access")
+            
+            // Clean up existing service if in invalid state
+            if meshService != nil && serviceState != .running {
+                meshService?.stop()
+                meshService = nil
+                serviceState = .stopped
+            }
             
             // Initialize managers if not already done
             if settingsManager == nil {
@@ -112,10 +126,11 @@ final class MeshRepository {
             }
             
             // Create minimal config for lazy start
+            // Use saved settings or sensible defaults
             let settings = (try? settingsManager?.load()) ?? MeshSettings(
                 relayEnabled: true,
-                maxRelayBudget: 1000,
-                batteryFloor: 20,
+                maxRelayBudget: DefaultSettings.maxRelayBudget,
+                batteryFloor: DefaultSettings.batteryFloor,
                 autoAdjust: true
             )
             
@@ -368,7 +383,7 @@ final class MeshRepository {
     func validateSettings(_ settings: MeshSettings) -> Bool {
         // Validate settings constraints
         guard settings.maxRelayBudget > 0 else { return false }
-        guard settings.batteryFloor <= 100 else { return false }
+        guard settings.batteryFloor >= 0 && settings.batteryFloor <= 100 else { return false }
         return true
     }
     
