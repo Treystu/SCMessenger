@@ -196,6 +196,29 @@ final class MeshRepository {
         logger.info("✓ Mesh service stopped")
     }
     
+    /// Pause the mesh service (background mode)
+    func pauseMeshService() {
+        logger.info("Pausing mesh service")
+        guard serviceState == .running else {
+            logger.warning("Service not running")
+            return
+        }
+        meshService?.pause()
+        logger.info("✓ Mesh service paused")
+    }
+    
+    /// Resume the mesh service (foreground mode)
+    func resumeMeshService() {
+        logger.info("Resuming mesh service")
+        meshService?.resume()
+        logger.info("✓ Mesh service resumed")
+    }
+    
+    /// Get current service state
+    func getServiceState() -> ServiceState {
+        return serviceState
+    }
+    
     // MARK: - Identity Management
     
     /// Get identity information
@@ -342,6 +365,57 @@ final class MeshRepository {
         logger.info("✓ Settings saved (relay: \(settings.relayEnabled))")
     }
     
+    func validateSettings(_ settings: MeshSettings) -> Bool {
+        // Validate settings constraints
+        guard settings.maxRelayBudget > 0 else { return false }
+        guard settings.batteryFloor <= 100 else { return false }
+        return true
+    }
+    
+    // MARK: - Ledger Management
+    
+    func recordConnection(multiaddr: String, peerId: String) throws {
+        guard let ledgerManager = ledgerManager else {
+            throw MeshError.notInitialized("LedgerManager not initialized")
+        }
+        try ledgerManager.recordConnection(multiaddr: multiaddr, peerId: peerId)
+    }
+    
+    func recordConnectionFailure(multiaddr: String) throws {
+        guard let ledgerManager = ledgerManager else {
+            throw MeshError.notInitialized("LedgerManager not initialized")
+        }
+        try ledgerManager.recordFailure(multiaddr: multiaddr)
+    }
+    
+    func getDialableAddresses() throws -> [LedgerEntry] {
+        guard let ledgerManager = ledgerManager else {
+            throw MeshError.notInitialized("LedgerManager not initialized")
+        }
+        return try ledgerManager.dialable()
+    }
+    
+    func getAllKnownTopics() throws -> [String] {
+        guard let ledgerManager = ledgerManager else {
+            throw MeshError.notInitialized("LedgerManager not initialized")
+        }
+        return try ledgerManager.allTopics()
+    }
+    
+    func getLedgerSummary() throws -> String {
+        guard let ledgerManager = ledgerManager else {
+            throw MeshError.notInitialized("LedgerManager not initialized")
+        }
+        return try ledgerManager.summary()
+    }
+    
+    func saveLedger() throws {
+        guard let ledgerManager = ledgerManager else {
+            throw MeshError.notInitialized("LedgerManager not initialized")
+        }
+        try ledgerManager.save()
+    }
+    
     // MARK: - Contacts Management
     
     func getContacts() throws -> [Contact] {
@@ -349,6 +423,13 @@ final class MeshRepository {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
         return try contactManager.list()
+    }
+    
+    func getContact(peerId: String) throws -> Contact? {
+        guard let contactManager = contactManager else {
+            throw MeshError.notInitialized("ContactManager not initialized")
+        }
+        return try contactManager.get(peerId: peerId)
     }
     
     func addContact(_ contact: Contact) throws {
@@ -367,6 +448,28 @@ final class MeshRepository {
         logger.info("✓ Contact removed: \(peerId)")
     }
     
+    func searchContacts(query: String) throws -> [Contact] {
+        guard let contactManager = contactManager else {
+            throw MeshError.notInitialized("ContactManager not initialized")
+        }
+        return try contactManager.search(query: query)
+    }
+    
+    func setContactNickname(peerId: String, nickname: String?) throws {
+        guard let contactManager = contactManager else {
+            throw MeshError.notInitialized("ContactManager not initialized")
+        }
+        try contactManager.setNickname(peerId: peerId, nickname: nickname)
+        logger.info("✓ Contact nickname updated: \(peerId)")
+    }
+    
+    func getContactCount() throws -> UInt32 {
+        guard let contactManager = contactManager else {
+            throw MeshError.notInitialized("ContactManager not initialized")
+        }
+        return try contactManager.count()
+    }
+    
     // MARK: - Message History
     
     func getMessages(peerId: String) throws -> [MessageRecord] {
@@ -374,6 +477,78 @@ final class MeshRepository {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
         return try historyManager.conversation(peerId: peerId, limit: 100)
+    }
+    
+    func getConversation(peerId: String, limit: UInt32 = 100) throws -> [MessageRecord] {
+        guard let historyManager = historyManager else {
+            throw MeshError.notInitialized("HistoryManager not initialized")
+        }
+        return try historyManager.conversation(peerId: peerId, limit: limit)
+    }
+    
+    func getRecentMessages(peerFilter: String? = nil, limit: UInt32 = 50) throws -> [MessageRecord] {
+        guard let historyManager = historyManager else {
+            throw MeshError.notInitialized("HistoryManager not initialized")
+        }
+        return try historyManager.recent(peerFilter: peerFilter, limit: limit)
+    }
+    
+    func getMessage(id: String) throws -> MessageRecord? {
+        guard let historyManager = historyManager else {
+            throw MeshError.notInitialized("HistoryManager not initialized")
+        }
+        return try historyManager.get(id: id)
+    }
+    
+    func addMessage(record: MessageRecord) throws {
+        guard let historyManager = historyManager else {
+            throw MeshError.notInitialized("HistoryManager not initialized")
+        }
+        try historyManager.add(record: record)
+    }
+    
+    func searchMessages(query: String, limit: UInt32 = 50) throws -> [MessageRecord] {
+        guard let historyManager = historyManager else {
+            throw MeshError.notInitialized("HistoryManager not initialized")
+        }
+        return try historyManager.search(query: query, limit: limit)
+    }
+    
+    func markMessageDelivered(id: String) throws {
+        guard let historyManager = historyManager else {
+            throw MeshError.notInitialized("HistoryManager not initialized")
+        }
+        try historyManager.markDelivered(id: id)
+    }
+    
+    func clearHistory() throws {
+        guard let historyManager = historyManager else {
+            throw MeshError.notInitialized("HistoryManager not initialized")
+        }
+        try historyManager.clear()
+        logger.info("✓ Message history cleared")
+    }
+    
+    func clearConversation(peerId: String) throws {
+        guard let historyManager = historyManager else {
+            throw MeshError.notInitialized("HistoryManager not initialized")
+        }
+        try historyManager.clearConversation(peerId: peerId)
+        logger.info("✓ Conversation cleared for peer: \(peerId)")
+    }
+    
+    func getHistoryStats() throws -> HistoryStats? {
+        guard let historyManager = historyManager else {
+            throw MeshError.notInitialized("HistoryManager not initialized")
+        }
+        return try historyManager.stats()
+    }
+    
+    func getMessageCount() throws -> UInt32 {
+        guard let historyManager = historyManager else {
+            throw MeshError.notInitialized("HistoryManager not initialized")
+        }
+        return try historyManager.count()
     }
     
     // MARK: - Platform Reporting
@@ -456,6 +631,53 @@ final class MeshRepository {
     func sendBlePacket(peerId: String, data: Data) {
         logger.debug("Send BLE packet to \(peerId): \(data.count) bytes")
         // Send via BLE transport
+    }
+    
+    // MARK: - Auto-Adjustment Engine
+    
+    func computeAdjustmentProfile(deviceProfile: DeviceProfile) throws -> AdjustmentProfile {
+        guard let autoAdjustEngine = autoAdjustEngine else {
+            throw MeshError.notInitialized("AutoAdjustEngine not initialized")
+        }
+        return autoAdjustEngine.computeProfile(deviceProfile: deviceProfile)
+    }
+    
+    func computeBleAdjustment(profile: AdjustmentProfile) throws -> BleAdjustment {
+        guard let autoAdjustEngine = autoAdjustEngine else {
+            throw MeshError.notInitialized("AutoAdjustEngine not initialized")
+        }
+        return autoAdjustEngine.computeBleAdjustment(profile: profile)
+    }
+    
+    func computeRelayAdjustment(profile: AdjustmentProfile) throws -> RelayAdjustment {
+        guard let autoAdjustEngine = autoAdjustEngine else {
+            throw MeshError.notInitialized("AutoAdjustEngine not initialized")
+        }
+        return autoAdjustEngine.computeRelayAdjustment(profile: profile)
+    }
+    
+    func overrideBleInterval(scanMs: UInt32, advertiseMs: UInt32) throws {
+        guard let autoAdjustEngine = autoAdjustEngine else {
+            throw MeshError.notInitialized("AutoAdjustEngine not initialized")
+        }
+        autoAdjustEngine.overrideBleInterval(scanMs: scanMs, advertiseMs: advertiseMs)
+        logger.info("✓ BLE interval overridden: scan=\(scanMs)ms advertise=\(advertiseMs)ms")
+    }
+    
+    func overrideRelayMax(maxRelayPerHour: UInt32) throws {
+        guard let autoAdjustEngine = autoAdjustEngine else {
+            throw MeshError.notInitialized("AutoAdjustEngine not initialized")
+        }
+        autoAdjustEngine.overrideRelayMax(maxRelayPerHour: maxRelayPerHour)
+        logger.info("✓ Relay max overridden: \(maxRelayPerHour)/hour")
+    }
+    
+    func clearAdjustmentOverrides() throws {
+        guard let autoAdjustEngine = autoAdjustEngine else {
+            throw MeshError.notInitialized("AutoAdjustEngine not initialized")
+        }
+        autoAdjustEngine.clearOverrides()
+        logger.info("✓ Adjustment overrides cleared")
     }
     
     // MARK: - Identity Helpers
