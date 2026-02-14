@@ -389,8 +389,14 @@ final class MeshRepository {
     
     func validateSettings(_ settings: MeshSettings) -> Bool {
         // Validate settings constraints
-        guard settings.maxRelayBudget > 0 && settings.maxRelayBudget <= DefaultSettings.maxRelayBudgetLimit else { return false }
-        guard settings.batteryFloor >= 0 && settings.batteryFloor <= 100 else { return false }
+        if settings.maxRelayBudget <= 0 || settings.maxRelayBudget > DefaultSettings.maxRelayBudgetLimit {
+            logger.warning("Invalid maxRelayBudget: \(settings.maxRelayBudget) (must be 1-\(DefaultSettings.maxRelayBudgetLimit))")
+            return false
+        }
+        if settings.batteryFloor < 0 || settings.batteryFloor > 100 {
+            logger.warning("Invalid batteryFloor: \(settings.batteryFloor) (must be 0-100)")
+            return false
+        }
         return true
     }
     

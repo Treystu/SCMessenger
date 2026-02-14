@@ -6,6 +6,9 @@
 //
 
 import SwiftUI
+import os
+
+private let logger = Logger(subsystem: "com.scmessenger", category: "Onboarding")
 
 struct OnboardingFlow: View {
     @Environment(MeshRepository.self) private var repository
@@ -122,7 +125,7 @@ struct IdentityView: View {
                 try repository.createIdentity()
                 identity = repository.getIdentityInfo()
             } catch {
-                print("Failed to generate identity: \(error)")
+                logger.error("Failed to generate identity: \(error.localizedDescription)")
                 // Keep identity as nil to show error state
             }
         }
