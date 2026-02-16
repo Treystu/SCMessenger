@@ -16,7 +16,7 @@ struct SCMessengerApp: App {
     @State private var backgroundService: MeshBackgroundService?
     
     // Onboarding state
-    @State private var hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     
     init() {
         // Initialize background service after repository
@@ -41,9 +41,6 @@ struct SCMessengerApp: App {
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                 handleEnteringForeground()
-            }
-            .onChange(of: UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")) { _, newValue in
-                hasCompletedOnboarding = newValue
             }
         }
     }

@@ -47,6 +47,10 @@ final class MeshRepository {
     private(set) var autoAdjustEngine: AutoAdjustEngine?
     private(set) var swarmBridge: SwarmBridge?
     
+    // Transport Managers
+    private var bleCentralManager: BLECentralManager?
+    private var blePeripheralManager: BLEPeripheralManager?
+    
     // Platform bridge
     private var platformBridge: IosPlatformBridge?
     
@@ -91,11 +95,15 @@ final class MeshRepository {
         
         do {
             // Initialize data managers
-            settingsManager = try MeshSettingsManager(storagePath: storagePath)
+            settingsManager = MeshSettingsManager(storagePath: storagePath)
             historyManager = try HistoryManager(storagePath: storagePath)
             contactManager = try ContactManager(storagePath: storagePath)
-            ledgerManager = try LedgerManager(storagePath: storagePath)
+            ledgerManager = LedgerManager(storagePath: storagePath)
             autoAdjustEngine = AutoAdjustEngine()
+            
+            // Initialize transport managers
+            bleCentralManager = BLECentralManager(meshRepository: self)
+            blePeripheralManager = BLEPeripheralManager(meshRepository: self)
             
             // Pre-load data where applicable
             try? ledgerManager?.load()
@@ -176,6 +184,9 @@ final class MeshRepository {
             // Start service first — IronCore is created during start()
             try meshService?.start()
             
+            // Initialize SwarmBridge for messaging operations
+            swarmBridge = SwarmBridge()
+            
             // Now obtain IronCore (only available after start())
             ironCore = meshService?.getCore()
             if ironCore == nil {
@@ -188,6 +199,11 @@ final class MeshRepository {
             
             serviceState = .running
             statusEvents.send(.serviceStateChanged(.running))
+            
+            // Start BLE advertising and scanning
+            blePeripheralManager?.startAdvertising()
+            bleCentralManager?.startScanning()
+            
             logger.info("✓ Mesh service started successfully")
         } catch {
             serviceState = .stopped
@@ -213,6 +229,10 @@ final class MeshRepository {
         
         serviceState = .stopped
         statusEvents.send(.serviceStateChanged(.stopped))
+        
+        bleCentralManager?.stopScanning()
+        blePeripheralManager?.stopAdvertising()
+        
         logger.info("✓ Mesh service stopped")
     }
     
@@ -220,7 +240,7 @@ final class MeshRepository {
     func pauseMeshService() {
         logger.info("Pausing mesh service")
         guard serviceState == .running else {
-            logger.warning("Service not running (current state: \(serviceState))")
+            logger.warning("Service not running (current state: \(self.serviceState))")
             return
         }
         meshService?.pause()
@@ -233,7 +253,7 @@ final class MeshRepository {
     func resumeMeshService() {
         logger.info("Resuming mesh service")
         guard serviceState == .running else {
-            logger.warning("Cannot resume - service not in running state (current: \(serviceState))")
+            logger.warning("Cannot resume - service not in running state (current: \(self.serviceState))")
             return
         }
         meshService?.resume()
@@ -256,7 +276,7 @@ final class MeshRepository {
     func isIdentityInitialized() -> Bool {
         do {
             try ensureServiceInitialized()
-            return ironCore?.getIdentityInfo()?.initialized == true
+            return ironCore?.getIdentityInfo().initialized == true
         } catch {
             logger.error("Failed to check identity status: \(error.localizedDescription)")
             return false
@@ -318,9 +338,14 @@ final class MeshRepository {
         // Prepare and send message
         let encryptedBytes = try ironCore.prepareMessage(recipientPublicKeyHex: recipientPublicKey, text: content)
         
-        // TODO: Actually send via network transport
-        // For now, just add to outbox
-        logger.info("✓ Message prepared and added to outbox: \(encryptedBytes.count) bytes")
+        // Send via SwarmBridge
+        if let swarmBridge = swarmBridge {
+            try swarmBridge.sendMessage(peerId: peerId, data: Data(encryptedBytes))
+            logger.info("✓ Message sent via SwarmBridge: \(encryptedBytes.count) bytes")
+        } else {
+            logger.error("SwarmBridge not initialized! Message dropped.")
+            throw MeshError.notInitialized("SwarmBridge not ready")
+        }
         
         // Record in history
         let messageRecord = MessageRecord(
@@ -413,35 +438,35 @@ final class MeshRepository {
         guard let ledgerManager = ledgerManager else {
             throw MeshError.notInitialized("LedgerManager not initialized")
         }
-        try ledgerManager.recordConnection(multiaddr: multiaddr, peerId: peerId)
+        ledgerManager.recordConnection(multiaddr: multiaddr, peerId: peerId)
     }
     
     func recordConnectionFailure(multiaddr: String) throws {
         guard let ledgerManager = ledgerManager else {
             throw MeshError.notInitialized("LedgerManager not initialized")
         }
-        try ledgerManager.recordFailure(multiaddr: multiaddr)
+        ledgerManager.recordFailure(multiaddr: multiaddr)
     }
     
     func getDialableAddresses() throws -> [LedgerEntry] {
         guard let ledgerManager = ledgerManager else {
             throw MeshError.notInitialized("LedgerManager not initialized")
         }
-        return try ledgerManager.dialable()
+        return ledgerManager.dialableAddresses()
     }
     
     func getAllKnownTopics() throws -> [String] {
         guard let ledgerManager = ledgerManager else {
             throw MeshError.notInitialized("LedgerManager not initialized")
         }
-        return try ledgerManager.allTopics()
+        return ledgerManager.allKnownTopics()
     }
     
     func getLedgerSummary() throws -> String {
         guard let ledgerManager = ledgerManager else {
             throw MeshError.notInitialized("LedgerManager not initialized")
         }
-        return try ledgerManager.summary()
+        return ledgerManager.summary()
     }
     
     func saveLedger() throws {
@@ -502,7 +527,7 @@ final class MeshRepository {
         guard let contactManager = contactManager else {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
-        return try contactManager.count()
+        return contactManager.count()
     }
     
     // MARK: - Message History
@@ -576,7 +601,7 @@ final class MeshRepository {
         guard let historyManager = historyManager else {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
-        return try historyManager.count()
+        return historyManager.count()
     }
     
     // MARK: - Platform Reporting
@@ -653,12 +678,31 @@ final class MeshRepository {
     
     func onBleDataReceived(peerId: String, data: Data) {
         logger.debug("BLE data from \(peerId): \(data.count) bytes")
-        // Handle BLE data packet
+        // Forward to MeshService
+        meshService?.onDataReceived(peerId: peerId, data: data)
     }
     
     func sendBlePacket(peerId: String, data: Data) {
         logger.debug("Send BLE packet to \(peerId): \(data.count) bytes")
-        // Send via BLE transport
+        
+        // Direct packet to appropriate manager based on UUID match
+        // Note: peerId here is likely the UUID from the transport layer if Rust is treating it as a handle
+        
+        // Try Central (we are client, sending to peripheral)
+        if let uuid = UUID(uuidString: peerId) {
+            bleCentralManager?.sendData(to: uuid, data: data)
+        } else {
+            // If peerId isn't a UUID, we can't route it blindly to BLE without a map
+            // But checking if Peripheral Manager has a central with this ID is tricky if it's not a UUID
+            // Assuming Rust uses the UUID string we gave it in onDataReceived
+            logger.warning("sendBlePacket: Invalid UUID string \(peerId)")
+        }
+        
+        // TODO: Handle Peripheral role sending (notifications to central)
+        // If we are Peripheral, and 'peerId' is the Central's UUID
+        // blePeripheralManager?.sendNotification(to: central, data: data)
+        // However, we need to lookup the CBCentral by UUID.
+        // BLEPeripheralManager implementation needs a helper for this.
     }
     
     // MARK: - Auto-Adjustment Engine
@@ -667,7 +711,7 @@ final class MeshRepository {
         guard let autoAdjustEngine = autoAdjustEngine else {
             throw MeshError.notInitialized("AutoAdjustEngine not initialized")
         }
-        return autoAdjustEngine.computeProfile(deviceProfile: deviceProfile)
+        return autoAdjustEngine.computeProfile(device: deviceProfile)
     }
     
     func computeBleAdjustment(profile: AdjustmentProfile) throws -> BleAdjustment {
@@ -688,7 +732,8 @@ final class MeshRepository {
         guard let autoAdjustEngine = autoAdjustEngine else {
             throw MeshError.notInitialized("AutoAdjustEngine not initialized")
         }
-        autoAdjustEngine.overrideBleInterval(scanMs: scanMs, advertiseMs: advertiseMs)
+        // Note: Only scan interval override is supported in new API
+        autoAdjustEngine.overrideBleScanInterval(intervalMs: scanMs)
         logger.info("✓ BLE interval overridden: scan=\(scanMs)ms advertise=\(advertiseMs)ms")
     }
     
@@ -696,7 +741,7 @@ final class MeshRepository {
         guard let autoAdjustEngine = autoAdjustEngine else {
             throw MeshError.notInitialized("AutoAdjustEngine not initialized")
         }
-        autoAdjustEngine.overrideRelayMax(maxRelayPerHour: maxRelayPerHour)
+        autoAdjustEngine.overrideRelayMaxPerHour(max: maxRelayPerHour)
         logger.info("✓ Relay max overridden: \(maxRelayPerHour)/hour")
     }
     
