@@ -99,6 +99,8 @@ struct StatRow: View {
 }
 
 struct TransportStatusSection: View {
+    @Environment(MeshRepository.self) private var repository
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.spacingMedium) {
             Text("Transports")
