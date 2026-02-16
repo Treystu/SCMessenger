@@ -83,9 +83,9 @@ gh run list --workflow=scm-test-diagnose-fix.lock.yml
 
 ## How It Works
 
-### Round-Robin Testing
+### Full-Sweep Testing
 
-The workflow tests 12 domains in round-robin order, tracking progress with `cache-memory`:
+The workflow tests ALL 12 domains sequentially in every run:
 
 1. **Core Unit Tests** - Full workspace test suite (638+ tests)
 2. **Core Module-by-Module** - Individual module testing (identity, crypto, message, store, transport, drift, routing, relay, privacy)
@@ -102,38 +102,37 @@ The workflow tests 12 domains in round-robin order, tracking progress with `cach
 
 ### Workflow Phases
 
-Each run executes:
+Each run executes all domains through these phases:
 
-1. **Phase 1: Determine Domain** - Select next domain via round-robin
-2. **Phase 2: Test** - Run domain-specific test commands
+1. **Phase 1: Run All Domains Sequentially** - Process all 12 domains in order (1-12)
+2. **Phase 2: Test** - Run domain-specific test commands for each domain
 3. **Phase 3: Diagnose** - Analyze failures with root cause analysis
 4. **Phase 4: Fix** - Apply fixes following code conventions
-5. **Phase 5: Re-Test** - Verify fixes and check for regressions
-6. **Phase 6: Report** - Create PRs/issues or call noop
+5. **Phase 5: Re-Test** - Verify fixes and check for regressions (max 5 iterations per domain)
+6. **Phase 6: Report** - Create consolidated PR/issue or call noop after all domains complete
 
 ### Automated Outputs
 
 #### Pull Requests (Fixes Applied)
-- **Prefix**: `[SCM-Fix]`
+- **Prefix**: `[SCM-Fix] Multi-domain:`
 - **Labels**: `automated`, `scm-test-fix`
-- **Content**: Root cause analysis, fixes, test results before/after
-- **Example**: `[SCM-Fix] Core Unit Tests: Fix crypto buffer zeroization`
+- **Content**: Consolidated root cause analysis across all domains, fixes, test results before/after
+- **Consolidation**: One PR per run containing all fixes from all domains
+- **Example**: `[SCM-Fix] Multi-domain: Fixes in Core Unit Tests, CLI Build & Tests`
 
 #### Issues (Unfixable Problems)
-- **Prefix**: `[SCM-Diag]`
+- **Prefix**: `[SCM-Diag] Multi-domain:`
 - **Labels**: `automated`, `scm-diagnosis`
-- **Content**: Root cause analysis, manual fix suggestions, reproduction steps
-- **Max**: 3 issues per run
-- **Example**: `[SCM-Diag] Android Build: Gradle version mismatch requires manual resolution`
+- **Content**: Consolidated breakdown by domain with root cause analysis, manual fix suggestions, reproduction steps
+- **Max**: 1 issue per run (consolidates all unfixable problems across domains)
+- **Example**: `[SCM-Diag] Multi-domain: Android SDK missing, Docker network timeout`
 
-#### Comments (Updates to Existing PRs)
-- The workflow checks for existing open PRs for the same domain
-- Adds comments with new findings instead of creating duplicate PRs
+#### Comments
 - Max: 5 comments per run
 
 #### Noop (All Tests Pass)
-- Called when domain passes without changes
-- **Example**: `"Domain Core Unit Tests: All 638 tests passed, no fixes needed"`
+- Called only after ALL 12 domains complete successfully
+- **Example**: `"All 12 domains passed: 900+ tests passed across all domains, no fixes needed"`
 
 ## Cache-Memory State
 
@@ -141,10 +140,9 @@ The workflow maintains state across runs using `cache-memory`:
 
 ```json
 {
-  "last_domain": "Core Unit Tests",
   "last_run": "2026-02-15T10:30:00Z",
-  "cycle_number": 1,
-  "domain_status": {
+  "run_number": 42,
+  "all_domains_status": {
     "Core Unit Tests": {
       "status": "pass",
       "tests_run": 638,
@@ -153,11 +151,19 @@ The workflow maintains state across runs using `cache-memory`:
       "fixes_applied": 0
     },
     "Core Module-by-Module": {
-      "status": "pending"
+      "status": "pass",
+      "tests_run": 145,
+      "tests_passed": 145,
+      "tests_failed": 0,
+      "fixes_applied": 2
     }
-  }
+  },
+  "total_fixes_applied": 2,
+  "domains_with_fixes": ["Core Module-by-Module"]
 }
 ```
+
+Each run processes all 12 domains and updates the complete status for all domains.
 
 ## Code Conventions
 
