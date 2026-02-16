@@ -150,20 +150,35 @@ struct MeshSettingsView: View {
 }
 
 struct PrivacySettingsView: View {
+    @Environment(MeshRepository.self) private var repository
+    @State private var viewModel: SettingsViewModel?
+    @State private var isRotationEnabled = true
+    
     var body: some View {
         Form {
             Section("Privacy") {
-                Toggle("Rotate BLE Identity", isOn: .constant(true))
+                Toggle("Rotate BLE Identity", isOn: Binding(
+                    get: { viewModel?.isBleRotationEnabled ?? true },
+                    set: { val in
+                        viewModel?.toggleBleRotation(enabled: val)
+                        isRotationEnabled = val // Force refresh
+                    }
+                ))
                 
                 HStack {
                     Text("Rotation Interval")
                     Spacer()
-                    Text("15 min")
+                    Text("\(Int((viewModel?.bleRotationInterval ?? 900) / 60)) min")
                         .foregroundStyle(Theme.onSurfaceVariant)
                 }
             }
         }
         .navigationTitle("Privacy Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            if viewModel == nil {
+                viewModel = SettingsViewModel(repository: repository)
+            }
+        }
     }
 }

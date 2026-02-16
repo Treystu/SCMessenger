@@ -106,7 +106,7 @@ struct TransportStatusSection: View {
             
             TransportStatusRow(type: .multipeer, isActive: true)
             TransportStatusRow(type: .ble, isActive: true)
-            TransportStatusRow(type: .internet, isActive: false)
+            TransportStatusRow(type: .internet, isActive: repository.networkStatus.available)
         }
         .padding(Theme.spacingMedium)
         .themedCard()

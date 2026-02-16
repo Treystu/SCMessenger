@@ -1,0 +1,142 @@
+diff --git a/iOS/SCMessenger/SCMessenger.xcodeproj/project.xcworkspace/xcuserdata/christymaxwell.xcuserdatad/UserInterfaceState.xcuserstate b/iOS/SCMessenger/SCMessenger.xcodeproj/project.xcworkspace/xcuserdata/christymaxwell.xcuserdatad/UserInterfaceState.xcuserstate
+index 0279552..836b968 100644
+Binary files a/iOS/SCMessenger/SCMessenger.xcodeproj/project.xcworkspace/xcuserdata/christymaxwell.xcuserdatad/UserInterfaceState.xcuserstate and b/iOS/SCMessenger/SCMessenger.xcodeproj/project.xcworkspace/xcuserdata/christymaxwell.xcuserdatad/UserInterfaceState.xcuserstate differ
+diff --git a/iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift b/iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift
+index 2f410b2..b32591e 100644
+--- a/iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift
++++ b/iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift
+@@ -91,10 +91,10 @@ final class MeshRepository {
+         
+         do {
+             // Initialize data managers
+-            settingsManager = try MeshSettingsManager(storagePath: storagePath)
++            settingsManager = MeshSettingsManager(storagePath: storagePath)
+             historyManager = try HistoryManager(storagePath: storagePath)
+             contactManager = try ContactManager(storagePath: storagePath)
+-            ledgerManager = try LedgerManager(storagePath: storagePath)
++            ledgerManager = LedgerManager(storagePath: storagePath)
+             autoAdjustEngine = AutoAdjustEngine()
+             
+             // Pre-load data where applicable
+@@ -171,7 +171,7 @@ final class MeshRepository {
+         
+         do {
+             // Create mesh service
+-            meshService = try MeshService(config: config)
++            meshService = MeshService(config: config)
+             
+             // Initialize IronCore from the service
+             // Always get fresh reference from new service
+@@ -221,7 +221,7 @@ final class MeshRepository {
+     func pauseMeshService() {
+         logger.info("Pausing mesh service")
+         guard serviceState == .running else {
+-            logger.warning("Service not running (current state: \(serviceState))")
++            logger.warning("Service not running (current state: \(self.serviceState))")
+             return
+         }
+         meshService?.pause()
+@@ -234,7 +234,7 @@ final class MeshRepository {
+     func resumeMeshService() {
+         logger.info("Resuming mesh service")
+         guard serviceState == .running else {
+-            logger.warning("Cannot resume - service not in running state (current: \(serviceState))")
++            logger.warning("Cannot resume - service not in running state (current: \(self.serviceState))")
+             return
+         }
+         meshService?.resume()
+@@ -257,7 +257,7 @@ final class MeshRepository {
+     func isIdentityInitialized() -> Bool {
+         do {
+             try ensureServiceInitialized()
+-            return ironCore?.getIdentityInfo()?.initialized == true
++            return ironCore?.getIdentityInfo().initialized == true
+         } catch {
+             logger.error("Failed to check identity status: \(error.localizedDescription)")
+             return false
+@@ -414,35 +414,35 @@ final class MeshRepository {
+         guard let ledgerManager = ledgerManager else {
+             throw MeshError.notInitialized("LedgerManager not initialized")
+         }
+-        try ledgerManager.recordConnection(multiaddr: multiaddr, peerId: peerId)
++        ledgerManager.recordConnection(multiaddr: multiaddr, peerId: peerId)
+     }
+     
+     func recordConnectionFailure(multiaddr: String) throws {
+         guard let ledgerManager = ledgerManager else {
+             throw MeshError.notInitialized("LedgerManager not initialized")
+         }
+-        try ledgerManager.recordFailure(multiaddr: multiaddr)
++        ledgerManager.recordFailure(multiaddr: multiaddr)
+     }
+     
+     func getDialableAddresses() throws -> [LedgerEntry] {
+         guard let ledgerManager = ledgerManager else {
+             throw MeshError.notInitialized("LedgerManager not initialized")
+         }
+-        return try ledgerManager.dialable()
++        return ledgerManager.dialableAddresses()
+     }
+     
+     func getAllKnownTopics() throws -> [String] {
+         guard let ledgerManager = ledgerManager else {
+             throw MeshError.notInitialized("LedgerManager not initialized")
+         }
+-        return try ledgerManager.allTopics()
++        return ledgerManager.allKnownTopics()
+     }
+     
+     func getLedgerSummary() throws -> String {
+         guard let ledgerManager = ledgerManager else {
+             throw MeshError.notInitialized("LedgerManager not initialized")
+         }
+-        return try ledgerManager.summary()
++        return ledgerManager.summary()
+     }
+     
+     func saveLedger() throws {
+@@ -503,7 +503,7 @@ final class MeshRepository {
+         guard let contactManager = contactManager else {
+             throw MeshError.notInitialized("ContactManager not initialized")
+         }
+-        return try contactManager.count()
++        return contactManager.count()
+     }
+     
+     // MARK: - Message History
+@@ -577,7 +577,7 @@ final class MeshRepository {
+         guard let historyManager = historyManager else {
+             throw MeshError.notInitialized("HistoryManager not initialized")
+         }
+-        return try historyManager.count()
++        return historyManager.count()
+     }
+     
+     // MARK: - Platform Reporting
+@@ -668,7 +668,7 @@ final class MeshRepository {
+         guard let autoAdjustEngine = autoAdjustEngine else {
+             throw MeshError.notInitialized("AutoAdjustEngine not initialized")
+         }
+-        return autoAdjustEngine.computeProfile(deviceProfile: deviceProfile)
++        return autoAdjustEngine.computeProfile(device: deviceProfile)
+     }
+     
+     func computeBleAdjustment(profile: AdjustmentProfile) throws -> BleAdjustment {
+@@ -689,7 +689,7 @@ final class MeshRepository {
+         guard let autoAdjustEngine = autoAdjustEngine else {
+             throw MeshError.notInitialized("AutoAdjustEngine not initialized")
+         }
+-        autoAdjustEngine.overrideBleInterval(scanMs: scanMs, advertiseMs: advertiseMs)
++        autoAdjustEngine.overrideBleScanInterval(intervalMs: scanMs)
+         logger.info("✓ BLE interval overridden: scan=\(scanMs)ms advertise=\(advertiseMs)ms")
+     }
+     
+@@ -697,7 +697,7 @@ final class MeshRepository {
+         guard let autoAdjustEngine = autoAdjustEngine else {
+             throw MeshError.notInitialized("AutoAdjustEngine not initialized")
+         }
+-        autoAdjustEngine.overrideRelayMax(maxRelayPerHour: maxRelayPerHour)
++        autoAdjustEngine.overrideRelayMaxPerHour(max: maxRelayPerHour)
+         logger.info("✓ Relay max overridden: \(maxRelayPerHour)/hour")
+     }
+     

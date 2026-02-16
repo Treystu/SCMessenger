@@ -37,6 +37,7 @@ final class BLEPeripheralManager: NSObject {
     
     // Advertising state
     private var isAdvertising = false
+    private var isRotationEnabled = true
     
     init(meshRepository: MeshRepository) {
         self.meshRepository = meshRepository
@@ -83,6 +84,23 @@ final class BLEPeripheralManager: NSObject {
     func setRotationInterval(_ interval: TimeInterval) {
         rotationInterval = interval
         logger.debug("Rotation interval set: \(interval)s")
+        if isAdvertising && isRotationEnabled {
+            rotationTimer?.invalidate()
+            startPrivacyRotation()
+        }
+    }
+    
+    func setRotationEnabled(_ enabled: Bool) {
+        isRotationEnabled = enabled
+        logger.debug("Rotation enabled: \(enabled)")
+        if isAdvertising {
+            if enabled {
+                startPrivacyRotation()
+            } else {
+                rotationTimer?.invalidate()
+                rotationTimer = nil
+            }
+        }
     }
     
     func applyAdvertiseSettings(intervalMs: UInt32, txPowerDbm: Int8) {
@@ -150,6 +168,8 @@ final class BLEPeripheralManager: NSObject {
     }
     
     private func startPrivacyRotation() {
+        guard isRotationEnabled else { return }
+        rotationTimer?.invalidate()
         rotationTimer = Timer.scheduledTimer(withTimeInterval: rotationInterval, repeats: true) { [weak self] _ in
             self?.rotateIdentity()
         }

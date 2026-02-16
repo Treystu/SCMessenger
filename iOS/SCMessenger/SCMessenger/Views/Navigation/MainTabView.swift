@@ -9,6 +9,7 @@ import SwiftUI
 
 struct MainTabView: View {
     @Environment(MeshRepository.self) private var repository
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     
     var body: some View {
         TabView {
@@ -38,6 +39,15 @@ struct MainTabView: View {
             }
             .tabItem {
                 Label("Settings", systemImage: "gear")
+            }
+        }
+        .onAppear {
+            repository.start()
+            
+            // Check if identity is truly available
+            if !repository.isIdentityInitialized() {
+                print("⚠️ Identity missing after start - resetting onboarding state")
+                hasCompletedOnboarding = false
             }
         }
     }

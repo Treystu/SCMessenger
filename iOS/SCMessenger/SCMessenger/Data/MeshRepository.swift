@@ -58,6 +58,30 @@ final class MeshRepository {
     
     var serviceState: ServiceState = .stopped
     var serviceStats: ServiceStats?
+    var networkStatus = NetworkStatus()
+    
+    struct NetworkStatus {
+        var wifi: Bool = false
+        var cellular: Bool = false
+        var available: Bool { wifi || cellular }
+    }
+    
+    // BLE Privacy Settings
+    var blePrivacyEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: "ble_rotation_enabled") as? Bool ?? true }
+        set { 
+            UserDefaults.standard.set(newValue, forKey: "ble_rotation_enabled")
+            blePeripheralManager?.setRotationEnabled(newValue)
+        }
+    }
+    
+    var blePrivacyInterval: TimeInterval {
+        get { UserDefaults.standard.object(forKey: "ble_rotation_interval") as? Double ?? 900 }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "ble_rotation_interval")
+            blePeripheralManager?.setRotationInterval(newValue)
+        }
+    }
     
     // MARK: - Event Streams
     
@@ -112,6 +136,20 @@ final class MeshRepository {
         } catch {
             logger.error("Failed to initialize managers: \(error.localizedDescription)")
             throw error
+        }
+    }
+    
+    /// Public start method called from App entry point
+    func start() {
+        logger.info("Application requested repository start")
+        do {
+            try ensureServiceInitialized()
+            
+            // Apply saved BLE settings now that managers are initialized
+            blePeripheralManager?.setRotationEnabled(blePrivacyEnabled)
+            blePeripheralManager?.setRotationInterval(blePrivacyInterval)
+        } catch {
+            logger.error("Failed to start repository: \(error.localizedDescription)")
         }
     }
     
@@ -614,6 +652,9 @@ final class MeshRepository {
     
     func reportNetwork(wifi: Bool, cellular: Bool) {
         logger.debug("Network: wifi=\(wifi) cellular=\(cellular)")
+        // Update published status
+        networkStatus.wifi = wifi
+        networkStatus.cellular = cellular
         // TODO: Report to autoAdjustEngine
     }
     

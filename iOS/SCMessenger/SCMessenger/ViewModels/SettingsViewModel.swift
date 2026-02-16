@@ -59,4 +59,22 @@ final class SettingsViewModel {
         settings = currentSettings
         saveSettings()
     }
+    
+    // MARK: - BLE Privacy
+    
+    var isBleRotationEnabled: Bool {
+        return repository?.blePrivacyEnabled ?? true
+    }
+    
+    var bleRotationInterval: TimeInterval {
+        return repository?.blePrivacyInterval ?? 900
+    }
+    
+    func toggleBleRotation(enabled: Bool) {
+        repository?.blePrivacyEnabled = enabled
+    }
+    
+    func updateBleRotationInterval(_ interval: TimeInterval) {
+        repository?.blePrivacyInterval = interval
+    }
 }
