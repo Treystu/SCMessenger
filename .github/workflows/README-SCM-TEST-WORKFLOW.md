@@ -1,5 +1,31 @@
 # SCMessenger Test-Diagnose-Fix Workflow
 
+## Prerequisites
+
+Before using this workflow, ensure the following:
+
+### Required GitHub Secrets
+
+The workflow requires the following secret to be configured in your repository:
+
+- **`COPILOT_GITHUB_TOKEN`**: A GitHub token with appropriate permissions for GitHub Copilot CLI
+  - Navigate to: Repository Settings → Secrets and variables → Actions → New repository secret
+  - Name: `COPILOT_GITHUB_TOKEN`
+  - Value: A GitHub Personal Access Token (PAT) or the default `${{ secrets.GITHUB_TOKEN }}`
+
+### Required Repository Permissions
+
+The workflow uses `safe-outputs` to handle PR/issue/comment creation, which means the workflow itself runs with read-only permissions for security. The `safe-outputs` jobs automatically get the necessary write permissions.
+
+However, you should ensure your repository has the following Actions permissions configured:
+
+- **Workflow permissions**: Read and write permissions
+  - Navigate to: Repository Settings → Actions → General → Workflow permissions
+  - Select: "Read and write permissions"
+  - Check: "Allow GitHub Actions to create and approve pull requests"
+
+This allows the `safe-outputs` jobs to create PRs, issues, and comments on behalf of the workflow.
+
 ## Overview
 
 This GitHub Agentic Workflow (`scm-test-diagnose-fix.md`) provides automated testing, diagnosis, and fixing for SCMessenger across all platforms and components.

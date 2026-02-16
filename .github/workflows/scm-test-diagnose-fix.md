@@ -7,6 +7,12 @@ permissions:
   contents: read
   issues: read
   pull-requests: read
+runs-on: ubuntu-latest
+network:
+  allowed:
+    - defaults
+    - rust
+    - java
 tools:
   github:
     toolsets: [default]
@@ -16,6 +22,7 @@ safe-outputs:
     title-prefix: "[SCM-Fix] "
     draft: false
     labels: [automated, scm-test-fix]
+    base-branch: main
   create-issue:
     title-prefix: "[SCM-Diag] "
     labels: [automated, scm-diagnosis]

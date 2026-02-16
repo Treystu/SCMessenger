@@ -23,7 +23,7 @@
 #
 # Comprehensive test-diagnose-fix-retest loop for SCMessenger across all platforms (Core, CLI, Android, iOS, WASM, Docker networking, cross-compatibility)
 #
-# frontmatter-hash: b527b5d4d6d072055f28c4eada9be2d598aafcc4ca879cf3aeb71a82e9913388
+# frontmatter-hash: e355896efb83034a345350fca0267f7c21e99398c19f3f8d9533d45b03d63fe0
 
 name: "SCMessenger Comprehensive Test → Diagnose → Fix → Re-Test"
 "on":
@@ -41,7 +41,7 @@ run-name: "SCMessenger Comprehensive Test → Diagnose → Fix → Re-Test"
 
 jobs:
   activation:
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
@@ -162,7 +162,7 @@ jobs:
               actor: context.actor,
               event_name: context.eventName,
               staged: false,
-              allowed_domains: ["defaults"],
+              allowed_domains: ["defaults","rust","java"],
               firewall_enabled: true,
               awf_version: "v0.18.0",
               awmg_version: "v0.1.4",
@@ -735,7 +735,7 @@ jobs:
         timeout-minutes: 90
         run: |
           set -o pipefail
-          sudo -E awf --env-all --container-workdir "${GITHUB_WORKSPACE}" --allow-domains api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,api.snapcraft.io,archive.ubuntu.com,azure.archive.ubuntu.com,crl.geotrust.com,crl.globalsign.com,crl.identrust.com,crl.sectigo.com,crl.thawte.com,crl.usertrust.com,crl.verisign.com,crl3.digicert.com,crl4.digicert.com,crls.ssl.com,github.com,host.docker.internal,json-schema.org,json.schemastore.org,keyserver.ubuntu.com,ocsp.digicert.com,ocsp.geotrust.com,ocsp.globalsign.com,ocsp.identrust.com,ocsp.sectigo.com,ocsp.ssl.com,ocsp.thawte.com,ocsp.usertrust.com,ocsp.verisign.com,packagecloud.io,packages.cloud.google.com,packages.microsoft.com,ppa.launchpad.net,raw.githubusercontent.com,registry.npmjs.org,s.symcb.com,s.symcd.com,security.ubuntu.com,telemetry.enterprise.githubcopilot.com,ts-crl.ws.symantec.com,ts-ocsp.ws.symantec.com --log-level info --proxy-logs-dir /tmp/gh-aw/sandbox/firewall/logs --enable-host-access --image-tag 0.18.0 --skip-pull \
+          sudo -E awf --env-all --container-workdir "${GITHUB_WORKSPACE}" --allow-domains adoptium.net,api.adoptium.net,api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.foojay.io,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,api.snapcraft.io,archive.apache.org,archive.ubuntu.com,azure.archive.ubuntu.com,cdn.azul.com,crates.io,crl.geotrust.com,crl.globalsign.com,crl.identrust.com,crl.sectigo.com,crl.thawte.com,crl.usertrust.com,crl.verisign.com,crl3.digicert.com,crl4.digicert.com,crls.ssl.com,dlcdn.apache.org,download.eclipse.org,download.java.net,download.oracle.com,github.com,gradle.org,host.docker.internal,index.crates.io,jcenter.bintray.com,jdk.java.net,json-schema.org,json.schemastore.org,keyserver.ubuntu.com,maven.apache.org,maven.oracle.com,maven.pkg.github.com,ocsp.digicert.com,ocsp.geotrust.com,ocsp.globalsign.com,ocsp.identrust.com,ocsp.sectigo.com,ocsp.ssl.com,ocsp.thawte.com,ocsp.usertrust.com,ocsp.verisign.com,packagecloud.io,packages.cloud.google.com,packages.microsoft.com,plugins-artifacts.gradle.org,plugins.gradle.org,ppa.launchpad.net,raw.githubusercontent.com,registry.npmjs.org,repo.grails.org,repo.maven.apache.org,repo.spring.io,repo1.maven.org,s.symcb.com,s.symcd.com,security.ubuntu.com,services.gradle.org,sh.rustup.rs,static.crates.io,static.rust-lang.org,telemetry.enterprise.githubcopilot.com,ts-crl.ws.symantec.com,ts-ocsp.ws.symantec.com,www.java.com --log-level info --proxy-logs-dir /tmp/gh-aw/sandbox/firewall/logs --enable-host-access --image-tag 0.18.0 --skip-pull \
             -- '/usr/local/bin/copilot --add-dir /tmp/gh-aw/ --log-level all --log-dir /tmp/gh-aw/sandbox/agent/logs/ --add-dir "${GITHUB_WORKSPACE}" --disable-builtin-mcps --allow-all-tools --add-dir /tmp/gh-aw/cache-memory/ --allow-all-paths --share /tmp/gh-aw/sandbox/agent/logs/conversation.md --prompt "$(cat /tmp/gh-aw/aw-prompts/prompt.txt)"${GH_AW_MODEL_AGENT_COPILOT:+ --model "$GH_AW_MODEL_AGENT_COPILOT"}' \
             2>&1 | tee /tmp/gh-aw/agent-stdio.log
         env:
@@ -815,7 +815,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_SAFE_OUTPUTS: ${{ env.GH_AW_SAFE_OUTPUTS }}
-          GH_AW_ALLOWED_DOMAINS: "api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,api.snapcraft.io,archive.ubuntu.com,azure.archive.ubuntu.com,crl.geotrust.com,crl.globalsign.com,crl.identrust.com,crl.sectigo.com,crl.thawte.com,crl.usertrust.com,crl.verisign.com,crl3.digicert.com,crl4.digicert.com,crls.ssl.com,github.com,host.docker.internal,json-schema.org,json.schemastore.org,keyserver.ubuntu.com,ocsp.digicert.com,ocsp.geotrust.com,ocsp.globalsign.com,ocsp.identrust.com,ocsp.sectigo.com,ocsp.ssl.com,ocsp.thawte.com,ocsp.usertrust.com,ocsp.verisign.com,packagecloud.io,packages.cloud.google.com,packages.microsoft.com,ppa.launchpad.net,raw.githubusercontent.com,registry.npmjs.org,s.symcb.com,s.symcd.com,security.ubuntu.com,telemetry.enterprise.githubcopilot.com,ts-crl.ws.symantec.com,ts-ocsp.ws.symantec.com"
+          GH_AW_ALLOWED_DOMAINS: "adoptium.net,api.adoptium.net,api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.foojay.io,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,api.snapcraft.io,archive.apache.org,archive.ubuntu.com,azure.archive.ubuntu.com,cdn.azul.com,crates.io,crl.geotrust.com,crl.globalsign.com,crl.identrust.com,crl.sectigo.com,crl.thawte.com,crl.usertrust.com,crl.verisign.com,crl3.digicert.com,crl4.digicert.com,crls.ssl.com,dlcdn.apache.org,download.eclipse.org,download.java.net,download.oracle.com,github.com,gradle.org,host.docker.internal,index.crates.io,jcenter.bintray.com,jdk.java.net,json-schema.org,json.schemastore.org,keyserver.ubuntu.com,maven.apache.org,maven.oracle.com,maven.pkg.github.com,ocsp.digicert.com,ocsp.geotrust.com,ocsp.globalsign.com,ocsp.identrust.com,ocsp.sectigo.com,ocsp.ssl.com,ocsp.thawte.com,ocsp.usertrust.com,ocsp.verisign.com,packagecloud.io,packages.cloud.google.com,packages.microsoft.com,plugins-artifacts.gradle.org,plugins.gradle.org,ppa.launchpad.net,raw.githubusercontent.com,registry.npmjs.org,repo.grails.org,repo.maven.apache.org,repo.spring.io,repo1.maven.org,s.symcb.com,s.symcd.com,security.ubuntu.com,services.gradle.org,sh.rustup.rs,static.crates.io,static.rust-lang.org,telemetry.enterprise.githubcopilot.com,ts-crl.ws.symantec.com,ts-ocsp.ws.symantec.com,www.java.com"
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_API_URL: ${{ github.api_url }}
         with:
@@ -899,7 +899,7 @@ jobs:
       - safe_outputs
       - update_cache_memory
     if: (always()) && (needs.agent.result != 'skipped')
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       discussions: write
@@ -1127,7 +1127,7 @@ jobs:
       - agent
       - detection
     if: ((!cancelled()) && (needs.agent.result != 'skipped')) && (needs.detection.outputs.success == 'true')
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       discussions: write
@@ -1190,7 +1190,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"add_comment\":{\"max\":5},\"create_issue\":{\"labels\":[\"automated\",\"scm-diagnosis\"],\"max\":3,\"title_prefix\":\"[SCM-Diag] \"},\"create_pull_request\":{\"base_branch\":\"${{ github.ref_name }}\",\"draft\":false,\"labels\":[\"automated\",\"scm-test-fix\"],\"max\":1,\"max_patch_size\":1024,\"title_prefix\":\"[SCM-Fix] \"},\"missing_data\":{},\"missing_tool\":{}}"
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"add_comment\":{\"max\":5},\"create_issue\":{\"labels\":[\"automated\",\"scm-diagnosis\"],\"max\":3,\"title_prefix\":\"[SCM-Diag] \"},\"create_pull_request\":{\"base_branch\":\"main\",\"draft\":false,\"labels\":[\"automated\",\"scm-test-fix\"],\"max\":1,\"max_patch_size\":1024,\"title_prefix\":\"[SCM-Fix] \"},\"missing_data\":{},\"missing_tool\":{}}"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
