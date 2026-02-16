@@ -61,9 +61,9 @@ SCMessenger is a sovereign mesh messenger built in Rust with:
 - `parking_lot::RwLock` over `std::sync::RwLock`
 - Tests in `#[cfg(test)] mod tests` in same file, integration tests in `tests/`
 
-## Round-Robin Test Domains
+## Test Domains
 
-Use `cache-memory` to track which domain was last processed. On each run, pick the NEXT domain in round-robin order. The domains are:
+The workflow tests all 12 domains sequentially in every run. The domains are:
 
 1. **Core Unit Tests** — `cargo test --workspace --all-features -- --nocapture` (all 638+ test functions across 71 .rs files in core/src/)
 2. **Core Module-by-Module** — Test individual modules: identity, crypto, message, store, transport, drift, routing, relay, privacy
@@ -80,15 +80,18 @@ Use `cache-memory` to track which domain was last processed. On each run, pick t
 
 ## Your Task (Per Run)
 
-### Phase 1: Determine Current Domain
-1. Read from `cache-memory` to find the last processed domain and its status
-2. Select the NEXT domain in round-robin order
-3. If all domains have been processed in this cycle, reset and start a new cycle
+### Phase 1: Run All Domains Sequentially
+1. Read from `cache-memory` to check the status of the current run
+2. Process ALL 12 domains in sequential order (1 through 12) in this single execution
+3. After completing each domain, IMMEDIATELY proceed to the next domain
+4. Do NOT call `noop` or stop until ALL 12 domains have been tested in this run
+5. Accumulate all findings and fixes across domains for consolidated reporting
 
-### Phase 2: Test
-1. Run the appropriate test commands for the selected domain
+### Phase 2: Test (for each domain)
+1. Run the appropriate test commands for the current domain
 2. Capture ALL output — stdout, stderr, exit codes
 3. Record pass/fail counts, specific failing test names, error messages
+4. Store results for this domain and continue to the next domain
 
 ### Phase 3: Diagnose (if failures found)
 For each failing test or build error:
@@ -118,26 +121,27 @@ For each diagnosed issue:
 1. Re-run the SAME test commands from Phase 2
 2. Verify the fix resolved the issue
 3. Verify no regressions were introduced (other tests still pass)
-4. If new failures appear, loop back to Phase 3 (max 3 iterations per domain)
+4. If new failures appear, loop back to Phase 3 (max 5 iterations per domain)
+5. After completing fix iterations for this domain, proceed to the next domain
 
-### Phase 6: Report & Output
+### Phase 6: Report & Output (after all 12 domains complete)
 1. **Update cache-memory** with:
-   - Current domain name and timestamp
-   - Pass/fail status
-   - Number of tests run, passed, failed
-   - List of fixes applied (file, line, description)
-   - List of remaining issues that couldn't be auto-fixed
-2. **If fixes were applied**: 
-   - First, search for existing open PRs with title containing "[SCM-Fix]" and same domain
-   - If an open PR exists for this domain, add a comment with the new findings instead
-   - If no open PR exists, create a new pull request with:
-     - Title: `[SCM-Fix] <Domain>: <brief description of fixes>`
-     - Body: Detailed root cause analysis, what was fixed, test results before/after
-     - All changed files
-3. **If tests all passed with no changes needed**: Call `noop` with a message like "Domain X: All N tests passed, no fixes needed"
-4. **If issues found but not auto-fixable**: Create an issue with:
-   - Title: `[SCM-Diag] <Domain>: <brief description>`
-   - Body: Root cause analysis, suggested manual fixes, reproduction steps
+   - Current run timestamp
+   - Complete status for all 12 domains
+   - Number of tests run, passed, failed per domain
+   - List of fixes applied across all domains (file, line, domain, description)
+   - List of remaining issues that couldn't be auto-fixed across all domains
+2. **If fixes were applied across any domains**: 
+   - Create a SINGLE consolidated pull request with:
+     - Title: `[SCM-Fix] Multi-domain: <brief summary of affected domains>`
+     - Body: Detailed breakdown by domain with root cause analysis, what was fixed, test results before/after
+     - All changed files from all domains
+   - Do NOT create separate PRs per domain — accumulate all fixes into one PR
+3. **If all 12 domains passed with no changes needed**: Call `noop` with a message summarizing all domains: "All 12 domains passed: <total test count> tests passed across all domains, no fixes needed"
+4. **If issues found but not auto-fixable across any domains**: Create a SINGLE consolidated issue with:
+   - Title: `[SCM-Diag] Multi-domain: <brief summary of affected domains>`
+   - Body: Breakdown by domain with root cause analysis, suggested manual fixes, reproduction steps
+   - Maximum 1 issue per run summarizing all unfixable problems
 
 ## Domain-Specific Test Commands Reference
 
@@ -255,13 +259,13 @@ Store and retrieve state in this format:
 **Read cache-memory** at start:
 ```json
 {
-  "last_domain": "Core Unit Tests",
   "last_run": "2026-02-15T10:30:00Z",
-  "cycle_number": 1,
-  "domain_status": {
+  "run_number": 42,
+  "all_domains_status": {
     "Core Unit Tests": {"status": "pass", "tests_run": 638, "tests_passed": 638, "tests_failed": 0},
-    "Core Module-by-Module": {"status": "pending"},
-    ...
+    "Core Module-by-Module": {"status": "pass", "tests_run": 145, "tests_passed": 145, "tests_failed": 0},
+    "CLI Build & Tests": {"status": "pass", "tests_run": 12, "tests_passed": 12, "tests_failed": 0},
+    ...all 12 domains...
   }
 }
 ```
@@ -269,23 +273,27 @@ Store and retrieve state in this format:
 **Write cache-memory** at end:
 ```json
 {
-  "last_domain": "Core Module-by-Module",
   "last_run": "2026-02-15T11:45:00Z",
-  "cycle_number": 1,
-  "domain_status": {
-    "Core Unit Tests": {"status": "pass", "tests_run": 638, "tests_passed": 638, "tests_failed": 0},
-    "Core Module-by-Module": {"status": "pass", "tests_run": 145, "tests_passed": 145, "tests_failed": 0, "fixes_applied": 0},
-    ...
-  }
+  "run_number": 43,
+  "all_domains_status": {
+    "Core Unit Tests": {"status": "pass", "tests_run": 638, "tests_passed": 638, "tests_failed": 0, "fixes_applied": 0},
+    "Core Module-by-Module": {"status": "pass", "tests_run": 145, "tests_passed": 145, "tests_failed": 0, "fixes_applied": 2},
+    "CLI Build & Tests": {"status": "pass", "tests_run": 12, "tests_passed": 12, "tests_failed": 0, "fixes_applied": 0},
+    ...all 12 domains with their results from this run...
+  },
+  "total_fixes_applied": 2,
+  "domains_with_fixes": ["Core Module-by-Module"]
 }
 ```
 
 ## Expected Behavior Summary
 
-- **On first run**: Start with "Core Unit Tests" (domain 1)
-- **On subsequent runs**: Pick next domain in round-robin order
-- **If all domains complete**: Reset to domain 1 and increment cycle number
-- **If fixes applied**: Create PR with `[SCM-Fix]` prefix
-- **If all tests pass**: Call `noop` with success message
-- **If unfixable issues**: Create issue with `[SCM-Diag]` prefix
-- **Always**: Update cache-memory with current state
+- **Every run**: Test ALL 12 domains sequentially (1 through 12) in a single execution
+- **Continuation**: After completing each domain, IMMEDIATELY proceed to the next domain without stopping
+- **No early exits**: Do NOT call `noop` or stop until all 12 domains have been processed
+- **If fixes applied**: Create a SINGLE consolidated PR with `[SCM-Fix] Multi-domain:` prefix containing all fixes from all domains
+- **If all tests pass**: Call `noop` only AFTER all 12 domains complete successfully
+- **If unfixable issues**: Create a SINGLE consolidated issue with `[SCM-Diag] Multi-domain:` prefix
+- **Always**: Update cache-memory with status of all 12 domains from this run
+- **Max iterations**: Up to 5 fix-retest iterations per domain before moving to next domain
+- **Timeout**: 90 minutes total for all 12 domains
