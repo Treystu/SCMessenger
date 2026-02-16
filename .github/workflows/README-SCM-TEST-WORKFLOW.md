@@ -11,7 +11,23 @@ The workflow requires the following secret to be configured in your repository:
 - **`COPILOT_GITHUB_TOKEN`**: A GitHub token with appropriate permissions for GitHub Copilot CLI
   - Navigate to: Repository Settings → Secrets and variables → Actions → New repository secret
   - Name: `COPILOT_GITHUB_TOKEN`
-  - Value: A GitHub Personal Access Token (PAT) or the default `${{ secrets.GITHUB_TOKEN }}`
+  - Value: **One of the following options:**
+    
+    **Option 1 (Recommended): Use the automatic token**
+    - Leave this secret unconfigured - the workflow will automatically use `GITHUB_TOKEN`
+    - This works if your repository has the default Actions token with sufficient permissions
+    
+    **Option 2: Use a Personal Access Token (PAT)**
+    - Create a PAT at: https://github.com/settings/tokens
+    - Required scopes: `repo`, `read:org`, `workflow`
+    - Copy the token value (starts with `ghp_` or `github_pat_`)
+    - Paste the actual token string as the secret value
+    - **Important**: Do NOT use workflow expressions like `${{ secrets.GITHUB_TOKEN }}` - store the actual token value
+    
+    **Option 3: Use a GitHub App token**
+    - Create a GitHub App with appropriate permissions
+    - Install the app on your repository
+    - Use the app's installation token as the secret value
 
 ### Required Repository Permissions
 
