@@ -1055,6 +1055,8 @@ public protocol IronCoreProtocol : AnyObject {
     
     func setDelegate(delegate: CoreDelegate?) 
     
+    func setNickname(nickname: String) throws 
+    
     func signData(data: Data) throws  -> SignatureResult
     
     func start() throws 
@@ -1171,6 +1173,13 @@ open func setDelegate(delegate: CoreDelegate?) {try! rustCall() {
 }
 }
     
+open func setNickname(nickname: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_set_nickname(self.uniffiClonePointer(),
+        FfiConverterString.lower(nickname),$0
+    )
+}
+}
+    
 open func signData(data: Data)throws  -> SignatureResult {
     return try  FfiConverterTypeSignatureResult.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_sign_data(self.uniffiClonePointer(),
@@ -1255,6 +1264,8 @@ public protocol LedgerManagerProtocol : AnyObject {
     
     func dialableAddresses()  -> [LedgerEntry]
     
+    func getPreferredRelays(limit: UInt32)  -> [LedgerEntry]
+    
     func load() throws 
     
     func recordConnection(multiaddr: String, peerId: String) 
@@ -1326,6 +1337,14 @@ open func allKnownTopics() -> [String] {
 open func dialableAddresses() -> [LedgerEntry] {
     return try!  FfiConverterSequenceTypeLedgerEntry.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ledgermanager_dialable_addresses(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func getPreferredRelays(limit: UInt32) -> [LedgerEntry] {
+    return try!  FfiConverterSequenceTypeLedgerEntry.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_ledgermanager_get_preferred_relays(self.uniffiClonePointer(),
+        FfiConverterUInt32.lower(limit),$0
     )
 })
 }
@@ -1767,6 +1786,8 @@ public protocol SwarmBridgeProtocol : AnyObject {
     
     func dial(multiaddr: String) throws 
     
+    func getListeners()  -> [String]
+    
     func getPeers()  -> [String]
     
     func getTopics()  -> [String]
@@ -1832,6 +1853,13 @@ open func dial(multiaddr: String)throws  {try rustCallWithError(FfiConverterType
         FfiConverterString.lower(multiaddr),$0
     )
 }
+}
+    
+open func getListeners() -> [String] {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_swarmbridge_get_listeners(self.uniffiClonePointer(),$0
+    )
+})
 }
     
 open func getPeers() -> [String] {
@@ -2219,13 +2247,15 @@ public struct IdentityInfo {
     public var identityId: String?
     public var publicKeyHex: String?
     public var initialized: Bool
+    public var nickname: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(identityId: String?, publicKeyHex: String?, initialized: Bool) {
+    public init(identityId: String?, publicKeyHex: String?, initialized: Bool, nickname: String?) {
         self.identityId = identityId
         self.publicKeyHex = publicKeyHex
         self.initialized = initialized
+        self.nickname = nickname
     }
 }
 
@@ -2242,6 +2272,9 @@ extension IdentityInfo: Equatable, Hashable {
         if lhs.initialized != rhs.initialized {
             return false
         }
+        if lhs.nickname != rhs.nickname {
+            return false
+        }
         return true
     }
 
@@ -2249,6 +2282,7 @@ extension IdentityInfo: Equatable, Hashable {
         hasher.combine(identityId)
         hasher.combine(publicKeyHex)
         hasher.combine(initialized)
+        hasher.combine(nickname)
     }
 }
 
@@ -2259,7 +2293,8 @@ public struct FfiConverterTypeIdentityInfo: FfiConverterRustBuffer {
             try IdentityInfo(
                 identityId: FfiConverterOptionString.read(from: &buf), 
                 publicKeyHex: FfiConverterOptionString.read(from: &buf), 
-                initialized: FfiConverterBool.read(from: &buf)
+                initialized: FfiConverterBool.read(from: &buf), 
+                nickname: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -2267,6 +2302,7 @@ public struct FfiConverterTypeIdentityInfo: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.identityId, into: &buf)
         FfiConverterOptionString.write(value.publicKeyHex, into: &buf)
         FfiConverterBool.write(value.initialized, into: &buf)
+        FfiConverterOptionString.write(value.nickname, into: &buf)
     }
 }
 
@@ -4019,6 +4055,9 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_ironcore_set_delegate() != 56502) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_set_nickname() != 20532) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_sign_data() != 21683) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4035,6 +4074,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ledgermanager_dialable_addresses() != 27481) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ledgermanager_get_preferred_relays() != 45636) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ledgermanager_load() != 59015) {
@@ -4101,6 +4143,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_swarmbridge_dial() != 24277) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_swarmbridge_get_listeners() != 59843) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_swarmbridge_get_peers() != 42047) {
