@@ -79,6 +79,8 @@ pub enum SwarmCommand {
         peer_id: PeerId,
         entries: Vec<SharedPeerEntry>,
     },
+    /// Get listening addresses
+    GetListeners { reply: mpsc::Sender<Vec<Multiaddr>> },
     /// Shutdown the swarm
     Shutdown,
 }
@@ -232,6 +234,20 @@ impl SwarmHandle {
             .send(SwarmCommand::AddKadAddress { peer_id, addr })
             .await
             .map_err(|_| anyhow::anyhow!("Swarm task not running"))
+    }
+
+    /// Get listening addresses
+    pub async fn get_listeners(&self) -> Result<Vec<Multiaddr>> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(SwarmCommand::GetListeners { reply: reply_tx })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+
+        reply_rx
+            .recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("No reply from swarm"))
     }
 
     /// Subscribe to a Gossipsub topic
@@ -1061,7 +1077,11 @@ pub async fn start_swarm_with_config(
                                 }
                             }
 
-                            SwarmCommand::Shutdown => {
+                            SwarmCommand::GetListeners { reply } => {
+                    let listeners: Vec<Multiaddr> = swarm.listeners().cloned().collect();
+                    let _ = reply.send(listeners).await;
+                }
+                SwarmCommand::Shutdown => {
                                 tracing::info!("Swarm shutting down");
                                 break;
                             }

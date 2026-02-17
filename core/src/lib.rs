@@ -68,6 +68,7 @@ pub struct IdentityInfo {
     pub identity_id: Option<String>,
     pub public_key_hex: Option<String>,
     pub initialized: bool,
+    pub nickname: Option<String>,
 }
 
 /// Signature result for UniFFI export
@@ -209,7 +210,16 @@ impl IronCore {
             identity_id: identity.identity_id(),
             public_key_hex: identity.public_key_hex(),
             initialized: identity.keys().is_some(),
+            nickname: identity.nickname(),
         }
+    }
+
+    /// Set the user's nickname
+    pub fn set_nickname(&self, nickname: String) -> Result<(), IronCoreError> {
+        self.identity
+            .write()
+            .set_nickname(nickname)
+            .map_err(|_| IronCoreError::StorageError)
     }
 
     /// Sign data with this node's identity key

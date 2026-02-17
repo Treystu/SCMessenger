@@ -4,6 +4,7 @@
 // locally and relays to other peers with periodic sync.
 
 use super::storage::{EvictionStrategy, WasmStore, WasmStoreConfig};
+use libp2p::identity::Keypair;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -59,6 +60,8 @@ pub struct WasmMeshNode {
     store: Arc<WasmStore>,
     last_sync_ms: Arc<RwLock<u64>>,
     message_count: Arc<RwLock<u64>>,
+    identity_keys: Keypair,
+    nickname: Arc<RwLock<Option<String>>>,
 }
 
 impl WasmMeshNode {
@@ -76,6 +79,8 @@ impl WasmMeshNode {
             store: Arc::new(WasmStore::new(store_config)),
             last_sync_ms: Arc::new(RwLock::new(0)),
             message_count: Arc::new(RwLock::new(0)),
+            identity_keys: Keypair::generate_ed25519(),
+            nickname: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -100,6 +105,19 @@ impl WasmMeshNode {
     /// Get current state
     pub fn state(&self) -> WasmMeshState {
         *self.state.read()
+    }
+
+    /// Get identity info (matching Core's IdentityInfo structure conceptually)
+    pub fn get_identity_info(&self) -> (String, String, Option<String>) {
+        let peer_id = self.identity_keys.public().to_peer_id().to_string();
+        let pub_key = hex::encode(self.identity_keys.public().to_protobuf_encoding());
+        let nickname = self.nickname.read().clone();
+        (peer_id, pub_key, nickname)
+    }
+
+    /// Set nickname
+    pub fn set_nickname(&self, name: String) {
+        *self.nickname.write() = Some(name);
     }
 
     /// Store a message envelope locally
@@ -402,5 +420,18 @@ mod tests {
         assert_eq!(node.config.storage_quota_bytes, 25_000_000);
         assert_eq!(node.config.sync_interval_ms, 60_000);
         assert!(node.config.relay_while_active);
+    }
+
+    #[test]
+    fn test_identity_management() {
+        let node = WasmMeshNode::default();
+        let (peer_id, _, nick) = node.get_identity_info();
+
+        assert!(!peer_id.is_empty());
+        assert!(nick.is_none());
+
+        node.set_nickname("WasmUser".to_string());
+        let (_, _, nick) = node.get_identity_info();
+        assert_eq!(nick, Some("WasmUser".to_string()));
     }
 }

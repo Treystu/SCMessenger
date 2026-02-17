@@ -4,6 +4,7 @@ use super::IdentityKeys;
 use anyhow::Result;
 
 const IDENTITY_KEY: &[u8] = b"identity_keys";
+const NICKNAME_KEY: &[u8] = b"identity_nickname";
 
 /// Storage backend for identity keys
 pub enum IdentityStore {
@@ -39,6 +40,18 @@ impl IdentityStore {
         }
     }
 
+    /// Save nickname to storage
+    pub fn save_nickname(&self, nickname: &str) -> Result<()> {
+        match self {
+            Self::Memory => Ok(()), // Memory store doesn't persist
+            Self::Persistent(db) => {
+                db.insert(NICKNAME_KEY, nickname.as_bytes())?;
+                db.flush()?;
+                Ok(())
+            }
+        }
+    }
+
     /// Load keys from storage
     pub fn load_keys(&self) -> Result<Option<IdentityKeys>> {
         match self {
@@ -57,12 +70,27 @@ impl IdentityStore {
         }
     }
 
+    /// Load nickname from storage
+    pub fn load_nickname(&self) -> Result<Option<String>> {
+        match self {
+            Self::Memory => Ok(None),
+            Self::Persistent(db) => {
+                if let Some(bytes) = db.get(NICKNAME_KEY)? {
+                    Ok(Some(String::from_utf8(bytes.to_vec())?))
+                } else {
+                    Ok(None)
+                }
+            }
+        }
+    }
+
     /// Clear stored keys
     pub fn clear(&self) -> Result<()> {
         match self {
             Self::Memory => Ok(()),
             Self::Persistent(db) => {
                 db.remove(IDENTITY_KEY)?;
+                db.remove(NICKNAME_KEY)?;
                 db.flush()?;
                 Ok(())
             }

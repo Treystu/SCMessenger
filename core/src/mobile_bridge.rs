@@ -736,6 +736,19 @@ impl LedgerManager {
             .collect()
     }
 
+    pub fn get_preferred_relays(&self, limit: u32) -> Vec<LedgerEntry> {
+        let entries = self.entries.lock().unwrap();
+        let mut preferred: Vec<LedgerEntry> = entries
+            .iter()
+            .filter(|e| e.success_count > 0)
+            .cloned() // Clone now so we can sort
+            .collect();
+        // Sort by last_seen descending
+        preferred.sort_by(|a, b| b.last_seen.unwrap_or(0).cmp(&a.last_seen.unwrap_or(0)));
+        preferred.truncate(limit as usize);
+        preferred
+    }
+
     pub fn all_known_topics(&self) -> Vec<String> {
         let entries = self.entries.lock().unwrap();
         let mut topics: Vec<String> = entries.iter().flat_map(|e| e.topics.clone()).collect();
@@ -852,6 +865,26 @@ impl SwarmBridge {
         }
     }
 
+    /// Get list of listening addresses.
+    pub fn get_listeners(&self) -> Vec<String> {
+        let handle_guard = self.handle.lock();
+        let handle = match handle_guard.as_ref() {
+            Some(h) => h,
+            None => return Vec::new(),
+        };
+
+        // Block on async operation
+        if let Some(rt) = &self.runtime_handle {
+            rt.block_on(handle.get_listeners())
+                .unwrap_or_default()
+                .iter()
+                .map(|addr| addr.to_string())
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
     /// Get list of subscribed Gossipsub topics.
     pub fn get_topics(&self) -> Vec<String> {
         let handle_guard = self.handle.lock();
@@ -899,5 +932,39 @@ fn current_timestamp() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
-        .as_secs()
+        .as_millis() as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_ledger_preferred_relays() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_str().unwrap().to_string();
+        let ledger = LedgerManager::new(path);
+
+        // Add some entries
+        ledger.record_connection("/ip4/1.2.3.4/tcp/1000".to_string(), "peer1".to_string());
+        ledger.record_connection("/ip4/1.2.3.4/tcp/1000".to_string(), "peer1".to_string()); // Make it successful
+
+        // Simulate time passing and another peer
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        ledger.record_connection("/ip4/5.6.7.8/tcp/2000".to_string(), "peer2".to_string());
+        ledger.record_connection("/ip4/5.6.7.8/tcp/2000".to_string(), "peer2".to_string());
+
+        let preferred = ledger.get_preferred_relays(10);
+        assert_eq!(preferred.len(), 2);
+
+        // Peer 2 should be first because it was seen last
+        assert_eq!(preferred[0].peer_id, Some("peer2".to_string()));
+        assert_eq!(preferred[1].peer_id, Some("peer1".to_string()));
+
+        // Test limit
+        let limited = ledger.get_preferred_relays(1);
+        assert_eq!(limited.len(), 1);
+        assert_eq!(limited[0].peer_id, Some("peer2".to_string()));
+    }
 }

@@ -31,7 +31,10 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Initialize new identity
-    Init,
+    Init {
+        #[arg(short, long)]
+        name: Option<String>,
+    },
     /// Show identity information
     Identity {
         #[command(subcommand)]
@@ -75,6 +78,7 @@ enum Commands {
 enum IdentityAction {
     Show,
     Export,
+    SetName { name: String },
 }
 
 #[derive(Subcommand)]
@@ -132,7 +136,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init => cmd_init().await,
+        Commands::Init { name } => cmd_init(name).await,
         Commands::Identity { action } => cmd_identity(action).await,
         Commands::Contact { action } => cmd_contact(action).await,
         Commands::Config { action } => cmd_config(action).await,
@@ -163,7 +167,7 @@ async fn cmd_stop() -> Result<()> {
     Ok(())
 }
 
-async fn cmd_init() -> Result<()> {
+async fn cmd_init(name: Option<String>) -> Result<()> {
     println!("{}", "Initializing SCMessenger...".bold());
     println!();
 
@@ -178,12 +182,22 @@ async fn cmd_init() -> Result<()> {
     core.initialize_identity()
         .context("Failed to initialize identity")?;
 
+    // Set nickname if provided
+    if let Some(nickname) = name {
+        core.set_nickname(nickname)
+            .context("Failed to set nickname")?;
+        println!("  {} Nickname set", "✓".green());
+    }
+
     let info = core.get_identity_info();
     println!("  {} Identity created", "✓".green());
     println!();
 
     println!("{}", "Identity Information:".bold());
     println!("  ID:         {}", info.identity_id.unwrap().bright_cyan());
+    if let Some(nick) = info.nickname {
+        println!("  Nickname:   {}", nick.bright_cyan());
+    }
     println!(
         "  Public Key: {}",
         info.public_key_hex.unwrap().bright_yellow()
@@ -213,9 +227,21 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
         None | Some(IdentityAction::Show) => {
             println!("{}", "Identity Information".bold());
             println!("  ID:         {}", info.identity_id.unwrap().bright_cyan());
+            if let Some(nick) = info.nickname {
+                println!("  Nickname:   {}", nick.bright_cyan());
+            }
             println!(
                 "  Public Key: {}",
                 info.public_key_hex.unwrap().bright_yellow()
+            );
+        }
+        Some(IdentityAction::SetName { name }) => {
+            core.set_nickname(name.clone())
+                .context("Failed to set nickname")?;
+            println!(
+                "{} Nickname updated to: {}",
+                "✓".green(),
+                name.bright_cyan()
             );
         }
         Some(IdentityAction::Export) => {

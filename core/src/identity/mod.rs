@@ -12,6 +12,7 @@ use anyhow::Result;
 pub struct IdentityManager {
     store: IdentityStore,
     keys: Option<IdentityKeys>,
+    nickname: Option<String>,
 }
 
 impl IdentityManager {
@@ -20,6 +21,7 @@ impl IdentityManager {
         Self {
             store: IdentityStore::memory(),
             keys: None,
+            nickname: None,
         }
     }
 
@@ -28,11 +30,17 @@ impl IdentityManager {
         Ok(Self {
             store: IdentityStore::persistent(path)?,
             keys: None,
+            nickname: None,
         })
     }
 
     /// Generate or load identity keys
     pub fn initialize(&mut self) -> Result<()> {
+        // Load nickname
+        if let Ok(Some(nickname)) = self.store.load_nickname() {
+            self.nickname = Some(nickname);
+        }
+
         // Try to load existing keys
         if let Some(keys) = self.store.load_keys()? {
             tracing::info!("🔑 Loaded existing identity");
@@ -74,6 +82,18 @@ impl IdentityManager {
     /// Verify signature
     pub fn verify(&self, data: &[u8], signature: &[u8], public_key: &[u8]) -> Result<bool> {
         IdentityKeys::verify(data, signature, public_key)
+    }
+
+    /// Set nickname
+    pub fn set_nickname(&mut self, nickname: String) -> Result<()> {
+        self.store.save_nickname(&nickname)?;
+        self.nickname = Some(nickname);
+        Ok(())
+    }
+
+    /// Get nickname
+    pub fn nickname(&self) -> Option<String> {
+        self.nickname.clone()
     }
 }
 
@@ -150,6 +170,7 @@ mod tests {
         // Create and initialize
         let mut manager1 = IdentityManager::with_path(&path).unwrap();
         manager1.initialize().unwrap();
+        manager1.set_nickname("Alice".to_string()).unwrap();
         let id1 = manager1.identity_id().unwrap();
 
         drop(manager1);
@@ -158,7 +179,9 @@ mod tests {
         let mut manager2 = IdentityManager::with_path(&path).unwrap();
         manager2.initialize().unwrap();
         let id2 = manager2.identity_id().unwrap();
+        let nick2 = manager2.nickname();
 
         assert_eq!(id1, id2);
+        assert_eq!(nick2, Some("Alice".to_string()));
     }
 }

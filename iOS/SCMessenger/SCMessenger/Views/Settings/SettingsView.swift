@@ -40,17 +40,33 @@ struct SettingsView: View {
             
             Section {
                 HStack {
-                    Text("Version")
+                    Text("Nickname")
                     Spacer()
-                    Text("0.1.1")
-                        .foregroundStyle(Theme.onSurfaceVariant)
+                    TextField("Enter nickname", text: Binding(
+                        get: { viewModel?.nickname ?? "" },
+                        set: { viewModel?.updateNickname($0) }
+                    ))
+                    .multilineTextAlignment(.trailing)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.words)
                 }
                 
                 HStack {
-                    Text("Identity")
+                    Text("Identity ID")
                     Spacer()
                     Text(repository.getIdentitySnippet())
                         .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(Theme.onSurfaceVariant)
+                }
+            } header: {
+                Text("Identity")
+            }
+            
+            Section {
+                HStack {
+                    Text("Version")
+                    Spacer()
+                    Text("0.1.1")
                         .foregroundStyle(Theme.onSurfaceVariant)
                 }
             } header: {

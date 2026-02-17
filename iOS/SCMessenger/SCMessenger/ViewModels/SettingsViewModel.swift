@@ -19,8 +19,31 @@ final class SettingsViewModel {
     
     init(repository: MeshRepository) {
         self.repository = repository
+        self.loadNickname()
     }
     
+    // MARK: - Identity
+    
+    var nickname: String = ""
+    
+    func loadNickname() {
+        if let name = repository?.getNickname() {
+            self.nickname = name
+        } else {
+            self.nickname = "User" // Default
+        }
+    }
+    
+    func updateNickname(_ name: String) {
+        self.nickname = name
+        do {
+            try repository?.setNickname(name)
+            successMessage = "Nickname updated"
+        } catch {
+            self.error = "Failed to update nickname: \(error.localizedDescription)"
+        }
+    }
+
     func loadSettings() {
         isLoading = true
         do {

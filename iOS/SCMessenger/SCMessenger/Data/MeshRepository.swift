@@ -803,6 +803,25 @@ final class MeshRepository {
         }
         return String(publicKey.prefix(8))
     }
+    
+    func getIdentityDisplay() -> String {
+        if let nick = ironCore?.getIdentityInfo().nickname {
+            return nick
+        }
+        return getIdentitySnippet()
+    }
+    
+    func getNickname() -> String? {
+        return ironCore?.getIdentityInfo().nickname
+    }
+    
+    func setNickname(_ nickname: String) throws {
+        guard let ironCore = ironCore else {
+            throw MeshError.notInitialized("IronCore not initialized")
+        }
+        try ironCore.setNickname(nickname: nickname)
+        logger.info("✓ Nickname set to: \(nickname)")
+    }
 }
 
 // MARK: - Error Types
