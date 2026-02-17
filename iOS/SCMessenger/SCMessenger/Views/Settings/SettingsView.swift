@@ -58,6 +58,22 @@ struct SettingsView: View {
                         .font(.system(.body, design: .monospaced))
                         .foregroundStyle(Theme.onSurfaceVariant)
                 }
+
+                Button {
+                    if let id = repository.getFullIdentityInfo()?.identityId {
+                        UIPasteboard.general.string = id
+                    }
+                } label: {
+                    Label("Copy Identity ID", systemImage: "doc.on.doc")
+                }
+
+                Button {
+                    if let key = repository.getFullIdentityInfo()?.publicKeyHex {
+                        UIPasteboard.general.string = key
+                    }
+                } label: {
+                    Label("Copy Public Key", systemImage: "key")
+                }
             } header: {
                 Text("Identity")
             }

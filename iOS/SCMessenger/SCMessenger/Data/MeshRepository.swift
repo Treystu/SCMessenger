@@ -796,6 +796,10 @@ final class MeshRepository {
     
     // MARK: - Identity Helpers
     
+    func getFullIdentityInfo() -> IdentityInfo? {
+        return ironCore?.getIdentityInfo()
+    }
+
     func getIdentitySnippet() -> String {
         guard let identity = ironCore?.getIdentityInfo(),
               let publicKey = identity.publicKeyHex else {
