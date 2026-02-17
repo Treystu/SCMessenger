@@ -4,11 +4,12 @@ fn main() {
     use uniffi::SwiftBindingGenerator;
 
     let udl_file = Utf8Path::new("src/api.udl");
+    let config_file = Utf8Path::new("uniffi.toml");
     let out_dir = Utf8Path::new("target/generated-sources/uniffi/swift");
 
     uniffi_bindgen::generate_bindings(
         udl_file,
-        None,
+        Some(config_file),
         SwiftBindingGenerator,
         Some(out_dir),
         None,

@@ -105,7 +105,7 @@ impl WebSocketRelay {
                 tracing::info!("WebSocket connection opened");
             }) as Box<dyn FnMut(MessageEvent)>);
 
-            ws.set_onopen(Some(onopen_callback.as_ref().unchecked_ref()));
+            ws.set_onopen(Some(onopen_callback.as_ref().dyn_ref().unwrap()));
             onopen_callback.forget(); // Keep callback alive
 
             // Create onmessage callback
@@ -118,7 +118,7 @@ impl WebSocketRelay {
                 }
             }) as Box<dyn FnMut(MessageEvent)>);
 
-            ws.set_onmessage(Some(onmessage_callback.as_ref().unchecked_ref()));
+            ws.set_onmessage(Some(onmessage_callback.as_ref().dyn_ref().unwrap()));
             onmessage_callback.forget();
 
             // Create onerror callback
@@ -126,7 +126,7 @@ impl WebSocketRelay {
                 tracing::error!("WebSocket error: {:?}", event);
             }) as Box<dyn FnMut(ErrorEvent)>);
 
-            ws.set_onerror(Some(onerror_callback.as_ref().unchecked_ref()));
+            ws.set_onerror(Some(onerror_callback.as_ref().dyn_ref().unwrap()));
             onerror_callback.forget();
 
             // Create onclose callback
@@ -138,7 +138,7 @@ impl WebSocketRelay {
                 );
             }) as Box<dyn FnMut(CloseEvent)>);
 
-            ws.set_onclose(Some(onclose_callback.as_ref().unchecked_ref()));
+            ws.set_onclose(Some(onclose_callback.as_ref().dyn_ref().unwrap()));
             onclose_callback.forget();
 
             tracing::info!("WebSocket connection initiated to {}", self.url);

@@ -5,6 +5,14 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
+[package.metadata.uniffi.bindings.kotlin]
+package = "com.scmessenger.core"
+cdylib_name = "scmessenger_core"
+
+[package.metadata.uniffi.bindings.swift]
+module = "SCMessengerCore"
+ffi_module_name = "scmessenger_core"
+
 [lib]
 crate-type = ["lib", "cdylib"]
 

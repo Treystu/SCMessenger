@@ -8,7 +8,7 @@ use parking_lot::RwLock;
 use std::sync::Arc;
 
 #[cfg(target_arch = "wasm32")]
-use wasm_bindgen::closure::Closure;
+use wasm_bindgen::{closure::Closure, JsCast};
 #[cfg(target_arch = "wasm32")]
 use web_sys::{CloseEvent, ErrorEvent, MessageEvent, RtcPeerConnection, WebSocket};
 
@@ -49,7 +49,7 @@ impl ManagedWebSocket {
     {
         let closure = Closure::wrap(Box::new(callback) as Box<dyn FnMut(MessageEvent)>);
         self.websocket
-            .set_onopen(Some(closure.as_ref().unchecked_ref()));
+            .set_onopen(Some(closure.as_ref().dyn_ref().unwrap()));
         self.onopen = Some(closure);
     }
 
@@ -60,7 +60,7 @@ impl ManagedWebSocket {
     {
         let closure = Closure::wrap(Box::new(callback) as Box<dyn FnMut(MessageEvent)>);
         self.websocket
-            .set_onmessage(Some(closure.as_ref().unchecked_ref()));
+            .set_onmessage(Some(closure.as_ref().dyn_ref().unwrap()));
         self.onmessage = Some(closure);
     }
 
@@ -71,7 +71,7 @@ impl ManagedWebSocket {
     {
         let closure = Closure::wrap(Box::new(callback) as Box<dyn FnMut(ErrorEvent)>);
         self.websocket
-            .set_onerror(Some(closure.as_ref().unchecked_ref()));
+            .set_onerror(Some(closure.as_ref().dyn_ref().unwrap()));
         self.onerror = Some(closure);
     }
 
@@ -82,7 +82,7 @@ impl ManagedWebSocket {
     {
         let closure = Closure::wrap(Box::new(callback) as Box<dyn FnMut(CloseEvent)>);
         self.websocket
-            .set_onclose(Some(closure.as_ref().unchecked_ref()));
+            .set_onclose(Some(closure.as_ref().dyn_ref().unwrap()));
         self.onclose = Some(closure);
     }
 
@@ -162,7 +162,7 @@ impl ManagedRtcConnection {
         let closure =
             Closure::wrap(Box::new(callback) as Box<dyn FnMut(web_sys::RtcDataChannelEvent)>);
         self.peer_connection
-            .set_ondatachannel(Some(closure.as_ref().unchecked_ref()));
+            .set_ondatachannel(Some(closure.as_ref().dyn_ref().unwrap()));
         self.ondatachannel = Some(closure);
     }
 
@@ -174,7 +174,7 @@ impl ManagedRtcConnection {
         let closure =
             Closure::wrap(Box::new(callback) as Box<dyn FnMut(web_sys::RtcPeerConnectionIceEvent)>);
         self.peer_connection
-            .set_onicecandidate(Some(closure.as_ref().unchecked_ref()));
+            .set_onicecandidate(Some(closure.as_ref().dyn_ref().unwrap()));
         self.onicecandidate = Some(closure);
     }
 
@@ -185,15 +185,13 @@ impl ManagedRtcConnection {
     {
         let closure = Closure::wrap(Box::new(callback) as Box<dyn FnMut(web_sys::Event)>);
         self.peer_connection
-            .set_onconnectionstatechange(Some(closure.as_ref().unchecked_ref()));
+            .set_onconnectionstatechange(Some(closure.as_ref().dyn_ref().unwrap()));
         self.onconnectionstatechange = Some(closure);
     }
 
     /// Create a data channel
     pub fn create_data_channel(&self, label: &str) -> Result<web_sys::RtcDataChannel, String> {
-        self.peer_connection
-            .create_data_channel(label)
-            .ok_or_else(|| "Failed to create data channel".to_string())
+        Ok(self.peer_connection.create_data_channel(label))
     }
 
     /// Get connection state

@@ -1,0 +1,7 @@
+[bindings.kotlin]
+package = "com.scmessenger.core"
+cdylib_name = "scmessenger_core"
+
+[bindings.swift]
+module = "SCMessengerCore"
+ffi_module_name = "scmessenger_core"
