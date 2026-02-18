@@ -214,6 +214,11 @@ impl IronCore {
         }
     }
 
+    /// Internal helper to get cloned identity keys
+    pub fn get_identity_keys(&self) -> Option<identity::IdentityKeys> {
+        self.identity.read().keys().cloned()
+    }
+
     /// Set the user's nickname
     pub fn set_nickname(&self, nickname: String) -> Result<(), IronCoreError> {
         self.identity

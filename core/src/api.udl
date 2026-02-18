@@ -85,7 +85,6 @@ enum IronCoreError {
 
 dictionary MeshServiceConfig {
     u32 discovery_interval_ms;
-    u32 relay_budget_per_hour;
     u8 battery_floor_pct;
 };
 
@@ -125,6 +124,13 @@ interface MeshService {
     ServiceStats get_stats();
     void reset_stats();
     void set_platform_bridge(PlatformBridge? bridge);
+
+    [Throws=IronCoreError]
+    void start_swarm(string listen_addr);
+    SwarmBridge get_swarm_bridge();
+
+    void update_device_state(DeviceProfile profile);
+    void set_relay_budget(u32 messages_per_hour);
 
     void on_peer_discovered(string peer_id);
     void on_peer_disconnected(string peer_id);

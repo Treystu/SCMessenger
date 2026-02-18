@@ -124,12 +124,7 @@ final class SettingsViewModel {
         saveSettings()
     }
 
-    func updateRelayBudget(_ budget: UInt32) {
-        guard var currentSettings = settings else { return }
-        currentSettings.maxRelayBudget = budget
-        settings = currentSettings
-        saveSettings()
-    }
+
 
     func updateBatteryFloor(_ floor: UInt8) {
         guard var currentSettings = settings else { return }

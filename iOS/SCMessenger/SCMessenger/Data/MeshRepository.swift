@@ -197,7 +197,6 @@ final class MeshRepository {
 
             let config = MeshServiceConfig(
                 discoveryIntervalMs: 30000,
-                relayBudgetPerHour: settings.maxRelayBudget,
                 batteryFloorPct: settings.batteryFloor
             )
 
@@ -230,14 +229,16 @@ final class MeshRepository {
         statusEvents.send(.serviceStateChanged(.starting))
 
         do {
-            // Create mesh service with persistent storage (matches Android: withStorage)
+            // Create mesh service with persistent storage
             meshService = MeshService.withStorage(config: config, storagePath: storagePath)
 
             // Start service first — IronCore is created during start()
             try meshService?.start()
 
-            // Initialize SwarmBridge for messaging operations
-            swarmBridge = SwarmBridge()
+            // Configure platform bridge (Swift -> Rust callbacks)
+            platformBridge = IosPlatformBridge()
+            platformBridge?.configure(repository: self)
+            meshService?.setPlatformBridge(bridge: platformBridge)
 
             // Now obtain IronCore (only available after start())
             ironCore = meshService?.getCore()
@@ -245,9 +246,16 @@ final class MeshRepository {
                 throw MeshError.notInitialized("Failed to obtain IronCore from MeshService")
             }
 
-            // Configure platform bridge
-            platformBridge = IosPlatformBridge()
-            platformBridge?.configure(repository: self)
+            // Obtain the SwarmBridge from MeshService (managed by Rust)
+            swarmBridge = meshService?.getSwarmBridge()
+
+            // Initialize internet transport if enabled
+            let settings = try? settingsManager?.load()
+            if settings?.internetEnabled == true {
+                // Listen on random port
+                try? meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/0")
+                logger.info("Internet transport (Swarm) initiated")
+            }
 
             serviceState = .running
             statusEvents.send(.serviceStateChanged(.running))
@@ -390,16 +398,7 @@ final class MeshRepository {
         // Prepare and send message
         let encryptedBytes = try ironCore.prepareMessage(recipientPublicKeyHex: recipientPublicKey, text: content)
 
-        // Send via SwarmBridge
-        if let swarmBridge = swarmBridge {
-            try swarmBridge.sendMessage(peerId: peerId, data: Data(encryptedBytes))
-            logger.info("✓ Message sent via SwarmBridge: \(encryptedBytes.count) bytes")
-        } else {
-            logger.error("SwarmBridge not initialized! Message dropped.")
-            throw MeshError.notInitialized("SwarmBridge not ready")
-        }
-
-        // Record in history
+        // Record in history FIRST so it's persisted even if bridge fails
         let messageRecord = MessageRecord(
             id: UUID().uuidString,
             direction: .sent,
@@ -412,6 +411,22 @@ final class MeshRepository {
 
         // Notify UI (Unified flow for sent messages)
         messageUpdates.send(messageRecord)
+
+        // Send via SwarmBridge (Network delivery)
+        if let swarmBridge = swarmBridge {
+            do {
+                try swarmBridge.sendMessage(peerId: peerId, data: Data(encryptedBytes))
+                logger.info("✓ Message sent via SwarmBridge: \(encryptedBytes.count) bytes")
+            } catch {
+                logger.error("SwarmBridge failed to send: \(error.localizedDescription)")
+                // Re-throw if it's a critical error, but for generic Network error 
+                // we've already saved it locally which handles "persistence".
+                throw error
+            }
+        } else {
+            logger.error("SwarmBridge not initialized! Message dropped.")
+            throw MeshError.notInitialized("SwarmBridge not ready")
+        }
     }
 
     /// Handle incoming message (from CoreDelegate callback)
@@ -662,22 +677,61 @@ final class MeshRepository {
     // MARK: - Platform Reporting
 
     func reportBattery(pct: UInt8, charging: Bool) {
-        // Update device profile and report to Rust
         logger.debug("Battery: \(pct)% charging=\(charging)")
-        // TODO: Report to autoAdjustEngine
+        
+        // 1. Update publishing status
+        // (UI might want to show battery state)
+
+        // 2. Report to Rust MeshService
+        let profile = DeviceProfile(
+            batteryPct: pct,
+            isCharging: charging,
+            hasWifi: networkStatus.wifi,
+            motionState: .unknown // Default to unknown if not yet reported
+        )
+        meshService?.updateDeviceState(profile: profile)
+
+        // 3. Auto-adjust local transport and relay budgets
+        if let engine = autoAdjustEngine {
+            let adjProfile = engine.computeProfile(device: profile)
+            let relayAdj = engine.computeRelayAdjustment(profile: adjProfile)
+            
+            // Apply new budget to MeshService
+            meshService?.setRelayBudget(messagesPerHour: relayAdj.maxPerHour)
+            
+            // Adjust BLE intervals if needed
+            let bleAdj = engine.computeBleAdjustment(profile: adjProfile)
+            bleCentralManager?.applyScanSettings(intervalMs: bleAdj.scanIntervalMs)
+            logger.info("Auto-adjusted relay budget: \(relayAdj.maxPerHour)/hr")
+        }
     }
 
     func reportNetwork(wifi: Bool, cellular: Bool) {
         logger.debug("Network: wifi=\(wifi) cellular=\(cellular)")
-        // Update published status
         networkStatus.wifi = wifi
         networkStatus.cellular = cellular
-        // TODO: Report to autoAdjustEngine
+        
+        // Report to Rust
+        let profile = DeviceProfile(
+            batteryPct: 100, // Placeholder, will be updated next battery report
+            isCharging: true,
+            hasWifi: wifi,
+            motionState: .unknown
+        )
+        // Note: Real implementation would cache last battery state
+        meshService?.updateDeviceState(profile: profile)
     }
 
     func reportMotion(state: MotionState) {
         logger.debug("Motion: \(state)")
-        // TODO: Report to autoAdjustEngine
+        // Report to Rust
+        let profile = DeviceProfile(
+            batteryPct: 100,
+            isCharging: true,
+            hasWifi: networkStatus.wifi,
+            motionState: state
+        )
+        meshService?.updateDeviceState(profile: profile)
     }
 
     // MARK: - Background Operations

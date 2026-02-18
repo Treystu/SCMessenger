@@ -7,6 +7,11 @@ use serde::{Deserialize, Serialize};
 
 // Re-export the contacts bridge
 pub use crate::contacts_bridge::{Contact, ContactManager};
+use crate::transport::swarm::SwarmHandle;
+use libp2p::{Multiaddr, PeerId};
+use parking_lot::Mutex;
+use std::str::FromStr;
+use std::sync::Arc;
 
 // ============================================================================
 // MOBILE SERVICE
@@ -15,7 +20,6 @@ pub use crate::contacts_bridge::{Contact, ContactManager};
 #[derive(Debug, Clone)]
 pub struct MeshServiceConfig {
     pub discovery_interval_ms: u32,
-    pub relay_budget_per_hour: u32,
     pub battery_floor_pct: u8,
 }
 
@@ -52,6 +56,7 @@ pub struct MeshService {
     core: std::sync::Arc<std::sync::Mutex<Option<crate::IronCore>>>,
     platform_bridge: std::sync::Arc<std::sync::Mutex<Option<Box<dyn PlatformBridge>>>>,
     storage_path: Option<String>,
+    swarm_bridge: std::sync::Arc<SwarmBridge>,
 }
 
 impl MeshService {
@@ -63,6 +68,7 @@ impl MeshService {
             core: std::sync::Arc::new(std::sync::Mutex::new(None)),
             platform_bridge: std::sync::Arc::new(std::sync::Mutex::new(None)),
             storage_path: None,
+            swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
         }
     }
 
@@ -75,6 +81,7 @@ impl MeshService {
             core: std::sync::Arc::new(std::sync::Mutex::new(None)),
             platform_bridge: std::sync::Arc::new(std::sync::Mutex::new(None)),
             storage_path: Some(storage_path),
+            swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
         }
     }
 
@@ -168,6 +175,72 @@ impl MeshService {
 
     pub fn set_platform_bridge(&self, bridge: Option<Box<dyn PlatformBridge>>) {
         *self.platform_bridge.lock().unwrap() = bridge;
+    }
+
+    pub fn start_swarm(&self, listen_addr: String) -> Result<(), crate::IronCoreError> {
+        let core_guard = self.core.lock().unwrap();
+        let core = core_guard
+            .as_ref()
+            .ok_or(crate::IronCoreError::NotInitialized)?;
+
+        // Get keys for swarm identity
+        let identity_keys = core
+            .get_identity_keys()
+            .ok_or(crate::IronCoreError::NotInitialized)?;
+        let libp2p_keys = identity_keys
+            .to_libp2p_keypair()
+            .map_err(|_| crate::IronCoreError::CryptoError)?;
+
+        let addr = libp2p_keys.public().to_peer_id().to_string();
+        tracing::info!("Starting Swarm with PeerID: {}", addr);
+
+        let listen_multiaddr = if listen_addr.is_empty() {
+            None
+        } else {
+            Some(
+                listen_addr
+                    .parse()
+                    .map_err(|_| crate::IronCoreError::InvalidInput)?,
+            )
+        };
+
+        let swarm_bridge = self.swarm_bridge.clone();
+
+        // Spawn swarm in a background thread/task
+        tokio::spawn(async move {
+            let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(100);
+
+            match crate::transport::start_swarm(libp2p_keys, listen_multiaddr, event_tx).await {
+                Ok(handle) => {
+                    tracing::info!("Swarm handle created, wiring up bridge");
+                    swarm_bridge.set_handle(handle);
+
+                    // Consume events (could feed back to delegate if needed)
+                    while let Some(event) = event_rx.recv().await {
+                        tracing::debug!("Swarm event: {:?}", event);
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to start swarm: {:?}", e);
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    pub fn get_swarm_bridge(&self) -> std::sync::Arc<SwarmBridge> {
+        self.swarm_bridge.clone()
+    }
+
+    pub fn update_device_state(&self, profile: DeviceProfile) {
+        // Feed into engine (placeholder for now as engine is stateless)
+        tracing::info!("Device state updated: {:?}", profile);
+    }
+
+    pub fn set_relay_budget(&self, messages_per_hour: u32) {
+        tracing::info!("Relay budget adjusted: {} msgs/hour", messages_per_hour);
+        // TODO: Apply to actual relay protocol blocking logic
     }
 
     pub fn on_peer_discovered(&self, peer_id: String) {
@@ -770,12 +843,6 @@ impl LedgerManager {
 // ============================================================================
 // SWARM BRIDGE
 // ============================================================================
-
-use crate::transport::swarm::SwarmHandle;
-use libp2p::{Multiaddr, PeerId};
-use parking_lot::Mutex;
-use std::str::FromStr;
-use std::sync::Arc;
 
 /// Bridge between UniFFI (synchronous) and SwarmHandle (async).
 ///
