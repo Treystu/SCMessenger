@@ -363,15 +363,14 @@ final class MeshRepository {
         return ironCore?.getIdentityInfo()
     }
 
-    /// Check if identity is initialized
+    /// Check if identity is initialized.
+    ///
+    /// Intentionally lightweight — reads current ironCore state only.
+    /// Do NOT call ensureServiceInitialized() here; this function is called
+    /// from inside startMeshService() and a recursive ensureServiceInitialized()
+    /// would destroy the service being started (nulling meshService/ironCore mid-flight).
     func isIdentityInitialized() -> Bool {
-        do {
-            try ensureServiceInitialized()
-            return ironCore?.getIdentityInfo().initialized == true
-        } catch {
-            logger.error("Failed to check identity status: \(error.localizedDescription)")
-            return false
-        }
+        return ironCore?.getIdentityInfo().initialized == true
     }
 
     /// Create a new identity (first-time setup)
