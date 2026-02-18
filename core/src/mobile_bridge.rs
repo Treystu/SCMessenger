@@ -48,13 +48,17 @@ pub struct ServiceStats {
     pub uptime_secs: u64,
 }
 
-/// Mobile mesh service wrapper integrating IronCore with mobile lifecycle
+/// Mobile mesh service wrapper integrating IronCore with mobile lifecycle.
+///
+/// Uses `parking_lot::Mutex` throughout — unlike `std::sync::Mutex` it never
+/// poisons on panic, eliminating the PoisonError cascade that previously
+/// caused a fatal crash when `start_swarm` panicked while holding `core`.
 pub struct MeshService {
-    _config: std::sync::Mutex<MeshServiceConfig>,
-    state: std::sync::Mutex<ServiceState>,
-    stats: std::sync::Mutex<ServiceStats>,
-    core: std::sync::Arc<std::sync::Mutex<Option<crate::IronCore>>>,
-    platform_bridge: std::sync::Arc<std::sync::Mutex<Option<Box<dyn PlatformBridge>>>>,
+    _config: Mutex<MeshServiceConfig>,
+    state: Mutex<ServiceState>,
+    stats: Mutex<ServiceStats>,
+    core: std::sync::Arc<Mutex<Option<crate::IronCore>>>,
+    platform_bridge: std::sync::Arc<Mutex<Option<Box<dyn PlatformBridge>>>>,
     storage_path: Option<String>,
     swarm_bridge: std::sync::Arc<SwarmBridge>,
 }
@@ -62,11 +66,11 @@ pub struct MeshService {
 impl MeshService {
     pub fn new(config: MeshServiceConfig) -> Self {
         Self {
-            _config: std::sync::Mutex::new(config),
-            state: std::sync::Mutex::new(ServiceState::Stopped),
-            stats: std::sync::Mutex::new(ServiceStats::default()),
-            core: std::sync::Arc::new(std::sync::Mutex::new(None)),
-            platform_bridge: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            _config: Mutex::new(config),
+            state: Mutex::new(ServiceState::Stopped),
+            stats: Mutex::new(ServiceStats::default()),
+            core: std::sync::Arc::new(Mutex::new(None)),
+            platform_bridge: std::sync::Arc::new(Mutex::new(None)),
             storage_path: None,
             swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
         }
@@ -75,18 +79,18 @@ impl MeshService {
     /// Create MeshService with persistent storage
     pub fn with_storage(config: MeshServiceConfig, storage_path: String) -> Self {
         Self {
-            _config: std::sync::Mutex::new(config),
-            state: std::sync::Mutex::new(ServiceState::Stopped),
-            stats: std::sync::Mutex::new(ServiceStats::default()),
-            core: std::sync::Arc::new(std::sync::Mutex::new(None)),
-            platform_bridge: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            _config: Mutex::new(config),
+            state: Mutex::new(ServiceState::Stopped),
+            stats: Mutex::new(ServiceStats::default()),
+            core: std::sync::Arc::new(Mutex::new(None)),
+            platform_bridge: std::sync::Arc::new(Mutex::new(None)),
             storage_path: Some(storage_path),
             swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
         }
     }
 
     pub fn start(&self) -> Result<(), crate::IronCoreError> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
 
         if *state == ServiceState::Running {
             return Err(crate::IronCoreError::AlreadyRunning);
@@ -106,17 +110,17 @@ impl MeshService {
         core.start()?;
 
         // Store the core instance
-        *self.core.lock().unwrap() = Some(core);
+        *self.core.lock() = Some(core);
 
         // Update state
-        *self.state.lock().unwrap() = ServiceState::Running;
+        *self.state.lock() = ServiceState::Running;
 
         tracing::info!("MeshService started");
         Ok(())
     }
 
     pub fn stop(&self) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
 
         if *state == ServiceState::Stopped {
             return;
@@ -126,75 +130,75 @@ impl MeshService {
         drop(state);
 
         // Stop the core
-        if let Some(ref core) = *self.core.lock().unwrap() {
+        if let Some(ref core) = *self.core.lock() {
             core.stop();
         }
 
         // Clear the core instance
-        *self.core.lock().unwrap() = None;
+        *self.core.lock() = None;
 
         // Update state
-        *self.state.lock().unwrap() = ServiceState::Stopped;
+        *self.state.lock() = ServiceState::Stopped;
 
         tracing::info!("MeshService stopped");
     }
 
     pub fn pause(&self) {
-        // In a full implementation, this would reduce activity:
-        // - Decrease BLE scan frequency
-        // - Reduce relay budget
-        // - Keep connections alive but minimize new discovery
         tracing::info!("MeshService paused (activity reduced)");
     }
 
     pub fn resume(&self) {
-        // Restore full activity levels
         tracing::info!("MeshService resumed (full activity)");
     }
 
     pub fn get_state(&self) -> ServiceState {
-        *self.state.lock().unwrap()
+        *self.state.lock()
     }
 
     pub fn get_stats(&self) -> ServiceStats {
-        let stats = self.stats.lock().unwrap().clone();
+        let stats = self.stats.lock().clone();
 
         // Augment with IronCore stats if available
-        if let Some(ref _core) = *self.core.lock().unwrap() {
-            // Core doesn't expose peer discovery yet, but we can get message counts
-            // This is a placeholder for future integration
+        if let Some(ref _core) = *self.core.lock() {
+            // Placeholder for future IronCore stats integration
         }
 
         stats
     }
 
     pub fn reset_stats(&self) {
-        *self.stats.lock().unwrap() = ServiceStats::default();
+        *self.stats.lock() = ServiceStats::default();
         tracing::info!("MeshService stats reset");
     }
 
     pub fn set_platform_bridge(&self, bridge: Option<Box<dyn PlatformBridge>>) {
-        *self.platform_bridge.lock().unwrap() = bridge;
+        *self.platform_bridge.lock() = bridge;
     }
 
     pub fn start_swarm(&self, listen_addr: String) -> Result<(), crate::IronCoreError> {
-        let core_guard = self.core.lock().unwrap();
-        let core = core_guard
-            .as_ref()
-            .ok_or(crate::IronCoreError::NotInitialized)?;
+        // Extract keys while holding the lock, then DROP the lock before any
+        // runtime/thread work.  This is critical: if anything below panics
+        // while the lock is held, parking_lot will NOT poison it (unlike
+        // std::sync::Mutex), but releasing early is still the safest pattern.
+        let libp2p_keys = {
+            let core_guard = self.core.lock();
+            let core = core_guard
+                .as_ref()
+                .ok_or(crate::IronCoreError::NotInitialized)?;
+            let identity_keys = core
+                .get_identity_keys()
+                .ok_or(crate::IronCoreError::NotInitialized)?;
+            identity_keys
+                .to_libp2p_keypair()
+                .map_err(|_| crate::IronCoreError::CryptoError)?
+        }; // ← core lock released here, before any runtime code
 
-        // Get keys for swarm identity
-        let identity_keys = core
-            .get_identity_keys()
-            .ok_or(crate::IronCoreError::NotInitialized)?;
-        let libp2p_keys = identity_keys
-            .to_libp2p_keypair()
-            .map_err(|_| crate::IronCoreError::CryptoError)?;
+        tracing::info!(
+            "Starting Swarm with PeerID: {}",
+            libp2p_keys.public().to_peer_id()
+        );
 
-        let addr = libp2p_keys.public().to_peer_id().to_string();
-        tracing::info!("Starting Swarm with PeerID: {}", addr);
-
-        let listen_multiaddr = if listen_addr.is_empty() {
+        let listen_multiaddr: Option<libp2p::Multiaddr> = if listen_addr.is_empty() {
             None
         } else {
             Some(
@@ -206,34 +210,51 @@ impl MeshService {
 
         let swarm_bridge = self.swarm_bridge.clone();
 
-        // 🚨 CRITICAL: We need a tokio runtime to spawn the swarm.
-        // On mobile, the current thread might not be in a tokio context.
-        let rt = tokio::runtime::Handle::try_current().unwrap_or_else(|_| {
-            tracing::warn!(
-                "No current Tokio runtime found, using background runtime from SwarmBridge"
-            );
-            swarm_bridge.get_runtime_handle()
-        });
+        // Spawn a dedicated OS thread that owns its own Tokio runtime.
+        // This is the safest approach for mobile: we cannot rely on being
+        // called from a Tokio context, and we must not hold any Mutex across
+        // the thread boundary.
+        std::thread::Builder::new()
+            .name("scm-swarm".to_string())
+            .spawn(move || {
+                let rt = tokio::runtime::Builder::new_multi_thread()
+                    .worker_threads(2)
+                    .enable_all()
+                    .thread_name("scm-swarm-worker")
+                    .build();
 
-        // Spawn swarm in a background thread/task using the captured runtime
-        rt.spawn(async move {
-            let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(100);
+                match rt {
+                    Ok(rt) => {
+                        rt.block_on(async move {
+                            let (event_tx, mut event_rx) =
+                                tokio::sync::mpsc::channel(100);
 
-            match crate::transport::start_swarm(libp2p_keys, listen_multiaddr, event_tx).await {
-                Ok(handle) => {
-                    tracing::info!("Swarm handle created, wiring up bridge");
-                    swarm_bridge.set_handle(handle);
-
-                    // Consume events (could feed back to delegate if needed)
-                    while let Some(event) = event_rx.recv().await {
-                        tracing::debug!("Swarm event: {:?}", event);
+                            match crate::transport::start_swarm(
+                                libp2p_keys,
+                                listen_multiaddr,
+                                event_tx,
+                            )
+                            .await
+                            {
+                                Ok(handle) => {
+                                    tracing::info!("Swarm started, wiring bridge");
+                                    swarm_bridge.set_handle(handle);
+                                    while let Some(event) = event_rx.recv().await {
+                                        tracing::debug!("Swarm event: {:?}", event);
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::error!("Failed to start swarm: {:?}", e);
+                                }
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to create swarm Tokio runtime: {}", e);
                     }
                 }
-                Err(e) => {
-                    tracing::error!("Failed to start swarm: {:?}", e);
-                }
-            }
-        });
+            })
+            .map_err(|_| crate::IronCoreError::Internal)?;
 
         Ok(())
     }
@@ -253,7 +274,7 @@ impl MeshService {
     }
 
     pub fn on_peer_discovered(&self, peer_id: String) {
-        let mut stats = self.stats.lock().unwrap();
+        let mut stats = self.stats.lock();
         stats.peers_discovered += 1;
         tracing::info!("Peer discovered: {}", peer_id);
     }
@@ -263,7 +284,7 @@ impl MeshService {
     }
 
     pub fn on_data_received(&self, peer_id: String, data: Vec<u8>) {
-        let mut stats = self.stats.lock().unwrap();
+        let mut stats = self.stats.lock();
         stats.bytes_transferred += data.len() as u64;
         drop(stats);
 
@@ -288,12 +309,12 @@ impl MeshService {
 
     /// Helper to get the core instance exposed to UniFFI
     pub fn get_core(&self) -> Option<std::sync::Arc<crate::IronCore>> {
-        self.core.lock().unwrap().clone().map(std::sync::Arc::new)
+        self.core.lock().clone().map(std::sync::Arc::new)
     }
 
     /// Check if service is running
     pub fn is_running(&self) -> bool {
-        *self.state.lock().unwrap() == ServiceState::Running
+        *self.state.lock() == ServiceState::Running
     }
 }
 
