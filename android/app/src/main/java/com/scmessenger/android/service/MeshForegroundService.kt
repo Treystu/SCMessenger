@@ -95,13 +95,13 @@ class MeshForegroundService : Service() {
         // Create mesh service configuration
         val config = uniffi.api.MeshServiceConfig(
             discoveryIntervalMs = 30000u,  // 30 seconds
-            relayBudgetPerHour = 200u,
             batteryFloorPct = 20u
         )
         
         // Start mesh service via repository
         try {
             meshRepository.startMeshService(config)
+            meshRepository.setPlatformBridge(platformBridge)
             isRunning = true
             
             // Wire CoreDelegate callbacks to MeshEventBus

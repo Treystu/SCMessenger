@@ -122,19 +122,6 @@ fun MeshSettingsScreen(
                     
                     if (currentSettings.relayEnabled) {
                         SliderSetting(
-                            title = "Relay Budget",
-                            description = "Maximum messages to relay per hour",
-                            value = currentSettings.maxRelayBudget.toFloat(),
-                            valueRange = 0f..500f,
-                            steps = 49,
-                            onValueChange = {
-                                viewModel.updateSettings(currentSettings.copy(maxRelayBudget = it.toUInt()))
-                            },
-                            valueLabel = "${currentSettings.maxRelayBudget} msg/hr",
-                            enabled = !isSaving
-                        )
-                        
-                        SliderSetting(
                             title = "Battery Floor",
                             description = "Stop relaying below this battery level",
                             value = currentSettings.batteryFloor.toFloat(),

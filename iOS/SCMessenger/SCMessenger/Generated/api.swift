@@ -158,21 +158,21 @@ fileprivate protocol FfiConverter {
     associatedtype FfiType
     associatedtype SwiftType
 
-    nonisolated static func lift(_ value: FfiType) throws -> SwiftType
-    nonisolated static func lower(_ value: SwiftType) -> FfiType
-    nonisolated static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType
-    nonisolated static func write(_ value: SwiftType, into buf: inout [UInt8])
+    static func lift(_ value: FfiType) throws -> SwiftType
+    static func lower(_ value: SwiftType) -> FfiType
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType
+    static func write(_ value: SwiftType, into buf: inout [UInt8])
 }
 
 // Types conforming to `Primitive` pass themselves directly over the FFI.
 fileprivate protocol FfiConverterPrimitive: FfiConverter where FfiType == SwiftType { }
 
 extension FfiConverterPrimitive {
-    nonisolated public static func lift(_ value: FfiType) throws -> SwiftType {
+    public static func lift(_ value: FfiType) throws -> SwiftType {
         return value
     }
 
-    nonisolated public static func lower(_ value: SwiftType) -> FfiType {
+    public static func lower(_ value: SwiftType) -> FfiType {
         return value
     }
 }
@@ -182,7 +182,7 @@ extension FfiConverterPrimitive {
 fileprivate protocol FfiConverterRustBuffer: FfiConverter where FfiType == RustBuffer {}
 
 extension FfiConverterRustBuffer {
-    nonisolated public static func lift(_ buf: RustBuffer) throws -> SwiftType {
+    public static func lift(_ buf: RustBuffer) throws -> SwiftType {
         var reader = createReader(data: Data(rustBuffer: buf))
         let value = try read(from: &reader)
         if hasRemaining(reader) {
@@ -192,10 +192,10 @@ extension FfiConverterRustBuffer {
         return value
     }
 
-    nonisolated public static func lower(_ value: SwiftType) -> RustBuffer {
-        var writer = [UInt8]()
-        write(value, into: &writer)
-        return RustBuffer(bytes: writer)
+    public static func lower(_ value: SwiftType) -> RustBuffer {
+          var writer = createWriter()
+          write(value, into: &writer)
+          return RustBuffer(bytes: writer)
     }
 }
 // An error type for FFI errors. These errors occur at the UniFFI level, not
@@ -1439,6 +1439,8 @@ public protocol MeshServiceProtocol : AnyObject {
     
     func getStats()  -> ServiceStats
     
+    func getSwarmBridge()  -> SwarmBridge
+    
     func onDataReceived(peerId: String, data: Data) 
     
     func onPeerDisconnected(peerId: String) 
@@ -1453,9 +1455,15 @@ public protocol MeshServiceProtocol : AnyObject {
     
     func setPlatformBridge(bridge: PlatformBridge?) 
     
+    func setRelayBudget(messagesPerHour: UInt32) 
+    
     func start() throws 
     
+    func startSwarm(listenAddr: String) throws 
+    
     func stop() 
+    
+    func updateDeviceState(profile: DeviceProfile) 
     
 }
 
@@ -1538,6 +1546,13 @@ open func getStats() -> ServiceStats {
 })
 }
     
+open func getSwarmBridge() -> SwarmBridge {
+    return try!  FfiConverterTypeSwarmBridge.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_meshservice_get_swarm_bridge(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func onDataReceived(peerId: String, data: Data) {try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_on_data_received(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),
@@ -1585,14 +1600,35 @@ open func setPlatformBridge(bridge: PlatformBridge?) {try! rustCall() {
 }
 }
     
+open func setRelayBudget(messagesPerHour: UInt32) {try! rustCall() {
+    uniffi_scmessenger_core_fn_method_meshservice_set_relay_budget(self.uniffiClonePointer(),
+        FfiConverterUInt32.lower(messagesPerHour),$0
+    )
+}
+}
+    
 open func start()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_meshservice_start(self.uniffiClonePointer(),$0
     )
 }
 }
     
+open func startSwarm(listenAddr: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_meshservice_start_swarm(self.uniffiClonePointer(),
+        FfiConverterString.lower(listenAddr),$0
+    )
+}
+}
+    
 open func stop() {try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_stop(self.uniffiClonePointer(),$0
+    )
+}
+}
+    
+open func updateDeviceState(profile: DeviceProfile) {try! rustCall() {
+    uniffi_scmessenger_core_fn_method_meshservice_update_device_state(self.uniffiClonePointer(),
+        FfiConverterTypeDeviceProfile.lower(profile),$0
     )
 }
 }
@@ -2407,14 +2443,12 @@ public func FfiConverterTypeLedgerEntry_lower(_ value: LedgerEntry) -> RustBuffe
 
 public struct MeshServiceConfig {
     public var discoveryIntervalMs: UInt32
-    public var relayBudgetPerHour: UInt32
     public var batteryFloorPct: UInt8
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(discoveryIntervalMs: UInt32, relayBudgetPerHour: UInt32, batteryFloorPct: UInt8) {
+    public init(discoveryIntervalMs: UInt32, batteryFloorPct: UInt8) {
         self.discoveryIntervalMs = discoveryIntervalMs
-        self.relayBudgetPerHour = relayBudgetPerHour
         self.batteryFloorPct = batteryFloorPct
     }
 }
@@ -2426,9 +2460,6 @@ extension MeshServiceConfig: Equatable, Hashable {
         if lhs.discoveryIntervalMs != rhs.discoveryIntervalMs {
             return false
         }
-        if lhs.relayBudgetPerHour != rhs.relayBudgetPerHour {
-            return false
-        }
         if lhs.batteryFloorPct != rhs.batteryFloorPct {
             return false
         }
@@ -2437,7 +2468,6 @@ extension MeshServiceConfig: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(discoveryIntervalMs)
-        hasher.combine(relayBudgetPerHour)
         hasher.combine(batteryFloorPct)
     }
 }
@@ -2448,14 +2478,12 @@ public struct FfiConverterTypeMeshServiceConfig: FfiConverterRustBuffer {
         return
             try MeshServiceConfig(
                 discoveryIntervalMs: FfiConverterUInt32.read(from: &buf), 
-                relayBudgetPerHour: FfiConverterUInt32.read(from: &buf), 
                 batteryFloorPct: FfiConverterUInt8.read(from: &buf)
         )
     }
 
     public static func write(_ value: MeshServiceConfig, into buf: inout [UInt8]) {
         FfiConverterUInt32.write(value.discoveryIntervalMs, into: &buf)
-        FfiConverterUInt32.write(value.relayBudgetPerHour, into: &buf)
         FfiConverterUInt8.write(value.batteryFloorPct, into: &buf)
     }
 }
@@ -4103,6 +4131,9 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_meshservice_get_stats() != 43801) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_meshservice_get_swarm_bridge() != 46469) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_meshservice_on_data_received() != 32989) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4124,10 +4155,19 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_meshservice_set_platform_bridge() != 10542) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_meshservice_set_relay_budget() != 64683) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_meshservice_start() != 4434) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_meshservice_start_swarm() != 44270) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_meshservice_stop() != 57632) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_meshservice_update_device_state() != 32579) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_meshsettingsmanager_default_settings() != 13041) {

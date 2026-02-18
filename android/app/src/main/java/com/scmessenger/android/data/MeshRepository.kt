@@ -246,13 +246,15 @@ class MeshRepository(private val context: Context) {
         }
 
         try {
-            if (swarmBridge == null) {
-                swarmBridge = uniffi.api.SwarmBridge()
-            }
-            // SwarmBridge starts automatically on creation or we might need to dial/listen
-            // Add known peers from Ledger optionally
+            // Initiate swarm in Rust core
+            meshService?.startSwarm("/ip4/0.0.0.0/tcp/0")
+            
+            // Obtain the SwarmBridge managed by Rust MeshService
+            swarmBridge = meshService?.getSwarmBridge()
+            
+            Timber.i("Internet transport (Swarm) initiated and bridge wired")
         } catch (e: Exception) {
-            Timber.e(e, "Failed to initialize SwarmBridge")
+            Timber.e(e, "Failed to initialize Swarm transport")
         }
     }
 
@@ -486,7 +488,6 @@ class MeshRepository(private val context: Context) {
                 val settings = loadSettings()
                 val config = uniffi.api.MeshServiceConfig(
                     discoveryIntervalMs = 30000u,
-                    relayBudgetPerHour = settings.maxRelayBudget,
                     batteryFloorPct = settings.batteryFloor
                 )
                 startMeshService(config)
@@ -645,6 +646,14 @@ class MeshRepository(private val context: Context) {
 
     fun overrideBleInterval(intervalMs: UInt) {
         autoAdjustEngine?.overrideBleScanInterval(intervalMs)
+    }
+
+    fun setRelayBudget(messagesPerHour: UInt) {
+        meshService?.setRelayBudget(messagesPerHour)
+    }
+
+    fun updateDeviceState(profile: uniffi.api.DeviceProfile) {
+        meshService?.updateDeviceState(profile)
     }
 
     fun overrideRelayMax(max: UInt) {

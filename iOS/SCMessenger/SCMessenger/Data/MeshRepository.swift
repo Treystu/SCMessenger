@@ -55,6 +55,11 @@ final class MeshRepository {
     // Platform bridge
     private var platformBridge: IosPlatformBridge?
 
+    // Device state for auto-adjustment
+    private var currentBatteryPct: UInt8 = 100
+    private var currentIsCharging: Bool = true
+    private var currentMotionState: MotionState = .unknown
+
     // MARK: - Published State
 
     var serviceState: ServiceState = .stopped
@@ -678,27 +683,26 @@ final class MeshRepository {
 
     func reportBattery(pct: UInt8, charging: Bool) {
         logger.debug("Battery: \(pct)% charging=\(charging)")
-        
-        // 1. Update publishing status
-        // (UI might want to show battery state)
+        currentBatteryPct = pct
+        currentIsCharging = charging
 
-        // 2. Report to Rust MeshService
+        // 1. Report to Rust MeshService
         let profile = DeviceProfile(
             batteryPct: pct,
             isCharging: charging,
             hasWifi: networkStatus.wifi,
-            motionState: .unknown // Default to unknown if not yet reported
+            motionState: currentMotionState
         )
         meshService?.updateDeviceState(profile: profile)
 
-        // 3. Auto-adjust local transport and relay budgets
+        // 2. Auto-adjust local transport and relay budgets
         if let engine = autoAdjustEngine {
             let adjProfile = engine.computeProfile(device: profile)
             let relayAdj = engine.computeRelayAdjustment(profile: adjProfile)
-            
+
             // Apply new budget to MeshService
             meshService?.setRelayBudget(messagesPerHour: relayAdj.maxPerHour)
-            
+
             // Adjust BLE intervals if needed
             let bleAdj = engine.computeBleAdjustment(profile: adjProfile)
             bleCentralManager?.applyScanSettings(intervalMs: bleAdj.scanIntervalMs)
@@ -710,24 +714,25 @@ final class MeshRepository {
         logger.debug("Network: wifi=\(wifi) cellular=\(cellular)")
         networkStatus.wifi = wifi
         networkStatus.cellular = cellular
-        
+
         // Report to Rust
         let profile = DeviceProfile(
-            batteryPct: 100, // Placeholder, will be updated next battery report
-            isCharging: true,
+            batteryPct: currentBatteryPct,
+            isCharging: currentIsCharging,
             hasWifi: wifi,
-            motionState: .unknown
+            motionState: currentMotionState
         )
-        // Note: Real implementation would cache last battery state
         meshService?.updateDeviceState(profile: profile)
     }
 
     func reportMotion(state: MotionState) {
         logger.debug("Motion: \(state)")
+        currentMotionState = state
+
         // Report to Rust
         let profile = DeviceProfile(
-            batteryPct: 100,
-            isCharging: true,
+            batteryPct: currentBatteryPct,
+            isCharging: currentIsCharging,
             hasWifi: networkStatus.wifi,
             motionState: state
         )

@@ -246,16 +246,20 @@ class AndroidPlatformBridge @Inject constructor(
             motionState = currentMotionState
         )
         
+        // 1. Report to Rust core
+        meshRepository.updateDeviceState(deviceProfile)
+
+        // 2. Local adjustment calculation
         val profile = meshRepository.computeAdjustmentProfile(deviceProfile)
         val bleAdjustment = meshRepository.computeBleAdjustment(profile)
         val relayAdjustment = meshRepository.computeRelayAdjustment(profile)
         
-        // Apply adjustments to mesh service
+        // 3. Apply adjustments to mesh service
         applyAdjustments(bleAdjustment, relayAdjustment)
         
         Timber.d("Adjustment profile: $profile for battery $batteryPct%, charging=$isCharging")
     }
-    
+
     override fun onNetworkChanged(hasWifi: Boolean, hasCellular: Boolean) {
         // Recompute and apply adjustment
         val deviceProfile = uniffi.api.DeviceProfile(
@@ -265,15 +269,17 @@ class AndroidPlatformBridge @Inject constructor(
             motionState = currentMotionState
         )
         
+        // 1. Report to Rust core
+        meshRepository.updateDeviceState(deviceProfile)
+        
+        // 2. Recompute profile
         val profile = meshRepository.computeAdjustmentProfile(deviceProfile)
         val bleAdjustment = meshRepository.computeBleAdjustment(profile)
         val relayAdjustment = meshRepository.computeRelayAdjustment(profile)
         
         applyAdjustments(bleAdjustment, relayAdjustment)
-        
-        Timber.d("Adjustment profile: $profile for network wifi=$hasWifi, cellular=$hasCellular")
     }
-    
+
     override fun onMotionChanged(motion: uniffi.api.MotionState) {
         currentMotionState = motion
         
@@ -285,6 +291,10 @@ class AndroidPlatformBridge @Inject constructor(
             motionState = motion
         )
         
+        // 1. Report to Rust core
+        meshRepository.updateDeviceState(deviceProfile)
+        
+        // 2. Recompute
         val profile = meshRepository.computeAdjustmentProfile(deviceProfile)
         val bleAdjustment = meshRepository.computeBleAdjustment(profile)
         val relayAdjustment = meshRepository.computeRelayAdjustment(profile)
@@ -364,6 +374,7 @@ class AndroidPlatformBridge @Inject constructor(
         
         // Apply relay budget adjustments
         Timber.d("Applying relay adjustments: maxPerHour=${relayAdjustment.maxPerHour}, priority=${relayAdjustment.priorityThreshold}, maxPayload=${relayAdjustment.maxPayloadBytes}")
+        meshRepository.setRelayBudget(relayAdjustment.maxPerHour)
         
         // Note: Actual application would update BLE scanner/advertiser settings
         // and mesh service relay configuration
