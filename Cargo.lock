@@ -3298,6 +3298,7 @@ name = "scmessenger-cli"
 version = "0.1.1"
 dependencies = [
  "anyhow",
+ "bincode",
  "chrono",
  "clap",
  "colored",
@@ -3371,6 +3372,7 @@ name = "scmessenger-wasm"
 version = "0.1.1"
 dependencies = [
  "console_error_panic_hook",
+ "futures",
  "js-sys",
  "parking_lot 0.12.5",
  "scmessenger-core",

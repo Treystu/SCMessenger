@@ -388,9 +388,13 @@ struct WebRtcInner {
     /// Sender half of the ingress channel.  Written by the DataChannel
     /// `onmessage` callback; `None` until `subscribe()` is called.
     ingress_tx: Option<UnboundedSender<Vec<u8>>>,
-    /// Local SDP produced by `create_offer()`.  `None` until the JS Promise
-    /// chain resolves.  Callers poll `get_local_sdp()`.
+    /// Local SDP produced by `create_offer()` or `create_answer()`.  `None`
+    /// until the JS Promise chain resolves.  Callers poll `get_local_sdp()`.
     local_sdp: Option<String>,
+    /// JSON-serialised `RTCIceCandidateInit` objects gathered by the
+    /// `onicecandidate` callback.  Callers drain these with
+    /// `get_ice_candidates()` and forward them through the signalling channel.
+    ice_candidates: Vec<String>,
 }
 
 /// Real WebRTC data-channel transport.
@@ -443,6 +447,7 @@ impl WebRtcTransport {
                 state: TransportState::Connecting,
                 ingress_tx: None,
                 local_sdp: None,
+                ice_candidates: Vec::new(),
             }));
 
             let data_channel_store: Arc<RwLock<Option<web_sys::RtcDataChannel>>> =
@@ -585,20 +590,29 @@ impl WebRtcTransport {
                 ondatachannel.forget();
             }
 
-            // --- onicecandidate: log ICE candidates (trickle-ICE TODO) ---
-            // TODO (≈ 30 LOC): forward candidates to the caller via a
-            // `Vec<String>` buffer + `get_ice_candidates() -> Vec<String>`
-            // accessor, then add a `add_ice_candidate(candidate_json: &str)`
-            // method that calls `peer_conn.add_ice_candidate_with_opt_rtc_ice_candidate_init`.
+            // --- onicecandidate: buffer trickle-ICE candidates ---
+            // Each gathered candidate is JSON-serialised and pushed into
+            // `inner.ice_candidates`.  Callers drain the buffer via
+            // `get_ice_candidates()` and forward entries through their
+            // signalling channel to the remote peer, which applies them with
+            // `add_ice_candidate()`.
             {
+                let inner_ice = Arc::clone(&inner);
                 let onicecandidate =
                     wasm_bindgen::closure::Closure::wrap(Box::new(move |evt: web_sys::RtcPeerConnectionIceEvent| {
                         if let Some(candidate) = evt.candidate() {
-                            tracing::debug!(
-                                "WebRTC ICE candidate: {}",
-                                candidate.candidate()
-                            );
-                            // TODO: buffer candidate.to_json() and expose via get_ice_candidates()
+                            // to_json() returns an RTCIceCandidateInit-shaped JS object;
+                            // stringify it so we can hand an opaque JSON string to the
+                            // signalling layer without pulling in extra serde machinery.
+                            let candidate_json = js_sys::JSON::stringify(&candidate)
+                                .ok()
+                                .and_then(|s| s.as_string());
+                            if let Some(json) = candidate_json {
+                                tracing::debug!("WebRTC ICE candidate gathered");
+                                inner_ice.write().ice_candidates.push(json);
+                            } else {
+                                tracing::warn!("WebRTC ICE candidate stringify failed; candidate dropped");
+                            }
                         } else {
                             tracing::debug!("WebRTC ICE gathering complete");
                         }
@@ -637,7 +651,6 @@ impl WebRtcTransport {
     pub fn create_offer(&self) -> Result<(), String> {
         #[cfg(target_arch = "wasm32")]
         {
-            use wasm_bindgen::JsValue;
             use wasm_bindgen_futures::JsFuture;
 
             let pc = Arc::clone(&self.peer_conn);
@@ -645,9 +658,7 @@ impl WebRtcTransport {
 
             wasm_bindgen_futures::spawn_local(async move {
                 // Step 1 — create_offer() → JS Promise → RtcSessionDescriptionInit-like object.
-                let offer_result: Result<JsValue, JsValue> =
-                    JsFuture::from(pc.create_offer()).await;
-                let offer_jsval = match offer_result {
+                let offer_jsval = match JsFuture::from(pc.create_offer()).await {
                     Ok(v) => v,
                     Err(e) => {
                         tracing::error!("create_offer failed: {:?}", e);
@@ -656,80 +667,41 @@ impl WebRtcTransport {
                     }
                 };
 
-                // Step 2 — extract "sdp" field via Reflect (RtcSdpType not in
-                // workspace features, so we access the raw JS object property).
-                let sdp_jsval =
-                    match js_sys::Reflect::get(&offer_jsval, &JsValue::from_str("sdp")) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            tracing::error!("Reflect::get(sdp) failed: {:?}", e);
-                            inner.write().state = TransportState::Error;
-                            return;
-                        }
-                    };
-                let sdp_str = match sdp_jsval.as_string() {
+                // Step 2 — extract the SDP string from the resolved JS value.
+                let sdp_str = match js_sys::Reflect::get(&offer_jsval, &wasm_bindgen::JsValue::from_str("sdp"))
+                    .ok()
+                    .and_then(|v| v.as_string())
+                {
                     Some(s) => s,
                     None => {
-                        tracing::error!("SDP field is not a string");
+                        tracing::error!("create_offer: SDP field missing or not a string");
                         inner.write().state = TransportState::Error;
                         return;
                     }
                 };
 
-                // Step 3 — build RtcSessionDescriptionInit for set_local_description.
-                //
-                // `RtcSdpType` is not in the workspace web-sys features list, so we
-                // cannot call `RtcSessionDescriptionInit::new(RtcSdpType::Offer)`.
-                // Instead we build the dictionary as a plain JS object via Reflect::set
-                // and cast it to the expected type.  The browser only inspects the
-                // object's "type" and "sdp" string properties — the Rust type is only
-                // a compile-time marker.
-                //
-                // TODO: add "RtcSdpType" to workspace web-sys features in Cargo.toml
-                // and replace with:
-                //   RtcSessionDescriptionInit::new(RtcSdpType::Offer)
-                let desc_init: web_sys::RtcSessionDescriptionInit = {
-                    use wasm_bindgen::JsCast;
-                    let obj = js_sys::Object::new();
-                    if let Err(e) = js_sys::Reflect::set(
-                        &obj,
-                        &JsValue::from_str("type"),
-                        &JsValue::from_str("offer"),
-                    ) {
-                        tracing::error!("Reflect::set(type) failed: {:?}", e);
-                        inner.write().state = TransportState::Error;
-                        return;
-                    }
-                    if let Err(e) = js_sys::Reflect::set(
-                        &obj,
-                        &JsValue::from_str("sdp"),
-                        &JsValue::from_str(&sdp_str),
-                    ) {
-                        tracing::error!("Reflect::set(sdp) failed: {:?}", e);
-                        inner.write().state = TransportState::Error;
-                        return;
-                    }
-                    // Safety: RtcSessionDescriptionInit is a plain JS dictionary;
-                    // any object with the right properties satisfies the interface.
-                    obj.unchecked_into::<web_sys::RtcSessionDescriptionInit>()
-                };
+                // Step 3 — build a typed RtcSessionDescriptionInit using the now-available
+                // RtcSdpType enum (added to workspace web-sys features in Cargo.toml).
+                let mut desc_init =
+                    web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Offer);
+                desc_init.sdp(&sdp_str);
 
                 // Step 4 — set_local_description → JS Promise.
-                let set_local_result: Result<JsValue, JsValue> =
-                    JsFuture::from(pc.set_local_description(&desc_init)).await;
-                if let Err(e) = set_local_result {
+                if let Err(e) = JsFuture::from(pc.set_local_description(&desc_init)).await {
                     tracing::error!("set_local_description failed: {:?}", e);
                     inner.write().state = TransportState::Error;
                     return;
                 }
 
                 // Step 5 — store SDP JSON for caller to retrieve via get_local_sdp().
-                // We serialise as a minimal JSON object so the caller can pass it
+                // Serialised as a minimal JSON object so the caller can pass it
                 // directly through any signalling channel without extra encoding.
-                let sdp_json = format!(r#"{{"type":"offer","sdp":{}}}"#,
-                    serde_json::to_string(&sdp_str).unwrap_or_else(|_| "\"\"".to_string()));
+                let sdp_json = format!(
+                    r#"{{"type":"offer","sdp":{}}}"#,
+                    serde_json::to_string(&sdp_str).unwrap_or_else(|_| "\"\"".to_string())
+                );
                 inner.write().local_sdp = Some(sdp_json);
-                tracing::info!("WebRTC local description set; SDP ready for signalling");
+                tracing::info!("WebRTC offer: local description set; SDP ready for signalling");
             });
 
             Ok(())
@@ -752,33 +724,259 @@ impl WebRtcTransport {
         self.inner.read().local_sdp.clone()
     }
 
-    /// Complete the WebRTC handshake by applying the answerer's SDP.
+    /// Complete the offerer-side WebRTC handshake by applying the remote
+    /// peer's SDP answer.
     ///
-    /// # TODO (≈ 50 LOC)
+    /// `sdp_json` must be a JSON string with the shape
+    /// `{"type":"answer","sdp":"v=0\r\n..."}` as produced by the answerer's
+    /// `get_local_sdp()`.  Only the `"sdp"` field is used; the `"type"` field
+    /// is fixed to `RtcSdpType::Answer`.
     ///
-    /// Parse `sdp_json` (shape `{"type":"answer","sdp":"v=0\r\n..."}`),
-    /// build an `RtcSessionDescriptionInit` with type=answer (u32 value 2)
-    /// and the extracted SDP string, then spawn:
+    /// The call returns immediately.  The actual `set_remote_description` JS
+    /// Promise runs on the WASM micro-task queue.  On failure the transport
+    /// state transitions to `Error` and a warning is logged.
     ///
-    /// ```text
-    /// JsFuture::from(peer_conn.set_remote_description(&desc_init)).await
-    /// ```
-    ///
-    /// On success transition state to `Connected` (the DataChannel `onopen`
-    /// will also fire, but `set_remote_description` resolving first is the
-    /// authoritative signal).
-    ///
-    /// On failure set state to `Error` and log the JS error.
-    pub fn set_remote_answer(&self, _sdp_json: &str) -> Result<(), String> {
+    /// On non-WASM returns `Err("WebRTC not available outside WASM")`.
+    pub fn set_remote_answer(&self, sdp_json: &str) -> Result<(), String> {
         #[cfg(target_arch = "wasm32")]
         {
-            // TODO: implement set_remote_description spawn_local (≈ 50 LOC).
-            // See doc-comment above for prescription.
-            Err("set_remote_answer: not yet implemented (TODO ≈ 50 LOC)".to_string())
+            let pc = Arc::clone(&self.peer_conn);
+            let inner = Arc::clone(&self.inner);
+            let sdp = sdp_json.to_string();
+
+            wasm_bindgen_futures::spawn_local(async move {
+                // Extract the raw SDP string from the JSON envelope.
+                let sdp_str = match serde_json::from_str::<serde_json::Value>(&sdp)
+                    .ok()
+                    .and_then(|v| v.get("sdp").and_then(|s| s.as_str()).map(str::to_string))
+                {
+                    Some(s) => s,
+                    None => {
+                        tracing::warn!("set_remote_answer: could not parse SDP from JSON; using raw string");
+                        sdp.clone()
+                    }
+                };
+
+                let mut desc_init =
+                    web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Answer);
+                desc_init.sdp(&sdp_str);
+
+                match wasm_bindgen_futures::JsFuture::from(
+                    pc.set_remote_description(&desc_init),
+                )
+                .await
+                {
+                    Ok(_) => tracing::info!("WebRTC remote answer set successfully"),
+                    Err(e) => {
+                        tracing::warn!("set_remote_description(answer) failed: {:?}", e);
+                        inner.write().state = TransportState::Error;
+                    }
+                }
+            });
+
+            Ok(())
         }
 
         #[cfg(not(target_arch = "wasm32"))]
         {
+            let _ = sdp_json;
+            Err("WebRTC not available outside WASM".to_string())
+        }
+    }
+
+    /// Apply a remote peer's SDP offer on the answerer side.
+    ///
+    /// `sdp_json` must be a JSON string with the shape
+    /// `{"type":"offer","sdp":"v=0\r\n..."}` as produced by the offerer's
+    /// `get_local_sdp()`.
+    ///
+    /// After this resolves, call `create_answer()` to generate the local SDP
+    /// answer, then retrieve it with `get_local_sdp()` and send it back
+    /// through the signalling channel.
+    ///
+    /// On non-WASM returns `Err("WebRTC not available outside WASM")`.
+    pub fn set_remote_offer(&self, sdp_json: &str) -> Result<(), String> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let pc = Arc::clone(&self.peer_conn);
+            let inner = Arc::clone(&self.inner);
+            let sdp = sdp_json.to_string();
+
+            wasm_bindgen_futures::spawn_local(async move {
+                let sdp_str = match serde_json::from_str::<serde_json::Value>(&sdp)
+                    .ok()
+                    .and_then(|v| v.get("sdp").and_then(|s| s.as_str()).map(str::to_string))
+                {
+                    Some(s) => s,
+                    None => {
+                        tracing::warn!("set_remote_offer: could not parse SDP from JSON; using raw string");
+                        sdp.clone()
+                    }
+                };
+
+                let mut desc_init =
+                    web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Offer);
+                desc_init.sdp(&sdp_str);
+
+                match wasm_bindgen_futures::JsFuture::from(
+                    pc.set_remote_description(&desc_init),
+                )
+                .await
+                {
+                    Ok(_) => tracing::info!("WebRTC remote offer set; call create_answer() next"),
+                    Err(e) => {
+                        tracing::warn!("set_remote_description(offer) failed: {:?}", e);
+                        inner.write().state = TransportState::Error;
+                    }
+                }
+            });
+
+            Ok(())
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = sdp_json;
+            Err("WebRTC not available outside WASM".to_string())
+        }
+    }
+
+    /// Generate a local SDP answer on the answerer side.
+    ///
+    /// Must be called after `set_remote_offer()` has been dispatched.  The
+    /// call returns immediately; the JS Promise chain runs on the WASM
+    /// micro-task queue.  Poll `get_local_sdp()` until it returns
+    /// `Some(json)`, then send that string back to the offerer.
+    ///
+    /// On non-WASM returns `Err("WebRTC not available outside WASM")`.
+    pub fn create_answer(&self) -> Result<(), String> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            use wasm_bindgen_futures::JsFuture;
+
+            let pc = Arc::clone(&self.peer_conn);
+            let inner = Arc::clone(&self.inner);
+
+            wasm_bindgen_futures::spawn_local(async move {
+                // Step 1 — create_answer() → JS Promise.
+                let answer_jsval = match JsFuture::from(pc.create_answer()).await {
+                    Ok(v) => v,
+                    Err(e) => {
+                        tracing::error!("create_answer failed: {:?}", e);
+                        inner.write().state = TransportState::Error;
+                        return;
+                    }
+                };
+
+                // Step 2 — extract the SDP string.
+                let sdp_str = match js_sys::Reflect::get(
+                    &answer_jsval,
+                    &wasm_bindgen::JsValue::from_str("sdp"),
+                )
+                .ok()
+                .and_then(|v| v.as_string())
+                {
+                    Some(s) => s,
+                    None => {
+                        tracing::error!("create_answer: SDP field missing or not a string");
+                        inner.write().state = TransportState::Error;
+                        return;
+                    }
+                };
+
+                // Step 3 — set_local_description with the answer SDP.
+                let mut desc_init =
+                    web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Answer);
+                desc_init.sdp(&sdp_str);
+
+                if let Err(e) = JsFuture::from(pc.set_local_description(&desc_init)).await {
+                    tracing::error!("set_local_description(answer) failed: {:?}", e);
+                    inner.write().state = TransportState::Error;
+                    return;
+                }
+
+                // Step 4 — store the answer SDP JSON for the caller.
+                let sdp_json = format!(
+                    r#"{{"type":"answer","sdp":{}}}"#,
+                    serde_json::to_string(&sdp_str).unwrap_or_else(|_| "\"\"".to_string())
+                );
+                inner.write().local_sdp = Some(sdp_json);
+                tracing::info!("WebRTC answer: local description set; SDP ready for signalling");
+            });
+
+            Ok(())
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            Err("WebRTC not available outside WASM".to_string())
+        }
+    }
+
+    /// Drain the ICE candidate buffer populated by the `onicecandidate` callback.
+    ///
+    /// Returns all candidates gathered since the last call (or since `new()`).
+    /// Each entry is a JSON string serialised from the browser's
+    /// `RTCIceCandidate` object and can be forwarded opaquely through the
+    /// signalling channel to the remote peer, which applies them with
+    /// `add_ice_candidate()`.
+    ///
+    /// The internal buffer is cleared on each call so repeated polling yields
+    /// only new candidates.
+    pub fn get_ice_candidates(&self) -> Vec<String> {
+        let mut guard = self.inner.write();
+        std::mem::take(&mut guard.ice_candidates)
+    }
+
+    /// Apply a remote ICE candidate received through the signalling channel.
+    ///
+    /// `candidate_json` must be a JSON string produced by the remote peer's
+    /// `get_ice_candidates()` call.  The string is parsed back to a JS object
+    /// and passed to `RTCPeerConnection.addIceCandidate()`.
+    ///
+    /// The call returns immediately; the async work runs on the WASM
+    /// micro-task queue.  Failures are logged as warnings and do not
+    /// transition transport state — ICE is resilient to individual candidate
+    /// failures.
+    ///
+    /// On non-WASM returns `Err("WebRTC not available outside WASM")`.
+    pub fn add_ice_candidate(&self, candidate_json: &str) -> Result<(), String> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            use wasm_bindgen::JsCast;
+
+            let pc = Arc::clone(&self.peer_conn);
+            let cand_str = candidate_json.to_string();
+
+            wasm_bindgen_futures::spawn_local(async move {
+                match js_sys::JSON::parse(&cand_str) {
+                    Ok(obj) => {
+                        let candidate_init =
+                            obj.unchecked_into::<web_sys::RtcIceCandidateInit>();
+                        if let Err(e) = wasm_bindgen_futures::JsFuture::from(
+                            pc.add_ice_candidate_with_opt_rtc_ice_candidate_init(Some(
+                                &candidate_init,
+                            )),
+                        )
+                        .await
+                        {
+                            tracing::warn!("add_ice_candidate failed: {:?}", e);
+                        } else {
+                            tracing::debug!("WebRTC ICE candidate applied successfully");
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to parse ICE candidate JSON: {:?}", e);
+                    }
+                }
+            });
+
+            Ok(())
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = candidate_json;
             Err("WebRTC not available outside WASM".to_string())
         }
     }
