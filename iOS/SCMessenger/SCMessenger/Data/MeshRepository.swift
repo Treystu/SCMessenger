@@ -422,11 +422,29 @@ final class MeshRepository {
         // Get recipient's public key
         let contact = try? contactManager?.get(peerId: peerId)
         guard let recipientPublicKey = contact?.publicKey else {
-            throw MeshError.contactNotFound("Contact \(peerId) not found")
+            throw MeshError.contactNotFound("Contact \(peerId) not found or has no public key")
         }
 
-        // Prepare and send message
-        let encryptedBytes = try ironCore.prepareMessage(recipientPublicKeyHex: recipientPublicKey, text: content)
+        // Pre-validate public key format to provide descriptive errors
+        let trimmedKey = recipientPublicKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedKey.isEmpty {
+            logger.error("❌ Contact \(peerId) has an empty public key")
+            throw MeshError.contactNotFound("Contact \(peerId) has no public key. Please re-add this contact with a valid public key.")
+        }
+        if trimmedKey.count != 64 {
+            logger.error("❌ Contact \(peerId) has invalid public key length: \(trimmedKey.count) chars (expected 64)")
+            throw MeshError.contactNotFound("Contact \(peerId) has an invalid public key (wrong length: \(trimmedKey.count), expected 64 hex characters). Please re-add this contact.")
+        }
+        let hexChars = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
+        if !trimmedKey.unicodeScalars.allSatisfy({ hexChars.contains($0) }) {
+            logger.error("❌ Contact \(peerId) has non-hex characters in public key")
+            throw MeshError.contactNotFound("Contact \(peerId) has an invalid public key (non-hex characters found). Please re-add this contact.")
+        }
+
+        logger.debug("Preparing message for \(peerId) with key: \(trimmedKey.prefix(8))...")
+
+        // Prepare and send message (use trimmed key to handle any stored whitespace)
+        let encryptedBytes = try ironCore.prepareMessage(recipientPublicKeyHex: trimmedKey, text: content)
 
         // Record in history FIRST so it's persisted even if bridge fails
         let messageRecord = MessageRecord(

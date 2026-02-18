@@ -400,9 +400,22 @@ class MeshRepository(private val context: Context) {
                 val contact = contactManager?.get(peerId)
                     ?: throw IllegalStateException("Contact not found for peer: $peerId")
 
-                val publicKey = contact.publicKey
+                val publicKey = contact.publicKey.trim()
 
-                // 2. Encrypt/Prepare message
+                // Pre-validate public key to provide descriptive errors
+                if (publicKey.isEmpty()) {
+                    throw IllegalStateException("Contact $peerId has no public key. Please re-add this contact with a valid public key.")
+                }
+                if (publicKey.length != 64) {
+                    throw IllegalStateException("Contact $peerId has invalid public key (length: ${publicKey.length}, expected 64 hex chars). Please re-add this contact.")
+                }
+                if (!publicKey.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
+                    throw IllegalStateException("Contact $peerId has invalid public key (non-hex characters). Please re-add this contact.")
+                }
+
+                Timber.d("Preparing message for $peerId with key: ${publicKey.take(8)}...")
+
+                // 2. Encrypt/Prepare message (use trimmed key)
                 val encryptedData = ironCore?.prepareMessage(publicKey, content)
                     ?: throw IllegalStateException("Failed to prepare message: IronCore not initialized")
 

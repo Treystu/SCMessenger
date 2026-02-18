@@ -85,10 +85,26 @@ class ContactsViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             try {
+                val trimmedKey = publicKey.trim()
+
+                // Validate public key format before storing
+                if (trimmedKey.isEmpty()) {
+                    _error.value = "Public key cannot be empty"
+                    return@launch
+                }
+                if (trimmedKey.length != 64) {
+                    _error.value = "Public key must be exactly 64 hex characters (got ${trimmedKey.length})"
+                    return@launch
+                }
+                if (!trimmedKey.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
+                    _error.value = "Public key contains invalid characters (must be hex: 0-9, a-f)"
+                    return@launch
+                }
+
                 val contact = uniffi.api.Contact(
-                    peerId = peerId,
+                    peerId = peerId.trim(),
                     nickname = nickname,
-                    publicKey = publicKey,
+                    publicKey = trimmedKey,
                     addedAt = System.currentTimeMillis().toULong(),
                     lastSeen = null,
                     notes = notes

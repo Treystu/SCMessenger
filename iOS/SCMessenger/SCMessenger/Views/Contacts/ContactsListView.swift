@@ -180,10 +180,29 @@ struct AddContactView: View {
         var finalPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
         if finalPeerId.isEmpty { finalPeerId = String(finalPublicKey.prefix(16)) }
 
+        // Validate public key format before storing
+        if finalPublicKey.isEmpty {
+            self.error = "Public key cannot be empty"
+            return
+        }
+
+        // Must be exactly 64 hex characters (32 bytes)
+        if finalPublicKey.count != 64 {
+            self.error = "Public key must be exactly 64 hex characters (got \(finalPublicKey.count))"
+            return
+        }
+
+        // Must be valid hex
+        let hexCharacterSet = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
+        if !finalPublicKey.unicodeScalars.allSatisfy({ hexCharacterSet.contains($0) }) {
+            self.error = "Public key contains invalid characters (must be hex: 0-9, a-f)"
+            return
+        }
+
         let contact = Contact(
             peerId: finalPeerId,
             nickname: nickname,
-            publicKey: publicKey,
+            publicKey: finalPublicKey,
             addedAt: UInt64(Date().timeIntervalSince1970),
             lastSeen: nil,
             notes: nil

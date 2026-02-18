@@ -289,9 +289,19 @@ impl IronCore {
         recipient_public_key_hex: String,
         text: String,
     ) -> Result<Vec<u8>, IronCoreError> {
+        // Trim whitespace from the key (defensive, mobile apps may include it)
+        let recipient_key_trimmed = recipient_public_key_hex.trim().to_string();
+
         // Validate the recipient public key at the core boundary
-        crate::crypto::validate_ed25519_public_key(&recipient_public_key_hex)
-            .map_err(|_| IronCoreError::InvalidInput)?;
+        if let Err(e) = crate::crypto::validate_ed25519_public_key(&recipient_key_trimmed) {
+            eprintln!(
+                "[IronCore] prepare_message: public key validation failed — key_len={} hex_chars={} error={}",
+                recipient_key_trimmed.len(),
+                recipient_key_trimmed.chars().take(16).collect::<String>(),
+                e
+            );
+            return Err(IronCoreError::InvalidInput);
+        }
 
         let identity = self.identity.read();
         let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
@@ -301,16 +311,22 @@ impl IronCore {
             .ok_or(IronCoreError::NotInitialized)?;
 
         // Decode recipient public key
-        let recipient_public_key =
-            hex::decode(&recipient_public_key_hex).map_err(|_| IronCoreError::InvalidInput)?;
+        let recipient_public_key = hex::decode(&recipient_key_trimmed).map_err(|e| {
+            eprintln!("[IronCore] prepare_message: hex decode failed — {}", e);
+            IronCoreError::InvalidInput
+        })?;
         if recipient_public_key.len() != 32 {
+            eprintln!(
+                "[IronCore] prepare_message: decoded key wrong length — got {} bytes, expected 32",
+                recipient_public_key.len()
+            );
             return Err(IronCoreError::InvalidInput);
         }
         let mut recipient_bytes = [0u8; 32];
         recipient_bytes.copy_from_slice(&recipient_public_key);
 
         // Create plaintext message
-        let msg = Message::text(sender_id, recipient_public_key_hex.clone(), &text);
+        let msg = Message::text(sender_id, recipient_key_trimmed.clone(), &text);
 
         // Serialize the message
         let plaintext = message::encode_message(&msg).map_err(|_| IronCoreError::Internal)?;
@@ -339,8 +355,17 @@ impl IronCore {
         recipient_public_key_hex: String,
         message_id: String,
     ) -> Result<Vec<u8>, IronCoreError> {
-        crate::crypto::validate_ed25519_public_key(&recipient_public_key_hex)
-            .map_err(|_| IronCoreError::InvalidInput)?;
+        // Trim whitespace (defensive, matches prepare_message)
+        let recipient_key_trimmed = recipient_public_key_hex.trim().to_string();
+
+        if let Err(e) = crate::crypto::validate_ed25519_public_key(&recipient_key_trimmed) {
+            eprintln!(
+                "[IronCore] prepare_receipt: public key validation failed — key_len={} error={}",
+                recipient_key_trimmed.len(),
+                e
+            );
+            return Err(IronCoreError::InvalidInput);
+        }
 
         let identity = self.identity.read();
         let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
@@ -350,7 +375,7 @@ impl IronCore {
             .ok_or(IronCoreError::NotInitialized)?;
 
         let recipient_public_key =
-            hex::decode(&recipient_public_key_hex).map_err(|_| IronCoreError::InvalidInput)?;
+            hex::decode(&recipient_key_trimmed).map_err(|_| IronCoreError::InvalidInput)?;
         if recipient_public_key.len() != 32 {
             return Err(IronCoreError::InvalidInput);
         }
@@ -358,7 +383,7 @@ impl IronCore {
         recipient_bytes.copy_from_slice(&recipient_public_key);
 
         let receipt = Receipt::delivered(message_id);
-        let msg = Message::receipt(sender_id, recipient_public_key_hex, &receipt);
+        let msg = Message::receipt(sender_id, recipient_key_trimmed, &receipt);
 
         let plaintext = message::encode_message(&msg).map_err(|_| IronCoreError::Internal)?;
 

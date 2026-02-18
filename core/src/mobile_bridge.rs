@@ -226,8 +226,7 @@ impl MeshService {
                 match rt {
                     Ok(rt) => {
                         rt.block_on(async move {
-                            let (event_tx, mut event_rx) =
-                                tokio::sync::mpsc::channel(100);
+                            let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(100);
 
                             match crate::transport::start_swarm(
                                 libp2p_keys,
