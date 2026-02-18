@@ -1,8 +1,8 @@
 # SCMessenger: Sovereign Mesh Implementation Plan
 ## "Works everywhere, owned by no one, unstoppable by design"
 
-**Date:** 2026-02-06 (plan), 2026-02-07 (last updated)
-**Status:** Phases 1-7 IMPLEMENTED. Phase 8 (WASM upgrade) pending.
+**Date:** 2026-02-06 (plan), 2026-02-18 (last updated)
+**Status:** Phases 1-7 IMPLEMENTED. Phase 8 (WASM upgrade) scaffolded/partial.
 **Estimation:** LoC (lines of code) only. No time estimates.
 
 ---
@@ -594,10 +594,10 @@ Total: 250-350 LoC
 | 5 | Mobile Platform Integration | 2,100-3,160 | **COMPLETE** |
 | 6 | Self-Relay Network Protocol | 1,950-2,890 | **COMPLETE** |
 | 7 | Privacy Enhancements | 1,030-1,560 | **COMPLETE** |
-| 8 | WASM Client Upgrade | 750-1,080 | Pending |
+| 8 | WASM Client Upgrade | 750-1,080 | Partial (scaffolded; `wasm/` excluded from workspace) |
 | **TOTAL** | | **14,000-20,810 LoC** | |
 
-**Current state:** The codebase is ~53,000 LoC across all workspace members (core: ~29K, cli: ~500, wasm: ~2.4K, plus lib.rs at ~19K). ~638 tests across 71 source files in core. All phases through 7 are implemented and unit-tested. The remaining integration gap is wiring IronCore to SwarmHandle via the CLI.
+**Current state (Feb 2026):** The codebase is ~53,000 LoC across all workspace members (core: ~29K, cli: ~500, wasm: ~2.4K, plus lib.rs at ~19K). ~638 tests across 71 source files in core. All phases through 7 are implemented and unit-tested. The CLI integration gap is resolved: `IronCore.prepare_message()` → `SwarmHandle.send_message()` is wired in `cli/src/main.rs`. Phase 8 is scaffolded (see WASM status above). See README.md for known remaining gaps.
 
 ---
 

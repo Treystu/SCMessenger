@@ -91,7 +91,13 @@ docs/        —                   Architecture, protocol, and design docs
 
 ## Current State
 
-All core modules are built and unit-tested through Phase 7 (Privacy). The remaining integration gap is wiring `IronCore` (crypto/storage) to `SwarmHandle` (network) via the CLI. `prepare_message()` outputs encrypted bytes, `SwarmHandle.send_message()` sends bytes — connect them.
+All core modules are built and unit-tested through Phases 1–7 (Security, Drift Protocol, Routing, Transport, Mobile, Relay, Privacy). The CLI is fully wired: `IronCore.prepare_message()` → encrypted `SignedEnvelope` → `SwarmHandle.send_message()`. Phase 8 (WASM upgrade) is scaffolded; `wasm/` is intentionally excluded from the workspace build.
+
+**Remaining minor TODOs (WebRTC signaling):**
+- `WebRtcTransport::set_remote_answer()` — ~50 LOC, prescription in doc-comment
+- WebRTC ICE trickle candidate exchange — ~30 LOC, prescription in code comment
+- WebRTC answerer path (`set_remote_offer` + `create_answer`) — ~60 LOC
+- Add `"RtcSdpType"` to workspace `web-sys` features to replace `js_sys::Reflect` workaround
 
 ## License
 

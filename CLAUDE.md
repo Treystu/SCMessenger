@@ -76,6 +76,20 @@ completing the IronCore → SwarmHandle wiring. `prepare_message()` → encrypte
 - Zero `todo!()` or `unimplemented!()` (good)
 - Production code consistently uses: `?`, `.map_err()`, `.unwrap_or_default()`, `.unwrap_or()`
 
+## Known Remaining Gaps (Feb 2026)
+All previously-listed gaps resolved in Feb 2026 hardening sprint. Minor WebRTC TODOs remain:
+- **WebRTC `set_remote_answer`** (`wasm/src/transport.rs`): ~50 LOC — parse answer SDP JSON, call `set_remote_description` via JsFuture. Prescription in doc-comment.
+- **WebRTC ICE trickle** (`wasm/src/transport.rs`): ~30 LOC — buffer candidates in `WebRtcInner`, expose `get_ice_candidates()` / `add_ice_candidate()`. Prescription in code comment.
+- **WebRTC answerer path** (`wasm/src/transport.rs`): ~60 LOC — `set_remote_offer()` + `create_answer()`. Mirrors `create_offer()` exactly.
+- **`RtcSdpType` feature**: add `"RtcSdpType"` to workspace `web-sys` features in `Cargo.toml` to replace the current `js_sys::Reflect` workaround in `WebRtcTransport::create_offer()`
+
+## Resolved (Feb 2026 sprint)
+- Internet relay: `connect_to_relay_via_swarm()` added to `InternetRelay` — real `swarm.dial()` call
+- Offline store-and-forward: outbox flushed on `PeerDiscovered` in CLI; `cmd_send_offline` now truly enqueues
+- Delivery receipts: `MessageType::Receipt` + `DeliveryStatus` wired end-to-end; `IronCore::prepare_receipt()` added; CLI sends ACK on receive, displays `✓✓ Delivered`
+- Integration tests: `core/tests/integration_ironcore_roundtrip.rs` — 7 tests, no network (encrypt→decrypt, wrong-recipient rejection, tamper detection, replay rejection, multi-message, self-send, empty payload)
+- WASM WebSocket transport: full `connect()`/`send_envelope()`/`disconnect()` with real `web_sys::WebSocket`, buffered sends during connecting, state machine, `subscribe()` ingress channel
+
 ## Do NOT
 - Add unnecessary abstractions or trait objects where concrete types work
 - Use `unwrap()` in library code (use `?` or `expect()` with context)

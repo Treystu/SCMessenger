@@ -326,6 +326,51 @@ impl IronCore {
         Ok(envelope_bytes)
     }
 
+    /// Encrypt and prepare a delivery receipt for the original sender.
+    ///
+    /// `recipient_public_key_hex` — the sender's Ed25519 public key (hex, 64 chars).
+    /// `message_id` — the ID of the message being acknowledged.
+    ///
+    /// Returns encrypted envelope bytes ready for transmission, identical wire
+    /// format to `prepare_message`. The recipient can distinguish receipts from
+    /// text messages via `Message::message_type`.
+    pub fn prepare_receipt(
+        &self,
+        recipient_public_key_hex: String,
+        message_id: String,
+    ) -> Result<Vec<u8>, IronCoreError> {
+        crate::crypto::validate_ed25519_public_key(&recipient_public_key_hex)
+            .map_err(|_| IronCoreError::InvalidInput)?;
+
+        let identity = self.identity.read();
+        let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
+
+        let sender_id = identity
+            .identity_id()
+            .ok_or(IronCoreError::NotInitialized)?;
+
+        let recipient_public_key =
+            hex::decode(&recipient_public_key_hex).map_err(|_| IronCoreError::InvalidInput)?;
+        if recipient_public_key.len() != 32 {
+            return Err(IronCoreError::InvalidInput);
+        }
+        let mut recipient_bytes = [0u8; 32];
+        recipient_bytes.copy_from_slice(&recipient_public_key);
+
+        let receipt = Receipt::delivered(message_id);
+        let msg = Message::receipt(sender_id, recipient_public_key_hex, &receipt);
+
+        let plaintext = message::encode_message(&msg).map_err(|_| IronCoreError::Internal)?;
+
+        let envelope = crypto::encrypt_message(&keys.signing_key, &recipient_bytes, &plaintext)
+            .map_err(|_| IronCoreError::CryptoError)?;
+
+        let envelope_bytes =
+            message::encode_envelope(&envelope).map_err(|_| IronCoreError::Internal)?;
+
+        Ok(envelope_bytes)
+    }
+
     /// Decrypt a received envelope and return the plaintext message.
     pub fn receive_message(&self, envelope_bytes: Vec<u8>) -> Result<Message, IronCoreError> {
         let identity = self.identity.read();

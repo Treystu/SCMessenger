@@ -3,6 +3,9 @@
 pub mod connection_state;
 pub mod transport;
 
+use crate::transport::WebSocketRelay;
+use futures::StreamExt;
+use parking_lot::Mutex;
 use scmessenger_core::{IdentityInfo, IronCore as RustIronCore, SignatureResult};
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
@@ -16,6 +19,8 @@ pub fn init_logging() {
 #[wasm_bindgen]
 pub struct IronCore {
     inner: Arc<RustIronCore>,
+    /// Buffer of successfully decoded messages waiting to be drained by JS.
+    rx_messages: Arc<Mutex<Vec<WasmMessage>>>,
 }
 
 #[wasm_bindgen]
@@ -26,6 +31,7 @@ impl IronCore {
         init_logging();
         Self {
             inner: Arc::new(RustIronCore::new()),
+            rx_messages: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -34,6 +40,7 @@ impl IronCore {
         init_logging();
         Self {
             inner: Arc::new(RustIronCore::with_storage(storage_path)),
+            rx_messages: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -120,6 +127,84 @@ impl IronCore {
     #[wasm_bindgen(js_name = inboxCount)]
     pub fn inbox_count(&self) -> u32 {
         self.inner.inbox_count()
+    }
+
+    /// Connect to a WebSocket relay and start decrypting incoming frames.
+    ///
+    /// Call `subscribe()` on the relay before `connect()` to avoid a race window
+    /// (safe in single-threaded WASM, but the ordering is explicit and clear).
+    /// Spawns a single-threaded async loop via `wasm_bindgen_futures::spawn_local`
+    /// that feeds each incoming frame through `IronCore::receive_message`.
+    /// Successfully decoded messages are pushed into an internal buffer that JS
+    /// can drain at any time by calling `drainReceivedMessages()`.
+    ///
+    /// Returns an error string if the WebSocket connection cannot be initiated.
+    #[wasm_bindgen(js_name = startReceiveLoop)]
+    pub fn start_receive_loop(&self, relay_url: String) -> Result<(), JsValue> {
+        let relay = WebSocketRelay::new(relay_url);
+
+        // Subscribe before connecting — installs the ingress_tx so the onmessage
+        // callback has a live sender the moment the socket opens.
+        let mut rx = relay.subscribe();
+
+        relay
+            .connect()
+            .map_err(|e| JsValue::from_str(&format!("WebSocket connect failed: {}", e)))?;
+
+        // Clone the Arcs that the async task will capture. Both are cheap
+        // reference-count bumps; no locks are held across the await point.
+        let inner = Arc::clone(&self.inner);
+        let rx_messages = Arc::clone(&self.rx_messages);
+
+        wasm_bindgen_futures::spawn_local(async move {
+            // `relay` is moved here so the WebSocket handle (and therefore the
+            // registered JS callbacks) stay alive for the lifetime of the loop.
+            let _relay_keep_alive = relay;
+
+            while let Some(bytes) = rx.next().await {
+                match inner.receive_message(bytes) {
+                    Ok(msg) => {
+                        let wasm_msg = WasmMessage {
+                            id: msg.id.clone(),
+                            sender_id: msg.sender_id.clone(),
+                            text: msg.text_content(),
+                            timestamp: msg.timestamp,
+                        };
+                        rx_messages.lock().push(wasm_msg);
+                    }
+                    Err(e) => {
+                        tracing::warn!("receive_message failed (frame dropped): {:?}", e);
+                    }
+                }
+            }
+
+            tracing::info!("WebSocket ingress loop terminated");
+        });
+
+        Ok(())
+    }
+
+    /// Drain and return all messages that have arrived since the last call.
+    ///
+    /// Returns a `js_sys::Array` of plain JS objects with the same shape as
+    /// the object returned by `receiveMessage`:
+    /// `{ id, senderId, text, timestamp }`.
+    ///
+    /// The internal buffer is cleared on each call; messages are not duplicated
+    /// across successive calls.
+    #[wasm_bindgen(js_name = drainReceivedMessages)]
+    pub fn drain_received_messages(&self) -> js_sys::Array {
+        let mut buf = self.rx_messages.lock();
+        let drained: Vec<WasmMessage> = buf.drain(..).collect();
+        drop(buf);
+
+        let array = js_sys::Array::new();
+        for msg in drained {
+            if let Ok(js_val) = serde_wasm_bindgen::to_value(&msg) {
+                array.push(&js_val);
+            }
+        }
+        array
     }
 }
 

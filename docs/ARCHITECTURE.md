@@ -10,7 +10,7 @@
 ## Module Map
 
 ```
-scmessenger-core/ (~29K LoC, 71 files, ~2,641 tests)
+scmessenger-core/ (~29K LoC, 71 files, ~638 tests)
 
   identity/
     keys.rs       Ed25519 keypair generation, signing, verification, Zeroize-on-Drop
@@ -48,7 +48,7 @@ scmessenger-core/ (~29K LoC, 71 files, ~2,641 tests)
     envelope.rs   DriftEnvelope (compact binary, 154 bytes overhead)
     frame.rs      DriftFrame (transport framing with CRC32)
     compress.rs   LZ4 compress/decompress
-    sketch.rs     Bloom filter / Minisketch for set reconciliation
+    sketch.rs     IBLT set reconciliation (Invertible Bloom Lookup Table; deterministic, one round-trip)
     sync.rs       SyncProtocol (handshake, sketch exchange, transfer)
     store.rs      CRDT MeshStore with priority-based eviction
     relay.rs      RelayService (receive→store→forward)

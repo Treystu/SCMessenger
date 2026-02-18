@@ -10,13 +10,14 @@
 // - Connection management with bandwidth limits
 // - Relay circuit establishment using libp2p's relay protocol
 
+use crate::transport::swarm::SwarmHandle;
 use libp2p::{Multiaddr, PeerId};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 // ============================================================================
 // ERROR TYPES
@@ -201,18 +202,16 @@ impl InternetRelay {
             relay_peer_id, relay_addr
         );
 
-        // Create libp2p peer ID and multiaddr for the relay
-        let libp2p_peer_id = libp2p::PeerId::from_bytes(&relay_peer_id.to_bytes())
-            .map_err(|e| InternetTransportError::Other(format!("Invalid peer ID: {}", e)))?;
-
         // Use the provided multiaddr directly (clone to avoid move)
         let multiaddr = relay_addr.clone();
 
-        // In a production implementation, this would dial the relay using libp2p's swarm
-        // For now, we log the connection attempt and store the relay info
+        // NOTE: InternetRelay does not hold a SwarmHandle; it is a pure registration and
+        // bookkeeping layer.  To perform an actual libp2p dial call
+        // `connect_to_relay_via_swarm()` instead, which accepts a &SwarmHandle and
+        // delegates here for the registration step after the dial succeeds.
         info!(
-            "Establishing libp2p connection to relay {} at {}",
-            libp2p_peer_id, multiaddr
+            "Registering relay {} at {} (no dial — use connect_to_relay_via_swarm for live dial)",
+            relay_peer_id, multiaddr
         );
 
         let relay_info = PeerRelayInfo {
@@ -242,6 +241,66 @@ impl InternetRelay {
         );
 
         Ok(())
+    }
+
+    /// Dial a relay node through the libp2p swarm and register it on success.
+    ///
+    /// This is the production entry-point for establishing an internet relay
+    /// connection.  It issues a real dial via `SwarmHandle::dial()` (which
+    /// enqueues a `SwarmCommand::Dial` on the running swarm task) and only
+    /// registers the peer in `active_relays` / `relay_stats` when the dial
+    /// command is accepted without error.
+    ///
+    /// A successful return means the dial was *submitted* to the swarm; the
+    /// actual TCP handshake completes asynchronously and will be surfaced as a
+    /// `SwarmEvent2::PeerDiscovered` event on the application's event channel.
+    ///
+    /// # Arguments
+    /// * `relay_peer_id` — libp2p `PeerId` of the relay node.
+    /// * `relay_addr`    — `Multiaddr` at which the relay is reachable (e.g.
+    ///                     `/ip4/1.2.3.4/tcp/5555`).
+    /// * `swarm`         — Reference to the running [`SwarmHandle`].  The
+    ///                     method borrows it only for the duration of the async
+    ///                     call; no ownership or long-term reference is stored.
+    pub async fn connect_to_relay_via_swarm(
+        &self,
+        relay_peer_id: PeerId,
+        relay_addr: Multiaddr,
+        swarm: &SwarmHandle,
+    ) -> Result<(), InternetTransportError> {
+        // Capacity guard — same check as connect_to_relay.
+        let current_count = self.active_relays.read().len();
+        if current_count >= self.config.max_relay_connections {
+            return Err(InternetTransportError::MaxConnectionsExceeded);
+        }
+
+        info!(
+            "Dialing relay {} at {} via swarm",
+            relay_peer_id, relay_addr
+        );
+
+        // Issue the actual libp2p dial.  SwarmHandle::dial() sends a
+        // SwarmCommand::Dial over the mpsc channel to the swarm event-loop,
+        // which calls swarm.dial(addr) and returns Ok(()) when the dial is
+        // enqueued (or Err if the swarm task is not running / the address is
+        // malformed).  The connection result arrives later as a
+        // SwarmEvent::ConnectionEstablished or OutgoingConnectionError.
+        swarm.dial(relay_addr.clone()).await.map_err(|e| {
+            warn!(
+                "Swarm dial to relay {} at {} failed: {}",
+                relay_peer_id, relay_addr, e
+            );
+            InternetTransportError::ConnectionFailed(e.to_string())
+        })?;
+
+        info!(
+            "Dial submitted for relay {} at {}; registering in active_relays",
+            relay_peer_id, relay_addr
+        );
+
+        // Register the relay in local bookkeeping.  Reuse the existing
+        // registration logic rather than duplicating it.
+        self.connect_to_relay(relay_peer_id, relay_addr).await
     }
 
     /// Store and forward a message for an offline/unreachable peer

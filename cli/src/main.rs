@@ -14,6 +14,8 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use colored::*;
 use libp2p::Multiaddr;
+use scmessenger_core::message::{decode_envelope, MessageType};
+use scmessenger_core::store::{Outbox, QueuedMessage};
 use scmessenger_core::transport::{self, SwarmEvent};
 use scmessenger_core::IronCore;
 use std::collections::HashMap;
@@ -327,6 +329,27 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             scmessenger_core::crypto::validate_ed25519_public_key(&public_key)
                 .context("Invalid public key")?;
 
+            // Guard: reject Blake3 identity_id where a libp2p Peer ID is required
+            if looks_like_blake3_id(&peer_id) {
+                eprintln!(
+                    "{} That looks like a Blake3 identity ID (64 hex chars), not a libp2p Peer ID.",
+                    "⚠ Error:".red()
+                );
+                eprintln!("  Use the 'Peer ID (Network)' shown by: scm identity");
+                eprintln!("  It starts with '12D3Koo...' and is ~52 characters.");
+                return Ok(());
+            }
+            if !looks_like_libp2p_peer_id(&peer_id) {
+                eprintln!(
+                    "{} '{}' is not a valid libp2p Peer ID.",
+                    "⚠ Error:".red(),
+                    peer_id
+                );
+                eprintln!("  Use the 'Peer ID (Network)' shown by: scm identity");
+                eprintln!("  It starts with '12D3Koo...' and is ~52 characters.");
+                return Ok(());
+            }
+
             // Try to use API if a node is running
             if api::is_api_available().await {
                 api::add_contact_via_api(&peer_id, &public_key, name.clone())
@@ -598,6 +621,19 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let history_db = data_dir.join("history");
     let history = Arc::new(history::MessageHistory::open(history_db)?);
 
+    // ── Outbox — persistent store-and-forward queue ──────────────────────
+    // Messages sent to offline peers are queued here and flushed automatically
+    // when those peers come online (see PeerDiscovered handler below).
+    let outbox_path = data_dir.join("outbox");
+    let outbox_path_str = outbox_path.to_str().unwrap_or("outbox").to_string();
+    let outbox = match Outbox::persistent(&outbox_path_str) {
+        Ok(ob) => Arc::new(tokio::sync::Mutex::new(ob)),
+        Err(e) => {
+            tracing::warn!("Failed to open persistent outbox, falling back to in-memory: {}", e);
+            Arc::new(tokio::sync::Mutex::new(Outbox::new()))
+        }
+    };
+
     // ── Connection Ledger — persistent peer memory ──────────────────────
     let mut connection_ledger = ledger::ConnectionLedger::load(&data_dir)?;
 
@@ -793,6 +829,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let history_rx = history.clone();
     let peers_rx = peers.clone();
     let ledger_rx = ledger.clone();
+    let outbox_rx = outbox.clone();
 
     // Stdin handling
     let stdin = tokio::io::BufReader::new(tokio::io::stdin());
@@ -832,6 +869,66 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                              };
                              if let Err(e) = swarm_handle.share_ledger(peer_id, entries).await {
                                  tracing::warn!("Failed to share ledger with {}: {}", peer_id, e);
+                             }
+
+                             // OUTBOX FLUSH: Deliver any queued messages for this peer now
+                             // that they are online. We drain (remove-and-return) the queue
+                             // atomically; failed sends are re-enqueued so they retry on the
+                             // next connection.
+                             //
+                             // KEY MATCHING: `peer_id.to_string()` here is the libp2p PeerId
+                             // (a base58-encoded multihash derived from the peer's Ed25519 key,
+                             // e.g. "12D3Koo..."). The outbox stores messages keyed by
+                             // `QueuedMessage::recipient_id`, which is set to `contact.peer_id`
+                             // in `cmd_send_offline`. `Contact::peer_id` is documented and
+                             // populated as the libp2p PeerId string — users supply it via
+                             // `scm contact add <peer-id> <public-key>`. The `scm identity`
+                             // display shows both "ID" (Blake3 identity_id) and "Peer ID
+                             // (Network)" (the libp2p PeerId); contacts must use the *Peer ID
+                             // (Network)* value for this flush to match. The two identifiers
+                             // are distinct strings; using the Blake3 identity_id as the
+                             // contact peer_id would silently break outbox delivery.
+                             let queued = {
+                                 let mut ob = outbox_rx.lock().await;
+                                 ob.drain_for_peer(&peer_id.to_string())
+                             };
+
+                             if !queued.is_empty() {
+                                 tracing::info!(
+                                     "Flushing {} queued message(s) to newly-connected peer {}",
+                                     queued.len(),
+                                     peer_id
+                                 );
+                             }
+
+                             for msg in queued {
+                                 let msg_id = msg.message_id.clone();
+                                 match swarm_handle.send_message(peer_id, msg.envelope_data.clone()).await {
+                                     Ok(()) => {
+                                         tracing::info!(
+                                             "Flushed queued message {} to {}",
+                                             msg_id,
+                                             peer_id
+                                         );
+                                     }
+                                     Err(e) => {
+                                         // Re-enqueue on failure so it is retried next connect.
+                                         tracing::warn!(
+                                             "Failed to flush queued message {} to {}: {} — re-enqueuing",
+                                             msg_id,
+                                             peer_id,
+                                             e
+                                         );
+                                         let mut ob = outbox_rx.lock().await;
+                                         if let Err(eq_err) = ob.enqueue(msg) {
+                                             tracing::error!(
+                                                 "Failed to re-enqueue message {}: {}",
+                                                 msg_id,
+                                                 eq_err
+                                             );
+                                         }
+                                     }
+                                 }
                              }
                          }
                     }
@@ -901,28 +998,64 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                     }
 
                     SwarmEvent::MessageReceived { peer_id, envelope_data } => {
+                        // Extract sender's Ed25519 public key from the envelope before decryption.
+                        // We need it to encrypt the delivery receipt back to them.
+                        let sender_public_key_hex = decode_envelope(&envelope_data)
+                            .ok()
+                            .map(|env| hex::encode(&env.sender_public_key));
+
                         if let Ok(msg) = core_rx.receive_message(envelope_data) {
-                            let text = msg.text_content().unwrap_or_else(|| "<binary>".into());
-                            let sender_name = contacts_rx.get(&peer_id.to_string())
-                                .ok().flatten()
-                                .map(|c| c.display_name().to_string())
-                                .unwrap_or_else(|| peer_id.to_string());
+                            match msg.message_type {
+                                MessageType::Text => {
+                                    let text = msg.text_content().unwrap_or_else(|| "<binary>".into());
+                                    let sender_name = contacts_rx.get(&peer_id.to_string())
+                                        .ok().flatten()
+                                        .map(|c| c.display_name().to_string())
+                                        .unwrap_or_else(|| peer_id.to_string());
 
-                            println!("\n{} {}: {}", "←".bright_blue(), sender_name.bright_cyan(), text);
-                            print!("> ");
-                            let _ = std::io::Write::flush(&mut std::io::stdout());
+                                    println!("\n{} {}: {}", "←".bright_blue(), sender_name.bright_cyan(), text);
+                                    print!("> ");
+                                    let _ = std::io::Write::flush(&mut std::io::stdout());
 
-                            let record = history::MessageRecord::new_received(peer_id.to_string(), text.clone());
-                            let _ = history_rx.add(record);
+                                    let record = history::MessageRecord::new_received(peer_id.to_string(), text.clone());
+                                    let _ = history_rx.add(record);
 
-                            // Update UI
-                            // Note: timestamps in Rust are u64, MessageReceived expects u64
-                            let _ = ui_broadcast.send(server::UiEvent::MessageReceived {
-                                from: peer_id.to_string(),
-                                content: text,
-                                timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
-                                message_id: uuid::Uuid::new_v4().to_string(),
-                            });
+                                    let _ = ui_broadcast.send(server::UiEvent::MessageReceived {
+                                        from: peer_id.to_string(),
+                                        content: text,
+                                        timestamp: std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .unwrap_or_default()
+                                            .as_secs(),
+                                        message_id: msg.id.clone(),
+                                    });
+
+                                    // Send delivery receipt back to sender.
+                                    if let Some(ref pk_hex) = sender_public_key_hex {
+                                        match core_rx.prepare_receipt(pk_hex.clone(), msg.id.clone()) {
+                                            Ok(ack_bytes) => {
+                                                tracing::debug!("Sending delivery ACK for {} to {}", msg.id, peer_id);
+                                                if let Err(e) = swarm_handle.send_message(peer_id, ack_bytes).await {
+                                                    tracing::debug!("Failed to send delivery ACK to {}: {}", peer_id, e);
+                                                }
+                                            }
+                                            Err(e) => {
+                                                tracing::debug!("Failed to prepare delivery ACK: {}", e);
+                                            }
+                                        }
+                                    }
+                                }
+                                MessageType::Receipt => {
+                                    // Received a delivery receipt — the remote peer confirmed delivery.
+                                    if let Ok(receipt) = bincode::deserialize::<scmessenger_core::Receipt>(&msg.payload) {
+                                        let short_id = receipt.message_id.get(..8).unwrap_or(&receipt.message_id);
+                                        println!("\n{} Delivered: {}", "✓✓".green(), short_id);
+                                        print!("> ");
+                                        let _ = std::io::Write::flush(&mut std::io::stdout());
+                                        tracing::debug!("Delivery ACK received from {}: msg_id={}", peer_id, receipt.message_id);
+                                    }
+                                }
+                            }
                         }
                     }
                     SwarmEvent::ListeningOn(addr) => {
@@ -1120,6 +1253,18 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 }
 
 async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
+    // Guard: catch the common mistake of supplying a Blake3 identity_id instead
+    // of a contact nickname / libp2p Peer ID.
+    if looks_like_blake3_id(&recipient) {
+        eprintln!(
+            "{} That looks like a Blake3 identity ID (64 hex chars), not a contact nickname or libp2p Peer ID.",
+            "⚠ Error:".red()
+        );
+        eprintln!("  Use a contact nickname, or the 'Peer ID (Network)' shown by: scm identity");
+        eprintln!("  The Peer ID starts with '12D3Koo...' and is ~52 characters.");
+        return Ok(());
+    }
+
     // Try to use API if a node is running
     if api::is_api_available().await {
         api::send_message_via_api(&recipient, &message)
@@ -1150,12 +1295,51 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
         "✓".green(),
         envelope_bytes.len()
     );
-    println!(
-        "{} Message queued for {} {}",
-        "✓".green(),
-        contact.display_name().bright_cyan(),
-        "(offline mode)".dimmed()
-    );
+
+    // Enqueue in the persistent outbox so cmd_start will flush it when the
+    // peer comes online.
+    let outbox_path = data_dir.join("outbox");
+    let outbox_path_str = outbox_path.to_str().unwrap_or("outbox").to_string();
+    match Outbox::persistent(&outbox_path_str) {
+        Ok(mut outbox) => {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let queued_msg = QueuedMessage {
+                message_id: uuid::Uuid::new_v4().to_string(),
+                recipient_id: contact.peer_id.clone(),
+                envelope_data: envelope_bytes,
+                queued_at: now,
+                attempts: 0,
+            };
+            match outbox.enqueue(queued_msg) {
+                Ok(()) => {
+                    println!(
+                        "{} Message queued for {} — will be delivered when peer comes online",
+                        "✓".green(),
+                        contact.display_name().bright_cyan(),
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to enqueue message for {}: {}", contact.peer_id, e);
+                    println!(
+                        "{} Could not queue message: {}",
+                        "⚠".yellow(),
+                        e
+                    );
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Could not open outbox for queuing: {}", e);
+            println!(
+                "{} Message encrypted but could not be queued (outbox unavailable: {})",
+                "⚠".yellow(),
+                e
+            );
+        }
+    }
 
     Ok(())
 }
@@ -1224,6 +1408,19 @@ async fn cmd_test() -> Result<()> {
     println!("{}", "All tests passed!".green().bold());
 
     Ok(())
+}
+
+/// Returns true if `s` is exactly 64 lowercase hex characters — the shape of a
+/// Blake3 identity_id (32-byte hash → 64 hex chars).  A user who copies their
+/// `scm identity` "ID" field will get this format.
+fn looks_like_blake3_id(s: &str) -> bool {
+    s.len() == 64 && s.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f'))
+}
+
+/// Returns true if `s` can be parsed as a valid libp2p PeerId
+/// (base58-encoded multihash, e.g. "12D3Koo…").
+fn looks_like_libp2p_peer_id(s: &str) -> bool {
+    s.parse::<libp2p::PeerId>().is_ok()
 }
 
 fn find_contact(contacts: &contacts::ContactList, query: &str) -> Result<contacts::Contact> {
