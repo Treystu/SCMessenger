@@ -259,26 +259,7 @@ struct MeshSettingsView: View {
                 }
             }
 
-            // Relay Budget
-            Section("Relay Budget") {
-                VStack(alignment: .leading) {
-                    HStack {
-                        Text("Max Messages/Hour")
-                        Spacer()
-                        Text("\(viewModel?.settings?.maxRelayBudget ?? 1000)")
-                            .foregroundStyle(Theme.onSurfaceVariant)
-                    }
-                    Slider(
-                        value: Binding(
-                            get: { Double(viewModel?.settings?.maxRelayBudget ?? 1000) },
-                            set: { viewModel?.updateRelayBudget(UInt32($0)) }
-                        ),
-                        in: 0...10000,
-                        step: 100
-                    )
-                    .tint(Theme.onPrimaryContainer)
-                }
-            }
+
 
             // Battery Floor
             Section("Battery") {
