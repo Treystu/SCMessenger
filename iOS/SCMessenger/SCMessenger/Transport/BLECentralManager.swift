@@ -38,9 +38,9 @@ final class BLECentralManager: NSObject {
     private var writeInProgress: [UUID: Bool] = [:]
     private var pendingWrites: [UUID: [Data]] = [:]
     
-    // Characteristics cache
-    private var txCharacteristics: [UUID: CBCharacteristic] = [:]
-    private var rxCharacteristics: [UUID: CBCharacteristic] = [:]
+    // Characteristics cache (names match Android BleGattServer)
+    private var messageCharacteristics: [UUID: CBCharacteristic] = [:] // Write: central → peripheral
+    private var syncCharacteristics: [UUID: CBCharacteristic] = [:]    // Notify: peripheral → central
     
     init(meshRepository: MeshRepository) {
         self.meshRepository = meshRepository
@@ -84,8 +84,8 @@ final class BLECentralManager: NSObject {
     
     func sendData(to peripheralId: UUID, data: Data) {
         guard let peripheral = connectedPeripherals[peripheralId],
-              let characteristic = txCharacteristics[peripheralId] else {
-            logger.error("Cannot send: peripheral \(peripheralId) not connected or TX char not found")
+              let characteristic = messageCharacteristics[peripheralId] else {
+            logger.error("Cannot send: peripheral \(peripheralId) not connected or Message char not found")
             return
         }
         
@@ -140,8 +140,8 @@ final class BLECentralManager: NSObject {
             centralManager.cancelPeripheralConnection(peripheral)
         }
         connectedPeripherals.removeAll()
-        txCharacteristics.removeAll()
-        rxCharacteristics.removeAll()
+        messageCharacteristics.removeAll()
+        syncCharacteristics.removeAll()
     }
     
     private func cleanupPeerCache() {
@@ -189,8 +189,8 @@ extension BLECentralManager: CBCentralManagerDelegate {
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         logger.info("Disconnected from \(peripheral.identifier)")
         connectedPeripherals.removeValue(forKey: peripheral.identifier)
-        txCharacteristics.removeValue(forKey: peripheral.identifier)
-        rxCharacteristics.removeValue(forKey: peripheral.identifier)
+        messageCharacteristics.removeValue(forKey: peripheral.identifier)
+        syncCharacteristics.removeValue(forKey: peripheral.identifier)
     }
     
     func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
@@ -212,23 +212,23 @@ extension BLECentralManager: CBPeripheralDelegate {
         guard let services = peripheral.services else { return }
         for service in services where service.uuid == MeshBLEConstants.serviceUUID {
             peripheral.discoverCharacteristics([
-                MeshBLEConstants.txCharUUID,
-                MeshBLEConstants.rxCharUUID,
-                MeshBLEConstants.idCharUUID
+                MeshBLEConstants.messageCharUUID,
+                MeshBLEConstants.syncCharUUID,
+                MeshBLEConstants.identityCharUUID
             ], for: service)
         }
     }
-    
+
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         guard let characteristics = service.characteristics else { return }
         for characteristic in characteristics {
             switch characteristic.uuid {
-            case MeshBLEConstants.txCharUUID:
-                txCharacteristics[peripheral.identifier] = characteristic
-            case MeshBLEConstants.rxCharUUID:
-                rxCharacteristics[peripheral.identifier] = characteristic
+            case MeshBLEConstants.messageCharUUID:
+                messageCharacteristics[peripheral.identifier] = characteristic
+            case MeshBLEConstants.syncCharUUID:
+                syncCharacteristics[peripheral.identifier] = characteristic
                 peripheral.setNotifyValue(true, for: characteristic)
-            case MeshBLEConstants.idCharUUID:
+            case MeshBLEConstants.identityCharUUID:
                 peripheral.readValue(for: characteristic)
             default:
                 break

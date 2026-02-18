@@ -31,6 +31,8 @@ class PreferencesRepository(private val context: Context) {
         private val SHOW_PEER_COUNT = booleanPreferencesKey("show_peer_count")
         private val AUTO_ADJUST_ENABLED = booleanPreferencesKey("auto_adjust_enabled")
         private val MANUAL_ADJUSTMENT_PROFILE = stringPreferencesKey("manual_adjustment_profile")
+        private val BLE_ROTATION_ENABLED = booleanPreferencesKey("ble_rotation_enabled")
+        private val BLE_ROTATION_INTERVAL_SEC = intPreferencesKey("ble_rotation_interval_sec")
     }
     
     // ========================================================================
@@ -152,5 +154,32 @@ class PreferencesRepository(private val context: Context) {
     suspend fun clearAll() {
         context.dataStore.edit { it.clear() }
         Timber.w("All preferences cleared")
+    }
+
+    // ========================================================================
+    // BLE PRIVACY SETTINGS
+    // ========================================================================
+
+    val bleRotationEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[BLE_ROTATION_ENABLED] ?: true
+    }
+
+    suspend fun setBleRotationEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[BLE_ROTATION_ENABLED] = enabled
+        }
+        Timber.d("BLE rotation: $enabled")
+    }
+
+    /** BLE identity rotation interval in seconds (default 900 = 15 minutes) */
+    val bleRotationIntervalSec: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[BLE_ROTATION_INTERVAL_SEC] ?: 900
+    }
+
+    suspend fun setBleRotationIntervalSec(intervalSec: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[BLE_ROTATION_INTERVAL_SEC] = intervalSec
+        }
+        Timber.d("BLE rotation interval: ${intervalSec}s")
     }
 }

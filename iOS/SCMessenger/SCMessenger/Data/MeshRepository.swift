@@ -31,13 +31,14 @@ private enum DefaultSettings {
 ///
 /// All UniFFI objects are initialized lazily and managed here to ensure
 /// proper lifecycle and resource cleanup.
+@MainActor
 @Observable
 final class MeshRepository {
     private let logger = Logger(subsystem: "com.scmessenger", category: "Repository")
     private let storagePath: String
-    
+
     // MARK: - UniFFI Components (lazy initialization)
-    
+
     private(set) var ironCore: IronCore?
     private(set) var meshService: MeshService?
     private(set) var contactManager: ContactManager?
@@ -46,35 +47,35 @@ final class MeshRepository {
     private(set) var settingsManager: MeshSettingsManager?
     private(set) var autoAdjustEngine: AutoAdjustEngine?
     private(set) var swarmBridge: SwarmBridge?
-    
+
     // Transport Managers
     private var bleCentralManager: BLECentralManager?
     private var blePeripheralManager: BLEPeripheralManager?
-    
+
     // Platform bridge
     private var platformBridge: IosPlatformBridge?
-    
+
     // MARK: - Published State
-    
+
     var serviceState: ServiceState = .stopped
     var serviceStats: ServiceStats?
     var networkStatus = NetworkStatus()
-    
+
     struct NetworkStatus {
         var wifi: Bool = false
         var cellular: Bool = false
         var available: Bool { wifi || cellular }
     }
-    
+
     // BLE Privacy Settings
     var blePrivacyEnabled: Bool {
         get { UserDefaults.standard.object(forKey: "ble_rotation_enabled") as? Bool ?? true }
-        set { 
+        set {
             UserDefaults.standard.set(newValue, forKey: "ble_rotation_enabled")
             blePeripheralManager?.setRotationEnabled(newValue)
         }
     }
-    
+
     var blePrivacyInterval: TimeInterval {
         get { UserDefaults.standard.object(forKey: "ble_rotation_interval") as? Double ?? 900 }
         set {
@@ -82,69 +83,82 @@ final class MeshRepository {
             blePeripheralManager?.setRotationInterval(newValue)
         }
     }
-    
+
     // MARK: - Event Streams
     
-    let incomingMessages = PassthroughSubject<MessageRecord, Never>()
+    /// Stream of ALL message updates (sent and received)
+    let messageUpdates = PassthroughSubject<MessageRecord, Never>()
+
+    /// Legacy alias for backward compatibility (filtered to received only if needed, but for now direct alias)
+    var incomingMessages: PassthroughSubject<MessageRecord, Never> { messageUpdates }
+
     let peerEvents = PassthroughSubject<PeerEvent, Never>()
     let statusEvents = PassthroughSubject<StatusEvent, Never>()
-    
+
     enum PeerEvent {
         case discovered(peerId: String)
         case connected(peerId: String)
         case disconnected(peerId: String)
     }
-    
+
     enum StatusEvent {
         case serviceStateChanged(ServiceState)
         case statsUpdated(ServiceStats)
     }
-    
+
     // MARK: - Initialization
-    
+
     init() {
         // Use app's documents directory for storage
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         self.storagePath = documentsPath.appendingPathComponent("mesh").path
-        
+
         logger.info("MeshRepository initialized with storage: \(self.storagePath)")
-        
+
         // Create storage directory if needed
         try? FileManager.default.createDirectory(atPath: storagePath, withIntermediateDirectories: true)
     }
-    
+
     /// Initialize all managers
     func initialize() throws {
         logger.info("Initializing managers")
-        
+
         do {
             // Initialize data managers
             settingsManager = MeshSettingsManager(storagePath: storagePath)
+
+            // Ensure settings exist (load or create defaults)
+            if (try? settingsManager?.load()) == nil {
+                logger.info("No settings found, applying defaults")
+                if let defaults = settingsManager?.defaultSettings() {
+                    try? settingsManager?.save(settings: defaults)
+                }
+            }
             historyManager = try HistoryManager(storagePath: storagePath)
             contactManager = try ContactManager(storagePath: storagePath)
             ledgerManager = LedgerManager(storagePath: storagePath)
             autoAdjustEngine = AutoAdjustEngine()
-            
+
             // Initialize transport managers
             bleCentralManager = BLECentralManager(meshRepository: self)
             blePeripheralManager = BLEPeripheralManager(meshRepository: self)
-            
+
             // Pre-load data where applicable
             try? ledgerManager?.load()
-            
+
             logger.info("✓ All managers initialized successfully")
         } catch {
             logger.error("Failed to initialize managers: \(error.localizedDescription)")
             throw error
         }
     }
-    
+
     /// Public start method called from App entry point
     func start() {
         logger.info("Application requested repository start")
         do {
             try ensureServiceInitialized()
-            
+
             // Apply saved BLE settings now that managers are initialized
             blePeripheralManager?.setRotationEnabled(blePrivacyEnabled)
             blePeripheralManager?.setRotationInterval(blePrivacyInterval)
@@ -152,7 +166,7 @@ final class MeshRepository {
             logger.error("Failed to start repository: \(error.localizedDescription)")
         }
     }
-    
+
     /// Ensure service is initialized (lazy start if needed)
     /// This enables identity operations before full mesh service is running
     private func ensureServiceInitialized() throws {
@@ -160,37 +174,37 @@ final class MeshRepository {
         // This properly handles all non-running states including .stopped, .starting, .stopping, .paused
         if meshService == nil || serviceState != .running {
             logger.info("Lazy starting MeshService for Identity access")
-            
+
             // Clean up existing service if stopped but not nil
             if meshService != nil {
                 meshService?.stop()
                 meshService = nil
                 ironCore = nil
             }
-            
+
             // Initialize managers if not already done
             if settingsManager == nil {
                 try initialize()
             }
-            
+
             // Create minimal config for lazy start
             // Use saved settings or defaults from settings manager
             guard let settingsManager = settingsManager else {
                 throw MeshError.notInitialized("SettingsManager not initialized for lazy start")
             }
-            
+
             let settings = (try? settingsManager.load()) ?? settingsManager.defaultSettings()
-            
+
             let config = MeshServiceConfig(
                 discoveryIntervalMs: 30000,
                 relayBudgetPerHour: settings.maxRelayBudget,
                 batteryFloorPct: settings.batteryFloor
             )
-            
+
             try startMeshService(config: config)
             logger.info("✓ MeshService started lazily")
         }
-        
+
         // Verify ironCore is available after initialization
         if ironCore == nil {
             logger.error("⚠️ IronCore is nil despite service running - attempting refresh")
@@ -200,48 +214,48 @@ final class MeshRepository {
             }
         }
     }
-    
+
     // MARK: - Service Lifecycle
-    
+
     /// Start the mesh service with configuration
     func startMeshService(config: MeshServiceConfig) throws {
         logger.info("Starting mesh service")
-        
+
         guard serviceState == .stopped else {
             logger.warning("Service already started or starting")
             return
         }
-        
+
         serviceState = .starting
         statusEvents.send(.serviceStateChanged(.starting))
-        
+
         do {
             // Create mesh service with persistent storage (matches Android: withStorage)
             meshService = MeshService.withStorage(config: config, storagePath: storagePath)
-            
+
             // Start service first — IronCore is created during start()
             try meshService?.start()
-            
+
             // Initialize SwarmBridge for messaging operations
             swarmBridge = SwarmBridge()
-            
+
             // Now obtain IronCore (only available after start())
             ironCore = meshService?.getCore()
             if ironCore == nil {
                 throw MeshError.notInitialized("Failed to obtain IronCore from MeshService")
             }
-            
+
             // Configure platform bridge
             platformBridge = IosPlatformBridge()
             platformBridge?.configure(repository: self)
-            
+
             serviceState = .running
             statusEvents.send(.serviceStateChanged(.running))
-            
+
             // Start BLE advertising and scanning
             blePeripheralManager?.startAdvertising()
             bleCentralManager?.startScanning()
-            
+
             logger.info("✓ Mesh service started successfully")
         } catch {
             serviceState = .stopped
@@ -250,30 +264,30 @@ final class MeshRepository {
             throw error
         }
     }
-    
+
     /// Stop the mesh service
     func stopMeshService() {
         logger.info("Stopping mesh service")
-        
+
         guard serviceState == .running else {
             logger.warning("Service not running")
             return
         }
-        
+
         serviceState = .stopping
         statusEvents.send(.serviceStateChanged(.stopping))
-        
+
         meshService?.stop()
-        
+
         serviceState = .stopped
         statusEvents.send(.serviceStateChanged(.stopped))
-        
+
         bleCentralManager?.stopScanning()
         blePeripheralManager?.stopAdvertising()
-        
+
         logger.info("✓ Mesh service stopped")
     }
-    
+
     /// Pause the mesh service (background mode)
     func pauseMeshService() {
         logger.info("Pausing mesh service")
@@ -286,7 +300,7 @@ final class MeshRepository {
         // The external serviceState remains .running (no .paused state exists)
         logger.info("✓ Mesh service paused")
     }
-    
+
     /// Resume the mesh service (foreground mode)
     func resumeMeshService() {
         logger.info("Resuming mesh service")
@@ -297,19 +311,19 @@ final class MeshRepository {
         meshService?.resume()
         logger.info("✓ Mesh service resumed")
     }
-    
+
     /// Get current service state
     func getServiceState() -> ServiceState {
         return serviceState
     }
-    
+
     // MARK: - Identity Management
-    
+
     /// Get identity information
     func getIdentityInfo() -> IdentityInfo? {
         return ironCore?.getIdentityInfo()
     }
-    
+
     /// Check if identity is initialized
     func isIdentityInitialized() -> Bool {
         do {
@@ -320,19 +334,19 @@ final class MeshRepository {
             return false
         }
     }
-    
+
     /// Create a new identity (first-time setup)
     func createIdentity() throws {
         logger.info("Creating identity")
-        
+
         do {
             try ensureServiceInitialized()
-            
+
             guard let ironCore = ironCore else {
                 logger.error("IronCore is nil after ensureServiceInitialized! Cannot create identity.")
                 throw MeshError.notInitialized("Mesh service initialization failed")
             }
-            
+
             logger.info("Calling ironCore.initializeIdentity()...")
             try ironCore.initializeIdentity()
             logger.info("✓ Identity created successfully")
@@ -341,41 +355,41 @@ final class MeshRepository {
             throw error
         }
     }
-    
+
     // MARK: - Messaging (with Relay Enforcement)
-    
+
     /// Send a message to a peer
     /// CRITICAL: Enforces relay = messaging coupling
     func sendMessage(peerId: String, content: String) async throws {
         logger.info("Send message to \(peerId)")
-        
+
         // RELAY ENFORCEMENT (matches Android pattern exactly)
         // Check if relay/messaging is enabled (bidirectional control)
         // Treat null/missing settings as disabled (fail-safe)
         // Cache settings value to avoid race condition during check
         let currentSettings = try? settingsManager?.load()
         let isRelayEnabled = currentSettings?.relayEnabled == true
-        
+
         if !isRelayEnabled {
             let errorMsg = "Cannot send message: Relay is disabled. Enable relay in Settings to send and receive messages."
             logger.error("\(errorMsg)")
             throw MeshError.relayDisabled(errorMsg)
         }
-        
+
         // Proceed with sending message
         guard let ironCore = ironCore else {
             throw MeshError.notInitialized("IronCore not initialized")
         }
-        
+
         // Get recipient's public key
         let contact = try? contactManager?.get(peerId: peerId)
         guard let recipientPublicKey = contact?.publicKey else {
             throw MeshError.contactNotFound("Contact \(peerId) not found")
         }
-        
+
         // Prepare and send message
         let encryptedBytes = try ironCore.prepareMessage(recipientPublicKeyHex: recipientPublicKey, text: content)
-        
+
         // Send via SwarmBridge
         if let swarmBridge = swarmBridge {
             try swarmBridge.sendMessage(peerId: peerId, data: Data(encryptedBytes))
@@ -384,7 +398,7 @@ final class MeshRepository {
             logger.error("SwarmBridge not initialized! Message dropped.")
             throw MeshError.notInitialized("SwarmBridge not ready")
         }
-        
+
         // Record in history
         let messageRecord = MessageRecord(
             id: UUID().uuidString,
@@ -395,31 +409,34 @@ final class MeshRepository {
             delivered: false
         )
         try? historyManager?.add(record: messageRecord)
+
+        // Notify UI (Unified flow for sent messages)
+        messageUpdates.send(messageRecord)
     }
-    
+
     /// Handle incoming message (from CoreDelegate callback)
     func onMessageReceived(senderId: String, messageId: String, data: Data) {
         logger.info("Message from \(senderId): \(messageId)")
-        
+
         // RELAY ENFORCEMENT (matches Android pattern exactly)
         // Check if relay/messaging is enabled (bidirectional control)
         // Treat null/missing settings as disabled (fail-safe)
         // Cache settings value to avoid race condition during check
         let currentSettings = try? settingsManager?.load()
         let isRelayEnabled = currentSettings?.relayEnabled == true
-        
+
         if !isRelayEnabled {
             // Silently drop message when relay disabled (matches Android)
             logger.warning("⚠️ Dropped message from \(senderId): relay disabled")
             return
         }
-        
+
         // Process message
         do {
             // Decrypt message (if needed)
             // For now, just record in history
             let content = String(data: data, encoding: .utf8) ?? "[binary]"
-            
+
             let messageRecord = MessageRecord(
                 id: messageId,
                 direction: .received,
@@ -428,24 +445,24 @@ final class MeshRepository {
                 timestamp: UInt64(Date().timeIntervalSince1970),
                 delivered: true
             )
-            
+
             try? historyManager?.add(record: messageRecord)
-            
+
             // Notify UI
-            incomingMessages.send(messageRecord)
+            messageUpdates.send(messageRecord)
             logger.info("✓ Message received and processed from \(senderId)")
         }
     }
-    
+
     // MARK: - Settings Management
-    
+
     func loadSettings() throws -> MeshSettings {
         guard let settingsManager = settingsManager else {
             throw MeshError.notInitialized("SettingsManager not initialized")
         }
         return try settingsManager.load()
     }
-    
+
     func saveSettings(_ settings: MeshSettings) throws {
         guard let settingsManager = settingsManager else {
             throw MeshError.notInitialized("SettingsManager not initialized")
@@ -453,14 +470,14 @@ final class MeshRepository {
         try settingsManager.save(settings: settings)
         logger.info("✓ Settings saved (relay: \(settings.relayEnabled))")
     }
-    
+
     func validateSettings(_ settings: MeshSettings) -> Bool {
         // Delegate to Rust-side validation via UniFFI for consistency with Android
         guard let settingsManager = settingsManager else {
             logger.error("SettingsManager not initialized; cannot validate settings")
             return false
         }
-        
+
         do {
             try settingsManager.validate(settings: settings)
             return true
@@ -469,67 +486,67 @@ final class MeshRepository {
             return false
         }
     }
-    
+
     // MARK: - Ledger Management
-    
+
     func recordConnection(multiaddr: String, peerId: String) throws {
         guard let ledgerManager = ledgerManager else {
             throw MeshError.notInitialized("LedgerManager not initialized")
         }
         ledgerManager.recordConnection(multiaddr: multiaddr, peerId: peerId)
     }
-    
+
     func recordConnectionFailure(multiaddr: String) throws {
         guard let ledgerManager = ledgerManager else {
             throw MeshError.notInitialized("LedgerManager not initialized")
         }
         ledgerManager.recordFailure(multiaddr: multiaddr)
     }
-    
+
     func getDialableAddresses() throws -> [LedgerEntry] {
         guard let ledgerManager = ledgerManager else {
             throw MeshError.notInitialized("LedgerManager not initialized")
         }
         return ledgerManager.dialableAddresses()
     }
-    
+
     func getAllKnownTopics() throws -> [String] {
         guard let ledgerManager = ledgerManager else {
             throw MeshError.notInitialized("LedgerManager not initialized")
         }
         return ledgerManager.allKnownTopics()
     }
-    
+
     func getLedgerSummary() throws -> String {
         guard let ledgerManager = ledgerManager else {
             throw MeshError.notInitialized("LedgerManager not initialized")
         }
         return ledgerManager.summary()
     }
-    
+
     func saveLedger() throws {
         guard let ledgerManager = ledgerManager else {
             throw MeshError.notInitialized("LedgerManager not initialized")
         }
         try ledgerManager.save()
     }
-    
+
     // MARK: - Contacts Management
-    
+
     func getContacts() throws -> [Contact] {
         guard let contactManager = contactManager else {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
         return try contactManager.list()
     }
-    
+
     func getContact(peerId: String) throws -> Contact? {
         guard let contactManager = contactManager else {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
         return try contactManager.get(peerId: peerId)
     }
-    
+
     func addContact(_ contact: Contact) throws {
         guard let contactManager = contactManager else {
             throw MeshError.notInitialized("ContactManager not initialized")
@@ -537,7 +554,7 @@ final class MeshRepository {
         try contactManager.add(contact: contact)
         logger.info("✓ Contact added: \(contact.peerId)")
     }
-    
+
     func removeContact(peerId: String) throws {
         guard let contactManager = contactManager else {
             throw MeshError.notInitialized("ContactManager not initialized")
@@ -545,14 +562,14 @@ final class MeshRepository {
         try contactManager.remove(peerId: peerId)
         logger.info("✓ Contact removed: \(peerId)")
     }
-    
+
     func searchContacts(query: String) throws -> [Contact] {
         guard let contactManager = contactManager else {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
         return try contactManager.search(query: query)
     }
-    
+
     func setContactNickname(peerId: String, nickname: String?) throws {
         guard let contactManager = contactManager else {
             throw MeshError.notInitialized("ContactManager not initialized")
@@ -560,58 +577,58 @@ final class MeshRepository {
         try contactManager.setNickname(peerId: peerId, nickname: nickname)
         logger.info("✓ Contact nickname updated: \(peerId)")
     }
-    
+
     func getContactCount() throws -> UInt32 {
         guard let contactManager = contactManager else {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
         return contactManager.count()
     }
-    
+
     // MARK: - Message History
-    
+
     func getConversation(peerId: String, limit: UInt32 = 100) throws -> [MessageRecord] {
         guard let historyManager = historyManager else {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
         return try historyManager.conversation(peerId: peerId, limit: limit)
     }
-    
+
     func getRecentMessages(peerIdFilter: String? = nil, limit: UInt32 = 50) throws -> [MessageRecord] {
         guard let historyManager = historyManager else {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
         return try historyManager.recent(peerFilter: peerIdFilter, limit: limit)
     }
-    
+
     func getMessage(id: String) throws -> MessageRecord? {
         guard let historyManager = historyManager else {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
         return try historyManager.get(id: id)
     }
-    
+
     func addMessage(record: MessageRecord) throws {
         guard let historyManager = historyManager else {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
         try historyManager.add(record: record)
     }
-    
+
     func searchMessages(query: String, limit: UInt32 = 50) throws -> [MessageRecord] {
         guard let historyManager = historyManager else {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
         return try historyManager.search(query: query, limit: limit)
     }
-    
+
     func markMessageDelivered(id: String) throws {
         guard let historyManager = historyManager else {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
         try historyManager.markDelivered(id: id)
     }
-    
+
     func clearHistory() throws {
         guard let historyManager = historyManager else {
             throw MeshError.notInitialized("HistoryManager not initialized")
@@ -619,7 +636,7 @@ final class MeshRepository {
         try historyManager.clear()
         logger.info("✓ Message history cleared")
     }
-    
+
     func clearConversation(peerId: String) throws {
         guard let historyManager = historyManager else {
             throw MeshError.notInitialized("HistoryManager not initialized")
@@ -627,29 +644,29 @@ final class MeshRepository {
         try historyManager.clearConversation(peerId: peerId)
         logger.info("✓ Conversation cleared for peer: \(peerId)")
     }
-    
+
     func getHistoryStats() throws -> HistoryStats? {
         guard let historyManager = historyManager else {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
         return try historyManager.stats()
     }
-    
+
     func getMessageCount() throws -> UInt32 {
         guard let historyManager = historyManager else {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
         return historyManager.count()
     }
-    
+
     // MARK: - Platform Reporting
-    
+
     func reportBattery(pct: UInt8, charging: Bool) {
         // Update device profile and report to Rust
         logger.debug("Battery: \(pct)% charging=\(charging)")
         // TODO: Report to autoAdjustEngine
     }
-    
+
     func reportNetwork(wifi: Bool, cellular: Bool) {
         logger.debug("Network: wifi=\(wifi) cellular=\(cellular)")
         // Update published status
@@ -657,34 +674,34 @@ final class MeshRepository {
         networkStatus.cellular = cellular
         // TODO: Report to autoAdjustEngine
     }
-    
+
     func reportMotion(state: MotionState) {
         logger.debug("Motion: \(state)")
         // TODO: Report to autoAdjustEngine
     }
-    
+
     // MARK: - Background Operations
-    
+
     func onEnteringBackground() {
         logger.info("Repository: entering background")
         // Reduce activity, save state
     }
-    
+
     func onEnteringForeground() {
         logger.info("Repository: entering foreground")
         // Resume full activity
     }
-    
+
     func pauseService() {
         logger.info("Pausing service")
         // Pause but don't stop (for background expiration)
     }
-    
+
     func syncPendingMessages() async throws {
         logger.info("Syncing pending messages")
         // Sync outbox with network
     }
-    
+
     func updateStats() {
         logger.info("Updating stats")
         if let service = meshService {
@@ -694,41 +711,41 @@ final class MeshRepository {
             }
         }
     }
-    
+
     func quickPeerDiscovery() async throws {
         logger.info("Quick peer discovery")
         // Brief scan for nearby peers
     }
-    
+
     func performBulkSync() async throws {
         logger.info("Performing bulk sync")
         // Full sync with all peers
     }
-    
+
     func cleanupOldMessages() async throws {
         logger.info("Cleaning up old messages")
         // Remove old messages based on retention policy
     }
-    
+
     func updatePeerLedger() async throws {
         logger.info("Updating peer ledger")
         // Update connection statistics
     }
-    
+
     // MARK: - BLE Transport Integration
-    
+
     func onBleDataReceived(peerId: String, data: Data) {
         logger.debug("BLE data from \(peerId): \(data.count) bytes")
         // Forward to MeshService
         meshService?.onDataReceived(peerId: peerId, data: data)
     }
-    
+
     func sendBlePacket(peerId: String, data: Data) {
         logger.debug("Send BLE packet to \(peerId): \(data.count) bytes")
-        
+
         // Direct packet to appropriate manager based on UUID match
         // Note: peerId here is likely the UUID from the transport layer if Rust is treating it as a handle
-        
+
         // Try Central (we are client, sending to peripheral)
         if let uuid = UUID(uuidString: peerId) {
             bleCentralManager?.sendData(to: uuid, data: data)
@@ -738,37 +755,37 @@ final class MeshRepository {
             // Assuming Rust uses the UUID string we gave it in onDataReceived
             logger.warning("sendBlePacket: Invalid UUID string \(peerId)")
         }
-        
+
         // TODO: Handle Peripheral role sending (notifications to central)
         // If we are Peripheral, and 'peerId' is the Central's UUID
         // blePeripheralManager?.sendNotification(to: central, data: data)
         // However, we need to lookup the CBCentral by UUID.
         // BLEPeripheralManager implementation needs a helper for this.
     }
-    
+
     // MARK: - Auto-Adjustment Engine
-    
+
     func computeAdjustmentProfile(deviceProfile: DeviceProfile) throws -> AdjustmentProfile {
         guard let autoAdjustEngine = autoAdjustEngine else {
             throw MeshError.notInitialized("AutoAdjustEngine not initialized")
         }
         return autoAdjustEngine.computeProfile(device: deviceProfile)
     }
-    
+
     func computeBleAdjustment(profile: AdjustmentProfile) throws -> BleAdjustment {
         guard let autoAdjustEngine = autoAdjustEngine else {
             throw MeshError.notInitialized("AutoAdjustEngine not initialized")
         }
         return autoAdjustEngine.computeBleAdjustment(profile: profile)
     }
-    
+
     func computeRelayAdjustment(profile: AdjustmentProfile) throws -> RelayAdjustment {
         guard let autoAdjustEngine = autoAdjustEngine else {
             throw MeshError.notInitialized("AutoAdjustEngine not initialized")
         }
         return autoAdjustEngine.computeRelayAdjustment(profile: profile)
     }
-    
+
     func overrideBleInterval(scanMs: UInt32, advertiseMs: UInt32) throws {
         guard let autoAdjustEngine = autoAdjustEngine else {
             throw MeshError.notInitialized("AutoAdjustEngine not initialized")
@@ -777,7 +794,7 @@ final class MeshRepository {
         autoAdjustEngine.overrideBleScanInterval(intervalMs: scanMs)
         logger.info("✓ BLE interval overridden: scan=\(scanMs)ms advertise=\(advertiseMs)ms")
     }
-    
+
     func overrideRelayMax(maxRelayPerHour: UInt32) throws {
         guard let autoAdjustEngine = autoAdjustEngine else {
             throw MeshError.notInitialized("AutoAdjustEngine not initialized")
@@ -785,7 +802,7 @@ final class MeshRepository {
         autoAdjustEngine.overrideRelayMaxPerHour(max: maxRelayPerHour)
         logger.info("✓ Relay max overridden: \(maxRelayPerHour)/hour")
     }
-    
+
     func clearAdjustmentOverrides() throws {
         guard let autoAdjustEngine = autoAdjustEngine else {
             throw MeshError.notInitialized("AutoAdjustEngine not initialized")
@@ -793,11 +810,100 @@ final class MeshRepository {
         autoAdjustEngine.clearOverrides()
         logger.info("✓ Adjustment overrides cleared")
     }
-    
+
+    // MARK: - Identity Export Helpers
+
+    func getPreferredRelay() -> String? {
+        return ledgerManager?.getPreferredRelays(limit: 1).first?.peerId
+    }
+
+    func connectToPeer(_ peerId: String, addresses: [String]) {
+        for addr in addresses {
+            var finalAddr = addr
+            if !addr.contains("/p2p/") {
+                finalAddr = "\(addr)/p2p/\(peerId)"
+            }
+            do {
+                try swarmBridge?.dial(multiaddr: finalAddr)
+            } catch {
+                logger.error("Failed to connect to peer \(peerId) at \(finalAddr): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func getListeningAddresses() -> [String] {
+        return swarmBridge?.getListeners() ?? []
+    }
+
+    func getLocalIpAddress() -> String? {
+        var address: String?
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        if getifaddrs(&ifaddr) == 0 {
+            var ptr = ifaddr
+            while ptr != nil {
+                defer { ptr = ptr?.pointee.ifa_next }
+
+                let interface = ptr?.pointee
+                let addrFamily = interface?.ifa_addr.pointee.sa_family
+
+                if addrFamily == UInt8(AF_INET) { // IPv4 only for now
+                    if let namePtr = interface?.ifa_name,
+                       let name = String(validatingUTF8: namePtr),
+                       name == "en0" { // Default WiFi interface on iOS
+                        var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                        getnameinfo(interface?.ifa_addr, socklen_t(interface?.ifa_addr.pointee.sa_len ?? 0),
+                                   &hostname, socklen_t(hostname.count),
+                                   nil, socklen_t(0), NI_NUMERICHOST)
+                        address = String(cString: hostname)
+                    }
+                }
+            }
+            freeifaddrs(ifaddr)
+        }
+        return address
+    }
+
     // MARK: - Identity Helpers
-    
+
     func getFullIdentityInfo() -> IdentityInfo? {
         return ironCore?.getIdentityInfo()
+    }
+
+    func getIdentityExportString() -> String {
+        guard let identity = getFullIdentityInfo() else { return "{}" }
+        var listeners = getListeningAddresses()
+        let relay = getPreferredRelay() ?? "None"
+        let localIp = getLocalIpAddress()
+
+        // Replace 0.0.0.0 with actual LAN IP
+        if let localIp = localIp {
+            var updatedListeners = [String]()
+            for addr in listeners {
+                if addr.contains("0.0.0.0") {
+                    updatedListeners.append(addr.replacingOccurrences(of: "0.0.0.0", with: localIp))
+                } else {
+                    updatedListeners.append(addr)
+                }
+            }
+
+            // If empty, suggest standard port
+            if updatedListeners.isEmpty {
+                updatedListeners.append("/ip4/\(localIp)/tcp/9001 (Potential)")
+            }
+            listeners = updatedListeners
+        }
+
+        let listenersJson = "[\"\(listeners.joined(separator: "\",\""))\"]"
+
+        return """
+        {
+          "identity_id": "\(identity.identityId ?? "")",
+          "nickname": "\(identity.nickname ?? "")",
+          "public_key": "\(identity.publicKeyHex ?? "")",
+          "listeners": \(listeners.isEmpty ? "[]" : listenersJson),
+          "relay": "\(relay)"
+        }
+        """
     }
 
     func getIdentitySnippet() -> String {
@@ -807,18 +913,18 @@ final class MeshRepository {
         }
         return String(publicKey.prefix(8))
     }
-    
+
     func getIdentityDisplay() -> String {
         if let nick = ironCore?.getIdentityInfo().nickname {
             return nick
         }
         return getIdentitySnippet()
     }
-    
+
     func getNickname() -> String? {
         return ironCore?.getIdentityInfo().nickname
     }
-    
+
     func setNickname(_ nickname: String) throws {
         guard let ironCore = ironCore else {
             throw MeshError.notInitialized("IronCore not initialized")
@@ -835,7 +941,7 @@ enum MeshError: LocalizedError {
     case relayDisabled(String)
     case contactNotFound(String)
     case alreadyRunning
-    
+
     var errorDescription: String? {
         switch self {
         case .notInitialized(let msg): return msg

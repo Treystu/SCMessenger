@@ -11,14 +11,26 @@ struct ContactsListView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var viewModel: ContactsViewModel?
     @State private var showingAddContact = false
-    
+    @State private var pendingChatConversation: Conversation?
+    @State private var navigateToPendingChat = false
+
     var body: some View {
         List {
             ForEach(viewModel?.filteredContacts ?? [], id: \.peerId) { contact in
-                ContactRow(contact: contact)
+                NavigationLink(value: Conversation(peerId: contact.peerId, peerNickname: contact.nickname ?? "Unknown")) {
+                    ContactRow(contact: contact)
+                }
             }
             .onDelete { offsets in
                 viewModel?.deleteContacts(at: offsets)
+            }
+        }
+        .navigationDestination(for: Conversation.self) { conversation in
+            ChatView(conversation: conversation)
+        }
+        .navigationDestination(isPresented: $navigateToPendingChat) {
+            if let conversation = pendingChatConversation {
+                ChatView(conversation: conversation)
             }
         }
         .searchable(text: Binding(
@@ -35,8 +47,13 @@ struct ContactsListView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingAddContact) {
-            AddContactView()
+        .sheet(isPresented: $showingAddContact, onDismiss: {
+            viewModel?.loadContacts()
+            if pendingChatConversation != nil {
+                navigateToPendingChat = true
+            }
+        }) {
+            AddContactView(pendingChatConversation: $pendingChatConversation)
         }
         .onAppear {
             if viewModel == nil {
@@ -49,7 +66,7 @@ struct ContactsListView: View {
 
 struct ContactRow: View {
     let contact: Contact
-    
+
     var body: some View {
         HStack(spacing: Theme.spacingMedium) {
             Circle()
@@ -60,11 +77,11 @@ struct ContactRow: View {
                         .font(Theme.titleMedium)
                         .foregroundStyle(Theme.onPrimaryContainer)
                 }
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(contact.nickname ?? "Unknown")
                     .font(Theme.titleMedium)
-                
+
                 Text(contact.peerId.prefix(8))
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(Theme.onSurfaceVariant)
@@ -77,20 +94,35 @@ struct ContactRow: View {
 struct AddContactView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(MeshRepository.self) private var repository
-    
+    @Binding var pendingChatConversation: Conversation?
+
     @State private var nickname = ""
     @State private var publicKey = ""
+    @State private var peerId = ""
+    @State private var listeners: [String] = []
     @State private var error: String?
-    
+
     var body: some View {
         NavigationStack {
             Form {
                 Section("Contact Information") {
+                    Button(action: pasteIdentity) {
+                        Label("Paste Identity Export", systemImage: "doc.on.clipboard")
+                    }
+
                     TextField("Nickname", text: $nickname)
                     TextField("Public Key", text: $publicKey)
                         .font(.system(.body, design: .monospaced))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                    if !peerId.isEmpty {
+                        Text("ID: \(peerId)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                
+
                 if let error = error {
                     Section {
                         Text(error)
@@ -98,10 +130,15 @@ struct AddContactView: View {
                             .font(Theme.bodySmall)
                     }
                 }
-                
+
                 Section {
                     Button("Add Contact") {
-                        addContact()
+                        addContact(andChat: false)
+                    }
+                    .disabled(nickname.isEmpty || publicKey.isEmpty)
+
+                    Button("Add & Chat") {
+                        addContact(andChat: true)
                     }
                     .disabled(nickname.isEmpty || publicKey.isEmpty)
                 }
@@ -117,19 +154,55 @@ struct AddContactView: View {
             }
         }
     }
-    
-    private func addContact() {
+
+    private func pasteIdentity() {
+        guard let string = UIPasteboard.general.string else { return }
+
+        // Simple JSON parsing
+        guard let data = string.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            error = "Invalid format"
+            return
+        }
+
+        if let key = json["public_key"] as? String { publicKey = key.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let nick = json["nickname"] as? String { nickname = nick.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let pid = json["identity_id"] as? String { peerId = pid.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let list = json["listeners"] as? [String] {
+            listeners = list.map { $0.replacingOccurrences(of: " (Potential)", with: "") }
+        }
+
+        error = nil
+    }
+
+    private func addContact(andChat: Bool) {
+        let finalPublicKey = publicKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        var finalPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if finalPeerId.isEmpty { finalPeerId = String(finalPublicKey.prefix(16)) }
+
         let contact = Contact(
-            peerId: publicKey.prefix(16).description,
+            peerId: finalPeerId,
             nickname: nickname,
             publicKey: publicKey,
             addedAt: UInt64(Date().timeIntervalSince1970),
             lastSeen: nil,
             notes: nil
         )
-        
+
         do {
             try repository.addContact(contact)
+
+            // Initiate connection if listeners provided
+            if !listeners.isEmpty {
+                repository.connectToPeer(finalPeerId, addresses: listeners)
+            }
+
+            if andChat {
+                pendingChatConversation = Conversation(peerId: finalPeerId, peerNickname: nickname)
+            } else {
+                pendingChatConversation = nil
+            }
+
             dismiss()
         } catch {
             self.error = error.localizedDescription

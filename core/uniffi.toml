@@ -1,0 +1,10 @@
+# UniFFI configuration for SCMessenger Core bindings generation
+# Fixes: https://github.com/Treystu/SCMessenger/issues/42 (Domain 5)
+
+[bindings.kotlin]
+package_name = "uniffi.api"
+cdylib_name = "scmessenger_core"
+
+[bindings.swift]
+module_name = "SCMessengerCore"
+ffi_module_name = "scmessenger_core"

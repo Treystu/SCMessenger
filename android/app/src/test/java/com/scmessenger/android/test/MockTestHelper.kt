@@ -15,7 +15,7 @@ object MockTestHelper {
     fun createMockMeshSettings(
         relayEnabled: Boolean = true,
         maxRelayBudget: UInt = 200u,
-        batteryFloor: UInt = 20u,
+        batteryFloor: UByte = 20u.toUByte(),
         bleEnabled: Boolean = true,
         wifiAwareEnabled: Boolean = true,
         wifiDirectEnabled: Boolean = true,
@@ -42,7 +42,7 @@ object MockTestHelper {
     fun createMockContact(
         peerId: String = "test-peer-123",
         nickname: String? = "Test User",
-        publicKey: ByteArray = ByteArray(32) { it.toByte() }
+        publicKey: String = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
     ): Contact {
         return mockk<Contact>(relaxed = true) {
             every { this@mockk.peerId } returns peerId
@@ -57,6 +57,8 @@ object MockTestHelper {
     fun createMockIronCore(): IronCore {
         return mockk<IronCore>(relaxed = true) {
             every { prepareMessage(any(), any()) } returns ByteArray(64) { it.toByte() }
+            // receiveMessage is no longer available or has different signature
+            /*
             every { receiveMessage(any(), any()) } returns MessageEnvelope(
                 messageId = "msg-123",
                 senderId = "sender-456",
@@ -65,6 +67,7 @@ object MockTestHelper {
                 timestamp = System.currentTimeMillis().toULong(),
                 signature = ByteArray(64)
             )
+            */
         }
     }
     

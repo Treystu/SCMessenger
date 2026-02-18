@@ -3,7 +3,7 @@ package com.scmessenger.android.test
 import com.scmessenger.android.ui.viewmodels.SettingsViewModel
 import org.junit.Before
 import org.junit.Test
-import kotlin.test.assertTrue
+import org.junit.Assert.assertTrue
 
 /**
  * Unit tests for SettingsViewModel.
@@ -33,7 +33,7 @@ class SettingsViewModelTest {
         
         // Then
         // assertNotNull(viewModel.settings.value)
-        assertTrue(true, "Placeholder - requires settings loading")
+        assertTrue("Placeholder - requires settings loading", true)
     }
     
     @Test
@@ -46,7 +46,7 @@ class SettingsViewModelTest {
         
         // Then
         // verify { mockRepository.saveSettings(updatedSettings) }
-        assertTrue(true, "Placeholder - requires save logic")
+        assertTrue("Placeholder - requires save logic", true)
     }
     
     @Test
@@ -60,7 +60,7 @@ class SettingsViewModelTest {
         // Then
         // Relay and messaging should both be disabled
         // assertFalse(viewModel.settings.value.relayEnabled)
-        assertTrue(true, "Placeholder - requires coupling enforcement")
+        assertTrue("Placeholder - requires coupling enforcement", true)
     }
     
     @Test
@@ -73,7 +73,7 @@ class SettingsViewModelTest {
         
         // Then
         // Should prevent disabling or show error
-        assertTrue(true, "Placeholder - requires validation")
+        assertTrue("Placeholder - requires validation", true)
     }
     
     @Test
@@ -86,7 +86,7 @@ class SettingsViewModelTest {
         
         // Then
         // verify { mockRepository.overrideBleInterval(scanInterval) }
-        assertTrue(true, "Placeholder - requires override logic")
+        assertTrue("Placeholder - requires override logic", true)
     }
     
     @Test
@@ -99,6 +99,6 @@ class SettingsViewModelTest {
         
         // Then
         // verify { mockRepository.clearAdjustmentOverrides() }
-        assertTrue(true, "Placeholder - requires reset logic")
+        assertTrue("Placeholder - requires reset logic", true)
     }
 }

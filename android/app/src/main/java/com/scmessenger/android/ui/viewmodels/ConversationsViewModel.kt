@@ -52,6 +52,13 @@ class ConversationsViewModel @Inject constructor(
     init {
         loadMessages()
         loadStats()
+
+        // Listen for message updates (sent or received) to refresh the list
+        viewModelScope.launch {
+            meshRepository.messageUpdates.collect {
+                loadMessages()
+            }
+        }
     }
     
     /**

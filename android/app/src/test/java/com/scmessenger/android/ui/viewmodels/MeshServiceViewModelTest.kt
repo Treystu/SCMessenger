@@ -7,6 +7,8 @@ import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.*
 import org.junit.After
 import org.junit.Before
@@ -68,8 +70,14 @@ class MeshServiceViewModelTest {
     @Test
     fun `isRunning is true when state is RUNNING`() = runTest {
         // Given
-        every { mockMeshRepository.serviceState } returns MutableStateFlow(uniffi.api.ServiceState.RUNNING)
+        val stateFlow = MutableStateFlow(uniffi.api.ServiceState.RUNNING)
+        every { mockMeshRepository.serviceState } returns stateFlow
         viewModel = MeshServiceViewModel(mockContext, mockMeshRepository, mockPreferencesRepository)
+        
+        // Trigger subscription
+        backgroundScope.launch(UnconfinedTestDispatcher(testDispatcher.scheduler)) {
+            viewModel.isRunning.collect()
+        }
         
         // When
         testDispatcher.scheduler.advanceUntilIdle()
@@ -93,7 +101,7 @@ class MeshServiceViewModelTest {
     }
     
     @Test
-    fun `getStatsText returns formatted stats`() {
+    fun `getStatsText returns formatted stats`() = runTest {
         // Given
         val stats = uniffi.api.ServiceStats(
             peersDiscovered = 5u,
@@ -104,7 +112,13 @@ class MeshServiceViewModelTest {
         every { mockMeshRepository.serviceStats } returns MutableStateFlow(stats)
         viewModel = MeshServiceViewModel(mockContext, mockMeshRepository, mockPreferencesRepository)
         
+        // Trigger subscription
+        backgroundScope.launch(UnconfinedTestDispatcher(testDispatcher.scheduler)) {
+            viewModel.serviceStats.collect()
+        }
+        
         // When
+        testDispatcher.scheduler.advanceUntilIdle()
         val statsText = viewModel.getStatsText()
         
         // Then

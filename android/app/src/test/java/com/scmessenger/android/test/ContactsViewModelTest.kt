@@ -3,7 +3,7 @@ package com.scmessenger.android.test
 import com.scmessenger.android.ui.viewmodels.ContactsViewModel
 import org.junit.Before
 import org.junit.Test
-import kotlin.test.assertTrue
+import org.junit.Assert.assertTrue
 
 /**
  * Unit tests for ContactsViewModel.
@@ -33,7 +33,7 @@ class ContactsViewModelTest {
         
         // Then
         // assertEquals(2, viewModel.contacts.value.size)
-        assertTrue(true, "Placeholder - requires data loading")
+        assertTrue("Placeholder - requires data loading", true)
     }
     
     @Test
@@ -47,7 +47,7 @@ class ContactsViewModelTest {
         
         // Then
         // assertTrue(viewModel.contacts.value.any { it.nickname == nickname })
-        assertTrue(true, "Placeholder - requires add logic")
+        assertTrue("Placeholder - requires add logic", true)
     }
     
     @Test
@@ -60,7 +60,7 @@ class ContactsViewModelTest {
         
         // Then
         // assertFalse(viewModel.contacts.value.any { it.peerId == peerId })
-        assertTrue(true, "Placeholder - requires remove logic")
+        assertTrue("Placeholder - requires remove logic", true)
     }
     
     @Test
@@ -73,7 +73,7 @@ class ContactsViewModelTest {
         
         // Then
         // assertTrue(viewModel.filteredContacts.value.all { it.nickname?.contains(query) == true })
-        assertTrue(true, "Placeholder - requires search logic")
+        assertTrue("Placeholder - requires search logic", true)
     }
     
     @Test
@@ -88,6 +88,6 @@ class ContactsViewModelTest {
         // Then
         // val contact = viewModel.contacts.value.find { it.peerId == peerId }
         // assertEquals(true, contact?.isOnline)
-        assertTrue(true, "Placeholder - requires online status")
+        assertTrue("Placeholder - requires online status", true)
     }
 }

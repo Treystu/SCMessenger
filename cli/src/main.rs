@@ -171,7 +171,7 @@ async fn cmd_init(name: Option<String>) -> Result<()> {
     println!("{}", "Initializing SCMessenger...".bold());
     println!();
 
-    let _config = config::Config::load()?;
+    let config = config::Config::load()?;
     println!("  {} Configuration", "✓".green());
 
     let data_dir = config::Config::data_dir()?;
@@ -189,21 +189,12 @@ async fn cmd_init(name: Option<String>) -> Result<()> {
         println!("  {} Nickname set", "✓".green());
     }
 
-    let info = core.get_identity_info();
     println!("  {} Identity created", "✓".green());
     println!();
 
-    println!("{}", "Identity Information:".bold());
-    println!("  ID:         {}", info.identity_id.unwrap().bright_cyan());
-    if let Some(nick) = info.nickname {
-        println!("  Nickname:   {}", nick.bright_cyan());
-    }
-    println!(
-        "  Public Key: {}",
-        info.public_key_hex.unwrap().bright_yellow()
-    );
-    println!();
+    print_full_identity(&core, &config)?;
 
+    println!();
     println!("{}", "Next steps:".bold());
     println!(
         "  • Add contacts: {}",
@@ -215,25 +206,16 @@ async fn cmd_init(name: Option<String>) -> Result<()> {
 }
 
 async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
+    let config = config::Config::load()?;
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
     core.initialize_identity()
         .context("Failed to load identity")?;
 
-    let info = core.get_identity_info();
-
     match action {
         None | Some(IdentityAction::Show) => {
-            println!("{}", "Identity Information".bold());
-            println!("  ID:         {}", info.identity_id.unwrap().bright_cyan());
-            if let Some(nick) = info.nickname {
-                println!("  Nickname:   {}", nick.bright_cyan());
-            }
-            println!(
-                "  Public Key: {}",
-                info.public_key_hex.unwrap().bright_yellow()
-            );
+            print_full_identity(&core, &config)?;
         }
         Some(IdentityAction::SetName { name }) => {
             core.set_nickname(name.clone())
@@ -245,6 +227,7 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
             );
         }
         Some(IdentityAction::Export) => {
+            let info = core.get_identity_info();
             println!("{}", "Export Identity (Backup)".bold());
             println!();
             println!(
@@ -259,6 +242,74 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
                 "Keys stored in: {}",
                 storage_path.display().to_string().bright_cyan()
             );
+        }
+    }
+
+    Ok(())
+}
+
+fn print_full_identity(core: &IronCore, config: &config::Config) -> Result<()> {
+    let info = core.get_identity_info();
+    // Derive PeerId from identity
+    let network_keypair = core
+        .get_libp2p_keypair()
+        .context("Failed to get network keypair")?;
+    let local_peer_id = network_keypair.public().to_peer_id();
+
+    println!("{}", "Identity Information".bold());
+    println!(
+        "  ID:                     {}",
+        info.identity_id.unwrap().bright_cyan()
+    );
+    println!(
+        "  Peer ID (Network):      {}",
+        local_peer_id.to_string().bright_cyan()
+    );
+    if let Some(nick) = info.nickname {
+        println!("  Nickname:               {}", nick.bright_cyan());
+    }
+    println!(
+        "  Public Key:             {}",
+        info.public_key_hex.unwrap().bright_yellow()
+    );
+    println!();
+
+    println!("{}", "Direct Connection Info".bold());
+    let ws_port = if config.listen_port == 0 {
+        9000
+    } else {
+        config.listen_port
+    };
+    let p2p_port = ws_port + 1;
+
+    // Show P2P listening address
+    println!(
+        "  P2P Listener:           {}",
+        format!("/ip4/0.0.0.0/tcp/{}", p2p_port).green()
+    );
+
+    // Show examples for LAN/Localhost
+    println!("  Local Address:          /ip4/127.0.0.1/tcp/{}", p2p_port);
+
+    // Attempt to show LAN IP if possible (simple heuristic or just mention it)
+    println!(
+        "  LAN Address:            /ip4/<YOUR_LAN_IP>/tcp/{}",
+        p2p_port
+    );
+
+    println!();
+    println!("{}", "Relays / Bootstrap Nodes".bold());
+    let nodes = if config.bootstrap_nodes.is_empty() {
+        crate::bootstrap::default_bootstrap_nodes()
+    } else {
+        crate::bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes.clone())
+    };
+
+    if nodes.is_empty() {
+        println!("  (None configured)");
+    } else {
+        for (i, node) in nodes.iter().enumerate() {
+            println!("  {}. {}", i + 1, node.dimmed());
         }
     }
 

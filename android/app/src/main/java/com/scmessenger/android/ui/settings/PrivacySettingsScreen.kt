@@ -124,9 +124,46 @@ fun PrivacySettingsScreen(
                         },
                         enabled = !isSaving
                     )
-                    
+
                     InfoCard(
                         message = "Onion routing provides anonymity by routing your messages through multiple peers before reaching the destination. This makes it harder to trace who is communicating with whom."
+                    )
+                }
+
+                // BLE Identity Rotation (mirrors iOS PrivacySettingsView)
+                val bleRotationEnabled by viewModel.bleRotationEnabled.collectAsState()
+                val bleRotationIntervalSec by viewModel.bleRotationIntervalSec.collectAsState()
+
+                SettingsSection(title = "BLE Identity Rotation") {
+                    SwitchSetting(
+                        title = "Rotate BLE Identity",
+                        description = "Periodically rotate the BLE advertising identity to prevent tracking",
+                        checked = bleRotationEnabled,
+                        onCheckedChange = { viewModel.setBleRotationEnabled(it) },
+                        enabled = !isSaving
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Rotation Interval",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "${bleRotationIntervalSec / 60} min",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    InfoCard(
+                        message = "BLE identity rotation changes your device's Bluetooth advertising data periodically, making it harder for third parties to track your device over time."
                     )
                 }
                 

@@ -12,22 +12,34 @@ import CoreBluetooth
 /// Shared between iOS and Android - MUST be identical
 struct MeshBLEConstants {
     // MARK: - Service and Characteristics
+    // ⚠️ CRITICAL: These UUIDs MUST match Android exactly for cross-platform BLE interop
+    // Android source: android/.../transport/ble/BleGattServer.kt + BleScanner.kt
     
     /// SCMesh GATT Service UUID
-    /// Must match: android/.../transport/ble/BleScanner.kt SERVICE_UUID
-    static let serviceUUID = CBUUID(string: "6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
+    /// Matches: BleScanner.SERVICE_UUID / BleGattServer.SERVICE_UUID
+    static let serviceUUID = CBUUID(string: "0000DF01-0000-1000-8000-00805F9B34FB")
     
-    /// TX Characteristic UUID (Write - phone → peer)
-    /// Central writes to peripheral's TX characteristic
-    static let txCharUUID = CBUUID(string: "6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
-    
-    /// RX Characteristic UUID (Notify - peer → phone)
-    /// Central subscribes to peripheral's RX characteristic for notifications
-    static let rxCharUUID = CBUUID(string: "6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
-    
-    /// Identity Characteristic UUID (Read - peer beacon)
+    /// Identity Characteristic UUID (Read - peer identity beacon)
+    /// Matches: BleGattServer.IDENTITY_CHAR_UUID
     /// Contains truncated identity for quick peer recognition
-    static let idCharUUID = CBUUID(string: "6E400004-B5A3-F393-E0A9-E50E24DCCA9E")
+    static let identityCharUUID = CBUUID(string: "0000DF02-0000-1000-8000-00805F9B34FB")
+    
+    /// Message Characteristic UUID (Write - central writes messages to peripheral)
+    /// Matches: BleGattServer.MESSAGE_CHAR_UUID
+    static let messageCharUUID = CBUUID(string: "0000DF03-0000-1000-8000-00805F9B34FB")
+    
+    /// Sync Characteristic UUID (Notify - peripheral notifies central of incoming data)
+    /// Matches: BleGattServer.SYNC_CHAR_UUID
+    static let syncCharUUID = CBUUID(string: "0000DF04-0000-1000-8000-00805F9B34FB")
+
+    /// Client Configuration Descriptor UUID (standard BLE descriptor for notify/indicate)
+    /// Matches: BleGattServer.CLIENT_CONFIG_DESCRIPTOR_UUID
+    static let clientConfigDescriptorUUID = CBUUID(string: "00002902-0000-1000-8000-00805F9B34FB")
+
+    // Legacy aliases for backward compatibility during migration
+    static let txCharUUID = messageCharUUID
+    static let rxCharUUID = syncCharUUID
+    static let idCharUUID = identityCharUUID
     
     // MARK: - L2CAP
     

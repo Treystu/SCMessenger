@@ -18,7 +18,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 bincode = { workspace = true }
 uuid = { workspace = true }
-cesride = { workspace = true }
 ed25519-dalek = { workspace = true }
 x25519-dalek = { workspace = true }
 curve25519-dalek = { workspace = true }

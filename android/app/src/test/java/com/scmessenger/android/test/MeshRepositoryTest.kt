@@ -7,10 +7,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Ignore
 import org.junit.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
+import org.junit.Assert.*
 
 /**
  * Unit tests for MeshRepository.
@@ -61,7 +58,7 @@ class MeshRepositoryTest {
         //     repository.sendMessage("peer123", "Hello")
         // }
         // assertTrue(exception.message?.contains("mesh participation is disabled") == true)
-        assertTrue(true, "Placeholder - requires settingsManager mock")
+        assertTrue("Placeholder - requires settingsManager mock", true)
     }
     
     /**
@@ -79,7 +76,7 @@ class MeshRepositoryTest {
         //     repository.sendMessage("peer123", "Hello")
         // }
         // assertTrue(exception.message?.contains("mesh participation is disabled") == true)
-        assertTrue(true, "Placeholder - requires settingsManager mock")
+        assertTrue("Placeholder - requires settingsManager mock", true)
     }
     
     /**
@@ -111,7 +108,7 @@ class MeshRepositoryTest {
         // Then: No exception thrown, message processing occurs
         // verify { ironCore?.prepareMessage(any(), any()) }
         // verify { historyManager?.add(any()) }
-        assertTrue(true, "Placeholder - requires full mock setup")
+        assertTrue("Placeholder - requires full mock setup", true)
     }
     
     /**
@@ -130,7 +127,7 @@ class MeshRepositoryTest {
         
         // Then: Message is not added to history (dropped)
         // verify(exactly = 0) { historyManager?.add(any()) }
-        assertTrue(true, "Placeholder - requires CoreDelegate mock")
+        assertTrue("Placeholder - requires CoreDelegate mock", true)
     }
     
     /**
@@ -148,7 +145,7 @@ class MeshRepositoryTest {
         
         // Then: Message is not added to history (dropped - fail-safe)
         // verify(exactly = 0) { historyManager?.add(any()) }
-        assertTrue(true, "Placeholder - requires CoreDelegate mock")
+        assertTrue("Placeholder - requires CoreDelegate mock", true)
     }
     
     /**
@@ -168,7 +165,7 @@ class MeshRepositoryTest {
         // Then: Message is added to history and notification emitted
         // verify { historyManager?.add(match { it.id == "msg123" }) }
         // verify { incomingMessages.emit(any()) }
-        assertTrue(true, "Placeholder - requires CoreDelegate mock")
+        assertTrue("Placeholder - requires CoreDelegate mock", true)
     }
     
     /**
@@ -198,7 +195,7 @@ class MeshRepositoryTest {
         
         // Then: Behavior should be consistent based on first load
         // verify(exactly = 1) { settingsManager?.load() }
-        assertTrue(true, "Placeholder - requires timing-controlled mock")
+        assertTrue("Placeholder - requires timing-controlled mock", true)
     }
     
     @Ignore("Placeholder test - requires full mock setup")
@@ -210,7 +207,7 @@ class MeshRepositoryTest {
         
         // When/Then
         // This requires mocking IronCore, ContactManager, HistoryManager
-        assertTrue(true, "Placeholder - requires full mock setup")
+        assertTrue("Placeholder - requires full mock setup", true)
     }
     
     @Ignore("Placeholder test - requires IronCore initialization")
@@ -255,7 +252,7 @@ class MeshRepositoryTest {
         
         // Then
         // assertNotNull(loaded)
-        assertTrue(true, "Placeholder - requires MeshSettingsManager mock")
+        assertTrue("Placeholder - requires MeshSettingsManager mock", true)
     }
     
     @Ignore("Placeholder test - requires ContactManager mock")
@@ -270,6 +267,6 @@ class MeshRepositoryTest {
         
         // Then
         // assertNotNull(retrieved)
-        assertTrue(true, "Placeholder - requires ContactManager mock")
+        assertTrue("Placeholder - requires ContactManager mock", true)
     }
 }

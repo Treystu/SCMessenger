@@ -1,10 +1,12 @@
 package com.scmessenger.android.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
@@ -23,15 +25,16 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactsScreen(
-    viewModel: ContactsViewModel = hiltViewModel()
+    viewModel: ContactsViewModel = hiltViewModel(),
+    onNavigateToChat: (String) -> Unit
 ) {
     val contacts by viewModel.filteredContacts.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
-    
+
     var showAddDialog by remember { mutableStateOf(false) }
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -59,7 +62,7 @@ fun ContactsScreen(
                 placeholder = { Text("Search contacts...") },
                 singleLine = true
             )
-            
+
             // Error snackbar
             error?.let { errorMsg ->
                 Snackbar(
@@ -73,7 +76,7 @@ fun ContactsScreen(
                     Text(errorMsg)
                 }
             }
-            
+
             // Loading indicator
             if (isLoading) {
                 Box(
@@ -126,6 +129,7 @@ fun ContactsScreen(
                     items(contacts, key = { it.peerId }) { contact ->
                         ContactItem(
                             contact = contact,
+                            onClick = { onNavigateToChat(contact.peerId) },
                             onDelete = { viewModel.removeContact(contact.peerId) }
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -134,13 +138,25 @@ fun ContactsScreen(
             }
         }
     }
-    
+
     // Add contact dialog
     if (showAddDialog) {
         AddContactDialog(
             onDismiss = { showAddDialog = false },
             onAdd = { peerId, publicKey, nickname ->
                 viewModel.addContact(peerId, publicKey, nickname)
+                showAddDialog = false
+            },
+            onAddAndChat = { peerId, publicKey, nickname ->
+                val id = peerId.trim()
+                if (id.isNotBlank() && publicKey.isNotBlank()) {
+                    viewModel.addContact(id, publicKey.trim(), nickname?.trim())
+                    showAddDialog = false
+                    onNavigateToChat(id)
+                }
+            },
+            onImport = { json ->
+                viewModel.importContact(json)
                 showAddDialog = false
             }
         )
@@ -150,12 +166,15 @@ fun ContactsScreen(
 @Composable
 fun ContactItem(
     contact: uniffi.api.Contact,
+    onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
-    
+
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier
@@ -184,7 +203,7 @@ fun ContactItem(
                     )
                 }
             }
-            
+
             IconButton(onClick = { showDeleteDialog = true }) {
                 Icon(
                     imageVector = Icons.Default.Delete,
@@ -194,7 +213,7 @@ fun ContactItem(
             }
         }
     }
-    
+
     // Confirm delete dialog
     if (showDeleteDialog) {
         AlertDialog(
@@ -225,17 +244,38 @@ fun ContactItem(
 @Composable
 fun AddContactDialog(
     onDismiss: () -> Unit,
-    onAdd: (String, String, String?) -> Unit
+    onAdd: (String, String, String?) -> Unit,
+    onAddAndChat: (String, String, String?) -> Unit,
+    onImport: (String) -> Unit
 ) {
     var peerId by remember { mutableStateOf("") }
     var publicKey by remember { mutableStateOf("") }
     var nickname by remember { mutableStateOf("") }
-    
+
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add Contact") },
         text = {
             Column {
+                OutlinedButton(
+                    onClick = {
+                        clipboardManager.getText()?.text?.let {
+                            onImport(it)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Paste Identity Export")
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Divider()
+                Spacer(modifier = Modifier.height(16.dp))
+
                 OutlinedTextField(
                     value = peerId,
                     onValueChange = { peerId = it },
@@ -262,15 +302,28 @@ fun AddContactDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = {
-                    if (peerId.isNotBlank() && publicKey.isNotBlank()) {
-                        onAdd(peerId, publicKey, nickname.ifBlank { null })
-                    }
-                },
-                enabled = peerId.isNotBlank() && publicKey.isNotBlank()
-            ) {
-                Text("Add")
+            Row {
+                TextButton(
+                    onClick = {
+                        if (peerId.isNotBlank() && publicKey.isNotBlank()) {
+                            onAdd(peerId.trim(), publicKey.trim(), nickname.trim().ifBlank { null })
+                        }
+                    },
+                    enabled = peerId.isNotBlank() && publicKey.isNotBlank()
+                ) {
+                    Text("Add")
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(
+                    onClick = {
+                        if (peerId.isNotBlank() && publicKey.isNotBlank()) {
+                            onAddAndChat(peerId, publicKey, nickname.ifBlank { null })
+                        }
+                    },
+                    enabled = peerId.isNotBlank() && publicKey.isNotBlank()
+                ) {
+                    Text("Chat")
+                }
             }
         },
         dismissButton = {
@@ -285,7 +338,7 @@ private fun formatTimestamp(timestamp: ULong): String {
     val date = Date(timestamp.toLong())
     val now = System.currentTimeMillis()
     val diff = now - timestamp.toLong()
-    
+
     return when {
         diff < 60_000 -> "Just now"
         diff < 3600_000 -> "${diff / 60_000}m ago"

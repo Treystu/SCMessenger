@@ -13,7 +13,7 @@ import os
 ///
 /// Responsibilities:
 /// - BLE advertising with mesh service
-/// - GATT server for TX/RX/ID characteristics
+/// - GATT server for Message/Sync/Identity characteristics (matches Android GATT)
 /// - Handle central subscriptions
 /// - Privacy rotation (15 min intervals)
 final class BLEPeripheralManager: NSObject {
@@ -21,11 +21,11 @@ final class BLEPeripheralManager: NSObject {
     private var peripheralManager: CBPeripheralManager!
     private weak var meshRepository: MeshRepository?
     
-    // GATT Service and Characteristics
+    // GATT Service and Characteristics (names match Android BleGattServer)
     private var meshService: CBMutableService?
-    private var txCharacteristic: CBMutableCharacteristic?
-    private var rxCharacteristic: CBMutableCharacteristic?
-    private var idCharacteristic: CBMutableCharacteristic?
+    private var messageCharacteristic: CBMutableCharacteristic?  // Write: central → peripheral
+    private var syncCharacteristic: CBMutableCharacteristic?     // Notify: peripheral → central
+    private var identityCharacteristic: CBMutableCharacteristic? // Read: identity beacon
     
     // Subscribed centrals
     private var subscribedCentrals: [CBCentral] = []
@@ -77,7 +77,7 @@ final class BLEPeripheralManager: NSObject {
             return
         }
         identityData = data
-        idCharacteristic?.value = data
+        identityCharacteristic?.value = data
         logger.debug("Identity data set: \(data.count) bytes")
     }
     
@@ -110,12 +110,12 @@ final class BLEPeripheralManager: NSObject {
     }
     
     func sendNotification(to central: CBCentral, data: Data) {
-        guard let rxCharacteristic = rxCharacteristic else {
-            logger.error("RX characteristic not available")
+        guard let syncCharacteristic = syncCharacteristic else {
+            logger.error("Sync characteristic not available")
             return
         }
-        
-        let success = peripheralManager.updateValue(data, for: rxCharacteristic, onSubscribedCentrals: [central])
+
+        let success = peripheralManager.updateValue(data, for: syncCharacteristic, onSubscribedCentrals: [central])
         if success {
             logger.debug("Sent notification to \(central.identifier): \(data.count) bytes")
         } else {
@@ -126,32 +126,32 @@ final class BLEPeripheralManager: NSObject {
     // MARK: - Private Methods
     
     private func setupService() {
-        // Create characteristics
-        txCharacteristic = CBMutableCharacteristic(
-            type: MeshBLEConstants.txCharUUID,
+        // Create characteristics (names match Android BleGattServer)
+        messageCharacteristic = CBMutableCharacteristic(
+            type: MeshBLEConstants.messageCharUUID,
             properties: [.write, .writeWithoutResponse],
             value: nil,
             permissions: .writeable
         )
-        
-        rxCharacteristic = CBMutableCharacteristic(
-            type: MeshBLEConstants.rxCharUUID,
+
+        syncCharacteristic = CBMutableCharacteristic(
+            type: MeshBLEConstants.syncCharUUID,
             properties: [.notify],
             value: nil,
             permissions: .readable
         )
-        
-        idCharacteristic = CBMutableCharacteristic(
-            type: MeshBLEConstants.idCharUUID,
+
+        identityCharacteristic = CBMutableCharacteristic(
+            type: MeshBLEConstants.identityCharUUID,
             properties: .read,
             value: identityData,
             permissions: .readable
         )
-        
+
         // Create service
         meshService = CBMutableService(type: MeshBLEConstants.serviceUUID, primary: true)
-        meshService?.characteristics = [txCharacteristic!, rxCharacteristic!, idCharacteristic!]
-        
+        meshService?.characteristics = [messageCharacteristic!, syncCharacteristic!, identityCharacteristic!]
+
         // Add service and start advertising
         peripheralManager.add(meshService!)
     }
@@ -225,7 +225,7 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
         for request in requests {
-            if request.characteristic.uuid == MeshBLEConstants.txCharUUID,
+            if request.characteristic.uuid == MeshBLEConstants.messageCharUUID,
                let data = request.value {
                 logger.debug("Received write: \(data.count) bytes from \(request.central.identifier)")
                 meshRepository?.onBleDataReceived(peerId: request.central.identifier.uuidString, data: data)

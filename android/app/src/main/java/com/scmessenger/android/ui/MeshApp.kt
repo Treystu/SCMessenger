@@ -73,7 +73,11 @@ fun MeshNavHost(
         }
         
         composable(Screen.Contacts.route) {
-            ContactsScreen()
+            ContactsScreen(
+                onNavigateToChat = { peerId ->
+                    navController.navigate("chat/$peerId")
+                }
+            )
         }
         
         composable(Screen.Dashboard.route) {

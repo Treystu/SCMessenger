@@ -3,7 +3,7 @@ package com.scmessenger.android.test
 import com.scmessenger.android.ui.viewmodels.ChatViewModel
 import org.junit.Before
 import org.junit.Test
-import kotlin.test.assertTrue
+import org.junit.Assert.assertTrue
 
 /**
  * Unit tests for ChatViewModel.
@@ -39,7 +39,7 @@ class ChatViewModelTest {
         
         // Then
         // assertEquals(SendState.SENDING, viewModel.sendState.value)
-        assertTrue(true, "Placeholder - requires ViewModel instantiation")
+        assertTrue("Placeholder - requires ViewModel instantiation", true)
     }
     
     @Test
@@ -52,7 +52,7 @@ class ChatViewModelTest {
         
         // Then
         // assertTrue(viewModel.messages.value.isNotEmpty())
-        assertTrue(true, "Placeholder - requires event emission")
+        assertTrue("Placeholder - requires event emission", true)
     }
     
     @Test
@@ -67,7 +67,7 @@ class ChatViewModelTest {
         // Then
         // val message = viewModel.messages.value.find { it.id == messageId }
         // assertTrue(message?.delivered == true)
-        assertTrue(true, "Placeholder - requires status tracking")
+        assertTrue("Placeholder - requires status tracking", true)
     }
     
     @Test
@@ -81,7 +81,7 @@ class ChatViewModelTest {
         
         // Then
         // assertEquals(PeerStatus.ONLINE, viewModel.peerStatus.value)
-        assertTrue(true, "Placeholder - requires peer tracking")
+        assertTrue("Placeholder - requires peer tracking", true)
     }
     
     @Test
@@ -94,6 +94,6 @@ class ChatViewModelTest {
         
         // Then
         // assertTrue(viewModel.messages.value.size > 50)
-        assertTrue(true, "Placeholder - requires pagination logic")
+        assertTrue("Placeholder - requires pagination logic", true)
     }
 }

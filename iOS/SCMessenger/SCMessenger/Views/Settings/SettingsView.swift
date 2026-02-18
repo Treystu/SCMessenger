@@ -2,7 +2,8 @@
 //  SettingsView.swift
 //  SCMessenger
 //
-//  Main settings view
+//  Main settings view - Full feature parity with Android SettingsScreen.kt
+//  Mirrors: android/.../ui/screens/SettingsScreen.kt
 //
 
 import SwiftUI
@@ -10,9 +11,39 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var viewModel: SettingsViewModel?
-    
+
     var body: some View {
         Form {
+            // MARK: - Service Control (mirrors Android)
+            Section {
+                HStack {
+                    Image(systemName: viewModel?.isServiceRunning == true ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
+                        .foregroundStyle(viewModel?.isServiceRunning == true ? Theme.onPrimaryContainer : Theme.onSurfaceVariant)
+                    Text("Mesh Service")
+                        .font(Theme.titleMedium.weight(.medium))
+                    Spacer()
+                    Text(viewModel?.isServiceRunning == true ? "Running" : "Stopped")
+                        .font(Theme.bodyMedium)
+                        .foregroundStyle(viewModel?.isServiceRunning == true ? .green : Theme.onSurfaceVariant)
+                }
+
+                Button {
+                    if viewModel?.isServiceRunning == true {
+                        viewModel?.stopService()
+                    } else {
+                        viewModel?.startService()
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: viewModel?.isServiceRunning == true ? "stop.circle.fill" : "play.circle.fill")
+                        Text(viewModel?.isServiceRunning == true ? "Stop Service" : "Start Service")
+                    }
+                }
+            } header: {
+                Text("Service Control")
+            }
+
+            // MARK: - Relay & Messaging
             Section {
                 RelayToggleRow(
                     isEnabled: Binding(
@@ -20,24 +51,40 @@ struct SettingsView: View {
                         set: { _ in viewModel?.toggleRelay() }
                     )
                 )
-                
+
                 RelayWarningCard()
             } header: {
                 Text("Relay & Messaging")
             }
-            
+
+            // MARK: - Advanced
             Section {
                 NavigationLink("Mesh Settings") {
                     MeshSettingsView()
                 }
-                
+
                 NavigationLink("Privacy Settings") {
                     PrivacySettingsView()
+                }
+
+                NavigationLink("Power Settings") {
+                    PowerSettingsView()
                 }
             } header: {
                 Text("Advanced")
             }
-            
+
+            // MARK: - App Preferences (mirrors Android)
+            Section {
+                Toggle("Notifications", isOn: Binding(
+                    get: { viewModel?.isNotificationsEnabled ?? true },
+                    set: { viewModel?.isNotificationsEnabled = $0 }
+                ))
+            } header: {
+                Text("App Preferences")
+            }
+
+            // MARK: - Identity
             Section {
                 HStack {
                     Text("Nickname")
@@ -50,7 +97,7 @@ struct SettingsView: View {
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.words)
                 }
-                
+
                 HStack {
                     Text("Identity ID")
                     Spacer()
@@ -74,11 +121,34 @@ struct SettingsView: View {
                 } label: {
                     Label("Copy Public Key", systemImage: "key")
                 }
+
+                Button {
+                    if let export = viewModel?.getIdentityExportString() {
+                        UIPasteboard.general.string = export
+                    }
+                } label: {
+                    Label("Copy Full Identity Export", systemImage: "square.and.arrow.up")
+                }
             } header: {
                 Text("Identity")
             }
-            
+
+            // MARK: - Information (mirrors Android)
             Section {
+                HStack {
+                    Text("Contacts")
+                    Spacer()
+                    Text("\(viewModel?.getContactCount() ?? 0)")
+                        .foregroundStyle(Theme.onSurfaceVariant)
+                }
+
+                HStack {
+                    Text("Messages")
+                    Spacer()
+                    Text("\(viewModel?.getMessageCount() ?? 0)")
+                        .foregroundStyle(Theme.onSurfaceVariant)
+                }
+
                 HStack {
                     Text("Version")
                     Spacer()
@@ -86,7 +156,7 @@ struct SettingsView: View {
                         .foregroundStyle(Theme.onSurfaceVariant)
                 }
             } header: {
-                Text("About")
+                Text("Information")
             }
         }
         .navigationTitle("Settings")
@@ -99,9 +169,11 @@ struct SettingsView: View {
     }
 }
 
+// MARK: - Relay Components
+
 struct RelayToggleRow: View {
     @Binding var isEnabled: Bool
-    
+
     var body: some View {
         Toggle(isOn: $isEnabled) {
             HStack(spacing: Theme.spacingSmall) {
@@ -125,7 +197,7 @@ struct RelayWarningCard: View {
                     .font(Theme.titleSmall.weight(.medium))
                     .foregroundStyle(Theme.onErrorContainer)
             }
-            
+
             VStack(alignment: .leading, spacing: Theme.spacingXSmall) {
                 BulletPoint("Relay enabled: You can send and receive messages")
                 BulletPoint("Relay disabled: All messaging blocked")
@@ -140,10 +212,12 @@ struct RelayWarningCard: View {
     }
 }
 
+// MARK: - Mesh Settings (mirrors Android MeshSettingsScreen.kt)
+
 struct MeshSettingsView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var viewModel: SettingsViewModel?
-    
+
     private var discoveryModeBinding: Binding<DiscoveryMode> {
         return Binding(
             get: { viewModel?.settings?.discoveryMode ?? .normal },
@@ -153,6 +227,30 @@ struct MeshSettingsView: View {
 
     var body: some View {
         Form {
+            // Transport Settings
+            Section("Transports") {
+                Toggle("Bluetooth LE", isOn: Binding(
+                    get: { viewModel?.settings?.bleEnabled ?? true },
+                    set: { viewModel?.updateBleEnabled($0) }
+                ))
+
+                Toggle("WiFi Aware", isOn: Binding(
+                    get: { viewModel?.settings?.wifiAwareEnabled ?? false },
+                    set: { viewModel?.updateWifiAwareEnabled($0) }
+                ))
+
+                Toggle("WiFi Direct", isOn: Binding(
+                    get: { viewModel?.settings?.wifiDirectEnabled ?? false },
+                    set: { viewModel?.updateWifiDirectEnabled($0) }
+                ))
+
+                Toggle("Internet / Swarm", isOn: Binding(
+                    get: { viewModel?.settings?.internetEnabled ?? true },
+                    set: { viewModel?.updateInternetEnabled($0) }
+                ))
+            }
+
+            // Discovery Mode
             Section("Discovery") {
                 Picker("Mode", selection: discoveryModeBinding) {
                     Text("Aggressive (Normal)").tag(DiscoveryMode.normal)
@@ -160,13 +258,46 @@ struct MeshSettingsView: View {
                     Text("Passive (Paranoid)").tag(DiscoveryMode.paranoid)
                 }
             }
-            
+
+            // Relay Budget
+            Section("Relay Budget") {
+                VStack(alignment: .leading) {
+                    HStack {
+                        Text("Max Messages/Hour")
+                        Spacer()
+                        Text("\(viewModel?.settings?.maxRelayBudget ?? 1000)")
+                            .foregroundStyle(Theme.onSurfaceVariant)
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { Double(viewModel?.settings?.maxRelayBudget ?? 1000) },
+                            set: { viewModel?.updateRelayBudget(UInt32($0)) }
+                        ),
+                        in: 0...10000,
+                        step: 100
+                    )
+                    .tint(Theme.onPrimaryContainer)
+                }
+            }
+
+            // Battery Floor
             Section("Battery") {
-                HStack {
-                    Text("Minimum Level")
-                    Spacer()
-                    Text("\(viewModel?.settings?.batteryFloor ?? 20)%")
-                        .foregroundStyle(Theme.onSurfaceVariant)
+                VStack(alignment: .leading) {
+                    HStack {
+                        Text("Minimum Level")
+                        Spacer()
+                        Text("\(viewModel?.settings?.batteryFloor ?? 20)%")
+                            .foregroundStyle(Theme.onSurfaceVariant)
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { Double(viewModel?.settings?.batteryFloor ?? 20) },
+                            set: { viewModel?.updateBatteryFloor(UInt8($0)) }
+                        ),
+                        in: 5...50,
+                        step: 5
+                    )
+                    .tint(Theme.onPrimaryContainer)
                 }
             }
         }
@@ -181,28 +312,117 @@ struct MeshSettingsView: View {
     }
 }
 
+// MARK: - Privacy Settings (mirrors Android PrivacySettingsScreen.kt)
+
 struct PrivacySettingsView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var viewModel: SettingsViewModel?
     @State private var isRotationEnabled = true
-    
+
     var body: some View {
         Form {
-            Section("Privacy") {
+            // Privacy by Design Notice (mirrors Android)
+            Section {
+                VStack(alignment: .leading, spacing: Theme.spacingSmall) {
+                    HStack(spacing: Theme.spacingSmall) {
+                        Image(systemName: "lock.shield.fill")
+                            .foregroundStyle(Theme.onPrimaryContainer)
+                        Text("Privacy by Design")
+                            .font(Theme.titleSmall.weight(.bold))
+                    }
+                    Text("SCMessenger is built with privacy at its core. All messages are end-to-end encrypted. These settings provide additional privacy protections.")
+                        .font(Theme.bodySmall)
+                        .foregroundStyle(Theme.onSurfaceVariant)
+                }
+                .padding(.vertical, Theme.spacingXSmall)
+            }
+
+            // Onion Routing (mirrors Android)
+            Section("Onion Routing") {
+                Toggle("Enable Onion Routing", isOn: Binding(
+                    get: { viewModel?.settings?.onionRouting ?? false },
+                    set: { viewModel?.updateOnionRouting($0) }
+                ))
+
+                Text("Route messages through multiple hops to obscure sender and receiver. This makes it harder to trace who is communicating with whom.")
+                    .font(Theme.bodySmall)
+                    .foregroundStyle(Theme.onSurfaceVariant)
+            }
+
+            // BLE Identity Rotation
+            Section("BLE Identity Rotation") {
                 Toggle("Rotate BLE Identity", isOn: Binding(
                     get: { viewModel?.isBleRotationEnabled ?? true },
                     set: { val in
                         viewModel?.toggleBleRotation(enabled: val)
-                        isRotationEnabled = val // Force refresh
+                        isRotationEnabled = val
                     }
                 ))
-                
+
                 HStack {
                     Text("Rotation Interval")
                     Spacer()
                     Text("\(Int((viewModel?.bleRotationInterval ?? 900) / 60)) min")
                         .foregroundStyle(Theme.onSurfaceVariant)
                 }
+
+                Text("BLE identity rotation changes your device's Bluetooth advertising data periodically, making it harder for third parties to track your device over time.")
+                    .font(Theme.bodySmall)
+                    .foregroundStyle(Theme.onSurfaceVariant)
+            }
+
+            // Future Privacy Features (mirrors Android placeholders)
+            Section("Additional Privacy Features") {
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("Cover Traffic")
+                        Text("Send dummy traffic to resist traffic analysis")
+                            .font(Theme.bodySmall)
+                            .foregroundStyle(Theme.onSurfaceVariant)
+                    }
+                    Spacer()
+                    Text("Coming Soon")
+                        .font(Theme.bodySmall)
+                        .foregroundStyle(Theme.onSurfaceVariant)
+                }
+
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("Message Padding")
+                        Text("Pad messages to hide actual message length")
+                            .font(Theme.bodySmall)
+                            .foregroundStyle(Theme.onSurfaceVariant)
+                    }
+                    Spacer()
+                    Text("Coming Soon")
+                        .font(Theme.bodySmall)
+                        .foregroundStyle(Theme.onSurfaceVariant)
+                }
+
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("Timing Obfuscation")
+                        Text("Add random delays to obscure communication patterns")
+                            .font(Theme.bodySmall)
+                            .foregroundStyle(Theme.onSurfaceVariant)
+                    }
+                    Spacer()
+                    Text("Coming Soon")
+                        .font(Theme.bodySmall)
+                        .foregroundStyle(Theme.onSurfaceVariant)
+                }
+            }
+
+            // Privacy Best Practices (mirrors Android)
+            Section("Privacy Best Practices") {
+                VStack(alignment: .leading, spacing: Theme.spacingXSmall) {
+                    BulletPoint("Enable onion routing for maximum anonymity")
+                    BulletPoint("Use unique identities for different contexts")
+                    BulletPoint("Be aware that metadata can still leak information")
+                    BulletPoint("Consider physical security of your device")
+                    BulletPoint("SCMessenger does not collect any user data or analytics")
+                }
+                .font(Theme.bodySmall)
             }
         }
         .navigationTitle("Privacy Settings")
@@ -210,6 +430,100 @@ struct PrivacySettingsView: View {
         .onAppear {
             if viewModel == nil {
                 viewModel = SettingsViewModel(repository: repository)
+                viewModel?.loadSettings()
+            }
+        }
+    }
+}
+
+// MARK: - Power Settings (NEW - mirrors Android PowerSettingsScreen.kt)
+
+struct PowerSettingsView: View {
+    @Environment(MeshRepository.self) private var repository
+    @State private var viewModel: SettingsViewModel?
+
+    var body: some View {
+        Form {
+            // AutoAdjust Engine
+            Section("AutoAdjust Engine") {
+                Toggle("Enable AutoAdjust", isOn: Binding(
+                    get: { viewModel?.isAutoAdjustEnabled ?? true },
+                    set: { viewModel?.isAutoAdjustEnabled = $0 }
+                ))
+
+                Text("Automatically adjusts BLE scan intervals and relay capacity based on battery level, network conditions, and device usage patterns.")
+                    .font(Theme.bodySmall)
+                    .foregroundStyle(Theme.onSurfaceVariant)
+            }
+
+            // Manual Overrides
+            Section("Manual Overrides") {
+                Button {
+                    viewModel?.overrideBleInterval(5000) // 5 seconds
+                } label: {
+                    Label("BLE Scan: 5s (Power Saver)", systemImage: "bolt.slash")
+                }
+
+                Button {
+                    viewModel?.overrideBleInterval(2000) // 2 seconds
+                } label: {
+                    Label("BLE Scan: 2s (Balanced)", systemImage: "bolt")
+                }
+
+                Button {
+                    viewModel?.overrideBleInterval(1000) // 1 second
+                } label: {
+                    Label("BLE Scan: 1s (Performance)", systemImage: "bolt.fill")
+                }
+
+                Divider()
+
+                Button {
+                    viewModel?.overrideRelayMax(500)
+                } label: {
+                    Label("Relay Max: 500/hr (Low)", systemImage: "arrow.triangle.branch")
+                }
+
+                Button {
+                    viewModel?.overrideRelayMax(1000)
+                } label: {
+                    Label("Relay Max: 1000/hr (Standard)", systemImage: "arrow.triangle.branch")
+                }
+
+                Button {
+                    viewModel?.overrideRelayMax(5000)
+                } label: {
+                    Label("Relay Max: 5000/hr (High)", systemImage: "arrow.triangle.branch")
+                }
+            }
+
+            // Clear Overrides
+            Section {
+                Button(role: .destructive) {
+                    viewModel?.clearAdjustmentOverrides()
+                } label: {
+                    Label("Clear All Overrides", systemImage: "xmark.circle")
+                }
+            }
+
+            // Power Saving Tips (mirrors Android)
+            Section("Power Saving Tips") {
+                VStack(alignment: .leading, spacing: Theme.spacingXSmall) {
+                    BulletPoint("Enable AutoAdjust for optimal battery use")
+                    BulletPoint("Reduce BLE scan frequency when not actively messaging")
+                    BulletPoint("Lower relay budget to reduce background processing")
+                    BulletPoint("Set a higher battery floor to preserve reserve power")
+                    BulletPoint("Use WiFi over BLE when available for better efficiency")
+                }
+                .font(Theme.bodySmall)
+            }
+        }
+        .navigationTitle("Power Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            if viewModel == nil {
+                viewModel = SettingsViewModel(repository: repository)
+                viewModel?.loadSettings()
             }
         }
     }

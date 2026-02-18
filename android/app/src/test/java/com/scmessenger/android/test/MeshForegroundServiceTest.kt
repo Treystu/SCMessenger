@@ -3,7 +3,7 @@ package com.scmessenger.android.test
 import com.scmessenger.android.service.MeshForegroundService
 import org.junit.Before
 import org.junit.Test
-import kotlin.test.assertTrue
+import org.junit.Assert.assertTrue
 
 /**
  * Unit tests for MeshForegroundService.
@@ -34,7 +34,7 @@ class MeshForegroundServiceTest {
         
         // Then
         // assertNotNull(service)
-        assertTrue(true, "Placeholder - requires service framework")
+        assertTrue("Placeholder - requires service framework", true)
     }
     
     @Test
@@ -49,7 +49,7 @@ class MeshForegroundServiceTest {
         // Then
         // Verify mesh service was started
         // verify { mockMeshRepository.startMeshService(any()) }
-        assertTrue(true, "Placeholder - requires intent handling")
+        assertTrue("Placeholder - requires intent handling", true)
     }
     
     @Test
@@ -64,7 +64,7 @@ class MeshForegroundServiceTest {
         
         // Then
         // verify { mockMeshRepository.stopMeshService() }
-        assertTrue(true, "Placeholder - requires stop logic")
+        assertTrue("Placeholder - requires stop logic", true)
     }
     
     @Test
@@ -78,7 +78,7 @@ class MeshForegroundServiceTest {
         
         // Then
         // Verify MeshEventBus.emitPeerEvent was called
-        assertTrue(true, "Placeholder - requires callback testing")
+        assertTrue("Placeholder - requires callback testing", true)
     }
     
     @Test
@@ -94,7 +94,7 @@ class MeshForegroundServiceTest {
         // Then
         // Verify message was stored in HistoryManager
         // Verify notification was shown
-        assertTrue(true, "Placeholder - requires message handling")
+        assertTrue("Placeholder - requires message handling", true)
     }
     
     @Test
@@ -109,7 +109,7 @@ class MeshForegroundServiceTest {
         // Then
         // Verify AutoAdjustEngine computed new profile
         // Verify BLE scan interval was adjusted
-        assertTrue(true, "Placeholder - requires battery monitoring")
+        assertTrue("Placeholder - requires battery monitoring", true)
     }
     
     @Test
@@ -122,7 +122,7 @@ class MeshForegroundServiceTest {
         
         // Then
         // Verify notification was updated with count
-        assertTrue(true, "Placeholder - requires notification testing")
+        assertTrue("Placeholder - requires notification testing", true)
     }
     
     @Test
@@ -136,6 +136,6 @@ class MeshForegroundServiceTest {
         // Then
         // Verify WakeLock was acquired
         // Verify WakeLock was released after scan
-        assertTrue(true, "Placeholder - requires WakeLock testing")
+        assertTrue("Placeholder - requires WakeLock testing", true)
     }
 }

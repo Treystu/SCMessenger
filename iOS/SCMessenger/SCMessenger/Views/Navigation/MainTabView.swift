@@ -77,6 +77,9 @@ struct ConversationListView: View {
         .task {
             loadConversations()
         }
+        .onReceive(repository.messageUpdates) { _ in
+            loadConversations()
+        }
     }
     
     private func loadConversations() {
@@ -161,6 +164,18 @@ struct ChatView: View {
                     }
                 }
             )
+
+            if let error = viewModel?.error {
+                Text(error)
+                    .foregroundStyle(.white)
+                    .padding()
+                    .background(.red)
+                    .cornerRadius(8)
+                    .padding()
+                    .onTapGesture {
+                        viewModel?.error = nil
+                    }
+            }
         }
         .navigationTitle(conversation.peerNickname)
         .navigationBarTitleDisplayMode(.inline)
