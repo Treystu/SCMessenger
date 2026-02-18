@@ -251,15 +251,23 @@ final class MeshRepository {
                 throw MeshError.notInitialized("Failed to obtain IronCore from MeshService")
             }
 
+            // Ensure identity exists (foundational requirement)
+            if !isIdentityInitialized() {
+                logger.info("Auto-initializing new identity for first run")
+                try? ironCore?.initializeIdentity()
+            }
+
             // Obtain the SwarmBridge from MeshService (managed by Rust)
             swarmBridge = meshService?.getSwarmBridge()
 
-            // Initialize internet transport if enabled
+            // Initialize internet transport if enabled (only if identity is ready)
             let settings = try? settingsManager?.load()
-            if settings?.internetEnabled == true {
+            if settings?.internetEnabled == true && isIdentityInitialized() {
                 // Listen on random port
                 try? meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/0")
                 logger.info("Internet transport (Swarm) initiated")
+            } else if settings?.internetEnabled == true {
+                logger.warning("Postponing Swarm start: Identity not ready")
             }
 
             serviceState = .running
@@ -328,6 +336,24 @@ final class MeshRepository {
     /// Get current service state
     func getServiceState() -> ServiceState {
         return serviceState
+    }
+
+    /// Initialize internet transport (Swarm) if enabled and identity is ready
+    func initializeAndStartSwarm() {
+        guard isIdentityInitialized() else {
+            logger.warning("Postponing Swarm start: Identity not ready")
+            return
+        }
+
+        let settings = try? settingsManager?.load()
+        if settings?.internetEnabled == true {
+            do {
+                try meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/0")
+                logger.info("✓ Internet transport (Swarm) started manually")
+            } catch {
+                logger.error("Failed to start swarm: \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - Identity Management

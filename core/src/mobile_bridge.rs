@@ -206,8 +206,17 @@ impl MeshService {
 
         let swarm_bridge = self.swarm_bridge.clone();
 
-        // Spawn swarm in a background thread/task
-        tokio::spawn(async move {
+        // 🚨 CRITICAL: We need a tokio runtime to spawn the swarm.
+        // On mobile, the current thread might not be in a tokio context.
+        let rt = tokio::runtime::Handle::try_current().unwrap_or_else(|_| {
+            tracing::warn!(
+                "No current Tokio runtime found, using background runtime from SwarmBridge"
+            );
+            swarm_bridge.get_runtime_handle()
+        });
+
+        // Spawn swarm in a background thread/task using the captured runtime
+        rt.spawn(async move {
             let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(100);
 
             match crate::transport::start_swarm(libp2p_keys, listen_multiaddr, event_tx).await {
@@ -850,7 +859,7 @@ impl LedgerManager {
 /// using tokio::runtime::Handle to block on futures when necessary.
 pub struct SwarmBridge {
     handle: Arc<Mutex<Option<SwarmHandle>>>,
-    runtime_handle: Option<tokio::runtime::Handle>,
+    captured_handle: Option<tokio::runtime::Handle>,
 }
 
 impl Default for SwarmBridge {
@@ -858,12 +867,38 @@ impl Default for SwarmBridge {
         Self::new()
     }
 }
+// 🚨 CRITICAL: Global runtime for network operations on mobile.
+// We need this because many mobile callback threads aren't in a tokio context.
+static GLOBAL_RT: parking_lot::RwLock<Option<tokio::runtime::Runtime>> =
+    parking_lot::RwLock::new(None);
+
+fn get_global_runtime() -> tokio::runtime::Handle {
+    let rt_read = GLOBAL_RT.read();
+    if let Some(rt) = &*rt_read {
+        return rt.handle().clone();
+    }
+    drop(rt_read);
+
+    let mut rt_write = GLOBAL_RT.write();
+    if let Some(rt) = &*rt_write {
+        return rt.handle().clone();
+    }
+
+    tracing::info!("Initializing global Tokio runtime for mobile mesh...");
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to create global Tokio runtime");
+    let handle = rt.handle().clone();
+    *rt_write = Some(rt);
+    handle
+}
 
 impl SwarmBridge {
     pub fn new() -> Self {
         Self {
             handle: Arc::new(Mutex::new(None)),
-            runtime_handle: tokio::runtime::Handle::try_current().ok(),
+            captured_handle: Some(get_global_runtime()),
         }
     }
 
@@ -871,6 +906,13 @@ impl SwarmBridge {
     /// This must be called after starting the swarm to wire up network operations.
     pub fn set_handle(&self, handle: SwarmHandle) {
         *self.handle.lock() = Some(handle);
+    }
+
+    /// Internal helper to get the runtime handle for spawning
+    pub fn get_runtime_handle(&self) -> tokio::runtime::Handle {
+        self.captured_handle
+            .clone()
+            .unwrap_or_else(get_global_runtime)
     }
 
     /// Send an encrypted message envelope to a peer.
@@ -884,12 +926,9 @@ impl SwarmBridge {
         let peer_id = PeerId::from_str(&peer_id).map_err(|_| crate::IronCoreError::InvalidInput)?;
 
         // Block on async operation
-        if let Some(rt) = &self.runtime_handle {
-            rt.block_on(handle.send_message(peer_id, data))
-                .map_err(|_| crate::IronCoreError::NetworkError)
-        } else {
-            Err(crate::IronCoreError::Internal)
-        }
+        let rt = self.get_runtime_handle();
+        rt.block_on(handle.send_message(peer_id, data))
+            .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
     /// Dial a peer at a multiaddress.
@@ -904,12 +943,9 @@ impl SwarmBridge {
             Multiaddr::from_str(&multiaddr).map_err(|_| crate::IronCoreError::InvalidInput)?;
 
         // Block on async operation
-        if let Some(rt) = &self.runtime_handle {
-            rt.block_on(handle.dial(addr))
-                .map_err(|_| crate::IronCoreError::NetworkError)
-        } else {
-            Err(crate::IronCoreError::Internal)
-        }
+        let rt = self.get_runtime_handle();
+        rt.block_on(handle.dial(addr))
+            .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
     /// Get list of connected peer IDs.
@@ -921,15 +957,12 @@ impl SwarmBridge {
         };
 
         // Block on async operation
-        if let Some(rt) = &self.runtime_handle {
-            rt.block_on(handle.get_peers())
-                .unwrap_or_default()
-                .iter()
-                .map(|peer_id| peer_id.to_string())
-                .collect()
-        } else {
-            Vec::new()
-        }
+        let rt = self.get_runtime_handle();
+        rt.block_on(handle.get_peers())
+            .unwrap_or_default()
+            .iter()
+            .map(|peer_id| peer_id.to_string())
+            .collect()
     }
 
     /// Get list of listening addresses.
@@ -941,15 +974,12 @@ impl SwarmBridge {
         };
 
         // Block on async operation
-        if let Some(rt) = &self.runtime_handle {
-            rt.block_on(handle.get_listeners())
-                .unwrap_or_default()
-                .iter()
-                .map(|addr| addr.to_string())
-                .collect()
-        } else {
-            Vec::new()
-        }
+        let rt = self.get_runtime_handle();
+        rt.block_on(handle.get_listeners())
+            .unwrap_or_default()
+            .iter()
+            .map(|addr| addr.to_string())
+            .collect()
     }
 
     /// Get list of subscribed Gossipsub topics.
@@ -961,11 +991,8 @@ impl SwarmBridge {
         };
 
         // Block on async operation
-        if let Some(rt) = &self.runtime_handle {
-            rt.block_on(handle.get_topics()).unwrap_or_default()
-        } else {
-            Vec::new()
-        }
+        let rt = self.get_runtime_handle();
+        rt.block_on(handle.get_topics()).unwrap_or_default()
     }
 
     /// Subscribe to a Gossipsub topic.
@@ -976,21 +1003,17 @@ impl SwarmBridge {
             .ok_or(crate::IronCoreError::NetworkError)?;
 
         // Block on async operation
-        if let Some(rt) = &self.runtime_handle {
-            rt.block_on(handle.subscribe_topic(topic))
-                .map_err(|_| crate::IronCoreError::NetworkError)
-        } else {
-            Err(crate::IronCoreError::Internal)
-        }
+        let rt = self.get_runtime_handle();
+        rt.block_on(handle.subscribe_topic(topic))
+            .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
     /// Shutdown the swarm gracefully.
     pub fn shutdown(&self) {
         let handle_guard = self.handle.lock();
         if let Some(handle) = handle_guard.as_ref() {
-            if let Some(rt) = &self.runtime_handle {
-                let _ = rt.block_on(handle.shutdown());
-            }
+            let rt = self.get_runtime_handle();
+            let _ = rt.block_on(handle.shutdown());
         }
     }
 }

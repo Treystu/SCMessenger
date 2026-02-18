@@ -246,13 +246,24 @@ class MeshRepository(private val context: Context) {
         }
 
         try {
-            // Initiate swarm in Rust core
-            meshService?.startSwarm("/ip4/0.0.0.0/tcp/0")
-            
-            // Obtain the SwarmBridge managed by Rust MeshService
-            swarmBridge = meshService?.getSwarmBridge()
-            
-            Timber.i("Internet transport (Swarm) initiated and bridge wired")
+            // Ensure identity is initialized locally before starting Swarm
+            // (IdentityKeys are needed for libp2p PeerId)
+            if (isIdentityInitialized() == false) {
+                 Timber.i("Auto-initializing identity for first run...")
+                 ironCore?.initializeIdentity()
+            }
+
+            if (isIdentityInitialized() == true) {
+                // Initiate swarm in Rust core
+                meshService?.startSwarm("/ip4/0.0.0.0/tcp/0")
+
+                // Obtain the SwarmBridge managed by Rust MeshService
+                swarmBridge = meshService?.getSwarmBridge()
+
+                Timber.i("✓ Internet transport (Swarm) initiated and bridge wired")
+            } else {
+                Timber.w("Postponing Swarm start: Identity not ready")
+            }
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize Swarm transport")
         }
