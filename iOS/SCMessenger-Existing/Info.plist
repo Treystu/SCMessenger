@@ -38,6 +38,10 @@
 		<string>com.scmessenger.mesh.processing</string>
 	</array>
 	
+	<!-- Motion (CMMotionActivityManager used in IosPlatformBridge for battery/relay auto-adjustment) -->
+	<key>NSMotionUsageDescription</key>
+	<string>SCMessenger uses motion data to optimize battery usage and network activity based on whether you are stationary or moving.</string>
+
 	<!-- Bluetooth Permissions -->
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>SCMessenger uses Bluetooth to discover and communicate with nearby mesh nodes, even when the app is in the background.</string>

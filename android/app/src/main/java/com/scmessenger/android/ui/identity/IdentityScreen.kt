@@ -72,18 +72,19 @@ fun IdentityScreen(
                     )
                 }
                 
-                identityInfo == null || !identityInfo!!.initialized -> {
+                identityInfo == null || identityInfo?.initialized != true -> {
                     // Identity not initialized
                     IdentityNotInitializedView(
                         onCreateIdentity = { viewModel.createIdentity() },
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
-                
+
                 else -> {
-                    // Show identity
+                    // Show identity — identityInfo is non-null and initialized here
+                    val resolvedIdentity = identityInfo ?: return@Box
                     IdentityContent(
-                        identityInfo = identityInfo!!,
+                        identityInfo = resolvedIdentity,
                         qrCodeData = viewModel.getQrCodeData(),
                         error = error,
                         successMessage = successMessage,

@@ -46,6 +46,8 @@ interface IronCore {
     // Messaging
     [Throws=IronCoreError]
     bytes prepare_message(string recipient_public_key_hex, string text);
+    [Throws=IronCoreError]
+    bytes prepare_receipt(string recipient_public_key_hex, string message_id);
     u32 outbox_count();
     u32 inbox_count();
 
@@ -60,7 +62,9 @@ interface IronCore {
 callback interface CoreDelegate {
     void on_peer_discovered(string peer_id);
     void on_peer_disconnected(string peer_id);
-    void on_message_received(string sender_id, string message_id, bytes data);
+    // sender_public_key_hex: Ed25519 hex (64 chars) — use this with prepare_receipt()
+    // sender_id: Blake3 identity_id (64 hex chars) — use this for display / history
+    void on_message_received(string sender_id, string sender_public_key_hex, string message_id, bytes data);
     void on_receipt_received(string message_id, string status);
 };
 

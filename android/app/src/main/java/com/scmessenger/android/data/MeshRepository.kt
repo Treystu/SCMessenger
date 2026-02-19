@@ -145,7 +145,7 @@ class MeshRepository(private val context: Context) {
                     }
                 }
 
-                override fun onMessageReceived(senderId: String, messageId: String, data: ByteArray) {
+                override fun onMessageReceived(senderId: String, senderPublicKeyHex: String, messageId: String, data: ByteArray) {
                     Timber.i("Message from $senderId: $messageId")
                     try {
                         // Check if relay/messaging is enabled (bidirectional control)
@@ -176,12 +176,11 @@ class MeshRepository(private val context: Context) {
                         }
 
                         // Send delivery receipt ACK back to sender via SwarmBridge.
-                        // senderId here is the sender's public key hex as provided by
-                        // the Rust core delegate — prepareReceipt() encrypts an ACK
-                        // envelope addressed to that public key.
+                        // senderPublicKeyHex is the sender's Ed25519 public key hex —
+                        // prepareReceipt() encrypts an ACK envelope addressed to that key.
                         repoScope.launch {
                             try {
-                                val receiptBytes = ironCore?.prepareReceipt(senderId, messageId)
+                                val receiptBytes = ironCore?.prepareReceipt(senderPublicKeyHex, messageId)
                                 if (receiptBytes != null) {
                                     swarmBridge?.sendMessage(senderId, receiptBytes)
                                     Timber.d("Delivery receipt sent for $messageId to $senderId")

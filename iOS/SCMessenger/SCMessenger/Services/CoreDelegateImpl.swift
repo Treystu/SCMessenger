@@ -42,14 +42,14 @@ final class CoreDelegateImpl: CoreDelegate {
         eventBus.peerEvents.send(.disconnected(peerId: peerId))
     }
     
-    func onMessageReceived(senderId: String, messageId: String, data: Data) {
+    func onMessageReceived(senderId: String, senderPublicKeyHex: String, messageId: String, data: Data) {
         logger.info("Message received: \(messageId) from \(senderId) (\(data.count) bytes)")
 
         // UniFFI callbacks arrive on a Rust thread; MeshRepository is @MainActor.
         // Capture values before the dispatch to avoid capturing self or mutable state.
         let repo = meshRepository
         DispatchQueue.main.async {
-            repo?.onMessageReceived(senderId: senderId, messageId: messageId, data: data)
+            repo?.onMessageReceived(senderId: senderId, senderPublicKeyHex: senderPublicKeyHex, messageId: messageId, data: data)
         }
 
         // Publish event (PassthroughSubject is thread-safe for send())

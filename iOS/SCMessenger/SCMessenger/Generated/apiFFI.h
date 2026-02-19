@@ -267,7 +267,7 @@ typedef void (*UniffiCallbackInterfaceCoreDelegateMethod1)(uint64_t, RustBuffer,
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_CORE_DELEGATE_METHOD2
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_CORE_DELEGATE_METHOD2
-typedef void (*UniffiCallbackInterfaceCoreDelegateMethod2)(uint64_t, RustBuffer, RustBuffer, RustBuffer, void* _Nonnull, 
+typedef void (*UniffiCallbackInterfaceCoreDelegateMethod2)(uint64_t, RustBuffer, RustBuffer, RustBuffer, RustBuffer, void* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
@@ -568,6 +568,11 @@ uint32_t uniffi_scmessenger_core_fn_method_ironcore_outbox_count(void*_Nonnull p
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_PREPARE_MESSAGE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_PREPARE_MESSAGE
 RustBuffer uniffi_scmessenger_core_fn_method_ironcore_prepare_message(void*_Nonnull ptr, RustBuffer recipient_public_key_hex, RustBuffer text, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_PREPARE_RECEIPT
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_PREPARE_RECEIPT
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_prepare_receipt(void*_Nonnull ptr, RustBuffer recipient_public_key_hex, RustBuffer message_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_SET_DELEGATE
@@ -1308,6 +1313,12 @@ uint16_t uniffi_scmessenger_core_checksum_method_ironcore_outbox_count(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_IRONCORE_PREPARE_MESSAGE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_IRONCORE_PREPARE_MESSAGE
 uint16_t uniffi_scmessenger_core_checksum_method_ironcore_prepare_message(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_IRONCORE_PREPARE_RECEIPT
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_IRONCORE_PREPARE_RECEIPT
+uint16_t uniffi_scmessenger_core_checksum_method_ironcore_prepare_receipt(void
     
 );
 #endif

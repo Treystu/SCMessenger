@@ -88,8 +88,11 @@ pub trait CoreDelegate: Send + Sync {
     fn on_peer_discovered(&self, peer_id: String);
     /// A peer disconnected
     fn on_peer_disconnected(&self, peer_id: String);
-    /// An encrypted message was received and decrypted
-    fn on_message_received(&self, sender_id: String, message_id: String, data: Vec<u8>);
+    /// An encrypted message was received and decrypted.
+    /// `sender_public_key_hex` is the sender's Ed25519 public key (64 hex chars) —
+    /// pass this to `prepare_receipt()` to send a delivery acknowledgement.
+    /// `sender_id` is the sender's Blake3 identity_id (64 hex chars) — use for display.
+    fn on_message_received(&self, sender_id: String, sender_public_key_hex: String, message_id: String, data: Vec<u8>);
     /// A delivery receipt was received
     fn on_receipt_received(&self, message_id: String, status: String);
 }
@@ -428,10 +431,13 @@ impl IronCore {
             return Err(IronCoreError::InvalidInput);
         }
 
-        // Notify delegate
+        // Notify delegate — include sender's Ed25519 public key hex so mobile
+        // platforms can send a receipt ACK without a contact-DB lookup.
         if let Some(delegate) = self.delegate.read().as_ref() {
+            let sender_pub_key_hex = hex::encode(&envelope.sender_public_key);
             delegate.on_message_received(
                 msg.sender_id.clone(),
+                sender_pub_key_hex,
                 msg.id.clone(),
                 msg.payload.clone(),
             );

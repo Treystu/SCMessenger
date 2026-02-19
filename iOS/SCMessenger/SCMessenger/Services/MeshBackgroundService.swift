@@ -48,9 +48,14 @@ final class MeshBackgroundService {
                 task.setTaskCompleted(success: false)
                 return
             }
-            self.handleBackgroundRefresh(task as! BGAppRefreshTask)
+            guard let refreshTask = task as? BGAppRefreshTask else {
+                logger.error("Background refresh: unexpected task type \(type(of: task))")
+                task.setTaskCompleted(success: false)
+                return
+            }
+            self.handleBackgroundRefresh(refreshTask)
         }
-        
+
         // Register processing task (longer operations, several minutes)
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: Self.processingTaskId,
@@ -60,7 +65,12 @@ final class MeshBackgroundService {
                 task.setTaskCompleted(success: false)
                 return
             }
-            self.handleBackgroundProcessing(task as! BGProcessingTask)
+            guard let processingTask = task as? BGProcessingTask else {
+                logger.error("Background processing: unexpected task type \(type(of: task))")
+                task.setTaskCompleted(success: false)
+                return
+            }
+            self.handleBackgroundProcessing(processingTask)
         }
         
         logger.info("Background tasks registered successfully")

@@ -487,7 +487,7 @@ final class MeshRepository {
     }
 
     /// Handle incoming message (from CoreDelegate callback)
-    func onMessageReceived(senderId: String, messageId: String, data: Data) {
+    func onMessageReceived(senderId: String, senderPublicKeyHex: String, messageId: String, data: Data) {
         logger.info("Message from \(senderId): \(messageId)")
 
         // RELAY ENFORCEMENT (matches Android pattern exactly)
@@ -499,30 +499,39 @@ final class MeshRepository {
 
         if !isRelayEnabled {
             // Silently drop message when relay disabled (matches Android)
-            logger.warning("⚠️ Dropped message from \(senderId): relay disabled")
+            logger.warning("Dropped message from \(senderId): relay disabled")
             return
         }
 
         // Process message
-        do {
-            // Decrypt message (if needed)
-            // For now, just record in history
-            let content = String(data: data, encoding: .utf8) ?? "[binary]"
+        let content = String(data: data, encoding: .utf8) ?? "[binary]"
 
-            let messageRecord = MessageRecord(
-                id: messageId,
-                direction: .received,
-                peerId: senderId,
-                content: content,
-                timestamp: UInt64(Date().timeIntervalSince1970),
-                delivered: true
-            )
+        let messageRecord = MessageRecord(
+            id: messageId,
+            direction: .received,
+            peerId: senderId,
+            content: content,
+            timestamp: UInt64(Date().timeIntervalSince1970),
+            delivered: true
+        )
 
-            try? historyManager?.add(record: messageRecord)
+        try? historyManager?.add(record: messageRecord)
 
-            // Notify UI
-            messageUpdates.send(messageRecord)
-            logger.info("✓ Message received and processed from \(senderId)")
+        // Notify UI
+        messageUpdates.send(messageRecord)
+        logger.info("Message received and processed from \(senderId)")
+
+        // Send delivery receipt ACK back to sender
+        Task {
+            do {
+                let receiptBytes = try ironCore?.prepareReceipt(recipientPublicKeyHex: senderPublicKeyHex, messageId: messageId)
+                if let receiptBytes = receiptBytes {
+                    try swarmBridge?.sendMessage(peerId: senderId, data: receiptBytes)
+                    logger.debug("Delivery receipt sent for \(messageId)")
+                }
+            } catch {
+                logger.debug("Failed to send delivery receipt for \(messageId): \(error)")
+            }
         }
     }
 

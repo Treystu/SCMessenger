@@ -1053,6 +1053,8 @@ public protocol IronCoreProtocol : AnyObject {
     
     func prepareMessage(recipientPublicKeyHex: String, text: String) throws  -> Data
     
+    func prepareReceipt(recipientPublicKeyHex: String, messageId: String) throws  -> Data
+    
     func setDelegate(delegate: CoreDelegate?) 
     
     func setNickname(nickname: String) throws 
@@ -1162,6 +1164,15 @@ open func prepareMessage(recipientPublicKeyHex: String, text: String)throws  -> 
     uniffi_scmessenger_core_fn_method_ironcore_prepare_message(self.uniffiClonePointer(),
         FfiConverterString.lower(recipientPublicKeyHex),
         FfiConverterString.lower(text),$0
+    )
+})
+}
+    
+open func prepareReceipt(recipientPublicKeyHex: String, messageId: String)throws  -> Data {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_prepare_receipt(self.uniffiClonePointer(),
+        FfiConverterString.lower(recipientPublicKeyHex),
+        FfiConverterString.lower(messageId),$0
     )
 })
 }
@@ -3337,7 +3348,7 @@ public protocol CoreDelegate : AnyObject {
     
     func onPeerDisconnected(peerId: String) 
     
-    func onMessageReceived(senderId: String, messageId: String, data: Data) 
+    func onMessageReceived(senderId: String, senderPublicKeyHex: String, messageId: String, data: Data) 
     
     func onReceiptReceived(messageId: String, status: String) 
     
@@ -3408,6 +3419,7 @@ fileprivate struct UniffiCallbackInterfaceCoreDelegate {
         onMessageReceived: { (
             uniffiHandle: UInt64,
             senderId: RustBuffer,
+            senderPublicKeyHex: RustBuffer,
             messageId: RustBuffer,
             data: RustBuffer,
             uniffiOutReturn: UnsafeMutableRawPointer,
@@ -3420,6 +3432,7 @@ fileprivate struct UniffiCallbackInterfaceCoreDelegate {
                 }
                 return uniffiObj.onMessageReceived(
                      senderId: try FfiConverterString.lift(senderId),
+                     senderPublicKeyHex: try FfiConverterString.lift(senderPublicKeyHex),
                      messageId: try FfiConverterString.lift(messageId),
                      data: try FfiConverterData.lift(data)
                 )
@@ -4080,6 +4093,9 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_ironcore_prepare_message() != 24979) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_prepare_receipt() != 37483) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_set_delegate() != 56502) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4239,7 +4255,7 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_coredelegate_on_peer_disconnected() != 46680) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_scmessenger_core_checksum_method_coredelegate_on_message_received() != 50754) {
+    if (uniffi_scmessenger_core_checksum_method_coredelegate_on_message_received() != 11956) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_coredelegate_on_receipt_received() != 33338) {
