@@ -37,7 +37,20 @@ class BleGattServer(
     private val deviceMtu = ConcurrentHashMap<String, Int>()
     
     private var isRunning = false
-    
+
+    // Identity beacon data served to BLE scanners via IDENTITY_CHAR_UUID reads.
+    // Default is a static placeholder; call setIdentityData() once IronCore is ready.
+    private var identityData: ByteArray = "SCM_IDENTITY_BEACON".toByteArray()
+
+    /**
+     * Update the identity beacon payload broadcast to nearby peers.
+     * Should be called after IronCore initializes an Ed25519 identity.
+     */
+    fun setIdentityData(data: ByteArray) {
+        identityData = data
+        Timber.d("BleGattServer: identity beacon set (${data.size} bytes)")
+    }
+
     fun start() {
         if (isRunning) {
             Timber.w("GATT server already running")
@@ -229,15 +242,13 @@ class BleGattServer(
             
             when (characteristic.uuid) {
                 IDENTITY_CHAR_UUID -> {
-                    // Return our identity beacon
-                    // Use a placeholder beacon - in production this would come from IronCore.getIdentityInfo()
-                    val identityBeacon = "SCM_IDENTITY_BEACON".toByteArray()
+                    // Return our identity beacon (set dynamically via setIdentityData())
                     gattServer?.sendResponse(
                         device,
                         requestId,
                         BluetoothGatt.GATT_SUCCESS,
                         offset,
-                        identityBeacon
+                        identityData
                     )
                 }
                 

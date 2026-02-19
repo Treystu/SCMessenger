@@ -237,9 +237,32 @@ extension BLECentralManager: CBPeripheralDelegate {
     }
     
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard let data = characteristic.value else { return }
-        logger.debug("Received \(data.count) bytes from \(peripheral.identifier)")
-        meshRepository?.onBleDataReceived(peerId: peripheral.identifier.uuidString, data: data)
+        if let error = error {
+            logger.error("Characteristic update error for \(characteristic.uuid.shortUUID): \(error.localizedDescription)")
+            return
+        }
+        guard let data = characteristic.value, !data.isEmpty else { return }
+
+        if characteristic.uuid == MeshBLEConstants.identityCharUUID {
+            // Parse identity beacon — extract Ed25519 public key, do NOT treat as message data
+            logger.debug("Identity beacon from \(peripheral.identifier): \(data.count) bytes")
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let publicKeyHex = json["public_key"] as? String,
+               publicKeyHex.count == 64 {
+                let nickname = json["nickname"] as? String
+                meshRepository?.onPeerIdentityRead(
+                    blePeerId: peripheral.identifier.uuidString,
+                    publicKeyHex: publicKeyHex,
+                    nickname: nickname
+                )
+            } else {
+                logger.warning("Could not parse identity beacon from \(peripheral.identifier)")
+            }
+        } else {
+            // Message or sync data — route to mesh service
+            logger.debug("Data from \(peripheral.identifier): \(data.count) bytes on \(characteristic.uuid.shortUUID)")
+            meshRepository?.onBleDataReceived(peerId: peripheral.identifier.uuidString, data: data)
+        }
     }
     
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {

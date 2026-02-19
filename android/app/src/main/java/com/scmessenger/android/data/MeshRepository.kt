@@ -69,6 +69,7 @@ class MeshRepository(private val context: Context) {
     // BLE Components
     private var bleScanner: com.scmessenger.android.transport.ble.BleScanner? = null
     private var bleAdvertiser: com.scmessenger.android.transport.ble.BleAdvertiser? = null
+    private var bleGattServer: com.scmessenger.android.transport.ble.BleGattServer? = null
 
     init {
         Timber.d("MeshRepository initialized with storage: $storagePath")
@@ -159,6 +160,30 @@ class MeshRepository(private val context: Context) {
                             return
                         }
 
+                        // Auto-upsert contact: senderPublicKeyHex is guaranteed valid Ed25519 key
+                        // (Rust only fires this callback after successful decryption)
+                        val existingContact = try { contactManager?.get(senderId) } catch (e: Exception) { null }
+                        if (existingContact == null && senderPublicKeyHex.trim().length == 64) {
+                            val autoContact = uniffi.api.Contact(
+                                peerId = senderId,
+                                nickname = null,
+                                publicKey = senderPublicKeyHex.trim(),
+                                addedAt = (System.currentTimeMillis() / 1000).toULong(),
+                                lastSeen = (System.currentTimeMillis() / 1000).toULong(),
+                                notes = null
+                            )
+                            try {
+                                contactManager?.add(autoContact)
+                                Timber.i("Auto-created contact from received message: ${senderId.take(8)} key: ${senderPublicKeyHex.take(8)}...")
+                            } catch (e: Exception) {
+                                Timber.w("Auto-create contact failed for ${senderId.take(8)}: ${e.message}")
+                            }
+                        } else if (existingContact != null) {
+                            try { contactManager?.updateLastSeen(senderId) } catch (e: Exception) {
+                                Timber.d("updateLastSeen failed: ${e.message}")
+                            }
+                        }
+
                         val content = data.toString(Charsets.UTF_8)
                         val record = uniffi.api.MessageRecord(
                             id = messageId,
@@ -244,6 +269,33 @@ class MeshRepository(private val context: Context) {
             bleAdvertiser = com.scmessenger.android.transport.ble.BleAdvertiser(context)
         }
         bleAdvertiser?.startAdvertising()
+
+        // BLE GATT Server: Serves our identity and accepts writes from nearby peers
+        if (bleGattServer == null) {
+            bleGattServer = com.scmessenger.android.transport.ble.BleGattServer(
+                context,
+                onDataReceived = { peerId, data ->
+                    meshService?.onDataReceived(peerId, data)
+                }
+            )
+        }
+        bleGattServer?.start()
+
+        // Set identity beacon on BLE GATT server so nearby peers can read our Ed25519 public key
+        val publicKeyHex = ironCore?.getIdentityInfo()?.publicKeyHex
+        if (!publicKeyHex.isNullOrEmpty()) {
+            try {
+                val beaconJson = org.json.JSONObject()
+                    .put("public_key", publicKeyHex)
+                    .put("nickname", ironCore?.getIdentityInfo()?.nickname ?: "")
+                    .toString()
+                    .toByteArray(Charsets.UTF_8)
+                bleGattServer?.setIdentityData(beaconJson)
+                Timber.i("BLE GATT identity beacon set: ${publicKeyHex.take(8)}...")
+            } catch (e: Exception) {
+                Timber.w("Failed to set BLE GATT identity beacon: ${e.message}")
+            }
+        }
     }
 
     private fun initializeAndStartWifi() {
@@ -315,6 +367,7 @@ class MeshRepository(private val context: Context) {
             // Stop BLE
             bleScanner?.stopScanning()
             bleAdvertiser?.stopAdvertising()
+            bleGattServer?.stop()
 
             // Stop WiFi
             wifiTransportManager?.stopDiscovery()

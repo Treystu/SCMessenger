@@ -56,8 +56,8 @@ final class ChatViewModel {
                 self.error = "Storage Error: \(message)"
             case .NotInitialized(let message):
                 self.error = "Not Initialized: \(message)"
-            case .InvalidInput(let message):
-                self.error = "Invalid Input: \(message)"
+            case .InvalidInput(_):
+                self.error = "Could not encrypt message — this contact may have an invalid public key. Try re-adding them using their identity export."
             case .Internal(let message):
                 self.error = "Internal Error: \(message)"
             case .AlreadyRunning(let message):

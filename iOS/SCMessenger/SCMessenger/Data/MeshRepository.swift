@@ -266,6 +266,9 @@ final class MeshRepository {
                 try? ironCore?.initializeIdentity()
             }
 
+            // Broadcast BLE identity beacon so nearby peers can read our public key
+            broadcastIdentityBeacon()
+
             // Obtain the SwarmBridge from MeshService (managed by Rust)
             swarmBridge = meshService?.getSwarmBridge()
 
@@ -501,6 +504,30 @@ final class MeshRepository {
             // Silently drop message when relay disabled (matches Android)
             logger.warning("Dropped message from \(senderId): relay disabled")
             return
+        }
+
+        // Auto-upsert contact: senderPublicKeyHex is guaranteed valid (Rust verified it during decrypt)
+        let existingContact = try? contactManager?.get(peerId: senderId)
+        if existingContact == nil {
+            let trimmedKey = senderPublicKeyHex.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedKey.count == 64 {
+                let autoContact = Contact(
+                    peerId: senderId,
+                    nickname: nil,
+                    publicKey: trimmedKey,
+                    addedAt: UInt64(Date().timeIntervalSince1970),
+                    lastSeen: UInt64(Date().timeIntervalSince1970),
+                    notes: nil
+                )
+                do {
+                    try contactManager?.add(contact: autoContact)
+                    logger.info("Auto-created contact from received message: \(senderId.prefix(8)) key: \(trimmedKey.prefix(8))...")
+                } catch {
+                    logger.warning("Auto-create contact failed for \(senderId.prefix(8)): \(error.localizedDescription)")
+                }
+            }
+        } else {
+            try? contactManager?.updateLastSeen(peerId: senderId)
         }
 
         // Process message
@@ -875,6 +902,60 @@ final class MeshRepository {
 
         // Also try Peripheral role (we are server, pushing notification to central)
         blePeripheralManager?.sendDataToConnectedCentral(peerId: peerId, data: data)
+    }
+
+    /// Called when BLE central reads the identity GATT characteristic from a peer.
+    /// Automatically creates a contact if none exists for this peer.
+    func onPeerIdentityRead(blePeerId: String, publicKeyHex: String, nickname: String?) {
+        logger.info("Peer BLE identity read: \(blePeerId.prefix(8)) key: \(publicKeyHex.prefix(8))...")
+        let trimmedKey = publicKeyHex.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedKey.count == 64 else {
+            logger.warning("Ignoring BLE identity from \(blePeerId.prefix(8)): wrong key length \(trimmedKey.count)")
+            return
+        }
+        let hexChars = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
+        guard trimmedKey.unicodeScalars.allSatisfy({ hexChars.contains($0) }) else {
+            logger.warning("Ignoring BLE identity from \(blePeerId.prefix(8)): non-hex key")
+            return
+        }
+        let existing = try? contactManager?.get(peerId: blePeerId)
+        if existing == nil {
+            let contact = Contact(
+                peerId: blePeerId,
+                nickname: nickname,
+                publicKey: trimmedKey,
+                addedAt: UInt64(Date().timeIntervalSince1970),
+                lastSeen: UInt64(Date().timeIntervalSince1970),
+                notes: nil
+            )
+            do {
+                try contactManager?.add(contact: contact)
+                logger.info("Auto-created contact from BLE identity: \(blePeerId.prefix(8)) key: \(trimmedKey.prefix(8))...")
+            } catch {
+                logger.error("Failed to auto-create contact from BLE identity: \(error.localizedDescription)")
+            }
+        } else {
+            try? contactManager?.updateLastSeen(peerId: blePeerId)
+        }
+    }
+
+    private func broadcastIdentityBeacon() {
+        guard let identity = ironCore?.getIdentityInfo(),
+              let publicKeyHex = identity.publicKeyHex,
+              !publicKeyHex.isEmpty else {
+            logger.warning("Cannot broadcast identity beacon: identity not initialized")
+            return
+        }
+        let beacon: [String: Any] = [
+            "public_key": publicKeyHex,
+            "nickname": identity.nickname ?? ""
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: beacon) else {
+            logger.error("Failed to serialize identity beacon")
+            return
+        }
+        blePeripheralManager?.setIdentityData(data)
+        logger.info("BLE identity beacon set: \(publicKeyHex.prefix(8))...")
     }
 
     // MARK: - Auto-Adjustment Engine
