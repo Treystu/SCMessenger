@@ -10,6 +10,7 @@ dictionary IdentityInfo {
     string? public_key_hex;
     boolean initialized;
     string? nickname;
+    string? libp2p_peer_id;
 };
 
 dictionary SignatureResult {
@@ -385,4 +386,7 @@ interface SwarmBridge {
     void subscribe_topic(string topic);
 
     void shutdown();
+
+    [Throws=IronCoreError]
+    void send_to_all_peers(bytes data);
 };

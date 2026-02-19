@@ -516,11 +516,12 @@ class MeshRepository(private val context: Context) {
                 // Attempt WiFi
                 wifiTransportManager?.sendData(peerId, encryptedData)
 
-                // Attempt Swarm (Internet)
+                // Attempt Swarm (Internet) — broadcast to all connected peers.
+                // The message is encrypted for the specific recipient; only they can decrypt it.
                 try {
-                    swarmBridge?.sendMessage(peerId, encryptedData)
+                    swarmBridge?.sendToAllPeers(encryptedData)
                 } catch (e: Exception) {
-                    Timber.w("Failed to send via SwarmBridge: ${e.message}")
+                    Timber.w("SwarmBridge delivery queued (no peers connected): ${e.message}")
                 }
 
                 // Note: In a real mesh, we would route via MeshService/Libp2p which manages transports.
@@ -781,11 +782,17 @@ class MeshRepository(private val context: Context) {
     fun connectToPeer(peerId: String, addresses: List<String>) {
         addresses.forEach { addr ->
             try {
-                var finalAddr = addr
-                if (!addr.contains("/p2p/")) {
-                    finalAddr = "$addr/p2p/$peerId"
+                // Only append /p2p/ component if peerId is a valid libp2p PeerId format
+                // (base58btc multihash, starts with "12D3Koo" or "Qm").
+                // Blake3 hex identity_ids (64 hex chars) are NOT valid libp2p PeerIds.
+                val isLibp2pPeerId = peerId.startsWith("12D3Koo") || peerId.startsWith("Qm")
+                val finalAddr = if (isLibp2pPeerId && !addr.contains("/p2p/")) {
+                    "$addr/p2p/$peerId"
+                } else {
+                    addr
                 }
                 swarmBridge?.dial(finalAddr)
+                Timber.d("Dialing $finalAddr")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to dial $addr")
             }

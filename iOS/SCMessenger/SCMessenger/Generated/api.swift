@@ -1841,6 +1841,8 @@ public protocol SwarmBridgeProtocol : AnyObject {
     
     func sendMessage(peerId: String, data: Data) throws 
     
+    func sendToAllPeers(data: Data) throws 
+    
     func shutdown() 
     
     func subscribeTopic(topic: String) throws 
@@ -1926,6 +1928,13 @@ open func getTopics() -> [String] {
 open func sendMessage(peerId: String, data: Data)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_swarmbridge_send_message(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),
+        FfiConverterData.lower(data),$0
+    )
+}
+}
+    
+open func sendToAllPeers(data: Data)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_swarmbridge_send_to_all_peers(self.uniffiClonePointer(),
         FfiConverterData.lower(data),$0
     )
 }
@@ -2295,14 +2304,16 @@ public struct IdentityInfo {
     public var publicKeyHex: String?
     public var initialized: Bool
     public var nickname: String?
+    public var libp2pPeerId: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(identityId: String?, publicKeyHex: String?, initialized: Bool, nickname: String?) {
+    public init(identityId: String?, publicKeyHex: String?, initialized: Bool, nickname: String?, libp2pPeerId: String?) {
         self.identityId = identityId
         self.publicKeyHex = publicKeyHex
         self.initialized = initialized
         self.nickname = nickname
+        self.libp2pPeerId = libp2pPeerId
     }
 }
 
@@ -2322,6 +2333,9 @@ extension IdentityInfo: Equatable, Hashable {
         if lhs.nickname != rhs.nickname {
             return false
         }
+        if lhs.libp2pPeerId != rhs.libp2pPeerId {
+            return false
+        }
         return true
     }
 
@@ -2330,6 +2344,7 @@ extension IdentityInfo: Equatable, Hashable {
         hasher.combine(publicKeyHex)
         hasher.combine(initialized)
         hasher.combine(nickname)
+        hasher.combine(libp2pPeerId)
     }
 }
 
@@ -2341,7 +2356,8 @@ public struct FfiConverterTypeIdentityInfo: FfiConverterRustBuffer {
                 identityId: FfiConverterOptionString.read(from: &buf), 
                 publicKeyHex: FfiConverterOptionString.read(from: &buf), 
                 initialized: FfiConverterBool.read(from: &buf), 
-                nickname: FfiConverterOptionString.read(from: &buf)
+                nickname: FfiConverterOptionString.read(from: &buf), 
+                libp2pPeerId: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -2350,6 +2366,7 @@ public struct FfiConverterTypeIdentityInfo: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.publicKeyHex, into: &buf)
         FfiConverterBool.write(value.initialized, into: &buf)
         FfiConverterOptionString.write(value.nickname, into: &buf)
+        FfiConverterOptionString.write(value.libp2pPeerId, into: &buf)
     }
 }
 
@@ -4211,6 +4228,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_swarmbridge_send_message() != 48419) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_swarmbridge_send_to_all_peers() != 18109) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_swarmbridge_shutdown() != 22199) {

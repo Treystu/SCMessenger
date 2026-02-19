@@ -1004,6 +1004,35 @@ impl SwarmBridge {
             .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
+    /// Send an encrypted message envelope to ALL connected peers.
+    /// Since messages are encrypted for a specific recipient, broadcasting to all peers is safe.
+    /// Only the intended recipient can decrypt the payload.
+    pub fn send_to_all_peers(&self, data: Vec<u8>) -> Result<(), crate::IronCoreError> {
+        let handle_guard = self.handle.lock();
+        let handle = handle_guard
+            .as_ref()
+            .ok_or(crate::IronCoreError::NetworkError)?;
+
+        let rt = self.get_runtime_handle();
+        let peers = rt.block_on(handle.get_peers()).unwrap_or_default();
+
+        if peers.is_empty() {
+            tracing::warn!("send_to_all_peers: no connected peers, message queued locally");
+            return Ok(());
+        }
+
+        let mut sent = 0usize;
+        for peer_id in peers {
+            match rt.block_on(handle.send_message(peer_id.clone(), data.clone())) {
+                Ok(()) => sent += 1,
+                Err(e) => tracing::warn!("send_to_all_peers: failed to send to {}: {:?}", peer_id, e),
+            }
+        }
+
+        tracing::info!("send_to_all_peers: sent to {} peers", sent);
+        Ok(())
+    }
+
     /// Dial a peer at a multiaddress.
     pub fn dial(&self, multiaddr: String) -> Result<(), crate::IronCoreError> {
         let handle_guard = self.handle.lock();

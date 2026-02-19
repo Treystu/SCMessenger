@@ -162,6 +162,7 @@ class SettingsViewModel @Inject constructor(
               "identity_id": "${identity?.identityId ?: ""}",
               "nickname": "${identity?.nickname ?: ""}",
               "public_key": "${identity?.publicKeyHex ?: ""}",
+              "libp2p_peer_id": "${identity?.libp2pPeerId ?: ""}",
               "listeners": $listenersJson,
               "relay": "${relay ?: "None"}"
             }

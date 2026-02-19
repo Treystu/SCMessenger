@@ -191,14 +191,16 @@ class ContactsViewModel @Inject constructor(
                 val idPattern = "\"identity_id\":\\s*\"(.*?)\"".toRegex()
                 val keyPattern = "\"public_key\":\\s*\"(.*?)\"".toRegex()
                 val nickPattern = "\"nickname\":\\s*\"(.*?)\"".toRegex()
+                val libp2pPattern = "\"libp2p_peer_id\":\\s*\"(.*?)\"".toRegex()
                 val listenersPattern = "\"listeners\":\\s*\\[(.*?)\\]".toRegex()
 
                 val peerId = idPattern.find(json)?.groupValues?.get(1)
                 val publicKey = keyPattern.find(json)?.groupValues?.get(1)
                 val nickname = nickPattern.find(json)?.groupValues?.get(1)
+                val libp2pPeerId = libp2pPattern.find(json)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
 
                 if (!peerId.isNullOrBlank() && !publicKey.isNullOrBlank()) {
-                    addContact(peerId, publicKey, nickname)
+                    addContact(peerId, publicKey, nickname, notes = libp2pPeerId)
 
                     // Parse Listeners
                     val listenersMatch = listenersPattern.find(json)?.groupValues?.get(1)
@@ -208,8 +210,10 @@ class ContactsViewModel @Inject constructor(
                          }.filter { it.isNotBlank() }
 
                          if (addresses.isNotEmpty()) {
-                             meshRepository.connectToPeer(peerId, addresses)
-                             Timber.i("Connecting to imported peer: $peerId with addresses: $addresses")
+                             // Use libp2p PeerId for dial if available — enables proper peer verification
+                             val peerIdForDial = libp2pPeerId ?: peerId
+                             meshRepository.connectToPeer(peerIdForDial, addresses)
+                             Timber.i("Connecting to imported peer (libp2p: ${libp2pPeerId != null}): $peerIdForDial with addresses: $addresses")
                          }
                     }
                 } else {

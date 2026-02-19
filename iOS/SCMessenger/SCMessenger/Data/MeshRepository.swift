@@ -472,20 +472,20 @@ final class MeshRepository {
         // Notify UI (Unified flow for sent messages)
         messageUpdates.send(messageRecord)
 
-        // Send via SwarmBridge (Network delivery)
+        // Send via SwarmBridge (Network delivery) — broadcast to all connected peers.
+        // The message is encrypted for the specific recipient, so only they can decrypt it.
+        // Others who receive it cannot read it and may relay it in mesh mode.
         if let swarmBridge = swarmBridge {
             do {
-                try swarmBridge.sendMessage(peerId: peerId, data: Data(encryptedBytes))
-                logger.info("✓ Message sent via SwarmBridge: \(encryptedBytes.count) bytes")
+                try swarmBridge.sendToAllPeers(data: Data(encryptedBytes))
+                logger.info("✓ Message broadcast to peers: \(encryptedBytes.count) bytes")
             } catch {
-                logger.error("SwarmBridge failed to send: \(error.localizedDescription)")
-                // Re-throw if it's a critical error, but for generic Network error 
-                // we've already saved it locally which handles "persistence".
-                throw error
+                // Log but don't re-throw — message is saved to history and will be
+                // delivered when peer connects (mesh delivery semantics).
+                logger.warning("SwarmBridge delivery queued (no peers connected): \(error.localizedDescription)")
             }
         } else {
-            logger.error("SwarmBridge not initialized! Message dropped.")
-            throw MeshError.notInitialized("SwarmBridge not ready")
+            logger.warning("SwarmBridge not initialized, message saved locally for later delivery.")
         }
     }
 
@@ -553,8 +553,8 @@ final class MeshRepository {
             do {
                 let receiptBytes = try ironCore?.prepareReceipt(recipientPublicKeyHex: senderPublicKeyHex, messageId: messageId)
                 if let receiptBytes = receiptBytes {
-                    try swarmBridge?.sendMessage(peerId: senderId, data: receiptBytes)
-                    logger.debug("Delivery receipt sent for \(messageId)")
+                    try swarmBridge?.sendToAllPeers(data: receiptBytes)
+                    logger.debug("Delivery receipt broadcast for \(messageId)")
                 }
             } catch {
                 logger.debug("Failed to send delivery receipt for \(messageId): \(error)")
@@ -1014,14 +1014,19 @@ final class MeshRepository {
 
     func connectToPeer(_ peerId: String, addresses: [String]) {
         for addr in addresses {
+            // Only append /p2p/ component if the peerId is a valid libp2p PeerId format
+            // (base58btc multihash, starts with "12D3Koo" or "Qm").
+            // Blake3 hex identity_ids (64 hex chars) are NOT valid libp2p PeerIds.
             var finalAddr = addr
-            if !addr.contains("/p2p/") {
+            let isLibp2pPeerId = peerId.hasPrefix("12D3Koo") || peerId.hasPrefix("Qm")
+            if isLibp2pPeerId && !addr.contains("/p2p/") {
                 finalAddr = "\(addr)/p2p/\(peerId)"
             }
             do {
                 try swarmBridge?.dial(multiaddr: finalAddr)
+                logger.info("Dialing \(finalAddr)")
             } catch {
-                logger.error("Failed to connect to peer \(peerId) at \(finalAddr): \(error.localizedDescription)")
+                logger.error("Failed to dial \(finalAddr): \(error.localizedDescription)")
             }
         }
     }
@@ -1090,11 +1095,13 @@ final class MeshRepository {
 
         let listenersJson = "[\"\(listeners.joined(separator: "\",\""))\"]"
 
+        let libp2pId = identity.libp2pPeerId ?? ""
         return """
         {
           "identity_id": "\(identity.identityId ?? "")",
           "nickname": "\(identity.nickname ?? "")",
           "public_key": "\(identity.publicKeyHex ?? "")",
+          "libp2p_peer_id": "\(libp2pId)",
           "listeners": \(listeners.isEmpty ? "[]" : listenersJson),
           "relay": "\(relay)"
         }

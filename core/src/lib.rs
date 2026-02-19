@@ -69,6 +69,7 @@ pub struct IdentityInfo {
     pub public_key_hex: Option<String>,
     pub initialized: bool,
     pub nickname: Option<String>,
+    pub libp2p_peer_id: Option<String>,
 }
 
 /// Signature result for UniFFI export
@@ -209,11 +210,18 @@ impl IronCore {
     pub fn get_identity_info(&self) -> IdentityInfo {
         let identity = self.identity.read();
 
+        let libp2p_peer_id = identity.keys().and_then(|keys| {
+            keys.to_libp2p_keypair()
+                .ok()
+                .map(|kp| kp.public().to_peer_id().to_string())
+        });
+
         IdentityInfo {
             identity_id: identity.identity_id(),
             public_key_hex: identity.public_key_hex(),
             initialized: identity.keys().is_some(),
             nickname: identity.nickname(),
+            libp2p_peer_id,
         }
     }
 

@@ -100,6 +100,7 @@ struct AddContactView: View {
     @State private var publicKey = ""
     @State private var peerId = ""
     @State private var listeners: [String] = []
+    @State private var libp2pPeerId: String = ""
     @State private var error: String?
 
     var body: some View {
@@ -168,6 +169,7 @@ struct AddContactView: View {
         if let key = json["public_key"] as? String { publicKey = key.trimmingCharacters(in: .whitespacesAndNewlines) }
         if let nick = json["nickname"] as? String { nickname = nick.trimmingCharacters(in: .whitespacesAndNewlines) }
         if let pid = json["identity_id"] as? String { peerId = pid.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let lpid = json["libp2p_peer_id"] as? String, !lpid.isEmpty { libp2pPeerId = lpid.trimmingCharacters(in: .whitespacesAndNewlines) }
         if let list = json["listeners"] as? [String] {
             listeners = list.map { $0.replacingOccurrences(of: " (Potential)", with: "") }
         }
@@ -199,21 +201,25 @@ struct AddContactView: View {
             return
         }
 
+        // Store libp2p PeerId in notes for use in connectToPeer/sendMessage
+        let notesValue: String? = libp2pPeerId.isEmpty ? nil : libp2pPeerId
         let contact = Contact(
             peerId: finalPeerId,
             nickname: nickname,
             publicKey: finalPublicKey,
             addedAt: UInt64(Date().timeIntervalSince1970),
             lastSeen: nil,
-            notes: nil
+            notes: notesValue
         )
 
         do {
             try repository.addContact(contact)
 
-            // Initiate connection if listeners provided
+            // Initiate connection if listeners provided.
+            // Use libp2p PeerId for the /p2p/ suffix if we have it — enables proper peer verification.
             if !listeners.isEmpty {
-                repository.connectToPeer(finalPeerId, addresses: listeners)
+                let peerIdForDial = libp2pPeerId.isEmpty ? finalPeerId : libp2pPeerId
+                repository.connectToPeer(peerIdForDial, addresses: listeners)
             }
 
             if andChat {
