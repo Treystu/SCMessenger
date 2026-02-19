@@ -14,7 +14,7 @@ import javax.inject.Inject
 
 /**
  * ViewModel for the dashboard screen.
- * 
+ *
  * Provides service statistics, peer list, mesh topology data,
  * and real-time network health metrics.
  */
@@ -22,32 +22,32 @@ import javax.inject.Inject
 class DashboardViewModel @Inject constructor(
     private val meshRepository: MeshRepository
 ) : ViewModel() {
-    
+
     // Service stats
     private val _stats = MutableStateFlow<uniffi.api.ServiceStats?>(null)
     val stats: StateFlow<uniffi.api.ServiceStats?> = _stats.asStateFlow()
-    
+
     // Active peers
     private val _peers = MutableStateFlow<List<PeerInfo>>(emptyList())
     val peers: StateFlow<List<PeerInfo>> = _peers.asStateFlow()
-    
+
     // Network topology data (for graph visualization)
     private val _topology = MutableStateFlow<NetworkTopology>(NetworkTopology())
     val topology: StateFlow<NetworkTopology> = _topology.asStateFlow()
-    
+
     // Loading state
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
-    
+
     // Error state
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
-    
+
     init {
         observeNetworkEvents()
         refreshData()
     }
-    
+
     /**
      * Refresh all dashboard data.
      */
@@ -56,16 +56,16 @@ class DashboardViewModel @Inject constructor(
             try {
                 _isLoading.value = true
                 _error.value = null
-                
+
                 // Get service stats
                 _stats.value = meshRepository.serviceStats.value
-                
+
                 // Get peer information
                 loadPeers()
-                
+
                 // Build topology
                 buildTopology()
-                
+
                 Timber.d("Dashboard data refreshed")
             } catch (e: Exception) {
                 _error.value = "Failed to refresh data: ${e.message}"
@@ -75,7 +75,7 @@ class DashboardViewModel @Inject constructor(
             }
         }
     }
-    
+
     /**
      * Load active peers from ledger.
      */
@@ -92,13 +92,13 @@ class DashboardViewModel @Inject constructor(
                 )
             }
             _peers.value = peerList
-            
+
             Timber.d("Loaded ${peerList.size} peers")
         } catch (e: Exception) {
             Timber.e(e, "Failed to load peers")
         }
     }
-    
+
     /**
      * Build network topology from ledger and stats.
      */
@@ -106,7 +106,7 @@ class DashboardViewModel @Inject constructor(
         try {
             val nodes = mutableListOf<TopologyNode>()
             val edges = mutableListOf<TopologyEdge>()
-            
+
             // Add self node
             val identityInfo = meshRepository.getIdentityInfo()
             if (identityInfo != null) {
@@ -118,7 +118,7 @@ class DashboardViewModel @Inject constructor(
                     )
                 )
             }
-            
+
             // Add peer nodes and edges
             _peers.value.forEach { peer ->
                 nodes.add(
@@ -128,7 +128,7 @@ class DashboardViewModel @Inject constructor(
                         isOnline = peer.isOnline
                     )
                 )
-                
+
                 // Add edge from self to peer
                 identityInfo?.let {
                     edges.add(
@@ -140,15 +140,15 @@ class DashboardViewModel @Inject constructor(
                     )
                 }
             }
-            
+
             _topology.value = NetworkTopology(nodes, edges)
-            
+
             Timber.d("Topology built: ${nodes.size} nodes, ${edges.size} edges")
         } catch (e: Exception) {
             Timber.e(e, "Failed to build topology")
         }
     }
-    
+
     /**
      * Observe network events for real-time updates.
      */
@@ -166,7 +166,7 @@ class DashboardViewModel @Inject constructor(
                 }
             }
         }
-        
+
         viewModelScope.launch {
             MeshEventBus.statusEvents.collect { event ->
                 if (event is StatusEvent.StatsUpdated) {
@@ -175,7 +175,7 @@ class DashboardViewModel @Inject constructor(
             }
         }
     }
-    
+
     /**
      * Determine transport type from multiaddr.
      */
@@ -188,7 +188,7 @@ class DashboardViewModel @Inject constructor(
             else -> "Unknown"
         }
     }
-    
+
     /**
      * Check if timestamp is recent (within last 5 minutes).
      */
@@ -198,7 +198,7 @@ class DashboardViewModel @Inject constructor(
         val fiveMinutes = 300u
         return (now - timestamp) < fiveMinutes
     }
-    
+
     /**
      * Clear error state.
      */

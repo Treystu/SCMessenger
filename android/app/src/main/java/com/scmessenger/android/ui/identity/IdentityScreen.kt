@@ -28,7 +28,7 @@ import timber.log.Timber
 
 /**
  * Identity screen - Display public key, QR code, and export options.
- * 
+ *
  * Shows the user's identity information including peer ID, public key,
  * and a scannable QR code for easy contact sharing.
  */
@@ -42,7 +42,7 @@ fun IdentityScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val successMessage by viewModel.successMessage.collectAsState()
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -71,7 +71,7 @@ fun IdentityScreen(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
-                
+
                 identityInfo == null || identityInfo?.initialized != true -> {
                     // Identity not initialized
                     IdentityNotInitializedView(
@@ -111,13 +111,13 @@ private fun IdentityNotInitializedView(
             text = "Identity Not Initialized",
             style = MaterialTheme.typography.titleLarge
         )
-        
+
         Text(
             text = "Create your identity to start using SCMessenger",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        
+
         Button(onClick = onCreateIdentity) {
             Text("Create Identity")
         }
@@ -147,7 +147,7 @@ private fun IdentityContent(
                 onDismiss = onClearError
             )
         }
-        
+
         // Success message
         successMessage?.let {
             Card(
@@ -162,14 +162,14 @@ private fun IdentityContent(
                 )
             }
         }
-        
+
         // Identicon
         IdenticonFromPeerId(
             peerId = identityInfo.identityId ?: "Unknown",
             size = 96.dp,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         )
-        
+
         // QR Code
         qrCodeData?.let { data ->
             QRCodeDisplay(
@@ -177,7 +177,7 @@ private fun IdentityContent(
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
         }
-        
+
         // Peer ID
         Card {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -186,16 +186,16 @@ private fun IdentityContent(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                
+
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
                 CopyableText(
                     text = identityInfo.identityId ?: "Unknown",
                     monospace = true
                 )
             }
         }
-        
+
         // Public Key
         Card {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -204,9 +204,9 @@ private fun IdentityContent(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                
+
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
                 CopyableText(
                     text = identityInfo.publicKeyHex ?: "Unknown",
                     monospace = true
@@ -232,7 +232,7 @@ private fun QRCodeDisplay(
             null
         }
     }
-    
+
     bitmap?.let {
         Card(modifier = modifier) {
             Image(
@@ -252,20 +252,20 @@ private fun QRCodeDisplay(
 private fun generateQRCode(data: String, size: Int): Bitmap {
     val writer = QRCodeWriter()
     val bitMatrix = writer.encode(data, BarcodeFormat.QR_CODE, size, size)
-    
+
     val width = bitMatrix.width
     val height = bitMatrix.height
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
-    
+
     for (x in 0 until width) {
         for (y in 0 until height) {
             bitmap.setPixel(
-                x, 
-                y, 
+                x,
+                y,
                 if (bitMatrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE
             )
         }
     }
-    
+
     return bitmap
 }

@@ -18,14 +18,14 @@ import com.scmessenger.android.ui.theme.*
 
 /**
  * Status indicator dot for peer online/offline status and transport type.
- * 
+ *
  * Colors:
  * - Green: Online (any transport)
  * - Grey: Offline
  * - Blue: BLE transport
  * - Green: WiFi (Aware/Direct)
  * - Purple: Internet transport
- * 
+ *
  * Includes animated pulse for active connections.
  */
 @Composable
@@ -46,7 +46,7 @@ fun StatusIndicator(
         }
         else -> StatusOnline
     }
-    
+
     Box(modifier = modifier) {
         if (animated && isOnline) {
             PulsingDot(color = color, size = size)
@@ -83,7 +83,7 @@ private fun PulsingDot(
     modifier: Modifier = Modifier
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    
+
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
         targetValue = 1.3f,
@@ -93,7 +93,7 @@ private fun PulsingDot(
         ),
         label = "scale"
     )
-    
+
     val alpha by infiniteTransition.animateFloat(
         initialValue = 1f,
         targetValue = 0.5f,
@@ -103,7 +103,7 @@ private fun PulsingDot(
         ),
         label = "alpha"
     )
-    
+
     Box(
         modifier = modifier
             .size(size)
@@ -129,7 +129,7 @@ fun ConnectionQualityIndicator(
         com.scmessenger.android.service.ConnectionQuality.POOR -> 1 to QualityPoor
         com.scmessenger.android.service.ConnectionQuality.UNKNOWN -> 0 to StatusOffline
     }
-    
+
     // Simple representation: just show a colored dot for now
     // Could be enhanced with actual bar visualization
     StatusIndicator(

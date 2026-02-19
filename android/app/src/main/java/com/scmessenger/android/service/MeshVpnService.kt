@@ -11,24 +11,24 @@ import java.nio.ByteBuffer
 
 /**
  * Optional VPN service for maximum background persistence.
- * 
+ *
  * Creates a dummy VPN tunnel to ensure the app stays alive even under
  * aggressive battery optimization. This is opt-in and togglable from Settings.
- * 
+ *
  * The VPN tunnel doesn't route any actual traffic - it's purely a mechanism
  * to maintain the mesh service in the background on devices with aggressive
  * doze/standby modes.
  */
 class MeshVpnService : VpnService() {
-    
+
     private var vpnInterface: ParcelFileDescriptor? = null
     private var isRunning = false
-    
+
     override fun onCreate() {
         super.onCreate()
         Timber.d("MeshVpnService created")
     }
-    
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> startVpn()
@@ -36,13 +36,13 @@ class MeshVpnService : VpnService() {
         }
         return START_STICKY
     }
-    
+
     private fun startVpn() {
         if (isRunning) {
             Timber.w("VPN already running")
             return
         }
-        
+
         try {
             // Create a dummy VPN interface for persistence (no traffic routing)
             // Do NOT add routes - we only want the VPN to keep the service alive,
@@ -50,11 +50,11 @@ class MeshVpnService : VpnService() {
             val builder = Builder()
                 .setSession("SCMessenger VPN")
                 .addAddress("10.255.255.1", 32)
-            
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 builder.setBlocking(false)
             }
-            
+
             vpnInterface = builder.establish()
             if (vpnInterface == null) {
                 Timber.e("Failed to establish VPN interface")
@@ -62,9 +62,9 @@ class MeshVpnService : VpnService() {
                 return
             }
             isRunning = true
-            
+
             Timber.i("VPN service started (dummy tunnel for persistence, no routing)")
-            
+
             // Start a thread to keep the interface alive
             // In a real VPN, this would forward packets
             Thread {
@@ -74,11 +74,11 @@ class MeshVpnService : VpnService() {
                         Timber.e("VPN interface is null, cannot start packet loop")
                         return@Thread
                     }
-                    
+
                     val input = FileInputStream(iface.fileDescriptor)
                     val output = FileOutputStream(iface.fileDescriptor)
                     val packet = ByteBuffer.allocate(32767)
-                    
+
                     while (isRunning) {
                         // Read any incoming packets (there won't be any)
                         val length = input.channel.read(packet)
@@ -92,23 +92,23 @@ class MeshVpnService : VpnService() {
                     Timber.e(e, "VPN thread error")
                 }
             }.start()
-            
+
         } catch (e: Exception) {
             Timber.e(e, "Failed to start VPN")
             stopSelf()
         }
     }
-    
+
     private fun stopVpn() {
         if (!isRunning) {
             return
         }
-        
+
         try {
             isRunning = false
             vpnInterface?.close()
             vpnInterface = null
-            
+
             Timber.i("VPN service stopped")
         } catch (e: Exception) {
             Timber.e(e, "Failed to stop VPN")
@@ -116,19 +116,19 @@ class MeshVpnService : VpnService() {
             stopSelf()
         }
     }
-    
+
     override fun onDestroy() {
         super.onDestroy()
         stopVpn()
         Timber.d("MeshVpnService destroyed")
     }
-    
+
     override fun onRevoke() {
         super.onRevoke()
         Timber.w("VPN permission revoked")
         stopVpn()
     }
-    
+
     companion object {
         const val ACTION_START = "com.scmessenger.android.service.VPN_START"
         const val ACTION_STOP = "com.scmessenger.android.service.VPN_STOP"

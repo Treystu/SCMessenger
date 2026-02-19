@@ -30,7 +30,7 @@ fun ConversationsScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val stats by viewModel.stats.collectAsState()
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -63,7 +63,7 @@ fun ConversationsScreen(
                     }
                 }
             }
-            
+
             // Error display
             error?.let { errorMsg ->
                 Snackbar(
@@ -77,7 +77,7 @@ fun ConversationsScreen(
                     Text(errorMsg)
                 }
             }
-            
+
             // Loading or conversation list
             if (isLoading) {
                 Box(
@@ -163,7 +163,7 @@ fun ConversationItem(
 ) {
     val lastMessage = messages.firstOrNull() ?: return
     val undeliveredCount = messages.count { !it.delivered }
-    
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -195,9 +195,9 @@ fun ConversationItem(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                
+
                 Spacer(modifier = Modifier.height(4.dp))
-                
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -217,14 +217,14 @@ fun ConversationItem(
                             MaterialTheme.colorScheme.onSurface
                         }
                     )
-                    
+
                     if (undeliveredCount > 0 && lastMessage.direction == uniffi.api.MessageDirection.SENT) {
                         Badge {
                             Text(undeliveredCount.toString())
                         }
                     }
                 }
-                
+
                 Text(
                     text = "${messages.size} messages",
                     style = MaterialTheme.typography.bodySmall,
@@ -239,7 +239,7 @@ private fun formatTimestamp(timestamp: ULong): String {
     val date = Date(timestamp.toLong())
     val now = System.currentTimeMillis()
     val diff = now - timestamp.toLong()
-    
+
     return when {
         diff < 60_000 -> "Now"
         diff < 3600_000 -> "${diff / 60_000}m"

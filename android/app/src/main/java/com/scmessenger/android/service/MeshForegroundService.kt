@@ -25,7 +25,7 @@ import javax.inject.Inject
 
 /**
  * Foreground service maintaining mesh network connectivity.
- * 
+ *
  * This service:
  * - Keeps the mesh network alive while the app is backgrounded
  * - Manages BLE, WiFi Aware, and WiFi Direct transports
@@ -36,26 +36,26 @@ import javax.inject.Inject
  */
 @AndroidEntryPoint
 class MeshForegroundService : Service() {
-    
+
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    
+
     @Inject
     lateinit var meshRepository: com.scmessenger.android.data.MeshRepository
-    
+
     @Inject
     lateinit var platformBridge: AndroidPlatformBridge
-    
+
     private var isRunning = false
     private var peerCount = 0
     private var messagesRelayed = 0
-    
+
     // WakeLock for BLE scan windows
     private var wakeLock: PowerManager.WakeLock? = null
-    
+
     override fun onCreate() {
         super.onCreate()
         Timber.d("MeshForegroundService created")
-        
+
         // Initialize WakeLock
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
@@ -63,7 +63,7 @@ class MeshForegroundService : Service() {
             "SCMessenger::MeshService"
         )
     }
-    
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> startMeshService()
@@ -71,49 +71,49 @@ class MeshForegroundService : Service() {
             ACTION_PAUSE -> pauseMeshService()
             ACTION_RESUME -> resumeMeshService()
         }
-        
+
         return START_STICKY
     }
-    
+
     private fun startMeshService() {
         if (isRunning) {
             Timber.w("Mesh service already running")
             return
         }
-        
+
         Timber.i("Starting mesh service")
-        
+
         // Start foreground with notification
         startForeground(NOTIFICATION_ID, createNotification())
-        
+
         // Acquire WakeLock for scan windows
         acquireWakeLock()
-        
+
         // Initialize platform bridge to monitor system state
         platformBridge.initialize()
-        
+
         // Create mesh service configuration
         val config = uniffi.api.MeshServiceConfig(
             discoveryIntervalMs = 30000u,  // 30 seconds
             batteryFloorPct = 20u
         )
-        
+
         // Start mesh service via repository
         try {
             meshRepository.startMeshService(config)
             meshRepository.setPlatformBridge(platformBridge)
             isRunning = true
-            
+
             // Wire CoreDelegate callbacks to MeshEventBus
             wireCoreDelegate()
-            
+
             // Listen for incoming messages and show notifications
             serviceScope.launch {
                 meshRepository.incomingMessages.collect { message ->
                     showMessageNotification(message)
                 }
             }
-            
+
             // Listen for peer events to update notification
             serviceScope.launch {
                 MeshEventBus.peerEvents.collect { event ->
@@ -130,7 +130,7 @@ class MeshForegroundService : Service() {
                     }
                 }
             }
-            
+
             // Listen for status events to update relay stats
             serviceScope.launch {
                 MeshEventBus.statusEvents.collect { event ->
@@ -143,13 +143,13 @@ class MeshForegroundService : Service() {
                     }
                 }
             }
-            
+
             // Start periodic AutoAdjust profile computation
             startPeriodicAdjustments()
-            
+
             // Start periodic WakeLock renewal
             startPeriodicWakeLockRenewal()
-            
+
             Timber.i("Mesh service started successfully")
         } catch (e: Exception) {
             Timber.e(e, "Failed to start mesh service")
@@ -157,26 +157,26 @@ class MeshForegroundService : Service() {
             stopSelf()
         }
     }
-    
+
     private fun wireCoreDelegate() {
         // Core delegate wiring is handled in MeshRepository
         // We listen to MeshEventBus which receives events from CoreDelegate
         Timber.d("CoreDelegate wired to MeshEventBus")
     }
-    
+
     private fun startPeriodicAdjustments() {
         serviceScope.launch {
             while (isActive && isRunning) {
                 try {
                     // Compute adjustments every 30 seconds
                     delay(30000L)
-                    
+
                     if (isRunning) {
                         // Trigger battery/network state update
                         // which will compute new adjustment profile
                         platformBridge.checkBatteryState()
                         platformBridge.checkNetworkState()
-                        
+
                         Timber.d("Periodic AutoAdjust profile computed")
                     }
                 } catch (e: Exception) {
@@ -185,7 +185,7 @@ class MeshForegroundService : Service() {
             }
         }
     }
-    
+
     private fun acquireWakeLock() {
         try {
             val lock = wakeLock
@@ -198,7 +198,7 @@ class MeshForegroundService : Service() {
             Timber.e(e, "Failed to acquire WakeLock")
         }
     }
-    
+
     private fun releaseWakeLock() {
         try {
             if (wakeLock?.isHeld == true) {
@@ -209,7 +209,7 @@ class MeshForegroundService : Service() {
             Timber.e(e, "Failed to release WakeLock")
         }
     }
-    
+
     private fun startPeriodicWakeLockRenewal() {
         serviceScope.launch {
             while (isActive && isRunning) {
@@ -220,43 +220,43 @@ class MeshForegroundService : Service() {
             }
         }
     }
-    
+
     private fun stopMeshService() {
         if (!isRunning) {
             Timber.w("Mesh service not running")
             return
         }
-        
+
         Timber.i("Stopping mesh service")
-        
+
         // Release WakeLock
         releaseWakeLock()
-        
+
         // Stop mesh service via repository
         meshRepository.stopMeshService()
-        
+
         isRunning = false
-        
+
         // Clean up
         platformBridge.cleanup()
-        
+
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
-    
+
     private fun pauseMeshService() {
         Timber.i("Pausing mesh service (reduced activity)")
         meshRepository.pauseMeshService()
     }
-    
+
     private fun resumeMeshService() {
         Timber.i("Resuming mesh service (full activity)")
         meshRepository.resumeMeshService()
     }
-    
+
     private fun createNotification(): Notification {
         createNotificationChannel()
-        
+
         val notificationIntent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -264,7 +264,7 @@ class MeshForegroundService : Service() {
             notificationIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        
+
         // Action: Pause Relay
         val pauseIntent = Intent(this, MeshForegroundService::class.java).apply {
             action = ACTION_PAUSE
@@ -275,7 +275,7 @@ class MeshForegroundService : Service() {
             pauseIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        
+
         // Action: Stop Service
         val stopIntent = Intent(this, MeshForegroundService::class.java).apply {
             action = ACTION_STOP
@@ -286,13 +286,13 @@ class MeshForegroundService : Service() {
             stopIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        
+
         val contentText = if (peerCount > 0) {
             "Connected to $peerCount peers • $messagesRelayed relayed"
         } else {
             getString(R.string.mesh_service_notification_text)
         }
-        
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.mesh_service_notification_title))
             .setContentText(contentText)
@@ -305,7 +305,7 @@ class MeshForegroundService : Service() {
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
-    
+
     private fun updateNotification() {
         val notification = createNotification()
         val notificationManager = getSystemService(NotificationManager::class.java)
@@ -314,7 +314,7 @@ class MeshForegroundService : Service() {
 
     private fun showMessageNotification(message: uniffi.api.MessageRecord) {
         val notificationManager = getSystemService(NotificationManager::class.java)
-        
+
         // Intent that opens chat
         val chatIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -327,7 +327,7 @@ class MeshForegroundService : Service() {
             chatIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        
+
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Message from " + message.peerId.take(8))
             .setContentText(message.content)
@@ -336,10 +336,10 @@ class MeshForegroundService : Service() {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
-            
+
         notificationManager.notify(message.id.hashCode(), notification)
     }
-    
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -350,24 +350,24 @@ class MeshForegroundService : Service() {
                 description = getString(R.string.mesh_service_channel_description)
                 setShowBadge(false)
             }
-            
+
             val notificationManager = getSystemService(NotificationManager::class.java)
             notificationManager.createNotificationChannel(channel)
         }
     }
-    
+
     override fun onBind(intent: Intent?): IBinder? = null
-    
+
     override fun onDestroy() {
         super.onDestroy()
         Timber.d("MeshForegroundService destroyed")
         serviceScope.cancel()
     }
-    
+
     companion object {
         private const val CHANNEL_ID = "mesh_service_channel"
         private const val NOTIFICATION_ID = 1001
-        
+
         const val ACTION_START = "com.scmessenger.android.service.START"
         const val ACTION_STOP = "com.scmessenger.android.service.STOP"
         const val ACTION_PAUSE = "com.scmessenger.android.service.PAUSE"

@@ -37,11 +37,11 @@ fun OnboardingScreen(
         }
         list.toList()
     }
-    
+
     val permissionsState = com.google.accompanist.permissions.rememberMultiplePermissionsState(
         permissions = permissionsToRequest
     )
-    
+
     var isCreating by remember { mutableStateOf(false) }
 
     Box(
@@ -61,26 +61,26 @@ fun OnboardingScreen(
                 modifier = Modifier.size(80.dp),
                 tint = MaterialTheme.colorScheme.primary
             )
-            
+
             Spacer(modifier = Modifier.height(32.dp))
-            
+
             Text(
                 text = "Welcome to SCMessenger",
                 style = MaterialTheme.typography.headlineMedium,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
-            
+
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             Text(
                 text = "Secure, private communication without central servers. Your identity is generated locally and never leaves your device.",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            
+
             Spacer(modifier = Modifier.height(48.dp))
-            
+
             if (isCreating) {
                 CircularProgressIndicator()
                 Spacer(modifier = Modifier.height(16.dp))
@@ -113,9 +113,9 @@ fun OnboardingScreen(
                         color = MaterialTheme.colorScheme.error
                     )
                 }
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 OutlinedButton(
                     onClick = { /* TODO: Import logic */ },
                     modifier = Modifier.fillMaxWidth().height(56.dp),

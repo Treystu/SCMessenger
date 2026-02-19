@@ -17,7 +17,7 @@ import com.scmessenger.android.ui.viewmodels.SettingsViewModel
 
 /**
  * Power Settings screen - AutoAdjust engine and battery management.
- * 
+ *
  * Provides controls for:
  * - AutoAdjust enable/disable (automatic resource management)
  * - Manual adjustment profile selection
@@ -35,14 +35,14 @@ fun PowerSettingsScreen(
     val currentProfile by viewModel.adjustmentProfile.collectAsState()
     val error by viewModel.error.collectAsState()
     val settings by viewModel.settings.collectAsState()
-    
+
     var bleScanInterval by remember { mutableStateOf(2000u) }
     var relayMaxPerHour by remember { mutableStateOf(200u) }
-    
+
     LaunchedEffect(Unit) {
         viewModel.loadSettings()
     }
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -68,7 +68,7 @@ fun PowerSettingsScreen(
                     onDismiss = { viewModel.clearError() }
                 )
             }
-            
+
             // AutoAdjust Settings
             SettingsSection(title = "AutoAdjust Engine") {
                 SwitchSetting(
@@ -77,7 +77,7 @@ fun PowerSettingsScreen(
                     checked = autoAdjustEnabled,
                     onCheckedChange = { viewModel.setAutoAdjust(it) }
                 )
-                
+
                 if (autoAdjustEnabled) {
                     Card(
                         modifier = Modifier
@@ -100,7 +100,7 @@ fun PowerSettingsScreen(
                     }
                 }
             }
-            
+
             // Manual Profile Override
             if (!autoAdjustEnabled) {
                 SettingsSection(title = "Manual Profile") {
@@ -110,7 +110,7 @@ fun PowerSettingsScreen(
                     )
                 }
             }
-            
+
             // Advanced Overrides
             SettingsSection(title = "Advanced Overrides") {
                 SliderSetting(
@@ -126,7 +126,7 @@ fun PowerSettingsScreen(
                     valueLabel = "${bleScanInterval}ms",
                     enabled = !autoAdjustEnabled
                 )
-                
+
                 SliderSetting(
                     title = "Relay Max Per Hour",
                     description = "Maximum messages to relay per hour",
@@ -140,7 +140,7 @@ fun PowerSettingsScreen(
                     valueLabel = "${relayMaxPerHour} msg/hr",
                     enabled = !autoAdjustEnabled
                 )
-                
+
                 Button(
                     onClick = { viewModel.clearAdjustmentOverrides() },
                     modifier = Modifier
@@ -151,7 +151,7 @@ fun PowerSettingsScreen(
                     Text("Reset to Defaults")
                 }
             }
-            
+
             // Battery Settings
             settings?.let { currentSettings ->
                 SettingsSection(title = "Battery Management") {
@@ -166,7 +166,7 @@ fun PowerSettingsScreen(
                         },
                         valueLabel = "${currentSettings.batteryFloor}%"
                     )
-                    
+
                     InfoCard(
                         title = "Power Saving Tips",
                         message = """
@@ -178,7 +178,7 @@ fun PowerSettingsScreen(
                     )
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
@@ -198,9 +198,9 @@ private fun SettingsSection(
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
         )
-        
+
         content()
-        
+
         Divider()
     }
 }
@@ -233,7 +233,7 @@ private fun SwitchSetting(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        
+
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
@@ -274,13 +274,13 @@ private fun SliderSetting(
                 color = MaterialTheme.colorScheme.primary
             )
         }
-        
+
         Text(
             text = description,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        
+
         Slider(
             value = value,
             onValueChange = onValueChange,
@@ -308,7 +308,7 @@ private fun ProfileSelector(
             uniffi.api.AdjustmentProfile.STANDARD to "Standard (Balanced)",
             uniffi.api.AdjustmentProfile.MAXIMUM to "Maximum (Performance)"
         )
-        
+
         profiles.forEach { (profile, label) ->
             Row(
                 modifier = Modifier.fillMaxWidth(),

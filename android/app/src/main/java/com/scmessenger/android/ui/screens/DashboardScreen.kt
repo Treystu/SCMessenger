@@ -94,7 +94,7 @@ fun DashboardScreen(
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
-                    
+
                     TextDetailRow("Uptime", formatDuration(stats?.uptimeSecs ?: 0uL))
                     TextDetailRow("Data Transferred", formatBytes(stats?.bytesTransferred ?: 0uL))
                 }
@@ -135,7 +135,7 @@ fun StatusCard(
                     color = if (isRunning) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            
+
             FloatingActionButton(
                 onClick = onToggle,
                 containerColor = if (isRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
@@ -197,7 +197,7 @@ fun ConnectionStatusCard() {
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
-            
+
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 TransportItem("BLE", Icons.Filled.Bluetooth, true) // Ideally get from ViewModel
                 TransportItem("WiFi Aware", Icons.Filled.Wifi, true)

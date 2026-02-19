@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Handles Bluetooth Low Energy scanning for mesh peers.
- * 
+ *
  * Features:
  * - Duty-cycle management (scan window/interval configurable)
  * - Background vs foreground scan mode switching
@@ -37,13 +37,13 @@ class BleScanner(
 
     private var isScanning = false
     private var isBackgroundMode = false
-    
+
     // Duty cycle management
     private var scanWindowMs: Long = 10000L  // 10 seconds
     private var scanIntervalMs: Long = 30000L  // 30 seconds
     private val handler = Handler(Looper.getMainLooper())
     private var dutyCycleRunnable: Runnable? = null
-    
+
     // Scan result caching to avoid duplicate processing
     private val recentlySeenPeers = ConcurrentHashMap<String, Long>()
     private val peerCacheTimeoutMs = 5000L  // 5 seconds
@@ -53,7 +53,7 @@ class BleScanner(
     companion object {
         val SERVICE_UUID = UUID.fromString("0000DF01-0000-1000-8000-00805F9B34FB")
         val PARCEL_UUID = ParcelUuid(SERVICE_UUID)
-        
+
         // Scan modes
         const val DEFAULT_SCAN_WINDOW_MS = 10000L
         const val DEFAULT_SCAN_INTERVAL_MS = 30000L
@@ -68,7 +68,7 @@ class BleScanner(
             result?.let { scanResult ->
                 val device = scanResult.device
                 val peerId = device.address
-                
+
                 // Check if we've recently seen this peer
                 val now = System.currentTimeMillis()
                 val lastSeen = recentlySeenPeers[peerId]
@@ -76,19 +76,19 @@ class BleScanner(
                     // Skip - we've processed this peer recently
                     return
                 }
-                
+
                 // Update cache
                 recentlySeenPeers[peerId] = now
-                
+
                 // Prune old entries
                 pruneOldPeers(now)
-                
+
                 val rssi = scanResult.rssi
                 val scanRecord = scanResult.scanRecord
 
                 // Extract Service Data
                 val serviceData = scanRecord?.getServiceData(PARCEL_UUID)
-                
+
                 if (serviceData != null) {
                     Timber.v("Discovered peer: $peerId (RSSI: $rssi, Data: ${serviceData.size} bytes)")
                     // Notify discovery
@@ -108,7 +108,7 @@ class BleScanner(
             isScanning = false
         }
     }
-    
+
     /**
      * Set scan duty cycle parameters.
      */
@@ -116,31 +116,31 @@ class BleScanner(
         scanWindowMs = windowMs
         scanIntervalMs = intervalMs
         Timber.d("Scan duty cycle updated: window=${windowMs}ms, interval=${intervalMs}ms")
-        
+
         // Restart scanning if active
         if (isScanning) {
             stopScanning()
             startScanning()
         }
     }
-    
+
     /**
      * Switch to background scan mode (lower duty cycle).
      */
     fun setBackgroundMode(background: Boolean) {
         if (isBackgroundMode == background) return
-        
+
         isBackgroundMode = background
-        
+
         if (background) {
             setScanDutyCycle(BACKGROUND_SCAN_WINDOW_MS, BACKGROUND_SCAN_INTERVAL_MS)
         } else {
             setScanDutyCycle(FOREGROUND_SCAN_WINDOW_MS, FOREGROUND_SCAN_INTERVAL_MS)
         }
-        
+
         Timber.i("Scan mode changed: background=$background")
     }
-    
+
     /**
      * Update scan settings based on AutoAdjust profile.
      */
@@ -148,7 +148,7 @@ class BleScanner(
         // Convert AutoAdjust interval to duty cycle
         val window = minOf(scanIntervalMs.toLong(), 20000L)
         val interval = maxOf(scanIntervalMs.toLong(), window + 5000L)
-        
+
         setScanDutyCycle(window, interval)
     }
 
@@ -171,7 +171,7 @@ class BleScanner(
         } else {
             ScanSettings.SCAN_MODE_LOW_LATENCY
         }
-        
+
         val settings = ScanSettings.Builder()
             .setScanMode(scanMode)
             .build()
@@ -180,7 +180,7 @@ class BleScanner(
             scanner.startScan(filters, settings, scanCallback)
             isScanning = true
             Timber.i("BLE Scanning started (background=$isBackgroundMode)")
-            
+
             // Start duty cycle if intervals are configured
             if (scanWindowMs < scanIntervalMs) {
                 startDutyCycle()
@@ -189,17 +189,17 @@ class BleScanner(
             Timber.e(e, "Failed to start BLE scan")
         }
     }
-    
+
     private fun startDutyCycle() {
         // Cancel any existing duty cycle
         stopDutyCycle()
-        
+
         dutyCycleRunnable = object : Runnable {
             override fun run() {
                 if (isScanning) {
                     // Stop scanning for the rest of the interval
                     stopScanningInternal()
-                    
+
                     // Schedule restart after pause
                     handler.postDelayed({
                         if (isScanning) {
@@ -207,56 +207,56 @@ class BleScanner(
                         }
                     }, scanIntervalMs - scanWindowMs)
                 }
-                
+
                 // Schedule next cycle
                 if (isScanning) {
                     handler.postDelayed(this, scanIntervalMs)
                 }
             }
         }
-        
+
         // Start first cycle after scan window
         handler.postDelayed(dutyCycleRunnable!!, scanWindowMs)
         Timber.d("Duty cycle started: ${scanWindowMs}ms scan / ${scanIntervalMs}ms interval")
     }
-    
+
     private fun stopDutyCycle() {
         dutyCycleRunnable?.let { handler.removeCallbacks(it) }
         dutyCycleRunnable = null
     }
-    
+
     @SuppressLint("MissingPermission")
     private fun startScanningInternal() {
         if (scanner == null) return
-        
+
         try {
             val filters = listOf(
                 ScanFilter.Builder()
                     .setServiceUuid(ParcelUuid(SERVICE_UUID))
                     .build()
             )
-            
+
             val scanMode = if (isBackgroundMode) {
                 ScanSettings.SCAN_MODE_LOW_POWER
             } else {
                 ScanSettings.SCAN_MODE_LOW_LATENCY
             }
-            
+
             val settings = ScanSettings.Builder()
                 .setScanMode(scanMode)
                 .build()
-            
+
             scanner.startScan(filters, settings, scanCallback)
             Timber.v("BLE scan window started")
         } catch (e: Exception) {
             Timber.e(e, "Failed to restart BLE scan")
         }
     }
-    
+
     @SuppressLint("MissingPermission")
     private fun stopScanningInternal() {
         if (scanner == null) return
-        
+
         try {
             scanner.stopScan(scanCallback)
             Timber.v("BLE scan window ended")
@@ -270,7 +270,7 @@ class BleScanner(
         if (scanner == null || !isScanning) return
 
         stopDutyCycle()
-        
+
         try {
             scanner.stopScan(scanCallback)
             isScanning = false
@@ -279,7 +279,7 @@ class BleScanner(
             Timber.e(e, "Failed to stop BLE scan")
         }
     }
-    
+
     /**
      * Clear the peer cache to allow re-discovery.
      */
@@ -287,7 +287,7 @@ class BleScanner(
         recentlySeenPeers.clear()
         Timber.d("Peer cache cleared")
     }
-    
+
     /**
      * Prune old entries from peer cache.
      */

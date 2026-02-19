@@ -13,17 +13,17 @@ import timber.log.Timber
 
 /**
  * Main activity for SCMessenger.
- * 
+ *
  * This is the entry point for the UI, hosting the Compose navigation graph.
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         Timber.d("MainActivity created")
-        
+
         setContent {
             SCMessengerTheme {
                 Surface(
@@ -35,16 +35,16 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-    
+
     override fun onResume() {
         super.onResume()
         // TODO: Notify platform bridge of foreground state
         Timber.d("MainActivity resumed")
     }
-    
+
     override fun onPause() {
         super.onPause()
-        // TODO: Notify platform bridge of background state  
+        // TODO: Notify platform bridge of background state
         Timber.d("MainActivity paused")
     }
 }

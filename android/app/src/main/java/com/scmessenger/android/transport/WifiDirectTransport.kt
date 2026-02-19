@@ -18,13 +18,13 @@ import kotlinx.coroutines.*
 
 /**
  * WiFi Direct (WiFi P2P) transport implementation.
- * 
+ *
  * Provides device-to-device communication using WiFi Direct:
  * - DNS-SD service discovery
  * - Group formation and negotiation
  * - Socket-based data exchange
  * - Auto-negotiation for group owner
- * 
+ *
  * Works on most Android devices (API 14+, but we target 26+).
  */
 class WifiDirectTransport(
@@ -32,21 +32,21 @@ class WifiDirectTransport(
     private val onPeerDiscovered: (peerId: String) -> Unit,
     private val onDataReceived: (peerId: String, data: ByteArray) -> Unit
 ) {
-    
+
     private val wifiP2pManager: WifiP2pManager? = context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
     private var channel: WifiP2pManager.Channel? = null
-    
+
     private var isRunning = false
     private var isGroupOwner = false
-    
+
     private val discoveredPeers = ConcurrentHashMap<String, WifiP2pDevice>()
     private val activeConnections = ConcurrentHashMap<String, P2pConnection>()
-    
+
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    
+
     // Server socket for group owner
     private var serverSocket: ServerSocket? = null
-    
+
     /**
      * Start WiFi Direct discovery and service advertisement.
      */
@@ -55,20 +55,20 @@ class WifiDirectTransport(
             Timber.w("WiFi Direct already running")
             return
         }
-        
+
         if (wifiP2pManager == null) {
             Timber.e("WiFi P2P not available on this device")
             return
         }
-        
+
         try {
             channel = wifiP2pManager.initialize(context, context.mainLooper, null)
-            
+
             if (channel == null) {
                 Timber.e("Failed to initialize WiFi P2P channel")
                 return
             }
-            
+
             // Register broadcast receiver for P2P events
             val intentFilter = IntentFilter().apply {
                 addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION)
@@ -76,17 +76,17 @@ class WifiDirectTransport(
                 addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION)
                 addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION)
             }
-            
+
             context.registerReceiver(p2pReceiver, intentFilter)
-            
+
             isRunning = true
-            
+
             // Start service discovery
             startServiceDiscovery()
-            
+
             // Register our service
             registerService()
-            
+
             Timber.i("WiFi Direct started")
         } catch (e: SecurityException) {
             Timber.e(e, "Security exception starting WiFi Direct - missing permissions?")
@@ -94,7 +94,7 @@ class WifiDirectTransport(
             Timber.e(e, "Failed to start WiFi Direct")
         }
     }
-    
+
     /**
      * Stop WiFi Direct.
      */
@@ -102,32 +102,32 @@ class WifiDirectTransport(
         if (!isRunning) {
             return
         }
-        
+
         isRunning = false
-        
+
         try {
             // Stop discovery
             wifiP2pManager?.stopPeerDiscovery(channel, null)
-            
+
             // Clear service
             wifiP2pManager?.clearLocalServices(channel, null)
-            
+
             // Disconnect from group
             wifiP2pManager?.removeGroup(channel, null)
-            
+
             // Close all connections
             activeConnections.values.forEach { it.close() }
             activeConnections.clear()
-            
+
             // Close server socket
             serverSocket?.close()
             serverSocket = null
-            
+
             // Unregister receiver
             context.unregisterReceiver(p2pReceiver)
-            
+
             discoveredPeers.clear()
-            
+
             Timber.i("WiFi Direct stopped")
         } catch (e: SecurityException) {
             Timber.e(e, "Security exception stopping WiFi Direct")
@@ -135,7 +135,7 @@ class WifiDirectTransport(
             Timber.e(e, "Failed to stop WiFi Direct")
         }
     }
-    
+
     /**
      * Send data to a peer via WiFi Direct.
      */
@@ -144,38 +144,38 @@ class WifiDirectTransport(
             Timber.w("No WiFi Direct connection to $peerId")
             return false
         }
-        
+
         return connection.send(data)
     }
-    
+
     private fun startServiceDiscovery() {
         if (channel == null) return
-        
+
         try {
             val serviceRequest = WifiP2pDnsSdServiceRequest.newInstance()
-            
+
             wifiP2pManager?.setDnsSdResponseListeners(
                 channel,
                 { _, _, _ -> },
                 { fullDomainName, record, device ->
                     Timber.d("WiFi Direct service discovered: $fullDomainName from ${device.deviceName}")
-                    
+
                     if (record["service"] == SERVICE_TYPE) {
                         discoveredPeers[device.deviceAddress] = device
                         onPeerDiscovered(device.deviceAddress)
-                        
+
                         // Initiate connection
                         connectToPeer(device)
                     }
                 }
             )
-            
+
             wifiP2pManager?.addServiceRequest(channel, serviceRequest, object : WifiP2pManager.ActionListener {
                 override fun onSuccess() {
                     Timber.d("Service discovery request added")
                     startPeerDiscovery()
                 }
-                
+
                 override fun onFailure(reason: Int) {
                     Timber.e("Failed to add service discovery request: $reason")
                 }
@@ -186,16 +186,16 @@ class WifiDirectTransport(
             Timber.e(e, "Failed to start service discovery")
         }
     }
-    
+
     private fun startPeerDiscovery() {
         if (channel == null) return
-        
+
         try {
             wifiP2pManager?.discoverPeers(channel, object : WifiP2pManager.ActionListener {
                 override fun onSuccess() {
                     Timber.d("Peer discovery started")
                 }
-                
+
                 override fun onFailure(reason: Int) {
                     Timber.e("Peer discovery failed: $reason")
                 }
@@ -206,27 +206,27 @@ class WifiDirectTransport(
             Timber.e(e, "Failed to start peer discovery")
         }
     }
-    
+
     private fun registerService() {
         if (channel == null) return
-        
+
         try {
             val record = mutableMapOf<String, String>().apply {
                 put("service", SERVICE_TYPE)
                 put("version", "1.0")
             }
-            
+
             val serviceInfo = WifiP2pDnsSdServiceInfo.newInstance(
                 SERVICE_NAME,
                 SERVICE_TYPE,
                 record
             )
-            
+
             wifiP2pManager?.addLocalService(channel, serviceInfo, object : WifiP2pManager.ActionListener {
                 override fun onSuccess() {
                     Timber.d("WiFi Direct service registered: $SERVICE_NAME")
                 }
-                
+
                 override fun onFailure(reason: Int) {
                     Timber.e("Failed to register service: $reason")
                 }
@@ -237,26 +237,26 @@ class WifiDirectTransport(
             Timber.e(e, "Failed to register service")
         }
     }
-    
+
     private fun connectToPeer(device: WifiP2pDevice) {
         if (channel == null) return
-        
+
         if (activeConnections.containsKey(device.deviceAddress)) {
             Timber.d("Already connected to ${device.deviceAddress}")
             return
         }
-        
+
         try {
             val config = WifiP2pConfig().apply {
                 deviceAddress = device.deviceAddress
                 groupOwnerIntent = 0 // We want to be client if possible
             }
-            
+
             wifiP2pManager?.connect(channel, config, object : WifiP2pManager.ActionListener {
                 override fun onSuccess() {
                     Timber.d("Connection initiated to ${device.deviceAddress}")
                 }
-                
+
                 override fun onFailure(reason: Int) {
                     Timber.e("Failed to connect to ${device.deviceAddress}: $reason")
                 }
@@ -267,7 +267,7 @@ class WifiDirectTransport(
             Timber.e(e, "Failed to connect to peer")
         }
     }
-    
+
     private val p2pReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
@@ -276,14 +276,14 @@ class WifiDirectTransport(
                     val enabled = state == WifiP2pManager.WIFI_P2P_STATE_ENABLED
                     Timber.d("WiFi P2P state changed: enabled=$enabled")
                 }
-                
+
                 WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> {
                     Timber.d("Peer list changed")
                 }
-                
+
                 WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
                     val networkInfo = intent.getParcelableExtra<android.net.NetworkInfo>(WifiP2pManager.EXTRA_NETWORK_INFO)
-                    
+
                     if (networkInfo?.isConnected == true) {
                         Timber.d("Connected to WiFi P2P group")
                         wifiP2pManager?.requestConnectionInfo(channel) { info ->
@@ -293,19 +293,19 @@ class WifiDirectTransport(
                         Timber.d("Disconnected from WiFi P2P group")
                     }
                 }
-                
+
                 WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION -> {
                     Timber.d("This device changed")
                 }
             }
         }
     }
-    
+
     private fun handleConnectionInfo(info: WifiP2pInfo) {
         isGroupOwner = info.isGroupOwner
-        
+
         Timber.d("Connection info - Group owner: $isGroupOwner, Owner address: ${info.groupOwnerAddress}")
-        
+
         if (isGroupOwner) {
             // We are group owner - start server
             startServer()
@@ -314,19 +314,19 @@ class WifiDirectTransport(
             connectToGroupOwner(info.groupOwnerAddress.hostAddress ?: "")
         }
     }
-    
+
     private fun startServer() {
         scope.launch {
             try {
                 serverSocket = ServerSocket(P2P_PORT)
                 Timber.i("WiFi Direct server started on port $P2P_PORT")
-                
+
                 while (isRunning) {
                     val socket = serverSocket?.accept()
                     if (socket != null) {
                         val peerId = socket.inetAddress.hostAddress ?: "unknown"
                         Timber.d("Incoming WiFi Direct connection from $peerId")
-                        
+
                         val connection = P2pConnection(peerId, socket)
                         activeConnections[peerId] = connection
                         connection.startReading()
@@ -339,15 +339,15 @@ class WifiDirectTransport(
             }
         }
     }
-    
+
     private fun connectToGroupOwner(address: String) {
         scope.launch {
             try {
                 val socket = Socket()
                 socket.connect(InetSocketAddress(address, P2P_PORT), 5000)
-                
+
                 Timber.i("Connected to WiFi Direct group owner at $address")
-                
+
                 val connection = P2pConnection(address, socket)
                 activeConnections[address] = connection
                 connection.startReading()
@@ -356,7 +356,7 @@ class WifiDirectTransport(
             }
         }
     }
-    
+
     /**
      * Represents an active WiFi Direct connection.
      */
@@ -366,30 +366,30 @@ class WifiDirectTransport(
     ) {
         private val inputStream: InputStream = socket.getInputStream()
         private val outputStream: OutputStream = socket.getOutputStream()
-        
+
         @Volatile
         private var isReading = false
-        
+
         fun startReading() {
             if (isReading) return
-            
+
             isReading = true
-            
+
             scope.launch {
                 try {
                     val buffer = ByteArray(8192)
                     val lengthBuffer = ByteArray(4)
-                    
+
                     while (isReading && socket.isConnected) {
                         val headerRead = inputStream.read(lengthBuffer)
                         if (headerRead < 4) break
-                        
+
                         val length = java.nio.ByteBuffer.wrap(lengthBuffer).int
                         if (length <= 0 || length > buffer.size) {
                             Timber.e("Invalid message length: $length")
                             break
                         }
-                        
+
                         val data = ByteArray(length)
                         var totalRead = 0
                         while (totalRead < length) {
@@ -397,7 +397,7 @@ class WifiDirectTransport(
                             if (bytesRead < 0) break
                             totalRead += bytesRead
                         }
-                        
+
                         if (totalRead == length) {
                             onDataReceived(peerId, data)
                         } else {
@@ -413,7 +413,7 @@ class WifiDirectTransport(
                 }
             }
         }
-        
+
         fun send(data: ByteArray): Boolean {
             return try {
                 synchronized(outputStream) {
@@ -428,7 +428,7 @@ class WifiDirectTransport(
                 false
             }
         }
-        
+
         fun close() {
             isReading = false
             try {
@@ -439,12 +439,12 @@ class WifiDirectTransport(
             activeConnections.remove(peerId)
         }
     }
-    
+
     fun cleanup() {
         stop()
         scope.cancel()
     }
-    
+
     companion object {
         private const val SERVICE_NAME = "scmessenger"
         private const val SERVICE_TYPE = "_scmessenger._tcp"

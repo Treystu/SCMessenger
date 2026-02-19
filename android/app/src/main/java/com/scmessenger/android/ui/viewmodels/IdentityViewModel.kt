@@ -11,7 +11,7 @@ import javax.inject.Inject
 
 /**
  * ViewModel for identity management.
- * 
+ *
  * Handles identity creation, display, QR code generation,
  * and key export/backup operations.
  */
@@ -19,27 +19,27 @@ import javax.inject.Inject
 class IdentityViewModel @Inject constructor(
     private val meshRepository: MeshRepository
 ) : ViewModel() {
-    
+
     // Identity info
     private val _identityInfo = MutableStateFlow<uniffi.api.IdentityInfo?>(null)
     val identityInfo: StateFlow<uniffi.api.IdentityInfo?> = _identityInfo.asStateFlow()
-    
+
     // Loading state
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
-    
+
     // Error state
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
-    
+
     // Success message (for export/copy operations)
     private val _successMessage = MutableStateFlow<String?>(null)
     val successMessage: StateFlow<String?> = _successMessage.asStateFlow()
-    
+
     init {
         loadIdentity()
     }
-    
+
     /**
      * Load identity information.
      */
@@ -48,10 +48,10 @@ class IdentityViewModel @Inject constructor(
             try {
                 _isLoading.value = true
                 _error.value = null
-                
+
                 val identity = meshRepository.getIdentityInfo()
                 _identityInfo.value = identity
-                
+
                 if (identity == null || !identity.initialized) {
                     Timber.w("Identity not initialized")
                 } else {
@@ -65,7 +65,7 @@ class IdentityViewModel @Inject constructor(
             }
         }
     }
-    
+
     /**
      * Create a new identity (first-time setup).
      */
@@ -74,10 +74,10 @@ class IdentityViewModel @Inject constructor(
             try {
                 _isLoading.value = true
                 _error.value = null
-                
+
                 meshRepository.createIdentity()
                 loadIdentity()
-                
+
                 _successMessage.value = "Identity created successfully"
                 Timber.i("Identity created")
             } catch (e: Exception) {
@@ -88,7 +88,7 @@ class IdentityViewModel @Inject constructor(
             }
         }
     }
-    
+
     /**
      * Get QR code data for sharing identity.
      * Returns JSON string with peer ID and public key.
@@ -96,10 +96,10 @@ class IdentityViewModel @Inject constructor(
     fun getQrCodeData(): String? {
         val identity = _identityInfo.value ?: return null
         if (!identity.initialized) return null
-        
+
         val id = identity.identityId ?: return null
         val pubKey = identity.publicKeyHex ?: return null
-        
+
         return try {
             """{"peerId":"$id","publicKey":"$pubKey"}"""
         } catch (e: Exception) {
@@ -107,14 +107,14 @@ class IdentityViewModel @Inject constructor(
             null
         }
     }
-    
+
     /**
      * Clear success message.
      */
     fun clearSuccessMessage() {
         _successMessage.value = null
     }
-    
+
     /**
      * Clear error state.
      */

@@ -21,14 +21,14 @@ import timber.log.Timber
 
 /**
  * JoinMeshScreen for joining an existing mesh network.
- * 
+ *
  * Features:
  * - QR scanner for join bundle (server.rs handle_join_bundle)
  * - Parse join bundle (bootstrap peers, topics, identity exchange)
  * - Dial bootstrap peers via SwarmHandle.dial()
  * - Subscribe to discovered topics
  * - Connection progress animation
- * 
+ *
  * Join Bundle Format (JSON):
  * {
  *   "bootstrap_peers": ["/ip4/x.x.x.x/tcp/yyyy"],
@@ -47,7 +47,7 @@ fun JoinMeshScreen(
     var joinState by remember { mutableStateOf(JoinState.SCANNING) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var connectionProgress by remember { mutableStateOf(0f) }
-    
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -81,19 +81,19 @@ fun JoinMeshScreen(
                     onCancel = onCancel
                 )
             }
-            
+
             JoinState.PARSING -> {
                 ParsingView()
             }
-            
+
             JoinState.CONNECTING -> {
                 ConnectingView(connectionProgress)
             }
-            
+
             JoinState.SUCCESS -> {
                 SuccessView(onComplete = onJoinSuccess)
             }
-            
+
             JoinState.ERROR -> {
                 ErrorView(errorMessage ?: "Unknown error", onRetry = {
                     joinState = JoinState.SCANNING
@@ -122,18 +122,18 @@ private fun QrScannerView(
             style = MaterialTheme.typography.headlineMedium,
             textAlign = TextAlign.Center
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         Text(
             text = "Position the QR code within the frame",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
-        
+
         Spacer(modifier = Modifier.height(32.dp))
-        
+
         // Placeholder for camera preview
         Box(
             modifier = Modifier
@@ -154,13 +154,13 @@ private fun QrScannerView(
                 }
             }
         }
-        
+
         Spacer(modifier = Modifier.height(32.dp))
-        
+
         OutlinedButton(onClick = onCancel) {
             Text("Cancel")
         }
-        
+
         // TODO: Integrate CameraX + ML Kit Barcode Scanner
         // Mock QR scan for development only
         if (com.scmessenger.android.BuildConfig.DEBUG) {
@@ -211,7 +211,7 @@ private fun ConnectingView(progress: Float) {
         ),
         label = "rotation"
     )
-    
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -224,25 +224,25 @@ private fun ConnectingView(progress: Float) {
                 .rotate(rotation),
             tint = MaterialTheme.colorScheme.primary
         )
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         Text(
             text = "Connecting to mesh...",
             style = MaterialTheme.typography.headlineSmall
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         LinearProgressIndicator(
             progress = progress,
             modifier = Modifier
                 .fillMaxWidth(0.7f)
                 .height(8.dp),
         )
-        
+
         Spacer(modifier = Modifier.height(8.dp))
-        
+
         Text(
             text = "${(progress * 100).toInt()}%",
             style = MaterialTheme.typography.bodyMedium,
@@ -260,7 +260,7 @@ private fun SuccessView(onComplete: () -> Unit) {
         kotlinx.coroutines.delay(1500)
         onComplete()
     }
-    
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -271,9 +271,9 @@ private fun SuccessView(onComplete: () -> Unit) {
             modifier = Modifier.size(64.dp),
             tint = Color(0xFF4CAF50)
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         Text(
             text = "Connected!",
             style = MaterialTheme.typography.headlineSmall,
@@ -301,17 +301,17 @@ private fun ErrorView(
             modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.error
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         Text(
             text = "Connection Failed",
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.error
         )
-        
+
         Spacer(modifier = Modifier.height(8.dp))
-        
+
         Text(
             text = message,
             style = MaterialTheme.typography.bodyMedium,
@@ -319,9 +319,9 @@ private fun ErrorView(
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 32.dp)
         )
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -347,40 +347,40 @@ private suspend fun parseAndJoin(
 ) = withContext(Dispatchers.IO) {
     try {
         Timber.d("Parsing join bundle (length: ${qrData.length})")
-        
+
         // Parse JSON (simplified - would use kotlinx.serialization)
         val jsonRegex = """"bootstrap_peers":\s*\[(.*?)\]""".toRegex()
         val topicsRegex = """"topics":\s*\[(.*?)\]""".toRegex()
-        
+
         val peersMatch = jsonRegex.find(qrData)
         val topicsMatch = topicsRegex.find(qrData)
-        
+
         if (peersMatch == null || topicsMatch == null) {
             onError("Invalid join bundle format")
             return@withContext
         }
-        
+
         val bootstrapPeers = peersMatch.groupValues[1]
             .split(",")
             .map { it.trim().removeSurrounding("\"") }
             .filter { it.isNotEmpty() }
-        
+
         val topics = topicsMatch.groupValues[1]
             .split(",")
             .map { it.trim().removeSurrounding("\"") }
             .filter { it.isNotEmpty() }
-        
+
         Timber.i("Bootstrap peers: $bootstrapPeers")
         Timber.i("Topics: $topics")
-        
+
         if (bootstrapPeers.isEmpty()) {
             onError("No bootstrap peers in bundle")
             return@withContext
         }
-        
+
         // Progress: 0.25 after parsing
         onProgress(0.25f)
-        
+
         // Dial bootstrap peers
         var successCount = 0
         bootstrapPeers.forEachIndexed { index, peer ->
@@ -395,14 +395,14 @@ private suspend fun parseAndJoin(
                 }
             }
         }
-        
+
         if (successCount == 0) {
             withContext(Dispatchers.Main) {
                 onError("Failed to connect to any bootstrap peers")
             }
             return@withContext
         }
-        
+
         // Subscribe to topics
         topics.forEach { topic ->
             withContext(Dispatchers.Main) {
@@ -414,12 +414,12 @@ private suspend fun parseAndJoin(
                 }
             }
         }
-        
+
         onProgress(1.0f)
         withContext(Dispatchers.Main) {
             onSuccess()
         }
-        
+
     } catch (e: Exception) {
         Timber.e(e, "Failed to parse and join")
         onError(e.message ?: "Unknown error")

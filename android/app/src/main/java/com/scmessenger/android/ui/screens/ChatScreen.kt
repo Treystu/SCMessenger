@@ -35,7 +35,7 @@ fun ChatScreen(
     val chatMessages = remember(messages, conversationId) {
         messages.filter { it.peerId == conversationId }.sortedBy { it.timestamp }
     }
-    
+
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
@@ -52,11 +52,11 @@ fun ChatScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { 
+                title = {
                     Column {
                         Text(text = "Chat", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            text = conversationId.take(8) + "...", 
+                            text = conversationId.take(8) + "...",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -108,9 +108,9 @@ fun ChatScreen(
                     shape = RoundedCornerShape(24.dp),
                     maxLines = 4
                 )
-                
+
                 Spacer(modifier = Modifier.width(8.dp))
-                
+
                 IconButton(
                     onClick = {
                         if (inputText.isNotBlank()) {

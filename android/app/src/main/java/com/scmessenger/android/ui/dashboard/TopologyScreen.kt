@@ -29,7 +29,7 @@ import kotlin.math.sin
 
 /**
  * Topology screen - Canvas-based network graph visualization.
- * 
+ *
  * Displays the mesh network topology as an interactive graph:
  * - Nodes represent peers (self node highlighted)
  * - Edges represent connections (colored by transport type)
@@ -44,11 +44,11 @@ fun TopologyScreen(
     val topology by viewModel.topology.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
-    
+
     LaunchedEffect(Unit) {
         viewModel.refreshData()
     }
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -77,7 +77,7 @@ fun TopologyScreen(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
-                
+
                 topology.nodes.isEmpty() -> {
                     Column(
                         modifier = Modifier
@@ -89,9 +89,9 @@ fun TopologyScreen(
                             text = "No topology data",
                             style = MaterialTheme.typography.titleLarge
                         )
-                        
+
                         Spacer(modifier = Modifier.height(8.dp))
-                        
+
                         Text(
                             text = "Start the mesh service to see network topology",
                             style = MaterialTheme.typography.bodyMedium,
@@ -99,7 +99,7 @@ fun TopologyScreen(
                         )
                     }
                 }
-                
+
                 else -> {
                     Column(
                         modifier = Modifier
@@ -113,10 +113,10 @@ fun TopologyScreen(
                                 onDismiss = { viewModel.clearError() }
                             )
                         }
-                        
+
                         // Stats
                         TopologyStats(topology = topology)
-                        
+
                         // Graph visualization
                         TopologyGraph(
                             topology = topology,
@@ -125,7 +125,7 @@ fun TopologyScreen(
                                 .height(500.dp)
                                 .padding(16.dp)
                         )
-                        
+
                         // Legend
                         TopologyLegend(
                             modifier = Modifier.padding(16.dp)
@@ -156,12 +156,12 @@ private fun TopologyStats(
                 label = "Nodes",
                 value = topology.nodes.size.toString()
             )
-            
+
             StatItem(
                 label = "Connections",
                 value = topology.edges.size.toString()
             )
-            
+
             StatItem(
                 label = "Online",
                 value = topology.nodes.count { it.isOnline }.toString()
@@ -202,15 +202,15 @@ private fun TopologyGraph(
     val nodeColor = MaterialTheme.colorScheme.primary
     val selfNodeColor = MaterialTheme.colorScheme.secondary
     val offlineNodeColor = MaterialTheme.colorScheme.surfaceVariant
-    
+
     Canvas(modifier = modifier.background(MaterialTheme.colorScheme.surface)) {
         val centerX = size.width / 2
         val centerY = size.height / 2
         val radius = minOf(size.width, size.height) / 2 - 60f
-        
+
         // Calculate node positions in a circle
         val nodePositions = mutableMapOf<String, Offset>()
-        
+
         topology.nodes.forEachIndexed { index, node ->
             if (node.isSelf) {
                 // Place self node in center
@@ -226,15 +226,15 @@ private fun TopologyGraph(
                 }
             }
         }
-        
+
         // Draw edges first (behind nodes)
         topology.edges.forEach { edge ->
             val source = nodePositions[edge.source]
             val target = nodePositions[edge.target]
-            
+
             if (source != null && target != null) {
                 val edgeColor = getTransportColor(edge.transport)
-                
+
                 drawLine(
                     color = edgeColor,
                     start = source,
@@ -244,7 +244,7 @@ private fun TopologyGraph(
                 )
             }
         }
-        
+
         // Draw nodes on top
         topology.nodes.forEach { node ->
             val position = nodePositions[node.id] ?: return@forEach
@@ -253,7 +253,7 @@ private fun TopologyGraph(
                 !node.isOnline -> offlineNodeColor
                 else -> nodeColor
             }
-            
+
             // Outer circle (highlight for self)
             if (node.isSelf) {
                 drawCircle(
@@ -262,7 +262,7 @@ private fun TopologyGraph(
                     center = position
                 )
             }
-            
+
             // Main node circle
             drawCircle(
                 color = color,
@@ -270,7 +270,7 @@ private fun TopologyGraph(
                 center = position,
                 style = Stroke(width = 4f)
             )
-            
+
             // Inner fill
             drawCircle(
                 color = color.copy(alpha = 0.2f),
@@ -295,7 +295,7 @@ private fun TopologyLegend(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-            
+
             // Node types
             LegendItem(
                 color = MaterialTheme.colorScheme.secondary,
@@ -309,15 +309,15 @@ private fun TopologyLegend(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 label = "Offline Peer"
             )
-            
+
             Divider()
-            
+
             // Transport types
             Text(
                 text = "Connection Types",
                 style = MaterialTheme.typography.titleSmall
             )
-            
+
             LegendItem(color = TransportBLE, label = "BLE")
             LegendItem(color = TransportWiFiAware, label = "WiFi Aware")
             LegendItem(color = TransportWiFiDirect, label = "WiFi Direct")
@@ -342,7 +342,7 @@ private fun LegendItem(
                 .size(20.dp)
                 .background(color, shape = MaterialTheme.shapes.small)
         )
-        
+
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium

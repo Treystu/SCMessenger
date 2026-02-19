@@ -16,27 +16,27 @@ import javax.inject.Inject
 
 /**
  * Broadcast receiver to restart the mesh service on device boot.
- * 
+ *
  * Only starts the service if auto-start is enabled in preferences.
  */
 @AndroidEntryPoint
 class BootReceiver : BroadcastReceiver() {
-    
+
     @Inject
     lateinit var preferencesRepository: PreferencesRepository
-    
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    
+
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
             intent.action == "android.intent.action.QUICKBOOT_POWERON") {
-            
+
             Timber.i("Boot completed, checking auto-start preference")
-            
+
             // Check if auto-start is enabled
             scope.launch {
                 val autoStart = preferencesRepository.serviceAutoStart.first()
-                
+
                 if (autoStart) {
                     Timber.i("Auto-start enabled, starting mesh service")
                     startMeshService(context)
@@ -46,12 +46,12 @@ class BootReceiver : BroadcastReceiver() {
             }
         }
     }
-    
+
     private fun startMeshService(context: Context) {
         val intent = Intent(context, MeshForegroundService::class.java).apply {
             action = MeshForegroundService.ACTION_START
         }
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(intent)
         } else {

@@ -20,7 +20,7 @@ import timber.log.Timber
 
 /**
  * Add Contact screen - QR scan, manual entry, nearby discovery.
- * 
+ *
  * Provides multiple methods to add contacts:
  * - Manual entry of peer ID and public key
  * - QR code scanning (future)
@@ -34,14 +34,14 @@ fun AddContactScreen(
     viewModel: ContactsViewModel = hiltViewModel()
 ) {
     val error by viewModel.error.collectAsState()
-    
+
     var selectedTab by remember { mutableStateOf(0) }
     var peerId by remember { mutableStateOf("") }
     var publicKey by remember { mutableStateOf("") }
     var nickname by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
     var isAdding by remember { mutableStateOf(false) }
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -77,7 +77,7 @@ fun AddContactScreen(
                     text = { Text("Nearby") }
                 )
             }
-            
+
             // Error banner
             error?.let {
                 ErrorBanner(
@@ -85,7 +85,7 @@ fun AddContactScreen(
                     onDismiss = { viewModel.clearError() }
                 )
             }
-            
+
             // Content based on selected tab
             when (selectedTab) {
                 0 -> ManualEntryTab(
@@ -153,7 +153,7 @@ private fun ManualEntryTab(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IdenticonFromPeerId(peerId = peerId, size = 64.dp)
-                    
+
                     Column {
                         Text(
                             text = nickname.ifBlank { "Unknown" },
@@ -169,7 +169,7 @@ private fun ManualEntryTab(
                 }
             }
         }
-        
+
         // Peer ID input
         OutlinedTextField(
             value = peerId,
@@ -179,7 +179,7 @@ private fun ManualEntryTab(
             singleLine = true,
             enabled = !isAdding
         )
-        
+
         // Public Key input
         OutlinedTextField(
             value = publicKey,
@@ -190,7 +190,7 @@ private fun ManualEntryTab(
             maxLines = 4,
             enabled = !isAdding
         )
-        
+
         // Nickname input
         OutlinedTextField(
             value = nickname,
@@ -200,7 +200,7 @@ private fun ManualEntryTab(
             singleLine = true,
             enabled = !isAdding
         )
-        
+
         // Notes input
         OutlinedTextField(
             value = notes,
@@ -211,7 +211,7 @@ private fun ManualEntryTab(
             maxLines = 5,
             enabled = !isAdding
         )
-        
+
         // Add button
         Button(
             onClick = onAdd,
@@ -247,16 +247,16 @@ private fun QRScanTab() {
             modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.primary
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         Text(
             text = "QR Code Scanning",
             style = MaterialTheme.typography.titleLarge
         )
-        
+
         Spacer(modifier = Modifier.height(8.dp))
-        
+
         Text(
             text = "QR code scanning will be available in a future update",
             style = MaterialTheme.typography.bodyMedium,
@@ -280,16 +280,16 @@ private fun NearbyDiscoveryTab() {
             modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.primary
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         Text(
             text = "Nearby Discovery",
             style = MaterialTheme.typography.titleLarge
         )
-        
+
         Spacer(modifier = Modifier.height(8.dp))
-        
+
         Text(
             text = "Automatic discovery of nearby peers will be available in a future update",
             style = MaterialTheme.typography.bodyMedium,

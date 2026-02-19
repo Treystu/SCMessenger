@@ -15,10 +15,10 @@ import timber.log.Timber
 
 /**
  * BroadcastReceiver for handling share intents.
- * 
+ *
  * Receives Intent.ACTION_SEND/ACTION_SEND_MULTIPLE and presents a contact picker
  * to encrypt and queue the shared content as a mesh message.
- * 
+ *
  * Features:
  * - Text/plain sharing support
  * - Contact picker dialog
@@ -26,9 +26,9 @@ import timber.log.Timber
  * - Background message queueing
  */
 class ShareReceiver : BroadcastReceiver() {
-    
+
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    
+
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_SEND -> handleSingleShare(context, intent)
@@ -36,7 +36,7 @@ class ShareReceiver : BroadcastReceiver() {
             else -> Timber.w("Unhandled intent action: ${intent.action}")
         }
     }
-    
+
     /**
      * Handle single item share (text).
      */
@@ -46,7 +46,7 @@ class ShareReceiver : BroadcastReceiver() {
             Timber.w("Share intent has no type")
             return
         }
-        
+
         when {
             type == "text/plain" -> {
                 val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
@@ -62,7 +62,7 @@ class ShareReceiver : BroadcastReceiver() {
             }
         }
     }
-    
+
     /**
      * Handle multiple items share (currently not supported).
      */
@@ -70,7 +70,7 @@ class ShareReceiver : BroadcastReceiver() {
         Toast.makeText(context, "Multiple items sharing not yet supported", Toast.LENGTH_SHORT).show()
         Timber.w("Multiple share not implemented")
     }
-    
+
     /**
      * Show contact picker dialog to select recipient.
      */
@@ -78,17 +78,17 @@ class ShareReceiver : BroadcastReceiver() {
         try {
             val repository = MeshRepository(context.applicationContext)
             val contacts = repository.listContacts()
-            
+
             if (contacts.isEmpty()) {
                 Toast.makeText(context, "No contacts available", Toast.LENGTH_SHORT).show()
                 Timber.w("No contacts to share with")
                 return
             }
-            
+
             val contactNames = contacts.map { contact ->
                 contact.nickname ?: contact.peerId.take(8)
             }.toTypedArray()
-            
+
             // NOTE: Showing AlertDialog from BroadcastReceiver context can fail on newer
             // Android versions due to background UI restrictions. For production, this should
             // launch a transparent Activity to handle the share flow.
@@ -108,8 +108,8 @@ class ShareReceiver : BroadcastReceiver() {
             } catch (e: android.view.WindowManager.BadTokenException) {
                 Timber.w("Cannot show dialog from BroadcastReceiver context, using toast fallback")
                 Toast.makeText(
-                    context, 
-                    "Open SCMessenger to share content with contacts", 
+                    context,
+                    "Open SCMessenger to share content with contacts",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -118,7 +118,7 @@ class ShareReceiver : BroadcastReceiver() {
             Toast.makeText(context, "Failed to load contacts", Toast.LENGTH_SHORT).show()
         }
     }
-    
+
     /**
      * Encrypt and queue message via MeshRepository.
      */

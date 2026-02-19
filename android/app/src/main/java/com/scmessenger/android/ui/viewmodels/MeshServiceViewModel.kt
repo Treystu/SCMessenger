@@ -17,7 +17,7 @@ import javax.inject.Inject
 
 /**
  * ViewModel managing the mesh service lifecycle and state.
- * 
+ *
  * This is shared across the app to provide consistent service state
  * and control methods.
  */
@@ -27,7 +27,7 @@ class MeshServiceViewModel @Inject constructor(
     private val meshRepository: MeshRepository,
     private val preferencesRepository: PreferencesRepository
 ) : ViewModel() {
-    
+
     // Service state from repository
     val serviceState = meshRepository.serviceState
         .stateIn(
@@ -35,7 +35,7 @@ class MeshServiceViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = uniffi.api.ServiceState.STOPPED
         )
-    
+
     // Service stats from repository
     val serviceStats = meshRepository.serviceStats
         .stateIn(
@@ -43,7 +43,7 @@ class MeshServiceViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = null
         )
-    
+
     // Preferences
     val autoStart = preferencesRepository.serviceAutoStart
         .stateIn(
@@ -51,7 +51,7 @@ class MeshServiceViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = false
         )
-    
+
     // Derived state: is service running
     val isRunning = serviceState.map { it == uniffi.api.ServiceState.RUNNING }
         .stateIn(
@@ -59,11 +59,11 @@ class MeshServiceViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = false
         )
-    
+
     init {
         Timber.d("MeshServiceViewModel initialized")
     }
-    
+
     /**
      * Start the mesh service.
      */
@@ -73,20 +73,20 @@ class MeshServiceViewModel @Inject constructor(
                 val intent = Intent(context, MeshForegroundService::class.java).apply {
                     action = MeshForegroundService.ACTION_START
                 }
-                
+
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
                 } else {
                     context.startService(intent)
                 }
-                
+
                 Timber.i("Mesh service start requested")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to start mesh service")
             }
         }
     }
-    
+
     /**
      * Stop the mesh service.
      */
@@ -97,14 +97,14 @@ class MeshServiceViewModel @Inject constructor(
                     action = MeshForegroundService.ACTION_STOP
                 }
                 context.startService(intent)
-                
+
                 Timber.i("Mesh service stop requested")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to stop mesh service")
             }
         }
     }
-    
+
     /**
      * Toggle the mesh service on/off.
      */
@@ -117,7 +117,7 @@ class MeshServiceViewModel @Inject constructor(
             }
         }
     }
-    
+
     /**
      * Set auto-start preference.
      */
@@ -127,13 +127,13 @@ class MeshServiceViewModel @Inject constructor(
             Timber.d("Auto-start set to: $enabled")
         }
     }
-    
+
     /**
      * Get formatted stats for display.
      */
     fun getStatsText(): String {
         val stats = serviceStats.value ?: return "No stats available"
-        
+
         return buildString {
             appendLine("Peers Discovered: ${stats.peersDiscovered}")
             appendLine("Messages Relayed: ${stats.messagesRelayed}")
@@ -141,7 +141,7 @@ class MeshServiceViewModel @Inject constructor(
             appendLine("Uptime: ${formatDuration(stats.uptimeSecs)}")
         }
     }
-    
+
     private fun formatBytes(bytes: ULong): String {
         return when {
             bytes < 1024u -> "$bytes B"
@@ -150,13 +150,13 @@ class MeshServiceViewModel @Inject constructor(
             else -> "${bytes / (1024u * 1024u * 1024u)} GB"
         }
     }
-    
+
     private fun formatDuration(seconds: ULong): String {
         val secs = seconds.toLong()
         val hours = secs / 3600
         val minutes = (secs % 3600) / 60
         val remainingSeconds = secs % 60
-        
+
         return when {
             hours > 0 -> "${hours}h ${minutes}m"
             minutes > 0 -> "${minutes}m ${remainingSeconds}s"

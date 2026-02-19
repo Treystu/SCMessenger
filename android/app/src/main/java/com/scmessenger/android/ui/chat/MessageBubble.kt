@@ -20,7 +20,7 @@ import java.util.*
 
 /**
  * Message bubble component for chat UI.
- * 
+ *
  * Displays sent/received messages with delivery status indicators,
  * timestamps, and appropriate styling based on message direction.
  */
@@ -30,7 +30,7 @@ fun MessageBubble(
     modifier: Modifier = Modifier
 ) {
     val isSent = message.direction == uniffi.api.MessageDirection.SENT
-    
+
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start
@@ -38,7 +38,7 @@ fun MessageBubble(
         if (!isSent) {
             Spacer(modifier = Modifier.width(48.dp))
         }
-        
+
         Column(
             horizontalAlignment = if (isSent) Alignment.End else Alignment.Start,
             modifier = Modifier.widthIn(max = 280.dp)
@@ -66,7 +66,7 @@ fun MessageBubble(
                     )
                 }
             }
-            
+
             // Timestamp and status
             Row(
                 modifier = Modifier.padding(top = 4.dp, start = 8.dp, end = 8.dp),
@@ -79,14 +79,14 @@ fun MessageBubble(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Normal
                 )
-                
+
                 // Delivery status for sent messages
                 if (isSent) {
                     DeliveryStatusIndicator(delivered = message.delivered)
                 }
             }
         }
-        
+
         if (isSent) {
             Spacer(modifier = Modifier.width(48.dp))
         }
@@ -125,13 +125,13 @@ private fun formatTimestamp(timestamp: ULong): String {
     val millis = timestamp.toLong() * 1000
     val date = Date(millis)
     val now = Date()
-    
+
     val sdf = if (isSameDay(date, now)) {
         SimpleDateFormat("HH:mm", Locale.getDefault())
     } else {
         SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
     }
-    
+
     return sdf.format(date)
 }
 
@@ -141,7 +141,7 @@ private fun formatTimestamp(timestamp: ULong): String {
 private fun isSameDay(date1: Date, date2: Date): Boolean {
     val cal1 = Calendar.getInstance().apply { time = date1 }
     val cal2 = Calendar.getInstance().apply { time = date2 }
-    
+
     return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
            cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
 }

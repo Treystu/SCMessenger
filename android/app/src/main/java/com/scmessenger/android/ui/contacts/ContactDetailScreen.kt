@@ -24,7 +24,7 @@ import java.util.*
 
 /**
  * Contact Detail screen - Display contact info, metrics, and actions.
- * 
+ *
  * Shows detailed information about a contact including:
  * - Identity information (peer ID, public key)
  * - Connection metrics (last seen, message count)
@@ -40,14 +40,14 @@ fun ContactDetailScreen(
 ) {
     val contacts by viewModel.contacts.collectAsState()
     val error by viewModel.error.collectAsState()
-    
+
     val contact = remember(contacts, contactId) {
         contacts.find { it.peerId == contactId }
     }
-    
+
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -87,9 +87,9 @@ fun ContactDetailScreen(
                         modifier = Modifier.size(64.dp),
                         tint = MaterialTheme.colorScheme.error
                     )
-                    
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    
+
                     Text(
                         text = "Contact not found",
                         style = MaterialTheme.typography.titleLarge
@@ -106,7 +106,7 @@ fun ContactDetailScreen(
             }
         }
     }
-    
+
     // Delete confirmation dialog
     if (showDeleteDialog) {
         AlertDialog(
@@ -131,11 +131,11 @@ fun ContactDetailScreen(
             }
         )
     }
-    
+
     // Edit nickname dialog
     if (showEditDialog && contact != null) {
         var newNickname by remember { mutableStateOf(contact.nickname ?: "") }
-        
+
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
             title = { Text("Edit Nickname") },
@@ -190,7 +190,7 @@ private fun ContactDetailContent(
                 onDismiss = onClearError
             )
         }
-        
+
         // Identity card
         Card {
             Column(
@@ -204,13 +204,13 @@ private fun ContactDetailContent(
                     peerId = contact.peerId,
                     size = 96.dp
                 )
-                
+
                 Text(
                     text = contact.nickname ?: "Unknown",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold
                 )
-                
+
                 // Online status
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -228,7 +228,7 @@ private fun ContactDetailContent(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                
+
                 // Send message button
                 Button(
                     onClick = onSendMessage,
@@ -240,7 +240,7 @@ private fun ContactDetailContent(
                 }
             }
         }
-        
+
         // Peer ID
         Card {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -249,16 +249,16 @@ private fun ContactDetailContent(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                
+
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
                 CopyableText(
                     text = contact.peerId,
                     monospace = true
                 )
             }
         }
-        
+
         // Public Key
         Card {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -267,16 +267,16 @@ private fun ContactDetailContent(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                
+
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
                 CopyableText(
                     text = contact.publicKey,
                     monospace = true
                 )
             }
         }
-        
+
         // Metadata
         Card {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -285,15 +285,15 @@ private fun ContactDetailContent(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                
+
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
                 MetadataRow(label = "Added", value = formatTimestamp(contact.addedAt))
-                
+
                 contact.lastSeen?.let {
                     MetadataRow(label = "Last Seen", value = formatTimestamp(it))
                 }
-                
+
                 contact.notes?.let {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(

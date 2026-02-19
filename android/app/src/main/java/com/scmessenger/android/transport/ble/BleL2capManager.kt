@@ -12,11 +12,11 @@ import kotlinx.coroutines.*
 
 /**
  * L2CAP Connection-Oriented Channel manager for high-throughput BLE.
- * 
+ *
  * Available on Android 10+ (API 29+).
  * Provides stream-oriented data transfer with higher throughput than GATT.
  * Falls back to GATT on older devices or if L2CAP fails.
- * 
+ *
  * Uses:
  * - BluetoothServerSocket for incoming connections
  * - BluetoothSocket for outgoing connections
@@ -26,26 +26,26 @@ class BleL2capManager(
     private val context: Context,
     private val onDataReceived: (deviceAddress: String, data: ByteArray) -> Unit
 ) {
-    
+
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-    
+
     // L2CAP server socket (listening for incoming)
     private var serverSocket: BluetoothServerSocket? = null
-    
+
     // Active L2CAP connections
     private val activeConnections = ConcurrentHashMap<String, L2capConnection>()
-    
+
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    
+
     private var isListening = false
-    
+
     /**
      * Check if L2CAP is supported on this device.
      */
     fun isSupported(): Boolean {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
     }
-    
+
     /**
      * Start listening for incoming L2CAP connections.
      */
@@ -54,26 +54,26 @@ class BleL2capManager(
             Timber.w("L2CAP not supported on this device (API < 29)")
             return
         }
-        
+
         if (isListening) {
             Timber.w("Already listening for L2CAP connections")
             return
         }
-        
+
         val adapter = bluetoothManager?.adapter
         if (adapter == null) {
             Timber.e("Bluetooth adapter not available")
             return
         }
-        
+
         scope.launch {
             try {
                 serverSocket = adapter.listenUsingInsecureL2capChannel()
                 isListening = true
-                
+
                 val psm = serverSocket?.psm ?: 0
                 Timber.i("L2CAP server listening on PSM: $psm")
-                
+
                 // Accept loop
                 while (isListening) {
                     try {
@@ -96,7 +96,7 @@ class BleL2capManager(
             }
         }
     }
-    
+
     /**
      * Stop listening for incoming connections.
      */
@@ -104,9 +104,9 @@ class BleL2capManager(
         if (!isListening) {
             return
         }
-        
+
         isListening = false
-        
+
         try {
             serverSocket?.close()
             serverSocket = null
@@ -115,7 +115,7 @@ class BleL2capManager(
             Timber.e(e, "Error stopping L2CAP server")
         }
     }
-    
+
     /**
      * Connect to a remote device via L2CAP.
      * Returns true if connection initiated successfully.
@@ -125,32 +125,32 @@ class BleL2capManager(
             Timber.w("L2CAP not supported on this device")
             return false
         }
-        
+
         if (activeConnections.containsKey(deviceAddress)) {
             Timber.d("Already connected to $deviceAddress via L2CAP")
             return true
         }
-        
+
         val adapter = bluetoothManager?.adapter
         if (adapter == null) {
             Timber.e("Bluetooth adapter not available")
             return false
         }
-        
+
         scope.launch {
             var socket: BluetoothSocket? = null
             try {
                 val device = adapter.getRemoteDevice(deviceAddress)
                 socket = device.createInsecureL2capChannel(psm)
-                
+
                 socket.connect()
-                
+
                 val connection = L2capConnection(deviceAddress, socket)
                 activeConnections[deviceAddress] = connection
-                
+
                 // Start read loop
                 connection.startReading()
-                
+
                 Timber.i("L2CAP connected to $deviceAddress (PSM: $psm)")
             } catch (e: SecurityException) {
                 socket?.close()
@@ -160,10 +160,10 @@ class BleL2capManager(
                 Timber.e(e, "Failed to connect L2CAP to $deviceAddress")
             }
         }
-        
+
         return true
     }
-    
+
     /**
      * Disconnect from a device.
      */
@@ -172,7 +172,7 @@ class BleL2capManager(
         connection.close()
         Timber.d("L2CAP disconnected from $deviceAddress")
     }
-    
+
     /**
      * Send data to a connected device.
      */
@@ -181,37 +181,37 @@ class BleL2capManager(
             Timber.w("No L2CAP connection to $deviceAddress")
             return false
         }
-        
+
         return connection.send(data)
     }
-    
+
     /**
      * Disconnect all connections and stop listening.
      */
     fun shutdown() {
         stopListening()
-        
+
         val addresses = activeConnections.keys.toList()
         addresses.forEach { disconnect(it) }
-        
+
         scope.cancel()
     }
-    
+
     private fun handleIncomingConnection(socket: BluetoothSocket) {
         val deviceAddress = socket.remoteDevice.address
         Timber.d("Incoming L2CAP connection from $deviceAddress")
-        
+
         if (activeConnections.containsKey(deviceAddress)) {
             Timber.w("Already have L2CAP connection to $deviceAddress, closing new one")
             socket.close()
             return
         }
-        
+
         val connection = L2capConnection(deviceAddress, socket)
         activeConnections[deviceAddress] = connection
         connection.startReading()
     }
-    
+
     /**
      * Represents an active L2CAP connection.
      */
@@ -221,21 +221,21 @@ class BleL2capManager(
     ) {
         private val inputStream: InputStream = socket.inputStream
         private val outputStream: OutputStream = socket.outputStream
-        
+
         @Volatile
         private var isReading = false
-        
+
         fun startReading() {
             if (isReading) {
                 return
             }
-            
+
             isReading = true
-            
+
             scope.launch {
                 try {
                     val buffer = ByteArray(8192) // 8KB buffer
-                    
+
                     while (isReading && socket.isConnected) {
                         val bytesRead = inputStream.read(buffer)
                         if (bytesRead > 0) {
@@ -256,7 +256,7 @@ class BleL2capManager(
                 }
             }
         }
-        
+
         fun send(data: ByteArray): Boolean {
             return try {
                 synchronized(outputStream) {
@@ -270,16 +270,16 @@ class BleL2capManager(
                 false
             }
         }
-        
+
         fun close() {
             isReading = false
-            
+
             try {
                 socket.close()
             } catch (e: Exception) {
                 Timber.w(e, "Error closing L2CAP socket for $deviceAddress")
             }
-            
+
             activeConnections.remove(deviceAddress, this)
         }
     }

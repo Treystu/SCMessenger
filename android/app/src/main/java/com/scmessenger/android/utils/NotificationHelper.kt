@@ -19,7 +19,7 @@ import timber.log.Timber
 
 /**
  * Notification helper for mesh messaging.
- * 
+ *
  * Features:
  * - 4 notification channels (Messages/high, Mesh Status/low, Peer Events/default, System/low)
  * - Grouped message notifications per contact
@@ -29,22 +29,22 @@ import timber.log.Timber
  * - Respects DND (Do Not Disturb) settings
  */
 object NotificationHelper {
-    
+
     // Channel IDs
     private const val CHANNEL_MESSAGES = "messages"
     private const val CHANNEL_MESH_STATUS = "mesh_status"
     private const val CHANNEL_PEER_EVENTS = "peer_events"
     private const val CHANNEL_SYSTEM = "system"
-    
+
     // Channel Group
     private const val GROUP_MESH = "mesh_group"
-    
+
     // Notification IDs
     const val NOTIFICATION_ID_FOREGROUND_SERVICE = 1001
     private const val NOTIFICATION_ID_MESSAGE_BASE = 2000
     private const val NOTIFICATION_ID_MESH_STATUS = 3000
     private const val NOTIFICATION_ID_PEER_EVENT = 4000
-    
+
     // Actions
     const val ACTION_REPLY = "com.scmessenger.ACTION_REPLY"
     const val ACTION_MARK_READ = "com.scmessenger.ACTION_MARK_READ"
@@ -52,10 +52,10 @@ object NotificationHelper {
     const val EXTRA_PEER_ID = "peer_id"
     const val EXTRA_MESSAGE_ID = "message_id"
     const val KEY_REPLY_TEXT = "key_reply_text"
-    
+
     // Message grouping
     private val messageGroups = mutableMapOf<String, MutableList<NotificationMessage>>()
-    
+
     /**
      * Initialize notification channels on app start.
      * Must be called before posting any notifications.
@@ -63,11 +63,11 @@ object NotificationHelper {
     fun createNotificationChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            
+
             // Create channel group
             val channelGroup = NotificationChannelGroup(GROUP_MESH, "Mesh Network")
             notificationManager.createNotificationChannelGroup(channelGroup)
-            
+
             // 1. Messages Channel (HIGH priority)
             val messagesChannel = NotificationChannel(
                 CHANNEL_MESSAGES,
@@ -80,7 +80,7 @@ object NotificationHelper {
                 enableVibration(true)
                 setShowBadge(true)
             }
-            
+
             // 2. Mesh Status Channel (LOW priority)
             val meshStatusChannel = NotificationChannel(
                 CHANNEL_MESH_STATUS,
@@ -93,7 +93,7 @@ object NotificationHelper {
                 enableVibration(false)
                 setShowBadge(false)
             }
-            
+
             // 3. Peer Events Channel (DEFAULT priority)
             val peerEventsChannel = NotificationChannel(
                 CHANNEL_PEER_EVENTS,
@@ -106,7 +106,7 @@ object NotificationHelper {
                 enableVibration(false)
                 setShowBadge(false)
             }
-            
+
             // 4. System Channel (LOW priority)
             val systemChannel = NotificationChannel(
                 CHANNEL_SYSTEM,
@@ -119,15 +119,15 @@ object NotificationHelper {
                 enableVibration(false)
                 setShowBadge(false)
             }
-            
+
             notificationManager.createNotificationChannels(
                 listOf(messagesChannel, meshStatusChannel, peerEventsChannel, systemChannel)
             )
-            
+
             Timber.d("Notification channels created")
         }
     }
-    
+
     /**
      * Build foreground service notification for MeshForegroundService.
      */
@@ -147,9 +147,9 @@ object NotificationHelper {
         } else {
             null
         }
-        
+
         val contentText = "Connected: $peerCount peers • Relayed: $relayCount messages"
-        
+
         return NotificationCompat.Builder(context, CHANNEL_MESH_STATUS)
             .setContentTitle("Mesh Network Active")
             .setContentText(contentText)
@@ -159,7 +159,7 @@ object NotificationHelper {
             .setSilent(true)
             .build()
     }
-    
+
     /**
      * Show a new message notification.
      * Groups messages by contact/peerId.
@@ -177,14 +177,14 @@ object NotificationHelper {
             Timber.d("DND enabled, skipping notification")
             return
         }
-        
+
         // Add to group
         val message = NotificationMessage(messageId, content, timestamp)
         messageGroups.getOrPut(peerId) { mutableListOf() }.add(message)
-        
+
         val messages = messageGroups[peerId] ?: return
         val displayName = nickname ?: peerId.take(8)
-        
+
         // Generate identicon for avatar
         val identicon = try {
             generateIdenticonBitmap(peerId.toByteArray(), 128)
@@ -192,19 +192,19 @@ object NotificationHelper {
             Timber.e(e, "Failed to generate identicon")
             null
         }
-        
+
         // Create person for messaging style
         val person = Person.Builder()
             .setName(displayName)
             .apply { identicon?.let { setIcon(IconCompat.createWithBitmap(it)) } }
             .build()
-        
+
         // Build messaging style notification
         val messagingStyle = NotificationCompat.MessagingStyle(person)
         messages.forEach { msg ->
             messagingStyle.addMessage(msg.content, msg.timestamp, person)
         }
-        
+
         // Reply action with RemoteInput
         val replyIntent = createReplyIntent(context, peerId, messageId)
         val replyPendingIntent = PendingIntent.getBroadcast(
@@ -213,11 +213,11 @@ object NotificationHelper {
             replyIntent,
             PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        
+
         val remoteInput = RemoteInput.Builder(KEY_REPLY_TEXT)
             .setLabel("Reply")
             .build()
-        
+
         val replyAction = NotificationCompat.Action.Builder(
             R.drawable.ic_notification,
             "Reply",
@@ -226,7 +226,7 @@ object NotificationHelper {
             .addRemoteInput(remoteInput)
             .setAllowGeneratedReplies(true)
             .build()
-        
+
         // Mark Read action
         val markReadIntent = createMarkReadIntent(context, peerId, messageId)
         val markReadPendingIntent = PendingIntent.getBroadcast(
@@ -235,13 +235,13 @@ object NotificationHelper {
             markReadIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        
+
         val markReadAction = NotificationCompat.Action.Builder(
             R.drawable.ic_notification,
             "Mark Read",
             markReadPendingIntent
         ).build()
-        
+
         // Mute action
         val muteIntent = createMuteIntent(context, peerId)
         val mutePendingIntent = PendingIntent.getBroadcast(
@@ -250,13 +250,13 @@ object NotificationHelper {
             muteIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        
+
         val muteAction = NotificationCompat.Action.Builder(
             R.drawable.ic_notification,
             "Mute",
             mutePendingIntent
         ).build()
-        
+
         // Tap to open chat
         val chatIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
             putExtra(EXTRA_PEER_ID, peerId)
@@ -271,7 +271,7 @@ object NotificationHelper {
         } else {
             null
         }
-        
+
         // Build notification
         val notification = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
             .setStyle(messagingStyle)
@@ -285,13 +285,13 @@ object NotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .build()
-        
+
         val notificationId = NOTIFICATION_ID_MESSAGE_BASE + peerId.hashCode()
         NotificationManagerCompat.from(context).notify(notificationId, notification)
-        
+
         Timber.d("Message notification shown for $peerId")
     }
-    
+
     /**
      * Clear message notifications for a specific peer.
      */
@@ -301,7 +301,7 @@ object NotificationHelper {
         NotificationManagerCompat.from(context).cancel(notificationId)
         Timber.d("Cleared notifications for $peerId")
     }
-    
+
     /**
      * Show peer discovery notification.
      */
@@ -311,7 +311,7 @@ object NotificationHelper {
         transport: String
     ) {
         if (isDndEnabled(context)) return
-        
+
         val notification = NotificationCompat.Builder(context, CHANNEL_PEER_EVENTS)
             .setContentTitle("Peer Discovered")
             .setContentText("$peerId via $transport")
@@ -319,13 +319,13 @@ object NotificationHelper {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
-        
+
         NotificationManagerCompat.from(context).notify(
             NOTIFICATION_ID_PEER_EVENT + peerId.hashCode(),
             notification
         )
     }
-    
+
     /**
      * Show mesh status notification (connection issues, etc).
      */
@@ -341,12 +341,12 @@ object NotificationHelper {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
-        
+
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_MESH_STATUS, notification)
     }
-    
+
     // Helper methods
-    
+
     private fun createReplyIntent(context: Context, peerId: String, messageId: String): Intent {
         return Intent(ACTION_REPLY).apply {
             setPackage(context.packageName)
@@ -354,7 +354,7 @@ object NotificationHelper {
             putExtra(EXTRA_MESSAGE_ID, messageId)
         }
     }
-    
+
     private fun createMarkReadIntent(context: Context, peerId: String, messageId: String): Intent {
         return Intent(ACTION_MARK_READ).apply {
             setPackage(context.packageName)
@@ -362,14 +362,14 @@ object NotificationHelper {
             putExtra(EXTRA_MESSAGE_ID, messageId)
         }
     }
-    
+
     private fun createMuteIntent(context: Context, peerId: String): Intent {
         return Intent(ACTION_MUTE).apply {
             setPackage(context.packageName)
             putExtra(EXTRA_PEER_ID, peerId)
         }
     }
-    
+
     private fun isDndEnabled(context: Context): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -377,7 +377,7 @@ object NotificationHelper {
         }
         return false
     }
-    
+
     /**
      * Data class for grouping messages.
      */

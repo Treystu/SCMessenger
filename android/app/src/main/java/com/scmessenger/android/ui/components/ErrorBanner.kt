@@ -24,7 +24,7 @@ import com.scmessenger.android.ui.theme.StatusWarning
 
 /**
  * Dismissible banner for displaying errors, warnings, and info messages.
- * 
+ *
  * Features:
  * - Different severity levels (error, warning, info)
  * - Dismissible with close button
@@ -63,21 +63,21 @@ fun ErrorBanner(
                     contentDescription = null,
                     modifier = Modifier.size(24.dp)
                 )
-                
+
                 Spacer(modifier = Modifier.width(12.dp))
-                
+
                 Text(
                     text = message,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f)
                 )
-                
+
                 if (onRetry != null) {
                     TextButton(onClick = onRetry) {
                         Text("Retry")
                     }
                 }
-                
+
                 IconButton(onClick = onDismiss) {
                     Icon(
                         imageVector = Icons.Default.Close,

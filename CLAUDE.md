@@ -1,7 +1,9 @@
 ## Philosophy: Sovereign Communication
+
 SCMessenger is the world's first truly sovereign messenger — works everywhere, owned by no one, unstoppable by design. Works WITH internet, never depends on it.
 
 ### Core Principles
+
 1. **Relay = Messaging.** You cannot message without relaying. You cannot relay without messaging. Single toggle. Non-negotiable coupling. This IS the incentive model — want to talk? You relay for others. No free riders.
 2. **Every node IS the network.** No third-party relays, no external infrastructure. When your device has internet, it IS a relay for the mesh. The mesh IS the infrastructure.
 3. **Internet is a transport, not a dependency.** Use internet when available (it's fast, it's free, it bootstraps new connections). Never require it. BLE, WiFi Direct, WiFi Aware, and physical proximity are equal transports.
@@ -11,6 +13,7 @@ SCMessenger is the world's first truly sovereign messenger — works everywhere,
 7. **Mass market UX.** Grandma should be able to use this. Technical complexity hidden behind simple defaults. Power users get granular controls.
 
 ## Architecture
+
 - `core/` — Rust library: identity (Ed25519), crypto (XChaCha20-Poly1305), messaging, storage (sled), transport (libp2p), mesh relay, Drift Protocol
 - `cli/` — Development/demo CLI tool
 - `mobile/` — UniFFI bindings for iOS/Android
@@ -18,6 +21,7 @@ SCMessenger is the world's first truly sovereign messenger — works everywhere,
 - `reference/` — V1 TypeScript crypto algorithms (read-only porting guides)
 
 ## Code Conventions
+
 - All new code is Rust. No TypeScript, no JavaScript.
 - Use `thiserror` for error types, `anyhow` for error propagation in binaries
 - Use `tracing` for logging (not `println!` in library code)
@@ -28,11 +32,14 @@ SCMessenger is the world's first truly sovereign messenger — works everywhere,
 - Tests go in `#[cfg(test)] mod tests` in the same file, integration tests in `tests/`
 
 ## Key Dependencies
+
 libp2p 0.53 with: tcp, quic, noise, yamux, gossipsub, kad, relay, identify, ping, mdns, request-response, cbor
 Crypto: ed25519-dalek 2.1, x25519-dalek 2.0, chacha20poly1305 0.10, blake3 1.5
 
 ## Current State
+
 All core modules are built and unit-tested through Phase 7 (Privacy):
+
 - **Identity** (Ed25519 keys, Blake3 hashing, sled persistence) — complete with Zeroize-on-Drop
 - **Crypto** (XChaCha20-Poly1305, ephemeral ECDH, AAD-bound sender auth, envelope signatures) — complete
 - **Message** (types, codecs, signed envelopes) — complete
@@ -49,23 +56,29 @@ All core modules are built and unit-tested through Phase 7 (Privacy):
 completing the IronCore → SwarmHandle wiring. `prepare_message()` → encrypted bytes → `send_message()`.
 
 ## Planning & Estimation
+
 - **LoC estimates ONLY.** Never use time-based estimates (days, weeks, months). All planning uses lines-of-code estimates for effort sizing.
 - Break phases into concrete deliverables with LoC ranges.
 
 ## Codebase Stats
+
 - 71 .rs files in core/src/ across 12 modules
 - ~53,000 lines of Rust across workspace (core: ~29K, lib.rs: ~19K, cli: ~500, wasm: ~2.4K)
 - ~638 test functions
 
 ## Hardening (Feb 2026)
+
 **Dynamic analysis fixes — COMPLETED**
+
 - **Resume Storm** (HIGH): `peers_needing_reconnect()` now rate-limited to `RECONNECT_MAX_CONCURRENT` (3) peers per tick with stagger, preventing OS kill on app resume
 - **Zombie Loop** (HIGH): Inbox `eviction_high_water_mark` rejects messages older than most-recently-evicted, preventing infinite re-sync from peers. Persisted in sled for SledInbox.
 - **Slow Loris** (MEDIUM): `FRAME_READ_TIMEOUT` (5s) constant + `FRAME_MAX_PAYLOAD` (64KB) limit + async `read_with_timeout()` on DriftFrame, plus `Timeout` and `IoError` variants on DriftError
 - **Key Leak** (LOW): All intermediate crypto buffers zeroized — `shared_secret_bytes`, `ephemeral_bytes`, `nonce_bytes` in encrypt.rs (encrypt + decrypt paths)
 
 ## Known Technical Debt
+
 **unwrap() / expect() / panic!() sweep — COMPLETED**
+
 - Full sweep of all 71 .rs files in core/src/ (Feb 2026)
 - Production code is CLEAN: only 5 issues found and fixed across 52 files
   - `transport/swarm.rs`: expect→map_err on behaviour builder, unwrap→? on address parse
@@ -77,13 +90,16 @@ completing the IronCore → SwarmHandle wiring. `prepare_message()` → encrypte
 - Production code consistently uses: `?`, `.map_err()`, `.unwrap_or_default()`, `.unwrap_or()`
 
 ## Known Remaining Gaps (Feb 2026)
+
 All previously-listed gaps resolved in Feb 2026 hardening sprint. Minor WebRTC TODOs remain:
+
 - **WebRTC `set_remote_answer`** (`wasm/src/transport.rs`): ~50 LOC — parse answer SDP JSON, call `set_remote_description` via JsFuture. Prescription in doc-comment.
 - **WebRTC ICE trickle** (`wasm/src/transport.rs`): ~30 LOC — buffer candidates in `WebRtcInner`, expose `get_ice_candidates()` / `add_ice_candidate()`. Prescription in code comment.
 - **WebRTC answerer path** (`wasm/src/transport.rs`): ~60 LOC — `set_remote_offer()` + `create_answer()`. Mirrors `create_offer()` exactly.
 - **`RtcSdpType` feature**: add `"RtcSdpType"` to workspace `web-sys` features in `Cargo.toml` to replace the current `js_sys::Reflect` workaround in `WebRtcTransport::create_offer()`
 
 ## Resolved (Feb 2026 sprint)
+
 - Internet relay: `connect_to_relay_via_swarm()` added to `InternetRelay` — real `swarm.dial()` call
 - Offline store-and-forward: outbox flushed on `PeerDiscovered` in CLI; `cmd_send_offline` now truly enqueues
 - Delivery receipts: `MessageType::Receipt` + `DeliveryStatus` wired end-to-end; `IronCore::prepare_receipt()` added; CLI sends ACK on receive, displays `✓✓ Delivered`
@@ -91,6 +107,7 @@ All previously-listed gaps resolved in Feb 2026 hardening sprint. Minor WebRTC T
 - WASM WebSocket transport: full `connect()`/`send_envelope()`/`disconnect()` with real `web_sys::WebSocket`, buffered sends during connecting, state machine, `subscribe()` ingress channel
 
 ## Do NOT
+
 - Add unnecessary abstractions or trait objects where concrete types work
 - Use `unwrap()` in library code (use `?` or `expect()` with context)
 - Add new dependencies without checking if an existing workspace dep covers the need

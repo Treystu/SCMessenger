@@ -21,10 +21,10 @@ class WifiTransportManager(
     private val manager: WifiP2pManager? by lazy {
         context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
     }
-    
+
     private var channel: WifiP2pManager.Channel? = null
     private var isDiscovering = false
-    
+
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val action = intent.action
@@ -42,10 +42,10 @@ class WifiTransportManager(
             Timber.d("WifiTransportManager initialized")
         }
     }
-    
+
     fun startDiscovery() {
         val c = channel ?: return
-        
+
         manager?.discoverPeers(c, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 Timber.i("WiFi P2P Discovery started")
@@ -59,7 +59,7 @@ class WifiTransportManager(
             }
         })
     }
-    
+
     fun stopDiscovery() {
         val c = channel ?: return
         if (isDiscovering) {
@@ -79,7 +79,7 @@ class WifiTransportManager(
             }
         }
     }
-    
+
     private fun registerReceiver() {
         val intentFilter = IntentFilter().apply {
             addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
@@ -87,7 +87,7 @@ class WifiTransportManager(
         }
         context.registerReceiver(receiver, intentFilter)
     }
-    
+
     private fun requestPeers() {
         val c = channel ?: return
         manager?.requestPeers(c) { peers ->

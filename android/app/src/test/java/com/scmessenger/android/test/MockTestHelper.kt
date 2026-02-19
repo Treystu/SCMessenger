@@ -8,7 +8,7 @@ import uniffi.api.*
  * Provides common mock configurations for UniFFI objects.
  */
 object MockTestHelper {
-    
+
     /**
      * Create a mock MeshSettings with sensible defaults.
      */
@@ -35,7 +35,7 @@ object MockTestHelper {
             every { this@mockk.onionRouting } returns onionRouting
         }
     }
-    
+
     /**
      * Create a mock Contact with sensible defaults.
      */
@@ -50,7 +50,7 @@ object MockTestHelper {
             every { this@mockk.publicKey } returns publicKey
         }
     }
-    
+
     /**
      * Create a mock IronCore instance.
      */
@@ -70,7 +70,7 @@ object MockTestHelper {
             */
         }
     }
-    
+
     /**
      * Create a mock MeshSettingsManager.
      */

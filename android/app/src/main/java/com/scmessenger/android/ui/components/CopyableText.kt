@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Text component that can be copied to clipboard on long-press.
- * 
+ *
  * Features:
  * - Long-press to copy
  * - Toast confirmation
@@ -41,10 +41,10 @@ fun CopyableText(
 ) {
     val context = LocalContext.current
     var isExpanded by remember { mutableStateOf(false) }
-    
+
     val isSingleLine = text.lines().size == 1
     val displayLines = if (expandable && !isExpanded && !isSingleLine) 1 else maxLines
-    
+
     Column(modifier = modifier) {
         Text(
             text = text,
@@ -65,7 +65,7 @@ fun CopyableText(
                     }
                 )
         )
-        
+
         if (expandable && !isSingleLine && text.length > 50) {
             TextButton(
                 onClick = { isExpanded = !isExpanded },
@@ -93,7 +93,7 @@ fun LabeledCopyableText(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -104,9 +104,9 @@ fun LabeledCopyableText(
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        
+
         Spacer(modifier = Modifier.height(4.dp))
-        
+
         Text(
             text = text,
             fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
@@ -140,7 +140,7 @@ fun TruncatedCopyableText(
     } else {
         text
     }
-    
+
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -152,7 +152,7 @@ fun TruncatedCopyableText(
             fontFamily = FontFamily.Monospace,
             modifier = Modifier.weight(1f)
         )
-        
+
         if (showCopyIcon) {
             IconButton(
                 onClick = {
@@ -175,6 +175,6 @@ private fun copyToClipboard(context: Context, label: String, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     val clip = ClipData.newPlainText(label, text)
     clipboard.setPrimaryClip(clip)
-    
+
     Toast.makeText(context, "$label copied to clipboard", Toast.LENGTH_SHORT).show()
 }

@@ -22,7 +22,7 @@ class ConversationsViewModelTest {
     private lateinit var viewModel: ConversationsViewModel
     private lateinit var mockMeshRepository: MeshRepository
     private val testDispatcher = StandardTestDispatcher()
-    
+
     // Mock flow for message updates
     private val messageUpdatesFlow = MutableSharedFlow<MessageRecord>(replay = 0)
 
@@ -33,13 +33,13 @@ class ConversationsViewModelTest {
 
         // Mock message updates flow
         every { mockMeshRepository.messageUpdates } returns messageUpdatesFlow
-        
+
         // Mock getRecentMessages to return a list (empty initially, then populated)
         every { mockMeshRepository.getRecentMessages(any(), any()) } returns emptyList()
-        
+
         // Mock getHistoryStats to perform cleanly
         every { mockMeshRepository.getHistoryStats() } returns HistoryStats(0u, 0u, 0u, 0u)
-        
+
         viewModel = ConversationsViewModel(mockMeshRepository)
     }
 
@@ -52,7 +52,7 @@ class ConversationsViewModelTest {
     fun `viewModel loads messages on initialization`() = runTest {
         // Run any pending coroutines (init block)
         testDispatcher.scheduler.advanceUntilIdle()
-        
+
         // Verify loadMessages was called with any args
         verify { mockMeshRepository.getRecentMessages(any(), any()) }
     }
@@ -80,7 +80,7 @@ class ConversationsViewModelTest {
 
         // Then verify getRecentMessages is called again (reloading list)
         verify(exactly = 1) { mockMeshRepository.getRecentMessages(any(), any()) }
-        
+
         // And verify state is updated
         assertEquals(1, viewModel.messages.value.size)
         assertEquals("Hello", viewModel.messages.value[0].content)

@@ -5,11 +5,11 @@ import android.os.Build
 
 /**
  * Permissions required for SCMessenger functionality.
- * 
+ *
  * Organized by feature and API level.
  */
 object Permissions {
-    
+
     /**
      * Bluetooth permissions (varies by API level).
      */
@@ -27,7 +27,7 @@ object Permissions {
             Manifest.permission.BLUETOOTH_ADMIN
         )
     }
-    
+
     /**
      * Location permissions (required for WiFi Aware).
      */
@@ -42,7 +42,7 @@ object Permissions {
             Manifest.permission.ACCESS_FINE_LOCATION
         )
     }
-    
+
     /**
      * Nearby WiFi devices (Android 13+).
      */
@@ -51,7 +51,7 @@ object Permissions {
     } else {
         emptyList()
     }
-    
+
     /**
      * Notifications permission (Android 13+).
      */
@@ -60,17 +60,17 @@ object Permissions {
     } else {
         emptyList()
     }
-    
+
     /**
      * All required permissions for core functionality.
      */
     val required: List<String> = bluetooth + location + nearbyWifi
-    
+
     /**
      * All permissions including optional ones.
      */
     val all: List<String> = required + notifications
-    
+
     /**
      * Get user-friendly permission names for rationale dialogs.
      */
@@ -80,31 +80,31 @@ object Permissions {
         Manifest.permission.BLUETOOTH_SCAN,
         Manifest.permission.BLUETOOTH_ADVERTISE,
         Manifest.permission.BLUETOOTH_CONNECT -> "Bluetooth"
-        
+
         Manifest.permission.ACCESS_FINE_LOCATION,
         Manifest.permission.ACCESS_COARSE_LOCATION -> "Location"
-        
+
         Manifest.permission.NEARBY_WIFI_DEVICES -> "Nearby WiFi Devices"
-        
+
         Manifest.permission.POST_NOTIFICATIONS -> "Notifications"
-        
+
         else -> permission
     }
-    
+
     /**
      * Get rationale explanation for a permission.
      */
     fun getRationale(permission: String): String = when (permission) {
         in bluetooth -> "Bluetooth is required for discovering and messaging with nearby peers."
-        
+
         in location -> "Location access is required for WiFi Aware peer discovery. " +
                       "SCMessenger does not track or store your location."
-        
+
         in nearbyWifi -> "Nearby WiFi devices permission enables WiFi Aware for " +
                         "direct peer-to-peer messaging without infrastructure."
-        
+
         in notifications -> "Notifications keep you informed when new messages arrive."
-        
+
         else -> "This permission is required for mesh networking."
     }
 }

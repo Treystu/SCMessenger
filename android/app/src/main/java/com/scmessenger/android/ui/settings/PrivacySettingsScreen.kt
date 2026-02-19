@@ -18,7 +18,7 @@ import com.scmessenger.android.ui.viewmodels.SettingsViewModel
 
 /**
  * Privacy Settings screen - Privacy controls and features.
- * 
+ *
  * Provides controls for:
  * - Onion routing (multi-hop message routing)
  * - Cover traffic (traffic analysis resistance)
@@ -34,11 +34,11 @@ fun PrivacySettingsScreen(
     val settings by viewModel.settings.collectAsState()
     val error by viewModel.error.collectAsState()
     val isSaving by viewModel.isSaving.collectAsState()
-    
+
     LaunchedEffect(Unit) {
         viewModel.loadSettings()
     }
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -64,7 +64,7 @@ fun PrivacySettingsScreen(
                     onDismiss = { viewModel.clearError() }
                 )
             }
-            
+
             if (settings == null) {
                 Box(
                     modifier = Modifier.fillMaxWidth().height(200.dp),
@@ -74,7 +74,7 @@ fun PrivacySettingsScreen(
                 }
             } else {
                 val currentSettings = settings!!
-                
+
                 // Privacy Notice
                 Card(
                     modifier = Modifier
@@ -93,7 +93,7 @@ fun PrivacySettingsScreen(
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
-                        
+
                         Column {
                             Text(
                                 text = "Privacy by Design",
@@ -101,9 +101,9 @@ fun PrivacySettingsScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
-                            
+
                             Spacer(modifier = Modifier.height(4.dp))
-                            
+
                             Text(
                                 text = "SCMessenger is built with privacy at its core. All messages are end-to-end encrypted. These settings provide additional privacy protections.",
                                 style = MaterialTheme.typography.bodySmall,
@@ -112,7 +112,7 @@ fun PrivacySettingsScreen(
                         }
                     }
                 }
-                
+
                 // Onion Routing
                 SettingsSection(title = "Onion Routing") {
                     SwitchSetting(
@@ -166,26 +166,26 @@ fun PrivacySettingsScreen(
                         message = "BLE identity rotation changes your device's Bluetooth advertising data periodically, making it harder for third parties to track your device over time."
                     )
                 }
-                
+
                 // Future Privacy Features (Placeholders)
                 SettingsSection(title = "Additional Privacy Features") {
                     FeaturePlaceholder(
                         title = "Cover Traffic",
                         description = "Send dummy traffic to resist traffic analysis (Coming Soon)"
                     )
-                    
+
                     FeaturePlaceholder(
                         title = "Message Padding",
                         description = "Pad messages to hide actual message length (Coming Soon)"
                     )
-                    
+
                     FeaturePlaceholder(
                         title = "Timing Obfuscation",
                         description = "Add random delays to obscure communication patterns (Coming Soon)"
                     )
                 }
             }
-            
+
             // Best Practices
             SettingsSection(title = "Privacy Best Practices") {
                 InfoCard(
@@ -198,7 +198,7 @@ fun PrivacySettingsScreen(
                     """.trimIndent()
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
@@ -218,9 +218,9 @@ private fun SettingsSection(
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
         )
-        
+
         content()
-        
+
         Divider()
     }
 }
@@ -253,7 +253,7 @@ private fun SwitchSetting(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        
+
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
@@ -288,7 +288,7 @@ private fun FeaturePlaceholder(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
         }
-        
+
         Switch(
             checked = false,
             onCheckedChange = {},

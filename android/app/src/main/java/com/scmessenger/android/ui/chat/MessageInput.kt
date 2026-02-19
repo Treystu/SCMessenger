@@ -12,7 +12,7 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Message input component for chat UI.
- * 
+ *
  * Provides text input field with send button.
  * Handles text composition and sending.
  */
@@ -46,7 +46,7 @@ fun MessageInput(
                 maxLines = 5,
                 shape = MaterialTheme.shapes.medium
             )
-            
+
             // Send button
             FloatingActionButton(
                 onClick = onSend,

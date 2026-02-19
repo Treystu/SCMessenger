@@ -21,7 +21,7 @@ import com.scmessenger.android.ui.viewmodels.MainViewModel
 
 /**
  * Root composable for the SCMessenger app.
- * 
+ *
  * Sets up the navigation graph and bottom navigation bar.
  */
 @Composable
@@ -42,7 +42,7 @@ fun MeshApp() {
         }
     } else {
         val navController = rememberNavController()
-        
+
         Scaffold(
             bottomBar = { MeshBottomBar(navController = navController) }
         ) { paddingValues ->
@@ -71,7 +71,7 @@ fun MeshNavHost(
                 }
             )
         }
-        
+
         composable(Screen.Contacts.route) {
             ContactsScreen(
                 onNavigateToChat = { peerId ->
@@ -79,7 +79,7 @@ fun MeshNavHost(
                 }
             )
         }
-        
+
         composable(Screen.Dashboard.route) {
             DashboardScreen()
         }
@@ -87,7 +87,7 @@ fun MeshNavHost(
         composable(Screen.Settings.route) {
             SettingsScreen()
         }
-        
+
         composable(
             route = "chat/{peerId}",
             arguments = listOf(androidx.navigation.navArgument("peerId") { type = androidx.navigation.NavType.StringType })
@@ -108,7 +108,7 @@ fun MeshNavHost(
 fun MeshBottomBar(navController: NavHostController) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-    
+
     // Hide bottom bar on Chat screen
     if (currentRoute?.startsWith("chat/") == true) return
 
@@ -140,7 +140,7 @@ sealed class Screen(val route: String, val label: String, val icon: androidx.com
     object Contacts : Screen("contacts", "Contacts", androidx.compose.material.icons.Icons.Default.People)
     object Dashboard: Screen("dashboard", "Network", androidx.compose.material.icons.Icons.Filled.Router)
     object Settings : Screen("settings", "Settings", androidx.compose.material.icons.Icons.Default.Settings)
-    
+
     companion object {
         val bottomNavItems = listOf(Conversations, Contacts, Dashboard, Settings)
     }

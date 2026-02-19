@@ -12,18 +12,18 @@ import javax.inject.Inject
 
 /**
  * ViewModel for the conversations/chat list screen.
- * 
+ *
  * Manages message history and conversation threads.
  */
 @HiltViewModel
 class ConversationsViewModel @Inject constructor(
     private val meshRepository: MeshRepository
 ) : ViewModel() {
-    
+
     // Recent messages
     private val _messages = MutableStateFlow<List<uniffi.api.MessageRecord>>(emptyList())
     val messages: StateFlow<List<uniffi.api.MessageRecord>> = _messages.asStateFlow()
-    
+
     // Grouped conversations (by peer)
     val conversations = messages.map { messageList ->
         messageList
@@ -36,19 +36,19 @@ class ConversationsViewModel @Inject constructor(
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyList()
     )
-    
+
     // Loading state
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
-    
+
     // Error state
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
-    
+
     // Stats
     private val _stats = MutableStateFlow<uniffi.api.HistoryStats?>(null)
     val stats: StateFlow<uniffi.api.HistoryStats?> = _stats.asStateFlow()
-    
+
     init {
         loadMessages()
         loadStats()
@@ -60,7 +60,7 @@ class ConversationsViewModel @Inject constructor(
             }
         }
     }
-    
+
     /**
      * Load recent messages.
      */
@@ -69,10 +69,10 @@ class ConversationsViewModel @Inject constructor(
             try {
                 _isLoading.value = true
                 _error.value = null
-                
+
                 val messageList = meshRepository.getRecentMessages(limit = limit)
                 _messages.value = messageList
-                
+
                 Timber.d("Loaded ${messageList.size} messages")
             } catch (e: Exception) {
                 _error.value = "Failed to load messages: ${e.message}"
@@ -82,7 +82,7 @@ class ConversationsViewModel @Inject constructor(
             }
         }
     }
-    
+
     /**
      * Load conversation with specific peer.
      */
@@ -98,7 +98,7 @@ class ConversationsViewModel @Inject constructor(
             }
         }
     }
-    
+
     /**
      * Send a message to a peer.
      */
@@ -110,10 +110,10 @@ class ConversationsViewModel @Inject constructor(
             try {
                 // Call repository to handle encryption and transmission
                 meshRepository.sendMessage(peerId, content)
-                
+
                 // Reload messages to show the sent message
                 loadMessages()
-                
+
                 Timber.i("Message sent to $peerId")
             } catch (e: Exception) {
                 _error.value = "Failed to send message: ${e.message}"
@@ -121,7 +121,7 @@ class ConversationsViewModel @Inject constructor(
             }
         }
     }
-    
+
     /**
      * Mark a message as delivered.
      */
@@ -130,14 +130,14 @@ class ConversationsViewModel @Inject constructor(
             try {
                 meshRepository.markMessageDelivered(messageId)
                 loadMessages()
-                
+
                 Timber.d("Message marked as delivered: $messageId")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to mark message as delivered")
             }
         }
     }
-    
+
     /**
      * Clear conversation with a peer.
      */
@@ -146,7 +146,7 @@ class ConversationsViewModel @Inject constructor(
             try {
                 meshRepository.clearConversation(peerId)
                 loadMessages()
-                
+
                 Timber.i("Conversation cleared: $peerId")
             } catch (e: Exception) {
                 _error.value = "Failed to clear conversation: ${e.message}"
@@ -154,7 +154,7 @@ class ConversationsViewModel @Inject constructor(
             }
         }
     }
-    
+
     /**
      * Clear all message history.
      */
@@ -164,7 +164,7 @@ class ConversationsViewModel @Inject constructor(
                 meshRepository.clearHistory()
                 loadMessages()
                 loadStats()
-                
+
                 Timber.i("All history cleared")
             } catch (e: Exception) {
                 _error.value = "Failed to clear history: ${e.message}"
@@ -172,7 +172,7 @@ class ConversationsViewModel @Inject constructor(
             }
         }
     }
-    
+
     /**
      * Load message statistics.
      */
@@ -181,14 +181,14 @@ class ConversationsViewModel @Inject constructor(
             try {
                 val historyStats = meshRepository.getHistoryStats()
                 _stats.value = historyStats
-                
+
                 Timber.d("Loaded stats: $historyStats")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load stats")
             }
         }
     }
-    
+
     /**
      * Search messages.
      */
@@ -204,14 +204,14 @@ class ConversationsViewModel @Inject constructor(
             }
         }
     }
-    
+
     /**
      * Clear error state.
      */
     fun clearError() {
         _error.value = null
     }
-    
+
     /**
      * Get total message count.
      */

@@ -17,7 +17,7 @@ import com.scmessenger.android.ui.viewmodels.SettingsViewModel
 
 /**
  * Mesh Settings screen - Relay and transport toggles.
- * 
+ *
  * Provides controls for:
  * - Relay enable/disable and budget configuration
  * - Individual transport toggles (BLE, WiFi Aware, WiFi Direct, Internet)
@@ -33,11 +33,11 @@ fun MeshSettingsScreen(
     val settings by viewModel.settings.collectAsState()
     val error by viewModel.error.collectAsState()
     val isSaving by viewModel.isSaving.collectAsState()
-    
+
     LaunchedEffect(Unit) {
         viewModel.loadSettings()
     }
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -63,7 +63,7 @@ fun MeshSettingsScreen(
                     onDismiss = { viewModel.clearError() }
                 )
             }
-            
+
             if (settings == null) {
                 Box(
                     modifier = Modifier.fillMaxWidth().height(200.dp),
@@ -73,7 +73,7 @@ fun MeshSettingsScreen(
                 }
             } else {
                 val currentSettings = settings!!
-                
+
                 // Relay Settings
                 SettingsSection(title = "Network Participation") {
                     // Warning/Info about relay requirement
@@ -109,7 +109,7 @@ fun MeshSettingsScreen(
                             )
                         }
                     }
-                    
+
                     SwitchSetting(
                         title = "Mesh Participation",
                         description = "Controls ALL sending AND receiving. OFF = complete communication shutdown in both directions.",
@@ -119,7 +119,7 @@ fun MeshSettingsScreen(
                         },
                         enabled = !isSaving
                     )
-                    
+
                     if (currentSettings.relayEnabled) {
                         SliderSetting(
                             title = "Battery Floor",
@@ -135,7 +135,7 @@ fun MeshSettingsScreen(
                         )
                     }
                 }
-                
+
                 // Transport Settings
                 SettingsSection(title = "Transport Settings") {
                     SwitchSetting(
@@ -147,7 +147,7 @@ fun MeshSettingsScreen(
                         },
                         enabled = !isSaving
                     )
-                    
+
                     SwitchSetting(
                         title = "WiFi Aware",
                         description = "Peer discovery using WiFi Aware (Android 8+)",
@@ -157,7 +157,7 @@ fun MeshSettingsScreen(
                         },
                         enabled = !isSaving
                     )
-                    
+
                     SwitchSetting(
                         title = "WiFi Direct",
                         description = "Direct peer-to-peer WiFi connections",
@@ -167,7 +167,7 @@ fun MeshSettingsScreen(
                         },
                         enabled = !isSaving
                     )
-                    
+
                     SwitchSetting(
                         title = "Internet (libp2p)",
                         description = "Connect to peers over the internet",
@@ -178,7 +178,7 @@ fun MeshSettingsScreen(
                         enabled = !isSaving
                     )
                 }
-                
+
                 // Discovery Settings
                 SettingsSection(title = "Discovery Settings") {
                     DiscoveryModeSetting(
@@ -189,7 +189,7 @@ fun MeshSettingsScreen(
                         enabled = !isSaving
                     )
                 }
-                
+
                 // Privacy Settings
                 SettingsSection(title = "Privacy Settings") {
                     SwitchSetting(
@@ -203,7 +203,7 @@ fun MeshSettingsScreen(
                     )
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
@@ -223,9 +223,9 @@ private fun SettingsSection(
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
         )
-        
+
         content()
-        
+
         Divider()
     }
 }
@@ -258,7 +258,7 @@ private fun SwitchSetting(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        
+
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
@@ -299,13 +299,13 @@ private fun SliderSetting(
                 color = MaterialTheme.colorScheme.primary
             )
         }
-        
+
         Text(
             text = description,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        
+
         Slider(
             value = value,
             onValueChange = onValueChange,
@@ -334,21 +334,21 @@ private fun DiscoveryModeSetting(
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Medium
         )
-        
+
         Text(
             text = "Control how aggressively this device discovers peers",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        
+
         Spacer(modifier = Modifier.height(8.dp))
-        
+
         val modes = listOf(
             uniffi.api.DiscoveryMode.CAUTIOUS to "Cautious",
             uniffi.api.DiscoveryMode.NORMAL to "Normal",
             uniffi.api.DiscoveryMode.PARANOID to "Paranoid"
         )
-        
+
         modes.forEach { (mode, label) ->
             Row(
                 modifier = Modifier.fillMaxWidth(),

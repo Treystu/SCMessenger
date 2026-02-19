@@ -12,7 +12,7 @@ import javax.inject.Singleton
 
 /**
  * Hilt module providing application-level dependencies.
- * 
+ *
  * This module provides:
  * - MeshRepository: Interface to Rust core via UniFFI
  * - PreferencesRepository: Android preferences storage
@@ -20,7 +20,7 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
-    
+
     @Provides
     @Singleton
     fun provideMeshRepository(
@@ -28,7 +28,7 @@ object AppModule {
     ): MeshRepository {
         return MeshRepository(context)
     }
-    
+
     @Provides
     @Singleton
     fun providePreferencesRepository(

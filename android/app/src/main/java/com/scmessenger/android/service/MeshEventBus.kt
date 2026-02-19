@@ -7,31 +7,31 @@ import timber.log.Timber
 
 /**
  * Central event dispatcher for mesh network events.
- * 
+ *
  * Maps UniFFI callback data to Kotlin sealed classes and dispatches them
  * via SharedFlow for consumption by ViewModels and UI components.
- * 
+ *
  * All flows have replay=1 for late subscribers to receive the latest event.
  * Thread-safe for concurrent access.
  */
 object MeshEventBus {
-    
+
     // Peer discovery/disconnection events
     private val _peerEvents = MutableSharedFlow<PeerEvent>(replay = 1)
     val peerEvents: SharedFlow<PeerEvent> = _peerEvents.asSharedFlow()
-    
+
     // Message send/receive events
     private val _messageEvents = MutableSharedFlow<MessageEvent>(replay = 1)
     val messageEvents: SharedFlow<MessageEvent> = _messageEvents.asSharedFlow()
-    
+
     // Service status changes
     private val _statusEvents = MutableSharedFlow<StatusEvent>(replay = 1)
     val statusEvents: SharedFlow<StatusEvent> = _statusEvents.asSharedFlow()
-    
+
     // Network/transport events
     private val _networkEvents = MutableSharedFlow<NetworkEvent>(replay = 1)
     val networkEvents: SharedFlow<NetworkEvent> = _networkEvents.asSharedFlow()
-    
+
     /**
      * Emit a peer event (discovery, disconnection, status change).
      */
@@ -43,7 +43,7 @@ object MeshEventBus {
             Timber.e(e, "Failed to emit peer event")
         }
     }
-    
+
     /**
      * Emit a message event (received, sent, delivered).
      */
@@ -55,7 +55,7 @@ object MeshEventBus {
             Timber.e(e, "Failed to emit message event")
         }
     }
-    
+
     /**
      * Emit a status event (service state change, profile change).
      */
@@ -67,7 +67,7 @@ object MeshEventBus {
             Timber.e(e, "Failed to emit status event")
         }
     }
-    
+
     /**
      * Emit a network event (transport change, connection quality).
      */
