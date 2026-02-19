@@ -457,6 +457,20 @@ impl IronCore {
     pub fn set_delegate(&self, delegate: Option<Box<dyn CoreDelegate>>) {
         *self.delegate.write() = delegate.map(|d| Arc::from(d) as Arc<dyn CoreDelegate>);
     }
+
+    /// Notify the delegate that a peer was discovered on the network.
+    pub fn notify_peer_discovered(&self, peer_id: String) {
+        if let Some(delegate) = self.delegate.read().as_ref() {
+            delegate.on_peer_discovered(peer_id);
+        }
+    }
+
+    /// Notify the delegate that a peer disconnected from the network.
+    pub fn notify_peer_disconnected(&self, peer_id: String) {
+        if let Some(delegate) = self.delegate.read().as_ref() {
+            delegate.on_peer_disconnected(peer_id);
+        }
+    }
 }
 
 impl Default for IronCore {

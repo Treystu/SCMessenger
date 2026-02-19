@@ -126,10 +126,23 @@ class MeshRepository(private val context: Context) {
             coreDelegate = object : uniffi.api.CoreDelegate {
                 override fun onPeerDiscovered(peerId: String) {
                     Timber.d("Core notified discovery: $peerId")
+                    repoScope.launch {
+                        com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
+                            com.scmessenger.android.service.PeerEvent.Discovered(
+                                peerId,
+                                com.scmessenger.android.service.TransportType.INTERNET
+                            )
+                        )
+                    }
                 }
 
                 override fun onPeerDisconnected(peerId: String) {
                     Timber.d("Core notified disconnect: $peerId")
+                    repoScope.launch {
+                        com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
+                            com.scmessenger.android.service.PeerEvent.Disconnected(peerId)
+                        )
+                    }
                 }
 
                 override fun onMessageReceived(senderId: String, messageId: String, data: ByteArray) {
@@ -160,6 +173,22 @@ class MeshRepository(private val context: Context) {
                         // Emit for notifications and UI updates
                         repoScope.launch {
                             _messageUpdates.emit(record)
+                        }
+
+                        // Send delivery receipt ACK back to sender via SwarmBridge.
+                        // senderId here is the sender's public key hex as provided by
+                        // the Rust core delegate — prepareReceipt() encrypts an ACK
+                        // envelope addressed to that public key.
+                        repoScope.launch {
+                            try {
+                                val receiptBytes = ironCore?.prepareReceipt(senderId, messageId)
+                                if (receiptBytes != null) {
+                                    swarmBridge?.sendMessage(senderId, receiptBytes)
+                                    Timber.d("Delivery receipt sent for $messageId to $senderId")
+                                }
+                            } catch (e: Exception) {
+                                Timber.d("Failed to send delivery receipt for $messageId: ${e.message}")
+                            }
                         }
                     } catch (e: Exception) {
                         Timber.e(e, "Failed to process received message")
@@ -230,9 +259,15 @@ class MeshRepository(private val context: Context) {
         }
 
         if (wifiTransportManager == null) {
-            wifiTransportManager = com.scmessenger.android.transport.WifiTransportManager(context) { peerId ->
-                meshService?.onPeerDiscovered(peerId)
-            }
+            wifiTransportManager = com.scmessenger.android.transport.WifiTransportManager(
+                context,
+                onPeerDiscovered = { peerId ->
+                    meshService?.onPeerDiscovered(peerId)
+                },
+                onDataReceived = { peerId, data ->
+                    meshService?.onDataReceived(peerId, data)
+                }
+            )
         }
         wifiTransportManager?.initialize()
         wifiTransportManager?.startDiscovery()

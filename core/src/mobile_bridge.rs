@@ -209,6 +209,7 @@ impl MeshService {
         };
 
         let swarm_bridge = self.swarm_bridge.clone();
+        let core = self.core.clone();
 
         // Spawn a dedicated OS thread that owns its own Tokio runtime.
         // This is the safest approach for mobile: we cannot rely on being
@@ -239,7 +240,59 @@ impl MeshService {
                                     tracing::info!("Swarm started, wiring bridge");
                                     swarm_bridge.set_handle(handle);
                                     while let Some(event) = event_rx.recv().await {
-                                        tracing::debug!("Swarm event: {:?}", event);
+                                        match event {
+                                            crate::transport::SwarmEvent::MessageReceived {
+                                                peer_id,
+                                                envelope_data,
+                                            } => {
+                                                let core_guard = core.lock();
+                                                if let Some(core_ref) = core_guard.as_ref() {
+                                                    match core_ref.receive_message(envelope_data) {
+                                                        Ok(msg) => tracing::info!(
+                                                            "Received message {} from {}",
+                                                            msg.id,
+                                                            peer_id
+                                                        ),
+                                                        Err(e) => tracing::warn!(
+                                                            "receive_message error from {}: {:?}",
+                                                            peer_id,
+                                                            e
+                                                        ),
+                                                    }
+                                                }
+                                            }
+                                            crate::transport::SwarmEvent::PeerDiscovered(
+                                                peer_id,
+                                            ) => {
+                                                tracing::info!(
+                                                    "Peer discovered via Swarm: {}",
+                                                    peer_id
+                                                );
+                                                let core_guard = core.lock();
+                                                if let Some(core_ref) = core_guard.as_ref() {
+                                                    core_ref.notify_peer_discovered(
+                                                        peer_id.to_string(),
+                                                    );
+                                                }
+                                            }
+                                            crate::transport::SwarmEvent::PeerDisconnected(
+                                                peer_id,
+                                            ) => {
+                                                tracing::info!(
+                                                    "Peer disconnected via Swarm: {}",
+                                                    peer_id
+                                                );
+                                                let core_guard = core.lock();
+                                                if let Some(core_ref) = core_guard.as_ref() {
+                                                    core_ref.notify_peer_disconnected(
+                                                        peer_id.to_string(),
+                                                    );
+                                                }
+                                            }
+                                            other => {
+                                                tracing::debug!("Swarm event: {:?}", other);
+                                            }
+                                        }
                                     }
                                 }
                                 Err(e) => {

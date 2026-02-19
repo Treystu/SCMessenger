@@ -28,27 +28,31 @@ final class CoreDelegateImpl: CoreDelegate {
     // MARK: - CoreDelegate Protocol (called FROM Rust)
     
     func onPeerDiscovered(peerId: String) {
-        logger.info("📡 Peer discovered: \(peerId)")
+        logger.info("Peer discovered: \(peerId)")
         eventBus.peerEvents.send(.discovered(peerId: peerId))
     }
-    
+
     func onPeerConnected(peerId: String) {
-        logger.info("🔗 Peer connected: \(peerId)")
+        logger.info("Peer connected: \(peerId)")
         eventBus.peerEvents.send(.connected(peerId: peerId))
     }
-    
+
     func onPeerDisconnected(peerId: String) {
-        logger.info("💔 Peer disconnected: \(peerId)")
+        logger.info("Peer disconnected: \(peerId)")
         eventBus.peerEvents.send(.disconnected(peerId: peerId))
     }
     
     func onMessageReceived(senderId: String, messageId: String, data: Data) {
-        logger.info("📨 Message received: \(messageId) from \(senderId) (\(data.count) bytes)")
-        
-        // Forward to repository for relay enforcement and processing
-        meshRepository?.onMessageReceived(senderId: senderId, messageId: messageId, data: data)
-        
-        // Publish event
+        logger.info("Message received: \(messageId) from \(senderId) (\(data.count) bytes)")
+
+        // UniFFI callbacks arrive on a Rust thread; MeshRepository is @MainActor.
+        // Capture values before the dispatch to avoid capturing self or mutable state.
+        let repo = meshRepository
+        DispatchQueue.main.async {
+            repo?.onMessageReceived(senderId: senderId, messageId: messageId, data: data)
+        }
+
+        // Publish event (PassthroughSubject is thread-safe for send())
         eventBus.messageEvents.send(.received(
             senderId: senderId,
             messageId: messageId,
@@ -57,23 +61,23 @@ final class CoreDelegateImpl: CoreDelegate {
     }
     
     func onMessageSent(messageId: String) {
-        logger.info("✅ Message sent: \(messageId)")
+        logger.info("Message sent: \(messageId)")
         eventBus.messageEvents.send(.sent(messageId: messageId))
     }
-    
+
     func onMessageDelivered(messageId: String) {
-        logger.info("📬 Message delivered: \(messageId)")
+        logger.info("Message delivered: \(messageId)")
         eventBus.messageEvents.send(.delivered(messageId: messageId))
     }
-    
+
     func onMessageFailed(messageId: String, error: String) {
-        logger.error("❌ Message failed: \(messageId) - \(error)")
+        logger.error("Message failed: \(messageId) - \(error)")
         eventBus.messageEvents.send(.failed(messageId: messageId, error: error))
     }
-    
+
     func onReceiptReceived(messageId: String, status: String) {
-        logger.info("📋 Receipt received: \(messageId) status=\(status)")
-        
+        logger.info("Receipt received: \(messageId) status=\(status)")
+
         // Map receipt status to message events
         switch status.lowercased() {
         case "delivered":
@@ -84,14 +88,14 @@ final class CoreDelegateImpl: CoreDelegate {
             logger.debug("Unknown receipt status: \(status)")
         }
     }
-    
+
     func onServiceStateChanged(state: ServiceState) {
-        logger.info("🔄 Service state changed: \(String(describing: state))")
+        logger.info("Service state changed: \(String(describing: state))")
         eventBus.statusEvents.send(.serviceStateChanged(state))
     }
-    
+
     func onStatsUpdated(stats: ServiceStats) {
-        logger.debug("📊 Stats updated: \(stats.peersDiscovered) peers, \(stats.messagesRelayed) messages")
+        logger.debug("Stats updated: \(stats.peersDiscovered) peers, \(stats.messagesRelayed) messages")
         eventBus.statusEvents.send(.statsUpdated(stats))
     }
 }

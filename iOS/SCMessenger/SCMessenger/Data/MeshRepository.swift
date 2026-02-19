@@ -55,6 +55,9 @@ final class MeshRepository {
     // Platform bridge
     private var platformBridge: IosPlatformBridge?
 
+    // Rust → Swift callback delegate (strong reference required; Rust holds weak)
+    private var coreDelegateImpl: CoreDelegateImpl?
+
     // Device state for auto-adjustment
     private var currentBatteryPct: UInt8 = 100
     private var currentIsCharging: Bool = true
@@ -250,6 +253,12 @@ final class MeshRepository {
             if ironCore == nil {
                 throw MeshError.notInitialized("Failed to obtain IronCore from MeshService")
             }
+
+            // Wire CoreDelegate: Rust → Swift callbacks
+            let coreDelegate = CoreDelegateImpl(meshRepository: self)
+            self.coreDelegateImpl = coreDelegate  // store strong reference
+            ironCore?.setDelegate(delegate: coreDelegate)
+            logger.info("CoreDelegate registered for Rust->Swift callbacks")
 
             // Ensure identity exists (foundational requirement)
             if !isIdentityInitialized() {
@@ -848,21 +857,15 @@ final class MeshRepository {
         // Direct packet to appropriate manager based on UUID match
         // Note: peerId here is likely the UUID from the transport layer if Rust is treating it as a handle
 
-        // Try Central (we are client, sending to peripheral)
+        // Try Central role first (we are client, sending to peripheral)
         if let uuid = UUID(uuidString: peerId) {
             bleCentralManager?.sendData(to: uuid, data: data)
         } else {
-            // If peerId isn't a UUID, we can't route it blindly to BLE without a map
-            // But checking if Peripheral Manager has a central with this ID is tricky if it's not a UUID
-            // Assuming Rust uses the UUID string we gave it in onDataReceived
             logger.warning("sendBlePacket: Invalid UUID string \(peerId)")
         }
 
-        // TODO: Handle Peripheral role sending (notifications to central)
-        // If we are Peripheral, and 'peerId' is the Central's UUID
-        // blePeripheralManager?.sendNotification(to: central, data: data)
-        // However, we need to lookup the CBCentral by UUID.
-        // BLEPeripheralManager implementation needs a helper for this.
+        // Also try Peripheral role (we are server, pushing notification to central)
+        blePeripheralManager?.sendDataToConnectedCentral(peerId: peerId, data: data)
     }
 
     // MARK: - Auto-Adjustment Engine

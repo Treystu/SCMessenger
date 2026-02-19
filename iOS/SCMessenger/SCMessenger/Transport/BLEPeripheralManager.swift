@@ -122,6 +122,20 @@ final class BLEPeripheralManager: NSObject {
             logger.warning("Failed to send notification, queue full")
         }
     }
+
+    /// Send data to a subscribed central identified by its UUID string.
+    /// Used when we are acting as Peripheral and need to push data to a Central peer.
+    func sendDataToConnectedCentral(peerId: String, data: Data) {
+        guard let uuid = UUID(uuidString: peerId) else {
+            logger.warning("sendDataToConnectedCentral: invalid UUID string \(peerId)")
+            return
+        }
+        guard let central = subscribedCentrals.first(where: { $0.identifier == uuid }) else {
+            logger.warning("sendDataToConnectedCentral: no subscribed central for \(peerId)")
+            return
+        }
+        sendNotification(to: central, data: data)
+    }
     
     // MARK: - Private Methods
     

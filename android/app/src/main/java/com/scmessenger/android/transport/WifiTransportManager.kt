@@ -14,7 +14,8 @@ import timber.log.Timber
  */
 class WifiTransportManager(
     private val context: Context,
-    private val onPeerDiscovered: (String) -> Unit
+    private val onPeerDiscovered: (String) -> Unit,
+    private val onDataReceived: ((String, ByteArray) -> Unit)? = null
 ) {
 
     private val manager: WifiP2pManager? by lazy {
