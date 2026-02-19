@@ -1025,7 +1025,9 @@ impl SwarmBridge {
         for peer_id in peers {
             match rt.block_on(handle.send_message(peer_id.clone(), data.clone())) {
                 Ok(()) => sent += 1,
-                Err(e) => tracing::warn!("send_to_all_peers: failed to send to {}: {:?}", peer_id, e),
+                Err(e) => {
+                    tracing::warn!("send_to_all_peers: failed to send to {}: {:?}", peer_id, e)
+                }
             }
         }
 

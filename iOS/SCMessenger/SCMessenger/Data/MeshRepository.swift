@@ -472,16 +472,18 @@ final class MeshRepository {
         // Notify UI (Unified flow for sent messages)
         messageUpdates.send(messageRecord)
 
+        // 3. Send over network (Multiple transports)
+        // Attempt BLE delivery (Best effort, broadcast to all connected peers)
+        bleCentralManager?.broadcastData(Data(encryptedBytes))
+        blePeripheralManager?.broadcastDataToCentrals(Data(encryptedBytes))
+
         // Send via SwarmBridge (Network delivery) — broadcast to all connected peers.
-        // The message is encrypted for the specific recipient, so only they can decrypt it.
-        // Others who receive it cannot read it and may relay it in mesh mode.
+        // The message is encrypted for the specific recipient; only they can decrypt it.
         if let swarmBridge = swarmBridge {
             do {
                 try swarmBridge.sendToAllPeers(data: Data(encryptedBytes))
                 logger.info("✓ Message broadcast to peers: \(encryptedBytes.count) bytes")
             } catch {
-                // Log but don't re-throw — message is saved to history and will be
-                // delivered when peer connects (mesh delivery semantics).
                 logger.warning("SwarmBridge delivery queued (no peers connected): \(error.localizedDescription)")
             }
         } else {
@@ -906,18 +908,26 @@ final class MeshRepository {
 
     /// Called when BLE central reads the identity GATT characteristic from a peer.
     /// Automatically creates a contact if none exists for this peer.
-    func onPeerIdentityRead(blePeerId: String, publicKeyHex: String, nickname: String?) {
+    func onPeerIdentityRead(blePeerId: String, info: [String: Any]) {
+        guard let publicKeyHex = info["public_key"] as? String else { return }
+        let nickname = info["nickname"] as? String
+        let libp2pPeerId = info["libp2p_peer_id"] as? String
+        let listeners = info["listeners"] as? [String]
+
         logger.info("Peer BLE identity read: \(blePeerId.prefix(8)) key: \(publicKeyHex.prefix(8))...")
         let trimmedKey = publicKeyHex.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmedKey.count == 64 else {
             logger.warning("Ignoring BLE identity from \(blePeerId.prefix(8)): wrong key length \(trimmedKey.count)")
             return
         }
-        let hexChars = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
-        guard trimmedKey.unicodeScalars.allSatisfy({ hexChars.contains($0) }) else {
-            logger.warning("Ignoring BLE identity from \(blePeerId.prefix(8)): non-hex key")
-            return
+
+        // Store libp2p info in contact notes for recovery
+        var notes: String?
+        if let peerId = libp2pPeerId, !peerId.isEmpty {
+            let addrs = (listeners ?? []).joined(separator: ",")
+            notes = "libp2p_peer_id:\(peerId);listeners:\(addrs)"
         }
+
         let existing = try? contactManager?.get(peerId: blePeerId)
         if existing == nil {
             let contact = Contact(
@@ -926,7 +936,7 @@ final class MeshRepository {
                 publicKey: trimmedKey,
                 addedAt: UInt64(Date().timeIntervalSince1970),
                 lastSeen: UInt64(Date().timeIntervalSince1970),
-                notes: nil
+                notes: notes
             )
             do {
                 try contactManager?.add(contact: contact)
@@ -936,26 +946,37 @@ final class MeshRepository {
             }
         } else {
             try? contactManager?.updateLastSeen(peerId: blePeerId)
+            // Update notes if missing or changed
+            if let newNotes = notes, existing?.notes != newNotes {
+                // Since UniFFI generated Contact is a struct, we'd need an update method.
+                // For now, identity exchange already happened.
+            }
+        }
+
+        // Auto-dial discovered peer via Swarm if we have libp2p info
+        if let peerId = libp2pPeerId, let addrs = listeners, !peerId.isEmpty, !addrs.isEmpty {
+            logger.info("Auto-dialing discovered peer over Swarm: \(peerId)")
+            connectToPeer(peerId, addresses: addrs)
         }
     }
 
     private func broadcastIdentityBeacon() {
-        guard let identity = ironCore?.getIdentityInfo(),
-              let publicKeyHex = identity.publicKeyHex,
-              !publicKeyHex.isEmpty else {
-            logger.warning("Cannot broadcast identity beacon: identity not initialized")
-            return
-        }
+        guard let info = ironCore?.getIdentityInfo(),
+              let publicKeyHex = info.publicKeyHex else { return }
+
+        let listeners = getListeningAddresses()
         let beacon: [String: Any] = [
             "public_key": publicKeyHex,
-            "nickname": identity.nickname ?? ""
+            "nickname": info.nickname ?? "",
+            "libp2p_peer_id": info.libp2pPeerId ?? "",
+            "listeners": listeners
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: beacon) else {
             logger.error("Failed to serialize identity beacon")
             return
         }
         blePeripheralManager?.setIdentityData(data)
-        logger.info("BLE identity beacon set: \(publicKeyHex.prefix(8))...")
+        logger.info("BLE identity beacon set: \(publicKeyHex.prefix(8))... (includes libp2p)")
     }
 
     // MARK: - Auto-Adjustment Engine

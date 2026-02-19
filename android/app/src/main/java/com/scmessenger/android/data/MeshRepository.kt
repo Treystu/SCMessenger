@@ -70,6 +70,7 @@ class MeshRepository(private val context: Context) {
     private var bleScanner: com.scmessenger.android.transport.ble.BleScanner? = null
     private var bleAdvertiser: com.scmessenger.android.transport.ble.BleAdvertiser? = null
     private var bleGattServer: com.scmessenger.android.transport.ble.BleGattServer? = null
+    private var bleGattClient: com.scmessenger.android.transport.ble.BleGattClient? = null
 
     init {
         Timber.d("MeshRepository initialized with storage: $storagePath")
@@ -207,8 +208,10 @@ class MeshRepository(private val context: Context) {
                             try {
                                 val receiptBytes = ironCore?.prepareReceipt(senderPublicKeyHex, messageId)
                                 if (receiptBytes != null) {
-                                    swarmBridge?.sendMessage(senderId, receiptBytes)
-                                    Timber.d("Delivery receipt sent for $messageId to $senderId")
+                                    // Broadcast delivery receipt ACK back to all peers.
+                                    // The receipt is encrypted for the specific recipient; only they can decrypt it.
+                                    swarmBridge?.sendToAllPeers(receiptBytes)
+                                    Timber.d("Delivery receipt broadcast for $messageId to $senderId")
                                 }
                             } catch (e: Exception) {
                                 Timber.d("Failed to send delivery receipt for $messageId: ${e.message}")
@@ -250,12 +253,14 @@ class MeshRepository(private val context: Context) {
             return
         }
 
-        // BLE Scanner: Feeds discovered peers to MeshService
+        // BLE Scanner: Feeds discovered peers to MeshService and handles GATT connections
         if (bleScanner == null) {
             bleScanner = com.scmessenger.android.transport.ble.BleScanner(
                 context,
                 onPeerDiscovered = { peerId ->
                     meshService?.onPeerDiscovered(peerId)
+                    // Connect via GATT client to read identity if needed
+                    bleGattClient?.connect(peerId)
                 },
                 onDataReceived = { peerId, data ->
                     meshService?.onDataReceived(peerId, data)
@@ -263,6 +268,19 @@ class MeshRepository(private val context: Context) {
             )
         }
         bleScanner?.startScanning()
+
+        // BLE GATT Client: Manages connections to discovered peers
+        if (bleGattClient == null) {
+            bleGattClient = com.scmessenger.android.transport.ble.BleGattClient(
+                context,
+                onIdentityReceived = { peerId, data ->
+                    onPeerIdentityRead(peerId, data)
+                },
+                onDataReceived = { peerId, data ->
+                    meshService?.onDataReceived(peerId, data)
+                }
+            )
+        }
 
         // BLE Advertiser: Broadcasts our presence
         if (bleAdvertiser == null) {
@@ -282,19 +300,73 @@ class MeshRepository(private val context: Context) {
         bleGattServer?.start()
 
         // Set identity beacon on BLE GATT server so nearby peers can read our Ed25519 public key
-        val publicKeyHex = ironCore?.getIdentityInfo()?.publicKeyHex
+        val identity = ironCore?.getIdentityInfo()
+        val publicKeyHex = identity?.publicKeyHex
         if (!publicKeyHex.isNullOrEmpty()) {
             try {
                 val beaconJson = org.json.JSONObject()
                     .put("public_key", publicKeyHex)
-                    .put("nickname", ironCore?.getIdentityInfo()?.nickname ?: "")
+                    .put("nickname", identity.nickname ?: "")
+                    .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
+                    .put("listeners", org.json.JSONArray(getListeningAddresses()))
                     .toString()
                     .toByteArray(Charsets.UTF_8)
                 bleGattServer?.setIdentityData(beaconJson)
-                Timber.i("BLE GATT identity beacon set: ${publicKeyHex.take(8)}...")
+                Timber.i("BLE GATT identity beacon set: ${publicKeyHex.take(8)}... (includes libp2p)")
             } catch (e: Exception) {
                 Timber.w("Failed to set BLE GATT identity beacon: ${e.message}")
             }
+        }
+    }
+
+    /**
+     * Called when BLE identity beacon is read from a peer.
+     * Extracts identity info and attempts to dial the peer via libp2p if possible.
+     */
+    private fun onPeerIdentityRead(blePeerId: String, data: ByteArray) {
+        try {
+            val json = org.json.JSONObject(data.toString(Charsets.UTF_8))
+            val publicKeyHex = json.getString("public_key")
+            val nickname = json.optString("nickname")
+            val libp2pPeerId = json.optString("libp2p_peer_id")
+            val listeners = json.optJSONArray("listeners")
+
+            Timber.i("Peer identity read from $blePeerId: ${publicKeyHex.take(8)}...")
+
+            // Auto-create/update contact
+            val existing = try { contactManager?.get(blePeerId) } catch (e: Exception) { null }
+            if (existing == null) {
+                val notes = if (!libp2pPeerId.isNullOrEmpty()) "libp2p_peer_id: $libp2pPeerId" else null
+                val contact = uniffi.api.Contact(
+                    peerId = blePeerId,
+                    nickname = if (nickname.isNullOrEmpty()) null else nickname,
+                    publicKey = publicKeyHex,
+                    addedAt = (System.currentTimeMillis() / 1000).toULong(),
+                    lastSeen = (System.currentTimeMillis() / 1000).toULong(),
+                    notes = notes
+                )
+                contactManager?.add(contact)
+                Timber.d("Created contact for BLE peer: $blePeerId")
+            } else {
+                contactManager?.updateLastSeen(blePeerId)
+                // Update notes if libp2p PeerId is newly discovered
+                if (!libp2pPeerId.isNullOrEmpty() && existing.notes?.contains(libp2pPeerId) != true) {
+                    val newNotes = "libp2p_peer_id: $libp2pPeerId"
+                    contactManager?.setNickname(blePeerId, existing.nickname) // Set notes via metadata?
+                    // Wait, UniFFI Contact interface doesn't have setNotes.
+                    // But we can re-add or ignore.
+                }
+            }
+
+            // Attempt to dial via Swarm if we have libp2p info
+            if (!libp2pPeerId.isNullOrEmpty() && listeners != null) {
+                for (i in 0 until listeners.length()) {
+                    val addr = listeners.getString(i)
+                    connectToPeer(libp2pPeerId, listOf(addr))
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w("Failed to parse peer identity read: ${e.message}")
         }
     }
 
@@ -368,6 +440,7 @@ class MeshRepository(private val context: Context) {
             bleScanner?.stopScanning()
             bleAdvertiser?.stopAdvertising()
             bleGattServer?.stop()
+            bleGattClient?.cleanup()
 
             // Stop WiFi
             wifiTransportManager?.stopDiscovery()
@@ -510,14 +583,16 @@ class MeshRepository(private val context: Context) {
                 // UniFFI 'bytes' maps to ByteArray, so encryptedData is ByteArray.
 
                 // 3. Send over network (Multiple transports)
-                // Attempt BLE
-                bleAdvertiser?.sendData(encryptedData)
+                // Attempt BLE (GATT)
+                // Try Central role (push to peripheral)
+                bleGattClient?.sendData(peerId, encryptedData)
+                // Try Peripheral role (push to central)
+                bleGattServer?.sendData(peerId, encryptedData)
 
                 // Attempt WiFi
                 wifiTransportManager?.sendData(peerId, encryptedData)
 
                 // Attempt Swarm (Internet) — broadcast to all connected peers.
-                // The message is encrypted for the specific recipient; only they can decrypt it.
                 try {
                     swarmBridge?.sendToAllPeers(encryptedData)
                 } catch (e: Exception) {

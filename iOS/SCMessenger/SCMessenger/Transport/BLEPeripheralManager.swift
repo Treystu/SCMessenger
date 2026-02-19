@@ -136,6 +136,13 @@ final class BLEPeripheralManager: NSObject {
         }
         sendNotification(to: central, data: data)
     }
+
+    /// Broadcast data to all subscribed centrals.
+    func broadcastDataToCentrals(_ data: Data) {
+        for central in subscribedCentrals {
+            sendNotification(to: central, data: data)
+        }
+    }
     
     // MARK: - Private Methods
     

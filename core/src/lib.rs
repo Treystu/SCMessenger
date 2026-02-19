@@ -93,7 +93,13 @@ pub trait CoreDelegate: Send + Sync {
     /// `sender_public_key_hex` is the sender's Ed25519 public key (64 hex chars) —
     /// pass this to `prepare_receipt()` to send a delivery acknowledgement.
     /// `sender_id` is the sender's Blake3 identity_id (64 hex chars) — use for display.
-    fn on_message_received(&self, sender_id: String, sender_public_key_hex: String, message_id: String, data: Vec<u8>);
+    fn on_message_received(
+        &self,
+        sender_id: String,
+        sender_public_key_hex: String,
+        message_id: String,
+        data: Vec<u8>,
+    );
     /// A delivery receipt was received
     fn on_receipt_received(&self, message_id: String, status: String);
 }
@@ -442,13 +448,28 @@ impl IronCore {
         // Notify delegate — include sender's Ed25519 public key hex so mobile
         // platforms can send a receipt ACK without a contact-DB lookup.
         if let Some(delegate) = self.delegate.read().as_ref() {
-            let sender_pub_key_hex = hex::encode(&envelope.sender_public_key);
-            delegate.on_message_received(
-                msg.sender_id.clone(),
-                sender_pub_key_hex,
-                msg.id.clone(),
-                msg.payload.clone(),
-            );
+            if msg.message_type == message::MessageType::Receipt {
+                // If it's a receipt, deserialize the payload to get the true message ID it acknowledges
+                if let Ok(receipt) = bincode::deserialize::<message::Receipt>(&msg.payload) {
+                    let status_str = match receipt.status {
+                        message::DeliveryStatus::Sent => "sent",
+                        message::DeliveryStatus::Delivered => "delivered",
+                        message::DeliveryStatus::Read => "read",
+                        message::DeliveryStatus::Failed(_) => "failed",
+                    };
+                    delegate.on_receipt_received(receipt.message_id, status_str.to_string());
+                } else {
+                    tracing::warn!("Failed to deserialize receipt payload");
+                }
+            } else {
+                let sender_pub_key_hex = hex::encode(&envelope.sender_public_key);
+                delegate.on_message_received(
+                    msg.sender_id.clone(),
+                    sender_pub_key_hex,
+                    msg.id.clone(),
+                    msg.payload.clone(),
+                );
+            }
         }
 
         Ok(msg)

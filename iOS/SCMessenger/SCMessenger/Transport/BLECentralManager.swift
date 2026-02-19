@@ -21,27 +21,27 @@ final class BLECentralManager: NSObject {
     private let logger = Logger(subsystem: "com.scmessenger", category: "BLE-Central")
     private var centralManager: CBCentralManager!
     private weak var meshRepository: MeshRepository?
-    
+
     // Peripheral tracking
     private var discoveredPeripherals: [UUID: CBPeripheral] = [:]
     private var connectedPeripherals: [UUID: CBPeripheral] = [:]
     private var peerCache: [UUID: Date] = [:] // Dedup cache
-    
+
     // Scanning parameters
     private var scanInterval: TimeInterval = MeshBLEConstants.defaultScanInterval
     private var scanWindow: TimeInterval = MeshBLEConstants.defaultScanWindow
     private var isBackgroundMode = false
     private var scanTimer: Timer?
     private var isScanning = false
-    
+
     // Write queue (mirrors Android BleGattClient pattern - CRITICAL)
     private var writeInProgress: [UUID: Bool] = [:]
     private var pendingWrites: [UUID: [Data]] = [:]
-    
+
     // Characteristics cache (names match Android BleGattServer)
     private var messageCharacteristics: [UUID: CBCharacteristic] = [:] // Write: central → peripheral
     private var syncCharacteristics: [UUID: CBCharacteristic] = [:]    // Notify: peripheral → central
-    
+
     init(meshRepository: MeshRepository) {
         self.meshRepository = meshRepository
         super.init()
@@ -51,9 +51,9 @@ final class BLECentralManager: NSObject {
             options: [CBCentralManagerOptionRestoreIdentifierKey: MeshBLEConstants.centralRestoreId]
         )
     }
-    
+
     // MARK: - Public API
-    
+
     func startScanning() {
         logger.info("Starting BLE scanning")
         guard centralManager.state == .poweredOn else {
@@ -62,7 +62,7 @@ final class BLECentralManager: NSObject {
         }
         scheduleDutyCycle()
     }
-    
+
     func stopScanning() {
         logger.info("Stopping BLE scanning")
         scanTimer?.invalidate()
@@ -71,45 +71,52 @@ final class BLECentralManager: NSObject {
         isScanning = false
         disconnectAll()
     }
-    
+
     func setBackgroundMode(_ background: Bool) {
         isBackgroundMode = background
         logger.info("Background mode: \(background)")
     }
-    
+
     func applyScanSettings(intervalMs: UInt32) {
         scanInterval = TimeInterval(intervalMs) / 1000.0
         logger.debug("Scan interval updated: \(self.scanInterval)s")
     }
-    
+
     func sendData(to peripheralId: UUID, data: Data) {
         guard let peripheral = connectedPeripherals[peripheralId],
               let characteristic = messageCharacteristics[peripheralId] else {
             logger.error("Cannot send: peripheral \(peripheralId) not connected or Message char not found")
             return
         }
-        
+
         // Write queue management (mirrors Android)
         if writeInProgress[peripheralId] == true {
             logger.debug("Write in progress, queueing data")
             pendingWrites[peripheralId, default: []].append(data)
             return
         }
-        
+
         writeInProgress[peripheralId] = true
         peripheral.writeValue(data, for: characteristic, type: .withResponse)
         logger.debug("Writing \(data.count) bytes to \(peripheralId)")
     }
-    
+
+    /// Broadcast data to all connected peripherals.
+    func broadcastData(_ data: Data) {
+        for peripheralId in connectedPeripherals.keys {
+            sendData(to: peripheralId, data: data)
+        }
+    }
+
     // MARK: - Private Methods
-    
+
     private func scheduleDutyCycle() {
         scanTimer = Timer.scheduledTimer(withTimeInterval: scanInterval, repeats: true) { [weak self] _ in
             self?.performScanCycle()
         }
         performScanCycle() // Start immediately
     }
-    
+
     private func performScanCycle() {
         if !isScanning {
             startScan()
@@ -118,7 +125,7 @@ final class BLECentralManager: NSObject {
             }
         }
     }
-    
+
     private func startScan() {
         let options: [String: Any] = isBackgroundMode ? [:] : [CBCentralManagerScanOptionAllowDuplicatesKey: true]
         centralManager.scanForPeripherals(
@@ -128,13 +135,13 @@ final class BLECentralManager: NSObject {
         isScanning = true
         logger.debug("Scan started")
     }
-    
+
     private func stopScan() {
         centralManager.stopScan()
         isScanning = false
         logger.debug("Scan stopped")
     }
-    
+
     private func disconnectAll() {
         for peripheral in connectedPeripherals.values {
             centralManager.cancelPeripheralConnection(peripheral)
@@ -143,7 +150,7 @@ final class BLECentralManager: NSObject {
         messageCharacteristics.removeAll()
         syncCharacteristics.removeAll()
     }
-    
+
     private func cleanupPeerCache() {
         let now = Date()
         peerCache = peerCache.filter { now.timeIntervalSince($0.value) < MeshBLEConstants.peerCacheTimeout }
@@ -159,40 +166,40 @@ extension BLECentralManager: CBCentralManagerDelegate {
             // Can start scanning if needed
         }
     }
-    
+
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
         logger.debug("Discovered peripheral: \(peripheral.identifier)")
-        
+
         // Check cache to avoid duplicate processing
         cleanupPeerCache()
         if peerCache[peripheral.identifier] != nil {
             return // Recently processed
         }
         peerCache[peripheral.identifier] = Date()
-        
+
         // Store and connect
         discoveredPeripherals[peripheral.identifier] = peripheral
         peripheral.delegate = self
         centralManager.connect(peripheral, options: nil)
     }
-    
+
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         logger.info("Connected to \(peripheral.identifier)")
         connectedPeripherals[peripheral.identifier] = peripheral
         peripheral.discoverServices([MeshBLEConstants.serviceUUID])
     }
-    
+
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         logger.error("Failed to connect to \(peripheral.identifier): \(error?.localizedDescription ?? "unknown")")
     }
-    
+
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         logger.info("Disconnected from \(peripheral.identifier)")
         connectedPeripherals.removeValue(forKey: peripheral.identifier)
         messageCharacteristics.removeValue(forKey: peripheral.identifier)
         syncCharacteristics.removeValue(forKey: peripheral.identifier)
     }
-    
+
     func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
         // State restoration (iOS-specific for background BLE)
         if let peripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] {
@@ -235,7 +242,7 @@ extension BLECentralManager: CBPeripheralDelegate {
             }
         }
     }
-    
+
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         if let error = error {
             logger.error("Characteristic update error for \(characteristic.uuid.shortUUID): \(error.localizedDescription)")
@@ -249,11 +256,9 @@ extension BLECentralManager: CBPeripheralDelegate {
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let publicKeyHex = json["public_key"] as? String,
                publicKeyHex.count == 64 {
-                let nickname = json["nickname"] as? String
                 meshRepository?.onPeerIdentityRead(
                     blePeerId: peripheral.identifier.uuidString,
-                    publicKeyHex: publicKeyHex,
-                    nickname: nickname
+                    info: json
                 )
             } else {
                 logger.warning("Could not parse identity beacon from \(peripheral.identifier)")
@@ -264,7 +269,7 @@ extension BLECentralManager: CBPeripheralDelegate {
             meshRepository?.onBleDataReceived(peerId: peripheral.identifier.uuidString, data: data)
         }
     }
-    
+
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
         // Dequeue next write (mirrors Android pattern)
         writeInProgress[peripheral.identifier] = false
