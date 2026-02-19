@@ -122,7 +122,10 @@ fun ConversationsScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     items(conversations) { (peerId, messages) ->
+                        val contact = viewModel.getContactForPeer(peerId)
+                        val displayName = contact?.nickname ?: peerId.take(8) + "..."
                         ConversationItem(
+                            displayName = displayName,
                             peerId = peerId,
                             messages = messages,
                             onClick = {
@@ -157,6 +160,7 @@ fun StatItem(label: String, value: String) {
 
 @Composable
 fun ConversationItem(
+    displayName: String,
     peerId: String,
     messages: List<uniffi.api.MessageRecord>,
     onClick: () -> Unit
@@ -183,7 +187,7 @@ fun ConversationItem(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = peerId.take(16) + "...",
+                        text = displayName,
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

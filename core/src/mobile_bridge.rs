@@ -716,6 +716,28 @@ impl HistoryManager {
         self.recent(Some(peer_id), limit)
     }
 
+    pub fn remove_conversation(&self, peer_id: String) -> Result<(), crate::IronCoreError> {
+        let db = self.db.lock().unwrap();
+        let mut keys_to_remove = Vec::new();
+
+        for item in db.iter() {
+            let (key, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
+            let record: MessageRecord =
+                serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
+
+            if record.peer_id == peer_id {
+                keys_to_remove.push(key);
+            }
+        }
+
+        for key in keys_to_remove {
+            db.remove(key)
+                .map_err(|_| crate::IronCoreError::StorageError)?;
+        }
+
+        Ok(())
+    }
+
     pub fn search(
         &self,
         query: String,

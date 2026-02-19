@@ -670,7 +670,8 @@ final class MeshRepository {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
         try contactManager.remove(peerId: peerId)
-        logger.info("✓ Contact removed: \(peerId)")
+        try? historyManager?.removeConversation(peerId: peerId)
+        logger.info("✓ Contact removed: \(peerId) and their message history")
     }
 
     func searchContacts(query: String) throws -> [Contact] {

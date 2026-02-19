@@ -206,6 +206,17 @@ class ConversationsViewModel @Inject constructor(
     }
 
     /**
+     * Get contact info for a peer (for displaying nickname).
+     */
+    fun getContactForPeer(peerId: String): uniffi.api.Contact? {
+        return try {
+            meshRepository.getContact(peerId)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
      * Clear error state.
      */
     fun clearError() {

@@ -510,7 +510,12 @@ class MeshRepository(private val context: Context) {
 
     fun removeContact(peerId: String) {
         contactManager?.remove(peerId)
-        Timber.d("Contact removed: $peerId")
+        try {
+            historyManager?.removeConversation(peerId)
+        } catch (e: Exception) {
+            Timber.w("Failed to remove conversation history for $peerId: ${e.message}")
+        }
+        Timber.d("Contact removed: $peerId and their message history")
     }
 
     fun listContacts(): List<uniffi.api.Contact> {

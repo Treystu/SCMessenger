@@ -316,6 +316,9 @@ interface HistoryManager {
     sequence<MessageRecord> conversation(string peer_id, u32 limit);
 
     [Throws=IronCoreError]
+    void remove_conversation(string peer_id);
+
+    [Throws=IronCoreError]
     sequence<MessageRecord> search(string query, u32 limit);
 
     [Throws=IronCoreError]

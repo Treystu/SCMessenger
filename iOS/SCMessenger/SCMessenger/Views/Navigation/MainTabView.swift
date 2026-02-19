@@ -87,7 +87,8 @@ struct ConversationListView: View {
         do {
             let contacts = try repository.getContacts()
             conversations = contacts.map { contact in
-                Conversation(peerId: contact.peerId, peerNickname: contact.nickname ?? "Unknown")
+                let displayName = contact.nickname ?? String(contact.peerId.prefix(8)) + "..."
+                return Conversation(peerId: contact.peerId, peerNickname: displayName)
             }
         } catch {
             // Handle error
