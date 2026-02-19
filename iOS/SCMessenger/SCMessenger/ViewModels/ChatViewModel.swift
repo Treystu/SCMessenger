@@ -28,7 +28,8 @@ final class ChatViewModel {
     
     func loadMessages() {
         do {
-            messages = try repository?.getConversation(peerId: conversation.peerId) ?? []
+            let fetched = try repository?.getConversation(peerId: conversation.peerId) ?? []
+            messages = fetched.sorted { $0.timestamp < $1.timestamp }
         } catch {
             self.error = error.localizedDescription
         }
