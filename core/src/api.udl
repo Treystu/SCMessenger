@@ -134,6 +134,14 @@ interface MeshService {
     void start_swarm(string listen_addr);
     SwarmBridge get_swarm_bridge();
 
+    /// Configure bootstrap nodes for NAT traversal and internet roaming.
+    /// These are multiaddr strings like "/ip4/1.2.3.4/tcp/4001" or
+    /// "/dns4/bootstrap.scmessenger.net/tcp/4001".
+    void set_bootstrap_nodes(sequence<string> addrs);
+
+    /// Get the current NAT status as a string: "open", "restricted", "symmetric", or "unknown".
+    string get_nat_status();
+
     void update_device_state(DeviceProfile profile);
     void set_relay_budget(u32 messages_per_hour);
 

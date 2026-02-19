@@ -61,6 +61,8 @@ pub struct MeshService {
     platform_bridge: std::sync::Arc<Mutex<Option<Box<dyn PlatformBridge>>>>,
     storage_path: Option<String>,
     swarm_bridge: std::sync::Arc<SwarmBridge>,
+    bootstrap_addrs: Mutex<Vec<String>>,
+    nat_status: Mutex<String>,
 }
 
 impl MeshService {
@@ -73,6 +75,8 @@ impl MeshService {
             platform_bridge: std::sync::Arc::new(Mutex::new(None)),
             storage_path: None,
             swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
+            bootstrap_addrs: Mutex::new(Vec::new()),
+            nat_status: Mutex::new("unknown".to_string()),
         }
     }
 
@@ -86,6 +90,8 @@ impl MeshService {
             platform_bridge: std::sync::Arc::new(Mutex::new(None)),
             storage_path: Some(storage_path),
             swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
+            bootstrap_addrs: Mutex::new(Vec::new()),
+            nat_status: Mutex::new("unknown".to_string()),
         }
     }
 
@@ -173,6 +179,21 @@ impl MeshService {
 
     pub fn set_platform_bridge(&self, bridge: Option<Box<dyn PlatformBridge>>) {
         *self.platform_bridge.lock() = bridge;
+    }
+
+    /// Configure bootstrap node multiaddrs for NAT traversal.
+    /// Call this BEFORE start_swarm() to have bootstrap nodes dialed on startup.
+    pub fn set_bootstrap_nodes(&self, addrs: Vec<String>) {
+        tracing::info!("Setting {} bootstrap node(s)", addrs.len());
+        for addr in &addrs {
+            tracing::info!("  Bootstrap: {}", addr);
+        }
+        *self.bootstrap_addrs.lock() = addrs;
+    }
+
+    /// Get current NAT status string.
+    pub fn get_nat_status(&self) -> String {
+        self.nat_status.lock().clone()
     }
 
     pub fn start_swarm(&self, listen_addr: String) -> Result<(), crate::IronCoreError> {

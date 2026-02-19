@@ -52,6 +52,7 @@ async fn test_all_six_phases_integrated() {
         None,
         alice_event_tx,
         Some(multiport_config.clone()),
+        Vec::new(),
     )
     .await
     .expect("Failed to start Alice");
@@ -83,6 +84,7 @@ async fn test_all_six_phases_integrated() {
         None,
         bob_event_tx,
         Some(multiport_config.clone()),
+        Vec::new(),
     )
     .await
     .expect("Failed to start Bob");
@@ -263,10 +265,15 @@ async fn test_message_retry_on_failure() {
     };
 
     let (alice_event_tx, _alice_event_rx) = mpsc::channel(100);
-    let alice_handle =
-        start_swarm_with_config(alice_keypair, None, alice_event_tx, Some(multiport_config))
-            .await
-            .expect("Failed to start Alice");
+    let alice_handle = start_swarm_with_config(
+        alice_keypair,
+        None,
+        alice_event_tx,
+        Some(multiport_config),
+        Vec::new(),
+    )
+    .await
+    .expect("Failed to start Alice");
 
     println!("✓ Alice started");
     println!("✓ Bob is offline (not started)");
@@ -344,6 +351,7 @@ async fn test_relay_protocol() {
         None,
         alice_event_tx,
         Some(multiport_config.clone()),
+        Vec::new(),
     )
     .await
     .expect("Failed to start Alice");
@@ -354,6 +362,7 @@ async fn test_relay_protocol() {
         None,
         bob_event_tx,
         Some(multiport_config.clone()),
+        Vec::new(),
     )
     .await
     .expect("Failed to start Bob");
@@ -364,6 +373,7 @@ async fn test_relay_protocol() {
         None,
         charlie_event_tx,
         Some(multiport_config),
+        Vec::new(),
     )
     .await
     .expect("Failed to start Charlie");

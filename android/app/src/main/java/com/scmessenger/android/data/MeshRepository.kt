@@ -26,6 +26,16 @@ import java.io.File
  */
 class MeshRepository(private val context: Context) {
 
+    companion object {
+        /** Default bootstrap node multiaddrs for NAT traversal and internet roaming.
+         *  Update these when a production bootstrap VPS is deployed. */
+        val DEFAULT_BOOTSTRAP_NODES: List<String> = listOf(
+            // Add your bootstrap VPS address here, e.g.:
+            // "/ip4/<VPS_IP>/tcp/4001",
+            // "/dns4/bootstrap.scmessenger.net/tcp/4001",
+        )
+    }
+
     private val storagePath: String = context.filesDir.absolutePath
 
     // Mesh service instance (lazy init)
@@ -412,6 +422,8 @@ class MeshRepository(private val context: Context) {
             }
 
             if (isIdentityInitialized() == true) {
+                // Configure bootstrap nodes for NAT traversal
+                meshService?.setBootstrapNodes(DEFAULT_BOOTSTRAP_NODES)
                 // Initiate swarm in Rust core
                 meshService?.startSwarm("/ip4/0.0.0.0/tcp/0")
 

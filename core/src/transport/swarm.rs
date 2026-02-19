@@ -301,15 +301,20 @@ pub async fn start_swarm(
     listen_addr: Option<Multiaddr>,
     event_tx: mpsc::Sender<SwarmEvent2>,
 ) -> Result<SwarmHandle> {
-    start_swarm_with_config(keypair, listen_addr, event_tx, None).await
+    start_swarm_with_config(keypair, listen_addr, event_tx, None, Vec::new()).await
 }
 
 /// Build and start the libp2p swarm with custom multi-port configuration.
+///
+/// `bootstrap_addrs` — Multiaddrs of well-known relay / bootstrap nodes.
+/// The swarm will auto-dial these after binding, enabling cross-network
+/// peer discovery via Kademlia DHT and relay-circuit connectivity.
 pub async fn start_swarm_with_config(
     keypair: Keypair,
     listen_addr: Option<Multiaddr>,
     event_tx: mpsc::Sender<SwarmEvent2>,
     multiport_config: Option<MultiPortConfig>,
+    bootstrap_addrs: Vec<Multiaddr>,
 ) -> Result<SwarmHandle> {
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -433,10 +438,29 @@ pub async fn start_swarm_with_config(
         // Track peers we've already exchanged ledgers with (avoid spamming)
         let mut ledger_exchanged_peers: HashSet<PeerId> = HashSet::new();
 
+        // Auto-dial bootstrap nodes for cross-network discovery
+        if !bootstrap_addrs.is_empty() {
+            tracing::info!(
+                "🌐 Dialing {} bootstrap node(s) for NAT traversal",
+                bootstrap_addrs.len()
+            );
+            for addr in &bootstrap_addrs {
+                match swarm.dial(addr.clone()) {
+                    Ok(_) => tracing::info!("  ✓ Dialing bootstrap: {}", addr),
+                    Err(e) => tracing::warn!("  ✗ Failed to dial bootstrap {}: {}", addr, e),
+                }
+            }
+        }
+
         // Spawn the swarm event loop
         tokio::spawn(async move {
             // PHASE 6: Retry interval for failed deliveries
             let mut retry_interval = tokio::time::interval(Duration::from_millis(500));
+
+            // Bootstrap reconnection timer — re-dial bootstrap nodes every 60s
+            // to handle network changes and maintain connectivity
+            let mut bootstrap_reconnect_interval = tokio::time::interval(Duration::from_secs(60));
+            let bootstrap_addrs_clone = bootstrap_addrs;
 
             loop {
                 tokio::select! {
@@ -500,6 +524,32 @@ pub async fn start_swarm_with_config(
                                     // All paths exhausted
                                     tracing::error!("All delivery paths exhausted for message {}", msg_id);
                                     let _ = pending.reply_tx.send(Err("All delivery paths exhausted".to_string())).await;
+                                }
+                            }
+                        }
+                    }
+
+                    // Bootstrap reconnection: re-dial bootstrap nodes periodically
+                    // This handles network changes, dropped connections, and roaming
+                    _ = bootstrap_reconnect_interval.tick() => {
+                        if !bootstrap_addrs_clone.is_empty() {
+                            let connected_peers: HashSet<PeerId> = swarm.connected_peers().cloned().collect();
+                            for addr in &bootstrap_addrs_clone {
+                                // Extract peer ID from multiaddr if present to avoid
+                                // re-dialing already-connected bootstrap nodes
+                                let already_connected = addr.iter().any(|proto| {
+                                    if let libp2p::multiaddr::Protocol::P2p(pid) = proto {
+                                        connected_peers.contains(&pid)
+                                    } else {
+                                        false
+                                    }
+                                });
+
+                                if !already_connected {
+                                    match swarm.dial(addr.clone()) {
+                                        Ok(_) => tracing::debug!("🔄 Re-dialing bootstrap: {}", addr),
+                                        Err(e) => tracing::trace!("Bootstrap re-dial {} skipped: {}", addr, e),
+                                    }
                                 }
                             }
                         }

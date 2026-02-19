@@ -37,6 +37,16 @@ final class MeshRepository {
     private let logger = Logger(subsystem: "com.scmessenger", category: "Repository")
     private let storagePath: String
 
+    // MARK: - Bootstrap Nodes for NAT Traversal
+
+    /// Default bootstrap node multiaddrs for NAT traversal and internet roaming.
+    /// Update these when a production bootstrap VPS is deployed.
+    static let defaultBootstrapNodes: [String] = [
+        // Add your bootstrap VPS address here, e.g.:
+        // "/ip4/<VPS_IP>/tcp/4001",
+        // "/dns4/bootstrap.scmessenger.net/tcp/4001",
+    ]
+
     // MARK: - UniFFI Components (lazy initialization)
 
     private(set) var ironCore: IronCore?
@@ -275,6 +285,8 @@ final class MeshRepository {
             // Initialize internet transport if enabled (only if identity is ready)
             let settings = try? settingsManager?.load()
             if settings?.internetEnabled == true && isIdentityInitialized() {
+                // Configure bootstrap nodes for NAT traversal
+                meshService?.setBootstrapNodes(addrs: Self.defaultBootstrapNodes)
                 // Listen on random port
                 try? meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/0")
                 logger.info("Internet transport (Swarm) initiated")
@@ -360,6 +372,8 @@ final class MeshRepository {
         let settings = try? settingsManager?.load()
         if settings?.internetEnabled == true {
             do {
+                // Configure bootstrap nodes for NAT traversal
+                meshService?.setBootstrapNodes(addrs: Self.defaultBootstrapNodes)
                 try meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/0")
                 logger.info("✓ Internet transport (Swarm) started manually")
             } catch {
