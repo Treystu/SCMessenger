@@ -30,9 +30,7 @@ class MeshRepository(private val context: Context) {
         /** Default bootstrap node multiaddrs for NAT traversal and internet roaming.
          *  Update these when a production bootstrap VPS is deployed. */
         val DEFAULT_BOOTSTRAP_NODES: List<String> = listOf(
-            // Add your bootstrap VPS address here, e.g.:
-            // "/ip4/<VPS_IP>/tcp/4001",
-            // "/dns4/bootstrap.scmessenger.net/tcp/4001",
+            "/ip4/34.135.34.73/tcp/4001/p2p/12D3KooWEYHahoPzBNy2Mm9SJDsgFzgbgDGhw7KywWexEjCdsFBB"
         )
     }
 
@@ -233,8 +231,14 @@ class MeshRepository(private val context: Context) {
                 }
 
                 override fun onReceiptReceived(messageId: String, status: String) {
-                     Timber.d("Receipt for $messageId: $status")
-                     historyManager?.markDelivered(messageId)
+                    Timber.d("Receipt for $messageId: $status")
+                    historyManager?.markDelivered(messageId)
+                    // Bridge to ChatViewModel: emit Delivered so UI delivery indicator updates
+                    repoScope.launch {
+                        com.scmessenger.android.service.MeshEventBus.emitMessageEvent(
+                            com.scmessenger.android.service.MessageEvent.Delivered(messageId)
+                        )
+                    }
                 }
             }
             ironCore?.setDelegate(coreDelegate)
@@ -313,18 +317,27 @@ class MeshRepository(private val context: Context) {
         val identity = ironCore?.getIdentityInfo()
         val publicKeyHex = identity?.publicKeyHex
         if (!publicKeyHex.isNullOrEmpty()) {
-            try {
-                val beaconJson = org.json.JSONObject()
-                    .put("public_key", publicKeyHex)
-                    .put("nickname", identity.nickname ?: "")
-                    .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
-                    .put("listeners", org.json.JSONArray(getListeningAddresses()))
-                    .toString()
-                    .toByteArray(Charsets.UTF_8)
-                bleGattServer?.setIdentityData(beaconJson)
-                Timber.i("BLE GATT identity beacon set: ${publicKeyHex.take(8)}... (includes libp2p)")
-            } catch (e: Exception) {
-                Timber.w("Failed to set BLE GATT identity beacon: ${e.message}")
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                var listeners = getListeningAddresses()
+                var attempts = 0
+                while (listeners.isEmpty() && attempts < 10) {
+                    kotlinx.coroutines.delay(500)
+                    listeners = getListeningAddresses()
+                    attempts++
+                }
+                try {
+                    val beaconJson = org.json.JSONObject()
+                        .put("public_key", publicKeyHex)
+                        .put("nickname", identity.nickname ?: "")
+                        .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
+                        .put("listeners", org.json.JSONArray(listeners))
+                        .toString()
+                        .toByteArray(Charsets.UTF_8)
+                    bleGattServer?.setIdentityData(beaconJson)
+                    Timber.i("BLE GATT identity beacon set: ${publicKeyHex.take(8)}... (includes libp2p)")
+                } catch (e: Exception) {
+                    Timber.w("Failed to set BLE GATT identity beacon: ${e.message}")
+                }
             }
         }
     }
@@ -599,21 +612,37 @@ class MeshRepository(private val context: Context) {
                 // Convert List<Byte> (or whatever UniFFI returns) to ByteArray
                 // UniFFI 'bytes' maps to ByteArray, so encryptedData is ByteArray.
 
-                // 3. Send over network (Multiple transports)
-                // Attempt BLE (GATT)
-                // Try Central role (push to peripheral)
-                bleGattClient?.sendData(peerId, encryptedData)
-                // Try Peripheral role (push to central)
-                bleGattServer?.sendData(peerId, encryptedData)
+                // 3. Send over network — routing hierarchy:
+                //    1. Internet (smart route): sendMessage(libp2pPeerId) — direct or relay-mediated
+                //    2. BLE / WiFi: broadcast — always attempted in parallel
+                //    3. Swarm broadcast: sendToAllPeers — fallback for LAN/direct connections
 
-                // Attempt WiFi
+                // BLE (always — parallel transport)
+                bleGattClient?.sendData(peerId, encryptedData)
+                bleGattServer?.sendData(peerId, encryptedData)
                 wifiTransportManager?.sendData(peerId, encryptedData)
 
-                // Attempt Swarm (Internet) — broadcast to all connected peers.
-                try {
-                    swarmBridge?.sendToAllPeers(encryptedData)
-                } catch (e: Exception) {
-                    Timber.w("SwarmBridge delivery queued (no peers connected): ${e.message}")
+                // Internet: smart routing when recipient's libp2p PeerId is known
+                var smartRoutingSucceeded = false
+                val libp2pPeerId = extractLibp2pPeerId(contact.notes)
+                if (!libp2pPeerId.isNullOrEmpty()) {
+                    try {
+                        swarmBridge?.sendMessage(libp2pPeerId, encryptedData)
+                        Timber.i("✓ Smart-routed to $libp2pPeerId (${encryptedData.size} bytes)")
+                        smartRoutingSucceeded = true
+                    } catch (e: Exception) {
+                        Timber.w("Smart routing failed: ${e.message}, using broadcast fallback")
+                    }
+                }
+
+                // Swarm broadcast fallback — covers LAN direct connections when smart
+                // routing is unavailable (no libp2p PeerId stored) or failed
+                if (!smartRoutingSucceeded) {
+                    try {
+                        swarmBridge?.sendToAllPeers(encryptedData)
+                    } catch (e: Exception) {
+                        Timber.w("SwarmBridge delivery queued (no peers connected): ${e.message}")
+                    }
                 }
 
                 // Note: In a real mesh, we would route via MeshService/Libp2p which manages transports.
@@ -871,6 +900,32 @@ class MeshRepository(private val context: Context) {
     /**
      * Connect to a peer using provided addresses.
      */
+    // ========================================================================
+    // SWARM BRIDGE DELEGATIONS
+    // ========================================================================
+
+    /**
+     * Subscribe to a gossipsub topic via SwarmBridge.
+     */
+    fun subscribeTopic(topic: String) {
+        try {
+            swarmBridge?.subscribeTopic(topic)
+        } catch (e: Exception) {
+            Timber.w("subscribeTopic failed for $topic: ${e.message}")
+        }
+    }
+
+    /**
+     * Broadcast data to all connected peers via SwarmBridge.
+     */
+    fun sendToAllPeers(data: ByteArray) {
+        try {
+            swarmBridge?.sendToAllPeers(data)
+        } catch (e: Exception) {
+            Timber.w("sendToAllPeers failed: ${e.message}")
+        }
+    }
+
     fun connectToPeer(peerId: String, addresses: List<String>) {
         addresses.forEach { addr ->
             try {
@@ -892,6 +947,27 @@ class MeshRepository(private val context: Context) {
     }
 
     // ========================================================================
+    // ROUTING HELPERS
+    // ========================================================================
+
+    /**
+     * Extract libp2p PeerId from a contact's notes field.
+     * iOS format:     "libp2p_peer_id:12D3KooW...;listeners:..."
+     * Android format: "libp2p_peer_id: 12D3KooW..."
+     */
+    private fun extractLibp2pPeerId(notes: String?): String? {
+        if (notes.isNullOrEmpty()) return null
+        for (component in notes.split(";")) {
+            val kv = component.trim()
+            if (kv.startsWith("libp2p_peer_id:")) {
+                val value = kv.removePrefix("libp2p_peer_id:").trim()
+                return value.ifEmpty { null }
+            }
+        }
+        return null
+    }
+
+    // ========================================================================
     // IDENTITY EXPORT HELPERS
     // ========================================================================    // MARK: - Identity Helpers
 
@@ -900,6 +976,17 @@ class MeshRepository(private val context: Context) {
         return relays?.firstOrNull()?.peerId
     }
 
+    fun getExternalAddresses(): List<String> {
+        return swarmBridge?.getExternalAddresses() ?: emptyList()
+    }
+
+    /**
+     * Returns local listener addresses (bound TCP ports on LAN interfaces).
+     * External NAT-mapped addresses are intentionally excluded — they are observed
+     * outbound ports, not stable inbound addresses, and including them causes remote
+     * peers to attempt unreachable dials.
+     * Use getExternalAddresses() for display/debugging only.
+     */
     fun getListeningAddresses(): List<String> {
         return swarmBridge?.getListeners() ?: emptyList()
     }

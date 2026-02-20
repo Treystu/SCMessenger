@@ -147,10 +147,6 @@ class SettingsViewModel @Inject constructor(
             // If we didn't have any listeners (or just didn't have 0.0.0.0),
             // but we have a generic "not listening" situation, maybe suggest what it WOULD be?
             // User requested: "no direct connection IP/Port info... Get the full info"
-            if (updatedListeners.isEmpty()) {
-                // If we have no listeners reported, we assume standard port 9001 for potential manual connection
-                updatedListeners.add("/ip4/$localIp/tcp/9001 (Potential)")
-            }
             listeners = updatedListeners
         }
 
