@@ -167,6 +167,39 @@ final class SettingsViewModel {
         set { UserDefaults.standard.set(newValue, forKey: "notifications_enabled") }
     }
 
+    // MARK: - Privacy Feature Preferences
+    //
+    // These preferences persist via UserDefaults and are forwarded to the Rust
+    // core privacy module (cover traffic, padding, timing obfuscation) via
+    // MeshSettings once the UniFFI surface exposes per-feature toggles.
+    // Until then the stored value is the source of truth consulted by the UI.
+
+    var isCoverTrafficEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: "privacy_cover_traffic") as? Bool ?? false }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "privacy_cover_traffic")
+            // TODO: forward to core when UniFFI exposes CoverTrafficConfig toggle
+            // e.g. guard var s = settings else { return }
+            //      s.coverTrafficEnabled = newValue; settings = s; saveSettings()
+        }
+    }
+
+    var isMessagePaddingEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: "privacy_message_padding") as? Bool ?? false }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "privacy_message_padding")
+            // TODO: forward to core when UniFFI exposes PaddingConfig toggle
+        }
+    }
+
+    var isTimingObfuscationEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: "privacy_timing_obfuscation") as? Bool ?? false }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "privacy_timing_obfuscation")
+            // TODO: forward to core when UniFFI exposes TimingObfuscationConfig toggle
+        }
+    }
+
     // MARK: - Service Control
 
     var isServiceRunning: Bool {

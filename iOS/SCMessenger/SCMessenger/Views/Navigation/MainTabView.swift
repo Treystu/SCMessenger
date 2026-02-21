@@ -10,7 +10,11 @@ import SwiftUI
 struct MainTabView: View {
     @Environment(MeshRepository.self) private var repository
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-    
+
+    // Identity fail-safe alert state
+    @State private var showIdentityAlert = false
+    @State private var identityRecoveryError: String?
+
     var body: some View {
         TabView {
             NavigationStack {
@@ -19,21 +23,21 @@ struct MainTabView: View {
             .tabItem {
                 Label("Messages", systemImage: "message")
             }
-            
+
             NavigationStack {
                 ContactsListView()
             }
             .tabItem {
                 Label("Contacts", systemImage: "person.2")
             }
-            
+
             NavigationStack {
                 MeshDashboardView()
             }
             .tabItem {
                 Label("Mesh", systemImage: "network")
             }
-            
+
             NavigationStack {
                 SettingsView()
             }
@@ -41,13 +45,42 @@ struct MainTabView: View {
                 Label("Settings", systemImage: "gear")
             }
         }
+        .alert("Identity Missing", isPresented: $showIdentityAlert) {
+            Button("Re-create Identity") {
+                do {
+                    try repository.createIdentity()
+                } catch {
+                    identityRecoveryError = error.localizedDescription
+                }
+            }
+            Button("Return to Setup", role: .destructive) {
+                hasCompletedOnboarding = false
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Your cryptographic identity could not be loaded. You can re-create it now (this will generate a new identity) or return to the setup screen.")
+        }
+        .alert("Recovery Failed", isPresented: Binding(
+            get: { identityRecoveryError != nil },
+            set: { if !$0 { identityRecoveryError = nil } }
+        )) {
+            Button("Return to Setup", role: .destructive) {
+                hasCompletedOnboarding = false
+            }
+            Button("Cancel", role: .cancel) {
+                identityRecoveryError = nil
+            }
+        } message: {
+            if let err = identityRecoveryError {
+                Text("Could not re-create identity: \(err)\n\nReturn to setup to start fresh.")
+            }
+        }
         .onAppear {
             repository.start()
-            
-            // Check if identity is truly available
+
+            // Check if identity is truly available after service start
             if !repository.isIdentityInitialized() {
-                print("⚠️ Identity missing after start - resetting onboarding state")
-                hasCompletedOnboarding = false
+                showIdentityAlert = true
             }
         }
     }
