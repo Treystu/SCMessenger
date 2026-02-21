@@ -28,6 +28,7 @@ hex = { workspace = true }
 rand = { workspace = true }
 zeroize = { workspace = true }
 sled = { workspace = true }
+bs58 = "0.5"
 uniffi = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }

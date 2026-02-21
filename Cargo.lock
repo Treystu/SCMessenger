@@ -3330,6 +3330,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "blake3",
+ "bs58",
  "camino",
  "chacha20poly1305",
  "curve25519-dalek",

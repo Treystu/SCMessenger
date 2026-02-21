@@ -1050,6 +1050,8 @@ public func FfiConverterTypeHistoryManager_lower(_ value: HistoryManager) -> Uns
 
 public protocol IronCoreProtocol : AnyObject {
     
+    func extractPublicKeyFromPeerId(peerId: String) throws  -> String
+    
     func getIdentityInfo()  -> IdentityInfo
     
     func inboxCount()  -> UInt32
@@ -1140,6 +1142,14 @@ public static func withStorage(storagePath: String) -> IronCore {
 }
     
 
+    
+open func extractPublicKeyFromPeerId(peerId: String)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_extract_public_key_from_peer_id(self.uniffiClonePointer(),
+        FfiConverterString.lower(peerId),$0
+    )
+})
+}
     
 open func getIdentityInfo() -> IdentityInfo {
     return try!  FfiConverterTypeIdentityInfo.lift(try! rustCall() {
@@ -3437,6 +3447,8 @@ public protocol CoreDelegate : AnyObject {
     
     func onPeerDisconnected(peerId: String) 
     
+    func onPeerIdentified(peerId: String, listenAddrs: [String]) 
+    
     func onMessageReceived(senderId: String, senderPublicKeyHex: String, messageId: String, data: Data) 
     
     func onReceiptReceived(messageId: String, status: String) 
@@ -3494,6 +3506,32 @@ fileprivate struct UniffiCallbackInterfaceCoreDelegate {
                 }
                 return uniffiObj.onPeerDisconnected(
                      peerId: try FfiConverterString.lift(peerId)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        onPeerIdentified: { (
+            uniffiHandle: UInt64,
+            peerId: RustBuffer,
+            listenAddrs: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCoreDelegate.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.onPeerIdentified(
+                     peerId: try FfiConverterString.lift(peerId),
+                     listenAddrs: try FfiConverterSequenceString.lift(listenAddrs)
                 )
             }
 
@@ -4167,6 +4205,9 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_historymanager_stats() != 45938) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_extract_public_key_from_peer_id() != 39145) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_get_identity_info() != 10640) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4360,6 +4401,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_coredelegate_on_peer_disconnected() != 46680) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_coredelegate_on_peer_identified() != 56716) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_coredelegate_on_message_received() != 11956) {

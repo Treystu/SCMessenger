@@ -43,6 +43,8 @@ interface IronCore {
     SignatureResult sign_data(bytes data);
     [Throws=IronCoreError]
     boolean verify_signature(bytes data, bytes signature, string public_key_hex);
+    [Throws=IronCoreError]
+    string extract_public_key_from_peer_id(string peer_id);
 
     // Messaging
     [Throws=IronCoreError]
@@ -68,6 +70,7 @@ interface IronCore {
 callback interface CoreDelegate {
     void on_peer_discovered(string peer_id);
     void on_peer_disconnected(string peer_id);
+    void on_peer_identified(string peer_id, sequence<string> listen_addrs);
     // sender_public_key_hex: Ed25519 hex (64 chars) — use this with prepare_receipt()
     // sender_id: Blake3 identity_id (64 hex chars) — use this for display / history
     void on_message_received(string sender_id, string sender_public_key_hex, string message_id, bytes data);

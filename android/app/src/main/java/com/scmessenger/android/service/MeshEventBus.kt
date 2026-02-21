@@ -95,7 +95,8 @@ sealed class PeerEvent {
         val publicKey: String,
         val nickname: String?,
         val libp2pPeerId: String?,
-        val listeners: List<String>
+        val listeners: List<String>,
+        val blePeerId: String? = null
     ) : PeerEvent()
     data class Connected(val peerId: String, val transport: TransportType) : PeerEvent()
     data class Disconnected(val peerId: String) : PeerEvent()

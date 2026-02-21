@@ -357,7 +357,7 @@ async fn test_address_reflection_timeout() {
 
     // Shutdown swarm1
     swarm1.shutdown().await.ok();
-    
+
     // Poll for disconnect to propagate (wait up to 10 seconds)
     let mut disconnected = false;
     for _ in 0..20 {

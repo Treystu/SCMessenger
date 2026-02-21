@@ -174,11 +174,7 @@ fn test_multiple_messages_roundtrip() {
     let bob = make_node();
     let bob_pubkey = pubkey(&bob);
 
-    let messages = [
-        "First message",
-        "Second message",
-        "Third message",
-    ];
+    let messages = ["First message", "Second message", "Third message"];
 
     for expected_text in &messages {
         let envelope_bytes = alice
@@ -225,7 +221,9 @@ fn test_self_message_roundtrip() {
         .expect("receive_message from self must succeed");
 
     assert_eq!(
-        received.text_content().expect("self-message must carry text"),
+        received
+            .text_content()
+            .expect("self-message must carry text"),
         plaintext,
         "self-message plaintext must be recovered verbatim"
     );

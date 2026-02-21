@@ -146,6 +146,29 @@ class MeshRepository(private val context: Context) {
                     }
                 }
 
+                override fun onPeerIdentified(peerId: String, listenAddrs: List<String>) {
+                    Timber.d("Core notified identified: $peerId with ${listenAddrs.size} addresses")
+                    repoScope.launch {
+                        try {
+                            val hexKey = ironCore?.extractPublicKeyFromPeerId(peerId)
+                            if (hexKey != null) {
+                                com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
+                                    com.scmessenger.android.service.PeerEvent.IdentityDiscovered(
+                                        peerId = peerId,
+                                        publicKey = hexKey,
+                                        nickname = null,
+                                        libp2pPeerId = peerId,
+                                        listeners = listenAddrs,
+                                        blePeerId = null
+                                    )
+                                )
+                            }
+                        } catch (e: Exception) {
+                            Timber.e(e, "Failed to extract public key from peer ID: $peerId")
+                        }
+                    }
+                }
+
                 override fun onPeerDisconnected(peerId: String) {
                     Timber.d("Core notified disconnect: $peerId")
                     repoScope.launch {
@@ -314,10 +337,14 @@ class MeshRepository(private val context: Context) {
         bleGattServer?.start()
 
         // Set identity beacon on BLE GATT server so nearby peers can read our Ed25519 public key
+        updateBleIdentityBeacon()
+    }
+
+    private fun updateBleIdentityBeacon() {
         val identity = ironCore?.getIdentityInfo()
         val publicKeyHex = identity?.publicKeyHex
         if (!publicKeyHex.isNullOrEmpty()) {
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            repoScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 var listeners = getListeningAddresses()
                 var attempts = 0
                 while (listeners.isEmpty() && attempts < 10) {
@@ -327,6 +354,7 @@ class MeshRepository(private val context: Context) {
                 }
                 try {
                     val beaconJson = org.json.JSONObject()
+                        .put("identity_id", identity.identityId ?: "")
                         .put("public_key", publicKeyHex)
                         .put("nickname", identity.nickname ?: "")
                         .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
@@ -350,6 +378,7 @@ class MeshRepository(private val context: Context) {
         try {
             val json = org.json.JSONObject(data.toString(Charsets.UTF_8))
             val publicKeyHex = json.getString("public_key")
+            val identityId = json.optString("identity_id", blePeerId).takeIf { it.isNotBlank() } ?: blePeerId
             val nickname = json.optString("nickname")
             val libp2pPeerId = json.optString("libp2p_peer_id")
             val listeners = json.optJSONArray("listeners")
@@ -361,11 +390,12 @@ class MeshRepository(private val context: Context) {
             repoScope.launch {
                 com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
                     com.scmessenger.android.service.PeerEvent.IdentityDiscovered(
-                        peerId = blePeerId,
+                        peerId = identityId,
                         publicKey = publicKeyHex,
                         nickname = nickname.takeIf { it.isNotEmpty() },
                         libp2pPeerId = libp2pPeerId.takeIf { it.isNotEmpty() },
-                        listeners = listenersStrings
+                        listeners = listenersStrings,
+                        blePeerId = blePeerId
                     )
                 )
             }
@@ -563,6 +593,7 @@ class MeshRepository(private val context: Context) {
     fun setNickname(nickname: String) {
         ironCore?.setNickname(nickname)
         Timber.i("Nickname set to: $nickname")
+        updateBleIdentityBeacon()
     }
 
     suspend fun sendMessage(peerId: String, content: String) {
@@ -697,6 +728,7 @@ class MeshRepository(private val context: Context) {
                 Timber.d("Calling ironCore.initializeIdentity()...")
                 ironCore?.initializeIdentity()
                 Timber.i("Identity created successfully")
+                updateBleIdentityBeacon()
             } catch (e: Exception) {
                 Timber.e(e, "Failed to create identity")
                 throw e

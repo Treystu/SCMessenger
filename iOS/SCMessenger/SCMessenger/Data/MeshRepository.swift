@@ -414,6 +414,7 @@ final class MeshRepository {
             logger.info("Calling ironCore.initializeIdentity()...")
             try ironCore.initializeIdentity()
             logger.info("✓ Identity created successfully")
+            broadcastIdentityBeacon()
         } catch {
             logger.error("Failed to create identity: \(error.localizedDescription)")
             throw error
@@ -929,6 +930,9 @@ final class MeshRepository {
         let libp2pPeerId = info["libp2p_peer_id"] as? String
         let listeners = info["listeners"] as? [String]
 
+        let idFromInfo = (info["identity_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let identityId = (idFromInfo?.isEmpty == false) ? idFromInfo! : blePeerId
+
         logger.info("Peer BLE identity read: \(blePeerId.prefix(8)) key: \(publicKeyHex.prefix(8))...")
         let trimmedKey = publicKeyHex.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmedKey.count == 64 else {
@@ -947,11 +951,12 @@ final class MeshRepository {
         let nonEmptyNickname = (nickname?.isEmpty == false) ? nickname : nil
         let nonEmptyLibp2p = (libp2pPeerId?.isEmpty == false) ? libp2pPeerId : nil
         MeshEventBus.shared.peerEvents.send(.identityDiscovered(
-            peerId: blePeerId,
+            peerId: identityId,
             publicKey: trimmedKey,
             nickname: nonEmptyNickname,
             libp2pPeerId: nonEmptyLibp2p,
-            listeners: listeners ?? []
+            listeners: listeners ?? [],
+            blePeerId: blePeerId
         ))
         logger.info("Emitted identityDiscovered for \(blePeerId.prefix(8)) key: \(trimmedKey.prefix(8))...")
         // Update lastSeen if already a saved contact
@@ -972,6 +977,7 @@ final class MeshRepository {
 
         let listeners = getListeningAddresses()
         let beacon: [String: Any] = [
+            "identity_id": info.identityId ?? "",
             "public_key": publicKeyHex,
             "nickname": info.nickname ?? "",
             "libp2p_peer_id": info.libp2pPeerId ?? "",
@@ -1160,6 +1166,7 @@ final class MeshRepository {
         }
         try ironCore.setNickname(nickname: nickname)
         logger.info("✓ Nickname set to: \(nickname)")
+        broadcastIdentityBeacon()
     }
 }
 

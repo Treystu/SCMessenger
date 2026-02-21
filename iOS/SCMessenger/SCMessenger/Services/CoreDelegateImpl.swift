@@ -20,13 +20,13 @@ final class CoreDelegateImpl: CoreDelegate {
     private let logger = Logger(subsystem: "com.scmessenger", category: "CoreDelegate")
     private let eventBus = MeshEventBus.shared
     private weak var meshRepository: MeshRepository?
-    
+
     init(meshRepository: MeshRepository?) {
         self.meshRepository = meshRepository
     }
-    
+
     // MARK: - CoreDelegate Protocol (called FROM Rust)
-    
+
     func onPeerDiscovered(peerId: String) {
         logger.info("Peer discovered: \(peerId)")
         eventBus.peerEvents.send(.discovered(peerId: peerId))
@@ -41,7 +41,29 @@ final class CoreDelegateImpl: CoreDelegate {
         logger.info("Peer disconnected: \(peerId)")
         eventBus.peerEvents.send(.disconnected(peerId: peerId))
     }
-    
+
+    func onPeerIdentified(peerId: String, listenAddrs: [String]) {
+        logger.info("Peer identified: \(peerId) with \(listenAddrs.count) addresses")
+
+        do {
+            guard let hexKey = try meshRepository?.ironCore?.extractPublicKeyFromPeerId(peerId: peerId) else {
+                logger.error("Core not initialized or peer ID invalid: \(peerId)")
+                return
+            }
+
+            eventBus.peerEvents.send(.identityDiscovered(
+                peerId: peerId,
+                publicKey: hexKey,
+                nickname: nil,
+                libp2pPeerId: peerId,
+                listeners: listenAddrs,
+                blePeerId: nil
+            ))
+        } catch {
+            logger.error("Failed to extract public key from peer ID: \(peerId) - error: \(error)")
+        }
+    }
+
     func onMessageReceived(senderId: String, senderPublicKeyHex: String, messageId: String, data: Data) {
         logger.info("Message received: \(messageId) from \(senderId) (\(data.count) bytes)")
 
@@ -59,7 +81,7 @@ final class CoreDelegateImpl: CoreDelegate {
             data: data
         ))
     }
-    
+
     func onMessageSent(messageId: String) {
         logger.info("Message sent: \(messageId)")
         eventBus.messageEvents.send(.sent(messageId: messageId))

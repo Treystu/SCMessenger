@@ -97,10 +97,10 @@ final class ContactsViewModel {
             .sink { [weak self] event in
                 guard let self else { return }
                 switch event {
-                case .identityDiscovered(let peerId, let publicKey, let nickname, let libp2pPeerId, let listeners):
+                case .identityDiscovered(let peerId, let publicKey, let nickname, let libp2pPeerId, let listeners, let blePeerId):
                     self.handleIdentityDiscovered(peerId: peerId, publicKey: publicKey,
                                                    nickname: nickname, libp2pPeerId: libp2pPeerId,
-                                                   listeners: listeners)
+                                                   listeners: listeners, blePeerId: blePeerId)
                 case .discovered(let peerId):
                     self.handleDiscovered(peerId: peerId)
                 case .disconnected(let peerId):
@@ -113,9 +113,14 @@ final class ContactsViewModel {
     }
 
     private func handleIdentityDiscovered(peerId: String, publicKey: String, nickname: String?,
-                                           libp2pPeerId: String?, listeners: [String]) {
+                                           libp2pPeerId: String?, listeners: [String], blePeerId: String?) {
         let alreadySaved = contacts.contains { $0.peerId == peerId }
         guard !alreadySaved else { return }
+
+        if let bleId = blePeerId, bleId != peerId {
+            nearbyPeers.removeAll { $0.peerId == bleId }
+        }
+
         let peer = NearbyPeer(peerId: peerId, publicKey: publicKey, nickname: nickname,
                               libp2pPeerId: libp2pPeerId, listeners: listeners)
         if let idx = nearbyPeers.firstIndex(where: { $0.peerId == peerId }) {

@@ -189,6 +189,9 @@ fun ContactsScreen(
 
     // Add contact dialog
     if (showAddDialog) {
+        val nearbyLibp2p = nearbyPrefilledPeer?.libp2pPeerId ?: ""
+        val nearbyListeners = nearbyPrefilledPeer?.listeners ?: emptyList()
+
         AddContactDialog(
             prefilledPeerId = nearbyPrefilledPeer?.peerId ?: "",
             prefilledPublicKey = nearbyPrefilledPeer?.publicKey ?: "",
@@ -198,14 +201,14 @@ fun ContactsScreen(
                 nearbyPrefilledPeer = null
             },
             onAdd = { peerId, publicKey, nickname ->
-                viewModel.addContact(peerId, publicKey, nickname)
+                viewModel.addContact(peerId, publicKey, nickname, nearbyLibp2p, nearbyListeners)
                 showAddDialog = false
                 nearbyPrefilledPeer = null
             },
             onAddAndChat = { peerId, publicKey, nickname ->
                 val id = peerId.trim()
                 if (id.isNotBlank() && publicKey.isNotBlank()) {
-                    viewModel.addContact(id, publicKey.trim(), nickname?.trim())
+                    viewModel.addContact(id, publicKey.trim(), nickname?.trim(), nearbyLibp2p, nearbyListeners)
                     showAddDialog = false
                     nearbyPrefilledPeer = null
                     onNavigateToChat(id)

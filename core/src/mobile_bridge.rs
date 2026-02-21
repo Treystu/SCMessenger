@@ -270,7 +270,10 @@ impl MeshService {
                                     // Apply stored relay budget
                                     let budget = *relay_budget_init.lock();
                                     if let Err(e) = handle.set_relay_budget(budget).await {
-                                        tracing::warn!("Failed to set initial relay budget: {:?}", e);
+                                        tracing::warn!(
+                                            "Failed to set initial relay budget: {:?}",
+                                            e
+                                        );
                                     }
                                     while let Some(event) = event_rx.recv().await {
                                         match event {
@@ -322,6 +325,31 @@ impl MeshService {
                                                     );
                                                 }
                                             }
+                                            crate::transport::SwarmEvent::PeerIdentified {
+                                                peer_id,
+                                                listen_addrs,
+                                                ..
+                                            } => {
+                                                tracing::info!(
+                                                    "Peer identified via Swarm: {}",
+                                                    peer_id
+                                                );
+                                                let core_guard = core.lock();
+                                                if let Some(core_ref) = core_guard.as_ref() {
+                                                    if let Some(delegate) =
+                                                        core_ref.delegate.read().as_ref()
+                                                    {
+                                                        let addrs_str: Vec<String> = listen_addrs
+                                                            .iter()
+                                                            .map(|a| a.to_string())
+                                                            .collect();
+                                                        delegate.on_peer_identified(
+                                                            peer_id.to_string(),
+                                                            addrs_str,
+                                                        );
+                                                    }
+                                                }
+                                            }
                                             other => {
                                                 tracing::debug!("Swarm event: {:?}", other);
                                             }
@@ -360,9 +388,9 @@ impl MeshService {
 
         // Auto-scale relay budget based on battery level
         let budget = if profile.battery_pct <= 10 && !profile.is_charging {
-            10  // Critical battery: minimal relay
+            10 // Critical battery: minimal relay
         } else if profile.battery_pct <= 20 && !profile.is_charging {
-            50  // Low battery: reduced relay
+            50 // Low battery: reduced relay
         } else if profile.is_charging || profile.battery_pct >= 50 {
             200 // Charging or healthy: full relay
         } else {

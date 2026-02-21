@@ -242,13 +242,20 @@ class BleGattServer(
 
             when (characteristic.uuid) {
                 IDENTITY_CHAR_UUID -> {
-                    // Return our identity beacon (set dynamically via setIdentityData())
+                    // Return our identity beacon, sliced by offset to support read blobs for large payloads
+                    val responseValue = if (offset == 0) {
+                        identityData
+                    } else if (offset < identityData.size) {
+                        identityData.copyOfRange(offset, identityData.size)
+                    } else {
+                        ByteArray(0)
+                    }
                     gattServer?.sendResponse(
                         device,
                         requestId,
                         BluetoothGatt.GATT_SUCCESS,
                         offset,
-                        identityData
+                        responseValue
                     )
                 }
 

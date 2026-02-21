@@ -286,7 +286,9 @@ impl SwarmHandle {
     /// Set the relay message budget (messages relayed per hour).
     pub async fn set_relay_budget(&self, messages_per_hour: u32) -> Result<()> {
         self.command_tx
-            .send(SwarmCommand::SetRelayBudget { budget: messages_per_hour })
+            .send(SwarmCommand::SetRelayBudget {
+                budget: messages_per_hour,
+            })
             .await
             .map_err(|_| anyhow::anyhow!("Swarm task not running"))
     }

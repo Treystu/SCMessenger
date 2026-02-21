@@ -85,6 +85,9 @@ class ContactsViewModel @Inject constructor(
                         val alreadyContact = _contacts.value.any { it.peerId == event.peerId }
                         if (!alreadyContact) {
                             val current = _nearbyPeers.value.toMutableList()
+                            if (event.blePeerId != null && event.blePeerId != event.peerId) {
+                                current.removeAll { it.peerId == event.blePeerId }
+                            }
                             val idx = current.indexOfFirst { it.peerId == event.peerId }
                             val updated = NearbyPeer(
                                 peerId = event.peerId,
@@ -148,6 +151,8 @@ class ContactsViewModel @Inject constructor(
         peerId: String,
         publicKey: String,
         nickname: String? = null,
+        libp2pPeerId: String? = null,
+        listeners: List<String> = emptyList(),
         notes: String? = null
     ) {
         viewModelScope.launch {
@@ -168,16 +173,33 @@ class ContactsViewModel @Inject constructor(
                     return@launch
                 }
 
+                val generatedNotes = if (!libp2pPeerId.isNullOrEmpty()) {
+                    "libp2p_peer_id:$libp2pPeerId;listeners:${listeners.joinToString(",")}"
+                } else null
+
+                val finalNotes = if (generatedNotes != null && notes != null) {
+                    "$notes\n$generatedNotes"
+                } else {
+                    generatedNotes ?: notes
+                }
+
                 val contact = uniffi.api.Contact(
                     peerId = peerId.trim(),
                     nickname = nickname,
                     publicKey = trimmedKey,
                     addedAt = System.currentTimeMillis().toULong(),
                     lastSeen = null,
-                    notes = notes
+                    notes = finalNotes
                 )
 
                 meshRepository.addContact(contact)
+
+                if (listeners.isNotEmpty()) {
+                    val peerIdForDial = libp2pPeerId ?: peerId.trim()
+                    meshRepository.connectToPeer(peerIdForDial, listeners)
+                    Timber.i("Dialing nearby local peer after adding contact: $peerIdForDial")
+                }
+
                 loadContacts()
 
                 Timber.i("Contact added: $peerId")
@@ -267,21 +289,19 @@ class ContactsViewModel @Inject constructor(
                 val libp2pPeerId = libp2pPattern.find(json)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
 
                 if (!peerId.isNullOrBlank() && !publicKey.isNullOrBlank()) {
-                    addContact(peerId, publicKey, nickname, notes = libp2pPeerId)
-
                     // Parse Listeners
                     val listenersMatch = listenersPattern.find(json)?.groupValues?.get(1)
-                    if (listenersMatch != null) {
-                         val addresses = listenersMatch.split(",").map {
-                             it.trim().trim('"').replace(" (Potential)", "")
-                         }.filter { it.isNotBlank() }
+                    val addresses = listenersMatch?.split(",")?.map {
+                        it.trim().trim('"').replace(" (Potential)", "")
+                    }?.filter { it.isNotBlank() } ?: emptyList()
 
-                         if (addresses.isNotEmpty()) {
-                             // Use libp2p PeerId for dial if available — enables proper peer verification
-                             val peerIdForDial = libp2pPeerId ?: peerId
-                             meshRepository.connectToPeer(peerIdForDial, addresses)
-                             Timber.i("Connecting to imported peer (libp2p: ${libp2pPeerId != null}): $peerIdForDial with addresses: $addresses")
-                         }
+                    addContact(peerId, publicKey, nickname, libp2pPeerId = libp2pPeerId, listeners = addresses)
+
+                    if (addresses.isNotEmpty()) {
+                        // Use libp2p PeerId for dial if available — enables proper peer verification
+                        val peerIdForDial = libp2pPeerId ?: peerId
+                        meshRepository.connectToPeer(peerIdForDial, addresses)
+                        Timber.i("Connecting to imported peer (libp2p: ${libp2pPeerId != null}): $peerIdForDial with addresses: $addresses")
                     }
                 } else {
                      _error.value = "Invalid identity format: Missing ID or Key"

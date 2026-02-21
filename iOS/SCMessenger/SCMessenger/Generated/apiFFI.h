@@ -267,14 +267,21 @@ typedef void (*UniffiCallbackInterfaceCoreDelegateMethod1)(uint64_t, RustBuffer,
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_CORE_DELEGATE_METHOD2
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_CORE_DELEGATE_METHOD2
-typedef void (*UniffiCallbackInterfaceCoreDelegateMethod2)(uint64_t, RustBuffer, RustBuffer, RustBuffer, RustBuffer, void* _Nonnull, 
+typedef void (*UniffiCallbackInterfaceCoreDelegateMethod2)(uint64_t, RustBuffer, RustBuffer, void* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_CORE_DELEGATE_METHOD3
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_CORE_DELEGATE_METHOD3
-typedef void (*UniffiCallbackInterfaceCoreDelegateMethod3)(uint64_t, RustBuffer, RustBuffer, void* _Nonnull, 
+typedef void (*UniffiCallbackInterfaceCoreDelegateMethod3)(uint64_t, RustBuffer, RustBuffer, RustBuffer, RustBuffer, void* _Nonnull, 
+        RustCallStatus *_Nonnull uniffiCallStatus
+    );
+
+#endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_CORE_DELEGATE_METHOD4
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_CORE_DELEGATE_METHOD4
+typedef void (*UniffiCallbackInterfaceCoreDelegateMethod4)(uint64_t, RustBuffer, RustBuffer, void* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
@@ -333,8 +340,9 @@ typedef void (*UniffiCallbackInterfacePlatformBridgeMethod6)(uint64_t, RustBuffe
 typedef struct UniffiVTableCallbackInterfaceCoreDelegate {
     UniffiCallbackInterfaceCoreDelegateMethod0 _Nonnull onPeerDiscovered;
     UniffiCallbackInterfaceCoreDelegateMethod1 _Nonnull onPeerDisconnected;
-    UniffiCallbackInterfaceCoreDelegateMethod2 _Nonnull onMessageReceived;
-    UniffiCallbackInterfaceCoreDelegateMethod3 _Nonnull onReceiptReceived;
+    UniffiCallbackInterfaceCoreDelegateMethod2 _Nonnull onPeerIdentified;
+    UniffiCallbackInterfaceCoreDelegateMethod3 _Nonnull onMessageReceived;
+    UniffiCallbackInterfaceCoreDelegateMethod4 _Nonnull onReceiptReceived;
     UniffiCallbackInterfaceFree _Nonnull uniffiFree;
 } UniffiVTableCallbackInterfaceCoreDelegate;
 
@@ -543,6 +551,11 @@ void*_Nonnull uniffi_scmessenger_core_fn_constructor_ironcore_new(RustCallStatus
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_IRONCORE_WITH_STORAGE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_IRONCORE_WITH_STORAGE
 void*_Nonnull uniffi_scmessenger_core_fn_constructor_ironcore_with_storage(RustBuffer storage_path, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_EXTRACT_PUBLIC_KEY_FROM_PEER_ID
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_EXTRACT_PUBLIC_KEY_FROM_PEER_ID
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_extract_public_key_from_peer_id(void*_Nonnull ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_GET_IDENTITY_INFO
@@ -1316,6 +1329,12 @@ uint16_t uniffi_scmessenger_core_checksum_method_historymanager_stats(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_IRONCORE_EXTRACT_PUBLIC_KEY_FROM_PEER_ID
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_IRONCORE_EXTRACT_PUBLIC_KEY_FROM_PEER_ID
+uint16_t uniffi_scmessenger_core_checksum_method_ironcore_extract_public_key_from_peer_id(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_IRONCORE_GET_IDENTITY_INFO
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_IRONCORE_GET_IDENTITY_INFO
 uint16_t uniffi_scmessenger_core_checksum_method_ironcore_get_identity_info(void
@@ -1703,6 +1722,12 @@ uint16_t uniffi_scmessenger_core_checksum_method_coredelegate_on_peer_discovered
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_COREDELEGATE_ON_PEER_DISCONNECTED
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_COREDELEGATE_ON_PEER_DISCONNECTED
 uint16_t uniffi_scmessenger_core_checksum_method_coredelegate_on_peer_disconnected(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_COREDELEGATE_ON_PEER_IDENTIFIED
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_COREDELEGATE_ON_PEER_IDENTIFIED
+uint16_t uniffi_scmessenger_core_checksum_method_coredelegate_on_peer_identified(void
     
 );
 #endif

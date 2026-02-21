@@ -90,10 +90,12 @@ pub trait CoreDelegate: Send + Sync {
     fn on_peer_discovered(&self, peer_id: String);
     /// A peer disconnected
     fn on_peer_disconnected(&self, peer_id: String);
+    /// A peer's libp2p identity was confirmed
+    fn on_peer_identified(&self, peer_id: String, listen_addrs: Vec<String>);
     /// An encrypted message was received and decrypted.
     /// `sender_public_key_hex` is the sender's Ed25519 public key (64 hex chars) —
     /// pass this to `prepare_receipt()` to send a delivery acknowledgement.
-    /// `sender_id` is the sender's Blake3 identity_id (64 hex chars) — use for display.
+    // `sender_id` is the sender's Blake3 identity_id (64 hex chars) — use for display.
     fn on_message_received(
         &self,
         sender_id: String,
@@ -295,6 +297,24 @@ impl IronCore {
             .map_err(|_| IronCoreError::CryptoError)
     }
 
+    /// Extract Ed25519 public key hex from a libp2p PeerID string
+    pub fn extract_public_key_from_peer_id(
+        &self,
+        peer_id: String,
+    ) -> Result<String, IronCoreError> {
+        let bytes = bs58::decode(&peer_id)
+            .into_vec()
+            .map_err(|_| IronCoreError::InvalidInput)?;
+
+        // A libp2p Ed25519 PeerId is an identity multihash. The last 32 bytes are the public key.
+        if bytes.len() >= 32 {
+            let pub_key_bytes = &bytes[bytes.len() - 32..];
+            Ok(hex::encode(pub_key_bytes))
+        } else {
+            Err(IronCoreError::InvalidInput)
+        }
+    }
+
     // ------------------------------------------------------------------------
     // MESSAGING
     // ------------------------------------------------------------------------
@@ -425,9 +445,9 @@ impl IronCore {
             message_size: size,
             rate_per_minute: 1,
         };
-        let gen = CoverTrafficGenerator::new(config)
-            .map_err(|_| IronCoreError::Internal)?;
-        let cover = gen.generate_cover_message()
+        let gen = CoverTrafficGenerator::new(config).map_err(|_| IronCoreError::Internal)?;
+        let cover = gen
+            .generate_cover_message()
             .map_err(|_| IronCoreError::Internal)?;
         // Encode as flat Vec<u8>: ephemeral_key (32) | recipient_hint (32) | encrypted_payload
         let mut out = Vec::with_capacity(32 + 32 + cover.encrypted_payload.len());
