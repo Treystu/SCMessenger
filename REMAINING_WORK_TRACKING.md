@@ -16,7 +16,7 @@ This document identifies all known TODOs, FIXMEs, placeholders, and incomplete i
    - **Sentiment**: Security Gap
    - **Description**: "The sender_public_key is NOT cryptographically bound". This implies a potential impersonation risk if not addressed.
 
-3. **Nearby Peer Public Key / Nickname Auto-fill Failure**
+3. ~~**Nearby Peer Public Key / Nickname Auto-fill Failure**~~ (Completed)
    - **File**: `core/src/lib.rs` (extract_public_key_from_peer_id) and `core/src/transport/swarm.rs`
    - **Root Cause**:
      - **Public Key**: The libp2p `PeerId` uses a SHA256 multihash for Ed25519 keys. The function `extract_public_key_from_peer_id` tries to parse an Identity multihash prefix, but fails since it's SHA256, making mathematical derivation impossible.
