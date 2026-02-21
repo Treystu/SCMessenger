@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 pub use crate::contacts_bridge::{Contact, ContactManager};
 use crate::transport::swarm::SwarmHandle;
 use libp2p::{Multiaddr, PeerId};
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -40,6 +40,78 @@ pub enum MotionState {
     Unknown,
 }
 
+/// Network connectivity type reported by the platform.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NetworkType {
+    /// No connectivity.
+    None,
+    /// WiFi connection present.
+    Wifi,
+    /// Cellular data (any generation).
+    Cellular,
+    /// Both WiFi and cellular available.
+    WifiAndCellular,
+    /// Unknown / not yet reported.
+    Unknown,
+}
+
+impl Default for NetworkType {
+    fn default() -> Self {
+        NetworkType::Unknown
+    }
+}
+
+/// Snapshot of device state as reported by the platform layer.
+///
+/// This is the canonical state record stored inside `MeshService`.
+/// It is richer than `DeviceProfile` (which is the UniFFI-facing input type)
+/// and drives the threshold-based behavior adjustments.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceState {
+    /// Battery level 0–100.
+    pub battery_level: u8,
+    /// True while the device is plugged in / wirelessly charging.
+    pub is_charging: bool,
+    /// Active network type.
+    pub network_type: NetworkType,
+    /// Motion context reported by the platform accelerometer/activity API.
+    pub motion_state: MotionState,
+}
+
+impl DeviceState {
+    /// Construct from the UniFFI-facing `DeviceProfile`.
+    pub fn from_profile(profile: &DeviceProfile) -> Self {
+        let network_type = match (profile.has_wifi, profile.is_charging) {
+            (true, _) => NetworkType::Wifi,
+            (false, _) => NetworkType::Cellular,
+        };
+        Self {
+            battery_level: profile.battery_pct,
+            is_charging: profile.is_charging,
+            network_type,
+            motion_state: profile.motion_state,
+        }
+    }
+}
+
+/// Recommended behavior adjustments derived from the current `DeviceState`.
+///
+/// Callers (swarm thread, scan schedulers, relay logic) should query
+/// `MeshService::recommended_behavior()` and honour these hints.
+#[derive(Debug, Clone)]
+pub struct BehaviorAdjustment {
+    /// Suggested BLE / WiFi-Aware scan interval in milliseconds.
+    /// Higher value = less frequent scanning = less battery drain.
+    pub scan_interval_ms: u32,
+    /// Whether relay duty should be active at all.
+    pub relay_enabled: bool,
+    /// Relay message budget (messages per hour, 0 means relay disabled).
+    pub relay_budget: u32,
+    /// True when the device should operate in the absolute minimum mode
+    /// (battery critically low and not charging).
+    pub minimal_operation: bool,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct ServiceStats {
     pub peers_discovered: u32,
@@ -65,6 +137,10 @@ pub struct MeshService {
     nat_status: Mutex<String>,
     relay_budget: std::sync::Arc<Mutex<u32>>,
     current_device_profile: Mutex<Option<DeviceProfile>>,
+    /// Current device state snapshot — drives threshold-based behavior.
+    /// Stored behind a `parking_lot::RwLock` so reads (very frequent) never
+    /// contend with writes (infrequent platform callbacks).
+    device_state: RwLock<Option<DeviceState>>,
 }
 
 impl MeshService {
@@ -81,6 +157,7 @@ impl MeshService {
             nat_status: Mutex::new("unknown".to_string()),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             current_device_profile: Mutex::new(None),
+            device_state: RwLock::new(None),
         }
     }
 
@@ -98,6 +175,7 @@ impl MeshService {
             nat_status: Mutex::new("unknown".to_string()),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             current_device_profile: Mutex::new(None),
+            device_state: RwLock::new(None),
         }
     }
 
