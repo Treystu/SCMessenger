@@ -365,22 +365,25 @@ impl WebSocketRelay {
 //   2. `create_offer()`                   → spawns JS promise chain; SDP stored
 //   3. Caller polls `get_local_sdp()`     → returns Some(sdp_json) when ready
 //   4. Caller sends SDP JSON via signalling channel to remote peer
-//   5. Remote peer calls `set_remote_answer(sdp)`  [TODO — see below]
-//   6. ICE candidates gathered via `onicecandidate` [TODO — see below]
+//   5. Remote peer calls `set_remote_answer(sdp)` — applies answer SDP via
+//      `set_remote_description` JS Promise on the WASM micro-task queue.
+//   6. ICE candidates gathered via `onicecandidate` → buffered in
+//      `inner.ice_candidates`; drain with `get_ice_candidates()` and apply
+//      on the remote side with `add_ice_candidate()`.
+//
+// Signalling flow (answerer side)
+// ================================
+//   1. `WebRtcTransport::new()`           → RtcPeerConnection (no DataChannel yet)
+//   2. `set_remote_offer(sdp_json)`       → applies offerer SDP via
+//      `set_remote_description`, triggering `ondatachannel` callback.
+//   3. `create_answer()`                  → spawns JS promise chain; SDP stored
+//   4. Caller polls `get_local_sdp()`     → returns Some(sdp_json) when ready
+//   5. Caller sends answer SDP back to offerer via signalling channel.
 //
 // DataChannel message flow
 // ========================
 //   `onmessage` callback → `ingress_tx.unbounded_send(bytes)` →
 //   caller polls `subscribe()` receiver
-//
-// Limitations / TODOs
-// ===================
-//   • `set_remote_answer()` — body is TODO; prescription in function body.
-//   • ICE trickle — `onicecandidate` callback is registered but candidates
-//     are not yet forwarded to the caller.  A `Vec<String>` candidate buffer
-//     and `get_ice_candidates()` accessor should be added (≈ 30 LOC).
-//   • Answerer path — `set_remote_offer()` + `create_answer()` mirror not
-//     yet implemented (≈ 60 LOC, same Promise-spawn pattern).
 
 /// Inner state shared between `WebRtcTransport` and its async closures.
 struct WebRtcInner {
