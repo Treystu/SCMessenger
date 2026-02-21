@@ -8,14 +8,11 @@ fn test_contact_persistence_across_restarts() {
     // First instance: add a contact
     {
         let manager = ContactManager::new(path.to_string()).unwrap();
-        let contact = scmessenger_core::contacts_bridge::Contact {
-            peer_id: "test-peer-001".to_string(),
-            nickname: Some("Alice".to_string()),
-            public_key: "a".repeat(64),
-            added_at: 1000,
-            last_seen: None,
-            notes: None,
-        };
+        let contact = scmessenger_core::contacts_bridge::Contact::new(
+            "test-peer-001".to_string(),
+            "a".repeat(64),
+        )
+        .with_nickname("Alice".to_string());
         manager.add(contact).unwrap();
         assert_eq!(manager.count(), 1);
     }
