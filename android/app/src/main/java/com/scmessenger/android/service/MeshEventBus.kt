@@ -90,6 +90,13 @@ object MeshEventBus {
  */
 sealed class PeerEvent {
     data class Discovered(val peerId: String, val transport: TransportType) : PeerEvent()
+    data class IdentityDiscovered(
+        val peerId: String,
+        val publicKey: String,
+        val nickname: String?,
+        val libp2pPeerId: String?,
+        val listeners: List<String>
+    ) : PeerEvent()
     data class Connected(val peerId: String, val transport: TransportType) : PeerEvent()
     data class Disconnected(val peerId: String) : PeerEvent()
     data class StatusChanged(val peerId: String, val online: Boolean) : PeerEvent()

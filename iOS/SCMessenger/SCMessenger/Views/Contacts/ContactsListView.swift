@@ -13,7 +13,7 @@ struct ContactsListView: View {
     @State private var showingAddContact = false
     @State private var pendingChatConversation: Conversation?
     @State private var navigateToPendingChat = false
-    @State private var nearbyPrefilledPeerId: String = ""
+    @State private var nearbyPrefilledPeer: NearbyPeer? = nil
 
     var body: some View {
         List {
@@ -21,9 +21,9 @@ struct ContactsListView: View {
             let nearby = viewModel?.nearbyPeers ?? []
             if !nearby.isEmpty {
                 Section {
-                    ForEach(nearby, id: \.self) { peerId in
-                        NearbyPeerRow(peerId: peerId) {
-                            nearbyPrefilledPeerId = peerId
+                    ForEach(nearby) { peer in
+                        NearbyPeerRow(peer: peer) {
+                            nearbyPrefilledPeer = peer
                             showingAddContact = true
                         }
                     }
@@ -65,7 +65,7 @@ struct ContactsListView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
-                    nearbyPrefilledPeerId = ""
+                    nearbyPrefilledPeer = nil
                     showingAddContact = true
                 } label: {
                     Image(systemName: "plus")
@@ -73,7 +73,7 @@ struct ContactsListView: View {
             }
         }
         .sheet(isPresented: $showingAddContact, onDismiss: {
-            nearbyPrefilledPeerId = ""
+            nearbyPrefilledPeer = nil
             viewModel?.loadContacts()
             if pendingChatConversation != nil {
                 navigateToPendingChat = true
@@ -81,7 +81,7 @@ struct ContactsListView: View {
         }) {
             AddContactView(
                 pendingChatConversation: $pendingChatConversation,
-                prefilledPeerId: nearbyPrefilledPeerId
+                prefilledPeer: nearbyPrefilledPeer
             )
         }
         .onAppear {
@@ -96,7 +96,7 @@ struct ContactsListView: View {
 // MARK: - Nearby Peer Row
 
 struct NearbyPeerRow: View {
-    let peerId: String
+    let peer: NearbyPeer
     let onAdd: () -> Void
 
     var body: some View {
@@ -110,11 +110,17 @@ struct NearbyPeerRow: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Nearby Peer")
+                Text(peer.displayName)
                     .font(Theme.titleMedium)
-                Text(peerId.prefix(16))
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(Theme.onSurfaceVariant)
+                if peer.hasFullIdentity {
+                    Text("● Identity verified")
+                        .font(.system(.caption2))
+                        .foregroundStyle(Color.green)
+                } else {
+                    Text(peer.peerId.prefix(16))
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(Theme.onSurfaceVariant)
+                }
             }
 
             Spacer()
@@ -139,7 +145,7 @@ struct ContactRow: View {
     var body: some View {
         HStack(spacing: Theme.spacingMedium) {
             Circle()
-                .fill(Color.accentColorContainer)
+                .fill(Theme.primaryContainer)
                 .frame(width: 44, height: 44)
                 .overlay {
                     Text((contact.nickname ?? "?").prefix(1).uppercased())
@@ -165,8 +171,8 @@ struct AddContactView: View {
     @Environment(MeshRepository.self) private var repository
     @Binding var pendingChatConversation: Conversation?
 
-    /// Pre-fill peer ID when launched from a "Nearby" row.
-    var prefilledPeerId: String = ""
+    /// Pre-fill from a nearby peer when launched from the Nearby section.
+    var prefilledPeer: NearbyPeer? = nil
 
     @State private var nickname = ""
     @State private var publicKey = ""
@@ -226,8 +232,12 @@ struct AddContactView: View {
                 }
             }
             .onAppear {
-                if !prefilledPeerId.isEmpty && peerId.isEmpty {
-                    peerId = prefilledPeerId
+                if let peer = prefilledPeer, peerId.isEmpty {
+                    peerId = peer.peerId
+                    if let pk = peer.publicKey { publicKey = pk }
+                    if let nick = peer.nickname, !nick.isEmpty { nickname = nick }
+                    if let lpid = peer.libp2pPeerId, !lpid.isEmpty { libp2pPeerId = lpid }
+                    listeners = peer.listeners
                 }
             }
         }
@@ -236,7 +246,6 @@ struct AddContactView: View {
     private func pasteIdentity() {
         guard let string = UIPasteboard.general.string else { return }
 
-        // Simple JSON parsing
         guard let data = string.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             error = "Invalid format"
@@ -259,27 +268,26 @@ struct AddContactView: View {
         var finalPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
         if finalPeerId.isEmpty { finalPeerId = String(finalPublicKey.prefix(16)) }
 
-        // Validate public key format before storing
         if finalPublicKey.isEmpty {
             self.error = "Public key cannot be empty"
             return
         }
-
-        // Must be exactly 64 hex characters (32 bytes)
         if finalPublicKey.count != 64 {
             self.error = "Public key must be exactly 64 hex characters (got \(finalPublicKey.count))"
             return
         }
-
-        // Must be valid hex
         let hexCharacterSet = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
         if !finalPublicKey.unicodeScalars.allSatisfy({ hexCharacterSet.contains($0) }) {
             self.error = "Public key contains invalid characters (must be hex: 0-9, a-f)"
             return
         }
 
-        // Store libp2p PeerId in notes for use in connectToPeer/sendMessage
-        let notesValue: String? = libp2pPeerId.isEmpty ? nil : libp2pPeerId
+        // Store libp2p PeerId + listeners in notes for sendMessage routing
+        var notesValue: String? = nil
+        if !libp2pPeerId.isEmpty {
+            let addrs = listeners.joined(separator: ",")
+            notesValue = "libp2p_peer_id:\(libp2pPeerId);listeners:\(addrs)"
+        }
         let contact = Contact(
             peerId: finalPeerId,
             nickname: nickname,
@@ -292,8 +300,6 @@ struct AddContactView: View {
         do {
             try repository.addContact(contact)
 
-            // Initiate connection if listeners provided.
-            // Use libp2p PeerId for the /p2p/ suffix if we have it — enables proper peer verification.
             if !listeners.isEmpty {
                 let peerIdForDial = libp2pPeerId.isEmpty ? finalPeerId : libp2pPeerId
                 repository.connectToPeer(peerIdForDial, addresses: listeners)

@@ -943,29 +943,20 @@ final class MeshRepository {
             notes = "libp2p_peer_id:\(peerId);listeners:\(addrs)"
         }
 
-        let existing = try? contactManager?.get(peerId: blePeerId)
-        if existing == nil {
-            let contact = Contact(
-                peerId: blePeerId,
-                nickname: nickname,
-                publicKey: trimmedKey,
-                addedAt: UInt64(Date().timeIntervalSince1970),
-                lastSeen: UInt64(Date().timeIntervalSince1970),
-                notes: notes
-            )
-            do {
-                try contactManager?.add(contact: contact)
-                logger.info("Auto-created contact from BLE identity: \(blePeerId.prefix(8)) key: \(trimmedKey.prefix(8))...")
-            } catch {
-                logger.error("Failed to auto-create contact from BLE identity: \(error.localizedDescription)")
-            }
-        } else {
+        // Emit to nearby peers bus — UI will show peer in Nearby section for user to manually add
+        let nonEmptyNickname = (nickname?.isEmpty == false) ? nickname : nil
+        let nonEmptyLibp2p = (libp2pPeerId?.isEmpty == false) ? libp2pPeerId : nil
+        MeshEventBus.shared.peerEvents.send(.identityDiscovered(
+            peerId: blePeerId,
+            publicKey: trimmedKey,
+            nickname: nonEmptyNickname,
+            libp2pPeerId: nonEmptyLibp2p,
+            listeners: listeners ?? []
+        ))
+        logger.info("Emitted identityDiscovered for \(blePeerId.prefix(8)) key: \(trimmedKey.prefix(8))...")
+        // Update lastSeen if already a saved contact
+        if (try? contactManager?.get(peerId: blePeerId)) != nil {
             try? contactManager?.updateLastSeen(peerId: blePeerId)
-            // Update notes if missing or changed
-            if let newNotes = notes, existing?.notes != newNotes {
-                // Since UniFFI generated Contact is a struct, we'd need an update method.
-                // For now, identity exchange already happened.
-            }
         }
 
         // Auto-dial discovered peer via Swarm if we have libp2p info

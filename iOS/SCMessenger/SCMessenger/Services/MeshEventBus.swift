@@ -42,6 +42,7 @@ final class MeshEventBus {
     
     enum PeerEvent: Equatable {
         case discovered(peerId: String)
+        case identityDiscovered(peerId: String, publicKey: String, nickname: String?, libp2pPeerId: String?, listeners: [String])
         case connected(peerId: String)
         case disconnected(peerId: String)
         case connectionFailed(peerId: String, error: String)

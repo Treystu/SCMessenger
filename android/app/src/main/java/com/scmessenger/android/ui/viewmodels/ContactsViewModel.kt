@@ -14,8 +14,15 @@ import javax.inject.Inject
 /** A peer discovered on the mesh but not yet saved as a contact. */
 data class NearbyPeer(
     val peerId: String,
+    val publicKey: String? = null,
+    val nickname: String? = null,
+    val libp2pPeerId: String? = null,
+    val listeners: List<String> = emptyList(),
     val isOnline: Boolean = true
-)
+) {
+    val displayName: String get() = nickname?.takeIf { it.isNotBlank() } ?: peerId.take(16)
+    val hasFullIdentity: Boolean get() = publicKey != null
+}
 
 /**
  * ViewModel for the contacts screen.
@@ -74,19 +81,34 @@ class ContactsViewModel @Inject constructor(
         viewModelScope.launch {
             MeshEventBus.peerEvents.collect { event ->
                 when (event) {
+                    is PeerEvent.IdentityDiscovered -> {
+                        val alreadyContact = _contacts.value.any { it.peerId == event.peerId }
+                        if (!alreadyContact) {
+                            val current = _nearbyPeers.value.toMutableList()
+                            val idx = current.indexOfFirst { it.peerId == event.peerId }
+                            val updated = NearbyPeer(
+                                peerId = event.peerId,
+                                publicKey = event.publicKey,
+                                nickname = event.nickname,
+                                libp2pPeerId = event.libp2pPeerId,
+                                listeners = event.listeners,
+                                isOnline = true
+                            )
+                            if (idx >= 0) current[idx] = updated else current.add(updated)
+                            _nearbyPeers.value = current
+                            Timber.d("Nearby identity discovered: ${event.peerId.take(16)}")
+                        }
+                    }
                     is PeerEvent.Discovered -> {
-                        val peerId = event.peerId
-                        val alreadyContact = _contacts.value.any { it.peerId == peerId }
-                        val alreadyNearby = _nearbyPeers.value.any { it.peerId == peerId }
+                        val alreadyContact = _contacts.value.any { it.peerId == event.peerId }
+                        val alreadyNearby = _nearbyPeers.value.any { it.peerId == event.peerId }
                         if (!alreadyContact && !alreadyNearby) {
-                            _nearbyPeers.value = _nearbyPeers.value + NearbyPeer(peerId, isOnline = true)
-                            Timber.d("Nearby peer added: ${peerId.take(16)}")
+                            _nearbyPeers.value = _nearbyPeers.value + NearbyPeer(event.peerId)
+                            Timber.d("Nearby peer (no identity yet): ${event.peerId.take(16)}")
                         }
                     }
                     is PeerEvent.Disconnected -> {
-                        _nearbyPeers.value = _nearbyPeers.value
-                            .map { if (it.peerId == event.peerId) it.copy(isOnline = false) else it }
-                            .filter { it.isOnline } // remove offline peers after disconnect
+                        _nearbyPeers.value = _nearbyPeers.value.filter { it.peerId != event.peerId }
                     }
                     else -> Unit
                 }

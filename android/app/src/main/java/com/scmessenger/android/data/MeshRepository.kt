@@ -356,30 +356,22 @@ class MeshRepository(private val context: Context) {
 
             Timber.i("Peer identity read from $blePeerId: ${publicKeyHex.take(8)}...")
 
-            // Auto-create/update contact
-            val existing = try { contactManager?.get(blePeerId) } catch (e: Exception) { null }
-            if (existing == null) {
-                val notes = if (!libp2pPeerId.isNullOrEmpty()) "libp2p_peer_id: $libp2pPeerId" else null
-                val contact = uniffi.api.Contact(
-                    peerId = blePeerId,
-                    nickname = if (nickname.isNullOrEmpty()) null else nickname,
-                    publicKey = publicKeyHex,
-                    addedAt = (System.currentTimeMillis() / 1000).toULong(),
-                    lastSeen = (System.currentTimeMillis() / 1000).toULong(),
-                    notes = notes
+            // Emit identity to nearby peers bus — UI will show peer in Nearby section for user to add
+            val listenersStrings = (0 until (listeners?.length() ?: 0)).map { i -> listeners!!.getString(i) }
+            repoScope.launch {
+                com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
+                    com.scmessenger.android.service.PeerEvent.IdentityDiscovered(
+                        peerId = blePeerId,
+                        publicKey = publicKeyHex,
+                        nickname = nickname.takeIf { it.isNotEmpty() },
+                        libp2pPeerId = libp2pPeerId.takeIf { it.isNotEmpty() },
+                        listeners = listenersStrings
+                    )
                 )
-                contactManager?.add(contact)
-                Timber.d("Created contact for BLE peer: $blePeerId")
-            } else {
-                contactManager?.updateLastSeen(blePeerId)
-                // Update notes if libp2p PeerId is newly discovered
-                if (!libp2pPeerId.isNullOrEmpty() && existing.notes?.contains(libp2pPeerId) != true) {
-                    val newNotes = "libp2p_peer_id: $libp2pPeerId"
-                    contactManager?.setNickname(blePeerId, existing.nickname) // Set notes via metadata?
-                    // Wait, UniFFI Contact interface doesn't have setNotes.
-                    // But we can re-add or ignore.
-                }
             }
+            Timber.i("Emitted IdentityDiscovered for $blePeerId: ${publicKeyHex.take(8)}...")
+            // Update lastSeen if already a saved contact
+            try { contactManager?.updateLastSeen(blePeerId) } catch (e: Exception) { /* not a contact yet */ }
 
             // Attempt to dial via Swarm if we have libp2p info
             if (!libp2pPeerId.isNullOrEmpty() && listeners != null) {

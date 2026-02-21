@@ -8,6 +8,30 @@
 import Combine
 import Foundation
 
+struct NearbyPeer: Identifiable, Equatable {
+    let id: String   // == peerId
+    let peerId: String
+    let publicKey: String?
+    let nickname: String?
+    let libp2pPeerId: String?
+    let listeners: [String]
+
+    init(peerId: String, publicKey: String? = nil, nickname: String? = nil,
+         libp2pPeerId: String? = nil, listeners: [String] = []) {
+        self.id = peerId
+        self.peerId = peerId
+        self.publicKey = publicKey
+        self.nickname = nickname
+        self.libp2pPeerId = libp2pPeerId
+        self.listeners = listeners
+    }
+
+    var displayName: String { nickname?.isEmpty == false ? nickname! : String(peerId.prefix(16)) }
+    var hasFullIdentity: Bool { publicKey != nil }
+
+    static func == (lhs: NearbyPeer, rhs: NearbyPeer) -> Bool { lhs.peerId == rhs.peerId }
+}
+
 @Observable
 final class ContactsViewModel {
     private weak var repository: MeshRepository?
@@ -18,9 +42,8 @@ final class ContactsViewModel {
     var isLoading = false
     var error: String?
 
-    /// Peer IDs discovered on the mesh but not yet in the contacts list.
-    /// These come from the MeshEventBus peer-discovered events.
-    var nearbyPeers: [String] = []
+    /// Peers discovered on the mesh but not yet in the contacts list.
+    var nearbyPeers: [NearbyPeer] = []
 
     var filteredContacts: [Contact] {
         if searchText.isEmpty {
@@ -74,10 +97,14 @@ final class ContactsViewModel {
             .sink { [weak self] event in
                 guard let self else { return }
                 switch event {
+                case .identityDiscovered(let peerId, let publicKey, let nickname, let libp2pPeerId, let listeners):
+                    self.handleIdentityDiscovered(peerId: peerId, publicKey: publicKey,
+                                                   nickname: nickname, libp2pPeerId: libp2pPeerId,
+                                                   listeners: listeners)
                 case .discovered(let peerId):
                     self.handleDiscovered(peerId: peerId)
                 case .disconnected(let peerId):
-                    self.nearbyPeers.removeAll { $0 == peerId }
+                    self.nearbyPeers.removeAll { $0.peerId == peerId }
                 default:
                     break
                 }
@@ -85,17 +112,28 @@ final class ContactsViewModel {
             .store(in: &cancellables)
     }
 
-    private func handleDiscovered(peerId: String) {
-        // Only show in "Nearby" if not already a saved contact
+    private func handleIdentityDiscovered(peerId: String, publicKey: String, nickname: String?,
+                                           libp2pPeerId: String?, listeners: [String]) {
         let alreadySaved = contacts.contains { $0.peerId == peerId }
-        if !alreadySaved && !nearbyPeers.contains(peerId) {
-            nearbyPeers.append(peerId)
+        guard !alreadySaved else { return }
+        let peer = NearbyPeer(peerId: peerId, publicKey: publicKey, nickname: nickname,
+                              libp2pPeerId: libp2pPeerId, listeners: listeners)
+        if let idx = nearbyPeers.firstIndex(where: { $0.peerId == peerId }) {
+            nearbyPeers[idx] = peer
+        } else {
+            nearbyPeers.append(peer)
         }
+    }
+
+    private func handleDiscovered(peerId: String) {
+        let alreadySaved = contacts.contains { $0.peerId == peerId }
+        guard !alreadySaved && !nearbyPeers.contains(where: { $0.peerId == peerId }) else { return }
+        nearbyPeers.append(NearbyPeer(peerId: peerId))
     }
 
     /// Called after contacts change to drop any nearby entry that became a contact.
     private func refreshNearbyFilter() {
         let contactIds = Set(contacts.map { $0.peerId })
-        nearbyPeers.removeAll { contactIds.contains($0) }
+        nearbyPeers.removeAll { contactIds.contains($0.peerId) }
     }
 }

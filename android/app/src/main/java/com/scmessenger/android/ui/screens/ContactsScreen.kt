@@ -38,7 +38,7 @@ fun ContactsScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
 
     var showAddDialog by remember { mutableStateOf(false) }
-    var nearbyPrefilledPeerId by remember { mutableStateOf("") }
+    var nearbyPrefilledPeer by remember { mutableStateOf<NearbyPeer?>(null) }
 
     Scaffold(
         topBar = {
@@ -155,7 +155,7 @@ fun ContactsScreen(
                             NearbyPeerItem(
                                 peer = peer,
                                 onAdd = {
-                                    nearbyPrefilledPeerId = peer.peerId
+                                    nearbyPrefilledPeer = peer
                                     showAddDialog = true
                                 }
                             )
@@ -190,29 +190,31 @@ fun ContactsScreen(
     // Add contact dialog
     if (showAddDialog) {
         AddContactDialog(
-            prefilledPeerId = nearbyPrefilledPeerId,
+            prefilledPeerId = nearbyPrefilledPeer?.peerId ?: "",
+            prefilledPublicKey = nearbyPrefilledPeer?.publicKey ?: "",
+            prefilledNickname = nearbyPrefilledPeer?.nickname ?: "",
             onDismiss = {
                 showAddDialog = false
-                nearbyPrefilledPeerId = ""
+                nearbyPrefilledPeer = null
             },
             onAdd = { peerId, publicKey, nickname ->
                 viewModel.addContact(peerId, publicKey, nickname)
                 showAddDialog = false
-                nearbyPrefilledPeerId = ""
+                nearbyPrefilledPeer = null
             },
             onAddAndChat = { peerId, publicKey, nickname ->
                 val id = peerId.trim()
                 if (id.isNotBlank() && publicKey.isNotBlank()) {
                     viewModel.addContact(id, publicKey.trim(), nickname?.trim())
                     showAddDialog = false
-                    nearbyPrefilledPeerId = ""
+                    nearbyPrefilledPeer = null
                     onNavigateToChat(id)
                 }
             },
             onImport = { json ->
                 viewModel.importContact(json)
                 showAddDialog = false
-                nearbyPrefilledPeerId = ""
+                nearbyPrefilledPeer = null
             }
         )
     }
@@ -327,15 +329,23 @@ fun NearbyPeerItem(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = "Nearby Peer",
+                        text = peer.displayName,
                         style = MaterialTheme.typography.titleSmall
                     )
-                    Text(
-                        text = peer.peerId.take(20) + "…",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                    )
+                    if (peer.hasFullIdentity) {
+                        Text(
+                            text = "● Identity verified",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        Text(
+                            text = peer.peerId.take(20) + "…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                    }
                 }
             }
             FilledTonalButton(onClick = onAdd) {
@@ -354,14 +364,16 @@ fun NearbyPeerItem(
 @Composable
 fun AddContactDialog(
     prefilledPeerId: String = "",
+    prefilledPublicKey: String = "",
+    prefilledNickname: String = "",
     onDismiss: () -> Unit,
     onAdd: (String, String, String?) -> Unit,
     onAddAndChat: (String, String, String?) -> Unit,
     onImport: (String) -> Unit
 ) {
     var peerId by remember(prefilledPeerId) { mutableStateOf(prefilledPeerId) }
-    var publicKey by remember { mutableStateOf("") }
-    var nickname by remember { mutableStateOf("") }
+    var publicKey by remember(prefilledPublicKey) { mutableStateOf(prefilledPublicKey) }
+    var nickname by remember(prefilledNickname) { mutableStateOf(prefilledNickname) }
 
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
 
