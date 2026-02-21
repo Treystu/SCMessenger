@@ -196,13 +196,8 @@ impl CoverTrafficScheduler {
             return None;
         }
 
-        match self
-            .last_generation_time
+        self.last_generation_time
             .checked_add(Duration::from_millis(self.config.message_interval_ms()))
-        {
-            Some(next_time) => Some(next_time),
-            None => None,
-        }
     }
 
     /// Get the configuration

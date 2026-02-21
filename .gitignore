@@ -32,3 +32,8 @@ core/target/generated-sources/
 core/target/android-libs/
 iOS/SCMessenger/Generated/
 *.a
+
+core/iOS/
+core/log.txt
+core/out.txt
+*.xcuserstate

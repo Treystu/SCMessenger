@@ -1,4 +1,5 @@
 // Iron Core V2 — Messaging Spine
+#![allow(clippy::empty_line_after_doc_comments)]
 //
 // "Does this help two humans exchange an encrypted message
 //  without any corporation in the middle?"
@@ -298,18 +299,24 @@ impl IronCore {
     }
 
     /// Extract Ed25519 public key hex from a libp2p PeerID string
-    pub fn extract_public_key_from_peer_id(
-        &self,
-        peer_id: String,
-    ) -> Result<String, IronCoreError> {
+    pub fn extract_public_key_from_peer_id(&self, peer_id: String) -> Result<String, IronCoreError> {
         let bytes = bs58::decode(&peer_id)
             .into_vec()
             .map_err(|_| IronCoreError::InvalidInput)?;
-
-        // A libp2p Ed25519 PeerId is an identity multihash. The last 32 bytes are the public key.
-        if bytes.len() >= 32 {
-            let pub_key_bytes = &bytes[bytes.len() - 32..];
-            Ok(hex::encode(pub_key_bytes))
+        // libp2p Ed25519 PeerId: 0x00 0x24 0x08 0x01 0x12 0x20 <32 bytes>
+        // Total = 38 bytes. Verify the protobuf prefix.
+        if bytes.len() == 38
+            && bytes[0] == 0x00  // identity multihash
+            && bytes[1] == 0x24  // length 36
+            && bytes[2] == 0x08  // protobuf field 1 (key type)
+            && bytes[3] == 0x01  // Ed25519
+            && bytes[4] == 0x12  // protobuf field 2 (key data)
+            && bytes[5] == 0x20  // 32 bytes
+        {
+            Ok(hex::encode(&bytes[6..38]))
+        } else if bytes.len() >= 32 {
+            // Fallback for non-standard PeerIds: take last 32 bytes
+            Ok(hex::encode(&bytes[bytes.len() - 32..]))
         } else {
             Err(IronCoreError::InvalidInput)
         }
@@ -727,5 +734,17 @@ mod tests {
         assert!(info.initialized);
 
         core.stop();
+    }
+
+    #[test]
+    fn test_extract_public_key_from_peer_id() {
+        let core = IronCore::new();
+        core.initialize_identity().unwrap();
+        let info = core.get_identity_info();
+        let libp2p_peer_id = info.libp2p_peer_id.unwrap();
+        let extracted_hex = core.extract_public_key_from_peer_id(libp2p_peer_id).unwrap();
+        let original_hex = info.public_key_hex.unwrap();
+        assert_eq!(extracted_hex, original_hex,
+            "Extracted public key must match the identity's own public key");
     }
 }

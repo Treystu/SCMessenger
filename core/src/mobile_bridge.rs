@@ -168,13 +168,9 @@ impl MeshService {
     }
 
     pub fn get_stats(&self) -> ServiceStats {
-        let stats = self.stats.lock().clone();
-
-        // Augment with IronCore stats if available
-        if let Some(ref _core) = *self.core.lock() {
-            // Placeholder for future IronCore stats integration
-        }
-
+        let mut stats = self.stats.lock().clone();
+        let peers = self.swarm_bridge.get_peers();
+        stats.peers_discovered = peers.len() as u32;
         stats
     }
 
@@ -430,13 +426,8 @@ impl MeshService {
             match core.receive_message(data) {
                 Ok(msg) => {
                     tracing::info!("Message received from {}: {:?}", peer_id, msg.id);
-                    // CoreDelegate.on_message_received is called inside IronCore?
-                    // No, IronCore.receive_message returns Message.
-                    // So we must notify delegate here IF IronCore doesn't.
-                    // IronCore.receive_message logic: decoding + inbox check.
-                    // It does NOT call delegate.
-                    // But MeshService doesn't hold delegate. IronCore does.
-                    // Check IronCore implementation...
+                    let mut stats = self.stats.lock();
+                    stats.messages_relayed += 1;
                 }
                 Err(e) => {
                     tracing::error!("Failed to process received message: {:?}", e);
@@ -1131,7 +1122,7 @@ impl SwarmBridge {
 
         let mut sent = 0usize;
         for peer_id in peers {
-            match rt.block_on(handle.send_message(peer_id.clone(), data.clone())) {
+            match rt.block_on(handle.send_message(peer_id, data.clone())) {
                 Ok(()) => sent += 1,
                 Err(e) => {
                     tracing::warn!("send_to_all_peers: failed to send to {}: {:?}", peer_id, e)
