@@ -258,10 +258,10 @@ impl InternetRelay {
     /// # Arguments
     /// * `relay_peer_id` — libp2p `PeerId` of the relay node.
     /// * `relay_addr`    — `Multiaddr` at which the relay is reachable (e.g.
-    ///                     `/ip4/1.2.3.4/tcp/5555`).
+    ///   `/ip4/1.2.3.4/tcp/5555`).
     /// * `swarm`         — Reference to the running [`SwarmHandle`].  The
-    ///                     method borrows it only for the duration of the async
-    ///                     call; no ownership or long-term reference is stored.
+    ///   method borrows it only for the duration of the async
+    ///   call; no ownership or long-term reference is stored.
     pub async fn connect_to_relay_via_swarm(
         &self,
         relay_peer_id: PeerId,

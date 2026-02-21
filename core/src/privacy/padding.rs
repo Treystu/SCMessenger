@@ -79,8 +79,8 @@ pub fn unpad_message(padded_message: &[u8]) -> Result<Vec<u8>, PaddingError> {
         .ok_or(PaddingError::InvalidPaddingFormat)?;
 
     // Verify everything after marker is 0x00
-    for i in (marker_pos + 1)..padded_message.len() {
-        if padded_message[i] != 0x00 {
+    for byte in &padded_message[(marker_pos + 1)..] {
+        if *byte != 0x00 {
             return Err(PaddingError::InvalidPaddingFormat);
         }
     }
