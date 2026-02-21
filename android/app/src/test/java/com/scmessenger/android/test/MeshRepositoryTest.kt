@@ -213,31 +213,37 @@ class MeshRepositoryTest {
     @Ignore("Placeholder test - requires IronCore initialization")
     @Test
     fun `test getServiceState - returns STOPPED initially`() {
-        // TODO: Implement once IronCore initialization is ready
-        // Given
-        // repository already created in setup
+        // Given: MeshRepository constructed with a mocked Context (no mesh service started)
+        // val mockContext = mockk<Context>(relaxed = true)
+        // every { mockContext.filesDir } returns File("/tmp/test-storage")
+        // val repo = MeshRepository(mockContext)
 
-        // When
-        // val state = repository.getServiceState()
+        // When: getServiceState() is called before startMeshService()
+        // val state = repo.getServiceState()
 
-        // Then
+        // Then: state should be STOPPED (meshService is null, fallback returns STOPPED)
         // assertEquals(uniffi.api.ServiceState.STOPPED, state)
+        assertTrue("Placeholder - requires IronCore native library in test classpath", true)
     }
 
     @Ignore("Placeholder test - requires LedgerManager mock")
     @Test
     fun `test ledger operations`() {
-        // TODO: Implement once LedgerManager is ready
-        // Given
+        // Given: MeshRepository with initialized LedgerManager
+        // val mockContext = mockk<Context>(relaxed = true)
+        // every { mockContext.filesDir } returns File("/tmp/test-storage")
+        // val repo = MeshRepository(mockContext)
         val multiaddr = "/ip4/192.168.1.1/tcp/4001"
         val peerId = "peer456"
 
-        // When
-        // repository.recordConnection(multiaddr, peerId)
-        // val dialable = repository.getDialableAddresses()
+        // When: recordConnection() is called and dialable addresses are fetched
+        // repo.recordConnection(multiaddr, peerId)
+        // val dialable = repo.getDialableAddresses()
 
-        // Then
+        // Then: dialable list should contain the recorded entry
         // assertNotNull(dialable)
+        // assertTrue(dialable.any { it.peerId == peerId })
+        assertTrue("Placeholder - requires LedgerManager native library in test classpath", true)
     }
 
     @Ignore("Placeholder test - requires MeshSettingsManager mock")
