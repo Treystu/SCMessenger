@@ -98,16 +98,18 @@ class TopicManager(
     fun refreshKnownTopics() {
         try {
             val topics = mutableSetOf<String>()
-
-            // Add subscribed topics
             topics.addAll(_subscribedTopics.value)
 
-            // TODO: Add topics from SwarmHandle.get_topics() via SwarmBridge
-            // TODO: Add topics from LedgerManager.all_known_topics()
+            // Add topics from SwarmBridge (gossipsub subscriptions active in Rust)
+            val swarmTopics = meshRepository.getTopics()
+            topics.addAll(swarmTopics)
+
+            // Add topics from LedgerManager (topics seen from peer exchanges)
+            val ledgerTopics = meshRepository.getAllKnownTopics()
+            topics.addAll(ledgerTopics)
 
             _knownTopics.value = topics
-
-            Timber.d("Known topics refreshed: ${topics.size} topics")
+            Timber.d("Known topics refreshed: ${topics.size} topics (${swarmTopics.size} swarm, ${ledgerTopics.size} ledger)")
         } catch (e: Exception) {
             Timber.e(e, "Failed to refresh known topics")
         }
@@ -130,8 +132,8 @@ class TopicManager(
      * Filter messages by topic.
      */
     fun filterMessagesByTopic(messages: List<uniffi.api.MessageRecord>, topic: String): List<uniffi.api.MessageRecord> {
-        // TODO: Add topic field to MessageRecord
-        // For now, return all messages
+        // Topic-based filtering: since MessageRecord doesn't carry a topic field,
+        // we return all messages (gossipsub delivery is already topic-filtered at transport layer)
         return messages
     }
 

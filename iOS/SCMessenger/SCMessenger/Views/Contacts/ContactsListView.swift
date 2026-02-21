@@ -13,16 +13,40 @@ struct ContactsListView: View {
     @State private var showingAddContact = false
     @State private var pendingChatConversation: Conversation?
     @State private var navigateToPendingChat = false
+    @State private var nearbyPrefilledPeerId: String = ""
 
     var body: some View {
         List {
-            ForEach(viewModel?.filteredContacts ?? [], id: \.peerId) { contact in
-                NavigationLink(value: Conversation(peerId: contact.peerId, peerNickname: contact.nickname ?? "Unknown")) {
-                    ContactRow(contact: contact)
+            // MARK: Nearby Peers — discovered on the mesh, not yet added
+            let nearby = viewModel?.nearbyPeers ?? []
+            if !nearby.isEmpty {
+                Section {
+                    ForEach(nearby, id: \.self) { peerId in
+                        NearbyPeerRow(peerId: peerId) {
+                            nearbyPrefilledPeerId = peerId
+                            showingAddContact = true
+                        }
+                    }
+                } header: {
+                    Label("Nearby", systemImage: "antenna.radiowaves.left.and.right")
+                        .foregroundStyle(Color.accentColor)
                 }
             }
-            .onDelete { offsets in
-                viewModel?.deleteContacts(at: offsets)
+
+            // MARK: Saved contacts
+            Section {
+                ForEach(viewModel?.filteredContacts ?? [], id: \.peerId) { contact in
+                    NavigationLink(value: Conversation(peerId: contact.peerId, peerNickname: contact.nickname ?? "Unknown")) {
+                        ContactRow(contact: contact)
+                    }
+                }
+                .onDelete { offsets in
+                    viewModel?.deleteContacts(at: offsets)
+                }
+            } header: {
+                if !(viewModel?.filteredContacts ?? []).isEmpty {
+                    Text("Contacts")
+                }
             }
         }
         .navigationDestination(for: Conversation.self) { conversation in
@@ -41,6 +65,7 @@ struct ContactsListView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
+                    nearbyPrefilledPeerId = ""
                     showingAddContact = true
                 } label: {
                     Image(systemName: "plus")
@@ -48,12 +73,16 @@ struct ContactsListView: View {
             }
         }
         .sheet(isPresented: $showingAddContact, onDismiss: {
+            nearbyPrefilledPeerId = ""
             viewModel?.loadContacts()
             if pendingChatConversation != nil {
                 navigateToPendingChat = true
             }
         }) {
-            AddContactView(pendingChatConversation: $pendingChatConversation)
+            AddContactView(
+                pendingChatConversation: $pendingChatConversation,
+                prefilledPeerId: nearbyPrefilledPeerId
+            )
         }
         .onAppear {
             if viewModel == nil {
@@ -64,13 +93,53 @@ struct ContactsListView: View {
     }
 }
 
+// MARK: - Nearby Peer Row
+
+struct NearbyPeerRow: View {
+    let peerId: String
+    let onAdd: () -> Void
+
+    var body: some View {
+        HStack(spacing: Theme.spacingMedium) {
+            ZStack {
+                Circle()
+                    .fill(Color.green.opacity(0.15))
+                    .frame(width: 44, height: 44)
+                Image(systemName: "dot.radiowaves.left.and.right")
+                    .foregroundStyle(Color.green)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Nearby Peer")
+                    .font(Theme.titleMedium)
+                Text(peerId.prefix(16))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(Theme.onSurfaceVariant)
+            }
+
+            Spacer()
+
+            Button {
+                onAdd()
+            } label: {
+                Label("Add", systemImage: "person.badge.plus")
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 20))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 struct ContactRow: View {
     let contact: Contact
 
     var body: some View {
         HStack(spacing: Theme.spacingMedium) {
             Circle()
-                .fill(Theme.primaryContainer)
+                .fill(Color.accentColorContainer)
                 .frame(width: 44, height: 44)
                 .overlay {
                     Text((contact.nickname ?? "?").prefix(1).uppercased())
@@ -95,6 +164,9 @@ struct AddContactView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(MeshRepository.self) private var repository
     @Binding var pendingChatConversation: Conversation?
+
+    /// Pre-fill peer ID when launched from a "Nearby" row.
+    var prefilledPeerId: String = ""
 
     @State private var nickname = ""
     @State private var publicKey = ""
@@ -151,6 +223,11 @@ struct AddContactView: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                }
+            }
+            .onAppear {
+                if !prefilledPeerId.isEmpty && peerId.isEmpty {
+                    peerId = prefilledPeerId
                 }
             }
         }

@@ -1,24 +1,25 @@
 package com.scmessenger.android.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.scmessenger.android.ui.viewmodels.MainViewModel
 
-// TODO: Phase 7 - Implement Onboarding UI
-// Requirements:
-// - Welcome screen
-// - Create/Import Identity
-// - Permissions request (BLE, Location, etc.)
-// - Setup Completion
 @OptIn(com.google.accompanist.permissions.ExperimentalPermissionsApi::class)
 @Composable
 fun OnboardingScreen(
-    onOnboardingComplete: () -> Unit
+    onOnboardingComplete: () -> Unit,
+    viewModel: MainViewModel = hiltViewModel()
 ) {
     val permissionsToRequest = remember {
         val list = mutableListOf(
@@ -42,7 +43,34 @@ fun OnboardingScreen(
         permissions = permissionsToRequest
     )
 
+    val importError by viewModel.importError.collectAsState()
+    val importSuccess by viewModel.importSuccess.collectAsState()
     var isCreating by remember { mutableStateOf(false) }
+    var showImportDialog by remember { mutableStateOf(false) }
+    var importCode by remember { mutableStateOf("") }
+
+    LaunchedEffect(importSuccess) {
+        if (importSuccess) {
+            viewModel.clearImportState()
+            showImportDialog = false
+            importCode = ""
+            onOnboardingComplete()
+        }
+    }
+
+    if (showImportDialog) {
+        ImportContactDialog(
+            importCode = importCode,
+            onImportCodeChange = { importCode = it },
+            importError = importError,
+            onImport = { if (importCode.isNotBlank()) viewModel.importContact(importCode) },
+            onDismiss = {
+                showImportDialog = false
+                importCode = ""
+                viewModel.clearImportState()
+            }
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -53,10 +81,12 @@ fun OnboardingScreen(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
         ) {
             Icon(
-                imageVector = androidx.compose.material.icons.Icons.Filled.Lock,
+                imageVector = Icons.Filled.Lock,
                 contentDescription = null,
                 modifier = Modifier.size(80.dp),
                 tint = MaterialTheme.colorScheme.primary
@@ -67,7 +97,7 @@ fun OnboardingScreen(
             Text(
                 text = "Welcome to SCMessenger",
                 style = MaterialTheme.typography.headlineMedium,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                textAlign = TextAlign.Center
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -75,7 +105,7 @@ fun OnboardingScreen(
             Text(
                 text = "Secure, private communication without central servers. Your identity is generated locally and never leaves your device.",
                 style = MaterialTheme.typography.bodyLarge,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
@@ -90,6 +120,7 @@ fun OnboardingScreen(
                     Button(
                         onClick = {
                             isCreating = true
+                            viewModel.createIdentity()
                             onOnboardingComplete()
                         },
                         modifier = Modifier.fillMaxWidth().height(56.dp)
@@ -109,7 +140,7 @@ fun OnboardingScreen(
                     Text(
                         text = "Bluetooth and Location permissions are required for mesh networking.",
                         style = MaterialTheme.typography.bodySmall,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.error
                     )
                 }
@@ -117,13 +148,70 @@ fun OnboardingScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 OutlinedButton(
-                    onClick = { /* TODO: Import logic */ },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    enabled = false // Import not yet supported in Core
+                    onClick = {
+                        importCode = ""
+                        viewModel.clearImportState()
+                        showImportDialog = true
+                    },
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
                 ) {
-                    Text("Import Existing Identity")
+                    Text("Import Contact / Join Existing Mesh")
                 }
             }
         }
     }
+}
+
+@Composable
+private fun ImportContactDialog(
+    importCode: String,
+    onImportCodeChange: (String) -> Unit,
+    importError: String?,
+    onImport: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Import Contact") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Paste the identity JSON shared by your contact.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = importCode,
+                    onValueChange = onImportCodeChange,
+                    label = { Text("Identity JSON") },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                    minLines = 4,
+                    maxLines = 8,
+                    textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
+                    placeholder = {
+                        Text(
+                            text = "{\"public_key\":\"...\",\"identity_id\":\"...\"}",
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                )
+                importError?.let { error ->
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onImport, enabled = importCode.isNotBlank()) {
+                Text("Import")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }

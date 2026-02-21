@@ -9,6 +9,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.scmessenger.android.ui.viewmodels.ContactsViewModel
+import com.scmessenger.android.ui.viewmodels.NearbyPeer
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -29,11 +32,13 @@ fun ContactsScreen(
     onNavigateToChat: (String) -> Unit
 ) {
     val contacts by viewModel.filteredContacts.collectAsState()
+    val nearbyPeers by viewModel.nearbyPeers.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
 
     var showAddDialog by remember { mutableStateOf(false) }
+    var nearbyPrefilledPeerId by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
@@ -85,7 +90,7 @@ fun ContactsScreen(
                 ) {
                     CircularProgressIndicator()
                 }
-            } else if (contacts.isEmpty()) {
+            } else if (contacts.isEmpty() && nearbyPeers.isEmpty()) {
                 // Empty state
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -121,11 +126,54 @@ fun ContactsScreen(
                     }
                 }
             } else {
-                // Contact list
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
+                    // Nearby peers section — discovered but not yet saved
+                    if (nearbyPeers.isNotEmpty()) {
+                        item {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(bottom = 4.dp, top = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Sensors,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Nearby (${nearbyPeers.size})",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        items(nearbyPeers, key = { "nearby_${it.peerId}" }) { peer ->
+                            NearbyPeerItem(
+                                peer = peer,
+                                onAdd = {
+                                    nearbyPrefilledPeerId = peer.peerId
+                                    showAddDialog = true
+                                }
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        if (contacts.isNotEmpty()) {
+                            item {
+                                Divider(modifier = Modifier.padding(vertical = 4.dp))
+                                Text(
+                                    text = "Contacts (${contacts.size})",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                    // Saved contacts
                     items(contacts, key = { it.peerId }) { contact ->
                         ContactItem(
                             contact = contact,
@@ -142,22 +190,29 @@ fun ContactsScreen(
     // Add contact dialog
     if (showAddDialog) {
         AddContactDialog(
-            onDismiss = { showAddDialog = false },
+            prefilledPeerId = nearbyPrefilledPeerId,
+            onDismiss = {
+                showAddDialog = false
+                nearbyPrefilledPeerId = ""
+            },
             onAdd = { peerId, publicKey, nickname ->
                 viewModel.addContact(peerId, publicKey, nickname)
                 showAddDialog = false
+                nearbyPrefilledPeerId = ""
             },
             onAddAndChat = { peerId, publicKey, nickname ->
                 val id = peerId.trim()
                 if (id.isNotBlank() && publicKey.isNotBlank()) {
                     viewModel.addContact(id, publicKey.trim(), nickname?.trim())
                     showAddDialog = false
+                    nearbyPrefilledPeerId = ""
                     onNavigateToChat(id)
                 }
             },
             onImport = { json ->
                 viewModel.importContact(json)
                 showAddDialog = false
+                nearbyPrefilledPeerId = ""
             }
         )
     }
@@ -242,13 +297,69 @@ fun ContactItem(
 }
 
 @Composable
+fun NearbyPeerItem(
+    peer: NearbyPeer,
+    onAdd: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Sensors,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(36.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "Nearby Peer",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = peer.peerId.take(20) + "…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                }
+            }
+            FilledTonalButton(onClick = onAdd) {
+                Icon(
+                    imageVector = Icons.Default.PersonAdd,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Add")
+            }
+        }
+    }
+}
+
+@Composable
 fun AddContactDialog(
+    prefilledPeerId: String = "",
     onDismiss: () -> Unit,
     onAdd: (String, String, String?) -> Unit,
     onAddAndChat: (String, String, String?) -> Unit,
     onImport: (String) -> Unit
 ) {
-    var peerId by remember { mutableStateOf("") }
+    var peerId by remember(prefilledPeerId) { mutableStateOf(prefilledPeerId) }
     var publicKey by remember { mutableStateOf("") }
     var nickname by remember { mutableStateOf("") }
 

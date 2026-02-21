@@ -905,6 +905,11 @@ class MeshRepository(private val context: Context) {
     // ========================================================================
 
     /**
+     * Get list of currently subscribed gossipsub topics from SwarmBridge.
+     */
+    fun getTopics(): List<String> = swarmBridge?.getTopics() ?: emptyList()
+
+    /**
      * Subscribe to a gossipsub topic via SwarmBridge.
      */
     fun subscribeTopic(topic: String) {
@@ -976,6 +981,12 @@ class MeshRepository(private val context: Context) {
         return relays?.firstOrNull()?.peerId
     }
 
+    /**
+     * Returns external NAT-mapped addresses observed by peer nodes on the mesh.
+     * Uses the libp2p identify protocol — confirmed by actual connected peers,
+     * no outside infrastructure required.
+     * For display/diagnostics only. Do NOT include in BLE beacons.
+     */
     fun getExternalAddresses(): List<String> {
         return swarmBridge?.getExternalAddresses() ?: emptyList()
     }
@@ -985,7 +996,6 @@ class MeshRepository(private val context: Context) {
      * External NAT-mapped addresses are intentionally excluded — they are observed
      * outbound ports, not stable inbound addresses, and including them causes remote
      * peers to attempt unreachable dials.
-     * Use getExternalAddresses() for display/debugging only.
      */
     fun getListeningAddresses(): List<String> {
         return swarmBridge?.getListeners() ?: emptyList()

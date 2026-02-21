@@ -90,7 +90,10 @@ pub struct OnionEnvelope {
 ///
 /// # Returns
 /// * `OnionEnvelope` ready for transmission to the first hop
-pub fn construct_onion(path: Vec<[u8; X25519_KEY_SIZE]>, payload: &[u8]) -> Result<OnionEnvelope, OnionError> {
+pub fn construct_onion(
+    path: Vec<[u8; X25519_KEY_SIZE]>,
+    payload: &[u8],
+) -> Result<OnionEnvelope, OnionError> {
     if path.is_empty() || path.len() > MAX_ONION_HOPS {
         return Err(OnionError::TooManyHops(MAX_ONION_HOPS));
     }
@@ -118,11 +121,23 @@ pub fn construct_onion(path: Vec<[u8; X25519_KEY_SIZE]>, payload: &[u8]) -> Resu
     let nonce = chacha20poly1305::XNonce::from_slice(&nonce_bytes);
 
     let encrypted_routing_info = cipher
-        .encrypt(nonce, Payload { msg: routing_info.as_slice(), aad: &nonce_bytes })
+        .encrypt(
+            nonce,
+            Payload {
+                msg: routing_info.as_slice(),
+                aad: &nonce_bytes,
+            },
+        )
         .map_err(|_| OnionError::EncryptionFailed)?;
 
     let encrypted_payload = cipher
-        .encrypt(nonce, Payload { msg: payload, aad: &nonce_bytes })
+        .encrypt(
+            nonce,
+            Payload {
+                msg: payload,
+                aad: &nonce_bytes,
+            },
+        )
         .map_err(|_| OnionError::EncryptionFailed)?;
 
     let mut current_layer = OnionLayer {
@@ -131,8 +146,8 @@ pub fn construct_onion(path: Vec<[u8; X25519_KEY_SIZE]>, payload: &[u8]) -> Resu
         encrypted_payload,
     };
 
-    let mut remaining_layers = bincode::serialize(&current_layer)
-        .map_err(|_| OnionError::InvalidEnvelope)?;
+    let mut remaining_layers =
+        bincode::serialize(&current_layer).map_err(|_| OnionError::InvalidEnvelope)?;
 
     // Wrap with each relay in reverse order (from second-to-last to first)
     for i in (0..path.len() - 1).rev() {
@@ -156,11 +171,23 @@ pub fn construct_onion(path: Vec<[u8; X25519_KEY_SIZE]>, payload: &[u8]) -> Resu
 
         // Encrypt routing info (next hop) and remaining layers
         let encrypted_routing_info = cipher
-            .encrypt(nonce, Payload { msg: next_hop_pk.as_slice(), aad: &nonce_bytes })
+            .encrypt(
+                nonce,
+                Payload {
+                    msg: next_hop_pk.as_slice(),
+                    aad: &nonce_bytes,
+                },
+            )
             .map_err(|_| OnionError::EncryptionFailed)?;
 
         let encrypted_payload = cipher
-            .encrypt(nonce, Payload { msg: remaining_layers.as_slice(), aad: &nonce_bytes })
+            .encrypt(
+                nonce,
+                Payload {
+                    msg: remaining_layers.as_slice(),
+                    aad: &nonce_bytes,
+                },
+            )
             .map_err(|_| OnionError::EncryptionFailed)?;
 
         current_layer = OnionLayer {
@@ -169,13 +196,13 @@ pub fn construct_onion(path: Vec<[u8; X25519_KEY_SIZE]>, payload: &[u8]) -> Resu
             encrypted_payload,
         };
 
-        remaining_layers = bincode::serialize(&current_layer)
-            .map_err(|_| OnionError::InvalidEnvelope)?;
+        remaining_layers =
+            bincode::serialize(&current_layer).map_err(|_| OnionError::InvalidEnvelope)?;
     }
 
     // Deserialize the outermost layer
-    let outermost_layer: OnionLayer = bincode::deserialize(&remaining_layers)
-        .map_err(|_| OnionError::InvalidEnvelope)?;
+    let outermost_layer: OnionLayer =
+        bincode::deserialize(&remaining_layers).map_err(|_| OnionError::InvalidEnvelope)?;
 
     Ok(OnionEnvelope {
         current_layer: outermost_layer,
@@ -223,13 +250,25 @@ pub fn peel_layer(
         vec![]
     } else {
         cipher
-            .decrypt(nonce, Payload { msg: envelope.current_layer.encrypted_routing_info.as_slice(), aad: &nonce_bytes })
+            .decrypt(
+                nonce,
+                Payload {
+                    msg: envelope.current_layer.encrypted_routing_info.as_slice(),
+                    aad: &nonce_bytes,
+                },
+            )
             .unwrap_or_default()
     };
 
     // Decrypt payload
     let payload_plaintext = cipher
-        .decrypt(nonce, Payload { msg: envelope.current_layer.encrypted_payload.as_slice(), aad: &nonce_bytes })
+        .decrypt(
+            nonce,
+            Payload {
+                msg: envelope.current_layer.encrypted_payload.as_slice(),
+                aad: &nonce_bytes,
+            },
+        )
         .map_err(|_| OnionError::DecryptionFailed)?;
 
     // Check if routing_info is empty (we're at destination)

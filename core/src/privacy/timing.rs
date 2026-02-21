@@ -157,9 +157,7 @@ pub fn compute_jitter(config: &JitterConfig) -> Duration {
 
     let mut rng = rand::thread_rng();
     let delay_ms = match config.distribution {
-        JitterDistribution::Uniform => {
-            rng.gen_range(config.min_delay_ms..=config.max_delay_ms)
-        }
+        JitterDistribution::Uniform => rng.gen_range(config.min_delay_ms..=config.max_delay_ms),
         JitterDistribution::Exponential => {
             // Exponential distribution: bias toward smaller delays
             let uniform = rng.gen::<f64>(); // 0.0 to 1.0

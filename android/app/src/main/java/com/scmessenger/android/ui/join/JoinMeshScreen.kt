@@ -407,7 +407,7 @@ private suspend fun parseAndJoin(
         topics.forEach { topic ->
             withContext(Dispatchers.Main) {
                 try {
-                    // TODO: Subscribe via SwarmBridge
+                    repository.subscribeTopic(topic)
                     Timber.i("Subscribed to topic: $topic")
                 } catch (e: Exception) {
                     Timber.w(e, "Failed to subscribe to topic: $topic")

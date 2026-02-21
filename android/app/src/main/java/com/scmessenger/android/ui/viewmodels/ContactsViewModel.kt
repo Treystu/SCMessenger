@@ -3,11 +3,19 @@ package com.scmessenger.android.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.scmessenger.android.data.MeshRepository
+import com.scmessenger.android.service.MeshEventBus
+import com.scmessenger.android.service.PeerEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
+
+/** A peer discovered on the mesh but not yet saved as a contact. */
+data class NearbyPeer(
+    val peerId: String,
+    val isOnline: Boolean = true
+)
 
 /**
  * ViewModel for the contacts screen.
@@ -48,8 +56,42 @@ class ContactsViewModel @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    // Peers discovered on the mesh but not yet saved as contacts.
+    private val _nearbyPeers = MutableStateFlow<List<NearbyPeer>>(emptyList())
+    val nearbyPeers: StateFlow<List<NearbyPeer>> = _nearbyPeers.asStateFlow()
+
     init {
         loadContacts()
+        observeNearbyPeers()
+    }
+
+    /**
+     * Subscribe to MeshEventBus peer events.
+     * Adds newly discovered peers to nearbyPeers if they aren't already contacts.
+     * Removes peers from nearbyPeers when they disconnect.
+     */
+    private fun observeNearbyPeers() {
+        viewModelScope.launch {
+            MeshEventBus.peerEvents.collect { event ->
+                when (event) {
+                    is PeerEvent.Discovered -> {
+                        val peerId = event.peerId
+                        val alreadyContact = _contacts.value.any { it.peerId == peerId }
+                        val alreadyNearby = _nearbyPeers.value.any { it.peerId == peerId }
+                        if (!alreadyContact && !alreadyNearby) {
+                            _nearbyPeers.value = _nearbyPeers.value + NearbyPeer(peerId, isOnline = true)
+                            Timber.d("Nearby peer added: ${peerId.take(16)}")
+                        }
+                    }
+                    is PeerEvent.Disconnected -> {
+                        _nearbyPeers.value = _nearbyPeers.value
+                            .map { if (it.peerId == event.peerId) it.copy(isOnline = false) else it }
+                            .filter { it.isOnline } // remove offline peers after disconnect
+                    }
+                    else -> Unit
+                }
+            }
+        }
     }
 
     /**
@@ -63,6 +105,9 @@ class ContactsViewModel @Inject constructor(
 
                 val contactList = meshRepository.listContacts()
                 _contacts.value = contactList
+                // Drop any nearby entry that is now a saved contact
+                val contactIds = contactList.map { it.peerId }.toSet()
+                _nearbyPeers.value = _nearbyPeers.value.filter { it.peerId !in contactIds }
 
                 Timber.d("Loaded ${contactList.size} contacts")
             } catch (e: Exception) {

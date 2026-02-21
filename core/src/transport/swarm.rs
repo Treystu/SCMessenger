@@ -22,6 +22,7 @@ use super::multiport::{self, BindResult, MultiPortConfig};
 use super::observation::{AddressObserver, ConnectionTracker};
 use super::reflection::{AddressReflectionRequest, AddressReflectionService};
 use anyhow::Result;
+use bincode;
 use libp2p::{identity::Keypair, kad, swarm::SwarmEvent, Multiaddr, PeerId};
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
@@ -81,6 +82,8 @@ pub enum SwarmCommand {
     },
     /// Get listening addresses
     GetListeners { reply: mpsc::Sender<Vec<Multiaddr>> },
+    /// Update the relay message budget (messages relayed per hour)
+    SetRelayBudget { budget: u32 },
     /// Shutdown the swarm
     Shutdown,
 }
@@ -280,6 +283,14 @@ impl SwarmHandle {
             .map_err(|_| anyhow::anyhow!("Swarm task not running"))
     }
 
+    /// Set the relay message budget (messages relayed per hour).
+    pub async fn set_relay_budget(&self, messages_per_hour: u32) -> Result<()> {
+        self.command_tx
+            .send(SwarmCommand::SetRelayBudget { budget: messages_per_hour })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))
+    }
+
     /// Shut down the swarm
     pub async fn shutdown(&self) -> Result<()> {
         self.command_tx
@@ -462,6 +473,14 @@ pub async fn start_swarm_with_config(
             let mut bootstrap_reconnect_interval = tokio::time::interval(Duration::from_secs(60));
             let bootstrap_addrs_clone = bootstrap_addrs;
 
+            // Cover traffic — 1 dummy message/min to mask real traffic patterns
+            let mut cover_traffic_interval = tokio::time::interval(Duration::from_secs(60));
+
+            // Relay budget rate-limiting
+            let mut relay_budget: u32 = 200;
+            let mut relay_count_this_hour: u32 = 0;
+            let mut relay_hour_start = std::time::Instant::now();
+
             loop {
                 tokio::select! {
                     // PHASE 6: Periodic retry check
@@ -550,6 +569,23 @@ pub async fn start_swarm_with_config(
                                         Ok(_) => tracing::debug!("🔄 Re-dialing bootstrap: {}", addr),
                                         Err(e) => tracing::trace!("Bootstrap re-dial {} skipped: {}", addr, e),
                                     }
+                                }
+                            }
+                        }
+                    }
+
+                    // Cover traffic — publish a dummy gossipsub message to mask real traffic
+                    _ = cover_traffic_interval.tick() => {
+                        use crate::privacy::cover::{CoverConfig, CoverTrafficGenerator};
+                        if let Ok(gen) = CoverTrafficGenerator::new(CoverConfig {
+                            rate_per_minute: 1,
+                            message_size: 256,
+                            enabled: true,
+                        }) {
+                            if let Ok(cover_msg) = gen.generate_cover_message() {
+                                if let Ok(bytes) = bincode::serialize(&cover_msg) {
+                                    let topic = libp2p::gossipsub::IdentTopic::new("sc-mesh");
+                                    let _ = swarm.behaviour_mut().gossipsub.publish(topic, bytes);
                                 }
                             }
                         }
@@ -654,50 +690,59 @@ pub async fn start_swarm_with_config(
                                     request_response::Message::Request { request, channel, .. } => {
                                         tracing::info!("🔄 Relay request from {} for message {}", peer, request.message_id);
 
-                                        match PeerId::from_bytes(&request.destination_peer) {
-                                            Ok(destination) => {
-                                                if swarm.is_connected(&destination) {
-                                                    // Forward the message
-                                                    let _forward_id = swarm.behaviour_mut().messaging.send_request(
-                                                        &destination,
-                                                        MessageRequest { envelope_data: request.envelope_data },
-                                                    );
+                                        // Enforce relay budget — reset counter hourly
+                                        if relay_hour_start.elapsed() >= std::time::Duration::from_secs(3600) {
+                                            relay_count_this_hour = 0;
+                                            relay_hour_start = std::time::Instant::now();
+                                        }
 
-                                                    let _ = swarm.behaviour_mut().relay.send_response(
-                                                        channel,
+                                        // Determine response; channel consumed exactly once at the end
+                                        let relay_response = if relay_budget > 0 && relay_count_this_hour >= relay_budget {
+                                            tracing::warn!(
+                                                "Relay budget ({}/hr) exhausted — dropping relay request {}",
+                                                relay_budget,
+                                                request.message_id
+                                            );
+                                            RelayResponse {
+                                                accepted: false,
+                                                error: Some("relay_budget_exhausted".to_string()),
+                                                message_id: request.message_id.clone(),
+                                            }
+                                        } else {
+                                            relay_count_this_hour += 1;
+                                            match PeerId::from_bytes(&request.destination_peer) {
+                                                Ok(destination) => {
+                                                    if swarm.is_connected(&destination) {
+                                                        let _forward_id = swarm.behaviour_mut().messaging.send_request(
+                                                            &destination,
+                                                            MessageRequest { envelope_data: request.envelope_data },
+                                                        );
+                                                        tracing::info!("✓ Relaying message {} to {}", request.message_id, destination);
                                                         RelayResponse {
                                                             accepted: true,
                                                             error: None,
                                                             message_id: request.message_id.clone(),
-                                                        },
-                                                    );
-
-                                                    tracing::info!("✓ Relaying message {} to {}", request.message_id, destination);
-                                                } else {
-                                                    // Not connected to destination
-                                                    tracing::warn!("⚠ Destination {} not connected, relay cannot proceed", destination);
-                                                    let _ = swarm.behaviour_mut().relay.send_response(
-                                                        channel,
+                                                        }
+                                                    } else {
+                                                        tracing::warn!("⚠ Destination {} not connected, relay cannot proceed", destination);
                                                         RelayResponse {
                                                             accepted: false,
                                                             error: Some("Destination not connected".to_string()),
-                                                            message_id: request.message_id,
-                                                        },
-                                                    );
+                                                            message_id: request.message_id.clone(),
+                                                        }
+                                                    }
                                                 }
-                                            }
-                                            Err(e) => {
-                                                tracing::error!("Invalid destination peer ID: {}", e);
-                                                let _ = swarm.behaviour_mut().relay.send_response(
-                                                    channel,
+                                                Err(e) => {
+                                                    tracing::error!("Invalid destination peer ID: {}", e);
                                                     RelayResponse {
                                                         accepted: false,
                                                         error: Some("Invalid destination peer ID".to_string()),
-                                                        message_id: request.message_id,
-                                                    },
-                                                );
+                                                        message_id: request.message_id.clone(),
+                                                    }
+                                                }
                                             }
-                                        }
+                                        };
+                                        let _ = swarm.behaviour_mut().relay.send_response(channel, relay_response);
                                     }
                                     request_response::Message::Response { request_id, response } => {
                                         if let Some(message_id) = pending_relay_requests.remove(&request_id) {
@@ -1131,6 +1176,11 @@ pub async fn start_swarm_with_config(
                     let listeners: Vec<Multiaddr> = swarm.listeners().cloned().collect();
                     let _ = reply.send(listeners).await;
                 }
+                            SwarmCommand::SetRelayBudget { budget } => {
+                                relay_budget = budget;
+                                tracing::info!("🔄 Relay budget updated: {} msgs/hour", budget);
+                            }
+
                 SwarmCommand::Shutdown => {
                                 tracing::info!("Swarm shutting down");
                                 break;

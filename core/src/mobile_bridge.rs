@@ -63,6 +63,8 @@ pub struct MeshService {
     swarm_bridge: std::sync::Arc<SwarmBridge>,
     bootstrap_addrs: Mutex<Vec<String>>,
     nat_status: Mutex<String>,
+    relay_budget: std::sync::Arc<Mutex<u32>>,
+    current_device_profile: Mutex<Option<DeviceProfile>>,
 }
 
 impl MeshService {
@@ -77,6 +79,8 @@ impl MeshService {
             swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
             bootstrap_addrs: Mutex::new(Vec::new()),
             nat_status: Mutex::new("unknown".to_string()),
+            relay_budget: std::sync::Arc::new(Mutex::new(200)),
+            current_device_profile: Mutex::new(None),
         }
     }
 
@@ -92,6 +96,8 @@ impl MeshService {
             swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
             bootstrap_addrs: Mutex::new(Vec::new()),
             nat_status: Mutex::new("unknown".to_string()),
+            relay_budget: std::sync::Arc::new(Mutex::new(200)),
+            current_device_profile: Mutex::new(None),
         }
     }
 
@@ -231,6 +237,7 @@ impl MeshService {
 
         let swarm_bridge = self.swarm_bridge.clone();
         let core = self.core.clone();
+        let relay_budget_init = self.relay_budget.clone();
 
         // Spawn a dedicated OS thread that owns its own Tokio runtime.
         // This is the safest approach for mobile: we cannot rely on being
@@ -259,7 +266,12 @@ impl MeshService {
                             {
                                 Ok(handle) => {
                                     tracing::info!("Swarm started, wiring bridge");
-                                    swarm_bridge.set_handle(handle);
+                                    swarm_bridge.set_handle(handle.clone());
+                                    // Apply stored relay budget
+                                    let budget = *relay_budget_init.lock();
+                                    if let Err(e) = handle.set_relay_budget(budget).await {
+                                        tracing::warn!("Failed to set initial relay budget: {:?}", e);
+                                    }
                                     while let Some(event) = event_rx.recv().await {
                                         match event {
                                             crate::transport::SwarmEvent::MessageReceived {
@@ -337,13 +349,38 @@ impl MeshService {
     }
 
     pub fn update_device_state(&self, profile: DeviceProfile) {
-        // Feed into engine (placeholder for now as engine is stateless)
-        tracing::info!("Device state updated: {:?}", profile);
+        tracing::info!(
+            "Device state: battery={}% charging={} wifi={} motion={:?}",
+            profile.battery_pct,
+            profile.is_charging,
+            profile.has_wifi,
+            profile.motion_state
+        );
+        *self.current_device_profile.lock() = Some(profile.clone());
+
+        // Auto-scale relay budget based on battery level
+        let budget = if profile.battery_pct <= 10 && !profile.is_charging {
+            10  // Critical battery: minimal relay
+        } else if profile.battery_pct <= 20 && !profile.is_charging {
+            50  // Low battery: reduced relay
+        } else if profile.is_charging || profile.battery_pct >= 50 {
+            200 // Charging or healthy: full relay
+        } else {
+            100 // Normal: moderate relay
+        };
+
+        self.set_relay_budget(budget);
     }
 
     pub fn set_relay_budget(&self, messages_per_hour: u32) {
-        tracing::info!("Relay budget adjusted: {} msgs/hour", messages_per_hour);
-        // TODO: Apply to actual relay protocol blocking logic
+        tracing::info!("Relay budget set: {} msgs/hour", messages_per_hour);
+        *self.relay_budget.lock() = messages_per_hour;
+        // If swarm is already running, forward the budget update immediately
+        let handle_guard = self.swarm_bridge.handle.lock();
+        if let Some(ref handle) = *handle_guard {
+            let rt = self.swarm_bridge.get_runtime_handle();
+            rt.block_on(handle.set_relay_budget(messages_per_hour)).ok();
+        }
     }
 
     pub fn on_peer_discovered(&self, peer_id: String) {
@@ -1123,6 +1160,30 @@ impl SwarmBridge {
         // Block on async operation
         let rt = self.get_runtime_handle();
         rt.block_on(handle.get_listeners())
+            .unwrap_or_default()
+            .iter()
+            .map(|addr| addr.to_string())
+            .collect()
+    }
+
+    /// Get external addresses observed by peer nodes on the mesh.
+    ///
+    /// Uses the libp2p `identify` protocol: when any connected peer observes
+    /// the address from which we connected them, they report it back. These
+    /// addresses are NAT-mapped and confirmed by actual mesh peers — no
+    /// outside infrastructure required.
+    ///
+    /// Use for display/diagnostics only. Do NOT include in BLE beacons
+    /// (they are observed outbound NAT ports, not stable inbound addresses).
+    pub fn get_external_addresses(&self) -> Vec<String> {
+        let handle_guard = self.handle.lock();
+        let handle = match handle_guard.as_ref() {
+            Some(h) => h,
+            None => return Vec::new(),
+        };
+
+        let rt = self.get_runtime_handle();
+        rt.block_on(handle.get_external_addresses())
             .unwrap_or_default()
             .iter()
             .map(|addr| addr.to_string())

@@ -49,6 +49,11 @@ interface IronCore {
     bytes prepare_message(string recipient_public_key_hex, string text);
     [Throws=IronCoreError]
     bytes prepare_receipt(string recipient_public_key_hex, string message_id);
+    /// Generate a cover traffic payload — random bytes that look like an encrypted
+    /// message. Broadcast via send_to_all_peers() to obscure real traffic patterns.
+    /// `size_bytes` controls payload size (16-1024); values outside range are clamped.
+    [Throws=IronCoreError]
+    bytes prepare_cover_traffic(u32 size_bytes);
     u32 outbox_count();
     u32 inbox_count();
 
@@ -391,6 +396,7 @@ interface SwarmBridge {
 
     sequence<string> get_peers();
     sequence<string> get_listeners();
+    sequence<string> get_external_addresses();
     sequence<string> get_topics();
 
     [Throws=IronCoreError]

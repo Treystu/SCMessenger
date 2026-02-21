@@ -185,7 +185,8 @@ impl CircuitBuilder {
             .peers
             .iter()
             .filter(|p| {
-                p.reliability_score >= self.config.min_reliability && p.peer_id != destination.peer_id
+                p.reliability_score >= self.config.min_reliability
+                    && p.peer_id != destination.peer_id
             })
             .collect();
 
@@ -222,7 +223,11 @@ impl CircuitBuilder {
             let best_peer = peers_in_segment
                 .iter()
                 .filter(|p| !used_peers.contains(&p.peer_id))
-                .max_by(|a, b| a.reliability_score.partial_cmp(&b.reliability_score).unwrap_or(std::cmp::Ordering::Equal));
+                .max_by(|a, b| {
+                    a.reliability_score
+                        .partial_cmp(&b.reliability_score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
 
             if let Some(peer) = best_peer {
                 selected.push((peer.peer_id.clone(), peer.public_key.clone()));
@@ -248,7 +253,8 @@ impl CircuitBuilder {
             .peers
             .iter()
             .filter(|p| {
-                p.reliability_score >= self.config.min_reliability && p.peer_id != destination.peer_id
+                p.reliability_score >= self.config.min_reliability
+                    && p.peer_id != destination.peer_id
             })
             .collect();
 
@@ -271,7 +277,11 @@ impl CircuitBuilder {
     }
 
     /// Update peer reliability score
-    pub fn update_peer_reliability(&mut self, peer_id: &str, score: f32) -> Result<(), CircuitError> {
+    pub fn update_peer_reliability(
+        &mut self,
+        peer_id: &str,
+        score: f32,
+    ) -> Result<(), CircuitError> {
         let peer = self
             .peers
             .iter_mut()
@@ -347,10 +357,7 @@ mod tests {
     fn test_circuit_path_public_keys() {
         let path = CircuitPath {
             circuit_id: CircuitId::random(),
-            hops: vec![(
-                "peer1".to_string(),
-                vec![1; 32],
-            )],
+            hops: vec![("peer1".to_string(), vec![1; 32])],
             destination: Some(PeerInfo {
                 peer_id: "dest".to_string(),
                 public_key: vec![2; 32],

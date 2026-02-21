@@ -8,6 +8,7 @@
 pub mod crypto;
 pub mod identity;
 pub mod message;
+pub mod privacy;
 pub mod store;
 pub mod transport;
 
@@ -411,6 +412,29 @@ impl IronCore {
             message::encode_envelope(&envelope).map_err(|_| IronCoreError::Internal)?;
 
         Ok(envelope_bytes)
+    }
+
+    /// Generate a cover traffic payload — random bytes that look like an encrypted
+    /// message. Broadcast via send_to_all_peers() to obscure real traffic patterns.
+    /// `size_bytes` controls payload size (16–1024); values outside range are clamped.
+    pub fn prepare_cover_traffic(&self, size_bytes: u32) -> Result<Vec<u8>, IronCoreError> {
+        use crate::privacy::cover::{CoverConfig, CoverTrafficGenerator};
+        let size = (size_bytes as usize).clamp(16, 1024);
+        let config = CoverConfig {
+            enabled: true,
+            message_size: size,
+            rate_per_minute: 1,
+        };
+        let gen = CoverTrafficGenerator::new(config)
+            .map_err(|_| IronCoreError::Internal)?;
+        let cover = gen.generate_cover_message()
+            .map_err(|_| IronCoreError::Internal)?;
+        // Encode as flat Vec<u8>: ephemeral_key (32) | recipient_hint (32) | encrypted_payload
+        let mut out = Vec::with_capacity(32 + 32 + cover.encrypted_payload.len());
+        out.extend_from_slice(&cover.ephemeral_key);
+        out.extend_from_slice(&cover.recipient_hint);
+        out.extend_from_slice(&cover.encrypted_payload);
+        Ok(out)
     }
 
     /// Decrypt a received envelope and return the plaintext message.

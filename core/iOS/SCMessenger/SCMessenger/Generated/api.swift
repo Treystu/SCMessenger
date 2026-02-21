@@ -1060,13 +1060,6 @@ public protocol IronCoreProtocol : AnyObject {
     
     func outboxCount()  -> UInt32
     
-    /**
-     * Generate a cover traffic payload — random bytes that look like an encrypted
-     * message. Broadcast via send_to_all_peers() to obscure real traffic patterns.
-     * `size_bytes` controls payload size (16-1024); values outside range are clamped.
-     */
-    func prepareCoverTraffic(sizeBytes: UInt32) throws  -> Data
-    
     func prepareMessage(recipientPublicKeyHex: String, text: String) throws  -> Data
     
     func prepareReceipt(recipientPublicKeyHex: String, messageId: String) throws  -> Data
@@ -1171,19 +1164,6 @@ open func isRunning() -> Bool {
 open func outboxCount() -> UInt32 {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_outbox_count(self.uniffiClonePointer(),$0
-    )
-})
-}
-    
-    /**
-     * Generate a cover traffic payload — random bytes that look like an encrypted
-     * message. Broadcast via send_to_all_peers() to obscure real traffic patterns.
-     * `size_bytes` controls payload size (16-1024); values outside range are clamped.
-     */
-open func prepareCoverTraffic(sizeBytes: UInt32)throws  -> Data {
-    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
-    uniffi_scmessenger_core_fn_method_ironcore_prepare_cover_traffic(self.uniffiClonePointer(),
-        FfiConverterUInt32.lower(sizeBytes),$0
     )
 })
 }
@@ -1896,8 +1876,6 @@ public protocol SwarmBridgeProtocol : AnyObject {
     
     func dial(multiaddr: String) throws 
     
-    func getExternalAddresses()  -> [String]
-    
     func getListeners()  -> [String]
     
     func getPeers()  -> [String]
@@ -1967,13 +1945,6 @@ open func dial(multiaddr: String)throws  {try rustCallWithError(FfiConverterType
         FfiConverterString.lower(multiaddr),$0
     )
 }
-}
-    
-open func getExternalAddresses() -> [String] {
-    return try!  FfiConverterSequenceString.lift(try! rustCall() {
-    uniffi_scmessenger_core_fn_method_swarmbridge_get_external_addresses(self.uniffiClonePointer(),$0
-    )
-})
 }
     
 open func getListeners() -> [String] {
@@ -4182,9 +4153,6 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_ironcore_outbox_count() != 26099) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_scmessenger_core_checksum_method_ironcore_prepare_cover_traffic() != 15820) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_prepare_message() != 24979) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4300,9 +4268,6 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_swarmbridge_dial() != 24277) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_scmessenger_core_checksum_method_swarmbridge_get_external_addresses() != 49043) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_swarmbridge_get_listeners() != 59843) {

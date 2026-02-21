@@ -135,9 +135,7 @@ impl CoverTrafficGenerator {
 
     /// Generate multiple cover traffic messages
     pub fn generate_batch(&self, count: usize) -> Result<Vec<CoverMessage>, CoverTrafficError> {
-        (0..count)
-            .map(|_| self.generate_cover_message())
-            .collect()
+        (0..count).map(|_| self.generate_cover_message()).collect()
     }
 
     /// Get the configuration
@@ -198,9 +196,10 @@ impl CoverTrafficScheduler {
             return None;
         }
 
-        match self.last_generation_time.checked_add(Duration::from_millis(
-            self.config.message_interval_ms(),
-        )) {
+        match self
+            .last_generation_time
+            .checked_add(Duration::from_millis(self.config.message_interval_ms()))
+        {
             Some(next_time) => Some(next_time),
             None => None,
         }
