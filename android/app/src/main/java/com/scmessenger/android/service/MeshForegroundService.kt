@@ -296,7 +296,7 @@ class MeshForegroundService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.mesh_service_notification_title))
             .setContentText(contentText)
-            .setSmallIcon(R.drawable.ic_notification)  // TODO: Create icon
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
             .addAction(0, "Pause", pausePendingIntent)
             .addAction(0, "Stop", stopPendingIntent)
