@@ -334,6 +334,9 @@ class WifiAwareTransport(
                 super.onLost(network)
                 Timber.d("WiFi Aware data path lost for $peerIdString")
                 activeConnections.remove(peerIdString)?.close()
+                // Also evict any in-flight initiator sentinel so the next
+                // onCapabilitiesChanged can re-attempt after the network recovers.
+                pendingInitiators.remove(peerIdString)
                 val callbackToRemove = synchronized(callbackLock) {
                     registeredCallbacks.remove(peerIdString)
                 }

@@ -92,6 +92,20 @@ class TopicManager(
     }
 
     /**
+     * Publish data to a gossipsub topic via SwarmBridge.
+     * Must be subscribed to the topic before publishing.
+     */
+    fun publish(topic: String, data: ByteArray) {
+        try {
+            check(_subscribedTopics.value.contains(topic)) { "Not subscribed to topic: $topic" }
+            meshRepository.publishTopic(topic, data)
+            Timber.d("Published ${data.size} bytes to topic: $topic")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to publish to topic: $topic")
+        }
+    }
+
+    /**
      * Refresh known topics from SwarmHandle and LedgerManager.
      */
     fun refreshKnownTopics() {

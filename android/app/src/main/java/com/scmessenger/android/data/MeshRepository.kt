@@ -956,6 +956,17 @@ class MeshRepository(private val context: Context) {
     }
 
     /**
+     * Publish data to a gossipsub topic via SwarmBridge.
+     */
+    fun publishTopic(topic: String, data: ByteArray) {
+        try {
+            swarmBridge?.publishTopic(topic, data)
+        } catch (e: Exception) {
+            Timber.w("publishTopic failed for $topic: ${e.message}")
+        }
+    }
+
+    /**
      * Broadcast data to all connected peers via SwarmBridge.
      */
     fun sendToAllPeers(data: ByteArray) {
