@@ -17,21 +17,28 @@ import os
 final class MultipeerTransport: NSObject {
     private let logger = Logger(subsystem: "com.scmessenger", category: "Multipeer")
     private weak var meshRepository: MeshRepository?
-    
+
     // Multipeer components
     private var peerID: MCPeerID!
     private var session: MCSession!
     private var advertiser: MCNearbyServiceAdvertiser?
     private var browser: MCNearbyServiceBrowser?
-    
+
     // Service type (must be ≤15 chars, lowercase, no special chars)
     private let serviceType = "scmesh"
-    
+
     // Connection state
     private var connectedPeers: Set<MCPeerID> = []
     private var isAdvertising = false
     private var isBrowsing = false
-    
+
+    // Reconnection state: maps peer display name → retry count
+    private var reconnectAttempts: [String: Int] = [:]
+    // Maximum reconnect attempts before giving up
+    private let maxReconnectAttempts = 5
+    // Base delay in seconds for exponential backoff
+    private let reconnectBaseDelay: TimeInterval = 2.0
+
     init(meshRepository: MeshRepository) {
         self.meshRepository = meshRepository
         super.init()
@@ -49,12 +56,49 @@ final class MultipeerTransport: NSObject {
     }
     
     private func setupSession() {
+        // .required encryption enforces TLS-like security for all Multipeer frames.
+        // This is non-negotiable for a sovereign messenger.
         session = MCSession(
             peer: peerID,
             securityIdentity: nil,
             encryptionPreference: .required
         )
         session.delegate = self
+    }
+
+    // MARK: - Reconnection
+
+    /// Schedule a reconnect attempt for a peer that dropped off.
+    ///
+    /// Uses exponential backoff: delay = base * 2^attempt, capped at 60 s.
+    /// Gives up after `maxReconnectAttempts` tries and removes the peer
+    /// from the retry table so it can be re-discovered organically.
+    private func scheduleReconnect(for peer: MCPeerID) {
+        let name = peer.displayName
+        let attempt = reconnectAttempts[name, default: 0]
+
+        guard attempt < maxReconnectAttempts else {
+            logger.warning("Reconnect: giving up on \(name) after \(attempt) attempts")
+            reconnectAttempts.removeValue(forKey: name)
+            return
+        }
+
+        let delay = reconnectBaseDelay * pow(2.0, Double(attempt))
+        let cappedDelay = min(delay, 60.0)
+        reconnectAttempts[name] = attempt + 1
+
+        logger.info("Reconnect: scheduling attempt \(attempt + 1)/\(maxReconnectAttempts) for \(name) in \(Int(cappedDelay))s")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + cappedDelay) { [weak self] in
+            guard let self else { return }
+            // Only invite if the peer is not already connected and we are still browsing
+            guard !self.connectedPeers.contains(peer), let browser = self.browser else {
+                self.logger.debug("Reconnect: skipping \(name) — already connected or not browsing")
+                return
+            }
+            self.logger.info("Reconnect: re-inviting \(name)")
+            browser.invitePeer(peer, to: self.session, withContext: nil, timeout: 10)
+        }
     }
     
     // MARK: - Public API
@@ -129,6 +173,8 @@ final class MultipeerTransport: NSObject {
     }
     
     func disconnect() {
+        // Clear reconnect table first so scheduled retries become no-ops
+        reconnectAttempts.removeAll()
         session.disconnect()
         stopAdvertising()
         stopBrowsing()
@@ -150,15 +196,19 @@ extension MultipeerTransport: MCSessionDelegate {
         switch state {
         case .connected:
             connectedPeers.insert(peerID)
+            // Clear any pending reconnect counter — peer is healthy again
+            reconnectAttempts.removeValue(forKey: peerID.displayName)
             MeshEventBus.shared.peerEvents.send(.connected(peerId: peerID.displayName))
-            
+
         case .connecting:
             logger.debug("Connecting to \(peerID.displayName)")
-            
+
         case .notConnected:
             connectedPeers.remove(peerID)
             MeshEventBus.shared.peerEvents.send(.disconnected(peerId: peerID.displayName))
-            
+            // Attempt to re-establish the connection with exponential backoff
+            scheduleReconnect(for: peerID)
+
         @unknown default:
             logger.warning("Unknown session state")
         }

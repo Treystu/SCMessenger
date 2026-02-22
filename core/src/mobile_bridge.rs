@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 pub use crate::contacts_bridge::{Contact, ContactManager};
 use crate::transport::swarm::SwarmHandle;
 use libp2p::{Multiaddr, PeerId};
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -40,6 +40,78 @@ pub enum MotionState {
     Unknown,
 }
 
+/// Network connectivity type reported by the platform.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NetworkType {
+    /// No connectivity.
+    None,
+    /// WiFi connection present.
+    Wifi,
+    /// Cellular data (any generation).
+    Cellular,
+    /// Both WiFi and cellular available.
+    WifiAndCellular,
+    /// Unknown / not yet reported.
+    Unknown,
+}
+
+impl Default for NetworkType {
+    fn default() -> Self {
+        NetworkType::Unknown
+    }
+}
+
+/// Snapshot of device state as reported by the platform layer.
+///
+/// This is the canonical state record stored inside `MeshService`.
+/// It is richer than `DeviceProfile` (which is the UniFFI-facing input type)
+/// and drives the threshold-based behavior adjustments.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceState {
+    /// Battery level 0–100.
+    pub battery_level: u8,
+    /// True while the device is plugged in / wirelessly charging.
+    pub is_charging: bool,
+    /// Active network type.
+    pub network_type: NetworkType,
+    /// Motion context reported by the platform accelerometer/activity API.
+    pub motion_state: MotionState,
+}
+
+impl DeviceState {
+    /// Construct from the UniFFI-facing `DeviceProfile`.
+    pub fn from_profile(profile: &DeviceProfile) -> Self {
+        let network_type = match (profile.has_wifi, profile.is_charging) {
+            (true, _) => NetworkType::Wifi,
+            (false, _) => NetworkType::Cellular,
+        };
+        Self {
+            battery_level: profile.battery_pct,
+            is_charging: profile.is_charging,
+            network_type,
+            motion_state: profile.motion_state,
+        }
+    }
+}
+
+/// Recommended behavior adjustments derived from the current `DeviceState`.
+///
+/// Callers (swarm thread, scan schedulers, relay logic) should query
+/// `MeshService::recommended_behavior()` and honour these hints.
+#[derive(Debug, Clone)]
+pub struct BehaviorAdjustment {
+    /// Suggested BLE / WiFi-Aware scan interval in milliseconds.
+    /// Higher value = less frequent scanning = less battery drain.
+    pub scan_interval_ms: u32,
+    /// Whether relay duty should be active at all.
+    pub relay_enabled: bool,
+    /// Relay message budget (messages per hour, 0 means relay disabled).
+    pub relay_budget: u32,
+    /// True when the device should operate in the absolute minimum mode
+    /// (battery critically low and not charging).
+    pub minimal_operation: bool,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct ServiceStats {
     pub peers_discovered: u32,
@@ -65,6 +137,10 @@ pub struct MeshService {
     nat_status: Mutex<String>,
     relay_budget: std::sync::Arc<Mutex<u32>>,
     current_device_profile: Mutex<Option<DeviceProfile>>,
+    /// Current device state snapshot — drives threshold-based behavior.
+    /// Stored behind a `parking_lot::RwLock` so reads (very frequent) never
+    /// contend with writes (infrequent platform callbacks).
+    device_state: RwLock<Option<DeviceState>>,
 }
 
 impl MeshService {
@@ -81,6 +157,7 @@ impl MeshService {
             nat_status: Mutex::new("unknown".to_string()),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             current_device_profile: Mutex::new(None),
+            device_state: RwLock::new(None),
         }
     }
 
@@ -98,6 +175,7 @@ impl MeshService {
             nat_status: Mutex::new("unknown".to_string()),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             current_device_profile: Mutex::new(None),
+            device_state: RwLock::new(None),
         }
     }
 
@@ -373,27 +451,162 @@ impl MeshService {
     }
 
     pub fn update_device_state(&self, profile: DeviceProfile) {
-        tracing::info!(
-            "Device state: battery={}% charging={} wifi={} motion={:?}",
-            profile.battery_pct,
-            profile.is_charging,
-            profile.has_wifi,
-            profile.motion_state
-        );
-        *self.current_device_profile.lock() = Some(profile.clone());
+        let new_state = DeviceState::from_profile(&profile);
 
-        // Auto-scale relay budget based on battery level
-        let budget = if profile.battery_pct <= 10 && !profile.is_charging {
-            10 // Critical battery: minimal relay
-        } else if profile.battery_pct <= 20 && !profile.is_charging {
-            50 // Low battery: reduced relay
-        } else if profile.is_charging || profile.battery_pct >= 50 {
-            200 // Charging or healthy: full relay
+        // Read old state for transition logging (cheap read-lock).
+        let old_state = self.device_state.read().clone();
+
+        // Log any meaningful transitions before storing the new state.
+        if let Some(ref old) = old_state {
+            if old.battery_level != new_state.battery_level {
+                tracing::debug!(
+                    "Battery level changed: {}% → {}%",
+                    old.battery_level,
+                    new_state.battery_level
+                );
+            }
+            if old.is_charging != new_state.is_charging {
+                tracing::info!(
+                    "Charging state changed: {} → {}",
+                    old.is_charging,
+                    new_state.is_charging
+                );
+            }
+            if old.network_type != new_state.network_type {
+                tracing::info!(
+                    "Network type changed: {:?} → {:?}",
+                    old.network_type,
+                    new_state.network_type
+                );
+            }
+            if old.motion_state != new_state.motion_state {
+                tracing::info!(
+                    "Motion state changed: {:?} → {:?}",
+                    old.motion_state,
+                    new_state.motion_state
+                );
+            }
+
+            // Threshold-crossing events deserve explicit log entries.
+            let was_critical = old.battery_level <= 10 && !old.is_charging;
+            let is_critical = new_state.battery_level <= 10 && !new_state.is_charging;
+            let was_low = old.battery_level <= 20 && !old.is_charging;
+            let is_low = new_state.battery_level <= 20 && !new_state.is_charging;
+
+            if !was_critical && is_critical {
+                tracing::warn!(
+                    "Battery CRITICAL ({}%, not charging) — entering minimal operation",
+                    new_state.battery_level
+                );
+            } else if was_critical && !is_critical {
+                tracing::info!(
+                    "Battery recovered from critical ({}%{})",
+                    new_state.battery_level,
+                    if new_state.is_charging { ", charging" } else { "" }
+                );
+            } else if !was_low && is_low {
+                tracing::warn!(
+                    "Battery LOW ({}%, not charging) — reducing scan and relay activity",
+                    new_state.battery_level
+                );
+            } else if was_low && !is_low {
+                tracing::info!(
+                    "Battery recovered from low ({}%{})",
+                    new_state.battery_level,
+                    if new_state.is_charging { ", charging" } else { "" }
+                );
+            }
         } else {
-            100 // Normal: moderate relay
-        };
+            // First report — just log the initial state.
+            tracing::info!(
+                "Device state initialised: battery={}% charging={} network={:?} motion={:?}",
+                new_state.battery_level,
+                new_state.is_charging,
+                new_state.network_type,
+                new_state.motion_state
+            );
+        }
 
-        self.set_relay_budget(budget);
+        // Persist the new DeviceState.
+        *self.device_state.write() = Some(new_state.clone());
+
+        // Also keep the legacy DeviceProfile for callers that still use it.
+        *self.current_device_profile.lock() = Some(profile);
+
+        // Derive and apply behavior adjustments.
+        let adj = Self::compute_behavior(&new_state);
+
+        if adj.minimal_operation {
+            tracing::warn!(
+                "Applying MINIMAL operation mode (battery={}%)",
+                new_state.battery_level
+            );
+        }
+
+        self.set_relay_budget(adj.relay_budget);
+    }
+
+    /// Compute recommended behavior from a device state snapshot.
+    ///
+    /// This is a pure function — no side-effects — so callers can call it at
+    /// any time without acquiring locks.
+    pub fn compute_behavior(state: &DeviceState) -> BehaviorAdjustment {
+        let battery = state.battery_level;
+        let charging = state.is_charging;
+
+        // Minimal mode: critical battery and not charging.
+        if battery <= 10 && !charging {
+            return BehaviorAdjustment {
+                scan_interval_ms: 30_000, // 30 s — barely alive
+                relay_enabled: false,
+                relay_budget: 0,
+                minimal_operation: true,
+            };
+        }
+
+        // Low battery: reduce everything but keep messaging alive.
+        if battery <= 20 && !charging {
+            return BehaviorAdjustment {
+                scan_interval_ms: 10_000, // 10 s
+                relay_enabled: false,     // no relay duty when low
+                relay_budget: 0,
+                minimal_operation: false,
+            };
+        }
+
+        // Stationary with good battery or charging: maximise relay duty.
+        let stationary = matches!(state.motion_state, MotionState::Still);
+        if charging || (battery >= 50 && stationary) {
+            return BehaviorAdjustment {
+                scan_interval_ms: 500, // very frequent
+                relay_enabled: true,
+                relay_budget: 200,
+                minimal_operation: false,
+            };
+        }
+
+        // Normal operation (battery 21–49, not charging, possibly moving).
+        BehaviorAdjustment {
+            scan_interval_ms: 2_000, // 2 s
+            relay_enabled: true,
+            relay_budget: 100,
+            minimal_operation: false,
+        }
+    }
+
+    /// Return the recommended behavior adjustments for the *current* device state.
+    ///
+    /// Returns `None` if no device state has been reported yet.
+    pub fn recommended_behavior(&self) -> Option<BehaviorAdjustment> {
+        self.device_state
+            .read()
+            .as_ref()
+            .map(Self::compute_behavior)
+    }
+
+    /// Return a clone of the most recently stored `DeviceState`, if any.
+    pub fn get_device_state(&self) -> Option<DeviceState> {
+        self.device_state.read().clone()
     }
 
     pub fn set_relay_budget(&self, messages_per_hour: u32) {
@@ -1256,6 +1469,158 @@ fn current_timestamp() -> u64 {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    // -----------------------------------------------------------------------
+    // DeviceState / BehaviorAdjustment tests
+    // -----------------------------------------------------------------------
+
+    fn make_state(battery: u8, charging: bool, motion: MotionState) -> DeviceState {
+        DeviceState {
+            battery_level: battery,
+            is_charging: charging,
+            network_type: NetworkType::Wifi,
+            motion_state: motion,
+        }
+    }
+
+    #[test]
+    fn test_compute_behavior_minimal_mode() {
+        // <= 10% and not charging → minimal operation
+        let adj = MeshService::compute_behavior(&make_state(10, false, MotionState::Still));
+        assert!(adj.minimal_operation);
+        assert!(!adj.relay_enabled);
+        assert_eq!(adj.relay_budget, 0);
+        assert!(adj.scan_interval_ms >= 10_000);
+
+        // Charging saves it even at 5%
+        let adj_charging = MeshService::compute_behavior(&make_state(5, true, MotionState::Still));
+        assert!(!adj_charging.minimal_operation);
+    }
+
+    #[test]
+    fn test_compute_behavior_low_battery() {
+        // 20% not charging → no relay, not minimal
+        let adj = MeshService::compute_behavior(&make_state(20, false, MotionState::Walking));
+        assert!(!adj.minimal_operation);
+        assert!(!adj.relay_enabled);
+        assert_eq!(adj.relay_budget, 0);
+        assert!(adj.scan_interval_ms > 2_000);
+
+        // 21% not charging → normal
+        let adj21 = MeshService::compute_behavior(&make_state(21, false, MotionState::Walking));
+        assert!(adj21.relay_enabled);
+    }
+
+    #[test]
+    fn test_compute_behavior_stationary_good_battery() {
+        // Stationary + battery >= 50 → maximum relay
+        let adj = MeshService::compute_behavior(&make_state(60, false, MotionState::Still));
+        assert!(adj.relay_enabled);
+        assert_eq!(adj.relay_budget, 200);
+        assert!(adj.scan_interval_ms <= 500);
+    }
+
+    #[test]
+    fn test_compute_behavior_charging_always_full() {
+        // Charging at any battery level → full relay
+        let adj = MeshService::compute_behavior(&make_state(15, true, MotionState::Automotive));
+        assert!(adj.relay_enabled);
+        assert_eq!(adj.relay_budget, 200);
+    }
+
+    #[test]
+    fn test_compute_behavior_normal_operation() {
+        // 30% not charging, moving → normal
+        let adj = MeshService::compute_behavior(&make_state(30, false, MotionState::Walking));
+        assert!(adj.relay_enabled);
+        assert_eq!(adj.relay_budget, 100);
+        assert_eq!(adj.scan_interval_ms, 2_000);
+    }
+
+    #[test]
+    fn test_device_state_from_profile() {
+        let profile = DeviceProfile {
+            battery_pct: 55,
+            is_charging: false,
+            has_wifi: true,
+            motion_state: MotionState::Still,
+        };
+        let state = DeviceState::from_profile(&profile);
+        assert_eq!(state.battery_level, 55);
+        assert!(!state.is_charging);
+        assert_eq!(state.network_type, NetworkType::Wifi);
+        assert_eq!(state.motion_state, MotionState::Still);
+    }
+
+    #[test]
+    fn test_update_device_state_stores_state() {
+        let svc = MeshService::new(MeshServiceConfig {
+            discovery_interval_ms: 1000,
+            battery_floor_pct: 20,
+        });
+
+        assert!(svc.get_device_state().is_none());
+        assert!(svc.recommended_behavior().is_none());
+
+        let profile = DeviceProfile {
+            battery_pct: 80,
+            is_charging: false,
+            has_wifi: true,
+            motion_state: MotionState::Still,
+        };
+        svc.update_device_state(profile);
+
+        let state = svc.get_device_state().unwrap();
+        assert_eq!(state.battery_level, 80);
+
+        let adj = svc.recommended_behavior().unwrap();
+        assert!(adj.relay_enabled);
+        assert_eq!(adj.relay_budget, 200); // stationary + good battery
+    }
+
+    #[test]
+    fn test_update_device_state_transitions() {
+        let svc = MeshService::new(MeshServiceConfig {
+            discovery_interval_ms: 1000,
+            battery_floor_pct: 20,
+        });
+
+        // First update
+        svc.update_device_state(DeviceProfile {
+            battery_pct: 50,
+            is_charging: false,
+            has_wifi: true,
+            motion_state: MotionState::Walking,
+        });
+
+        // Transition to low battery
+        svc.update_device_state(DeviceProfile {
+            battery_pct: 15,
+            is_charging: false,
+            has_wifi: false,
+            motion_state: MotionState::Walking,
+        });
+
+        let adj = svc.recommended_behavior().unwrap();
+        assert!(!adj.relay_enabled);
+        assert_eq!(adj.relay_budget, 0);
+        assert!(!adj.minimal_operation);
+
+        // Transition to critical battery
+        svc.update_device_state(DeviceProfile {
+            battery_pct: 8,
+            is_charging: false,
+            has_wifi: false,
+            motion_state: MotionState::Still,
+        });
+
+        let adj = svc.recommended_behavior().unwrap();
+        assert!(adj.minimal_operation);
+    }
+
+    // -----------------------------------------------------------------------
+    // Existing tests
+    // -----------------------------------------------------------------------
 
     #[test]
     fn test_ledger_preferred_relays() {

@@ -8,6 +8,7 @@ import android.os.Build
 import timber.log.Timber
 import java.io.InputStream
 import java.io.OutputStream
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.ConcurrentHashMap
@@ -228,11 +229,11 @@ class WifiAwareTransport(
             val peerIdString = peerId.toString()
             onPeerDiscovered(peerIdString)
 
-            // Initiate data path
+            // Initiate data path — Publisher is the RESPONDER (server socket)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val session = publishSession
                 if (session != null) {
-                    initiateDataPath(session, peerId, peerIdString)
+                    initiateDataPath(session, peerId, peerIdString, isPublisher = true)
                 } else {
                     Timber.w("Publish session unavailable for WiFi Aware data path to $peerIdString")
                 }
@@ -256,11 +257,11 @@ class WifiAwareTransport(
             val peerIdString = peerId.toString()
             onPeerDiscovered(peerIdString)
 
-            // Initiate data path
+            // Initiate data path — Subscriber is the INITIATOR (client socket)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val session = subscribeSession
                 if (session != null) {
-                    initiateDataPath(session, peerId, peerIdString)
+                    initiateDataPath(session, peerId, peerIdString, isPublisher = false)
                 } else {
                     Timber.w("Subscribe session unavailable for WiFi Aware data path to $peerIdString")
                 }
@@ -269,7 +270,12 @@ class WifiAwareTransport(
     }
 
     @TargetApi(Build.VERSION_CODES.Q)
-    private fun initiateDataPath(session: DiscoverySession, peerHandle: PeerHandle, peerIdString: String) {
+    private fun initiateDataPath(
+        session: DiscoverySession,
+        peerHandle: PeerHandle,
+        peerIdString: String,
+        isPublisher: Boolean
+    ) {
         val config = WifiAwareNetworkSpecifier.Builder(session, peerHandle)
             .build()
 
@@ -281,11 +287,33 @@ class WifiAwareTransport(
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 super.onAvailable(network)
-                Timber.i("WiFi Aware data path available for $peerIdString")
+                Timber.i("WiFi Aware data path available for $peerIdString (publisher=$isPublisher)")
 
-                // Create socket connection
-                scope.launch {
-                    createSocketConnection(network, peerIdString)
+                if (isPublisher) {
+                    // Publisher is RESPONDER: open a ServerSocket and wait for the initiator
+                    scope.launch {
+                        createResponderSocket(network, peerIdString)
+                    }
+                }
+                // Initiator path is deferred to onCapabilitiesChanged where peer IPv6 is available
+            }
+
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                super.onCapabilitiesChanged(network, networkCapabilities)
+
+                if (!isPublisher) {
+                    // Subscriber is INITIATOR: extract peer IPv6 from WifiAwareNetworkInfo
+                    // and connect as a client socket
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val info = networkCapabilities.transportInfo as? WifiAwareNetworkInfo
+                        val peerIpv6 = info?.peerIpv6Addr
+                        if (peerIpv6 != null && !activeConnections.containsKey(peerIdString)) {
+                            Timber.d("WiFi Aware initiator: peer IPv6=$peerIpv6 for $peerIdString")
+                            scope.launch {
+                                createInitiatorSocket(network, peerIdString, peerIpv6.hostAddress ?: return@launch)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -319,36 +347,53 @@ class WifiAwareTransport(
         connectivityManager.requestNetwork(request, callback)
     }
 
-    private suspend fun createSocketConnection(network: Network, peerId: String) {
+    /**
+     * Publisher (RESPONDER) path: open a ServerSocket bound to the Aware network,
+     * accept the single incoming connection from the Subscriber, then close the
+     * server socket and hand the accepted socket to AwareConnection.
+     */
+    private suspend fun createResponderSocket(network: Network, peerId: String) {
         withContext(Dispatchers.IO) {
             var serverSocket: ServerSocket? = null
             try {
-                // TODO: FIXME - Socket role negotiation needed
-                // Currently both peers create ServerSocket and wait on accept(), causing deadlock.
-                // Proper WiFi Aware pattern requires:
-                // 1. Use WifiAwareNetworkSpecifier.Builder with INITIATOR/RESPONDER roles
-                // 2. RESPONDER creates ServerSocket and accepts
-                // 3. INITIATOR gets peer IPv6 from WifiAwareNetworkInfo.getPeerIpv6Addr()
-                //    via NetworkCapabilities.getTransportInfo() in onCapabilitiesChanged
-                // 4. INITIATOR connects as client: Socket().connect(InetSocketAddress(peerIp6, port))
-                //
-                // For now this is non-functional placeholder code
                 serverSocket = ServerSocket(AWARE_PORT)
-                // network.bindSocket(serverSocket)
+                network.bindSocket(serverSocket)
 
-                Timber.d("Waiting for WiFi Aware connection from $peerId on port $AWARE_PORT")
+                Timber.d("WiFi Aware responder waiting for connection from $peerId on port $AWARE_PORT")
 
                 val socket = serverSocket.accept()
-                serverSocket.close() // Close server socket after accept
+                serverSocket.close()
 
                 val connection = AwareConnection(peerId, socket)
                 activeConnections[peerId] = connection
                 connection.startReading()
 
-                Timber.i("WiFi Aware socket connected to $peerId")
+                Timber.i("WiFi Aware responder connected to $peerId")
             } catch (e: Exception) {
                 serverSocket?.close()
-                Timber.e(e, "Failed to create WiFi Aware socket connection")
+                Timber.e(e, "Failed to create WiFi Aware responder socket for $peerId")
+            }
+        }
+    }
+
+    /**
+     * Subscriber (INITIATOR) path: connect a client Socket to the Responder's
+     * well-known port using the peer's link-local IPv6 address obtained from
+     * WifiAwareNetworkInfo in onCapabilitiesChanged.
+     */
+    private suspend fun createInitiatorSocket(network: Network, peerId: String, peerIpv6: String) {
+        withContext(Dispatchers.IO) {
+            try {
+                val socket = network.socketFactory.createSocket()
+                socket.connect(InetSocketAddress(peerIpv6, AWARE_PORT), CONNECT_TIMEOUT_MS)
+
+                val connection = AwareConnection(peerId, socket)
+                activeConnections[peerId] = connection
+                connection.startReading()
+
+                Timber.i("WiFi Aware initiator connected to $peerId at [$peerIpv6]:$AWARE_PORT")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to create WiFi Aware initiator socket for $peerId at [$peerIpv6]")
             }
         }
     }
@@ -423,5 +468,6 @@ class WifiAwareTransport(
     companion object {
         private const val SERVICE_NAME = "scmessenger"
         private const val AWARE_PORT = 8765
+        private const val CONNECT_TIMEOUT_MS = 5000
     }
 }
