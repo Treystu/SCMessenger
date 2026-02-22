@@ -945,6 +945,17 @@ class MeshRepository(private val context: Context) {
     }
 
     /**
+     * Unsubscribe from a gossipsub topic via SwarmBridge.
+     */
+    fun unsubscribeTopic(topic: String) {
+        try {
+            swarmBridge?.unsubscribeTopic(topic)
+        } catch (e: Exception) {
+            Timber.w("unsubscribeTopic failed for $topic: ${e.message}")
+        }
+    }
+
+    /**
      * Broadcast data to all connected peers via SwarmBridge.
      */
     fun sendToAllPeers(data: ByteArray) {

@@ -2034,6 +2034,21 @@ open func subscribeTopic(topic: String)throws  {try rustCallWithError(FfiConvert
     )
 }
 }
+
+open func unsubscribeTopic(topic: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_swarmbridge_unsubscribe_topic(self.uniffiClonePointer(),
+        FfiConverterString.lower(topic),$0
+    )
+}
+}
+
+open func publishTopic(topic: String, data: Data)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_swarmbridge_publish_topic(self.uniffiClonePointer(),
+        FfiConverterString.lower(topic),
+        FfiConverterData.lower(data),$0
+    )
+}
+}
     
 
 }

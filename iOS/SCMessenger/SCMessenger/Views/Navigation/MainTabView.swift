@@ -49,6 +49,7 @@ struct MainTabView: View {
             Button("Re-create Identity") {
                 do {
                     try repository.createIdentity()
+                    showIdentityAlert = false
                 } catch {
                     identityRecoveryError = error.localizedDescription
                 }

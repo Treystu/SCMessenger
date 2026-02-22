@@ -178,9 +178,15 @@ final class SettingsViewModel {
         get { UserDefaults.standard.object(forKey: "privacy_cover_traffic") as? Bool ?? false }
         set {
             UserDefaults.standard.set(newValue, forKey: "privacy_cover_traffic")
-            // TODO: forward to core when UniFFI exposes CoverTrafficConfig toggle
-            // e.g. guard var s = settings else { return }
-            //      s.coverTrafficEnabled = newValue; settings = s; saveSettings()
+            // TODO: Forward to Rust core once UniFFI exposes a CoverTrafficConfig toggle.
+            // Steps to complete:
+            //   1. Add `cover_traffic_enabled: boolean` to `MeshSettings` in core/src/api.udl
+            //      and core/src/mobile_bridge.rs (struct + Default impl + validate()).
+            //   2. Regenerate iOS/Generated/api.swift (run `cargo build` then uniffi-bindgen).
+            //   3. Replace UserDefaults with:
+            //        guard var s = settings else { return }
+            //        s.coverTrafficEnabled = newValue
+            //        try? repository?.saveSettings(s)
         }
     }
 
@@ -188,7 +194,8 @@ final class SettingsViewModel {
         get { UserDefaults.standard.object(forKey: "privacy_message_padding") as? Bool ?? false }
         set {
             UserDefaults.standard.set(newValue, forKey: "privacy_message_padding")
-            // TODO: forward to core when UniFFI exposes PaddingConfig toggle
+            // TODO: Forward to Rust core once UniFFI exposes a PaddingConfig toggle.
+            // Same 3-step process as isCoverTrafficEnabled above; field name: `message_padding_enabled`.
         }
     }
 
@@ -196,7 +203,8 @@ final class SettingsViewModel {
         get { UserDefaults.standard.object(forKey: "privacy_timing_obfuscation") as? Bool ?? false }
         set {
             UserDefaults.standard.set(newValue, forKey: "privacy_timing_obfuscation")
-            // TODO: forward to core when UniFFI exposes TimingObfuscationConfig toggle
+            // TODO: Forward to Rust core once UniFFI exposes a TimingObfuscationConfig toggle.
+            // Same 3-step process as isCoverTrafficEnabled above; field name: `timing_obfuscation_enabled`.
         }
     }
 

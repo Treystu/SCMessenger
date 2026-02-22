@@ -64,8 +64,7 @@ class TopicManager(
      */
     fun subscribe(topic: String) {
         try {
-            // TODO: Call SwarmHandle.subscribe(topic) via SwarmBridge
-            // For now, just track locally
+            meshRepository.subscribeTopic(topic)
             val current = _subscribedTopics.value.toMutableSet()
             current.add(topic)
             _subscribedTopics.value = current
@@ -81,7 +80,7 @@ class TopicManager(
      */
     fun unsubscribe(topic: String) {
         try {
-            // TODO: Call SwarmHandle.unsubscribe(topic) via SwarmBridge
+            meshRepository.unsubscribeTopic(topic)
             val current = _subscribedTopics.value.toMutableSet()
             current.remove(topic)
             _subscribedTopics.value = current

@@ -32,8 +32,12 @@ final class MultipeerTransport: NSObject {
     private var isAdvertising = false
     private var isBrowsing = false
 
-    // Reconnection state: maps peer display name → retry count
+    // Reconnection state: maps peer display name → retry count.
+    // All reads and writes go through `reconnectQueue` to prevent data races
+    // (MCSessionDelegate callbacks fire on an internal delegate queue, while
+    // scheduleReconnect and disconnect() may be called from other queues).
     private var reconnectAttempts: [String: Int] = [:]
+    private let reconnectQueue = DispatchQueue(label: "com.scmessenger.multipeer.reconnect")
     // Maximum reconnect attempts before giving up
     private let maxReconnectAttempts = 5
     // Base delay in seconds for exponential backoff
@@ -75,29 +79,31 @@ final class MultipeerTransport: NSObject {
     /// from the retry table so it can be re-discovered organically.
     private func scheduleReconnect(for peer: MCPeerID) {
         let name = peer.displayName
-        let attempt = reconnectAttempts[name, default: 0]
+        reconnectQueue.sync {
+            let attempt = reconnectAttempts[name, default: 0]
 
-        guard attempt < maxReconnectAttempts else {
-            logger.warning("Reconnect: giving up on \(name) after \(attempt) attempts")
-            reconnectAttempts.removeValue(forKey: name)
-            return
-        }
-
-        let delay = reconnectBaseDelay * pow(2.0, Double(attempt))
-        let cappedDelay = min(delay, 60.0)
-        reconnectAttempts[name] = attempt + 1
-
-        logger.info("Reconnect: scheduling attempt \(attempt + 1)/\(maxReconnectAttempts) for \(name) in \(Int(cappedDelay))s")
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + cappedDelay) { [weak self] in
-            guard let self else { return }
-            // Only invite if the peer is not already connected and we are still browsing
-            guard !self.connectedPeers.contains(peer), let browser = self.browser else {
-                self.logger.debug("Reconnect: skipping \(name) — already connected or not browsing")
+            guard attempt < maxReconnectAttempts else {
+                logger.warning("Reconnect: giving up on \(name) after \(attempt) attempts")
+                reconnectAttempts.removeValue(forKey: name)
                 return
             }
-            self.logger.info("Reconnect: re-inviting \(name)")
-            browser.invitePeer(peer, to: self.session, withContext: nil, timeout: 10)
+
+            let delay = reconnectBaseDelay * pow(2.0, Double(attempt))
+            let cappedDelay = min(delay, 60.0)
+            reconnectAttempts[name] = attempt + 1
+
+            logger.info("Reconnect: scheduling attempt \(attempt + 1)/\(maxReconnectAttempts) for \(name) in \(Int(cappedDelay))s")
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + cappedDelay) { [weak self] in
+                guard let self else { return }
+                // Only invite if the peer is not already connected and we are still browsing
+                guard !self.connectedPeers.contains(peer), let browser = self.browser else {
+                    self.logger.debug("Reconnect: skipping \(name) — already connected or not browsing")
+                    return
+                }
+                self.logger.info("Reconnect: re-inviting \(name)")
+                browser.invitePeer(peer, to: self.session, withContext: nil, timeout: 10)
+            }
         }
     }
     
@@ -173,8 +179,9 @@ final class MultipeerTransport: NSObject {
     }
     
     func disconnect() {
-        // Clear reconnect table first so scheduled retries become no-ops
-        reconnectAttempts.removeAll()
+        // Clear reconnect table first so scheduled retries become no-ops.
+        // async is safe here — retries check connectedPeers before re-inviting.
+        reconnectQueue.async { self.reconnectAttempts.removeAll() }
         session.disconnect()
         stopAdvertising()
         stopBrowsing()
@@ -196,8 +203,8 @@ extension MultipeerTransport: MCSessionDelegate {
         switch state {
         case .connected:
             connectedPeers.insert(peerID)
-            // Clear any pending reconnect counter — peer is healthy again
-            reconnectAttempts.removeValue(forKey: peerID.displayName)
+            // Clear any pending reconnect counter — peer is healthy again.
+            reconnectQueue.async { self.reconnectAttempts.removeValue(forKey: peerID.displayName) }
             MeshEventBus.shared.peerEvents.send(.connected(peerId: peerID.displayName))
 
         case .connecting:
