@@ -64,8 +64,7 @@ class TopicManager(
      */
     fun subscribe(topic: String) {
         try {
-            // TODO: Call SwarmHandle.subscribe(topic) via SwarmBridge
-            // For now, just track locally
+            meshRepository.subscribeTopic(topic)
             val current = _subscribedTopics.value.toMutableSet()
             current.add(topic)
             _subscribedTopics.value = current
@@ -81,7 +80,7 @@ class TopicManager(
      */
     fun unsubscribe(topic: String) {
         try {
-            // TODO: Call SwarmHandle.unsubscribe(topic) via SwarmBridge
+            meshRepository.unsubscribeTopic(topic)
             val current = _subscribedTopics.value.toMutableSet()
             current.remove(topic)
             _subscribedTopics.value = current
@@ -89,6 +88,20 @@ class TopicManager(
             Timber.i("Unsubscribed from topic: $topic")
         } catch (e: Exception) {
             Timber.e(e, "Failed to unsubscribe from topic: $topic")
+        }
+    }
+
+    /**
+     * Publish data to a gossipsub topic via SwarmBridge.
+     * Must be subscribed to the topic before publishing.
+     */
+    fun publish(topic: String, data: ByteArray) {
+        try {
+            check(_subscribedTopics.value.contains(topic)) { "Not subscribed to topic: $topic" }
+            meshRepository.publishTopic(topic, data)
+            Timber.d("Published ${data.size} bytes to topic: $topic")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to publish to topic: $topic")
         }
     }
 

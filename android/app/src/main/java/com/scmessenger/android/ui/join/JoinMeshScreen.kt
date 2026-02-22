@@ -161,7 +161,11 @@ private fun QrScannerView(
             Text("Cancel")
         }
 
-        // TODO: Integrate CameraX + ML Kit Barcode Scanner
+        // TODO: Replace mock camera preview with real CameraX viewfinder + ML Kit barcode scanner.
+        // Steps: (1) add androidx.camera:camera-camera2 + com.google.mlkit:barcode-scanning to
+        // build.gradle, (2) implement a CameraX AndroidViewBinding that calls onQrScanned() when
+        // BarcodeScanner detects a QR code. The parseAndJoin() logic below is already complete.
+        // Debug mode auto-fills mock data (see LaunchedEffect below) so the flow is testable now.
         // Mock QR scan for development only
         if (com.scmessenger.android.BuildConfig.DEBUG) {
             LaunchedEffect(Unit) {

@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import com.scmessenger.android.service.AndroidPlatformBridge
 import com.scmessenger.android.ui.theme.SCMessengerTheme
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
+import javax.inject.Inject
 
 /**
  * Main activity for SCMessenger.
@@ -18,6 +20,9 @@ import timber.log.Timber
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var platformBridge: AndroidPlatformBridge
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,13 +43,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // TODO: Notify platform bridge of foreground state
+        platformBridge.notifyForeground()
         Timber.d("MainActivity resumed")
     }
 
     override fun onPause() {
         super.onPause()
-        // TODO: Notify platform bridge of background state
+        platformBridge.notifyBackground()
         Timber.d("MainActivity paused")
     }
 }

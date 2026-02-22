@@ -73,6 +73,10 @@ pub enum SwarmCommand {
     AddKadAddress { peer_id: PeerId, addr: Multiaddr },
     /// Subscribe to a Gossipsub topic
     SubscribeTopic { topic: String },
+    /// Unsubscribe from a Gossipsub topic
+    UnsubscribeTopic { topic: String },
+    /// Publish data to a Gossipsub topic
+    PublishTopic { topic: String, data: Vec<u8> },
     /// Get currently subscribed topics
     GetTopics { reply: mpsc::Sender<Vec<String>> },
     /// Share our ledger with a specific peer
@@ -257,6 +261,22 @@ impl SwarmHandle {
     pub async fn subscribe_topic(&self, topic: String) -> Result<()> {
         self.command_tx
             .send(SwarmCommand::SubscribeTopic { topic })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))
+    }
+
+    /// Unsubscribe from a Gossipsub topic
+    pub async fn unsubscribe_topic(&self, topic: String) -> Result<()> {
+        self.command_tx
+            .send(SwarmCommand::UnsubscribeTopic { topic })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))
+    }
+
+    /// Publish data to a Gossipsub topic
+    pub async fn publish_topic(&self, topic: String, data: Vec<u8>) -> Result<()> {
+        self.command_tx
+            .send(SwarmCommand::PublishTopic { topic, data })
             .await
             .map_err(|_| anyhow::anyhow!("Swarm task not running"))
     }
@@ -1140,6 +1160,25 @@ pub async fn start_swarm_with_config(
                                         tracing::info!("📡 Subscribed to topic: {}", topic);
                                         subscribed_topics.insert(topic);
                                     }
+                                }
+                            }
+
+                            SwarmCommand::UnsubscribeTopic { topic } => {
+                                let ident_topic = libp2p::gossipsub::IdentTopic::new(topic.clone());
+                                if let Err(e) = swarm.behaviour_mut().gossipsub.unsubscribe(&ident_topic) {
+                                    tracing::warn!("Failed to unsubscribe from topic {}: {}", topic, e);
+                                } else {
+                                    tracing::info!("📡 Unsubscribed from topic: {}", topic);
+                                    subscribed_topics.remove(&topic);
+                                }
+                            }
+
+                            SwarmCommand::PublishTopic { topic, data } => {
+                                let ident_topic = libp2p::gossipsub::IdentTopic::new(topic.clone());
+                                if let Err(e) = swarm.behaviour_mut().gossipsub.publish(ident_topic, data) {
+                                    tracing::warn!("Failed to publish to topic {}: {}", topic, e);
+                                } else {
+                                    tracing::debug!("📡 Published to topic: {}", topic);
                                 }
                             }
 

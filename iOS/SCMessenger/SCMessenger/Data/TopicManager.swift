@@ -41,8 +41,7 @@ final class TopicManager {
         logger.info("Unsubscribing from topic: \(topic)")
         
         // Unsubscribe via SwarmBridge
-        // TODO: Implement unsubscribe in SwarmBridge FFI
-        // try meshRepository?.swarmBridge?.unsubscribe(topic: topic)
+        try meshRepository?.swarmBridge?.unsubscribeTopic(topic: topic)
         subscribedTopics.remove(topic)
         
         logger.info("✓ Unsubscribed from topic: \(topic)")
@@ -56,8 +55,7 @@ final class TopicManager {
         }
         
         // Publish via SwarmBridge
-        // TODO: Implement gossipsub publish in SwarmBridge FFI
-        // try meshRepository?.swarmBridge?.publish(topic: topic, data: data)
+        try meshRepository?.swarmBridge?.publishTopic(topic: topic, data: data)
         
         logger.debug("✓ Published to topic: \(topic)")
     }

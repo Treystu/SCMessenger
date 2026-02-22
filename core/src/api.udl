@@ -405,6 +405,12 @@ interface SwarmBridge {
     [Throws=IronCoreError]
     void subscribe_topic(string topic);
 
+    [Throws=IronCoreError]
+    void unsubscribe_topic(string topic);
+
+    [Throws=IronCoreError]
+    void publish_topic(string topic, bytes data);
+
     void shutdown();
 
     [Throws=IronCoreError]

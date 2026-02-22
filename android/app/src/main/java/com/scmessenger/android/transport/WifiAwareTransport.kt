@@ -57,6 +57,12 @@ class WifiAwareTransport(
     private val callbackLock = Any()
     private val registeredCallbacks = ConcurrentHashMap<String, ConnectivityManager.NetworkCallback>()
 
+    // Guards the initiator path in onCapabilitiesChanged against duplicate launches.
+    // putIfAbsent acts as an atomic check-and-set, preventing a second callback
+    // from racing past the activeConnections.containsKey guard before the first
+    // coroutine has inserted the completed connection.
+    private val pendingInitiators = ConcurrentHashMap<String, Boolean>()
+
     /**
      * Check if WiFi Aware is available on this device.
      */
@@ -307,10 +313,17 @@ class WifiAwareTransport(
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         val info = networkCapabilities.transportInfo as? WifiAwareNetworkInfo
                         val peerIpv6 = info?.peerIpv6Addr
-                        if (peerIpv6 != null && !activeConnections.containsKey(peerIdString)) {
+                        if (peerIpv6 != null &&
+                            !activeConnections.containsKey(peerIdString) &&
+                            pendingInitiators.putIfAbsent(peerIdString, true) == null
+                        ) {
                             Timber.d("WiFi Aware initiator: peer IPv6=$peerIpv6 for $peerIdString")
                             scope.launch {
-                                createInitiatorSocket(network, peerIdString, peerIpv6.hostAddress ?: return@launch)
+                                try {
+                                    createInitiatorSocket(network, peerIdString, peerIpv6.hostAddress ?: return@launch)
+                                } finally {
+                                    pendingInitiators.remove(peerIdString)
+                                }
                             }
                         }
                     }
@@ -321,6 +334,9 @@ class WifiAwareTransport(
                 super.onLost(network)
                 Timber.d("WiFi Aware data path lost for $peerIdString")
                 activeConnections.remove(peerIdString)?.close()
+                // Also evict any in-flight initiator sentinel so the next
+                // onCapabilitiesChanged can re-attempt after the network recovers.
+                pendingInitiators.remove(peerIdString)
                 val callbackToRemove = synchronized(callbackLock) {
                     registeredCallbacks.remove(peerIdString)
                 }
@@ -358,6 +374,8 @@ class WifiAwareTransport(
             try {
                 serverSocket = ServerSocket(AWARE_PORT)
                 network.bindSocket(serverSocket)
+                // Prevent accept() from blocking indefinitely if the initiator never connects.
+                serverSocket.soTimeout = CONNECT_TIMEOUT_MS
 
                 Timber.d("WiFi Aware responder waiting for connection from $peerId on port $AWARE_PORT")
 

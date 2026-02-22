@@ -81,9 +81,11 @@ pub struct DeviceState {
 impl DeviceState {
     /// Construct from the UniFFI-facing `DeviceProfile`.
     pub fn from_profile(profile: &DeviceProfile) -> Self {
-        let network_type = match (profile.has_wifi, profile.is_charging) {
-            (true, _) => NetworkType::Wifi,
-            (false, _) => NetworkType::Cellular,
+        let network_type = if profile.has_wifi {
+            NetworkType::Wifi
+        } else {
+            // WiFi absent does not imply cellular; DeviceProfile lacks a cellular flag.
+            NetworkType::Unknown
         };
         Self {
             battery_level: profile.battery_pct,
@@ -558,18 +560,18 @@ impl MeshService {
         if battery <= 10 && !charging {
             return BehaviorAdjustment {
                 scan_interval_ms: 30_000, // 30 s — barely alive
-                relay_enabled: false,
-                relay_budget: 0,
+                relay_enabled: true,
+                relay_budget: 5,          // minimal but non-zero — relay IS messaging
                 minimal_operation: true,
             };
         }
 
-        // Low battery: reduce everything but keep messaging alive.
+        // Low battery: reduce everything but keep messaging and relay alive.
         if battery <= 20 && !charging {
             return BehaviorAdjustment {
                 scan_interval_ms: 10_000, // 10 s
-                relay_enabled: false,     // no relay duty when low
-                relay_budget: 0,
+                relay_enabled: true,
+                relay_budget: 20,         // reduced but non-zero
                 minimal_operation: false,
             };
         }
@@ -1448,6 +1450,30 @@ impl SwarmBridge {
             .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
+    /// Unsubscribe from a Gossipsub topic.
+    pub fn unsubscribe_topic(&self, topic: String) -> Result<(), crate::IronCoreError> {
+        let handle_guard = self.handle.lock();
+        let handle = handle_guard
+            .as_ref()
+            .ok_or(crate::IronCoreError::NetworkError)?;
+
+        let rt = self.get_runtime_handle();
+        rt.block_on(handle.unsubscribe_topic(topic))
+            .map_err(|_| crate::IronCoreError::NetworkError)
+    }
+
+    /// Publish data to a Gossipsub topic.
+    pub fn publish_topic(&self, topic: String, data: Vec<u8>) -> Result<(), crate::IronCoreError> {
+        let handle_guard = self.handle.lock();
+        let handle = handle_guard
+            .as_ref()
+            .ok_or(crate::IronCoreError::NetworkError)?;
+
+        let rt = self.get_runtime_handle();
+        rt.block_on(handle.publish_topic(topic, data))
+            .map_err(|_| crate::IronCoreError::NetworkError)
+    }
+
     /// Shutdown the swarm gracefully.
     pub fn shutdown(&self) {
         let handle_guard = self.handle.lock();
@@ -1485,11 +1511,11 @@ mod tests {
 
     #[test]
     fn test_compute_behavior_minimal_mode() {
-        // <= 10% and not charging → minimal operation
+        // <= 10% and not charging → minimal operation with tiny relay budget
         let adj = MeshService::compute_behavior(&make_state(10, false, MotionState::Still));
         assert!(adj.minimal_operation);
-        assert!(!adj.relay_enabled);
-        assert_eq!(adj.relay_budget, 0);
+        assert!(adj.relay_enabled);   // relay stays ON — it IS messaging
+        assert_eq!(adj.relay_budget, 5);
         assert!(adj.scan_interval_ms >= 10_000);
 
         // Charging saves it even at 5%
@@ -1499,11 +1525,11 @@ mod tests {
 
     #[test]
     fn test_compute_behavior_low_battery() {
-        // 20% not charging → no relay, not minimal
+        // 20% not charging → reduced relay, not minimal
         let adj = MeshService::compute_behavior(&make_state(20, false, MotionState::Walking));
         assert!(!adj.minimal_operation);
-        assert!(!adj.relay_enabled);
-        assert_eq!(adj.relay_budget, 0);
+        assert!(adj.relay_enabled);   // relay stays ON
+        assert_eq!(adj.relay_budget, 20);
         assert!(adj.scan_interval_ms > 2_000);
 
         // 21% not charging → normal
@@ -1602,8 +1628,8 @@ mod tests {
         });
 
         let adj = svc.recommended_behavior().unwrap();
-        assert!(!adj.relay_enabled);
-        assert_eq!(adj.relay_budget, 0);
+        assert!(adj.relay_enabled);   // relay stays ON even at low battery
+        assert_eq!(adj.relay_budget, 20);
         assert!(!adj.minimal_operation);
 
         // Transition to critical battery

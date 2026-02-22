@@ -49,6 +49,7 @@ struct MainTabView: View {
             Button("Re-create Identity") {
                 do {
                     try repository.createIdentity()
+                    showIdentityAlert = false
                 } catch {
                     identityRecoveryError = error.localizedDescription
                 }
@@ -89,6 +90,8 @@ struct MainTabView: View {
 struct ConversationListView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var conversations: [Conversation] = []
+    @State private var showingNewContact = false
+    @State private var pendingChatConversation: Conversation?
     
     var body: some View {
         List(conversations) { conversation in
@@ -102,9 +105,23 @@ struct ConversationListView: View {
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: {}) {
+                Button(action: { showingNewContact = true }) {
                     Image(systemName: "square.and.pencil")
                 }
+            }
+        }
+        .sheet(isPresented: $showingNewContact, onDismiss: {
+            loadConversations()
+            if let conv = pendingChatConversation {
+                pendingChatConversation = nil
+                // Navigate to chat by appending to conversation list selection
+                conversations = conversations.filter { $0.peerId != conv.peerId }
+                conversations.insert(conv, at: 0)
+            }
+        }) {
+            NavigationStack {
+                AddContactView(pendingChatConversation: $pendingChatConversation)
+                    .environment(repository)
             }
         }
         .task {
