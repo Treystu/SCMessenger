@@ -2,14 +2,17 @@ package com.scmessenger.android.service
 
 import android.app.Notification
 import android.app.NotificationChannel
+import android.app.ForegroundServiceStartNotAllowedException
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import com.scmessenger.android.R
 import com.scmessenger.android.ui.MainActivity
 import dagger.hilt.android.AndroidEntryPoint
@@ -83,8 +86,13 @@ class MeshForegroundService : Service() {
 
         Timber.i("Starting mesh service")
 
-        // Start foreground with notification
-        startForeground(NOTIFICATION_ID, createNotification())
+        // Start foreground with notification. Android 14+ can reject this if
+        // app state/permissions are not currently eligible.
+        if (!tryStartForeground()) {
+            Timber.e("Foreground start denied by OS; aborting mesh startup")
+            stopSelf()
+            return
+        }
 
         // Acquire WakeLock for scan windows
         acquireWakeLock()
@@ -310,6 +318,29 @@ class MeshForegroundService : Service() {
         val notification = createNotification()
         val notificationManager = getSystemService(NotificationManager::class.java)
         notificationManager.notify(NOTIFICATION_ID, notification)
+    }
+
+    private fun tryStartForeground(): Boolean {
+        val notification = createNotification()
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ServiceCompat.startForeground(
+                    this,
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            true
+        } catch (e: SecurityException) {
+            Timber.e(e, "SecurityException while starting foreground service")
+            false
+        } catch (e: ForegroundServiceStartNotAllowedException) {
+            Timber.e(e, "ForegroundServiceStartNotAllowedException while starting foreground service")
+            false
+        }
     }
 
     private fun showMessageNotification(message: uniffi.api.MessageRecord) {

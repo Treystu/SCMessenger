@@ -25,7 +25,6 @@
     
     <!-- Foreground service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     
     <!-- Post notifications (API 33+) -->
@@ -84,7 +83,7 @@
             android:name=".service.MeshForegroundService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="location|connectedDevice" />
+            android:foregroundServiceType="connectedDevice" />
         
         <!-- Optional: VPN Service for persistent connection -->
         <service
