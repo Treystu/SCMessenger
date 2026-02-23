@@ -21,20 +21,24 @@ Action key:
 | `ios/FINAL_STATUS.md` | untagged snapshot sections | `delete/replace` (usage) | `docs/CURRENT_STATE.md`, `ios/README.md` | done |
 | `ios/COMPLETE_STATUS.md` | untagged snapshot sections | `delete/replace` (usage) | `docs/CURRENT_STATE.md`, `ios/README.md` | done |
 | `ios/IMPLEMENTATION_STATUS.md` | untagged snapshot sections | `delete/replace` (usage) | `docs/CURRENT_STATE.md`, `ios/README.md` | done |
+| `PRODUCTION_READY.md` | readiness proof, checklists, summary claims | `move` + `delete/replace` | `docs/CURRENT_STATE.md`, `docs/TESTING_GUIDE.md` | done |
+| `INTEGRATION_COMPLETE.md` | integration verdict and performance claims | `move` + `delete/replace` | `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md` | done |
+| `INTEGRATION_VERIFICATION.md` | phase activation claims | `move` + `delete/replace` | `docs/CURRENT_STATE.md`, `docs/REPO_CONTEXT.md` | done |
+| `DOCKER_TEST_SETUP_COMPLETE.md` | setup-complete and CI claims | `rewrite` + `move` | `docker/README.md`, `docs/CURRENT_STATE.md` | done |
+| `DOCKER_TEST_QUICKREF.md` | command/reference card | `rewrite` | `docker/README.md`, `docs/CURRENT_STATE.md` | done |
+| `DOCKER_QUICKSTART.md` | cloud/bootstrap quickstart | `rewrite` + `move` | `docs/UNIFIED_GLOBAL_APP_PLAN.md`, `docs/CURRENT_STATE.md` | done |
+| `docs/REMEDIATION_PLAN.md` | remediation roadmap checkpoints | `move` + `delete/replace` | `REMAINING_WORK_TRACKING.md`, `docs/GLOBAL_ROLLOUT_PLAN.md` | done |
+| `SECURITY_AUDIT_NOTES.md` | audit findings and actions | `rewrite` + `move` | `SECURITY.md`, `docs/CURRENT_STATE.md` | done |
+| `android/IMPLEMENTATION_STATUS.md` | implementation checkpoint claims | `move` + `delete/replace` | `docs/CURRENT_STATE.md`, `android/README.md` | done |
 
 ## Next High-Impact Queue
 
-| File | Section(s) | Action | Target |
-| --- | --- | --- | --- |
-| `PRODUCTION_READY.md` | test proofs, readiness checklist, code statistics | `move` + `delete/replace` | `docs/CURRENT_STATE.md`, `docs/TESTING_GUIDE.md` |
-| `INTEGRATION_COMPLETE.md` | integration verdict claims and performance claims | `move` + `delete/replace` | `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md` |
-| `INTEGRATION_VERIFICATION.md` | runtime phase activation claims | `move` + `rewrite` | `docs/CURRENT_STATE.md`, `docs/REPO_CONTEXT.md` |
-| `DOCKER_TEST_SETUP_COMPLETE.md` | delivered infra + CI workflow claims | `rewrite` + `move` | `docker/README.md`, `docs/CURRENT_STATE.md` |
-| `DOCKER_TEST_QUICKREF.md` | test commands and service matrix | `rewrite` | keep in file with canonical command validation |
-| `DOCKER_QUICKSTART.md` | cloud/deploy examples and bootstrap instructions | `rewrite` | keep in file, align with community-operated model |
-| `docs/REMEDIATION_PLAN.md` | phase remediation roadmap | `move` + `delete/replace` | `REMAINING_WORK_TRACKING.md`, `docs/GLOBAL_ROLLOUT_PLAN.md` |
-| `SECURITY_AUDIT_NOTES.md` | vulnerability status and action priorities | `rewrite` + `move` | `SECURITY.md`, `docs/CURRENT_STATE.md` |
-| `android/IMPLEMENTATION_STATUS.md` | implementation checkpoint claims | `move` + `rewrite` | `docs/CURRENT_STATE.md`, `android/README.md` |
+High-impact queue completed for this pass. Lower-impact followup markdown docs were also normalized with explicit section-action outcome blocks on 2026-02-23.
+
+Normalization verification snapshot:
+- followup markdown docs in tracker: 53
+- followup markdown docs with explicit section-action outcome block: 53
+- missing action blocks: 0
 
 ## Verification Rules
 

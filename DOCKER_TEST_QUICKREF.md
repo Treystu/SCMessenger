@@ -8,6 +8,13 @@
 
 > Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
 
+## [Current] Section Action Outcome (2026-02-23)
+
+- `rewrite`: quick-reference commands remain usable only after command/path verification against current repo scripts.
+- `move`: canonical Docker/testing status belongs in `docs/CURRENT_STATE.md` and `docker/README.md`.
+- `delete/replace`: stale CI/runtime assumptions in this file should be treated as historical until revalidated.
+- `keep`: retain this as an operator shortcut card once command lines are reconfirmed.
+
 ## [Needs Revalidation] One-Line Commands
 
 ```bash

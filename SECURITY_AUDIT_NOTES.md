@@ -13,6 +13,13 @@
 
 ---
 
+## [Current] Section Action Outcome (2026-02-23)
+
+- `move`: active security posture and enforcement policy belong in `SECURITY.md` and `docs/CURRENT_STATE.md`.
+- `move`: unresolved remediation tasks belong in `REMAINING_WORK_TRACKING.md`.
+- `rewrite`: dependency advisory snapshots here require fresh rerun before operational use.
+- `keep`: retain this audit as a historical evidence snapshot.
+
 ## [Needs Revalidation] Summary
 
 - 1 vulnerability (error-level)

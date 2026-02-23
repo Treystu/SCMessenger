@@ -8,6 +8,13 @@
 
 This guide gets you up and running with SCMessenger in Docker in under 5 minutes.
 
+## [Current] Section Action Outcome (2026-02-23)
+
+- `rewrite`: this guide remains operational only where commands match current docker files and image/runtime behavior.
+- `move`: community-operated deployment policy belongs in `docs/UNIFIED_GLOBAL_APP_PLAN.md`.
+- `move`: current validated runtime behavior belongs in `docs/CURRENT_STATE.md`.
+- `delete/replace`: cloud/bootstrap examples here are historical unless validated against current bootstrap model and scripts.
+
 ## [Needs Revalidation] Prerequisites
 
 - Docker and Docker Compose installed

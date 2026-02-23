@@ -159,6 +159,15 @@ bash
 cd core
 cargo run --bin gen_swift --features gen-bindings
 # Outputs to: core/target/generated-sources/uniffi/swift/
+
+## [Current] Section Action Outcome (2026-02-23)
+
+- `move`: current verified behavior and active priorities belong in `docs/CURRENT_STATE.md` and `REMAINING_WORK_TRACKING.md`.
+- `move`: rollout and architecture-level decisions belong in `docs/GLOBAL_ROLLOUT_PLAN.md`, `docs/UNIFIED_GLOBAL_APP_PLAN.md`, and `docs/REPO_CONTEXT.md`.
+- `rewrite`: operational commands/examples in this file require revalidation against current code/scripts before use.
+- `keep`: retain this file as supporting context and workflow/reference detail.
+- `delete/replace`: do not use this file alone as authoritative current-state truth; use canonical docs above.
+
 # Generates: api.swift (Swift bindings) + apiFFI.h (C header) + apiFFI.modulemap
 Build the Static Library
 bash

@@ -8,6 +8,13 @@
 
 > Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
 
+## [Current] Section Action Outcome (2026-02-23)
+
+- `rewrite`: use this file as a historical setup reference; revalidate commands against checked-in docker scripts before use.
+- `move`: current Docker test/ops status belongs in `docker/README.md` and `docs/CURRENT_STATE.md`.
+- `move`: open Docker consistency issues belong in `REMAINING_WORK_TRACKING.md`.
+- `delete/replace`: do not treat this file's completion language as current truth without revalidation.
+
 ## [Needs Revalidation] Executive Summary
 
 **Objective**: Set up comprehensive Docker-based mock test infrastructure for SCMessenger  

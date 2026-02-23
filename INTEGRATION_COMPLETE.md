@@ -8,6 +8,13 @@
 
 > Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
 
+## [Current] Section Action Outcome (2026-02-23)
+
+- `move`: current runtime integration status and verified behavior are tracked in `docs/CURRENT_STATE.md` and `docs/REPO_CONTEXT.md`.
+- `move`: unresolved integration risks/tasks are tracked in `REMAINING_WORK_TRACKING.md`.
+- `delete/replace`: avoid using this file's completion verdicts as current release truth.
+- `keep`: retain this document as historical integration context and rationale.
+
 ## [Needs Revalidation] Executive Summary
 
 **Previous Status (from Gemini Audit):**

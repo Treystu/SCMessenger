@@ -8,9 +8,9 @@ This report captures the three-pass repository verification requested for full-c
 
 Scope note: inventory uses `rg --files` (source-relevant files) and excludes transient hidden build outputs such as `.build/`.
 
-- Total tracked files (`rg --files`): **392**
-- Tracker entries (`docs/DOC_PASS_TRACKER.md`): **392**
-- Checked entries: **392**
+- Total tracked files (`rg --files`): **393**
+- Tracker entries (`docs/DOC_PASS_TRACKER.md`): **393**
+- Checked entries: **393**
 - Pending entries: **0**
 
 Directory counts:
@@ -18,7 +18,7 @@ Directory counts:
 - `core/`: 90
 - `android/`: 90
 - `iOS/`: 88
-- `docs/`: 19
+- `docs/`: 20
 - `docker/`: 21
 - `cli/`: 12
 - `mobile/`: 4
@@ -35,12 +35,12 @@ Pattern set:
 
 Results:
 
-- Total hits: **357**
+- Total hits: **352**
 - Highest-concentration roots:
-  - `iOS`: 192
+  - `iOS`: 182
   - `core`: 29
-  - `android`: 25
-  - `docs`: 20
+  - `android`: 23
+  - `docs`: 25
   - `docker`: 17
 
 Interpretation:
@@ -59,13 +59,13 @@ TODO/FIXME sync outcome:
 Keyword distribution (`core`, `android`, `iOS`, `wasm`, `ui`, `cli`, `mobile`, `docs`):
 
 - `relay`: `1574, 167, 499, 129, 4, 20, 0, 142`
-- `bootstrap`: `141, 44, 50, 0, 3, 120, 0, 106`
-- `public_key_hex`: `45, 1, 9, 8, 0, 22, 2, 12`
-- `identity_id`: `37, 9, 6, 2, 0, 14, 1, 8`
-- `libp2p_peer_id`: `6, 17, 16, 0, 0, 2, 0, 7`
+- `bootstrap`: `141, 44, 49, 0, 3, 120, 0, 112`
+- `public_key_hex`: `45, 1, 8, 8, 0, 22, 2, 12`
+- `identity_id`: `37, 9, 5, 2, 0, 14, 1, 8`
+- `libp2p_peer_id`: `6, 17, 15, 0, 0, 2, 0, 7`
 - `privacy`: `29, 18, 85, 1, 0, 0, 0, 35`
 - `qr`: `16, 68, 81, 0, 0, 0, 0, 9`
-- `history`: `15, 71, 428, 0, 1, 67, 0, 42`
+- `history`: `15, 71, 427, 0, 1, 67, 0, 44`
 
 Interpretation:
 
@@ -76,7 +76,7 @@ Interpretation:
 
 ## Confirmed Outcome
 
-- Repository-wide file coverage is complete (**392/392 checked**).
+- Repository-wide file coverage is complete (**393/393 checked**).
 - No unreviewed tracker entries remain.
 - Remaining work is implementation/parity/operational hardening, not discovery.
 

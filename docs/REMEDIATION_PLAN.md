@@ -6,6 +6,13 @@
 
  # SCMessenger Implementation Progress & Roadmap
 
+## [Current] Section Action Outcome (2026-02-23)
+
+- `move`: active remediation backlog belongs in `REMAINING_WORK_TRACKING.md`.
+- `move`: rollout-phase execution belongs in `docs/GLOBAL_ROLLOUT_PLAN.md`.
+- `delete/replace`: roadmap checkpoints here are historical unless reflected in canonical backlog and rollout docs.
+- `keep`: retain this file as historical remediation context.
+
 ## [Needs Revalidation] 📊 Current Status Summary
 
 A cross-platform audit reveals that while the core mesh connectivity (via UniFFI) is functional, there is significant non-parity between Android and iOS, particularly in UX (Onboarding) and advanced Privacy features.

@@ -8,6 +8,12 @@
 
 > Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
 
+## [Current] Section Action Outcome (2026-02-23)
+
+- `delete/replace`: do not use this file as current Android readiness truth; use `docs/CURRENT_STATE.md` and `android/README.md`.
+- `move`: active Android implementation gaps and priorities are tracked in `REMAINING_WORK_TRACKING.md`.
+- `keep`: retain this checkpoint as historical implementation context.
+
 ## [Needs Revalidation] ✅ Completed & Verified
 
 The following phases have been implemented and verified as building successfully:
