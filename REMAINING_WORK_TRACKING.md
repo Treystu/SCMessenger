@@ -19,14 +19,12 @@ This is the active implementation backlog based on repository state verified on 
    - Current: compile blocker fixed (`Network.bindSocket(ServerSocket)` removed), but no device-level interoperability report
    - Target: verify subscriber/responder connectivity on supported hardware and document pass/fail by Android version/device
 
-## Priority 1: Platform UX Completeness
+4. Immediate functionality wiring audit and fix pass (FULL SCAN)
+   - Scope: audit all core and app-facing flows for incorrectly wired, partially wired, duplicated, or dead/unreachable code paths
+   - Current: latest pass completed on 2026-02-23; core flows, QR import/export paths, Android+iOS builds, and iOS device-target compile were verified
+   - Remaining: non-core follow-ups only (privacy toggle API exposure, warnings cleanup, physical device field-matrix validation)
 
-1. Complete iOS repository background operation stubs
-   - File: `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift`
-   - Current: several methods are placeholders (`syncPendingMessages`, maintenance helpers)
-   - Target: implement actual background sync/discovery/update routines or remove unused stubs
-
-## Priority 2: Tooling and Validation Coverage
+## Priority 1: Tooling and Validation Coverage
 
 1. Add browser-executed WASM test job
    - Current: workspace tests cover native/non-browser WASM paths only
@@ -46,6 +44,7 @@ This is the active implementation backlog based on repository state verified on 
 - Core NAT reflection integration tests pass
 - iOS build verification script passes, including static library build
 - iOS simulator app build passes (`SCMessenger` scheme, iPhone 17 simulator)
+- iOS repository background helpers are wired (sync/discovery/ledger/background hooks)
 - Android build verification script passes when `ANDROID_HOME` is set
 - Android app build passes (`./gradlew assembleDebug`)
 - Topic subscribe/unsubscribe/publish paths are wired on Android and iOS

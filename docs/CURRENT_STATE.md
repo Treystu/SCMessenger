@@ -37,6 +37,8 @@ Last verified: **2026-02-23** (local workspace checks on this machine)
 - iOS:
   - `xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj -scheme SCMessenger -destination 'platform=iOS Simulator,name=iPhone 17' build`
   - Result: **pass**
+  - `xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj -scheme SCMessenger -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build`
+  - Result: **pass** (device-target compile path verified)
 
 ### Browser/WASM Runtime Validation
 
@@ -57,6 +59,7 @@ Last verified: **2026-02-23** (local workspace checks on this machine)
   - embedded web landing/dashboard server
 - Mobile UniFFI surface (MeshService, SwarmBridge, managers, settings)
 - iOS and Android app codebases with active integration to Rust core
+- iOS background lifecycle repository hooks are wired (`pause/resume`, ledger save, sync/discovery triggers)
 - WASM crate with WebSocket/WebRTC abstractions and native stub-path tests
 
 ## Known Gaps and Partial Areas
@@ -79,6 +82,9 @@ Last verified: **2026-02-23** (local workspace checks on this machine)
   - Android export source: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
   - iOS identity QR: `iOS/SCMessenger/SCMessenger/Views/Settings/SettingsView.swift`
   - iOS export source: `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift`
+- iOS physical-device helper scripts are available:
+  - Build signed device artifact: `iOS/build-device.sh`
+  - Build + install on connected iPhone: `iOS/install-device.sh`
 - Android `WifiAwareTransport` compile issue was fixed; runtime behavior still needs field validation across devices/NAT scenarios
   - `android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt`
 

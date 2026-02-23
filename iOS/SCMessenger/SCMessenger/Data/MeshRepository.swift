@@ -889,22 +889,44 @@ final class MeshRepository {
 
     func onEnteringBackground() {
         logger.info("Repository: entering background")
-        // Reduce activity, save state
+        pauseMeshService()
+        do {
+            try saveLedger()
+        } catch {
+            logger.warning("Failed to save ledger on background transition: \(error.localizedDescription)")
+        }
     }
 
     func onEnteringForeground() {
         logger.info("Repository: entering foreground")
-        // Resume full activity
+        resumeMeshService()
+        updateStats()
     }
 
     func pauseService() {
-        logger.info("Pausing service")
-        // Pause but don't stop (for background expiration)
+        pauseMeshService()
     }
 
     func syncPendingMessages() async throws {
         logger.info("Syncing pending messages")
-        // Sync outbox with network
+        // Pending outbox data is managed by Rust core. The best available
+        // sync trigger here is to refresh transport connectivity so queued
+        // messages can be retried by the core.
+        if serviceState != .running {
+            try ensureServiceInitialized()
+        }
+
+        let contacts = (try? contactManager?.list()) ?? []
+        for contact in contacts {
+            guard let notes = contact.notes,
+                  let routing = parseRoutingInfo(notes: notes),
+                  !routing.addresses.isEmpty else {
+                continue
+            }
+            connectToPeer(routing.libp2pPeerId, addresses: routing.addresses)
+        }
+
+        updateStats()
     }
 
     func updateStats() {
@@ -919,22 +941,49 @@ final class MeshRepository {
 
     func quickPeerDiscovery() async throws {
         logger.info("Quick peer discovery")
-        // Brief scan for nearby peers
+        if serviceState != .running {
+            try ensureServiceInitialized()
+        }
+
+        bleCentralManager?.startScanning()
+        blePeripheralManager?.startAdvertising()
+        updateStats()
     }
 
     func performBulkSync() async throws {
         logger.info("Performing bulk sync")
-        // Full sync with all peers
+        try await syncPendingMessages()
+        try await quickPeerDiscovery()
+        try await updatePeerLedger()
     }
 
     func cleanupOldMessages() async throws {
         logger.info("Cleaning up old messages")
-        // Remove old messages based on retention policy
+        guard let contactManager = contactManager else {
+            throw MeshError.notInitialized("ContactManager not initialized")
+        }
+        guard let historyManager = historyManager else {
+            throw MeshError.notInitialized("HistoryManager not initialized")
+        }
+
+        // Retention policy: clear conversations for peers not seen in 180 days.
+        let staleThresholdSeconds: UInt64 = 180 * 24 * 60 * 60
+        let now = UInt64(Date().timeIntervalSince1970)
+
+        for contact in try contactManager.list() {
+            guard let lastSeen = contact.lastSeen else { continue }
+            if now > lastSeen && (now - lastSeen) > staleThresholdSeconds {
+                try? historyManager.removeConversation(peerId: contact.peerId)
+            }
+        }
     }
 
     func updatePeerLedger() async throws {
         logger.info("Updating peer ledger")
-        // Update connection statistics
+        guard let ledgerManager = ledgerManager else {
+            throw MeshError.notInitialized("LedgerManager not initialized")
+        }
+        try ledgerManager.save()
     }
 
     // MARK: - BLE Transport Integration
@@ -980,13 +1029,6 @@ final class MeshRepository {
             return
         }
 
-        // Store libp2p info in contact notes for recovery
-        var notes: String?
-        if let peerId = libp2pPeerId, !peerId.isEmpty {
-            let addrs = (listeners ?? []).joined(separator: ",")
-            notes = "libp2p_peer_id:\(peerId);listeners:\(addrs)"
-        }
-
         // Emit to nearby peers bus — UI will show peer in Nearby section for user to manually add
         let nonEmptyNickname = (nickname?.isEmpty == false) ? nickname : nil
         let nonEmptyLibp2p = (libp2pPeerId?.isEmpty == false) ? libp2pPeerId : nil
@@ -1009,6 +1051,33 @@ final class MeshRepository {
             logger.info("Auto-dialing discovered peer over Swarm: \(peerId)")
             connectToPeer(peerId, addresses: addrs)
         }
+    }
+
+    private func parseRoutingInfo(notes: String) -> (libp2pPeerId: String, addresses: [String])? {
+        let segments = notes.split(separator: ";").map { String($0) }
+        var libp2pPeerId: String?
+        var addresses: [String] = []
+
+        for segment in segments {
+            let trimmed = segment.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("libp2p_peer_id:") {
+                let value = trimmed.replacingOccurrences(of: "libp2p_peer_id:", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !value.isEmpty { libp2pPeerId = value }
+            } else if trimmed.hasPrefix("listeners:") {
+                let value = trimmed.replacingOccurrences(of: "listeners:", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !value.isEmpty {
+                    addresses = value
+                        .split(separator: ",")
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                }
+            }
+        }
+
+        guard let peerId = libp2pPeerId else { return nil }
+        return (peerId, addresses)
     }
 
     private func broadcastIdentityBeacon() {

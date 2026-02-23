@@ -20,7 +20,7 @@
 	
 	<!-- iOS Version -->
 	<key>LSMinimumSystemVersion</key>
-	<string>16.0</string>
+	<string>17.0</string>
 	
 	<!-- Background Modes -->
 	<key>UIBackgroundModes</key>
