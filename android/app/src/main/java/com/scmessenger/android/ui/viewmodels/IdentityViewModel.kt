@@ -91,17 +91,13 @@ class IdentityViewModel @Inject constructor(
 
     /**
      * Get QR code data for sharing identity.
-     * Returns JSON string with peer ID and public key.
+     * Returns canonical identity export JSON so contact imports fully autofill.
      */
     fun getQrCodeData(): String? {
-        val identity = _identityInfo.value ?: return null
-        if (!identity.initialized) return null
-
-        val id = identity.identityId ?: return null
-        val pubKey = identity.publicKeyHex ?: return null
-
         return try {
-            """{"peerId":"$id","publicKey":"$pubKey"}"""
+            val identity = _identityInfo.value ?: return null
+            if (!identity.initialized) return null
+            meshRepository.getIdentityExportString()
         } catch (e: Exception) {
             Timber.e(e, "Failed to generate QR code data")
             null

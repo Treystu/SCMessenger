@@ -7,10 +7,12 @@
 //
 
 import SwiftUI
+import CoreImage.CIFilterBuiltins
 
 struct SettingsView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var viewModel: SettingsViewModel?
+    @State private var showingIdentityQr = false
 
     var body: some View {
         Form {
@@ -129,6 +131,12 @@ struct SettingsView: View {
                 } label: {
                     Label("Copy Full Identity Export", systemImage: "square.and.arrow.up")
                 }
+
+                Button {
+                    showingIdentityQr = true
+                } label: {
+                    Label("Show Identity QR", systemImage: "qrcode")
+                }
             } header: {
                 Text("Identity")
             }
@@ -165,6 +173,9 @@ struct SettingsView: View {
                 viewModel = SettingsViewModel(repository: repository)
                 viewModel?.loadSettings()
             }
+        }
+        .sheet(isPresented: $showingIdentityQr) {
+            IdentityQrSheet(payload: viewModel?.getIdentityExportString() ?? "{}")
         }
     }
 }
@@ -209,6 +220,55 @@ struct RelayWarningCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.errorContainer)
         .cornerRadius(Theme.cornerRadiusSmall)
+    }
+}
+
+private struct IdentityQrSheet: View {
+    let payload: String
+    @Environment(\.dismiss) private var dismiss
+    private let context = CIContext()
+    private let filter = CIFilter.qrCodeGenerator()
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: Theme.spacingMedium) {
+                if let image = qrImage(from: payload) {
+                    Image(uiImage: image)
+                        .interpolation(.none)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 320, maxHeight: 320)
+                } else {
+                    Text("Unable to generate QR code.")
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("Scan to add this contact with full identity export details.")
+                    .font(Theme.bodySmall)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Theme.spacingLarge)
+            }
+            .padding(Theme.spacingLarge)
+            .navigationTitle("Identity QR")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func qrImage(from string: String) -> UIImage? {
+        let data = Data(string.utf8)
+        filter.setValue(data, forKey: "inputMessage")
+        filter.setValue("Q", forKey: "inputCorrectionLevel")
+
+        guard let outputImage = filter.outputImage else { return nil }
+        let scaled = outputImage.transformed(by: CGAffineTransform(scaleX: 12, y: 12))
+        guard let cgImage = context.createCGImage(scaled, from: scaled.extent) else { return nil }
+        return UIImage(cgImage: cgImage)
     }
 }
 

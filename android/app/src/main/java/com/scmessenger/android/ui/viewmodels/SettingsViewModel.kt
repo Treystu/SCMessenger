@@ -126,43 +126,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun getIdentityExportString(): String {
-        val identity = _identityInfo.value
-        var listeners = meshRepository.getListeningAddresses().toMutableList()
-        val relay = meshRepository.getPreferredRelay()
-        val localIp = meshRepository.getLocalIpAddress()
-
-        // Improve usability: Replace 0.0.0.0 with actual LAN IP
-        if (localIp != null) {
-            val updatedListeners = mutableListOf<String>()
-            var hadUnspecified = false
-            for (addr in listeners) {
-                if (addr.contains("0.0.0.0")) {
-                    updatedListeners.add(addr.replace("0.0.0.0", localIp))
-                    hadUnspecified = true
-                } else {
-                    updatedListeners.add(addr)
-                }
-            }
-
-            // If we didn't have any listeners (or just didn't have 0.0.0.0),
-            // but we have a generic "not listening" situation, maybe suggest what it WOULD be?
-            // User requested: "no direct connection IP/Port info... Get the full info"
-            listeners = updatedListeners
-        }
-
-        // Manual JSON construction to avoid external dependency for just this one thing
-        val listenersJson = listeners.joinToString(separator = ",", prefix = "[", postfix = "]") { "\"$it\"" }
-
-        return """
-            {
-              "identity_id": "${identity?.identityId ?: ""}",
-              "nickname": "${identity?.nickname ?: ""}",
-              "public_key": "${identity?.publicKeyHex ?: ""}",
-              "libp2p_peer_id": "${identity?.libp2pPeerId ?: ""}",
-              "listeners": $listenersJson,
-              "relay": "${relay ?: "None"}"
-            }
-        """.trimIndent()
+        return meshRepository.getIdentityExportString()
     }
 
     fun updateNickname(name: String) {

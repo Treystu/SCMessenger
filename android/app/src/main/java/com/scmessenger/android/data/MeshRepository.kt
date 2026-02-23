@@ -1060,6 +1060,29 @@ class MeshRepository(private val context: Context) {
         return null
     }
 
+    fun getIdentityExportString(): String {
+        val identity = getIdentityInfo() ?: return "{}"
+        var listeners = getListeningAddresses().toMutableList()
+        val relay = getPreferredRelay()
+        val localIp = getLocalIpAddress()
+
+        if (localIp != null) {
+            listeners = listeners.map { addr ->
+                if (addr.contains("0.0.0.0")) addr.replace("0.0.0.0", localIp) else addr
+            }.toMutableList()
+        }
+
+        val payload = org.json.JSONObject()
+            .put("identity_id", identity.identityId ?: "")
+            .put("nickname", identity.nickname ?: "")
+            .put("public_key", identity.publicKeyHex ?: "")
+            .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
+            .put("listeners", org.json.JSONArray(listeners))
+            .put("relay", relay ?: "None")
+
+        return payload.toString()
+    }
+
     // ========================================================================
     // OBSERVABLES FOR UI (NEW)
     // ========================================================================

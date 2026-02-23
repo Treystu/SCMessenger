@@ -73,6 +73,11 @@ Last verified: **2026-02-23** (local workspace checks on this machine)
   - Android contacts: `android/app/src/main/java/com/scmessenger/android/ui/contacts/AddContactScreen.kt`
   - iOS join: `iOS/SCMessenger/SCMessenger/Views/Topics/JoinMeshView.swift`
   - iOS contacts: `iOS/SCMessenger/SCMessenger/Views/Contacts/ContactsListView.swift`
+- Android and iOS can generate identity QR codes from full identity export payloads (ID, public key, nickname, libp2p peer ID, listeners, relay)
+  - Android identity QR: `android/app/src/main/java/com/scmessenger/android/ui/identity/IdentityScreen.kt`
+  - Android export source: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
+  - iOS identity QR: `iOS/SCMessenger/SCMessenger/Views/Settings/SettingsView.swift`
+  - iOS export source: `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift`
 - Android `WifiAwareTransport` compile issue was fixed; runtime behavior still needs field validation across devices/NAT scenarios
   - `android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt`
 

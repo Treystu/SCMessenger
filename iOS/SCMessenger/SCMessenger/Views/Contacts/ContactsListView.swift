@@ -281,34 +281,7 @@ struct AddContactView: View {
 
     private func pasteIdentity() {
         guard let string = UIPasteboard.general.string else { return }
-
-        guard let data = string.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            error = "Invalid format"
-            return
-        }
-
-        if let key = (json["public_key"] as? String)
-            ?? (json["publicKey"] as? String)
-            ?? (json["publicKeyHex"] as? String) {
-            publicKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if let nick = json["nickname"] as? String { nickname = nick.trimmingCharacters(in: .whitespacesAndNewlines) }
-        if let pid = (json["identity_id"] as? String)
-            ?? (json["identityId"] as? String)
-            ?? (json["peerId"] as? String) {
-            peerId = pid.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if let lpid = json["libp2p_peer_id"] as? String, !lpid.isEmpty { libp2pPeerId = lpid.trimmingCharacters(in: .whitespacesAndNewlines) }
-        if let list = json["listeners"] as? [String] {
-            listeners = list.map { $0.replacingOccurrences(of: " (Potential)", with: "") }
-        }
-
-        if !peerId.isEmpty && publicKey.isEmpty {
-            error = "Identity ID was found, but public key is missing in this payload."
-            return
-        }
-        error = nil
+        applyImportedContact(raw: string, invalidFormatMessage: "Invalid format")
     }
 
     private func addContact(andChat: Bool) {
@@ -366,38 +339,71 @@ struct AddContactView: View {
     }
 
     private func importQrPayload(_ raw: String) {
-        guard let data = raw.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            error = "Invalid QR format"
+        applyImportedContact(raw: raw, invalidFormatMessage: "Invalid QR format")
+    }
+
+    private func applyImportedContact(raw: String, invalidFormatMessage: String) {
+        guard let payload = parseImportedContactPayload(raw: raw) else {
+            error = invalidFormatMessage
             return
         }
 
-        if let key = (json["public_key"] as? String)
-            ?? (json["publicKey"] as? String)
-            ?? (json["publicKeyHex"] as? String) {
-            publicKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if let nick = json["nickname"] as? String {
-            nickname = nick.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if let pid = (json["identity_id"] as? String)
-            ?? (json["identityId"] as? String)
-            ?? (json["peerId"] as? String) {
-            peerId = pid.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if let lpid = json["libp2p_peer_id"] as? String, !lpid.isEmpty {
-            libp2pPeerId = lpid.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if let list = json["listeners"] as? [String] {
-            listeners = list.map { $0.replacingOccurrences(of: " (Potential)", with: "") }
-        }
+        if let key = payload.publicKey { publicKey = key }
+        if let nick = payload.nickname { nickname = nick }
+        if let pid = payload.peerId { peerId = pid }
+        if let lpid = payload.libp2pPeerId { libp2pPeerId = lpid }
+        if let addrs = payload.listeners { listeners = addrs }
 
-        if !peerId.isEmpty && publicKey.isEmpty {
+        if !(payload.peerId ?? "").isEmpty && (payload.publicKey ?? "").isEmpty {
             error = "Identity ID was found, but public key is missing in this payload."
             return
         }
         error = nil
     }
+
+    private func parseImportedContactPayload(raw: String) -> ImportedContactPayload? {
+        guard let data = raw.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        let publicKey = ((json["public_key"] as? String)
+            ?? (json["publicKey"] as? String)
+            ?? (json["publicKeyHex"] as? String))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let nickname = (json["nickname"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let peerId = ((json["identity_id"] as? String)
+            ?? (json["identityId"] as? String)
+            ?? (json["peerId"] as? String))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let libp2pPeerId = ((json["libp2p_peer_id"] as? String)
+            ?? (json["libp2pPeerId"] as? String))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedLibp2pPeerId = (libp2pPeerId?.isEmpty == false) ? libp2pPeerId : nil
+
+        let listeners = (json["listeners"] as? [String])?
+            .map { $0.replacingOccurrences(of: " (Potential)", with: "") }
+
+        return ImportedContactPayload(
+            peerId: peerId?.isEmpty == false ? peerId : nil,
+            publicKey: publicKey?.isEmpty == false ? publicKey : nil,
+            nickname: nickname?.isEmpty == false ? nickname : nil,
+            libp2pPeerId: normalizedLibp2pPeerId,
+            listeners: listeners
+        )
+    }
+}
+
+private struct ImportedContactPayload {
+    let peerId: String?
+    let publicKey: String?
+    let nickname: String?
+    let libp2pPeerId: String?
+    let listeners: [String]?
 }
 
 @available(iOS 16.0, *)
