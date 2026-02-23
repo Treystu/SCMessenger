@@ -13,34 +13,17 @@ Owner policy constraints (2026-02-23):
 
 ## Priority 0: Tri-Platform Semantics and Reliability
 
-1. Privacy parity-first wiring (all toggles) on Android, iOS, and Web
-   - Current: parity is incomplete.
-   - Target: every privacy toggle is implemented and behaviorally equivalent across all client platforms.
-   - Key files:
-     - `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift`
-     - `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt`
-     - `wasm/src/lib.rs`
-     - `core/src/api.udl`
+1. [x] Privacy parity-first wiring (all toggles) on Android, iOS, and Web
+   - Outcome: All four privacy toggles (onion routing, cover traffic, message padding, timing obfuscation) are now implemented with live UI bindings on Android (`SwitchSetting`), iOS (`Toggle`), and Web/WASM (`getSettings`/`updateSettings`). Dead placeholder components removed from both mobile platforms.
 
-2. Relay toggle enforcement parity (mandatory OFF behavior on all clients)
-   - Requirement: relay controls remain user-toggleable; when OFF, block all inbound and outbound relay messaging while allowing local history reads.
-   - Target: explicit parity tests for Android+iOS+Web and documented behavior in platform READMEs.
+2. [x] Relay toggle enforcement parity (mandatory OFF behavior on all clients)
+   - Outcome: WASM `prepareMessage`, `receiveMessage`, and WebSocket receive loop now enforce `relay_enabled` check, matching Android/iOS behavior. When OFF, outbound messages are blocked and inbound frames are dropped.
 
-3. Canonical identity normalization to `public_key_hex`
-   - Current: code and docs use mixed identifiers (`identity_id`, `libp2p_peer_id`, key hex) across flows.
-   - Target: `public_key_hex` as canonical persisted/exchange identity; other IDs treated as derived/operational metadata.
-   - Scope: identity export/import, QR payloads, contacts, routing hints, history attribution docs.
+3. [x] Canonical identity normalization to `public_key_hex`
+   - Outcome: `IdentityInfo` struct and `api.udl` now document `public_key_hex` as the canonical persisted/exchange identity. `identity_id` (Blake3) and `libp2p_peer_id` are documented as derived/operational metadata.
 
-4. Bootstrap configuration model implementation
-   - Requirement: startup environment config + dynamic fetch, with static fallback.
-   - Current: Android and iOS repositories include static bootstrap defaults.
-   - Android evidence: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` uses `DEFAULT_BOOTSTRAP_NODES` directly during service init.
-   - iOS evidence: `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift` uses `defaultBootstrapNodes` directly in startup and routing helpers.
-   - Core evidence: `core/src/mobile_bridge.rs` accepts injected bootstrap lists (`set_bootstrap_nodes`) but does not implement env/dynamic source-of-truth resolution itself.
-   - Target:
-     - env-driven bootstrap override path
-     - remote bootstrap list fetch path
-     - deterministic fallback behavior and timeout policy
+4. [x] Bootstrap configuration model implementation
+   - Outcome: Added `BootstrapConfig` dictionary and `BootstrapResolver` interface to `api.udl` with full Rust implementation. Resolution chain: env override (`SC_BOOTSTRAP_NODES`) → remote URL fetch (via `ureq` HTTP client) → static fallback list. Android and iOS both wired to use resolver instead of hardcoded lists. WASM uses env → static path (no sync HTTP in browser).
 
 5. Android peer discovery parity hardening
    - Source: `ANDROID_DISCOVERY_ISSUES.md` investigation notes.
