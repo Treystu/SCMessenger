@@ -154,33 +154,33 @@ impl SmartAutoAdjust {
             },
 
             AdjustmentProfile::High => AdjustmentResult {
-                scan_interval_ms: 10000,     // Still aggressive: 10 seconds
-                relay_budget_per_hour: 800,  // High but not maximum
+                scan_interval_ms: 10000,    // Still aggressive: 10 seconds
+                relay_budget_per_hour: 800, // High but not maximum
                 enable_wifi_aware: true,
                 enable_internet_relay: false, // Mesh-only
-                ble_duty_cycle: 90,          // Almost always on
+                ble_duty_cycle: 90,           // Almost always on
             },
 
             AdjustmentProfile::Standard => AdjustmentResult {
-                scan_interval_ms: 30000,     // Normal: 30 seconds
-                relay_budget_per_hour: 300,  // Moderate
+                scan_interval_ms: 30000,    // Normal: 30 seconds
+                relay_budget_per_hour: 300, // Moderate
                 enable_wifi_aware: true,
                 enable_internet_relay: true,
                 ble_duty_cycle: 50, // Normal duty cycle
             },
 
             AdjustmentProfile::Reduced => AdjustmentResult {
-                scan_interval_ms: 120000,    // 2 minutes: less frequent
-                relay_budget_per_hour: 50,   // Low relay budget
-                enable_wifi_aware: false,    // Disable WiFi Aware to save power
+                scan_interval_ms: 120000,  // 2 minutes: less frequent
+                relay_budget_per_hour: 50, // Low relay budget
+                enable_wifi_aware: false,  // Disable WiFi Aware to save power
                 enable_internet_relay: false,
                 ble_duty_cycle: 20, // Low duty cycle
             },
 
             AdjustmentProfile::Minimal => AdjustmentResult {
-                scan_interval_ms: 300000,    // 5 minutes: very infrequent
-                relay_budget_per_hour: 5,    // Minimal relay
-                enable_wifi_aware: false,    // Disabled
+                scan_interval_ms: 300000, // 5 minutes: very infrequent
+                relay_budget_per_hour: 5, // Minimal relay
+                enable_wifi_aware: false, // Disabled
                 enable_internet_relay: false,
                 ble_duty_cycle: 5, // Very low duty cycle
             },

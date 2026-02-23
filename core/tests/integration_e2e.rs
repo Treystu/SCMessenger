@@ -12,7 +12,7 @@
 use scmessenger_core::crypto::encrypt::{
     decrypt_message, encrypt_message, sign_envelope, verify_envelope,
 };
-use scmessenger_core::identity::{IdentityKeys, IdentityManager, IdentityStore};
+use scmessenger_core::identity::{IdentityKeys, IdentityStore};
 use scmessenger_core::message::{Envelope, Message, MessageType};
 use scmessenger_core::store::{Inbox, Outbox, QueuedMessage};
 use tempfile::tempdir;
@@ -202,7 +202,7 @@ fn test_e2e_persistent_message_flow() {
         // Load Alice's identity
         let alice_identity_store = IdentityStore::persistent(alice_store_path.to_str().unwrap())
             .expect("Failed to open Alice's identity store");
-        let alice_keys = alice_identity_store
+        let _alice_keys = alice_identity_store
             .load_keys()
             .expect("Failed to load keys")
             .expect("Alice's keys not found");

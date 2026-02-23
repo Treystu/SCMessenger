@@ -6,7 +6,6 @@
 pub mod auto_adjust;
 pub mod ios_strategy;
 pub mod service;
-pub mod settings;
 
 pub use auto_adjust::{AdjustmentProfile, AutoAdjustEngine, DeviceProfile};
 pub use ios_strategy::{BackgroundMode, CoreBluetoothState, IosBackgroundStrategy};

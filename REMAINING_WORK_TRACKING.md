@@ -72,29 +72,34 @@ Owner policy constraints (2026-02-23):
    - Scope: crash/restart recovery, relay outage handling, offline queue replay, duplicate-safe redelivery.
 
 10. Bounded retention policy implementation
-   - Requirement: local history/outbox storage must be policy-bound to avoid unbounded disk growth.
-   - Target: configurable retention caps + deterministic pruning behavior + docs for user expectations.
-   - Scope: Android, iOS, and Web local storage behavior and defaults.
+
+- Requirement: local history/outbox storage must be policy-bound to avoid unbounded disk growth.
+- Target: configurable retention caps + deterministic pruning behavior + docs for user expectations.
+- Scope: Android, iOS, and Web local storage behavior and defaults.
 
 11. First-run consent gate (mandatory)
-   - Requirement: first app launch must present consent text explaining privacy/security boundaries.
-   - Target: consent acknowledgment gate on Android/iOS/Web before first messaging actions.
-   - Scope: UX copy parity, acceptance persistence, and re-display rules after major policy changes.
+
+- Requirement: first app launch must present consent text explaining privacy/security boundaries.
+- Target: consent acknowledgment gate on Android/iOS/Web before first messaging actions.
+- Scope: UX copy parity, acceptance persistence, and re-display rules after major policy changes.
 
 12. 80/20 platform support matrix
-   - Requirement: prioritize the smallest support matrix that covers the majority of active users.
-   - Target: explicit minimum OS/browser matrix and validation plan tied to release gates.
-   - Scope: Android API levels, iOS versions/devices, and browser families/versions.
+
+- Requirement: prioritize the smallest support matrix that covers the majority of active users.
+- Target: explicit minimum OS/browser matrix and validation plan tied to release gates.
+- Scope: Android API levels, iOS versions/devices, and browser families/versions.
 
 13. Community-operated relay/bootstrap topology support
-   - Requirement: both self-hosted and third-party-operated infra must be valid without protocol-level assumptions.
-   - Target: operator docs + connectivity tests for cloud-hosted and home-hosted relays/bootstrap nodes.
-   - Scope: examples for GCP-style deployments and low-resource/self-hosted setups.
+
+- Requirement: both self-hosted and third-party-operated infra must be valid without protocol-level assumptions.
+- Target: operator docs + connectivity tests for cloud-hosted and home-hosted relays/bootstrap nodes.
+- Scope: examples for GCP-style deployments and low-resource/self-hosted setups.
 
 14. Bootstrap governance mode decision (product choice pending)
-   - Requirement: choose how clients trust and discover bootstrap updates.
-   - Target: lock one governance mode and document it in canonical docs.
-   - Scope: trust source, update cadence, and fallback behavior.
+
+- Requirement: choose how clients trust and discover bootstrap updates.
+- Target: lock one governance mode and document it in canonical docs.
+- Scope: trust source, update cadence, and fallback behavior.
 
 ## Priority 1: Tooling, CI, and Experimental Surface
 
@@ -107,9 +112,10 @@ Owner policy constraints (2026-02-23):
    - Current: native/non-browser WASM tests only in workspace run.
    - Target: `wasm-pack` runtime test coverage in CI.
 
-3. Resolve integration test warnings in core tests
+3. [x] Resolve integration test warnings in core tests
    - Current: workspace tests pass with warning noise.
    - Target: warning-clean path for strict CI.
+   - Outcome: Cleaned up unused assignments and unused variables across all integration suites. Unit and integration tests are 100% warning-clean.
 
 4. Standardize Android CI environment setup for `ANDROID_HOME`
    - Current: local build requires explicit shell env setup.
@@ -136,36 +142,44 @@ Owner policy constraints (2026-02-23):
    - Target: either enable those tests with stable mocks or update docs/scripts to match actual execution status.
 
 10. Android ABI build coverage alignment
-   - Current: `android/app/build.gradle` declares multiple ABI filters, while `buildRustAndroid` currently builds only `aarch64-linux-android`.
-   - Target: align Rust artifact production with declared ABI support or explicitly narrow supported ABI scope in build config/docs.
 
-11. Core settings model convergence (critical reliability debt)
-   - Current: multiple overlapping settings models diverge in defaults/semantics:
-     - `core/src/mobile_bridge.rs` (`MeshSettings`, DiscoveryMode `Normal/Cautious/Paranoid`)
-     - `core/src/mobile/settings.rs` (`MeshSettings`, DiscoveryMode from transport layer)
-     - `core/src/platform/settings.rs` (`MeshSettings`, DiscoveryMode `Open/Closed/Stealth`)
-   - Target: one canonical settings schema and mapping strategy used by UniFFI/mobile/runtime layers.
+- Current: `android/app/build.gradle` declares multiple ABI filters, while `buildRustAndroid` currently builds only `aarch64-linux-android`.
+- Target: align Rust artifact production with declared ABI support or explicitly narrow supported ABI scope in build config/docs.
+
+11. [x] Core settings model convergence (critical reliability debt)
+
+- Current: multiple overlapping settings models diverge in defaults/semantics:
+  - `core/src/mobile_bridge.rs` (`MeshSettings`, DiscoveryMode `Normal/Cautious/Paranoid`)
+  - `core/src/mobile/settings.rs` (`MeshSettings`, DiscoveryMode from transport layer)
+  - `core/src/platform/settings.rs` (`MeshSettings`, DiscoveryMode `Open/Closed/Stealth`)
+- Target: one canonical settings schema and mapping strategy used by UniFFI/mobile/runtime layers.
+- Outcome: Deleted the unused `mobile/settings.rs` and `platform/settings.rs` completely. Unified purely behind the single UniFFI-verified `mobile_bridge::MeshSettings` exported transparently through `api.udl`. Web clients will default to "always plugged in" behavior via this schema.
 
 12. iOS verification script integrity
-   - Current: `iOS/verify-test.sh` is a placeholder (`test`) and does not verify anything.
-   - Target: real automated check script or explicit deprecation with canonical replacement.
+
+- Current: `iOS/verify-test.sh` is a placeholder (`test`) and does not verify anything.
+- Target: real automated check script or explicit deprecation with canonical replacement.
 
 13. iOS background capability hardening
-   - Current: `iOS/SCMessenger/SCMessenger/Info.plist` declares a broad background mode set.
-   - Target: retain only modes required by implemented behavior and provisioning policy; remove speculative extras.
+
+- Current: `iOS/SCMessenger/SCMessenger/Info.plist` declares a broad background mode set.
+- Target: retain only modes required by implemented behavior and provisioning policy; remove speculative extras.
 
 14. iOS generated-binding path normalization
-   - Current: `iOS/copy-bindings.sh` writes generated files into both `iOS/SCMessenger/SCMessenger/Generated/` and `iOS/SCMessenger/Generated/`.
-   - Target: one canonical generated artifact path tied to active Xcode targets and docs.
+
+- Current: `iOS/copy-bindings.sh` writes generated files into both `iOS/SCMessenger/SCMessenger/Generated/` and `iOS/SCMessenger/Generated/`.
+- Target: one canonical generated artifact path tied to active Xcode targets and docs.
 
 15. iOS historical artifact segmentation
-   - Current: `iOS/iosdesign.md` and `iOS/SCMessenger/build_*.txt` mix design/historical/runtime evidence in active tree.
-   - Target: section-level historical tagging and relocation/retention policy to keep active docs concise.
+
+- Current: `iOS/iosdesign.md` and `iOS/SCMessenger/build_*.txt` mix design/historical/runtime evidence in active tree.
+- Target: section-level historical tagging and relocation/retention policy to keep active docs concise.
 
 16. TODO/FIXME accuracy sync pass (including external test/update signals)
-   - Current: TODO/FIXME markers are distributed across code/docs; external testing updates can drift from tracked backlog.
-   - Target: recurring TODO/FIXME audit that syncs canonical backlog items with current implementation evidence.
-   - Evidence source: `docs/TRIPLE_CHECK_REPORT.md` risk scan + direct file review.
+
+- Current: TODO/FIXME markers are distributed across code/docs; external testing updates can drift from tracked backlog.
+- Target: recurring TODO/FIXME audit that syncs canonical backlog items with current implementation evidence.
+- Evidence source: `docs/TRIPLE_CHECK_REPORT.md` risk scan + direct file review.
 
 ## Priority 2: Documentation Completion and Governance
 

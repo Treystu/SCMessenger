@@ -8,7 +8,7 @@
 // - Phase 5: Reputation tracking works (peers scored on performance)
 // - Phase 6: Retry logic works (failed messages retry with exponential backoff)
 
-use libp2p::{identity::Keypair, Multiaddr, PeerId};
+use libp2p::{identity::Keypair, Multiaddr};
 use scmessenger_core::transport::{start_swarm_with_config, MultiPortConfig, SwarmEvent};
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -60,7 +60,7 @@ async fn test_all_six_phases_integrated() {
     println!("\n✓ Alice started (Phase 2: Multi-port listening)");
 
     // Wait for Alice to start listening
-    let mut alice_addr = None;
+    let mut alice_addr: Option<Multiaddr>;
     loop {
         match timeout(Duration::from_secs(5), alice_event_rx.recv()).await {
             Ok(Some(SwarmEvent::ListeningOn(addr))) => {
@@ -92,7 +92,7 @@ async fn test_all_six_phases_integrated() {
     println!("\n✓ Bob started (Phase 2: Multi-port listening)");
 
     // Wait for Bob to start listening
-    let mut bob_addr = None;
+    let mut bob_addr: Option<Multiaddr>;
     loop {
         match timeout(Duration::from_secs(5), bob_event_rx.recv()).await {
             Ok(Some(SwarmEvent::ListeningOn(addr))) => {
@@ -379,8 +379,8 @@ async fn test_relay_protocol() {
     .expect("Failed to start Charlie");
 
     // Get listening addresses
-    let mut bob_addr = None;
-    let mut charlie_addr = None;
+    let mut bob_addr: Option<Multiaddr>;
+    let mut charlie_addr: Option<Multiaddr>;
 
     // Wait for Bob's address
     loop {

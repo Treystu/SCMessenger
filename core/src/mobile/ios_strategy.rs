@@ -222,11 +222,17 @@ impl IosBackgroundStrategy {
         tracing::info!("Background fetch triggered");
 
         // Request Bluetooth operations if enabled
-        if self.config.is_mode_enabled(BackgroundMode::BluetoothCentral) {
+        if self
+            .config
+            .is_mode_enabled(BackgroundMode::BluetoothCentral)
+        {
             self.bluetooth_state.set_central_active(true);
         }
 
-        if self.config.is_mode_enabled(BackgroundMode::BluetoothPeripheral) {
+        if self
+            .config
+            .is_mode_enabled(BackgroundMode::BluetoothPeripheral)
+        {
             self.bluetooth_state.set_peripheral_active(true);
         }
 
@@ -258,13 +264,15 @@ impl IosBackgroundStrategy {
 
     /// Check if BLE central can operate in background
     pub fn can_run_ble_central_background(&self) -> bool {
-        self.config.is_mode_enabled(BackgroundMode::BluetoothCentral)
+        self.config
+            .is_mode_enabled(BackgroundMode::BluetoothCentral)
             && self.bluetooth_state.state != BluetoothState::Restricted
     }
 
     /// Check if BLE peripheral can operate in background
     pub fn can_run_ble_peripheral_background(&self) -> bool {
-        self.config.is_mode_enabled(BackgroundMode::BluetoothPeripheral)
+        self.config
+            .is_mode_enabled(BackgroundMode::BluetoothPeripheral)
             && self.bluetooth_state.state != BluetoothState::Restricted
     }
 
@@ -284,7 +292,10 @@ impl IosBackgroundStrategy {
         if self.config.is_mode_enabled(BackgroundMode::BackgroundFetch) {
             active.push("Fetch");
         }
-        if self.config.is_mode_enabled(BackgroundMode::BackgroundProcessing) {
+        if self
+            .config
+            .is_mode_enabled(BackgroundMode::BackgroundProcessing)
+        {
             active.push("Processing");
         }
 

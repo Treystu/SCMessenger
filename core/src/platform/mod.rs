@@ -8,7 +8,6 @@
 
 pub mod auto_adjust;
 pub mod service;
-pub mod settings;
 
 pub use auto_adjust::{AdjustmentProfile, AdjustmentResult, DeviceState, SmartAutoAdjust};
 pub use service::{

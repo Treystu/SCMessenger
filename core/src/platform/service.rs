@@ -6,7 +6,7 @@
 //!
 //! The service integrates with IronCore for crypto and mesh operations.
 
-use crate::platform::auto_adjust::{AdjustmentProfile, SmartAutoAdjust, DeviceState};
+use crate::platform::auto_adjust::{AdjustmentProfile, DeviceState, SmartAutoAdjust};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -298,9 +298,10 @@ impl MeshService {
                 ));
             }
             _ => {
-                return Err(PlatformError::InvalidState(
-                    format!("Cannot start from {:?} state", state),
-                ));
+                return Err(PlatformError::InvalidState(format!(
+                    "Cannot start from {:?} state",
+                    state
+                )));
             }
         }
 
@@ -336,12 +337,15 @@ impl MeshService {
                 *state = MeshServiceState::Stopping;
             }
             MeshServiceState::Stopped => {
-                return Err(PlatformError::InvalidState("Service already stopped".to_string()));
+                return Err(PlatformError::InvalidState(
+                    "Service already stopped".to_string(),
+                ));
             }
             _ => {
-                return Err(PlatformError::InvalidState(
-                    format!("Cannot stop from {:?} state", state),
-                ));
+                return Err(PlatformError::InvalidState(format!(
+                    "Cannot stop from {:?} state",
+                    state
+                )));
             }
         }
 
@@ -375,7 +379,9 @@ impl MeshService {
                 *state = MeshServiceState::Paused;
             }
             MeshServiceState::Paused => {
-                return Err(PlatformError::InvalidState("Service already paused".to_string()));
+                return Err(PlatformError::InvalidState(
+                    "Service already paused".to_string(),
+                ));
             }
             MeshServiceState::Stopped => {
                 return Err(PlatformError::InvalidState(
@@ -383,9 +389,10 @@ impl MeshService {
                 ));
             }
             _ => {
-                return Err(PlatformError::InvalidState(
-                    format!("Cannot pause from {:?} state", state),
-                ));
+                return Err(PlatformError::InvalidState(format!(
+                    "Cannot pause from {:?} state",
+                    state
+                )));
             }
         }
 
@@ -418,9 +425,10 @@ impl MeshService {
                 ));
             }
             _ => {
-                return Err(PlatformError::InvalidState(
-                    format!("Cannot resume from {:?} state", state),
-                ));
+                return Err(PlatformError::InvalidState(format!(
+                    "Cannot resume from {:?} state",
+                    state
+                )));
             }
         }
 
