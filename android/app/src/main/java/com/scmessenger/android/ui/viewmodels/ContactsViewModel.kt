@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.scmessenger.android.data.MeshRepository
 import com.scmessenger.android.service.MeshEventBus
 import com.scmessenger.android.service.PeerEvent
+import com.scmessenger.android.utils.ContactImportParseResult
+import com.scmessenger.android.utils.parseContactImportPayload
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -276,35 +278,26 @@ class ContactsViewModel @Inject constructor(
     fun importContact(json: String) {
         viewModelScope.launch {
             try {
-                // Basic regex parsing to avoid dependencies
-                val idPattern = "\"identity_id\":\\s*\"(.*?)\"".toRegex()
-                val keyPattern = "\"public_key\":\\s*\"(.*?)\"".toRegex()
-                val nickPattern = "\"nickname\":\\s*\"(.*?)\"".toRegex()
-                val libp2pPattern = "\"libp2p_peer_id\":\\s*\"(.*?)\"".toRegex()
-                val listenersPattern = "\"listeners\":\\s*\\[(.*?)\\]".toRegex()
-
-                val peerId = idPattern.find(json)?.groupValues?.get(1)
-                val publicKey = keyPattern.find(json)?.groupValues?.get(1)
-                val nickname = nickPattern.find(json)?.groupValues?.get(1)
-                val libp2pPeerId = libp2pPattern.find(json)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
-
-                if (!peerId.isNullOrBlank() && !publicKey.isNullOrBlank()) {
-                    // Parse Listeners
-                    val listenersMatch = listenersPattern.find(json)?.groupValues?.get(1)
-                    val addresses = listenersMatch?.split(",")?.map {
-                        it.trim().trim('"').replace(" (Potential)", "")
-                    }?.filter { it.isNotBlank() } ?: emptyList()
-
-                    addContact(peerId, publicKey, nickname, libp2pPeerId = libp2pPeerId, listeners = addresses)
-
-                    if (addresses.isNotEmpty()) {
-                        // Use libp2p PeerId for dial if available — enables proper peer verification
-                        val peerIdForDial = libp2pPeerId ?: peerId
-                        meshRepository.connectToPeer(peerIdForDial, addresses)
-                        Timber.i("Connecting to imported peer (libp2p: ${libp2pPeerId != null}): $peerIdForDial with addresses: $addresses")
+                when (val parsed = parseContactImportPayload(json)) {
+                    is ContactImportParseResult.Invalid -> {
+                        _error.value = parsed.reason
                     }
-                } else {
-                     _error.value = "Invalid identity format: Missing ID or Key"
+                    is ContactImportParseResult.Valid -> {
+                        val payload = parsed.payload
+                        addContact(
+                            payload.peerId,
+                            payload.publicKey,
+                            payload.nickname,
+                            libp2pPeerId = payload.libp2pPeerId,
+                            listeners = payload.listeners
+                        )
+
+                        if (payload.listeners.isNotEmpty()) {
+                            val peerIdForDial = payload.libp2pPeerId ?: payload.peerId
+                            meshRepository.connectToPeer(peerIdForDial, payload.listeners)
+                            Timber.i("Connecting to imported peer (libp2p: ${payload.libp2pPeerId != null}): $peerIdForDial with addresses: ${payload.listeners}")
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 _error.value = "Failed to import: ${e.message}"

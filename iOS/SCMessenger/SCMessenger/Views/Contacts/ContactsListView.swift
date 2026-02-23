@@ -288,14 +288,26 @@ struct AddContactView: View {
             return
         }
 
-        if let key = json["public_key"] as? String { publicKey = key.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let key = (json["public_key"] as? String)
+            ?? (json["publicKey"] as? String)
+            ?? (json["publicKeyHex"] as? String) {
+            publicKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         if let nick = json["nickname"] as? String { nickname = nick.trimmingCharacters(in: .whitespacesAndNewlines) }
-        if let pid = json["identity_id"] as? String { peerId = pid.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let pid = (json["identity_id"] as? String)
+            ?? (json["identityId"] as? String)
+            ?? (json["peerId"] as? String) {
+            peerId = pid.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         if let lpid = json["libp2p_peer_id"] as? String, !lpid.isEmpty { libp2pPeerId = lpid.trimmingCharacters(in: .whitespacesAndNewlines) }
         if let list = json["listeners"] as? [String] {
             listeners = list.map { $0.replacingOccurrences(of: " (Potential)", with: "") }
         }
 
+        if !peerId.isEmpty && publicKey.isEmpty {
+            error = "Identity ID was found, but public key is missing in this payload."
+            return
+        }
         error = nil
     }
 
@@ -360,13 +372,17 @@ struct AddContactView: View {
             return
         }
 
-        if let key = json["public_key"] as? String ?? json["publicKey"] as? String {
+        if let key = (json["public_key"] as? String)
+            ?? (json["publicKey"] as? String)
+            ?? (json["publicKeyHex"] as? String) {
             publicKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         if let nick = json["nickname"] as? String {
             nickname = nick.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        if let pid = json["identity_id"] as? String ?? json["peerId"] as? String {
+        if let pid = (json["identity_id"] as? String)
+            ?? (json["identityId"] as? String)
+            ?? (json["peerId"] as? String) {
             peerId = pid.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         if let lpid = json["libp2p_peer_id"] as? String, !lpid.isEmpty {
@@ -374,6 +390,11 @@ struct AddContactView: View {
         }
         if let list = json["listeners"] as? [String] {
             listeners = list.map { $0.replacingOccurrences(of: " (Potential)", with: "") }
+        }
+
+        if !peerId.isEmpty && publicKey.isEmpty {
+            error = "Identity ID was found, but public key is missing in this payload."
+            return
         }
         error = nil
     }

@@ -22,6 +22,8 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.scmessenger.android.ui.components.ErrorBanner
 import com.scmessenger.android.ui.components.IdenticonFromPeerId
 import com.scmessenger.android.ui.viewmodels.ContactsViewModel
+import com.scmessenger.android.utils.ContactImportParseResult
+import com.scmessenger.android.utils.parseContactImportPayload
 import timber.log.Timber
 
 /**
@@ -46,6 +48,8 @@ fun AddContactScreen(
     var publicKey by remember { mutableStateOf("") }
     var nickname by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
+    var libp2pPeerId by remember { mutableStateOf<String?>(null) }
+    var listeners by remember { mutableStateOf<List<String>>(emptyList()) }
     var isAdding by remember { mutableStateOf(false) }
     var qrError by remember { mutableStateOf<String?>(null) }
 
@@ -118,6 +122,8 @@ fun AddContactScreen(
                                 peerId = peerId,
                                 publicKey = publicKey,
                                 nickname = nickname.takeIf { it.isNotBlank() },
+                                libp2pPeerId = libp2pPeerId,
+                                listeners = listeners,
                                 notes = notes.takeIf { it.isNotBlank() }
                             )
                             // Reset form
@@ -133,15 +139,17 @@ fun AddContactScreen(
                 1 -> QRScanTab(
                     onScanned = { scanned ->
                         qrError = null
-                        when (val parsed = parseContactQrData(scanned)) {
-                            is ParsedContactQr.Invalid -> {
+                        when (val parsed = parseContactImportPayload(scanned)) {
+                            is ContactImportParseResult.Invalid -> {
                                 qrError = parsed.reason
                                 Timber.w("Invalid contact QR data: ${parsed.reason}")
                             }
-                            is ParsedContactQr.Valid -> {
-                                peerId = parsed.peerId
-                                publicKey = parsed.publicKey
-                                nickname = parsed.nickname ?: nickname
+                            is ContactImportParseResult.Valid -> {
+                                peerId = parsed.payload.peerId
+                                publicKey = parsed.payload.publicKey
+                                nickname = parsed.payload.nickname ?: nickname
+                                libp2pPeerId = parsed.payload.libp2pPeerId
+                                listeners = parsed.payload.listeners
                                 selectedTab = 0
                             }
                         }
@@ -327,35 +335,6 @@ private fun QRScanTab(
             Spacer(modifier = Modifier.width(8.dp))
             Text("Scan QR Code")
         }
-    }
-}
-
-private sealed class ParsedContactQr {
-    data class Valid(val peerId: String, val publicKey: String, val nickname: String?) : ParsedContactQr()
-    data class Invalid(val reason: String) : ParsedContactQr()
-}
-
-private fun parseContactQrData(raw: String): ParsedContactQr {
-    return try {
-        // Accept both legacy and current fields.
-        // legacy: {"peerId":"...","publicKey":"..."}
-        // current: {"identity_id":"...","public_key":"...","nickname":"..."}
-        val id = """"identity_id"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
-            ?: """"peerId"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
-        val key = """"public_key"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
-            ?: """"publicKey"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
-        val nick = """"nickname"\s*:\s*"([^"]*)"""".toRegex().find(raw)?.groupValues?.get(1)
-
-        if (id.isNullOrBlank() || key.isNullOrBlank()) {
-            return ParsedContactQr.Invalid("Missing peer ID or public key")
-        }
-        ParsedContactQr.Valid(
-            peerId = id.trim(),
-            publicKey = key.trim(),
-            nickname = nick?.trim()?.takeIf { it.isNotEmpty() }
-        )
-    } catch (e: Exception) {
-        ParsedContactQr.Invalid(e.message ?: "Failed to parse QR data")
     }
 }
 

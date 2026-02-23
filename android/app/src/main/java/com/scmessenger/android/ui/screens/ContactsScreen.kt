@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
@@ -15,10 +16,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.mlkit.common.MlKitException
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.scmessenger.android.ui.viewmodels.ContactsViewModel
 import com.scmessenger.android.ui.viewmodels.NearbyPeer
+import com.scmessenger.android.utils.ContactImportParseResult
+import com.scmessenger.android.utils.parseContactImportPayload
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -200,24 +209,23 @@ fun ContactsScreen(
                 showAddDialog = false
                 nearbyPrefilledPeer = null
             },
-            onAdd = { peerId, publicKey, nickname ->
-                viewModel.addContact(peerId, publicKey, nickname, nearbyLibp2p, nearbyListeners)
+            onAdd = { peerId, publicKey, nickname, importedLibp2p, importedListeners ->
+                val effectiveLibp2p = importedLibp2p ?: nearbyLibp2p.takeIf { it.isNotBlank() }
+                val effectiveListeners = if (importedListeners.isNotEmpty()) importedListeners else nearbyListeners
+                viewModel.addContact(peerId, publicKey, nickname, effectiveLibp2p, effectiveListeners)
                 showAddDialog = false
                 nearbyPrefilledPeer = null
             },
-            onAddAndChat = { peerId, publicKey, nickname ->
+            onAddAndChat = { peerId, publicKey, nickname, importedLibp2p, importedListeners ->
                 val id = peerId.trim()
                 if (id.isNotBlank() && publicKey.isNotBlank()) {
-                    viewModel.addContact(id, publicKey.trim(), nickname?.trim(), nearbyLibp2p, nearbyListeners)
+                    val effectiveLibp2p = importedLibp2p ?: nearbyLibp2p.takeIf { it.isNotBlank() }
+                    val effectiveListeners = if (importedListeners.isNotEmpty()) importedListeners else nearbyListeners
+                    viewModel.addContact(id, publicKey.trim(), nickname?.trim(), effectiveLibp2p, effectiveListeners)
                     showAddDialog = false
                     nearbyPrefilledPeer = null
                     onNavigateToChat(id)
                 }
-            },
-            onImport = { json ->
-                viewModel.importContact(json)
-                showAddDialog = false
-                nearbyPrefilledPeer = null
             }
         )
     }
@@ -370,15 +378,18 @@ fun AddContactDialog(
     prefilledPublicKey: String = "",
     prefilledNickname: String = "",
     onDismiss: () -> Unit,
-    onAdd: (String, String, String?) -> Unit,
-    onAddAndChat: (String, String, String?) -> Unit,
-    onImport: (String) -> Unit
+    onAdd: (String, String, String?, String?, List<String>) -> Unit,
+    onAddAndChat: (String, String, String?, String?, List<String>) -> Unit
 ) {
     var peerId by remember(prefilledPeerId) { mutableStateOf(prefilledPeerId) }
     var publicKey by remember(prefilledPublicKey) { mutableStateOf(prefilledPublicKey) }
     var nickname by remember(prefilledNickname) { mutableStateOf(prefilledNickname) }
+    var libp2pPeerId by remember { mutableStateOf<String?>(null) }
+    var listeners by remember { mutableStateOf<List<String>>(emptyList()) }
+    var parseError by remember { mutableStateOf<String?>(null) }
 
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+    val context = LocalContext.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -387,8 +398,19 @@ fun AddContactDialog(
             Column {
                 OutlinedButton(
                     onClick = {
-                        clipboardManager.getText()?.text?.let {
-                            onImport(it)
+                        val text = clipboardManager.getText()?.text?.toString().orEmpty()
+                        when (val parsed = parseContactImportPayload(text)) {
+                            is ContactImportParseResult.Valid -> {
+                                peerId = parsed.payload.peerId
+                                publicKey = parsed.payload.publicKey
+                                nickname = parsed.payload.nickname ?: nickname
+                                libp2pPeerId = parsed.payload.libp2pPeerId
+                                listeners = parsed.payload.listeners
+                                parseError = null
+                            }
+                            is ContactImportParseResult.Invalid -> {
+                                parseError = parsed.reason
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
@@ -398,9 +420,56 @@ fun AddContactDialog(
                     Text("Paste Identity Export")
                 }
 
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        val options = GmsBarcodeScannerOptions.Builder()
+                            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                            .build()
+                        val scanner = GmsBarcodeScanning.getClient(context, options)
+                        scanner.startScan()
+                            .addOnSuccessListener { barcode ->
+                                val raw = barcode.rawValue.orEmpty()
+                                when (val parsed = parseContactImportPayload(raw)) {
+                                    is ContactImportParseResult.Valid -> {
+                                        peerId = parsed.payload.peerId
+                                        publicKey = parsed.payload.publicKey
+                                        nickname = parsed.payload.nickname ?: nickname
+                                        libp2pPeerId = parsed.payload.libp2pPeerId
+                                        listeners = parsed.payload.listeners
+                                        parseError = null
+                                    }
+                                    is ContactImportParseResult.Invalid -> {
+                                        parseError = parsed.reason
+                                    }
+                                }
+                            }
+                            .addOnFailureListener { e ->
+                                if (e is MlKitException && e.errorCode == CommonStatusCodes.CANCELED) {
+                                    return@addOnFailureListener
+                                }
+                                parseError = "Unable to scan QR code."
+                            }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Scan Contact QR")
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
                 Divider()
                 Spacer(modifier = Modifier.height(16.dp))
+
+                parseError?.let {
+                    Text(
+                        text = it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 OutlinedTextField(
                     value = peerId,
@@ -432,7 +501,13 @@ fun AddContactDialog(
                 TextButton(
                     onClick = {
                         if (peerId.isNotBlank() && publicKey.isNotBlank()) {
-                            onAdd(peerId.trim(), publicKey.trim(), nickname.trim().ifBlank { null })
+                            onAdd(
+                                peerId.trim(),
+                                publicKey.trim(),
+                                nickname.trim().ifBlank { null },
+                                libp2pPeerId,
+                                listeners
+                            )
                         }
                     },
                     enabled = peerId.isNotBlank() && publicKey.isNotBlank()
@@ -443,7 +518,13 @@ fun AddContactDialog(
                 TextButton(
                     onClick = {
                         if (peerId.isNotBlank() && publicKey.isNotBlank()) {
-                            onAddAndChat(peerId, publicKey, nickname.ifBlank { null })
+                            onAddAndChat(
+                                peerId.trim(),
+                                publicKey.trim(),
+                                nickname.ifBlank { null },
+                                libp2pPeerId,
+                                listeners
+                            )
                         }
                     },
                     enabled = peerId.isNotBlank() && publicKey.isNotBlank()
