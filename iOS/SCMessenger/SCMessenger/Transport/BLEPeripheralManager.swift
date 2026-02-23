@@ -72,10 +72,8 @@ final class BLEPeripheralManager: NSObject {
     }
     
     func setIdentityData(_ data: Data) {
-        guard data.count <= MeshBLEConstants.maxIdentityDataSize else {
-            logger.error("Identity data too large: \(data.count) bytes (max \(MeshBLEConstants.maxIdentityDataSize))")
-            return
-        }
+        // This payload is served over GATT identity characteristic reads, not
+        // advertisement service data. Full JSON identity is expected here.
         identityData = data
         identityCharacteristic?.value = data
         logger.debug("Identity data set: \(data.count) bytes")

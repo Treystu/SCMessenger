@@ -42,10 +42,12 @@ final class MeshRepository {
     /// Default bootstrap node multiaddrs for NAT traversal and internet roaming.
     /// Update these when a production bootstrap VPS is deployed.
     static let defaultBootstrapNodes: [String] = [
-        // Add your bootstrap VPS address here, e.g.:
-        // "/ip4/<VPS_IP>/tcp/4001",
-        // "/dns4/bootstrap.scmessenger.net/tcp/4001",
+        "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWL6KesqENjgojaLTxJiwXdvgmEkbvh1znyu8FdJQEizmV",
     ]
+
+    private static let bootstrapRelayPeerIds: Set<String> = Set(
+        defaultBootstrapNodes.compactMap { parseBootstrapRelay(from: $0)?.relayPeerId }
+    )
 
     // MARK: - UniFFI Components (lazy initialization)
 
@@ -67,6 +69,41 @@ final class MeshRepository {
 
     // Rust → Swift callback delegate (strong reference required; Rust holds weak)
     private var coreDelegateImpl: CoreDelegateImpl?
+    private var pendingOutboxRetryTask: Task<Void, Never>?
+    private var lastRelayBootstrapDialAt: Date = .distantPast
+    private let receiptAwaitSeconds: UInt64 = 8
+
+    private var pendingOutboxURL: URL {
+        URL(fileURLWithPath: storagePath).appendingPathComponent("pending_outbox.json")
+    }
+
+    private struct RoutingHints {
+        let libp2pPeerId: String?
+        let addresses: [String]
+    }
+
+    private struct TransportIdentityResolution {
+        let canonicalPeerId: String
+        let publicKey: String
+        let nickname: String?
+    }
+
+    private struct PendingOutboundEnvelope: Codable {
+        let queueId: String
+        let historyRecordId: String
+        let peerId: String
+        let routePeerId: String?
+        let addresses: [String]
+        let envelopeBase64: String
+        let createdAtEpochSec: UInt64
+        let attemptCount: UInt32
+        let nextAttemptAtEpochSec: UInt64
+    }
+
+    private struct DeliveryAttemptResult {
+        let acked: Bool
+        let routePeerId: String?
+    }
 
     // Device state for auto-adjustment
     private var currentBatteryPct: UInt8 = 100
@@ -127,14 +164,21 @@ final class MeshRepository {
     // MARK: - Initialization
 
     init() {
-        // Use app's documents directory for storage
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        self.storagePath = documentsPath.appendingPathComponent("mesh").path
+        // Use Application Support for internal app state (not user-facing docs).
+        let appSupportPath = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let meshPath = appSupportPath.appendingPathComponent("mesh", isDirectory: true)
+        self.storagePath = meshPath.path
 
         logger.info("MeshRepository initialized with storage: \(self.storagePath)")
 
         // Create storage directory if needed
-        try? FileManager.default.createDirectory(atPath: storagePath, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: meshPath, withIntermediateDirectories: true)
+
+        // Avoid restoring mesh state on reinstall from iCloud backup.
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var mutableMeshPath = meshPath
+        try? mutableMeshPath.setResourceValues(values)
     }
 
     /// Initialize all managers
@@ -263,6 +307,7 @@ final class MeshRepository {
             if ironCore == nil {
                 throw MeshError.notInitialized("Failed to obtain IronCore from MeshService")
             }
+            try ensureLocalIdentityFederation()
 
             // Wire CoreDelegate: Rust → Swift callbacks
             let coreDelegate = CoreDelegateImpl(meshRepository: self)
@@ -274,6 +319,7 @@ final class MeshRepository {
             if !isIdentityInitialized() {
                 logger.info("Auto-initializing new identity for first run")
                 try? ironCore?.initializeIdentity()
+                try? ensureLocalIdentityFederation()
             }
 
             // Broadcast BLE identity beacon so nearby peers can read our public key
@@ -289,6 +335,7 @@ final class MeshRepository {
                 meshService?.setBootstrapNodes(addrs: Self.defaultBootstrapNodes)
                 // Listen on random port
                 try? meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/0")
+                broadcastIdentityBeacon()
                 logger.info("Internet transport (Swarm) initiated")
             } else if settings?.internetEnabled == true {
                 logger.warning("Postponing Swarm start: Identity not ready")
@@ -300,6 +347,8 @@ final class MeshRepository {
             // Start BLE advertising and scanning
             blePeripheralManager?.startAdvertising()
             bleCentralManager?.startScanning()
+            startPendingOutboxRetryLoop()
+            Task { await flushPendingOutbox(reason: "service_started") }
 
             logger.info("✓ Mesh service started successfully")
         } catch {
@@ -323,6 +372,8 @@ final class MeshRepository {
         statusEvents.send(.serviceStateChanged(.stopping))
 
         meshService?.stop()
+        pendingOutboxRetryTask?.cancel()
+        pendingOutboxRetryTask = nil
 
         serviceState = .stopped
         statusEvents.send(.serviceStateChanged(.stopped))
@@ -369,12 +420,15 @@ final class MeshRepository {
             return
         }
 
+        try? ensureLocalIdentityFederation()
+
         let settings = try? settingsManager?.load()
         if settings?.internetEnabled == true {
             do {
                 // Configure bootstrap nodes for NAT traversal
                 meshService?.setBootstrapNodes(addrs: Self.defaultBootstrapNodes)
                 try meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/0")
+                broadcastIdentityBeacon()
                 logger.info("✓ Internet transport (Swarm) started manually")
             } catch {
                 logger.error("Failed to start swarm: \(error.localizedDescription)")
@@ -413,12 +467,40 @@ final class MeshRepository {
 
             logger.info("Calling ironCore.initializeIdentity()...")
             try ironCore.initializeIdentity()
+            try ensureLocalIdentityFederation()
             logger.info("✓ Identity created successfully")
             broadcastIdentityBeacon()
         } catch {
             logger.error("Failed to create identity: \(error.localizedDescription)")
             throw error
         }
+    }
+
+    private func ensureLocalIdentityFederation() throws {
+        guard let ironCore else {
+            throw MeshError.notInitialized("IronCore not initialized")
+        }
+
+        var info = ironCore.getIdentityInfo()
+        if !info.initialized {
+            logger.info("Auto-initializing new identity for first run")
+            try ironCore.initializeIdentity()
+            info = ironCore.getIdentityInfo()
+        }
+
+        let nickname = info.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if nickname.isEmpty {
+            let defaultNickname = buildDefaultLocalNickname(info: info)
+            try ironCore.setNickname(nickname: defaultNickname)
+            logger.info("Auto-set local nickname: \(defaultNickname)")
+        }
+    }
+
+    private func buildDefaultLocalNickname(info: IdentityInfo) -> String {
+        let source = info.publicKeyHex ?? info.identityId ?? info.libp2pPeerId ?? "peer"
+        let suffix = String(source.suffix(6))
+        let normalizedSuffix = suffix.isEmpty ? "peer" : suffix
+        return "ios-\(normalizedSuffix)".lowercased()
     }
 
     // MARK: - Messaging (with Relay Enforcement)
@@ -469,13 +551,25 @@ final class MeshRepository {
         }
 
         logger.debug("Preparing message for \(peerId) with key: \(trimmedKey.prefix(8))...")
+        let routing = parseRoutingHintsFromNotes(contact?.notes)
+        let routePeerCandidates = buildRoutePeerCandidates(
+            peerId: peerId,
+            cachedRoutePeerId: routing.libp2pPeerId,
+            notes: contact?.notes
+        )
+        let preferredRoutePeerId = routePeerCandidates.first
 
         // Prepare and send message (use trimmed key to handle any stored whitespace)
-        let encryptedBytes = try ironCore.prepareMessage(recipientPublicKeyHex: trimmedKey, text: content)
+        let prepared = try ironCore.prepareMessageWithId(recipientPublicKeyHex: trimmedKey, text: content)
+        let messageId = prepared.messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if messageId.isEmpty {
+            throw MeshError.notInitialized("Core returned empty message ID")
+        }
+        let envelopeData = Data(prepared.envelopeData)
 
         // Record in history FIRST so it's persisted even if bridge fails
         let messageRecord = MessageRecord(
-            id: UUID().uuidString,
+            id: messageId,
             direction: .sent,
             peerId: peerId,
             content: content,
@@ -487,22 +581,35 @@ final class MeshRepository {
         // Notify UI (Unified flow for sent messages)
         messageUpdates.send(messageRecord)
 
-        // 3. Send over network (Multiple transports)
-        // Attempt BLE delivery (Best effort, broadcast to all connected peers)
-        bleCentralManager?.broadcastData(Data(encryptedBytes))
-        blePeripheralManager?.broadcastDataToCentrals(Data(encryptedBytes))
+        // 3. Send over core-selected swarm route only.
+        // Mobile app passes identity/routing hints; Rust core owns path selection.
+        let delivery = await attemptDirectSwarmDelivery(
+            routePeerCandidates: routePeerCandidates,
+            addresses: routing.addresses,
+            envelopeData: envelopeData
+        )
+        let selectedRoutePeerId = delivery.routePeerId ?? preferredRoutePeerId
 
-        // Send via SwarmBridge (Network delivery) — broadcast to all connected peers.
-        // The message is encrypted for the specific recipient; only they can decrypt it.
-        if let swarmBridge = swarmBridge {
-            do {
-                try swarmBridge.sendToAllPeers(data: Data(encryptedBytes))
-                logger.info("✓ Message broadcast to peers: \(encryptedBytes.count) bytes")
-            } catch {
-                logger.warning("SwarmBridge delivery queued (no peers connected): \(error.localizedDescription)")
-            }
+        if delivery.acked {
+            enqueuePendingOutbound(
+                historyRecordId: messageId,
+                peerId: peerId,
+                routePeerId: selectedRoutePeerId,
+                addresses: routing.addresses,
+                envelopeData: envelopeData,
+                initialAttemptCount: 1,
+                initialDelaySec: receiptAwaitSeconds
+            )
         } else {
-            logger.warning("SwarmBridge not initialized, message saved locally for later delivery.")
+            enqueuePendingOutbound(
+                historyRecordId: messageId,
+                peerId: peerId,
+                routePeerId: selectedRoutePeerId,
+                addresses: routing.addresses,
+                envelopeData: envelopeData,
+                initialAttemptCount: 1,
+                initialDelaySec: 0
+            )
         }
     }
 
@@ -523,8 +630,8 @@ final class MeshRepository {
             return
         }
 
-        let trimmedKey = senderPublicKeyHex.trimmingCharacters(in: .whitespacesAndNewlines)
-        let canonicalPeerId = resolveCanonicalPeerId(senderId: senderId, senderPublicKeyHex: trimmedKey)
+        let normalizedSenderKey = normalizePublicKey(senderPublicKeyHex)
+        let canonicalPeerId = resolveCanonicalPeerId(senderId: senderId, senderPublicKeyHex: senderPublicKeyHex)
         if canonicalPeerId != senderId {
             logger.info("Canonicalized sender \(senderId) -> \(canonicalPeerId) using public key match")
         }
@@ -532,28 +639,50 @@ final class MeshRepository {
         // Auto-upsert contact: senderPublicKeyHex is guaranteed valid (Rust verified it during decrypt)
         let existingContact = try? contactManager?.get(peerId: canonicalPeerId)
         if existingContact == nil {
-            if trimmedKey.count == 64 {
+            if let normalizedSenderKey {
                 let autoContact = Contact(
                     peerId: canonicalPeerId,
                     nickname: nil,
-                    publicKey: trimmedKey,
+                    publicKey: normalizedSenderKey,
                     addedAt: UInt64(Date().timeIntervalSince1970),
                     lastSeen: UInt64(Date().timeIntervalSince1970),
-                    notes: nil
+                    notes: isLibp2pPeerId(senderId) ? appendRoutingHint(notes: nil, key: "libp2p_peer_id", value: senderId) : nil
                 )
                 do {
                     try contactManager?.add(contact: autoContact)
-                    logger.info("Auto-created contact from received message: \(canonicalPeerId.prefix(8)) key: \(trimmedKey.prefix(8))...")
+                    logger.info("Auto-created contact from received message: \(canonicalPeerId.prefix(8)) key: \(normalizedSenderKey.prefix(8))...")
                 } catch {
                     logger.warning("Auto-create contact failed for \(canonicalPeerId.prefix(8)): \(error.localizedDescription)")
                 }
             }
-        } else {
+        } else if let existingContact {
             try? contactManager?.updateLastSeen(peerId: canonicalPeerId)
+
+            if isLibp2pPeerId(senderId),
+               let normalizedSenderKey,
+               normalizePublicKey(existingContact.publicKey) == normalizedSenderKey,
+               parseRoutingHintsFromNotes(existingContact.notes).libp2pPeerId == nil {
+                let updatedContact = Contact(
+                    peerId: existingContact.peerId,
+                    nickname: existingContact.nickname,
+                    publicKey: existingContact.publicKey,
+                    addedAt: existingContact.addedAt,
+                    lastSeen: existingContact.lastSeen,
+                    notes: appendRoutingHint(notes: existingContact.notes, key: "libp2p_peer_id", value: senderId)
+                )
+                try? contactManager?.add(contact: updatedContact)
+            }
         }
 
         // Process message
         let content = String(data: data, encoding: .utf8) ?? "[binary]"
+
+        if let existing = try? historyManager?.get(id: messageId),
+           existing.direction == .received {
+            logger.debug("Duplicate inbound message \(messageId); acknowledging without UI emit")
+            sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId)
+            return
+        }
 
         let messageRecord = MessageRecord(
             id: messageId,
@@ -571,6 +700,20 @@ final class MeshRepository {
         logger.info("Message received and processed from \(canonicalPeerId)")
 
         // Send delivery receipt ACK back to sender
+        sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId)
+    }
+
+    /// Handle delivery receipt callbacks from CoreDelegate.
+    /// Marks local history and removes pending retry entries when IDs match.
+    func onDeliveryReceipt(messageId: String, status: String) {
+        let normalized = status.lowercased()
+        guard normalized == "delivered" || normalized == "read" else { return }
+        try? historyManager?.markDelivered(id: messageId)
+        removePendingOutbound(historyRecordId: messageId)
+        MeshEventBus.shared.messageEvents.send(.delivered(messageId: messageId))
+    }
+
+    private func sendDeliveryReceiptAsync(senderPublicKeyHex: String, messageId: String) {
         Task {
             do {
                 let receiptBytes = try ironCore?.prepareReceipt(recipientPublicKeyHex: senderPublicKeyHex, messageId: messageId)
@@ -584,23 +727,63 @@ final class MeshRepository {
         }
     }
 
-    /// Resolve incoming sender IDs to an existing contact using public-key identity.
+    /// Resolve incoming sender IDs to a canonical contact ID.
     ///
-    /// This prevents duplicate conversations when transport IDs differ
-    /// (e.g. libp2p peer ID vs identity ID) but cryptographic identity is the same.
+    /// Canonicalization prefers one stable contact per public key.
+    /// Exact sender ID matches still win, then a unique public-key match wins.
+    /// Routing hints are used only as fallback when key-based matching is ambiguous.
     private func resolveCanonicalPeerId(senderId: String, senderPublicKeyHex: String) -> String {
         guard let normalizedIncomingKey = normalizePublicKey(senderPublicKeyHex),
               let contacts = try? contactManager?.list() else {
             return senderId
         }
 
-        let keyMatches = contacts.filter { normalizePublicKey($0.publicKey) == normalizedIncomingKey }
-        guard !keyMatches.isEmpty else { return senderId }
-
-        let best = keyMatches.max { lhs, rhs in
-            contactRank(lhs, senderId: senderId) < contactRank(rhs, senderId: senderId)
+        let exactMatch = contacts.contains {
+            $0.peerId == senderId && normalizePublicKey($0.publicKey) == normalizedIncomingKey
         }
-        return best?.peerId ?? senderId
+        if exactMatch { return senderId }
+
+        let keyedMatches = contacts.filter {
+            normalizePublicKey($0.publicKey) == normalizedIncomingKey
+        }
+        if keyedMatches.count == 1 {
+            return keyedMatches[0].peerId
+        }
+        if keyedMatches.count > 1 {
+            logger.warning("Ambiguous canonical sender mapping for key \(normalizedIncomingKey.prefix(8))...; trying route-hint fallback")
+        }
+
+        if isLibp2pPeerId(senderId) {
+            let linkedIdentityMatches = contacts.filter {
+                guard normalizePublicKey($0.publicKey) == normalizedIncomingKey else { return false }
+                guard $0.peerId != senderId else { return false }
+                guard let notes = $0.notes,
+                      let routing = parseRoutingInfo(notes: notes) else { return false }
+                return routing.libp2pPeerId == senderId
+            }
+
+            if linkedIdentityMatches.count == 1 {
+                return linkedIdentityMatches[0].peerId
+            }
+            if linkedIdentityMatches.count > 1 {
+                logger.warning("Ambiguous canonical sender mapping for \(senderId); keeping raw sender ID")
+            }
+            return senderId
+        }
+
+        guard isIdentityId(senderId) else { return senderId }
+        let keyedRoutedMatches = contacts.filter {
+            guard normalizePublicKey($0.publicKey) == normalizedIncomingKey else { return false }
+            guard $0.peerId != senderId else { return false }
+            return parseRoutingHintsFromNotes($0.notes).libp2pPeerId != nil || isLibp2pPeerId($0.peerId)
+        }
+        if keyedRoutedMatches.count == 1 {
+            return keyedRoutedMatches[0].peerId
+        }
+        if keyedRoutedMatches.count > 1 {
+            logger.warning("Ambiguous identity sender mapping for \(senderId); keeping raw sender ID")
+        }
+        return senderId
     }
 
     private func normalizePublicKey(_ key: String?) -> String? {
@@ -608,15 +791,73 @@ final class MeshRepository {
               value.count == 64 else {
             return nil
         }
+        let validHex = value.unicodeScalars.allSatisfy { scalar in
+            CharacterSet(charactersIn: "0123456789abcdefABCDEF").contains(scalar)
+        }
+        guard validHex else { return nil }
         return value.lowercased()
     }
 
-    private func contactRank(_ contact: Contact, senderId: String) -> Int {
-        var score = 0
-        if contact.peerId == senderId { score += 4 }
-        if let nickname = contact.nickname, !nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { score += 8 }
-        if contact.peerId.hasPrefix("12D3Koo") || contact.peerId.hasPrefix("Qm") { score += 1 }
-        return score
+    private func appendRoutingHint(notes: String?, key: String, value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return notes
+        }
+
+        let existing = notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let segments = existing.split(whereSeparator: { $0 == ";" || $0 == "\n" }).map { String($0) }
+        let alreadyPresent = segments.contains {
+            let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix("\(key):") else { return false }
+            let current = trimmed.replacingOccurrences(of: "\(key):", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return current == value
+        }
+        if alreadyPresent { return notes }
+
+        let merged = [existing, "\(key):\(value)"]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ";")
+        return merged.isEmpty ? nil : merged
+    }
+
+    private func resolveTransportIdentity(libp2pPeerId: String) -> TransportIdentityResolution? {
+        guard isLibp2pPeerId(libp2pPeerId) else { return nil }
+        let extractedKey: String? = {
+            guard let core = ironCore else { return nil }
+            return try? core.extractPublicKeyFromPeerId(peerId: libp2pPeerId)
+        }()
+        guard let extractedKey,
+              let normalizedKey = normalizePublicKey(extractedKey) else {
+            return nil
+        }
+
+        let selfKey = normalizePublicKey(ironCore?.getIdentityInfo().publicKeyHex)
+        if selfKey == normalizedKey { return nil }
+
+        guard let contacts = try? contactManager?.list() else {
+            return TransportIdentityResolution(
+                canonicalPeerId: libp2pPeerId,
+                publicKey: normalizedKey,
+                nickname: nil
+            )
+        }
+
+        let keyMatches = contacts.filter { normalizePublicKey($0.publicKey) == normalizedKey }
+        if keyMatches.count > 1 {
+            logger.warning("Multiple contacts share transport key \(normalizedKey.prefix(8))...; using explicit route match where possible")
+        }
+
+        let routeLinked = keyMatches.first {
+            $0.peerId == libp2pPeerId || parseRoutingHintsFromNotes($0.notes).libp2pPeerId == libp2pPeerId
+        }
+        let canonicalContact = routeLinked ?? keyMatches.first
+
+        return TransportIdentityResolution(
+            canonicalPeerId: canonicalContact?.peerId ?? libp2pPeerId,
+            publicKey: normalizedKey,
+            nickname: canonicalContact?.nickname
+        )
     }
 
     // MARK: - Settings Management
@@ -793,6 +1034,7 @@ final class MeshRepository {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
         try historyManager.markDelivered(id: id)
+        removePendingOutbound(historyRecordId: id)
     }
 
     func clearHistory() throws {
@@ -926,6 +1168,8 @@ final class MeshRepository {
             connectToPeer(routing.libp2pPeerId, addresses: routing.addresses)
         }
 
+        await flushPendingOutbox(reason: "sync_pending")
+
         updateStats()
     }
 
@@ -986,6 +1230,108 @@ final class MeshRepository {
         try ledgerManager.save()
     }
 
+    /// Handle libp2p transport identity updates from the Rust core.
+    /// Transport peer IDs are route hints, not user/contact identities.
+    func handleTransportPeerDiscovered(peerId: String) {
+        let selfLibp2p = ironCore?.getIdentityInfo().libp2pPeerId?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let selfLibp2p, !selfLibp2p.isEmpty, selfLibp2p == peerId {
+            logger.debug("Ignoring self transport discovery: \(peerId)")
+            return
+        }
+
+        if isBootstrapRelayPeer(peerId) {
+            logger.debug("Ignoring bootstrap relay peer discovery event: \(peerId)")
+            return
+        }
+
+        if let transportIdentity = resolveTransportIdentity(libp2pPeerId: peerId) {
+            let relayHints = buildDialCandidatesForPeer(
+                routePeerId: peerId,
+                rawAddresses: [],
+                includeRelayCircuits: true
+            )
+            MeshEventBus.shared.peerEvents.send(.identityDiscovered(
+                peerId: transportIdentity.canonicalPeerId,
+                publicKey: transportIdentity.publicKey,
+                nickname: transportIdentity.nickname,
+                libp2pPeerId: peerId,
+                listeners: relayHints,
+                blePeerId: nil
+            ))
+            persistRouteHintsForTransportPeer(
+                libp2pPeerId: peerId,
+                listeners: relayHints,
+                knownPublicKey: transportIdentity.publicKey
+            )
+            upsertFederatedContact(
+                canonicalPeerId: transportIdentity.canonicalPeerId,
+                publicKey: transportIdentity.publicKey,
+                nickname: transportIdentity.nickname,
+                libp2pPeerId: peerId,
+                listeners: relayHints
+            )
+            try? contactManager?.updateLastSeen(peerId: transportIdentity.canonicalPeerId)
+            try? contactManager?.updateLastSeen(peerId: peerId)
+        } else {
+            MeshEventBus.shared.peerEvents.send(.discovered(peerId: peerId))
+        }
+    }
+
+    func handleTransportPeerIdentified(peerId: String, listenAddrs: [String]) {
+        let selfLibp2p = ironCore?.getIdentityInfo().libp2pPeerId?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let selfLibp2p, !selfLibp2p.isEmpty, selfLibp2p == peerId {
+            logger.debug("Ignoring self transport identity: \(peerId)")
+            return
+        }
+
+        let dialCandidates = buildDialCandidatesForPeer(
+            routePeerId: peerId,
+            rawAddresses: listenAddrs,
+            includeRelayCircuits: true
+        )
+
+        if isBootstrapRelayPeer(peerId) {
+            logger.info("Treating bootstrap peer \(peerId) as transport relay only")
+        } else {
+            let transportIdentity = resolveTransportIdentity(libp2pPeerId: peerId)
+            if let transportIdentity {
+                MeshEventBus.shared.peerEvents.send(.identityDiscovered(
+                    peerId: transportIdentity.canonicalPeerId,
+                    publicKey: transportIdentity.publicKey,
+                    nickname: transportIdentity.nickname,
+                    libp2pPeerId: peerId,
+                    listeners: dialCandidates,
+                    blePeerId: nil
+                ))
+                try? contactManager?.updateLastSeen(peerId: transportIdentity.canonicalPeerId)
+                try? contactManager?.updateLastSeen(peerId: peerId)
+            } else {
+                logger.debug("Transport identity unavailable for \(peerId)")
+            }
+            MeshEventBus.shared.peerEvents.send(.connected(peerId: peerId))
+            persistRouteHintsForTransportPeer(
+                libp2pPeerId: peerId,
+                listeners: dialCandidates,
+                knownPublicKey: transportIdentity?.publicKey
+            )
+            if let transportIdentity {
+                upsertFederatedContact(
+                    canonicalPeerId: transportIdentity.canonicalPeerId,
+                    publicKey: transportIdentity.publicKey,
+                    nickname: transportIdentity.nickname,
+                    libp2pPeerId: peerId,
+                    listeners: dialCandidates
+                )
+            }
+        }
+
+        // Identified implies an active session already exists; avoid re-dial loops here.
+        Task { await flushPendingOutbox(reason: "peer_identified:\(peerId)") }
+        broadcastIdentityBeacon()
+    }
+
     // MARK: - BLE Transport Integration
 
     func onBleDataReceived(peerId: String, data: Data) {
@@ -1018,43 +1364,80 @@ final class MeshRepository {
         let nickname = info["nickname"] as? String
         let libp2pPeerId = info["libp2p_peer_id"] as? String
         let listeners = info["listeners"] as? [String]
+        let externalAddresses = info["external_addresses"] as? [String]
+        let connectionHints = info["connection_hints"] as? [String]
 
         let idFromInfo = (info["identity_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let identityId = (idFromInfo?.isEmpty == false) ? idFromInfo! : blePeerId
 
         logger.info("Peer BLE identity read: \(blePeerId.prefix(8)) key: \(publicKeyHex.prefix(8))...")
-        let trimmedKey = publicKeyHex.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedKey.count == 64 else {
-            logger.warning("Ignoring BLE identity from \(blePeerId.prefix(8)): wrong key length \(trimmedKey.count)")
+        guard let normalizedKey = normalizePublicKey(publicKeyHex) else {
+            let trimmed = publicKeyHex.trimmingCharacters(in: .whitespacesAndNewlines)
+            logger.warning("Ignoring BLE identity from \(blePeerId.prefix(8)): invalid key (\(trimmed.count) chars)")
+            return
+        }
+        let selfIdentity = ironCore?.getIdentityInfo()
+        let selfKey = normalizePublicKey(selfIdentity?.publicKeyHex)
+        let selfIdentityId = selfIdentity?.identityId?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let selfLibp2pPeerId = selfIdentity?.libp2pPeerId?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let normalizedLibp2p: String? = {
+            guard let raw = libp2pPeerId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !raw.isEmpty else { return nil }
+            return raw
+        }()
+        if (selfKey != nil && selfKey == normalizedKey) ||
+            (!selfIdentityId.isEmpty && selfIdentityId == identityId) ||
+            (!selfLibp2pPeerId.isEmpty && selfLibp2pPeerId == normalizedLibp2p) {
+            logger.debug("Ignoring self BLE identity beacon from \(blePeerId.prefix(8))")
             return
         }
 
         // Emit to nearby peers bus — UI will show peer in Nearby section for user to manually add
         let nonEmptyNickname = (nickname?.isEmpty == false) ? nickname : nil
-        let nonEmptyLibp2p = (libp2pPeerId?.isEmpty == false) ? libp2pPeerId : nil
+        let nonEmptyLibp2p = normalizedLibp2p
+        let mergedHints = (listeners ?? []) + (externalAddresses ?? []) + (connectionHints ?? [])
+        let dialCandidates = buildDialCandidatesForPeer(
+            routePeerId: nonEmptyLibp2p,
+            rawAddresses: mergedHints,
+            includeRelayCircuits: true
+        )
         MeshEventBus.shared.peerEvents.send(.identityDiscovered(
             peerId: identityId,
-            publicKey: trimmedKey,
+            publicKey: normalizedKey,
             nickname: nonEmptyNickname,
             libp2pPeerId: nonEmptyLibp2p,
-            listeners: listeners ?? [],
+            listeners: dialCandidates,
             blePeerId: blePeerId
         ))
-        logger.info("Emitted identityDiscovered for \(blePeerId.prefix(8)) key: \(trimmedKey.prefix(8))...")
+        logger.info("Emitted identityDiscovered for \(blePeerId.prefix(8)) key: \(normalizedKey.prefix(8))...")
         // Update lastSeen if already a saved contact
-        if (try? contactManager?.get(peerId: blePeerId)) != nil {
-            try? contactManager?.updateLastSeen(peerId: blePeerId)
+        try? contactManager?.updateLastSeen(peerId: blePeerId)
+        try? contactManager?.updateLastSeen(peerId: identityId)
+        if let libp2pPeerId, !libp2pPeerId.isEmpty {
+            try? contactManager?.updateLastSeen(peerId: libp2pPeerId)
         }
+        upsertFederatedContact(
+            canonicalPeerId: identityId,
+            publicKey: normalizedKey,
+            nickname: nonEmptyNickname,
+            libp2pPeerId: nonEmptyLibp2p,
+            listeners: dialCandidates
+        )
 
         // Auto-dial discovered peer via Swarm if we have libp2p info
-        if let peerId = libp2pPeerId, let addrs = listeners, !peerId.isEmpty, !addrs.isEmpty {
+        if let peerId = nonEmptyLibp2p, !dialCandidates.isEmpty {
             logger.info("Auto-dialing discovered peer over Swarm: \(peerId)")
-            connectToPeer(peerId, addresses: addrs)
+            connectToPeer(peerId, addresses: dialCandidates)
+            Task { await flushPendingOutbox(reason: "peer_identity_read") }
         }
     }
 
     private func parseRoutingInfo(notes: String) -> (libp2pPeerId: String, addresses: [String])? {
-        let segments = notes.split(separator: ";").map { String($0) }
+        let segments = notes
+            .split(whereSeparator: { $0 == ";" || $0 == "\n" })
+            .map { String($0) }
         var libp2pPeerId: String?
         var addresses: [String] = []
 
@@ -1080,24 +1463,564 @@ final class MeshRepository {
         return (peerId, addresses)
     }
 
+    private func parseRoutingHintsFromNotes(_ notes: String?) -> RoutingHints {
+        guard let notes,
+              let parsed = parseRoutingInfo(notes: notes) else {
+            return RoutingHints(libp2pPeerId: nil, addresses: [])
+        }
+        return RoutingHints(libp2pPeerId: parsed.libp2pPeerId, addresses: parsed.addresses)
+    }
+
+    private func parseAllRoutingPeerIds(from notes: String?) -> [String] {
+        guard let notes, !notes.isEmpty else { return [] }
+        var out: [String] = []
+        let segments = notes
+            .split(whereSeparator: { $0 == ";" || $0 == "\n" })
+            .map { String($0) }
+
+        for segment in segments {
+            let trimmed = segment.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix("libp2p_peer_id:") else { continue }
+            let value = trimmed.replacingOccurrences(of: "libp2p_peer_id:", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty, isLibp2pPeerId(value), !out.contains(value) {
+                out.append(value)
+            }
+        }
+        return out
+    }
+
+    private func buildRoutePeerCandidates(peerId: String, cachedRoutePeerId: String?, notes: String?) -> [String] {
+        var candidates: [String] = []
+        let notedPeerIds = parseAllRoutingPeerIds(from: notes)
+        if let newest = notedPeerIds.last, !newest.isEmpty {
+            candidates.append(newest)
+        }
+        for hint in notedPeerIds.reversed() where !candidates.contains(hint) {
+            candidates.append(hint)
+        }
+        if let cached = cachedRoutePeerId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !cached.isEmpty,
+           !candidates.contains(cached) {
+            candidates.append(cached)
+        }
+        if isLibp2pPeerId(peerId), !candidates.contains(peerId) {
+            candidates.append(peerId)
+        }
+        return candidates.filter { isLibp2pPeerId($0) }
+    }
+
+    private func isLibp2pPeerId(_ value: String) -> Bool {
+        value.hasPrefix("12D3Koo") || value.hasPrefix("Qm")
+    }
+
+    private func isIdentityId(_ value: String) -> Bool {
+        guard value.count == 64 else { return false }
+        return value.unicodeScalars.allSatisfy { scalar in
+            CharacterSet(charactersIn: "0123456789abcdefABCDEF").contains(scalar)
+        }
+    }
+
+    private func startPendingOutboxRetryLoop() {
+        guard pendingOutboxRetryTask == nil else { return }
+        pendingOutboxRetryTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.flushPendingOutbox(reason: "periodic")
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+            }
+        }
+    }
+
+    private func attemptDirectSwarmDelivery(
+        routePeerCandidates: [String],
+        addresses: [String],
+        envelopeData: Data
+    ) async -> DeliveryAttemptResult {
+        guard let swarmBridge else {
+            return DeliveryAttemptResult(acked: false, routePeerId: routePeerCandidates.first)
+        }
+        let sanitizedCandidates = routePeerCandidates
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && isLibp2pPeerId($0) && !isBootstrapRelayPeer($0) }
+            .reduce(into: [String]()) { acc, peer in
+                if !acc.contains(peer) { acc.append(peer) }
+            }
+        guard !sanitizedCandidates.isEmpty else {
+            return DeliveryAttemptResult(acked: false, routePeerId: routePeerCandidates.first)
+        }
+
+        primeRelayBootstrapConnections()
+
+        for routePeerId in sanitizedCandidates {
+            let dialCandidates = buildDialCandidatesForPeer(
+                routePeerId: routePeerId,
+                rawAddresses: addresses,
+                includeRelayCircuits: true
+            )
+            if !dialCandidates.isEmpty {
+                connectToPeer(routePeerId, addresses: dialCandidates)
+                _ = await awaitPeerConnection(peerId: routePeerId)
+            }
+
+            do {
+                try swarmBridge.sendMessage(peerId: routePeerId, data: envelopeData)
+                logger.info("✓ Direct delivery ACK from \(routePeerId)")
+                return DeliveryAttemptResult(acked: true, routePeerId: routePeerId)
+            } catch {
+                logger.warning("Core-routed delivery failed for \(routePeerId): \(error.localizedDescription); retrying via relay-circuit")
+            }
+
+            let relayOnly = relayCircuitAddresses(for: routePeerId)
+            if !relayOnly.isEmpty {
+                connectToPeer(routePeerId, addresses: relayOnly)
+                _ = await awaitPeerConnection(peerId: routePeerId)
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                do {
+                    try swarmBridge.sendMessage(peerId: routePeerId, data: envelopeData)
+                    logger.info("✓ Delivery ACK from \(routePeerId) after relay-circuit retry")
+                    return DeliveryAttemptResult(acked: true, routePeerId: routePeerId)
+                } catch {
+                    logger.warning("Relay-circuit retry failed for \(routePeerId): \(error.localizedDescription)")
+                }
+            }
+        }
+        return DeliveryAttemptResult(acked: false, routePeerId: sanitizedCandidates.first)
+    }
+
+    private func awaitPeerConnection(peerId: String, timeoutMs: UInt64 = 1200) async -> Bool {
+        guard let swarmBridge else { return false }
+        let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
+        while Date() < deadline {
+            if swarmBridge.getPeers().contains(peerId) {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return false
+    }
+
+    private func enqueuePendingOutbound(
+        historyRecordId: String,
+        peerId: String,
+        routePeerId: String?,
+        addresses: [String],
+        envelopeData: Data,
+        initialAttemptCount: UInt32 = 0,
+        initialDelaySec: UInt64 = 0
+    ) {
+        let now = UInt64(Date().timeIntervalSince1970)
+        var queue = loadPendingOutbox().filter { $0.historyRecordId != historyRecordId }
+        queue.append(
+            PendingOutboundEnvelope(
+                queueId: UUID().uuidString,
+                historyRecordId: historyRecordId,
+                peerId: peerId,
+                routePeerId: routePeerId,
+                addresses: addresses,
+                envelopeBase64: envelopeData.base64EncodedString(),
+                createdAtEpochSec: now,
+                attemptCount: initialAttemptCount,
+                nextAttemptAtEpochSec: now + initialDelaySec
+            )
+        )
+        savePendingOutbox(queue)
+        Task { await flushPendingOutbox(reason: "enqueue") }
+    }
+
+    private func flushPendingOutbox(reason: String) async {
+        let now = UInt64(Date().timeIntervalSince1970)
+        let queue = loadPendingOutbox()
+        if queue.isEmpty { return }
+
+        var nextQueue: [PendingOutboundEnvelope] = []
+        nextQueue.reserveCapacity(queue.count)
+
+        for item in queue {
+            if item.nextAttemptAtEpochSec > now {
+                nextQueue.append(item)
+                continue
+            }
+
+            if let existing = try? historyManager?.get(id: item.historyRecordId), existing.delivered == true {
+                continue
+            }
+
+            guard let envelopeData = Data(base64Encoded: item.envelopeBase64) else {
+                logger.warning("Dropping corrupt pending envelope \(item.queueId)")
+                continue
+            }
+
+            let contact = (try? contactManager?.get(peerId: item.peerId)) ?? nil
+            let latestRouting = parseRoutingHintsFromNotes(contact?.notes)
+            let routePeerCandidates = buildRoutePeerCandidates(
+                peerId: item.peerId,
+                cachedRoutePeerId: item.routePeerId,
+                notes: contact?.notes
+            )
+            let resolvedRoutePeerId = routePeerCandidates.first
+            let resolvedAddresses = buildDialCandidatesForPeer(
+                routePeerId: resolvedRoutePeerId,
+                rawAddresses: item.addresses + latestRouting.addresses,
+                includeRelayCircuits: true
+            )
+
+            let delivery = await attemptDirectSwarmDelivery(
+                routePeerCandidates: routePeerCandidates,
+                addresses: resolvedAddresses,
+                envelopeData: envelopeData
+            )
+            let selectedRoutePeerId = delivery.routePeerId ?? resolvedRoutePeerId
+
+            if delivery.acked {
+                nextQueue.append(
+                    PendingOutboundEnvelope(
+                        queueId: item.queueId,
+                        historyRecordId: item.historyRecordId,
+                        peerId: item.peerId,
+                        routePeerId: selectedRoutePeerId,
+                        addresses: resolvedAddresses,
+                        envelopeBase64: item.envelopeBase64,
+                        createdAtEpochSec: item.createdAtEpochSec,
+                        attemptCount: item.attemptCount + 1,
+                        nextAttemptAtEpochSec: now + receiptAwaitSeconds
+                    )
+                )
+                continue
+            }
+
+            let nextAttemptCount = item.attemptCount + 1
+            let shift = Int(min(nextAttemptCount, 6))
+            let backoff = UInt64(min(60, 1 << shift))
+            nextQueue.append(
+                    PendingOutboundEnvelope(
+                        queueId: item.queueId,
+                        historyRecordId: item.historyRecordId,
+                        peerId: item.peerId,
+                        routePeerId: selectedRoutePeerId,
+                        addresses: resolvedAddresses,
+                        envelopeBase64: item.envelopeBase64,
+                        createdAtEpochSec: item.createdAtEpochSec,
+                    attemptCount: nextAttemptCount,
+                    nextAttemptAtEpochSec: now + backoff
+                )
+            )
+        }
+
+        savePendingOutbox(nextQueue)
+    }
+
+    private func loadPendingOutbox() -> [PendingOutboundEnvelope] {
+        guard let data = try? Data(contentsOf: pendingOutboxURL), !data.isEmpty else {
+            return []
+        }
+        guard let decoded = try? JSONDecoder().decode([PendingOutboundEnvelope].self, from: data) else {
+            logger.warning("Failed to parse pending outbox")
+            return []
+        }
+        return decoded
+    }
+
+    private func savePendingOutbox(_ queue: [PendingOutboundEnvelope]) {
+        do {
+            let data = try JSONEncoder().encode(queue)
+            try data.write(to: pendingOutboxURL, options: .atomic)
+        } catch {
+            logger.warning("Failed to persist pending outbox: \(error.localizedDescription)")
+        }
+    }
+
+    private func removePendingOutbound(historyRecordId: String) {
+        guard !historyRecordId.isEmpty else { return }
+        let queue = loadPendingOutbox()
+        let filtered = queue.filter { $0.historyRecordId != historyRecordId }
+        guard filtered.count != queue.count else { return }
+        savePendingOutbox(filtered)
+    }
+
+    private func prioritizeAddressesForCurrentNetwork(_ addresses: [String]) -> [String] {
+        guard addresses.count > 1 else { return addresses }
+        let lan = addresses.filter { isSameLanAddress($0) }
+        guard !lan.isEmpty else { return addresses }
+        return (lan + addresses.filter { !lan.contains($0) })
+    }
+
+    private func isSameLanAddress(_ multiaddr: String) -> Bool {
+        guard let targetIp = extractIpv4FromMultiaddr(multiaddr),
+              let localIp = getLocalIpAddress() else {
+            return false
+        }
+        return sameSubnet24(localIp, targetIp)
+    }
+
+    private func extractIpv4FromMultiaddr(_ multiaddr: String) -> String? {
+        let marker = "/ip4/"
+        guard let markerRange = multiaddr.range(of: marker) else { return nil }
+        let tail = multiaddr[markerRange.upperBound...]
+        let components = tail.split(separator: "/")
+        guard let first = components.first else { return nil }
+        return String(first)
+    }
+
+    private func sameSubnet24(_ a: String, _ b: String) -> Bool {
+        let lhs = a.split(separator: ".")
+        let rhs = b.split(separator: ".")
+        guard lhs.count == 4, rhs.count == 4 else { return false }
+        return lhs[0] == rhs[0] && lhs[1] == rhs[1] && lhs[2] == rhs[2]
+    }
+
+    private static func parseBootstrapRelay(from multiaddr: String) -> (transportAddr: String, relayPeerId: String)? {
+        guard let range = multiaddr.range(of: "/p2p/", options: .backwards) else {
+            return nil
+        }
+        let transportAddr = String(multiaddr[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let relayPeerId = String(multiaddr[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !transportAddr.isEmpty, !relayPeerId.isEmpty else { return nil }
+        return (transportAddr, relayPeerId)
+    }
+
+    func isBootstrapRelayPeer(_ peerId: String) -> Bool {
+        return Self.bootstrapRelayPeerIds.contains(peerId)
+    }
+
+    private func buildDialCandidatesForPeer(
+        routePeerId: String?,
+        rawAddresses: [String],
+        includeRelayCircuits: Bool
+    ) -> [String] {
+        var deduped: [String] = []
+        for addr in rawAddresses.compactMap({ normalizeAddressHint($0) }) where !deduped.contains(addr) {
+            deduped.append(addr)
+        }
+        let prioritized = prioritizeAddressesForCurrentNetwork(deduped)
+        let relayCircuits = (includeRelayCircuits && (routePeerId?.isEmpty == false))
+            ? relayCircuitAddresses(for: routePeerId!)
+            : []
+        var merged: [String] = []
+        for addr in prioritized + relayCircuits where !merged.contains(addr) {
+            merged.append(addr)
+        }
+        return merged
+    }
+
+    private func normalizeOutboundListenerHints(_ raw: [String]) -> [String] {
+        var out: [String] = []
+        for addr in raw.compactMap({ normalizeAddressHint($0) }) where !out.contains(addr) {
+            out.append(addr)
+        }
+        return out
+    }
+
+    private func normalizeExternalAddressHints(_ raw: [String]) -> [String] {
+        var out: [String] = []
+        for addr in raw.compactMap({ normalizeAddressHint($0) }) where !out.contains(addr) {
+            out.append(addr)
+        }
+        return out
+    }
+
+    private func normalizeAddressHint(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let replacedWildcard: String
+        if trimmed.contains("/ip4/0.0.0.0/"), let localIp = getLocalIpAddress() {
+            replacedWildcard = trimmed.replacingOccurrences(of: "/ip4/0.0.0.0/", with: "/ip4/\(localIp)/")
+        } else {
+            replacedWildcard = trimmed
+        }
+
+        let candidate = replacedWildcard.hasPrefix("/")
+            ? replacedWildcard
+            : (toMultiaddrFromSocketAddress(replacedWildcard) ?? "")
+        guard !candidate.isEmpty else { return nil }
+        guard isDialableAddress(candidate) else { return nil }
+        return candidate
+    }
+
+    private func toMultiaddrFromSocketAddress(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.hasPrefix("/") { return trimmed }
+
+        guard let separatorIdx = trimmed.lastIndex(of: ":") else { return nil }
+        let host = String(trimmed[..<separatorIdx]).trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        let portStr = String(trimmed[trimmed.index(after: separatorIdx)...])
+        guard let port = Int(portStr), (1...65535).contains(port), !host.isEmpty else { return nil }
+
+        let ipv4Regex = try? NSRegularExpression(pattern: #"^\d{1,3}(\.\d{1,3}){3}$"#)
+        let hostRange = NSRange(host.startIndex..<host.endIndex, in: host)
+        if host.contains(":") {
+            return "/ip6/\(host)/tcp/\(port)"
+        }
+        if let ipv4Regex, ipv4Regex.firstMatch(in: host, options: [], range: hostRange) != nil {
+            return "/ip4/\(host)/tcp/\(port)"
+        }
+        return "/dns4/\(host)/tcp/\(port)"
+    }
+
+    private func isDialableAddress(_ multiaddr: String) -> Bool {
+        if multiaddr.contains("/p2p-circuit") { return true }
+        guard let ip = extractIpv4FromMultiaddr(multiaddr) else { return true }
+        if ip == "0.0.0.0" { return false }
+        if ip.hasPrefix("127.") { return false }
+        if ip.hasPrefix("169.254.") { return false }
+        if isPrivateIPv4(ip) {
+            return isSameLanAddress(multiaddr)
+        }
+        return true
+    }
+
+    private func isPrivateIPv4(_ ip: String) -> Bool {
+        let octets = ip.split(separator: ".").compactMap { Int($0) }
+        guard octets.count == 4 else { return false }
+        return octets[0] == 10
+            || (octets[0] == 172 && (16...31).contains(octets[1]))
+            || (octets[0] == 192 && octets[1] == 168)
+    }
+
+    private func relayCircuitAddresses(for targetPeerId: String) -> [String] {
+        guard isLibp2pPeerId(targetPeerId) else { return [] }
+        return Self.defaultBootstrapNodes.compactMap { bootstrap in
+            guard let relay = Self.parseBootstrapRelay(from: bootstrap) else { return nil }
+            return "\(relay.transportAddr)/p2p/\(relay.relayPeerId)/p2p-circuit/p2p/\(targetPeerId)"
+        }
+    }
+
+    private func primeRelayBootstrapConnections() {
+        guard let swarmBridge else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastRelayBootstrapDialAt) >= 10 else { return }
+        lastRelayBootstrapDialAt = now
+
+        for addr in Self.defaultBootstrapNodes {
+            do {
+                try swarmBridge.dial(multiaddr: addr)
+            } catch {
+                logger.debug("Relay bootstrap dial skipped for \(addr): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func persistRouteHintsForTransportPeer(
+        libp2pPeerId: String,
+        listeners: [String],
+        knownPublicKey: String? = nil
+    ) {
+        guard !libp2pPeerId.isEmpty else { return }
+        guard let contacts = try? contactManager?.list() else { return }
+        let normalizedListeners = normalizeOutboundListenerHints(listeners)
+        let extractedTransportKey: String? = {
+            guard let core = ironCore else { return nil }
+            return try? core.extractPublicKeyFromPeerId(peerId: libp2pPeerId)
+        }()
+        let normalizedTransportKey = knownPublicKey
+            ?? normalizePublicKey(extractedTransportKey)
+
+        for contact in contacts {
+            let routing = parseRoutingHintsFromNotes(contact.notes)
+            let match = contact.peerId == libp2pPeerId
+                || routing.libp2pPeerId == libp2pPeerId
+                || (
+                    normalizedTransportKey != nil &&
+                    normalizePublicKey(contact.publicKey) == normalizedTransportKey
+                )
+            if !match { continue }
+
+            let withPeerId = appendRoutingHint(notes: contact.notes, key: "libp2p_peer_id", value: libp2pPeerId)
+            let withListeners = upsertRoutingListeners(notes: withPeerId, listeners: normalizedListeners)
+            if withListeners == contact.notes { continue }
+
+            let updated = Contact(
+                peerId: contact.peerId,
+                nickname: contact.nickname,
+                publicKey: contact.publicKey,
+                addedAt: contact.addedAt,
+                lastSeen: contact.lastSeen,
+                notes: withListeners
+            )
+            try? contactManager?.add(contact: updated)
+        }
+    }
+
+    private func upsertFederatedContact(
+        canonicalPeerId: String,
+        publicKey: String,
+        nickname: String?,
+        libp2pPeerId: String?,
+        listeners: [String]
+    ) {
+        let normalizedPeerId = canonicalPeerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedPeerId.isEmpty else { return }
+        guard let normalizedKey = normalizePublicKey(publicKey) else { return }
+
+        let normalizedLibp2p = libp2pPeerId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let normalizedLibp2p, !normalizedLibp2p.isEmpty, isBootstrapRelayPeer(normalizedLibp2p) {
+            return
+        }
+
+        let contacts = (try? contactManager?.list()) ?? []
+        let existingByKey = contacts.first { normalizePublicKey($0.publicKey) == normalizedKey }
+        let existingById = contacts.first { $0.peerId == normalizedPeerId }
+        let existing = existingByKey ?? existingById
+
+        var notes = existing?.notes
+        if let normalizedLibp2p, !normalizedLibp2p.isEmpty {
+            notes = appendRoutingHint(notes: notes, key: "libp2p_peer_id", value: normalizedLibp2p)
+        }
+        notes = upsertRoutingListeners(notes: notes, listeners: normalizeOutboundListenerHints(listeners))
+
+        let now = UInt64(Date().timeIntervalSince1970)
+        let resolvedPeerId = existing?.peerId ?? normalizedPeerId
+        let resolvedPublicKey = existingByKey?.publicKey ?? normalizedKey
+        let existingNickname = existing?.nickname?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let incomingNickname = nickname?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedNickname = (existingNickname?.isEmpty == false)
+            ? existingNickname
+            : ((incomingNickname?.isEmpty == false) ? incomingNickname : nil)
+
+        let updated = Contact(
+            peerId: resolvedPeerId,
+            nickname: resolvedNickname,
+            publicKey: resolvedPublicKey,
+            addedAt: existing?.addedAt ?? now,
+            lastSeen: now,
+            notes: notes
+        )
+        try? contactManager?.add(contact: updated)
+    }
+
+    private func upsertRoutingListeners(notes: String?, listeners: [String]) -> String? {
+        guard !listeners.isEmpty else { return notes }
+        let base = notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let filtered = base
+            .split(whereSeparator: { $0 == ";" || $0 == "\n" })
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("listeners:") }
+        return (filtered + ["listeners:\(listeners.joined(separator: ","))"]).joined(separator: ";")
+    }
+
     private func broadcastIdentityBeacon() {
         guard let info = ironCore?.getIdentityInfo(),
               let publicKeyHex = info.publicKeyHex else { return }
 
-        let listeners = getListeningAddresses()
+        let listeners = normalizeOutboundListenerHints(getListeningAddresses())
+        let externalAddresses = normalizeExternalAddressHints(getExternalAddresses())
+        let connectionHints = Array(Set(listeners + externalAddresses))
         let beacon: [String: Any] = [
             "identity_id": info.identityId ?? "",
             "public_key": publicKeyHex,
             "nickname": info.nickname ?? "",
             "libp2p_peer_id": info.libp2pPeerId ?? "",
-            "listeners": listeners
+            "listeners": listeners,
+            "external_addresses": externalAddresses,
+            "connection_hints": connectionHints
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: beacon) else {
             logger.error("Failed to serialize identity beacon")
             return
         }
         blePeripheralManager?.setIdentityData(data)
-        logger.info("BLE identity beacon set: \(publicKeyHex.prefix(8))... (includes libp2p)")
+        logger.info("BLE identity beacon set: \(publicKeyHex.prefix(8))... (includes relay-confirmed hints)")
     }
 
     // MARK: - Auto-Adjustment Engine
@@ -1155,13 +2078,18 @@ final class MeshRepository {
     }
 
     func connectToPeer(_ peerId: String, addresses: [String]) {
-        for addr in addresses {
+        let dialCandidates = buildDialCandidatesForPeer(
+            routePeerId: peerId,
+            rawAddresses: addresses,
+            includeRelayCircuits: false
+        )
+
+        for addr in dialCandidates {
             // Only append /p2p/ component if the peerId is a valid libp2p PeerId format
             // (base58btc multihash, starts with "12D3Koo" or "Qm").
             // Blake3 hex identity_ids (64 hex chars) are NOT valid libp2p PeerIds.
             var finalAddr = addr
-            let isLibp2pPeerId = peerId.hasPrefix("12D3Koo") || peerId.hasPrefix("Qm")
-            if isLibp2pPeerId && !addr.contains("/p2p/") {
+            if isLibp2pPeerId(peerId) && !addr.contains("/p2p/") {
                 finalAddr = "\(addr)/p2p/\(peerId)"
             }
             do {
@@ -1175,6 +2103,10 @@ final class MeshRepository {
 
     func getListeningAddresses() -> [String] {
         return swarmBridge?.getListeners() ?? []
+    }
+
+    func getExternalAddresses() -> [String] {
+        return swarmBridge?.getExternalAddresses() ?? []
     }
 
     func getTopics() -> [String] {
@@ -1238,7 +2170,8 @@ final class MeshRepository {
 
     func getIdentityExportString() -> String {
         guard let identity = getFullIdentityInfo() else { return "{}" }
-        var listeners = getListeningAddresses()
+        var listeners = normalizeOutboundListenerHints(getListeningAddresses())
+        let externalAddresses = normalizeExternalAddressHints(getExternalAddresses())
         let relay = getPreferredRelay() ?? "None"
         let localIp = getLocalIpAddress()
 
@@ -1253,26 +2186,24 @@ final class MeshRepository {
                 }
             }
 
-            // If empty, suggest standard port
-            if updatedListeners.isEmpty {
-                updatedListeners.append("/ip4/\(localIp)/tcp/9001 (Potential)")
-            }
             listeners = updatedListeners
         }
 
-        let listenersJson = "[\"\(listeners.joined(separator: "\",\""))\"]"
-
-        let libp2pId = identity.libp2pPeerId ?? ""
-        return """
-        {
-          "identity_id": "\(identity.identityId ?? "")",
-          "nickname": "\(identity.nickname ?? "")",
-          "public_key": "\(identity.publicKeyHex ?? "")",
-          "libp2p_peer_id": "\(libp2pId)",
-          "listeners": \(listeners.isEmpty ? "[]" : listenersJson),
-          "relay": "\(relay)"
+        let payload: [String: Any] = [
+            "identity_id": identity.identityId ?? "",
+            "nickname": identity.nickname ?? "",
+            "public_key": identity.publicKeyHex ?? "",
+            "libp2p_peer_id": identity.libp2pPeerId ?? "",
+            "listeners": listeners,
+            "external_addresses": externalAddresses,
+            "connection_hints": Array(Set(listeners + externalAddresses)),
+            "relay": relay
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else {
+            return "{}"
         }
-        """
+        return json
     }
 
     func getIdentitySnippet() -> String {

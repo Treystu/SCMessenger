@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.scmessenger.android.utils.toEpochMillis
 import com.scmessenger.android.ui.viewmodels.ConversationsViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -166,7 +167,7 @@ fun MessageBubble(message: uniffi.api.MessageRecord, isMe: Boolean) {
 }
 
 private fun formatTimestamp(timestamp: ULong): String {
-    val date = Date(timestamp.toLong() * 1000)
+    val date = Date(timestamp.toEpochMillis())
     val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
     return sdf.format(date)
 }

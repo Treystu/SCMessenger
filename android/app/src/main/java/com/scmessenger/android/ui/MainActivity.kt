@@ -1,6 +1,5 @@
 package com.scmessenger.android.ui
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -9,7 +8,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.scmessenger.android.ui.theme.SCMessengerTheme
-import com.scmessenger.android.service.MeshForegroundService
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
 
@@ -40,17 +38,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        startService(Intent(this, MeshForegroundService::class.java).apply {
-            action = MeshForegroundService.ACTION_RESUME
-        })
         Timber.d("MainActivity resumed")
     }
 
     override fun onPause() {
         super.onPause()
-        startService(Intent(this, MeshForegroundService::class.java).apply {
-            action = MeshForegroundService.ACTION_PAUSE
-        })
         Timber.d("MainActivity paused")
     }
 }

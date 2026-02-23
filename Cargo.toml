@@ -25,6 +25,8 @@ libp2p = { version = "0.53", features = [
   "yamux",
   "gossipsub",
   "kad",
+  "autonat",
+  "dcutr",
   "relay",
   "identify",
   "ping",

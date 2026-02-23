@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.scmessenger.android.ui.theme.*
+import com.scmessenger.android.utils.toEpochMillis
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -122,7 +123,7 @@ private fun DeliveryStatusIndicator(
  * Format timestamp for display.
  */
 private fun formatTimestamp(timestamp: ULong): String {
-    val millis = timestamp.toLong() * 1000
+    val millis = timestamp.toEpochMillis()
     val date = Date(millis)
     val now = Date()
 

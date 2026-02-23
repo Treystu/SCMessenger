@@ -2,7 +2,7 @@
 # Test connection to GCP node
 # Usage: ./scripts/test_gcp_node.sh [GCP_IP]
 
-GCP_IP="${1:-34.168.102.7}"
+GCP_IP="${1:-34.135.34.73}"
 GCP_PORT="${2:-9001}"
 
 echo "Testing connection to GCP node at $GCP_IP:$GCP_PORT..."

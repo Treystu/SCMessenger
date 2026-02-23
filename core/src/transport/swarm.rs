@@ -360,8 +360,11 @@ pub async fn start_swarm_with_config(
                 libp2p::noise::Config::new,
                 libp2p::yamux::Config::default,
             )?
-            .with_behaviour(|key| {
-                IronCoreBehaviour::new(key).expect("Failed to create network behaviour")
+            .with_quic()
+            .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)?
+            .with_behaviour(|key, relay_client| {
+                IronCoreBehaviour::new(key, relay_client)
+                    .expect("Failed to create network behaviour")
             })?
             .with_swarm_config(|cfg| {
                 cfg.with_idle_connection_timeout(std::time::Duration::from_secs(600))
@@ -402,6 +405,14 @@ pub async fn start_swarm_with_config(
             // Single port mode (legacy behavior)
             let addr = listen_addr.unwrap_or_else(|| "/ip4/0.0.0.0/tcp/0".parse().unwrap());
             swarm.listen_on(addr)?;
+        }
+
+        // Always expose a QUIC listener for NAT traversal and future relay-circuit upgrades.
+        if let Ok(quic_addr) = "/ip4/0.0.0.0/udp/0/quic-v1".parse::<Multiaddr>() {
+            match swarm.listen_on(quic_addr.clone()) {
+                Ok(_) => tracing::info!("✓ Bound QUIC listener {}", quic_addr),
+                Err(e) => tracing::warn!("✗ Failed to bind QUIC listener {}: {}", quic_addr, e),
+            }
         }
 
         // Kademlia already set to Server mode in behaviour constructor,
@@ -921,6 +932,22 @@ pub async fn start_swarm_with_config(
                                 );
                             }
 
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Autonat(event)) => {
+                                tracing::debug!("AutoNAT event: {:?}", event);
+                            }
+
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Dcutr(event)) => {
+                                tracing::debug!("DCUtR event: {:?}", event);
+                            }
+
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::RelayClient(event)) => {
+                                tracing::debug!("Relay client event: {:?}", event);
+                            }
+
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Ping(event)) => {
+                                tracing::trace!("Ping event: {:?}", event);
+                            }
+
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Mdns(
                                 mdns::Event::Discovered(peers)
                             )) => {
@@ -955,6 +982,25 @@ pub async fn start_swarm_with_config(
                                     info.protocols.len(),
                                     info.listen_addrs.len()
                                 );
+
+                                // Relay-confirmed observation of our externally visible endpoint
+                                // as seen by this peer. This gives mobile layers a stable
+                                // "what the network sees" signal for publishing connection hints.
+                                if let Some(observed_addr) =
+                                    ConnectionTracker::extract_socket_addr(&info.observed_addr)
+                                {
+                                    address_observer.record_observation(peer_id, observed_addr);
+                                    tracing::info!(
+                                        "🌐 Identify observed address via {}: {}",
+                                        peer_id,
+                                        observed_addr
+                                    );
+                                } else {
+                                    tracing::trace!(
+                                        "Identify observed_addr not socket-like: {}",
+                                        info.observed_addr
+                                    );
+                                }
 
                                 // Add ALL reported addresses to Kademlia — no filtering
                                 for addr in &info.listen_addrs {

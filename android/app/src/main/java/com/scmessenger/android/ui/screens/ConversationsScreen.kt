@@ -14,6 +14,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.scmessenger.android.ui.viewmodels.ConversationsViewModel
+import com.scmessenger.android.utils.toEpochMillis
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -240,9 +241,10 @@ fun ConversationItem(
 }
 
 private fun formatTimestamp(timestamp: ULong): String {
-    val date = Date(timestamp.toLong())
+    val timestampMillis = timestamp.toEpochMillis()
+    val date = Date(timestampMillis)
     val now = System.currentTimeMillis()
-    val diff = now - timestamp.toLong()
+    val diff = now - timestampMillis
 
     return when {
         diff < 60_000 -> "Now"

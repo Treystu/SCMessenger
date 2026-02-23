@@ -19,6 +19,7 @@ import com.scmessenger.android.ui.components.IdenticonFromPeerId
 import com.scmessenger.android.ui.theme.StatusOnline
 import com.scmessenger.android.ui.theme.StatusOffline
 import com.scmessenger.android.ui.viewmodels.ContactsViewModel
+import com.scmessenger.android.utils.toEpochMillis
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -330,7 +331,7 @@ private fun MetadataRow(label: String, value: String) {
 }
 
 private fun formatTimestamp(timestamp: ULong): String {
-    val millis = timestamp.toLong()
+    val millis = timestamp.toEpochMillis()
     val date = Date(millis)
     val sdf = SimpleDateFormat("MMM d, yyyy HH:mm", Locale.getDefault())
     return sdf.format(date)

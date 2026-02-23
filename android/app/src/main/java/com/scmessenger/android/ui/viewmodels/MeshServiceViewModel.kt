@@ -101,6 +101,11 @@ class MeshServiceViewModel @Inject constructor(
                 Timber.i("Mesh service stop requested")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to stop mesh service")
+                kotlin.runCatching {
+                    context.stopService(Intent(context, MeshForegroundService::class.java))
+                }.onFailure {
+                    Timber.w(it, "Fallback stopService() call also failed")
+                }
             }
         }
     }

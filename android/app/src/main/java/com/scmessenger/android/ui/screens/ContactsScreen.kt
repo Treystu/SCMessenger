@@ -28,6 +28,7 @@ import com.scmessenger.android.ui.viewmodels.ContactsViewModel
 import com.scmessenger.android.ui.viewmodels.NearbyPeer
 import com.scmessenger.android.utils.ContactImportParseResult
 import com.scmessenger.android.utils.parseContactImportPayload
+import com.scmessenger.android.utils.toEpochMillis
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -166,6 +167,25 @@ fun ContactsScreen(
                                 onAdd = {
                                     nearbyPrefilledPeer = peer
                                     showAddDialog = true
+                                },
+                                onConnect = {
+                                    val publicKey = peer.publicKey?.trim()
+                                    if (publicKey.isNullOrEmpty()) {
+                                        nearbyPrefilledPeer = peer
+                                        showAddDialog = true
+                                    } else {
+                                        val bleRoute = peer.blePeerId?.takeIf { it.isNotBlank() }
+                                        val notes = bleRoute?.let { "ble_peer_id:$it" }
+                                        viewModel.addContact(
+                                            peerId = peer.peerId,
+                                            publicKey = publicKey,
+                                            nickname = peer.nickname,
+                                            libp2pPeerId = peer.libp2pPeerId,
+                                            listeners = peer.listeners,
+                                            notes = notes
+                                        )
+                                        onNavigateToChat(peer.peerId)
+                                    }
                                 }
                             )
                             Spacer(modifier = Modifier.height(8.dp))
@@ -198,6 +218,7 @@ fun ContactsScreen(
 
     // Add contact dialog
     if (showAddDialog) {
+        val nearbyBlePeerId = nearbyPrefilledPeer?.blePeerId ?: ""
         val nearbyLibp2p = nearbyPrefilledPeer?.libp2pPeerId ?: ""
         val nearbyListeners = nearbyPrefilledPeer?.listeners ?: emptyList()
 
@@ -212,7 +233,8 @@ fun ContactsScreen(
             onAdd = { peerId, publicKey, nickname, importedLibp2p, importedListeners ->
                 val effectiveLibp2p = importedLibp2p ?: nearbyLibp2p.takeIf { it.isNotBlank() }
                 val effectiveListeners = if (importedListeners.isNotEmpty()) importedListeners else nearbyListeners
-                viewModel.addContact(peerId, publicKey, nickname, effectiveLibp2p, effectiveListeners)
+                val notes = nearbyBlePeerId.takeIf { it.isNotBlank() }?.let { "ble_peer_id:$it" }
+                viewModel.addContact(peerId, publicKey, nickname, effectiveLibp2p, effectiveListeners, notes)
                 showAddDialog = false
                 nearbyPrefilledPeer = null
             },
@@ -221,7 +243,8 @@ fun ContactsScreen(
                 if (id.isNotBlank() && publicKey.isNotBlank()) {
                     val effectiveLibp2p = importedLibp2p ?: nearbyLibp2p.takeIf { it.isNotBlank() }
                     val effectiveListeners = if (importedListeners.isNotEmpty()) importedListeners else nearbyListeners
-                    viewModel.addContact(id, publicKey.trim(), nickname?.trim(), effectiveLibp2p, effectiveListeners)
+                    val notes = nearbyBlePeerId.takeIf { it.isNotBlank() }?.let { "ble_peer_id:$it" }
+                    viewModel.addContact(id, publicKey.trim(), nickname?.trim(), effectiveLibp2p, effectiveListeners, notes)
                     showAddDialog = false
                     nearbyPrefilledPeer = null
                     onNavigateToChat(id)
@@ -312,7 +335,8 @@ fun ContactItem(
 @Composable
 fun NearbyPeerItem(
     peer: NearbyPeer,
-    onAdd: () -> Unit
+    onAdd: () -> Unit,
+    onConnect: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -359,14 +383,14 @@ fun NearbyPeerItem(
                     }
                 }
             }
-            FilledTonalButton(onClick = onAdd) {
+            FilledTonalButton(onClick = if (peer.hasFullIdentity) onConnect else onAdd) {
                 Icon(
-                    imageVector = Icons.Default.PersonAdd,
+                    imageVector = if (peer.hasFullIdentity) Icons.Default.Sensors else Icons.Default.PersonAdd,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Add")
+                Text(if (peer.hasFullIdentity) "Connect" else "Add")
             }
         }
     }
@@ -542,9 +566,10 @@ fun AddContactDialog(
 }
 
 private fun formatTimestamp(timestamp: ULong): String {
-    val date = Date(timestamp.toLong())
+    val timestampMillis = timestamp.toEpochMillis()
+    val date = Date(timestampMillis)
     val now = System.currentTimeMillis()
-    val diff = now - timestamp.toLong()
+    val diff = now - timestampMillis
 
     return when {
         diff < 60_000 -> "Just now"

@@ -16,6 +16,7 @@ struct ContactsListView: View {
     @State private var pendingChatConversation: Conversation?
     @State private var navigateToPendingChat = false
     @State private var nearbyPrefilledPeer: NearbyPeer? = nil
+    @State private var quickConnectError: String? = nil
 
     var body: some View {
         List {
@@ -25,8 +26,12 @@ struct ContactsListView: View {
                 Section {
                     ForEach(nearby) { peer in
                         NearbyPeerRow(peer: peer) {
-                            nearbyPrefilledPeer = peer
-                            showingAddContact = true
+                            if peer.hasFullIdentity {
+                                quickConnect(peer)
+                            } else {
+                                nearbyPrefilledPeer = peer
+                                showingAddContact = true
+                            }
                         }
                     }
                 } header: {
@@ -92,6 +97,64 @@ struct ContactsListView: View {
                 viewModel?.loadContacts()
             }
         }
+        .alert(
+            "Nearby Connect Failed",
+            isPresented: Binding(
+                get: { quickConnectError != nil },
+                set: { if !$0 { quickConnectError = nil } }
+            ),
+            actions: {
+                Button("OK", role: .cancel) { quickConnectError = nil }
+            },
+            message: {
+                Text(quickConnectError ?? "Unknown error")
+            }
+        )
+    }
+
+    private func quickConnect(_ peer: NearbyPeer) {
+        guard let viewModel else { return }
+        guard let publicKey = peer.publicKey?.trimmingCharacters(in: .whitespacesAndNewlines),
+              publicKey.count == 64 else {
+            nearbyPrefilledPeer = peer
+            showingAddContact = true
+            return
+        }
+
+        var notesParts: [String] = []
+        if let blePeerId = peer.blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !blePeerId.isEmpty {
+            notesParts.append("ble_peer_id:\(blePeerId)")
+        }
+        if let libp2p = peer.libp2pPeerId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !libp2p.isEmpty {
+            notesParts.append("libp2p_peer_id:\(libp2p)")
+        }
+        if !peer.listeners.isEmpty {
+            notesParts.append("listeners:\(peer.listeners.joined(separator: ","))")
+        }
+
+        let contact = Contact(
+            peerId: peer.peerId,
+            nickname: peer.nickname,
+            publicKey: publicKey,
+            addedAt: UInt64(Date().timeIntervalSince1970),
+            lastSeen: nil,
+            notes: notesParts.isEmpty ? nil : notesParts.joined(separator: ";")
+        )
+
+        do {
+            try viewModel.addContact(contact)
+            if !peer.listeners.isEmpty {
+                let dialPeerId = (peer.libp2pPeerId?.isEmpty == false) ? peer.libp2pPeerId! : peer.peerId
+                repository.connectToPeer(dialPeerId, addresses: peer.listeners)
+            }
+            let displayName = peer.nickname?.isEmpty == false ? peer.nickname! : String(peer.peerId.prefix(8))
+            pendingChatConversation = Conversation(peerId: peer.peerId, peerNickname: displayName)
+            navigateToPendingChat = true
+        } catch {
+            quickConnectError = error.localizedDescription
+        }
     }
 }
 
@@ -130,9 +193,8 @@ struct NearbyPeerRow: View {
             Button {
                 onAdd()
             } label: {
-                Label("Add", systemImage: "person.badge.plus")
-                    .labelStyle(.iconOnly)
-                    .font(.system(size: 20))
+                Label(peer.hasFullIdentity ? "Connect" : "Add", systemImage: peer.hasFullIdentity ? "bolt.horizontal.circle.fill" : "person.badge.plus")
+                    .font(.system(size: peer.hasFullIdentity ? 15 : 20))
                     .foregroundStyle(Color.accentColor)
             }
             .buttonStyle(.plain)
@@ -180,6 +242,7 @@ struct AddContactView: View {
     @State private var publicKey = ""
     @State private var peerId = ""
     @State private var listeners: [String] = []
+    @State private var blePeerId: String = ""
     @State private var libp2pPeerId: String = ""
     @State private var error: String?
     @State private var showingQrScanner = false
@@ -234,12 +297,12 @@ struct AddContactView: View {
                     Button("Add Contact") {
                         addContact(andChat: false)
                     }
-                    .disabled(nickname.isEmpty || publicKey.isEmpty)
+                    .disabled(publicKey.isEmpty)
 
                     Button("Add & Chat") {
                         addContact(andChat: true)
                     }
-                    .disabled(nickname.isEmpty || publicKey.isEmpty)
+                    .disabled(publicKey.isEmpty)
                 }
             }
             .navigationTitle("Add Contact")
@@ -256,6 +319,7 @@ struct AddContactView: View {
                     peerId = peer.peerId
                     if let pk = peer.publicKey { publicKey = pk }
                     if let nick = peer.nickname, !nick.isEmpty { nickname = nick }
+                    if let ble = peer.blePeerId, !ble.isEmpty { blePeerId = ble }
                     if let lpid = peer.libp2pPeerId, !lpid.isEmpty { libp2pPeerId = lpid }
                     listeners = peer.listeners
                 }
@@ -303,12 +367,17 @@ struct AddContactView: View {
             return
         }
 
-        // Store libp2p PeerId + listeners in notes for sendMessage routing
-        var notesValue: String? = nil
+        // Store nearby route hints for sendMessage routing.
+        var notesParts: [String] = []
+        if !blePeerId.isEmpty {
+            notesParts.append("ble_peer_id:\(blePeerId)")
+        }
         if !libp2pPeerId.isEmpty {
             let addrs = listeners.joined(separator: ",")
-            notesValue = "libp2p_peer_id:\(libp2pPeerId);listeners:\(addrs)"
+            notesParts.append("libp2p_peer_id:\(libp2pPeerId)")
+            notesParts.append("listeners:\(addrs)")
         }
+        let notesValue: String? = notesParts.isEmpty ? nil : notesParts.joined(separator: ";")
         let contact = Contact(
             peerId: finalPeerId,
             nickname: nickname,

@@ -68,19 +68,55 @@ class MeshForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        val action = intent?.action
+        when (action) {
+            null -> {
+                // START_STICKY restart without explicit action: always rebuild full
+                // foreground state so OS doesn't classify us as a background service.
+                Timber.w("Service restarted with null action; promoting to ACTION_START")
+                startMeshService()
+            }
             ACTION_START -> startMeshService()
             ACTION_STOP -> stopMeshService()
-            ACTION_PAUSE -> pauseMeshService()
-            ACTION_RESUME -> resumeMeshService()
+            ACTION_PAUSE -> {
+                val repoRunning = meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING
+                if (isRunning || repoRunning) {
+                    pauseMeshService()
+                } else {
+                    Timber.w("Ignoring pause request while service is not running")
+                }
+            }
+            ACTION_RESUME -> {
+                val repoRunning = meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING
+                if (isRunning && repoRunning) {
+                    resumeMeshService()
+                } else {
+                    // Critical for persistence: if process was recreated with ACTION_RESUME,
+                    // we must call startMeshService() to re-enter foreground mode.
+                    Timber.w("Resume requested while service not fully running; promoting to full start")
+                    startMeshService()
+                }
+            }
+            else -> {
+                Timber.w("Unknown action '$action'; defaulting to ACTION_START")
+                startMeshService()
+            }
         }
 
         return START_STICKY
     }
 
     private fun startMeshService() {
-        if (isRunning) {
-            Timber.w("Mesh service already running")
+        val repoRunning = meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING
+        if (isRunning || repoRunning) {
+            if (!tryStartForeground()) {
+                Timber.e("Foreground promotion denied while mesh repository is already running")
+                stopSelf()
+                return
+            }
+            isRunning = true
+            updateNotification()
+            Timber.w("Mesh service already running; foreground promotion refreshed")
             return
         }
 
@@ -110,6 +146,11 @@ class MeshForegroundService : Service() {
         try {
             meshRepository.startMeshService(config)
             meshRepository.setPlatformBridge(platformBridge)
+
+            val started = meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING
+            if (!started) {
+                throw IllegalStateException("Repository did not reach RUNNING state")
+            }
             isRunning = true
 
             // Wire CoreDelegate callbacks to MeshEventBus
@@ -161,7 +202,9 @@ class MeshForegroundService : Service() {
             Timber.i("Mesh service started successfully")
         } catch (e: Exception) {
             Timber.e(e, "Failed to start mesh service")
+            isRunning = false
             releaseWakeLock()
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
     }
@@ -230,9 +273,9 @@ class MeshForegroundService : Service() {
     }
 
     private fun stopMeshService() {
-        if (!isRunning) {
-            Timber.w("Mesh service not running")
-            return
+        val repoRunning = meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING
+        if (!isRunning && !repoRunning) {
+            Timber.w("Mesh service stop requested while already stopped")
         }
 
         Timber.i("Stopping mesh service")
@@ -241,12 +284,16 @@ class MeshForegroundService : Service() {
         releaseWakeLock()
 
         // Stop mesh service via repository
-        meshRepository.stopMeshService()
+        kotlin.runCatching { meshRepository.stopMeshService() }
+            .onFailure { Timber.e(it, "Error while stopping mesh repository") }
 
         isRunning = false
+        peerCount = 0
+        messagesRelayed = 0
 
         // Clean up
-        platformBridge.cleanup()
+        kotlin.runCatching { platformBridge.cleanup() }
+            .onFailure { Timber.w(it, "Platform bridge cleanup failed during stop") }
 
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -392,6 +439,11 @@ class MeshForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Timber.d("MeshForegroundService destroyed")
+        releaseWakeLock()
+        if (meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING) {
+            kotlin.runCatching { meshRepository.stopMeshService() }
+                .onFailure { Timber.w(it, "Repository stop failed during service destroy") }
+        }
         serviceScope.cancel()
     }
 

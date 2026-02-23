@@ -81,6 +81,16 @@ pub struct SignatureResult {
     pub public_key_hex: String,
 }
 
+/// Prepared outbound message metadata for UniFFI export.
+///
+/// `message_id` must be persisted by mobile clients so delivery receipts can
+/// be correlated exactly to the outbound history record.
+#[derive(Clone)]
+pub struct PreparedMessage {
+    pub message_id: String,
+    pub envelope_data: Vec<u8>,
+}
+
 // ============================================================================
 // CORE DELEGATE TRAIT
 // ============================================================================
@@ -334,6 +344,18 @@ impl IronCore {
         recipient_public_key_hex: String,
         text: String,
     ) -> Result<Vec<u8>, IronCoreError> {
+        self.prepare_message_with_id(recipient_public_key_hex, text)
+            .map(|prepared| prepared.envelope_data)
+    }
+
+    /// Encrypt and prepare a text message, returning both message ID and envelope.
+    ///
+    /// Mobile clients should use this API for robust receipt correlation.
+    pub fn prepare_message_with_id(
+        &self,
+        recipient_public_key_hex: String,
+        text: String,
+    ) -> Result<PreparedMessage, IronCoreError> {
         // Trim whitespace from the key (defensive, mobile apps may include it)
         let recipient_key_trimmed = recipient_public_key_hex.trim().to_string();
 
@@ -372,6 +394,7 @@ impl IronCore {
 
         // Create plaintext message
         let msg = Message::text(sender_id, recipient_key_trimmed.clone(), &text);
+        let message_id = msg.id.clone();
 
         // Serialize the message
         let plaintext = message::encode_message(&msg).map_err(|_| IronCoreError::Internal)?;
@@ -384,7 +407,10 @@ impl IronCore {
         let envelope_bytes =
             message::encode_envelope(&envelope).map_err(|_| IronCoreError::Internal)?;
 
-        Ok(envelope_bytes)
+        Ok(PreparedMessage {
+            message_id,
+            envelope_data: envelope_bytes,
+        })
     }
 
     /// Encrypt and prepare a delivery receipt for the original sender.
@@ -493,7 +519,30 @@ impl IronCore {
         });
 
         if !is_new {
-            return Err(IronCoreError::InvalidInput);
+            // Duplicate message IDs are expected under at-least-once delivery.
+            // Re-dispatch callbacks so receivers can re-send receipts if needed.
+            if let Some(delegate) = self.delegate.read().as_ref() {
+                if msg.message_type == message::MessageType::Receipt {
+                    if let Ok(receipt) = bincode::deserialize::<message::Receipt>(&msg.payload) {
+                        let status_str = match receipt.status {
+                            message::DeliveryStatus::Sent => "sent",
+                            message::DeliveryStatus::Delivered => "delivered",
+                            message::DeliveryStatus::Read => "read",
+                            message::DeliveryStatus::Failed(_) => "failed",
+                        };
+                        delegate.on_receipt_received(receipt.message_id, status_str.to_string());
+                    }
+                } else {
+                    let sender_pub_key_hex = hex::encode(&envelope.sender_public_key);
+                    delegate.on_message_received(
+                        msg.sender_id.clone(),
+                        sender_pub_key_hex,
+                        msg.id.clone(),
+                        msg.payload.clone(),
+                    );
+                }
+            }
+            return Ok(msg);
         }
 
         // Notify delegate — include sender's Ed25519 public key hex so mobile
@@ -715,7 +764,7 @@ mod tests {
         bob.receive_message(envelope_bytes.clone()).unwrap();
 
         let result = bob.receive_message(envelope_bytes);
-        assert!(result.is_err());
+        assert!(result.is_ok());
     }
 
     #[test]

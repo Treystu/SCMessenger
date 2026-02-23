@@ -29,7 +29,14 @@ final class CoreDelegateImpl: CoreDelegate {
 
     func onPeerDiscovered(peerId: String) {
         logger.info("Peer discovered: \(peerId)")
-        eventBus.peerEvents.send(.discovered(peerId: peerId))
+        let repo = meshRepository
+        DispatchQueue.main.async {
+            if let repo {
+                repo.handleTransportPeerDiscovered(peerId: peerId)
+            } else {
+                self.eventBus.peerEvents.send(.discovered(peerId: peerId))
+            }
+        }
     }
 
     func onPeerConnected(peerId: String) {
@@ -44,23 +51,9 @@ final class CoreDelegateImpl: CoreDelegate {
 
     func onPeerIdentified(peerId: String, listenAddrs: [String]) {
         logger.info("Peer identified: \(peerId) with \(listenAddrs.count) addresses")
-
-        do {
-            guard let hexKey = try meshRepository?.ironCore?.extractPublicKeyFromPeerId(peerId: peerId) else {
-                logger.error("Core not initialized or peer ID invalid: \(peerId)")
-                return
-            }
-
-            eventBus.peerEvents.send(.identityDiscovered(
-                peerId: peerId,
-                publicKey: hexKey,
-                nickname: nil,
-                libp2pPeerId: peerId,
-                listeners: listenAddrs,
-                blePeerId: nil
-            ))
-        } catch {
-            logger.error("Failed to extract public key from peer ID: \(peerId) - error: \(error)")
+        let repo = meshRepository
+        DispatchQueue.main.async {
+            repo?.handleTransportPeerIdentified(peerId: peerId, listenAddrs: listenAddrs)
         }
     }
 
@@ -99,6 +92,12 @@ final class CoreDelegateImpl: CoreDelegate {
 
     func onReceiptReceived(messageId: String, status: String) {
         logger.info("Receipt received: \(messageId) status=\(status)")
+
+        // Keep repository delivery state aligned with receipt callbacks.
+        let repo = meshRepository
+        DispatchQueue.main.async {
+            repo?.onDeliveryReceipt(messageId: messageId, status: status)
+        }
 
         // Map receipt status to message events
         switch status.lowercased() {

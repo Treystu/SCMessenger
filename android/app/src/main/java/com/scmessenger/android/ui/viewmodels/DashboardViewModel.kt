@@ -6,6 +6,7 @@ import com.scmessenger.android.data.MeshRepository
 import com.scmessenger.android.service.MeshEventBus
 import com.scmessenger.android.service.PeerEvent
 import com.scmessenger.android.service.StatusEvent
+import com.scmessenger.android.utils.toEpochSeconds
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -194,9 +195,10 @@ class DashboardViewModel @Inject constructor(
      */
     private fun isRecent(timestamp: ULong?): Boolean {
         if (timestamp == null) return false
-        val now = (System.currentTimeMillis() / 1000).toULong()
-        val fiveMinutes = 300u
-        return (now - timestamp) < fiveMinutes
+        val now = System.currentTimeMillis() / 1000
+        val seenAt = timestamp.toEpochSeconds()
+        val fiveMinutes = 300L
+        return seenAt <= now && (now - seenAt) < fiveMinutes
     }
 
     /**

@@ -62,7 +62,7 @@ if check_exists "$BEHAVIOUR_FILE" "pub relay:" "Relay protocol in behaviour"; th
 if check_exists "$BEHAVIOUR_FILE" "RelayRequest" "RelayRequest type defined"; then ((PASS++)); else ((FAIL++)); fi
 if check_exists "$BEHAVIOUR_FILE" "RelayResponse" "RelayResponse type defined"; then ((PASS++)); else ((FAIL++)); fi
 if check_exists "$SWARM_FILE" "IronCoreBehaviourEvent::Relay" "Relay event handler"; then ((PASS++)); else ((FAIL++)); fi
-if check_exists "$SWARM_FILE" "Peer is asking us to relay a message" "Relay request processing"; then ((PASS++)); else ((FAIL++)); fi
+if check_exists "$SWARM_FILE" "Relay request from" "Relay request processing"; then ((PASS++)); else ((FAIL++)); fi
 if check_exists "$SWARM_FILE" "behaviour_mut().relay.send_request" "Relay requests sent"; then ((PASS++)); else ((FAIL++)); fi
 echo ""
 

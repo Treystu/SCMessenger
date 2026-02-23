@@ -18,6 +18,7 @@ data class NearbyPeer(
     val peerId: String,
     val publicKey: String? = null,
     val nickname: String? = null,
+    val blePeerId: String? = null,
     val libp2pPeerId: String? = null,
     val listeners: List<String> = emptyList(),
     val isOnline: Boolean = true
@@ -35,6 +36,8 @@ data class NearbyPeer(
 class ContactsViewModel @Inject constructor(
     private val meshRepository: MeshRepository
 ) : ViewModel() {
+    private val nearbyDisconnectGraceMs = 30_000L
+    private val pendingNearbyRemovalJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
 
     // All contacts
     private val _contacts = MutableStateFlow<List<uniffi.api.Contact>>(emptyList())
@@ -84,19 +87,33 @@ class ContactsViewModel @Inject constructor(
             MeshEventBus.peerEvents.collect { event ->
                 when (event) {
                     is PeerEvent.IdentityDiscovered -> {
-                        val alreadyContact = _contacts.value.any { it.peerId == event.peerId }
+                        cancelPendingNearbyRemoval(event.peerId)
+                        cancelPendingNearbyRemoval(event.libp2pPeerId)
+                        cancelPendingNearbyRemoval(event.blePeerId)
+
+                        val alreadyContact = _contacts.value.any { contact ->
+                            contact.peerId == event.peerId ||
+                                contact.publicKey.equals(event.publicKey, ignoreCase = true)
+                        }
                         if (!alreadyContact) {
                             val current = _nearbyPeers.value.toMutableList()
                             if (event.blePeerId != null && event.blePeerId != event.peerId) {
                                 current.removeAll { it.peerId == event.blePeerId }
                             }
+                            current.removeAll {
+                                it.peerId != event.peerId &&
+                                    !it.publicKey.isNullOrBlank() &&
+                                    it.publicKey?.equals(event.publicKey, ignoreCase = true) == true
+                            }
                             val idx = current.indexOfFirst { it.peerId == event.peerId }
+                            val existing = if (idx >= 0) current[idx] else null
                             val updated = NearbyPeer(
                                 peerId = event.peerId,
                                 publicKey = event.publicKey,
-                                nickname = event.nickname,
+                                nickname = event.nickname ?: existing?.nickname,
+                                blePeerId = event.blePeerId,
                                 libp2pPeerId = event.libp2pPeerId,
-                                listeners = event.listeners,
+                                listeners = if (event.listeners.isNotEmpty()) event.listeners else (existing?.listeners ?: emptyList()),
                                 isOnline = true
                             )
                             if (idx >= 0) current[idx] = updated else current.add(updated)
@@ -106,18 +123,54 @@ class ContactsViewModel @Inject constructor(
                     }
                     is PeerEvent.Discovered -> {
                         val alreadyContact = _contacts.value.any { it.peerId == event.peerId }
-                        val alreadyNearby = _nearbyPeers.value.any { it.peerId == event.peerId }
-                        if (!alreadyContact && !alreadyNearby) {
-                            _nearbyPeers.value = _nearbyPeers.value + NearbyPeer(event.peerId)
+                        cancelPendingNearbyRemoval(event.peerId)
+                        val current = _nearbyPeers.value.toMutableList()
+                        val existingIdx = current.indexOfFirst { it.peerId == event.peerId || it.libp2pPeerId == event.peerId }
+                        if (existingIdx >= 0) {
+                            current[existingIdx] = current[existingIdx].copy(isOnline = true)
+                            _nearbyPeers.value = current
+                        } else if (!alreadyContact) {
+                            _nearbyPeers.value = current + NearbyPeer(event.peerId, isOnline = true)
                             Timber.d("Nearby peer (no identity yet): ${event.peerId.take(16)}")
                         }
                     }
                     is PeerEvent.Disconnected -> {
-                        _nearbyPeers.value = _nearbyPeers.value.filter { it.peerId != event.peerId }
+                        val current = _nearbyPeers.value.toMutableList()
+                        var changed = false
+                        current.indices.forEach { idx ->
+                            val peer = current[idx]
+                            if (peer.peerId == event.peerId || peer.libp2pPeerId == event.peerId) {
+                                if (peer.isOnline) {
+                                    current[idx] = peer.copy(isOnline = false)
+                                    changed = true
+                                }
+                            }
+                        }
+                        if (changed) {
+                            _nearbyPeers.value = current
+                            scheduleNearbyRemoval(event.peerId)
+                        }
                     }
                     else -> Unit
                 }
             }
+        }
+    }
+
+    private fun cancelPendingNearbyRemoval(peerId: String?) {
+        val id = peerId?.trim().orEmpty()
+        if (id.isEmpty()) return
+        pendingNearbyRemovalJobs.remove(id)?.cancel()
+    }
+
+    private fun scheduleNearbyRemoval(peerId: String) {
+        cancelPendingNearbyRemoval(peerId)
+        pendingNearbyRemovalJobs[peerId] = viewModelScope.launch {
+            kotlinx.coroutines.delay(nearbyDisconnectGraceMs)
+            _nearbyPeers.value = _nearbyPeers.value.filterNot {
+                it.peerId == peerId || it.libp2pPeerId == peerId
+            }
+            pendingNearbyRemovalJobs.remove(peerId)
         }
     }
 
@@ -179,17 +232,16 @@ class ContactsViewModel @Inject constructor(
                     "libp2p_peer_id:$libp2pPeerId;listeners:${listeners.joinToString(",")}"
                 } else null
 
-                val finalNotes = if (generatedNotes != null && notes != null) {
-                    "$notes\n$generatedNotes"
-                } else {
-                    generatedNotes ?: notes
-                }
+                val finalNotes = listOfNotNull(
+                    notes?.trim()?.takeIf { it.isNotEmpty() },
+                    generatedNotes?.trim()?.takeIf { it.isNotEmpty() }
+                ).joinToString(";").takeIf { it.isNotEmpty() }
 
                 val contact = uniffi.api.Contact(
                     peerId = peerId.trim(),
                     nickname = nickname,
                     publicKey = trimmedKey,
-                    addedAt = System.currentTimeMillis().toULong(),
+                    addedAt = (System.currentTimeMillis() / 1000).toULong(),
                     lastSeen = null,
                     notes = finalNotes
                 )
@@ -303,5 +355,11 @@ class ContactsViewModel @Inject constructor(
                 _error.value = "Failed to import: ${e.message}"
             }
         }
+    }
+
+    override fun onCleared() {
+        pendingNearbyRemovalJobs.values.forEach { it.cancel() }
+        pendingNearbyRemovalJobs.clear()
+        super.onCleared()
     }
 }

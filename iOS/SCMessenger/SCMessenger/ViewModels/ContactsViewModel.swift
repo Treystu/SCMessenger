@@ -13,17 +13,22 @@ struct NearbyPeer: Identifiable, Equatable {
     let peerId: String
     let publicKey: String?
     let nickname: String?
+    let blePeerId: String?
     let libp2pPeerId: String?
     let listeners: [String]
+    let isOnline: Bool
 
     init(peerId: String, publicKey: String? = nil, nickname: String? = nil,
-         libp2pPeerId: String? = nil, listeners: [String] = []) {
+         blePeerId: String? = nil, libp2pPeerId: String? = nil, listeners: [String] = [],
+         isOnline: Bool = true) {
         self.id = peerId
         self.peerId = peerId
         self.publicKey = publicKey
         self.nickname = nickname
+        self.blePeerId = blePeerId
         self.libp2pPeerId = libp2pPeerId
         self.listeners = listeners
+        self.isOnline = isOnline
     }
 
     var displayName: String { nickname?.isEmpty == false ? nickname! : String(peerId.prefix(16)) }
@@ -36,6 +41,8 @@ struct NearbyPeer: Identifiable, Equatable {
 final class ContactsViewModel {
     private weak var repository: MeshRepository?
     private var cancellables = Set<AnyCancellable>()
+    private let nearbyDisconnectGraceSec: TimeInterval = 30
+    private var pendingNearbyRemoval: [String: DispatchWorkItem] = [:]
 
     var contacts: [Contact] = []
     var searchText = ""
@@ -105,7 +112,7 @@ final class ContactsViewModel {
                 case .discovered(let peerId):
                     self.handleDiscovered(peerId: peerId)
                 case .disconnected(let peerId):
-                    self.nearbyPeers.removeAll { $0.peerId == peerId }
+                    self.handleDisconnected(peerId: peerId)
                 default:
                     break
                 }
@@ -115,15 +122,28 @@ final class ContactsViewModel {
 
     private func handleIdentityDiscovered(peerId: String, publicKey: String, nickname: String?,
                                            libp2pPeerId: String?, listeners: [String], blePeerId: String?) {
-        let alreadySaved = contacts.contains { $0.peerId == peerId }
+        cancelPendingNearbyRemoval(peerId: peerId)
+        cancelPendingNearbyRemoval(peerId: libp2pPeerId)
+        cancelPendingNearbyRemoval(peerId: blePeerId)
+
+        let alreadySaved = contacts.contains {
+            $0.peerId == peerId || $0.publicKey.caseInsensitiveCompare(publicKey) == .orderedSame
+        }
         guard !alreadySaved else { return }
 
         if let bleId = blePeerId, bleId != peerId {
             nearbyPeers.removeAll { $0.peerId == bleId }
         }
+        nearbyPeers.removeAll {
+            $0.peerId != peerId &&
+            ($0.publicKey?.caseInsensitiveCompare(publicKey) ?? .orderedDescending) == .orderedSame
+        }
 
-        let peer = NearbyPeer(peerId: peerId, publicKey: publicKey, nickname: nickname,
-                              libp2pPeerId: libp2pPeerId, listeners: listeners)
+        let existing = nearbyPeers.first { $0.peerId == peerId }
+        let peer = NearbyPeer(peerId: peerId, publicKey: publicKey, nickname: nickname ?? existing?.nickname,
+                              blePeerId: blePeerId, libp2pPeerId: libp2pPeerId,
+                              listeners: listeners.isEmpty ? (existing?.listeners ?? []) : listeners,
+                              isOnline: true)
         if let idx = nearbyPeers.firstIndex(where: { $0.peerId == peerId }) {
             nearbyPeers[idx] = peer
         } else {
@@ -132,9 +152,67 @@ final class ContactsViewModel {
     }
 
     private func handleDiscovered(peerId: String) {
+        cancelPendingNearbyRemoval(peerId: peerId)
         let alreadySaved = contacts.contains { $0.peerId == peerId }
-        guard !alreadySaved && !nearbyPeers.contains(where: { $0.peerId == peerId }) else { return }
-        nearbyPeers.append(NearbyPeer(peerId: peerId))
+        guard !alreadySaved else { return }
+
+        if let idx = nearbyPeers.firstIndex(where: { $0.peerId == peerId || $0.libp2pPeerId == peerId }) {
+            let existing = nearbyPeers[idx]
+            nearbyPeers[idx] = NearbyPeer(
+                peerId: existing.peerId,
+                publicKey: existing.publicKey,
+                nickname: existing.nickname,
+                blePeerId: existing.blePeerId,
+                libp2pPeerId: existing.libp2pPeerId,
+                listeners: existing.listeners,
+                isOnline: true
+            )
+        } else {
+            nearbyPeers.append(NearbyPeer(peerId: peerId, isOnline: true))
+        }
+    }
+
+    private func handleDisconnected(peerId: String) {
+        var changed = false
+        for idx in nearbyPeers.indices {
+            let peer = nearbyPeers[idx]
+            if peer.peerId == peerId || peer.libp2pPeerId == peerId {
+                if peer.isOnline {
+                    nearbyPeers[idx] = NearbyPeer(
+                        peerId: peer.peerId,
+                        publicKey: peer.publicKey,
+                        nickname: peer.nickname,
+                        blePeerId: peer.blePeerId,
+                        libp2pPeerId: peer.libp2pPeerId,
+                        listeners: peer.listeners,
+                        isOnline: false
+                    )
+                    changed = true
+                }
+            }
+        }
+        if changed {
+            scheduleNearbyRemoval(peerId: peerId)
+        }
+    }
+
+    private func cancelPendingNearbyRemoval(peerId: String?) {
+        guard let peerId = peerId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !peerId.isEmpty else { return }
+        pendingNearbyRemoval.removeValue(forKey: peerId)?.cancel()
+    }
+
+    private func scheduleNearbyRemoval(peerId: String) {
+        cancelPendingNearbyRemoval(peerId: peerId)
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.nearbyPeers.removeAll {
+                ($0.peerId == peerId || $0.libp2pPeerId == peerId) && !$0.isOnline
+            }
+            self.pendingNearbyRemoval.removeValue(forKey: peerId)
+        }
+        pendingNearbyRemoval[peerId] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + nearbyDisconnectGraceSec, execute: work)
     }
 
     /// Called after contacts change to drop any nearby entry that became a contact.

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.scmessenger.android.data.MeshRepository
 import com.scmessenger.android.service.MeshEventBus
 import com.scmessenger.android.service.MessageEvent
+import com.scmessenger.android.utils.toEpochMillis
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -239,7 +240,7 @@ class ChatViewModel @Inject constructor(
      * Get formatted timestamp for a message.
      */
     fun formatTimestamp(timestamp: ULong): String {
-        val millis = timestamp.toLong() * 1000
+        val millis = timestamp.toEpochMillis()
         val date = java.util.Date(millis)
         val now = java.util.Date()
 

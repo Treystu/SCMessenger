@@ -39,7 +39,6 @@ class UniffiIntegrationTest {
     fun `test IronCore initialization`() {
         val config = uniffi.api.MeshServiceConfig(
             discoveryIntervalMs = 30000u,
-            relayBudgetPerHour = 200u,
             batteryFloorPct = 20u
         )
         val service = uniffi.api.MeshService.withStorage(config, storagePath)

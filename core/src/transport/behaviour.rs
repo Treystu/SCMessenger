@@ -16,7 +16,7 @@ use super::reflection::{AddressReflectionRequest, AddressReflectionResponse};
 #[cfg(not(target_arch = "wasm32"))]
 use libp2p::mdns;
 use libp2p::{
-    gossipsub, identify, kad,
+    autonat, dcutr, gossipsub, identify, kad, ping, relay,
     request_response::{self, ProtocolSupport},
     swarm::NetworkBehaviour,
     StreamProtocol,
@@ -26,6 +26,14 @@ use std::time::Duration;
 /// The Iron Core network behaviour combining all protocols.
 #[derive(NetworkBehaviour)]
 pub struct IronCoreBehaviour {
+    /// Circuit Relay v2 client for relay reservations and relayed dials.
+    pub relay_client: relay::client::Behaviour,
+    /// Direct connection upgrade through relay (hole punching).
+    pub dcutr: dcutr::Behaviour,
+    /// NAT status probing via observed reachability.
+    pub autonat: autonat::Behaviour,
+    /// Keepalive and round-trip telemetry.
+    pub ping: ping::Behaviour,
     /// Direct message delivery (request-response pattern)
     pub messaging: request_response::cbor::Behaviour<MessageRequest, MessageResponse>,
     /// Address reflection for sovereign NAT discovery (replaces external STUN)
@@ -131,8 +139,18 @@ impl IronCoreBehaviour {
     /// - Kademlia set to Server mode by default
     /// - Ledger exchange for automatic peer list sharing
     /// - All timeouts are generous to survive flaky networks
-    pub fn new(keypair: &libp2p::identity::Keypair) -> anyhow::Result<Self> {
+    pub fn new(
+        keypair: &libp2p::identity::Keypair,
+        relay_client: relay::client::Behaviour,
+    ) -> anyhow::Result<Self> {
         let peer_id = keypair.public().to_peer_id();
+        let dcutr = dcutr::Behaviour::new(peer_id);
+        let autonat = autonat::Behaviour::new(peer_id, autonat::Config::default());
+        let ping = ping::Behaviour::new(
+            ping::Config::new()
+                .with_interval(Duration::from_secs(15))
+                .with_timeout(Duration::from_secs(20)),
+        );
 
         // Request-response for direct messaging
         let messaging = request_response::cbor::Behaviour::new(
@@ -222,6 +240,10 @@ impl IronCoreBehaviour {
         );
 
         Ok(Self {
+            relay_client,
+            dcutr,
+            autonat,
+            ping,
             messaging,
             address_reflection,
             relay,

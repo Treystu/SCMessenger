@@ -312,6 +312,7 @@ impl MeshService {
         let swarm_bridge = self.swarm_bridge.clone();
         let core = self.core.clone();
         let relay_budget_init = self.relay_budget.clone();
+        let bootstrap_addrs = self.bootstrap_addrs.lock().clone();
 
         // Spawn a dedicated OS thread that owns its own Tokio runtime.
         // This is the safest approach for mobile: we cannot rely on being
@@ -330,11 +331,32 @@ impl MeshService {
                     Ok(rt) => {
                         rt.block_on(async move {
                             let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(100);
+                            let bootstrap_multiaddrs: Vec<libp2p::Multiaddr> = bootstrap_addrs
+                                .iter()
+                                .filter_map(|raw| match raw.parse::<libp2p::Multiaddr>() {
+                                    Ok(addr) => Some(addr),
+                                    Err(e) => {
+                                        tracing::warn!(
+                                            "Invalid bootstrap multiaddr '{}': {}",
+                                            raw,
+                                            e
+                                        );
+                                        None
+                                    }
+                                })
+                                .collect();
 
-                            match crate::transport::start_swarm(
+                            tracing::info!(
+                                "Starting swarm with {} bootstrap addr(s)",
+                                bootstrap_multiaddrs.len()
+                            );
+
+                            match crate::transport::start_swarm_with_config(
                                 libp2p_keys,
                                 listen_multiaddr,
                                 event_tx,
+                                None,
+                                bootstrap_multiaddrs,
                             )
                             .await
                             {
@@ -1329,8 +1351,8 @@ impl SwarmBridge {
         let peers = rt.block_on(handle.get_peers()).unwrap_or_default();
 
         if peers.is_empty() {
-            tracing::warn!("send_to_all_peers: no connected peers, message queued locally");
-            return Ok(());
+            tracing::warn!("send_to_all_peers: no connected peers");
+            return Err(crate::IronCoreError::NetworkError);
         }
 
         let mut sent = 0usize;
@@ -1341,6 +1363,11 @@ impl SwarmBridge {
                     tracing::warn!("send_to_all_peers: failed to send to {}: {:?}", peer_id, e)
                 }
             }
+        }
+
+        if sent == 0 {
+            tracing::warn!("send_to_all_peers: failed to deliver to every connected peer");
+            return Err(crate::IronCoreError::NetworkError);
         }
 
         tracing::info!("send_to_all_peers: sent to {} peers", sent);

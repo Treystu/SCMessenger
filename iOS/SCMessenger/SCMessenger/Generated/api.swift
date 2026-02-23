@@ -1071,6 +1071,8 @@ public protocol IronCoreProtocol : AnyObject {
     
     func prepareMessage(recipientPublicKeyHex: String, text: String) throws  -> Data
     
+    func prepareMessageWithId(recipientPublicKeyHex: String, text: String) throws  -> PreparedMessage
+    
     func prepareReceipt(recipientPublicKeyHex: String, messageId: String) throws  -> Data
     
     func setDelegate(delegate: CoreDelegate?) 
@@ -1201,6 +1203,15 @@ open func prepareCoverTraffic(sizeBytes: UInt32)throws  -> Data {
 open func prepareMessage(recipientPublicKeyHex: String, text: String)throws  -> Data {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_prepare_message(self.uniffiClonePointer(),
+        FfiConverterString.lower(recipientPublicKeyHex),
+        FfiConverterString.lower(text),$0
+    )
+})
+}
+    
+open func prepareMessageWithId(recipientPublicKeyHex: String, text: String)throws  -> PreparedMessage {
+    return try  FfiConverterTypePreparedMessage.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_prepare_message_with_id(self.uniffiClonePointer(),
         FfiConverterString.lower(recipientPublicKeyHex),
         FfiConverterString.lower(text),$0
     )
@@ -2829,6 +2840,63 @@ public func FfiConverterTypeMessageRecord_lower(_ value: MessageRecord) -> RustB
 }
 
 
+public struct PreparedMessage {
+    public var messageId: String
+    public var envelopeData: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(messageId: String, envelopeData: Data) {
+        self.messageId = messageId
+        self.envelopeData = envelopeData
+    }
+}
+
+
+
+extension PreparedMessage: Equatable, Hashable {
+    public static func ==(lhs: PreparedMessage, rhs: PreparedMessage) -> Bool {
+        if lhs.messageId != rhs.messageId {
+            return false
+        }
+        if lhs.envelopeData != rhs.envelopeData {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(messageId)
+        hasher.combine(envelopeData)
+    }
+}
+
+
+public struct FfiConverterTypePreparedMessage: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PreparedMessage {
+        return
+            try PreparedMessage(
+                messageId: FfiConverterString.read(from: &buf), 
+                envelopeData: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PreparedMessage, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.messageId, into: &buf)
+        FfiConverterData.write(value.envelopeData, into: &buf)
+    }
+}
+
+
+public func FfiConverterTypePreparedMessage_lift(_ buf: RustBuffer) throws -> PreparedMessage {
+    return try FfiConverterTypePreparedMessage.lift(buf)
+}
+
+public func FfiConverterTypePreparedMessage_lower(_ value: PreparedMessage) -> RustBuffer {
+    return FfiConverterTypePreparedMessage.lower(value)
+}
+
+
 public struct RelayAdjustment {
     public var maxPerHour: UInt32
     public var priorityThreshold: UInt8
@@ -4246,6 +4314,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_prepare_message() != 24979) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_prepare_message_with_id() != 51238) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_prepare_receipt() != 37483) {

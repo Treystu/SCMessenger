@@ -19,6 +19,7 @@ import com.scmessenger.android.ui.components.IdenticonFromPeerId
 import com.scmessenger.android.ui.components.StatusIndicator
 import com.scmessenger.android.ui.theme.*
 import com.scmessenger.android.ui.viewmodels.DashboardViewModel
+import com.scmessenger.android.utils.toEpochMillis
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -227,7 +228,7 @@ private fun TransportBadge(
 }
 
 private fun formatTimestamp(timestamp: ULong): String {
-    val millis = timestamp.toLong() * 1000
+    val millis = timestamp.toEpochMillis()
     val date = Date(millis)
     val now = Date()
 

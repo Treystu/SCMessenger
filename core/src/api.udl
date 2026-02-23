@@ -18,6 +18,11 @@ dictionary SignatureResult {
     string public_key_hex;
 };
 
+dictionary PreparedMessage {
+    string message_id;
+    bytes envelope_data;
+};
+
 // ============================================================================
 // MAIN INTERFACE
 // ============================================================================
@@ -49,6 +54,8 @@ interface IronCore {
     // Messaging
     [Throws=IronCoreError]
     bytes prepare_message(string recipient_public_key_hex, string text);
+    [Throws=IronCoreError]
+    PreparedMessage prepare_message_with_id(string recipient_public_key_hex, string text);
     [Throws=IronCoreError]
     bytes prepare_receipt(string recipient_public_key_hex, string message_id);
     /// Generate a cover traffic payload — random bytes that look like an encrypted
