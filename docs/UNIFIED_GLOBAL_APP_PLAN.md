@@ -13,7 +13,7 @@ Deliver one **singular, dependable SCMessenger product** that works consistently
 
 ## 2) Current Baseline (Verified)
 
-- Full repo context review complete: **393/393 files checked**
+- Full repo context review complete: **359/359 files checked**
 - Triple-check artifact: `docs/TRIPLE_CHECK_REPORT.md`
 - Canonical tracker pending count: **0** (`docs/DOC_PASS_TRACKER.md`)
 

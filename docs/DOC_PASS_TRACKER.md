@@ -14,10 +14,10 @@ Status key:
 
 ## Summary
 
-- Total files: **393**
+- Total files: **359**
 - Validated: **78**
 - Deprecated snapshots: **0**
-- Follow-up required: **315**
+- Follow-up required: **281**
 - Pending review: **0**
 
 Top pending hotspots:
@@ -166,7 +166,6 @@ Top pending hotspots:
 - [x] `cli/src/landing.html` — followup
 - [x] `cli/src/ledger.rs` — followup
 - [x] `cli/src/main.rs` — followup
-- [x] `cli/src/main.rs.backup` — followup
 - [x] `cli/src/server.rs` — followup
 - [x] `cloudbuild.yaml` — followup
 - [x] `core/Cargo.toml` — followup
@@ -199,12 +198,10 @@ Top pending hotspots:
 - [x] `core/src/mobile/ios_strategy.rs` — followup
 - [x] `core/src/mobile/mod.rs` — followup
 - [x] `core/src/mobile/service.rs` — followup
-- [x] `core/src/mobile/settings.rs` — followup
 - [x] `core/src/mobile_bridge.rs` — followup
 - [x] `core/src/platform/auto_adjust.rs` — followup
 - [x] `core/src/platform/mod.rs` — followup
 - [x] `core/src/platform/service.rs` — followup
-- [x] `core/src/platform/settings.rs` — followup
 - [x] `core/src/privacy/circuit.rs` — followup
 - [x] `core/src/privacy/cover.rs` — followup
 - [x] `core/src/privacy/mod.rs` — followup
@@ -309,36 +306,6 @@ Top pending hotspots:
 - [x] `iOS/PHASES_4-15_GUIDE.md` — validated
 - [x] `iOS/PLAN_REVIEW.md` — validated
 - [x] `iOS/README.md` — validated
-- [x] `iOS/SCMessenger-Existing/Bridging-Header.h` — followup
-- [x] `iOS/SCMessenger-Existing/Data/MeshRepository.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Data/TopicManager.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Generated/api.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Generated/apiFFI.h` — followup
-- [x] `iOS/SCMessenger-Existing/Generated/apiFFI.modulemap` — followup
-- [x] `iOS/SCMessenger-Existing/Info.plist` — followup
-- [x] `iOS/SCMessenger-Existing/Models/Models.swift` — followup
-- [x] `iOS/SCMessenger-Existing/SCMessengerApp.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Services/CoreDelegateImpl.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Services/IosPlatformBridge.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Services/MeshBackgroundService.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Services/MeshEventBus.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Services/NotificationManager.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Transport/BLECentralManager.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Transport/BLEL2CAPManager.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Transport/BLEPeripheralManager.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Transport/MeshBLEConstants.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Transport/MultipeerTransport.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Utils/Theme.swift` — followup
-- [x] `iOS/SCMessenger-Existing/ViewModels/ChatViewModel.swift` — followup
-- [x] `iOS/SCMessenger-Existing/ViewModels/ContactsViewModel.swift` — followup
-- [x] `iOS/SCMessenger-Existing/ViewModels/OnboardingViewModel.swift` — followup
-- [x] `iOS/SCMessenger-Existing/ViewModels/SettingsViewModel.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Views/Contacts/ContactsListView.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Views/Dashboard/MeshDashboardView.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Views/Navigation/MainTabView.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Views/Onboarding/OnboardingFlow.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Views/Settings/SettingsView.swift` — followup
-- [x] `iOS/SCMessenger-Existing/Views/Topics/JoinMeshView.swift` — followup
 - [x] `iOS/SCMessenger/SCMessenger.xcodeproj/project.pbxproj` — followup
 - [x] `iOS/SCMessenger/SCMessenger.xcodeproj/project.xcworkspace/contents.xcworkspacedata` — followup
 - [x] `iOS/SCMessenger/SCMessenger.xcodeproj/xcuserdata/christymaxwell.xcuserdatad/xcschemes/xcschememanagement.plist` — followup
@@ -393,17 +360,16 @@ Top pending hotspots:
 - [x] `mobile/README.md` — validated
 - [x] `mobile/build.rs` — followup
 - [x] `mobile/src/lib.rs` — followup
-- [x] `reference/Androidlogs.txt` — followup
 - [x] `reference/README.md` — validated
 - [x] `reference/double-ratchet.ts` — followup
 - [x] `reference/envelope.ts` — followup
-- [x] `reference/iOSlogs.txt` — followup
 - [x] `reference/primitives.ts` — followup
 - [x] `reference/shamir.ts` — followup
 - [x] `reference/storage.ts` — followup
 - [x] `reference/x3dh.ts` — followup
 - [x] `run_comprehensive_network_tests.sh` — followup
 - [x] `scripts/delete_merged_branches.sh` — followup
+- [x] `scripts/deploy_gcp_node.sh` — followup
 - [x] `scripts/get-node-info.sh` — followup
 - [x] `scripts/repo_audit.sh` — followup
 - [x] `scripts/scm.sh` — followup

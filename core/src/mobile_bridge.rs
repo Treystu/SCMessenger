@@ -941,6 +941,111 @@ impl MeshSettingsManager {
 }
 
 // ============================================================================
+// BOOTSTRAP CONFIGURATION
+// ============================================================================
+
+/// Configuration for bootstrap node resolution.
+///
+/// Resolution order: `env_override_key` → `remote_url` → `static_nodes`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BootstrapConfig {
+    /// Static fallback multiaddr strings.
+    pub static_nodes: Vec<String>,
+    /// Optional remote URL to fetch a JSON array of multiaddr strings.
+    pub remote_url: Option<String>,
+    /// Timeout for the remote fetch, in seconds.
+    pub fetch_timeout_secs: u32,
+    /// Optional environment variable name for a comma-separated override list.
+    pub env_override_key: Option<String>,
+}
+
+/// Resolves bootstrap node addresses using a deterministic priority chain.
+pub struct BootstrapResolver {
+    config: BootstrapConfig,
+}
+
+impl BootstrapResolver {
+    pub fn new(config: BootstrapConfig) -> Self {
+        Self { config }
+    }
+
+    /// Resolve bootstrap nodes: env → remote → static.
+    pub fn resolve(&self) -> Vec<String> {
+        // 1. Environment override (highest priority)
+        if let Some(ref env_key) = self.config.env_override_key {
+            if let Ok(val) = std::env::var(env_key) {
+                let addrs: Vec<String> = val
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                if !addrs.is_empty() {
+                    tracing::info!(
+                        "Bootstrap resolved via env var '{}': {} addr(s)",
+                        env_key,
+                        addrs.len()
+                    );
+                    return addrs;
+                }
+            }
+        }
+
+        // 2. Remote URL fetch (medium priority) — non-WASM only
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(ref url) = self.config.remote_url {
+            match self.fetch_remote(url) {
+                Ok(addrs) if !addrs.is_empty() => {
+                    tracing::info!("Bootstrap resolved via remote URL: {} addr(s)", addrs.len());
+                    return addrs;
+                }
+                Ok(_) => {
+                    tracing::warn!(
+                        "Remote bootstrap URL returned empty list; falling back to static"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Remote bootstrap fetch failed: {}; falling back to static",
+                        e
+                    );
+                }
+            }
+        }
+
+        // 3. Static fallback (lowest priority)
+        tracing::info!(
+            "Bootstrap resolved via static fallback: {} addr(s)",
+            self.config.static_nodes.len()
+        );
+        self.config.static_nodes.clone()
+    }
+
+    /// Return the raw static fallback list without env/remote resolution.
+    pub fn static_fallback(&self) -> Vec<String> {
+        self.config.static_nodes.clone()
+    }
+
+    /// Attempt to fetch bootstrap nodes from a remote URL (non-WASM only).
+    /// Expects a JSON array of strings: `["/ip4/1.2.3.4/tcp/9001/p2p/..."]`
+    #[cfg(not(target_arch = "wasm32"))]
+    fn fetch_remote(&self, url: &str) -> Result<Vec<String>, String> {
+        let timeout = std::time::Duration::from_secs(self.config.fetch_timeout_secs as u64);
+        let resp = ureq::AgentBuilder::new()
+            .timeout(timeout)
+            .build()
+            .get(url)
+            .call()
+            .map_err(|e| format!("HTTP request failed: {}", e))?;
+        let body = resp
+            .into_string()
+            .map_err(|e| format!("Failed to read response body: {}", e))?;
+        let addrs: Vec<String> =
+            serde_json::from_str(&body).map_err(|e| format!("Failed to parse JSON: {}", e))?;
+        Ok(addrs)
+    }
+}
+
+// ============================================================================
 // MESSAGE HISTORY
 // ============================================================================
 

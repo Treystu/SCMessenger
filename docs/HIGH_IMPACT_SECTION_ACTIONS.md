@@ -36,8 +36,8 @@ Action key:
 High-impact queue completed for this pass. Lower-impact followup markdown docs were also normalized with explicit section-action outcome blocks on 2026-02-23.
 
 Normalization verification snapshot:
-- followup markdown docs in tracker: 53
-- followup markdown docs with explicit section-action outcome block: 53
+- followup markdown docs in tracker: 0
+- followup markdown docs with explicit section-action outcome block: 0
 - missing action blocks: 0
 
 ## Verification Rules

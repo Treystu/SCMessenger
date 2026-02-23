@@ -186,7 +186,7 @@ Owner policy constraints (2026-02-23):
 ## Priority 2: Documentation Completion and Governance
 
 1. Full-file documentation pass completion using `docs/DOC_PASS_TRACKER.md` (completed)
-   - Current: all tracked files are reviewed (`pending` = 0, checked = 393).
+   - Current: all tracked files are reviewed (`pending` = 0, checked = 359).
    - Ongoing target: keep this at 0 pending via delta checks on new/changed files.
 
 2. Historical-heavy docs section-status sweep
