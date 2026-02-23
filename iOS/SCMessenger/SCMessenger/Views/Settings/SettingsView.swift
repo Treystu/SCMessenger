@@ -413,20 +413,30 @@ struct PrivacySettingsView: View {
             }
 
             // Additional Privacy Features
-            // Temporarily disabled until core-level toggle wiring is complete.
             Section("Additional Privacy Features") {
-                FeaturePlaceholderRow(
-                    title: "Cover Traffic",
-                    description: "Send dummy traffic to resist traffic analysis (temporarily disabled)"
-                )
-                FeaturePlaceholderRow(
-                    title: "Message Padding",
-                    description: "Pad messages to hide actual message length (temporarily disabled)"
-                )
-                FeaturePlaceholderRow(
-                    title: "Timing Obfuscation",
-                    description: "Add random delays to obscure patterns (temporarily disabled)"
-                )
+                Toggle("Cover Traffic", isOn: Binding(
+                    get: { viewModel?.settings?.coverTrafficEnabled ?? false },
+                    set: { viewModel?.isCoverTrafficEnabled = $0 }
+                ))
+                Text("Send dummy traffic to resist traffic analysis")
+                    .font(Theme.bodySmall)
+                    .foregroundStyle(Theme.onSurfaceVariant)
+
+                Toggle("Message Padding", isOn: Binding(
+                    get: { viewModel?.settings?.messagePaddingEnabled ?? false },
+                    set: { viewModel?.isMessagePaddingEnabled = $0 }
+                ))
+                Text("Pad messages to hide actual message length")
+                    .font(Theme.bodySmall)
+                    .foregroundStyle(Theme.onSurfaceVariant)
+
+                Toggle("Timing Obfuscation", isOn: Binding(
+                    get: { viewModel?.settings?.timingObfuscationEnabled ?? false },
+                    set: { viewModel?.isTimingObfuscationEnabled = $0 }
+                ))
+                Text("Add random delays to obscure communication patterns")
+                    .font(Theme.bodySmall)
+                    .foregroundStyle(Theme.onSurfaceVariant)
             }
 
             // Privacy Best Practices (mirrors Android)

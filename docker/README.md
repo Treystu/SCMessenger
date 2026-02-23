@@ -48,7 +48,7 @@ This directory contains Docker configurations and test scripts to validate SCMes
 
 ### Network Topology
 
-```
+```text
 Network-A (172.20.0.0/24)          Network-B (172.21.0.0/24)          Network-C (172.22.0.0/24)
 ┌──────────────────┐               ┌──────────────────┐               ┌──────────────────┐
 │                  │               │                  │               │                  │

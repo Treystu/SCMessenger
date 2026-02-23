@@ -167,21 +167,36 @@ fun PrivacySettingsScreen(
                     )
                 }
 
-                // Future Privacy Features (Placeholders)
+                // Additional Privacy Features
                 SettingsSection(title = "Additional Privacy Features") {
-                    FeaturePlaceholder(
+                    SwitchSetting(
                         title = "Cover Traffic",
-                        description = "Send dummy traffic to resist traffic analysis (Coming Soon)"
+                        description = "Send dummy traffic to resist traffic analysis",
+                        checked = currentSettings.coverTrafficEnabled,
+                        onCheckedChange = {
+                            viewModel.updateSettings(currentSettings.copy(coverTrafficEnabled = it))
+                        },
+                        enabled = !isSaving
                     )
 
-                    FeaturePlaceholder(
+                    SwitchSetting(
                         title = "Message Padding",
-                        description = "Pad messages to hide actual message length (Coming Soon)"
+                        description = "Pad messages to hide actual message length",
+                        checked = currentSettings.messagePaddingEnabled,
+                        onCheckedChange = {
+                            viewModel.updateSettings(currentSettings.copy(messagePaddingEnabled = it))
+                        },
+                        enabled = !isSaving
                     )
 
-                    FeaturePlaceholder(
+                    SwitchSetting(
                         title = "Timing Obfuscation",
-                        description = "Add random delays to obscure communication patterns (Coming Soon)"
+                        description = "Add random delays to obscure communication patterns",
+                        checked = currentSettings.timingObfuscationEnabled,
+                        onCheckedChange = {
+                            viewModel.updateSettings(currentSettings.copy(timingObfuscationEnabled = it))
+                        },
+                        enabled = !isSaving
                     )
                 }
             }

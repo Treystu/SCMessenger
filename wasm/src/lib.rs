@@ -6,7 +6,10 @@ pub mod transport;
 use crate::transport::WebSocketRelay;
 use futures::StreamExt;
 use parking_lot::Mutex;
-use scmessenger_core::{IdentityInfo, IronCore as RustIronCore, SignatureResult};
+use scmessenger_core::{
+    DiscoveryMode, IdentityInfo, IronCore as RustIronCore, MeshSettings, MeshSettingsManager,
+    SignatureResult,
+};
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
@@ -21,6 +24,10 @@ pub struct IronCore {
     inner: Arc<RustIronCore>,
     /// Buffer of successfully decoded messages waiting to be drained by JS.
     rx_messages: Arc<Mutex<Vec<WasmMessage>>>,
+    /// Settings manager for persistence (uses localStorage path or in-memory).
+    settings_manager: Option<MeshSettingsManager>,
+    /// Cached in-memory settings for the current session.
+    settings: Arc<Mutex<MeshSettings>>,
 }
 
 #[wasm_bindgen]
@@ -29,18 +36,39 @@ impl IronCore {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         init_logging();
+        // Web defaults: always plugged in, internet-only transport
+        let mut defaults = MeshSettings::default();
+        defaults.battery_floor = 0; // Web = always plugged in
+        defaults.ble_enabled = false; // No BLE in browser
+        defaults.wifi_aware_enabled = false; // No WiFi Aware in browser
+        defaults.wifi_direct_enabled = false; // No WiFi Direct in browser
+        defaults.internet_enabled = true;
         Self {
             inner: Arc::new(RustIronCore::new()),
             rx_messages: Arc::new(Mutex::new(Vec::new())),
+            settings_manager: None,
+            settings: Arc::new(Mutex::new(defaults)),
         }
     }
 
     #[wasm_bindgen(js_name = withStorage)]
     pub fn with_storage(storage_path: String) -> Self {
         init_logging();
+        let manager = MeshSettingsManager::new(storage_path.clone());
+        let loaded = manager.load().unwrap_or_else(|_| {
+            let mut defaults = MeshSettings::default();
+            defaults.battery_floor = 0;
+            defaults.ble_enabled = false;
+            defaults.wifi_aware_enabled = false;
+            defaults.wifi_direct_enabled = false;
+            defaults.internet_enabled = true;
+            defaults
+        });
         Self {
             inner: Arc::new(RustIronCore::with_storage(storage_path)),
             rx_messages: Arc::new(Mutex::new(Vec::new())),
+            settings_manager: Some(manager),
+            settings: Arc::new(Mutex::new(loaded)),
         }
     }
 
@@ -206,6 +234,45 @@ impl IronCore {
         }
         array
     }
+
+    // ── Settings Management ──────────────────────────────────────────────
+
+    /// Return the current MeshSettings as a JS object.
+    #[wasm_bindgen(js_name = getSettings)]
+    pub fn get_settings(&self) -> JsValue {
+        let s = self.settings.lock();
+        serde_wasm_bindgen::to_value(&WasmMeshSettings::from(s.clone())).unwrap()
+    }
+
+    /// Apply a partial or full settings update from JS.
+    /// Accepts a JS object matching the WasmMeshSettings shape.
+    #[wasm_bindgen(js_name = updateSettings)]
+    pub fn update_settings(&self, js_settings: JsValue) -> Result<(), JsValue> {
+        let wasm_settings: WasmMeshSettings = serde_wasm_bindgen::from_value(js_settings)
+            .map_err(|e| JsValue::from_str(&format!("Invalid settings: {}", e)))?;
+        let settings: MeshSettings = wasm_settings.into();
+
+        // Persist if we have a storage manager
+        if let Some(ref mgr) = self.settings_manager {
+            mgr.save(settings.clone())
+                .map_err(|e| JsValue::from_str(&format!("Failed to save settings: {:?}", e)))?;
+        }
+
+        *self.settings.lock() = settings;
+        Ok(())
+    }
+
+    /// Return the default settings for the Web platform.
+    #[wasm_bindgen(js_name = getDefaultSettings)]
+    pub fn get_default_settings(&self) -> JsValue {
+        let mut defaults = MeshSettings::default();
+        defaults.battery_floor = 0;
+        defaults.ble_enabled = false;
+        defaults.wifi_aware_enabled = false;
+        defaults.wifi_direct_enabled = false;
+        defaults.internet_enabled = true;
+        serde_wasm_bindgen::to_value(&WasmMeshSettings::from(defaults)).unwrap()
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -249,6 +316,70 @@ struct WasmMessage {
     sender_id: String,
     text: Option<String>,
     timestamp: u64,
+}
+
+/// Web-facing MeshSettings with camelCase field names for JS interop.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmMeshSettings {
+    relay_enabled: bool,
+    max_relay_budget: u32,
+    battery_floor: u8,
+    ble_enabled: bool,
+    wifi_aware_enabled: bool,
+    wifi_direct_enabled: bool,
+    internet_enabled: bool,
+    discovery_mode: String,
+    onion_routing: bool,
+    cover_traffic_enabled: bool,
+    message_padding_enabled: bool,
+    timing_obfuscation_enabled: bool,
+}
+
+impl From<MeshSettings> for WasmMeshSettings {
+    fn from(s: MeshSettings) -> Self {
+        Self {
+            relay_enabled: s.relay_enabled,
+            max_relay_budget: s.max_relay_budget,
+            battery_floor: s.battery_floor,
+            ble_enabled: s.ble_enabled,
+            wifi_aware_enabled: s.wifi_aware_enabled,
+            wifi_direct_enabled: s.wifi_direct_enabled,
+            internet_enabled: s.internet_enabled,
+            discovery_mode: match s.discovery_mode {
+                DiscoveryMode::Normal => "normal".to_string(),
+                DiscoveryMode::Cautious => "cautious".to_string(),
+                DiscoveryMode::Paranoid => "paranoid".to_string(),
+            },
+            onion_routing: s.onion_routing,
+            cover_traffic_enabled: s.cover_traffic_enabled,
+            message_padding_enabled: s.message_padding_enabled,
+            timing_obfuscation_enabled: s.timing_obfuscation_enabled,
+        }
+    }
+}
+
+impl From<WasmMeshSettings> for MeshSettings {
+    fn from(w: WasmMeshSettings) -> Self {
+        Self {
+            relay_enabled: w.relay_enabled,
+            max_relay_budget: w.max_relay_budget,
+            battery_floor: w.battery_floor,
+            ble_enabled: w.ble_enabled,
+            wifi_aware_enabled: w.wifi_aware_enabled,
+            wifi_direct_enabled: w.wifi_direct_enabled,
+            internet_enabled: w.internet_enabled,
+            discovery_mode: match w.discovery_mode.as_str() {
+                "cautious" => DiscoveryMode::Cautious,
+                "paranoid" => DiscoveryMode::Paranoid,
+                _ => DiscoveryMode::Normal,
+            },
+            onion_routing: w.onion_routing,
+            cover_traffic_enabled: w.cover_traffic_enabled,
+            message_padding_enabled: w.message_padding_enabled,
+            timing_obfuscation_enabled: w.timing_obfuscation_enabled,
+        }
+    }
 }
 
 #[cfg(test)]
