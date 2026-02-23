@@ -39,11 +39,27 @@ final class MeshRepository {
 
     // MARK: - Bootstrap Nodes for NAT Traversal
 
-    /// Default bootstrap node multiaddrs for NAT traversal and internet roaming.
-    /// Update these when a production bootstrap VPS is deployed.
-    static let defaultBootstrapNodes: [String] = [
+    /// Static fallback bootstrap node multiaddrs for NAT traversal and internet roaming.
+    /// These are used only if env override and remote fetch both fail/are absent.
+    private static let staticBootstrapNodes: [String] = [
         "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWL6KesqENjgojaLTxJiwXdvgmEkbvh1znyu8FdJQEizmV",
     ]
+
+    /// Resolved bootstrap nodes using the core BootstrapResolver.
+    /// Priority: SC_BOOTSTRAP_NODES env var → remote URL → static fallback.
+    static let defaultBootstrapNodes: [String] = {
+        do {
+            let config = BootstrapConfig(
+                staticNodes: staticBootstrapNodes,
+                remoteUrl: nil,  // Set to a bootstrap-list URL when available
+                fetchTimeoutSecs: 5,
+                envOverrideKey: "SC_BOOTSTRAP_NODES"
+            )
+            return BootstrapResolver(config: config).resolve()
+        } catch {
+            return staticBootstrapNodes
+        }
+    }()
 
     private static let bootstrapRelayPeerIds: Set<String> = Set(
         defaultBootstrapNodes.compactMap { parseBootstrapRelay(from: $0)?.relayPeerId }

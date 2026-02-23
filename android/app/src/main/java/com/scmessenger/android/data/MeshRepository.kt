@@ -27,11 +27,28 @@ import java.io.File
 class MeshRepository(private val context: Context) {
 
     companion object {
-        /** Default bootstrap node multiaddrs for NAT traversal and internet roaming.
-         *  Update these when a production bootstrap VPS is deployed. */
-        val DEFAULT_BOOTSTRAP_NODES: List<String> = listOf(
+        /** Static fallback bootstrap nodes for NAT traversal and internet roaming.
+         *  These are used if env override and remote fetch both fail/are absent. */
+        private val STATIC_BOOTSTRAP_NODES: List<String> = listOf(
             "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWL6KesqENjgojaLTxJiwXdvgmEkbvh1znyu8FdJQEizmV"
         )
+
+        /** Resolve bootstrap nodes using the core BootstrapResolver.
+         *  Priority: SC_BOOTSTRAP_NODES env var → remote URL → static fallback. */
+        val DEFAULT_BOOTSTRAP_NODES: List<String> by lazy {
+            try {
+                val config = uniffi.api.BootstrapConfig(
+                    staticNodes = STATIC_BOOTSTRAP_NODES,
+                    remoteUrl = null,  // Set to a bootstrap-list URL when available
+                    fetchTimeoutSecs = 5u,
+                    envOverrideKey = "SC_BOOTSTRAP_NODES"
+                )
+                uniffi.api.BootstrapResolver(config).resolve()
+            } catch (e: Exception) {
+                Timber.w("BootstrapResolver failed, using static fallback: ${e.message}")
+                STATIC_BOOTSTRAP_NODES
+            }
+        }
     }
 
     private val storagePath: String = context.filesDir.absolutePath
