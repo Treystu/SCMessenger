@@ -63,7 +63,8 @@ final class ContactsViewModel {
     func loadContacts() {
         isLoading = true
         do {
-            contacts = try repository?.getContacts() ?? []
+            let rawContacts = try repository?.getContacts() ?? []
+            contacts = deduplicateByPublicKey(rawContacts)
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -140,5 +141,37 @@ final class ContactsViewModel {
     private func refreshNearbyFilter() {
         let contactIds = Set(contacts.map { $0.peerId })
         nearbyPeers.removeAll { contactIds.contains($0.peerId) }
+    }
+
+    private func deduplicateByPublicKey(_ input: [Contact]) -> [Contact] {
+        var byKey: [String: Contact] = [:]
+        var passthrough: [Contact] = []
+
+        for contact in input {
+            let normalizedKey = contact.publicKey.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard normalizedKey.count == 64 else {
+                passthrough.append(contact)
+                continue
+            }
+
+            if let current = byKey[normalizedKey] {
+                byKey[normalizedKey] = preferredContact(current, contact)
+            } else {
+                byKey[normalizedKey] = contact
+            }
+        }
+
+        return Array(byKey.values) + passthrough
+    }
+
+    private func preferredContact(_ a: Contact, _ b: Contact) -> Contact {
+        let aName = a.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let bName = b.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if !aName.isEmpty && bName.isEmpty { return a }
+        if !bName.isEmpty && aName.isEmpty { return b }
+        if a.peerId.hasPrefix("12D3Koo") && !b.peerId.hasPrefix("12D3Koo") { return a }
+        if b.peerId.hasPrefix("12D3Koo") && !a.peerId.hasPrefix("12D3Koo") { return b }
+        return a
     }
 }

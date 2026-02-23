@@ -523,13 +523,18 @@ final class MeshRepository {
             return
         }
 
+        let trimmedKey = senderPublicKeyHex.trimmingCharacters(in: .whitespacesAndNewlines)
+        let canonicalPeerId = resolveCanonicalPeerId(senderId: senderId, senderPublicKeyHex: trimmedKey)
+        if canonicalPeerId != senderId {
+            logger.info("Canonicalized sender \(senderId) -> \(canonicalPeerId) using public key match")
+        }
+
         // Auto-upsert contact: senderPublicKeyHex is guaranteed valid (Rust verified it during decrypt)
-        let existingContact = try? contactManager?.get(peerId: senderId)
+        let existingContact = try? contactManager?.get(peerId: canonicalPeerId)
         if existingContact == nil {
-            let trimmedKey = senderPublicKeyHex.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmedKey.count == 64 {
                 let autoContact = Contact(
-                    peerId: senderId,
+                    peerId: canonicalPeerId,
                     nickname: nil,
                     publicKey: trimmedKey,
                     addedAt: UInt64(Date().timeIntervalSince1970),
@@ -538,13 +543,13 @@ final class MeshRepository {
                 )
                 do {
                     try contactManager?.add(contact: autoContact)
-                    logger.info("Auto-created contact from received message: \(senderId.prefix(8)) key: \(trimmedKey.prefix(8))...")
+                    logger.info("Auto-created contact from received message: \(canonicalPeerId.prefix(8)) key: \(trimmedKey.prefix(8))...")
                 } catch {
-                    logger.warning("Auto-create contact failed for \(senderId.prefix(8)): \(error.localizedDescription)")
+                    logger.warning("Auto-create contact failed for \(canonicalPeerId.prefix(8)): \(error.localizedDescription)")
                 }
             }
         } else {
-            try? contactManager?.updateLastSeen(peerId: senderId)
+            try? contactManager?.updateLastSeen(peerId: canonicalPeerId)
         }
 
         // Process message
@@ -553,7 +558,7 @@ final class MeshRepository {
         let messageRecord = MessageRecord(
             id: messageId,
             direction: .received,
-            peerId: senderId,
+            peerId: canonicalPeerId,
             content: content,
             timestamp: UInt64(Date().timeIntervalSince1970),
             delivered: true
@@ -563,7 +568,7 @@ final class MeshRepository {
 
         // Notify UI
         messageUpdates.send(messageRecord)
-        logger.info("Message received and processed from \(senderId)")
+        logger.info("Message received and processed from \(canonicalPeerId)")
 
         // Send delivery receipt ACK back to sender
         Task {
@@ -577,6 +582,41 @@ final class MeshRepository {
                 logger.debug("Failed to send delivery receipt for \(messageId): \(error)")
             }
         }
+    }
+
+    /// Resolve incoming sender IDs to an existing contact using public-key identity.
+    ///
+    /// This prevents duplicate conversations when transport IDs differ
+    /// (e.g. libp2p peer ID vs identity ID) but cryptographic identity is the same.
+    private func resolveCanonicalPeerId(senderId: String, senderPublicKeyHex: String) -> String {
+        guard let normalizedIncomingKey = normalizePublicKey(senderPublicKeyHex),
+              let contacts = try? contactManager?.list() else {
+            return senderId
+        }
+
+        let keyMatches = contacts.filter { normalizePublicKey($0.publicKey) == normalizedIncomingKey }
+        guard !keyMatches.isEmpty else { return senderId }
+
+        let best = keyMatches.max { lhs, rhs in
+            contactRank(lhs, senderId: senderId) < contactRank(rhs, senderId: senderId)
+        }
+        return best?.peerId ?? senderId
+    }
+
+    private func normalizePublicKey(_ key: String?) -> String? {
+        guard let value = key?.trimmingCharacters(in: .whitespacesAndNewlines),
+              value.count == 64 else {
+            return nil
+        }
+        return value.lowercased()
+    }
+
+    private func contactRank(_ contact: Contact, senderId: String) -> Int {
+        var score = 0
+        if contact.peerId == senderId { score += 4 }
+        if let nickname = contact.nickname, !nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { score += 8 }
+        if contact.peerId.hasPrefix("12D3Koo") || contact.peerId.hasPrefix("Qm") { score += 1 }
+        return score
     }
 
     // MARK: - Settings Management

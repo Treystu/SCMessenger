@@ -16,6 +16,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.scmessenger.android.ui.identity.IdentityScreen
 import com.scmessenger.android.ui.screens.*
 import com.scmessenger.android.ui.viewmodels.MainViewModel
 
@@ -85,7 +86,17 @@ fun MeshNavHost(
         }
 
         composable(Screen.Settings.route) {
-            SettingsScreen()
+            SettingsScreen(
+                onNavigateToIdentity = {
+                    navController.navigate(Screen.Identity.route)
+                }
+            )
+        }
+
+        composable(Screen.Identity.route) {
+            IdentityScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
 
         composable(
@@ -140,6 +151,7 @@ sealed class Screen(val route: String, val label: String, val icon: androidx.com
     object Contacts : Screen("contacts", "Contacts", androidx.compose.material.icons.Icons.Default.People)
     object Dashboard: Screen("dashboard", "Network", androidx.compose.material.icons.Icons.Filled.Router)
     object Settings : Screen("settings", "Settings", androidx.compose.material.icons.Icons.Default.Settings)
+    object Identity : Screen("identity", "Identity", androidx.compose.material.icons.Icons.Default.Settings)
 
     companion object {
         val bottomNavItems = listOf(Conversations, Contacts, Dashboard, Settings)

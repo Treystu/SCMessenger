@@ -192,12 +192,17 @@ class MeshRepository(private val context: Context) {
                             return
                         }
 
+                        val canonicalPeerId = resolveCanonicalPeerId(senderId, senderPublicKeyHex)
+                        if (canonicalPeerId != senderId) {
+                            Timber.i("Canonicalized sender $senderId -> $canonicalPeerId using public key match")
+                        }
+
                         // Auto-upsert contact: senderPublicKeyHex is guaranteed valid Ed25519 key
                         // (Rust only fires this callback after successful decryption)
-                        val existingContact = try { contactManager?.get(senderId) } catch (e: Exception) { null }
+                        val existingContact = try { contactManager?.get(canonicalPeerId) } catch (e: Exception) { null }
                         if (existingContact == null && senderPublicKeyHex.trim().length == 64) {
                             val autoContact = uniffi.api.Contact(
-                                peerId = senderId,
+                                peerId = canonicalPeerId,
                                 nickname = null,
                                 publicKey = senderPublicKeyHex.trim(),
                                 addedAt = (System.currentTimeMillis() / 1000).toULong(),
@@ -206,12 +211,12 @@ class MeshRepository(private val context: Context) {
                             )
                             try {
                                 contactManager?.add(autoContact)
-                                Timber.i("Auto-created contact from received message: ${senderId.take(8)} key: ${senderPublicKeyHex.take(8)}...")
+                                Timber.i("Auto-created contact from received message: ${canonicalPeerId.take(8)} key: ${senderPublicKeyHex.take(8)}...")
                             } catch (e: Exception) {
-                                Timber.w("Auto-create contact failed for ${senderId.take(8)}: ${e.message}")
+                                Timber.w("Auto-create contact failed for ${canonicalPeerId.take(8)}: ${e.message}")
                             }
                         } else if (existingContact != null) {
-                            try { contactManager?.updateLastSeen(senderId) } catch (e: Exception) {
+                            try { contactManager?.updateLastSeen(canonicalPeerId) } catch (e: Exception) {
                                 Timber.d("updateLastSeen failed: ${e.message}")
                             }
                         }
@@ -220,7 +225,7 @@ class MeshRepository(private val context: Context) {
                         val record = uniffi.api.MessageRecord(
                             id = messageId,
                             direction = uniffi.api.MessageDirection.RECEIVED,
-                            peerId = senderId,
+                            peerId = canonicalPeerId,
                             content = content,
                             timestamp = (System.currentTimeMillis() / 1000).toULong(),
                             delivered = true
@@ -994,6 +999,35 @@ class MeshRepository(private val context: Context) {
     // ========================================================================
     // ROUTING HELPERS
     // ========================================================================
+
+    private fun resolveCanonicalPeerId(senderId: String, senderPublicKeyHex: String): String {
+        val normalizedIncomingKey = normalizePublicKey(senderPublicKeyHex) ?: return senderId
+        val keyMatches = try {
+            contactManager?.list()
+                ?.filter { normalizePublicKey(it.publicKey) == normalizedIncomingKey }
+                .orEmpty()
+        } catch (e: Exception) {
+            Timber.d("Unable to resolve canonical sender ID: ${e.message}")
+            emptyList()
+        }
+
+        if (keyMatches.isEmpty()) return senderId
+        return keyMatches.maxByOrNull { contactRank(it, senderId) }?.peerId ?: senderId
+    }
+
+    private fun normalizePublicKey(value: String?): String? {
+        val trimmed = value?.trim() ?: return null
+        if (trimmed.length != 64) return null
+        return trimmed.lowercase()
+    }
+
+    private fun contactRank(contact: uniffi.api.Contact, senderId: String): Int {
+        var score = 0
+        if (contact.peerId == senderId) score += 4
+        if (!contact.nickname.isNullOrBlank()) score += 8
+        if (contact.peerId.startsWith("12D3Koo") || contact.peerId.startsWith("Qm")) score += 1
+        return score
+    }
 
     /**
      * Extract libp2p PeerId from a contact's notes field.

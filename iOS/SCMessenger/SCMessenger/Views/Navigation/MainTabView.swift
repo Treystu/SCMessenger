@@ -119,13 +119,46 @@ struct ConversationListView: View {
         // Load conversations from repository
         do {
             let contacts = try repository.getContacts()
-            conversations = contacts.map { contact in
+            let deduped = deduplicateContactsByPublicKey(contacts)
+            conversations = deduped.map { contact in
                 let displayName = contact.nickname ?? String(contact.peerId.prefix(8)) + "..."
                 return Conversation(peerId: contact.peerId, peerNickname: displayName)
             }
         } catch {
             // Handle error
         }
+    }
+
+    private func deduplicateContactsByPublicKey(_ input: [Contact]) -> [Contact] {
+        var byKey: [String: Contact] = [:]
+        var passthrough: [Contact] = []
+
+        for contact in input {
+            let normalizedKey = contact.publicKey.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard normalizedKey.count == 64 else {
+                passthrough.append(contact)
+                continue
+            }
+
+            if let current = byKey[normalizedKey] {
+                byKey[normalizedKey] = preferredContact(current, contact)
+            } else {
+                byKey[normalizedKey] = contact
+            }
+        }
+
+        return Array(byKey.values) + passthrough
+    }
+
+    private func preferredContact(_ a: Contact, _ b: Contact) -> Contact {
+        let aName = a.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let bName = b.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if !aName.isEmpty && bName.isEmpty { return a }
+        if !bName.isEmpty && aName.isEmpty { return b }
+        if a.peerId.hasPrefix("12D3Koo") && !b.peerId.hasPrefix("12D3Koo") { return a }
+        if b.peerId.hasPrefix("12D3Koo") && !a.peerId.hasPrefix("12D3Koo") { return b }
+        return a
     }
 }
 

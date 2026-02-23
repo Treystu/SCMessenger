@@ -23,7 +23,8 @@ import com.scmessenger.android.ui.viewmodels.SettingsViewModel
 @Composable
 fun SettingsScreen(
     settingsViewModel: SettingsViewModel = hiltViewModel(),
-    serviceViewModel: MeshServiceViewModel = hiltViewModel()
+    serviceViewModel: MeshServiceViewModel = hiltViewModel(),
+    onNavigateToIdentity: () -> Unit = {}
 ) {
     val meshSettings by settingsViewModel.settings.collectAsState()
     val identityInfo by settingsViewModel.identityInfo.collectAsState()
@@ -70,7 +71,8 @@ fun SettingsScreen(
                     val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                     val clip = android.content.ClipData.newPlainText("Identity Export", export)
                     clipboard.setPrimaryClip(clip)
-                }
+                },
+                onShowIdentityQr = onNavigateToIdentity
             )
         }
 
@@ -367,7 +369,8 @@ fun InfoRow(label: String, value: String) {
 fun IdentitySection(
     identityInfo: uniffi.api.IdentityInfo,
     onNicknameChange: (String) -> Unit,
-    onCopyExport: () -> Unit
+    onCopyExport: () -> Unit,
+    onShowIdentityQr: () -> Unit
 ) {
     var nicknameText by remember(identityInfo.nickname) { mutableStateOf(identityInfo.nickname ?: "") }
     val context = LocalContext.current
@@ -467,6 +470,15 @@ fun IdentitySection(
                 Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Copy Full Identity Export")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = onShowIdentityQr,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Show Identity QR")
             }
         }
     }
