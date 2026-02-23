@@ -42,7 +42,6 @@ The following phases have been implemented and verified as building successfully
 - **Phase 9: Messaging UI**
   - `ConversationsScreen.kt` exists (List view).
   - **Missing:** `ChatScreen.kt` (Detail view for actual messaging).
-  - _Note:_ `ConversationsScreen` contains `TODO: Navigate to conversation detail`.
 
 ## [Needs Revalidation] ❌ Missing / To Do
 
