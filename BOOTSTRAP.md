@@ -8,6 +8,13 @@
 
 SCMessenger automatically embeds default bootstrap nodes into all builds (Docker images and native binaries), enabling instant network connectivity without manual configuration.
 
+## [Current] Section Action Outcome (2026-02-23)
+
+- `rewrite`: canonical bootstrap model is env/startup override + dynamic fetch + static fallback.
+- `move`: strategic/bootstrap rollout policy is maintained in `docs/UNIFIED_GLOBAL_APP_PLAN.md` and `REMAINING_WORK_TRACKING.md`.
+- `keep`: this document remains operator-facing bootstrap usage guidance.
+- `delete/replace`: treat default-only interpretations as historical unless reconfirmed in current code paths.
+
 ## [Needs Revalidation] How It Works
 
 ### [Needs Revalidation] 1. Embedded Defaults

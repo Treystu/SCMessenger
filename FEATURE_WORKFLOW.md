@@ -8,6 +8,12 @@
 
 This guide outlines the streamlined process for adding new features to SCMessenger across all platforms (Core, iOS, Android, Web/WASM, CLI). Follow this checklist to ensure consistency, quality, and complete coverage.
 
+## [Current] Section Action Outcome (2026-02-23)
+
+- `rewrite`: workflow applies to unified Android+iOS+Web parity delivery.
+- `move`: launch-gating execution and priorities are in `docs/GLOBAL_ROLLOUT_PLAN.md` and `REMAINING_WORK_TRACKING.md`.
+- `keep`: this file is the implementation process runbook (how work ships), not current-state proof.
+
 ## [Needs Revalidation] 1. Core Implementation (Rust)
 
 **Location**: `core/src/`

@@ -12,6 +12,7 @@ This is the documentation index and governance map for the repository.
 - [Unified Global App Plan (Android+iOS+Web)](docs/UNIFIED_GLOBAL_APP_PLAN.md)
 - [Full File Documentation Tracker](docs/DOC_PASS_TRACKER.md)
 - [Triple-Check Verification Report](docs/TRIPLE_CHECK_REPORT.md)
+- [High-Impact Section Action Matrix](docs/HIGH_IMPACT_SECTION_ACTIONS.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Transport Architecture](docs/TRANSPORT_ARCHITECTURE.md)
 - [Protocol Specification](docs/PROTOCOL.md)

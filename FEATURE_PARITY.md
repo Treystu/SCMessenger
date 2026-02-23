@@ -9,6 +9,13 @@
 This document tracks the implementation status of key features across all SCMessenger platforms (CLI, iOS, Android, Web/WASM, Core).
 It serves as an audit log and a roadmap for ensuring full cross-platform functionality.
 
+## [Current] Section Action Outcome (2026-02-23)
+
+- `move`: active parity gaps and priorities are maintained in `REMAINING_WORK_TRACKING.md`.
+- `move`: verified runtime status is maintained in `docs/CURRENT_STATE.md`.
+- `rewrite`: this file remains as a historical parity audit reference and process context.
+- `delete/replace`: do not use this file as launch-gate truth; canonical chain owns current-state decisions.
+
 ## [Needs Revalidation] Feature Status Matrix
 
 | Feature                   | Core (Rust) | CLI | iOS | Android | Web/WASM | Notes                                                                                |

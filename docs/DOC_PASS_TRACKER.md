@@ -14,8 +14,8 @@ Status key:
 
 ## Summary
 
-- Total files: **392**
-- Validated: **24**
+- Total files: **393**
+- Validated: **25**
 - Deprecated snapshots: **0**
 - Follow-up required: **368**
 - Pending review: **0**
@@ -289,6 +289,7 @@ Top pending hotspots:
 - [x] `docs/CURRENT_STATE.md` — validated
 - [x] `docs/DOC_PASS_TRACKER.md` — validated
 - [x] `docs/GLOBAL_ROLLOUT_PLAN.md` — validated
+- [x] `docs/HIGH_IMPACT_SECTION_ACTIONS.md` — validated
 - [x] `docs/NAT_TRAVERSAL_GUIDE.md` — followup
 - [x] `docs/NAT_TRAVERSAL_PLAN.md` — followup
 - [x] `docs/PROTOCOL.md` — validated
