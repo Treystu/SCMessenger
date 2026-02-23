@@ -14,10 +14,10 @@ Status key:
 
 ## Summary
 
-- Total files: **359**
-- Validated: **78**
+- Total files: **356**
+- Validated: **79**
 - Deprecated snapshots: **0**
-- Follow-up required: **281**
+- Follow-up required: **277**
 - Pending review: **0**
 
 Top pending hotspots:
@@ -112,7 +112,6 @@ Top pending hotspots:
 - [x] `android/app/src/main/java/com/scmessenger/android/ui/screens/SettingsScreen.kt` — followup
 - [x] `android/app/src/main/java/com/scmessenger/android/ui/settings/MeshSettingsScreen.kt` — followup
 - [x] `android/app/src/main/java/com/scmessenger/android/ui/settings/PowerSettingsScreen.kt` — followup
-- [x] `android/app/src/main/java/com/scmessenger/android/ui/settings/PrivacySettingsScreen.kt` — followup
 - [x] `android/app/src/main/java/com/scmessenger/android/ui/theme/Color.kt` — followup
 - [x] `android/app/src/main/java/com/scmessenger/android/ui/theme/Theme.kt` — followup
 - [x] `android/app/src/main/java/com/scmessenger/android/ui/theme/Type.kt` — followup
@@ -289,9 +288,11 @@ Top pending hotspots:
 - [x] `docs/HIGH_IMPACT_SECTION_ACTIONS.md` — validated
 - [x] `docs/NAT_TRAVERSAL_GUIDE.md` — validated
 - [x] `docs/NAT_TRAVERSAL_PLAN.md` — validated
+- [x] `docs/NON_MD_FOLLOWUP_CLASSIFICATION.md` — validated
 - [x] `docs/PROTOCOL.md` — validated
 - [x] `docs/REMEDIATION_PLAN.md` — validated
 - [x] `docs/REPO_CONTEXT.md` — validated
+- [x] `docs/STUBS_AND_UNIMPLEMENTED.md` — followup
 - [x] `docs/SWARMBRIDGE_INTEGRATION.md` — validated
 - [x] `docs/TESTING_GUIDE.md` — validated
 - [x] `docs/TRANSPORT_ARCHITECTURE.md` — validated
@@ -343,9 +344,6 @@ Top pending hotspots:
 - [x] `iOS/SCMessenger/SCMessenger/Views/Onboarding/OnboardingFlow.swift` — followup
 - [x] `iOS/SCMessenger/SCMessenger/Views/Settings/SettingsView.swift` — followup
 - [x] `iOS/SCMessenger/SCMessenger/Views/Topics/JoinMeshView.swift` — followup
-- [x] `iOS/SCMessenger/build_new.txt` — followup
-- [x] `iOS/SCMessenger/build_output.txt` — followup
-- [x] `iOS/SCMessenger/build_output_2.txt` — followup
 - [x] `iOS/SCMessengerCore.xcframework/Info.plist` — followup
 - [x] `iOS/SCMessengerCore.xcframework/ios-arm64/Headers` — followup
 - [x] `iOS/XCODE_SETUP.md` — validated
@@ -375,7 +373,6 @@ Top pending hotspots:
 - [x] `scripts/scm.sh` — followup
 - [x] `scripts/test_gcp_node.sh` — followup
 - [x] `scripts/verify_branch_merges.sh` — followup
-- [x] `stash0.diff` — followup
 - [x] `test_network_scenarios.sh` — followup
 - [x] `ui/index.html` — followup
 - [x] `verify_integration.sh` — followup

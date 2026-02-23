@@ -32,16 +32,16 @@ Transient hidden build artifacts (for example `.build/` intermediates) are exclu
 
 Inventory snapshot from `rg --files` at plan creation:
 
-- Total tracked files: **359**
+- Total tracked files: **356**
 - Top-level heavy areas:
   - `core/` (88)
-  - `android/` (90)
-  - `iOS/` (58)
+  - `android/` (89)
+  - `iOS/` (55)
   - `docker/` (21)
-  - `docs/` (20)
+  - `docs/` (22)
 - Major file types:
   - Rust (`.rs`): 102
-  - Markdown (`.md`): 75
+  - Markdown (`.md`): 77
   - Kotlin (`.kt`): 67
   - Swift (`.swift`): 53
 
@@ -51,8 +51,8 @@ File-by-file checklist artifact: `docs/DOC_PASS_TRACKER.md`.
 
 From `docs/DOC_PASS_TRACKER.md`:
 
-- Validated: 78
-- Follow-up (mixed-status section tagging applied): 281
+- Validated: 79
+- Follow-up (mixed-status section tagging applied): 278
 - Pending review: 0
 
 Top-level pending concentration:

@@ -8,17 +8,17 @@ This report captures the three-pass repository verification requested for full-c
 
 Scope note: inventory uses `rg --files` (source-relevant files) and excludes transient hidden build outputs such as `.build/`.
 
-- Total tracked files (`rg --files`): **359**
-- Tracker entries (`docs/DOC_PASS_TRACKER.md`): **359**
-- Checked entries: **359**
+- Total tracked files (`rg --files`): **357**
+- Tracker entries (`docs/DOC_PASS_TRACKER.md`): **357**
+- Checked entries: **357**
 - Pending entries: **0**
 
 Directory counts:
 
 - `core/`: 88
 - `android/`: 90
-- `iOS/`: 58
-- `docs/`: 20
+- `iOS/`: 55
+- `docs/`: 22
 - `docker/`: 21
 - `cli/`: 11
 - `mobile/`: 4
@@ -35,12 +35,12 @@ Pattern set:
 
 Results:
 
-- Total hits: **254**
+- Total hits: **279**
 - Highest-concentration roots:
-  - `iOS`: 96
+  - `iOS`: 98
   - `core`: 29
   - `android`: 23
-  - `docs`: 25
+  - `docs`: 47
   - `docker`: 17
 
 Interpretation:
@@ -58,14 +58,14 @@ TODO/FIXME sync outcome:
 
 Keyword distribution (`core`, `android`, `iOS`, `wasm`, `ui`, `cli`, `mobile`, `docs`):
 
-- `relay`: `1455, 167, 390, 144, 4, 20, 0, 148`
-- `bootstrap`: `147, 44, 49, 0, 3, 120, 0, 112`
-- `public_key_hex`: `52, 1, 6, 8, 0, 10, 2, 12`
+- `relay`: `1455, 167, 390, 144, 4, 36, 0, 171`
+- `bootstrap`: `162, 53, 117, 0, 3, 135, 0, 116`
+- `public_key_hex`: `52, 1, 6, 8, 0, 15, 2, 12`
 - `identity_id`: `40, 9, 5, 2, 0, 11, 1, 8`
-- `libp2p_peer_id`: `9, 17, 15, 0, 0, 2, 0, 7`
-- `privacy`: `9, 18, 72, 1, 0, 0, 0, 38`
+- `libp2p_peer_id`: `9, 17, 14, 0, 0, 2, 0, 7`
+- `privacy`: `9, 18, 72, 1, 0, 0, 0, 45`
 - `qr`: `17, 68, 79, 0, 0, 0, 0, 9`
-- `history`: `16, 71, 292, 0, 1, 67, 0, 44`
+- `history`: `16, 71, 291, 0, 1, 74, 0, 45`
 
 Interpretation:
 
@@ -76,7 +76,7 @@ Interpretation:
 
 ## Confirmed Outcome
 
-- Repository-wide file coverage is complete (**359/359 checked**).
+- Repository-wide file coverage is complete (**357/357 checked**).
 - No unreviewed tracker entries remain.
 - Remaining work is implementation/parity/operational hardening, not discovery.
 

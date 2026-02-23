@@ -248,6 +248,24 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun updateCoverTrafficEnabled(enabled: Boolean) {
+        _settings.value?.let { current ->
+            updateSettings(current.copy(coverTrafficEnabled = enabled))
+        }
+    }
+
+    fun updateMessagePaddingEnabled(enabled: Boolean) {
+        _settings.value?.let { current ->
+            updateSettings(current.copy(messagePaddingEnabled = enabled))
+        }
+    }
+
+    fun updateTimingObfuscationEnabled(enabled: Boolean) {
+        _settings.value?.let { current ->
+            updateSettings(current.copy(timingObfuscationEnabled = enabled))
+        }
+    }
+
     // ========================================================================
     // APP PREFERENCES
     // ========================================================================
@@ -369,32 +387,3 @@ class SettingsViewModel @Inject constructor(
         }
     }
 }
-
-// Helper extension for copying MeshSettings
-private fun uniffi.api.MeshSettings.copy(
-    relayEnabled: Boolean = this.relayEnabled,
-    maxRelayBudget: UInt = this.maxRelayBudget,
-    batteryFloor: UByte = this.batteryFloor,
-    bleEnabled: Boolean = this.bleEnabled,
-    wifiAwareEnabled: Boolean = this.wifiAwareEnabled,
-    wifiDirectEnabled: Boolean = this.wifiDirectEnabled,
-    internetEnabled: Boolean = this.internetEnabled,
-    discoveryMode: uniffi.api.DiscoveryMode = this.discoveryMode,
-    onionRouting: Boolean = this.onionRouting,
-    coverTrafficEnabled: Boolean = this.coverTrafficEnabled,
-    messagePaddingEnabled: Boolean = this.messagePaddingEnabled,
-    timingObfuscationEnabled: Boolean = this.timingObfuscationEnabled
-) = uniffi.api.MeshSettings(
-    relayEnabled = relayEnabled,
-    maxRelayBudget = maxRelayBudget,
-    batteryFloor = batteryFloor,
-    bleEnabled = bleEnabled,
-    wifiAwareEnabled = wifiAwareEnabled,
-    wifiDirectEnabled = wifiDirectEnabled,
-    internetEnabled = internetEnabled,
-    discoveryMode = discoveryMode,
-    onionRouting = onionRouting,
-    coverTrafficEnabled = coverTrafficEnabled,
-    messagePaddingEnabled = messagePaddingEnabled,
-    timingObfuscationEnabled = timingObfuscationEnabled
-)

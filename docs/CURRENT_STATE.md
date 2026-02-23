@@ -96,6 +96,19 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - Browser-executed WASM tests are not currently verified in this environment (`wasm-pack` missing)
 - Android build verification requires `ANDROID_HOME` to be set in-shell
 
+### Non-Markdown Extraction Highlights (2026-02-23)
+
+- `docker/run-all-tests.sh` + `docker/docker-compose.test.yml` define a broader CI-like test surface than previously summarized:
+  - Rust tests
+  - lint (`cargo fmt` + `clippy -D warnings`)
+  - security audit (`cargo audit`)
+  - UniFFI bindings checks (Kotlin + Swift generation)
+  - WASM node-runtime tests (`wasm-pack test --node`)
+- `scripts/deploy_gcp_node.sh` is a concrete community-operator deployment path using Cloud Build + Compute Engine container update/restart for the relay/bootstrap role.
+- `scripts/get-node-info.sh` documents and automates extraction of `Peer ID`, external address API query (`/api/external-address` on port `9876`), and shareable bootstrap multiaddr formatting.
+- `iOS/verify-test.sh` is now an actual build verification script (simulator workspace build), not a placeholder.
+- `android/app/build.gradle` currently aligns ABI filters and Rust build targets to `arm64-v8a` + `x86_64` (earlier mismatch note is outdated).
+
 ### Repository Structure Clarifications
 
 - Active iOS app project/code is under:

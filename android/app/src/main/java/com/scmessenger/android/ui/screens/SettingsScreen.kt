@@ -24,7 +24,8 @@ import com.scmessenger.android.ui.viewmodels.SettingsViewModel
 fun SettingsScreen(
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     serviceViewModel: MeshServiceViewModel = hiltViewModel(),
-    onNavigateToIdentity: () -> Unit = {}
+    onNavigateToIdentity: () -> Unit = {},
+    onNavigateToPrivacy: () -> Unit = {}
 ) {
     val meshSettings by settingsViewModel.settings.collectAsState()
     val identityInfo by settingsViewModel.identityInfo.collectAsState()
@@ -84,6 +85,18 @@ fun SettingsScreen(
                 settings = settings,
                 onUpdateSetting = { updater -> updater(settingsViewModel) },
                 isLoading = isLoading
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Privacy Section — inline toggles for quick access
+        meshSettings?.let { settings ->
+            PrivacySettingsSection(
+                settings = settings,
+                onUpdateSetting = { updater -> updater(settingsViewModel) },
+                isLoading = isLoading,
+                onNavigateToPrivacy = onNavigateToPrivacy
             )
         }
 
@@ -242,6 +255,60 @@ fun MeshSettingsSection(
                 subtitle = "Use internet as fallback",
                 checked = settings.internetEnabled,
                 onCheckedChange = { onUpdateSetting { vm -> vm.updateInternetEnabled(it) } },
+                enabled = !isLoading
+            )
+        }
+    }
+}
+
+@Composable
+fun PrivacySettingsSection(
+    settings: uniffi.api.MeshSettings,
+    onUpdateSetting: ((SettingsViewModel) -> Unit) -> Unit,
+    isLoading: Boolean,
+    onNavigateToPrivacy: () -> Unit = {}
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "Privacy",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            SwitchPreference(
+                title = "Onion Routing",
+                subtitle = "Route messages through multiple hops for anonymity",
+                checked = settings.onionRouting,
+                onCheckedChange = { onUpdateSetting { vm -> vm.updateOnionRouting(it) } },
+                enabled = !isLoading
+            )
+
+            SwitchPreference(
+                title = "Cover Traffic",
+                subtitle = "Send dummy traffic to resist traffic analysis",
+                checked = settings.coverTrafficEnabled,
+                onCheckedChange = { onUpdateSetting { vm -> vm.updateCoverTrafficEnabled(it) } },
+                enabled = !isLoading
+            )
+
+            SwitchPreference(
+                title = "Message Padding",
+                subtitle = "Pad messages to hide actual message length",
+                checked = settings.messagePaddingEnabled,
+                onCheckedChange = { onUpdateSetting { vm -> vm.updateMessagePaddingEnabled(it) } },
+                enabled = !isLoading
+            )
+
+            SwitchPreference(
+                title = "Timing Obfuscation",
+                subtitle = "Add random delays to obscure communication patterns",
+                checked = settings.timingObfuscationEnabled,
+                onCheckedChange = { onUpdateSetting { vm -> vm.updateTimingObfuscationEnabled(it) } },
                 enabled = !isLoading
             )
         }

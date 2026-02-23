@@ -126,10 +126,10 @@ Owner policy constraints (2026-02-23):
    - Target: either enable those tests with stable mocks or update docs/scripts to match actual execution status.
    - Outcome: Updated `android/app/src/test/README.md` to truthfully explain that UniFFI MockK limitations natively prevent complete CI verification for generated files, serving as architectural documentation pending a stable JNA harness setup instead.
 
-10. Android ABI build coverage alignment
+10. Android ABI and verification script alignment
 
-- Current: `android/app/build.gradle` declares multiple ABI filters, while `buildRustAndroid` currently builds only `aarch64-linux-android`.
-- Target: align Rust artifact production with declared ABI support or explicitly narrow supported ABI scope in build config/docs.
+- Current: `android/app/build.gradle` and `buildRustAndroid` are aligned on `arm64-v8a` + `x86_64`, but `android/verify-build-setup.sh` still checks for legacy extra Rust targets (`armv7`, `i686`).
+- Target: align environment verification script with actual supported ABI matrix and documentation.
 
 11. [x] Core settings model convergence (critical reliability debt)
 
@@ -140,10 +140,10 @@ Owner policy constraints (2026-02-23):
 - Target: one canonical settings schema and mapping strategy used by UniFFI/mobile/runtime layers.
 - Outcome: Deleted the unused `mobile/settings.rs` and `platform/settings.rs` completely. Unified purely behind the single UniFFI-verified `mobile_bridge::MeshSettings` exported transparently through `api.udl`. Web clients will default to "always plugged in" behavior via this schema.
 
-12. iOS verification script integrity
+12. iOS verification script hardening
 
-- Current: `iOS/verify-test.sh` is a placeholder (`test`) and does not verify anything.
-- Target: real automated check script or explicit deprecation with canonical replacement.
+- Current: `iOS/verify-test.sh` now performs simulator build verification.
+- Target: harden script behavior (deterministic destination selection, warning handling policy, and explicit failure output) for stable CI/operator use.
 
 13. iOS background capability hardening
 
@@ -176,7 +176,7 @@ Owner policy constraints (2026-02-23):
 ## Priority 2: Documentation Completion and Governance
 
 1. Full-file documentation pass completion using `docs/DOC_PASS_TRACKER.md` (completed)
-   - Current: all tracked files are reviewed (`pending` = 0, checked = 359).
+   - Current: all tracked files are reviewed (`pending` = 0, checked = 356).
    - Ongoing target: keep this at 0 pending via delta checks on new/changed files.
 
 2. Historical-heavy docs section-status sweep

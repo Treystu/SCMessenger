@@ -11,6 +11,7 @@ This is the documentation index and governance map for the repository.
 - [Global Rollout Plan](docs/GLOBAL_ROLLOUT_PLAN.md)
 - [Unified Global App Plan (Android+iOS+Web)](docs/UNIFIED_GLOBAL_APP_PLAN.md)
 - [Full File Documentation Tracker](docs/DOC_PASS_TRACKER.md)
+- [Non-Markdown Followup Classification](docs/NON_MD_FOLLOWUP_CLASSIFICATION.md)
 - [Triple-Check Verification Report](docs/TRIPLE_CHECK_REPORT.md)
 - [High-Impact Section Action Matrix](docs/HIGH_IMPACT_SECTION_ACTIONS.md)
 - [Architecture](docs/ARCHITECTURE.md)

@@ -2,7 +2,7 @@
 
 Generated: 2026-02-23
 
-Total checked files: **359**
+Total checked files: **356**
 
 Status legend:
 - `validated`: reviewed and aligned with canonical docs
@@ -92,7 +92,6 @@ Status legend:
 - `android/app/src/main/java/com/scmessenger/android/ui/screens/SettingsScreen.kt — followup`
 - `android/app/src/main/java/com/scmessenger/android/ui/settings/MeshSettingsScreen.kt — followup`
 - `android/app/src/main/java/com/scmessenger/android/ui/settings/PowerSettingsScreen.kt — followup`
-- `android/app/src/main/java/com/scmessenger/android/ui/settings/PrivacySettingsScreen.kt — followup`
 - `android/app/src/main/java/com/scmessenger/android/ui/theme/Color.kt — followup`
 - `android/app/src/main/java/com/scmessenger/android/ui/theme/Theme.kt — followup`
 - `android/app/src/main/java/com/scmessenger/android/ui/theme/Type.kt — followup`
@@ -269,9 +268,11 @@ Status legend:
 - `docs/HIGH_IMPACT_SECTION_ACTIONS.md — validated`
 - `docs/NAT_TRAVERSAL_GUIDE.md — validated`
 - `docs/NAT_TRAVERSAL_PLAN.md — validated`
+- `docs/NON_MD_FOLLOWUP_CLASSIFICATION.md — validated`
 - `docs/PROTOCOL.md — validated`
 - `docs/REMEDIATION_PLAN.md — validated`
 - `docs/REPO_CONTEXT.md — validated`
+- `docs/STUBS_AND_UNIMPLEMENTED.md — followup`
 - `docs/SWARMBRIDGE_INTEGRATION.md — validated`
 - `docs/TESTING_GUIDE.md — validated`
 - `docs/TRANSPORT_ARCHITECTURE.md — validated`
@@ -323,9 +324,6 @@ Status legend:
 - `iOS/SCMessenger/SCMessenger/Views/Onboarding/OnboardingFlow.swift — followup`
 - `iOS/SCMessenger/SCMessenger/Views/Settings/SettingsView.swift — followup`
 - `iOS/SCMessenger/SCMessenger/Views/Topics/JoinMeshView.swift — followup`
-- `iOS/SCMessenger/build_new.txt — followup`
-- `iOS/SCMessenger/build_output.txt — followup`
-- `iOS/SCMessenger/build_output_2.txt — followup`
 - `iOS/SCMessengerCore.xcframework/Info.plist — followup`
 - `iOS/SCMessengerCore.xcframework/ios-arm64/Headers — followup`
 - `iOS/XCODE_SETUP.md — validated`
@@ -355,7 +353,6 @@ Status legend:
 - `scripts/scm.sh — followup`
 - `scripts/test_gcp_node.sh — followup`
 - `scripts/verify_branch_merges.sh — followup`
-- `stash0.diff — followup`
 - `test_network_scenarios.sh — followup`
 - `ui/index.html — followup`
 - `verify_integration.sh — followup`
