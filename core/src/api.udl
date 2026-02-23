@@ -5,6 +5,9 @@ namespace api {
 // IDENTITY
 // ============================================================================
 
+// IdentityInfo — canonical identity = public_key_hex (Ed25519 hex).
+// identity_id (Blake3 hash) and libp2p_peer_id are derived/operational metadata.
+// Always use public_key_hex for persistence, exchange, and cross-platform resolution.
 dictionary IdentityInfo {
     string? identity_id;
     string? public_key_hex;

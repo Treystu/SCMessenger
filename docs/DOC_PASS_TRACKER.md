@@ -15,9 +15,9 @@ Status key:
 ## Summary
 
 - Total files: **393**
-- Validated: **25**
+- Validated: **78**
 - Deprecated snapshots: **0**
-- Follow-up required: **368**
+- Follow-up required: **315**
 - Pending review: **0**
 
 Top pending hotspots:
@@ -29,44 +29,44 @@ Top pending hotspots:
 
 ## File Checklist
 
-- [x] `ANDROID_BUILD_RESOLUTION.md` — followup
-- [x] `ANDROID_DISCOVERY_ISSUES.md` — followup
-- [x] `AUDIT_QUICK_REFERENCE.md` — followup
-- [x] `AUDIT_RESOLUTIONS.md` — followup
-- [x] `BOOTSTRAP.md` — followup
-- [x] `BRANCH_AUDIT_REPORT.md` — followup
-- [x] `CLAUDE.md` — followup
+- [x] `ANDROID_BUILD_RESOLUTION.md` — validated
+- [x] `ANDROID_DISCOVERY_ISSUES.md` — validated
+- [x] `AUDIT_QUICK_REFERENCE.md` — validated
+- [x] `AUDIT_RESOLUTIONS.md` — validated
+- [x] `BOOTSTRAP.md` — validated
+- [x] `BRANCH_AUDIT_REPORT.md` — validated
+- [x] `CLAUDE.md` — validated
 - [x] `CODE_OF_CONDUCT.md` — validated
 - [x] `CONTRIBUTING.md` — validated
 - [x] `Cargo.lock` — validated
 - [x] `Cargo.toml` — validated
-- [x] `DOCKER_QUICKSTART.md` — followup
-- [x] `DOCKER_TEST_QUICKREF.md` — followup
-- [x] `DOCKER_TEST_SETUP_COMPLETE.md` — followup
+- [x] `DOCKER_QUICKSTART.md` — validated
+- [x] `DOCKER_TEST_QUICKREF.md` — validated
+- [x] `DOCKER_TEST_SETUP_COMPLETE.md` — validated
 - [x] `DOCUMENTATION.md` — validated
-- [x] `DRIFTNET_MESH_BLUEPRINT.md` — followup
-- [x] `FEATURE_PARITY.md` — followup
-- [x] `FEATURE_WORKFLOW.md` — followup
-- [x] `GCP_DEPLOY_GUIDE.md` — followup
-- [x] `GEMINI_UI_GUIDE.md` — followup
-- [x] `HANDOFF_NEARBY_PEERS.md` — followup
-- [x] `INSTALL.md` — followup
-- [x] `INTEGRATION_COMPLETE.md` — followup
-- [x] `INTEGRATION_VERIFICATION.md` — followup
+- [x] `DRIFTNET_MESH_BLUEPRINT.md` — validated
+- [x] `FEATURE_PARITY.md` — validated
+- [x] `FEATURE_WORKFLOW.md` — validated
+- [x] `GCP_DEPLOY_GUIDE.md` — validated
+- [x] `GEMINI_UI_GUIDE.md` — validated
+- [x] `HANDOFF_NEARBY_PEERS.md` — validated
+- [x] `INSTALL.md` — validated
+- [x] `INTEGRATION_COMPLETE.md` — validated
+- [x] `INTEGRATION_VERIFICATION.md` — validated
 - [x] `LICENSE` — validated
-- [x] `NAT_REFACTOR_PLAN.md` — followup
-- [x] `NETWORK_TESTING.md` — followup
-- [x] `PRODUCTION_READY.md` — followup
-- [x] `QUICKCONNECT.md` — followup
+- [x] `NAT_REFACTOR_PLAN.md` — validated
+- [x] `NETWORK_TESTING.md` — validated
+- [x] `PRODUCTION_READY.md` — validated
+- [x] `QUICKCONNECT.md` — validated
 - [x] `README.md` — validated
 - [x] `REMAINING_WORK_TRACKING.md` — validated
 - [x] `SCMessengerCore.xcframework/Info.plist` — followup
 - [x] `SCMessengerCore.xcframework/ios-arm64/Headers` — followup
-- [x] `SCMessengerSKILL.md` — followup
-- [x] `SECURITY.md` — followup
-- [x] `SECURITY_AUDIT_NOTES.md` — followup
-- [x] `SOVEREIGN_MESH_PLAN.md` — followup
-- [x] `android/IMPLEMENTATION_STATUS.md` — followup
+- [x] `SCMessengerSKILL.md` — validated
+- [x] `SECURITY.md` — validated
+- [x] `SECURITY_AUDIT_NOTES.md` — validated
+- [x] `SOVEREIGN_MESH_PLAN.md` — validated
+- [x] `android/IMPLEMENTATION_STATUS.md` — validated
 - [x] `android/README.md` — validated
 - [x] `android/app/build.gradle` — followup
 - [x] `android/app/proguard-rules.pro` — followup
@@ -139,7 +139,7 @@ Top pending hotspots:
 - [x] `android/app/src/main/res/values/themes.xml` — followup
 - [x] `android/app/src/main/res/xml/backup_rules.xml` — followup
 - [x] `android/app/src/main/res/xml/data_extraction_rules.xml` — followup
-- [x] `android/app/src/test/README.md` — followup
+- [x] `android/app/src/test/README.md` — validated
 - [x] `android/app/src/test/java/com/scmessenger/android/test/ChatViewModelTest.kt` — followup
 - [x] `android/app/src/test/java/com/scmessenger/android/test/ContactsViewModelTest.kt` — followup
 - [x] `android/app/src/test/java/com/scmessenger/android/test/MeshForegroundServiceTest.kt` — followup
@@ -157,7 +157,7 @@ Top pending hotspots:
 - [x] `android/settings.gradle` — followup
 - [x] `android/verify-build-setup.sh` — followup
 - [x] `cli/Cargo.toml` — followup
-- [x] `cli/README.md` — followup
+- [x] `cli/README.md` — validated
 - [x] `cli/src/api.rs` — followup
 - [x] `cli/src/bootstrap.rs` — followup
 - [x] `cli/src/config.rs` — followup
@@ -264,10 +264,10 @@ Top pending hotspots:
 - [x] `docker/Dockerfile.android-test` — followup
 - [x] `docker/Dockerfile.rust-test` — followup
 - [x] `docker/Dockerfile.wasm-test` — followup
-- [x] `docker/IMPLEMENTATION_SUMMARY.md` — followup
-- [x] `docker/QUICKSTART.md` — followup
-- [x] `docker/README.md` — followup
-- [x] `docker/TESTING_GUIDE.md` — followup
+- [x] `docker/IMPLEMENTATION_SUMMARY.md` — validated
+- [x] `docker/QUICKSTART.md` — validated
+- [x] `docker/README.md` — validated
+- [x] `docker/TESTING_GUIDE.md` — validated
 - [x] `docker/docker-compose-extended.yml` — followup
 - [x] `docker/docker-compose.network-test.yml` — followup
 - [x] `docker/docker-compose.test.yml` — followup
@@ -279,35 +279,35 @@ Top pending hotspots:
 - [x] `docker/run-tests.sh` — followup
 - [x] `docker/setup-android-test-mocks.sh` — followup
 - [x] `docker/test-results/.gitignore` — followup
-- [x] `docker/test-results/README.md` — followup
+- [x] `docker/test-results/README.md` — validated
 - [x] `docker/test-scripts/run-integration-tests.sh` — followup
 - [x] `docs/ARCHITECTURE.md` — validated
 - [x] `docs/CHECKED_FILES.md` — validated
-- [x] `docs/CLI_LINUX.md` — followup
-- [x] `docs/CLI_MACOS.md` — followup
-- [x] `docs/CLI_WINDOWS.md` — followup
+- [x] `docs/CLI_LINUX.md` — validated
+- [x] `docs/CLI_MACOS.md` — validated
+- [x] `docs/CLI_WINDOWS.md` — validated
 - [x] `docs/CURRENT_STATE.md` — validated
 - [x] `docs/DOC_PASS_TRACKER.md` — validated
 - [x] `docs/GLOBAL_ROLLOUT_PLAN.md` — validated
 - [x] `docs/HIGH_IMPACT_SECTION_ACTIONS.md` — validated
-- [x] `docs/NAT_TRAVERSAL_GUIDE.md` — followup
-- [x] `docs/NAT_TRAVERSAL_PLAN.md` — followup
+- [x] `docs/NAT_TRAVERSAL_GUIDE.md` — validated
+- [x] `docs/NAT_TRAVERSAL_PLAN.md` — validated
 - [x] `docs/PROTOCOL.md` — validated
-- [x] `docs/REMEDIATION_PLAN.md` — followup
+- [x] `docs/REMEDIATION_PLAN.md` — validated
 - [x] `docs/REPO_CONTEXT.md` — validated
-- [x] `docs/SWARMBRIDGE_INTEGRATION.md` — followup
+- [x] `docs/SWARMBRIDGE_INTEGRATION.md` — validated
 - [x] `docs/TESTING_GUIDE.md` — validated
-- [x] `docs/TRANSPORT_ARCHITECTURE.md` — followup
+- [x] `docs/TRANSPORT_ARCHITECTURE.md` — validated
 - [x] `docs/TRIPLE_CHECK_REPORT.md` — validated
 - [x] `docs/UNCHECKED_FILES.md` — validated
 - [x] `docs/UNIFIED_GLOBAL_APP_PLAN.md` — validated
-- [x] `iOS/COMPLETE_STATUS.md` — followup
-- [x] `iOS/FINAL_STATUS.md` — followup
-- [x] `iOS/IMPLEMENTATION_STATUS.md` — followup
-- [x] `iOS/IMPLEMENTATION_SUMMARY.md` — followup
-- [x] `iOS/PHASE4_IMPLEMENTATION.md` — followup
-- [x] `iOS/PHASES_4-15_GUIDE.md` — followup
-- [x] `iOS/PLAN_REVIEW.md` — followup
+- [x] `iOS/COMPLETE_STATUS.md` — validated
+- [x] `iOS/FINAL_STATUS.md` — validated
+- [x] `iOS/IMPLEMENTATION_STATUS.md` — validated
+- [x] `iOS/IMPLEMENTATION_SUMMARY.md` — validated
+- [x] `iOS/PHASE4_IMPLEMENTATION.md` — validated
+- [x] `iOS/PHASES_4-15_GUIDE.md` — validated
+- [x] `iOS/PLAN_REVIEW.md` — validated
 - [x] `iOS/README.md` — validated
 - [x] `iOS/SCMessenger-Existing/Bridging-Header.h` — followup
 - [x] `iOS/SCMessenger-Existing/Data/MeshRepository.swift` — followup
@@ -381,12 +381,12 @@ Top pending hotspots:
 - [x] `iOS/SCMessenger/build_output_2.txt` — followup
 - [x] `iOS/SCMessengerCore.xcframework/Info.plist` — followup
 - [x] `iOS/SCMessengerCore.xcframework/ios-arm64/Headers` — followup
-- [x] `iOS/XCODE_SETUP.md` — followup
+- [x] `iOS/XCODE_SETUP.md` — validated
 - [x] `iOS/build-device.sh` — followup
 - [x] `iOS/build-rust.sh` — followup
 - [x] `iOS/copy-bindings.sh` — followup
 - [x] `iOS/install-device.sh` — followup
-- [x] `iOS/iosdesign.md` — followup
+- [x] `iOS/iosdesign.md` — validated
 - [x] `iOS/verify-build-setup.sh` — followup
 - [x] `iOS/verify-test.sh` — followup
 - [x] `mobile/Cargo.toml` — followup
@@ -394,7 +394,7 @@ Top pending hotspots:
 - [x] `mobile/build.rs` — followup
 - [x] `mobile/src/lib.rs` — followup
 - [x] `reference/Androidlogs.txt` — followup
-- [x] `reference/README.md` — followup
+- [x] `reference/README.md` — validated
 - [x] `reference/double-ratchet.ts` — followup
 - [x] `reference/envelope.ts` — followup
 - [x] `reference/iOSlogs.txt` — followup

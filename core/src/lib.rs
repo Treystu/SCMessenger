@@ -64,13 +64,35 @@ impl From<anyhow::Error> for IronCoreError {
 // DATA TYPES
 // ============================================================================
 
-/// Identity information for UniFFI export
+/// Identity information for UniFFI / WASM export.
+///
+/// ## Canonical Identity: `public_key_hex`
+///
+/// `public_key_hex` is the **canonical persisted and exchanged identity**.
+/// It is the hex-encoded Ed25519 public key used for:
+/// - Contact exchange (QR codes, import/export payloads)
+/// - Message encryption (recipient addressing)
+/// - History attribution (sender identification)
+/// - Cross-platform identity resolution
+///
+/// Other identifiers are **derived/operational metadata**:
+/// - `identity_id`: Blake3 hash of the public key (legacy display ID, 64 hex chars)
+/// - `libp2p_peer_id`: libp2p PeerId derived from the Ed25519 keypair (transport-layer routing)
+///
+/// When persisting contacts or exchanging identity information, always use
+/// `public_key_hex` as the primary key. The `identity_id` and `libp2p_peer_id`
+/// can be derived from it and should not be used as standalone identifiers.
 #[derive(Clone)]
 pub struct IdentityInfo {
+    /// Blake3 hash of the public key — derived/display identifier (64 hex chars).
+    /// **Not canonical.** Use `public_key_hex` for persistence and exchange.
     pub identity_id: Option<String>,
+    /// Hex-encoded Ed25519 public key — **CANONICAL identity** for all platforms.
     pub public_key_hex: Option<String>,
     pub initialized: bool,
     pub nickname: Option<String>,
+    /// libp2p PeerId — transport-layer routing identifier. Derived from the Ed25519 keypair.
+    /// **Not canonical.** Use `public_key_hex` for persistence and exchange.
     pub libp2p_peer_id: Option<String>,
 }
 
@@ -309,7 +331,10 @@ impl IronCore {
     }
 
     /// Extract Ed25519 public key hex from a libp2p PeerID string
-    pub fn extract_public_key_from_peer_id(&self, peer_id: String) -> Result<String, IronCoreError> {
+    pub fn extract_public_key_from_peer_id(
+        &self,
+        peer_id: String,
+    ) -> Result<String, IronCoreError> {
         let bytes = bs58::decode(&peer_id)
             .into_vec()
             .map_err(|_| IronCoreError::InvalidInput)?;
@@ -321,7 +346,8 @@ impl IronCore {
             && bytes[2] == 0x08  // protobuf field 1 (key type)
             && bytes[3] == 0x01  // Ed25519
             && bytes[4] == 0x12  // protobuf field 2 (key data)
-            && bytes[5] == 0x20  // 32 bytes
+            && bytes[5] == 0x20
+        // 32 bytes
         {
             Ok(hex::encode(&bytes[6..38]))
         } else if bytes.len() >= 32 {
@@ -791,9 +817,13 @@ mod tests {
         core.initialize_identity().unwrap();
         let info = core.get_identity_info();
         let libp2p_peer_id = info.libp2p_peer_id.unwrap();
-        let extracted_hex = core.extract_public_key_from_peer_id(libp2p_peer_id).unwrap();
+        let extracted_hex = core
+            .extract_public_key_from_peer_id(libp2p_peer_id)
+            .unwrap();
         let original_hex = info.public_key_hex.unwrap();
-        assert_eq!(extracted_hex, original_hex,
-            "Extracted public key must match the identity's own public key");
+        assert_eq!(
+            extracted_hex, original_hex,
+            "Extracted public key must match the identity's own public key"
+        );
     }
 }
