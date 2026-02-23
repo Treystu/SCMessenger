@@ -7,7 +7,7 @@ This guide explains how to create and configure the SCMessenger Xcode project on
 - macOS 14+ (Sonoma)
 - Xcode 15.2+
 - Rust toolchain with iOS targets installed
-- Run `./ios/verify-build-setup.sh` to verify prerequisites
+- Run `./iOS/verify-build-setup.sh` to verify prerequisites
 
 ## Step 1: Create Xcode Project
 
@@ -22,12 +22,12 @@ This guide explains how to create and configure the SCMessenger Xcode project on
    - Language: **Swift**
    - Storage: **None** (no Core Data)
    - Include Tests: **Yes**
-5. Save location: Choose `ios/` directory (this directory)
+5. Save location: Choose `iOS/` directory (this directory)
 
 ## Step 2: Configure Build Settings
 
 ### General Tab
-- **Deployment Target**: iOS 16.0
+- **Deployment Target**: iOS 17.0
 - **Supported Destinations**: iPhone, iPad
 
 ### Build Settings
@@ -165,7 +165,7 @@ Click "+ Capability" and add:
 ### Common Build Issues
 
 #### Issue: "No such module 'Observation'"
-**Solution**: Ensure deployment target is iOS 16.0+ (Observation framework requires iOS 17+, but @Observable macro is available in iOS 16+)
+**Solution**: Ensure deployment target is iOS 17.0+.
 
 #### Issue: "Bridging header not found"
 **Solution**: Check "Objective-C Bridging Header" in Build Settings points to `SCMessenger/Bridging-Header.h`
@@ -178,14 +178,14 @@ Click "+ Capability" and add:
 
 #### Issue: "Rust compilation failed"
 **Solution**:
-- Run `./ios/verify-build-setup.sh` to check Rust toolchain
+- Run `./iOS/verify-build-setup.sh` to check Rust toolchain
 - Ensure iOS targets are installed: `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`
 
 ### Test on Simulator
 
-1. Select iPhone 15 (or later) simulator
+1. Select iPhone 17 (or later) simulator
 2. Product → Run (⌘R)
-3. App should launch with placeholder UI
+3. App should launch with the SCMessenger UI
 
 ## Step 8: Test Background Tasks (Important!)
 
@@ -217,7 +217,7 @@ Once built successfully:
 
 ```bash
 # Verify all source files compile
-xcodebuild -project SCMessenger.xcodeproj -scheme SCMessenger -destination 'platform=iOS Simulator,name=iPhone 15' build
+xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj -scheme SCMessenger -destination 'platform=iOS Simulator,name=iPhone 17' build
 
 # Expected output: BUILD SUCCEEDED
 ```
@@ -227,7 +227,7 @@ xcodebuild -project SCMessenger.xcodeproj -scheme SCMessenger -destination 'plat
 After setup, your project should have:
 
 ```
-ios/
+iOS/
 ├── SCMessenger.xcodeproj/
 │   └── project.pbxproj
 ├── SCMessenger/
@@ -253,12 +253,10 @@ ios/
 
 After successfully building:
 
-1. **Phase 4**: Implement CoreBluetooth transport
-2. **Phase 5**: Implement Multipeer Connectivity
-3. **Phase 6**: Complete MeshRepository integration
-4. **Phases 7-13**: Build UI (Views, ViewModels)
-5. **Phase 14**: Integration tests
-6. **Phase 15**: Gossipsub topic integration
+1. Install to a physical iPhone: `APPLE_TEAM_ID=<YOUR_TEAM_ID> DEVICE_UDID=<YOUR_DEVICE_UDID> ./iOS/install-device.sh`
+2. Verify QR identity export + QR contact import on two devices
+3. Verify message send/receive in both directions with app background/foreground transitions
+4. Re-run simulator build check before shipping additional changes
 
 ## Troubleshooting
 
@@ -266,10 +264,10 @@ After successfully building:
 
 If you encounter issues:
 
-1. Check `ios/verify-build-setup.sh` output
+1. Check `iOS/verify-build-setup.sh` output
 2. Review Xcode build logs
 3. Check Rust compilation: `cd mobile && cargo build --target aarch64-apple-ios`
-4. Verify UniFFI bindings: `./ios/copy-bindings.sh`
+4. Verify UniFFI bindings: `./iOS/copy-bindings.sh`
 
 ### Clean Build
 
@@ -283,11 +281,11 @@ cd mobile
 cargo clean
 
 # Regenerate bindings
-./ios/copy-bindings.sh
+./iOS/copy-bindings.sh
 ```
 
 ## Documentation
 
 - **Full iOS Plan**: `iOS/iosdesign.md`
-- **Plan Review**: `ios/PLAN_REVIEW.md`
-- **Build Scripts**: `ios/README.md`
+- **Plan Review**: `iOS/PLAN_REVIEW.md`
+- **Build Scripts**: `iOS/README.md`
