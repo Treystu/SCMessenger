@@ -1,5 +1,7 @@
 # ✅ Integration Complete - All 6 Phases Fully Active
 
+> Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
+
 ## Executive Summary
 
 **Previous Status (from Gemini Audit):**

@@ -87,7 +87,7 @@ final class MultipeerTransport: NSObject {
         let cappedDelay = min(delay, 60.0)
         reconnectAttempts[name] = attempt + 1
 
-        logger.info("Reconnect: scheduling attempt \(attempt + 1)/\(maxReconnectAttempts) for \(name) in \(Int(cappedDelay))s")
+        logger.info("Reconnect: scheduling attempt \(attempt + 1)/\(self.maxReconnectAttempts) for \(name) in \(Int(cappedDelay))s")
 
         DispatchQueue.main.asyncAfter(deadline: .now() + cappedDelay) { [weak self] in
             guard let self else { return }

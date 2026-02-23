@@ -353,44 +353,20 @@ struct PrivacySettingsView: View {
             }
 
             // Additional Privacy Features
-            // Preferences are persisted in UserDefaults and will be forwarded to the
-            // Rust core privacy module once the UniFFI surface exposes per-feature toggles.
+            // Temporarily disabled until core-level toggle wiring is complete.
             Section("Additional Privacy Features") {
-                Toggle(isOn: Binding(
-                    get: { viewModel?.isCoverTrafficEnabled ?? false },
-                    set: { viewModel?.isCoverTrafficEnabled = $0 }
-                )) {
-                    VStack(alignment: .leading) {
-                        Text("Cover Traffic")
-                        Text("Send dummy traffic to resist traffic analysis")
-                            .font(Theme.bodySmall)
-                            .foregroundStyle(Theme.onSurfaceVariant)
-                    }
-                }
-
-                Toggle(isOn: Binding(
-                    get: { viewModel?.isMessagePaddingEnabled ?? false },
-                    set: { viewModel?.isMessagePaddingEnabled = $0 }
-                )) {
-                    VStack(alignment: .leading) {
-                        Text("Message Padding")
-                        Text("Pad messages to hide actual message length")
-                            .font(Theme.bodySmall)
-                            .foregroundStyle(Theme.onSurfaceVariant)
-                    }
-                }
-
-                Toggle(isOn: Binding(
-                    get: { viewModel?.isTimingObfuscationEnabled ?? false },
-                    set: { viewModel?.isTimingObfuscationEnabled = $0 }
-                )) {
-                    VStack(alignment: .leading) {
-                        Text("Timing Obfuscation")
-                        Text("Add random delays to obscure communication patterns")
-                            .font(Theme.bodySmall)
-                            .foregroundStyle(Theme.onSurfaceVariant)
-                    }
-                }
+                FeaturePlaceholderRow(
+                    title: "Cover Traffic",
+                    description: "Send dummy traffic to resist traffic analysis (temporarily disabled)"
+                )
+                FeaturePlaceholderRow(
+                    title: "Message Padding",
+                    description: "Pad messages to hide actual message length (temporarily disabled)"
+                )
+                FeaturePlaceholderRow(
+                    title: "Timing Obfuscation",
+                    description: "Add random delays to obscure patterns (temporarily disabled)"
+                )
             }
 
             // Privacy Best Practices (mirrors Android)
@@ -412,6 +388,26 @@ struct PrivacySettingsView: View {
                 viewModel = SettingsViewModel(repository: repository)
                 viewModel?.loadSettings()
             }
+        }
+    }
+}
+
+private struct FeaturePlaceholderRow: View {
+    let title: String
+    let description: String
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text(title)
+                Text(description)
+                    .font(Theme.bodySmall)
+                    .foregroundStyle(Theme.onSurfaceVariant)
+            }
+            Spacer()
+            Toggle("", isOn: .constant(false))
+                .labelsHidden()
+                .disabled(true)
         }
     }
 }

@@ -1,5 +1,7 @@
 # SCMessenger CLI — macOS Setup Guide
 
+> Legacy OS-specific guide. Prefer `cli/README.md` for the current command surface.
+
 Complete installation and usage guide for SCMessenger command-line interface on macOS.
 
 ## System Requirements

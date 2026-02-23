@@ -1,5 +1,7 @@
 # iOS Plan Review & Analysis
 
+> Historical plan-review document. For current verified status, use `docs/CURRENT_STATE.md`.
+
 ## Executive Summary
 
 **Status:** ✅ iOS plan is PERFECT and ready for implementation

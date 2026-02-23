@@ -1,5 +1,7 @@
 # iOS Implementation - Final Status Report
 
+> Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
+
 **Date**: February 13, 2026  
 **Status**: Foundation Complete + Comprehensive Implementation Guide  
 **Progress**: 3/15 Phases Implemented, 12/15 Phases Documented

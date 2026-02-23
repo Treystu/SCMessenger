@@ -1,5 +1,7 @@
 # iOS Implementation - Phases 4-15 Complete Guide
 
+> Design/implementation guide snapshot. Validate against `docs/CURRENT_STATE.md` before treating status claims as current.
+
 ## Overview
 This document provides a complete implementation guide for iOS Phases 4-15. Each phase includes file structure, key patterns, and implementation requirements.
 

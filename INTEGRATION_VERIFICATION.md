@@ -1,6 +1,8 @@
 # Full Integration Verification Report
 ## All 6 Phases Now Active in Runtime
 
+> Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
+
 ### Executive Summary
 **Status:** ✅ **FULLY INTEGRATED**
 

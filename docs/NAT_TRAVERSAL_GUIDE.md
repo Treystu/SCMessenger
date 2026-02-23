@@ -1,5 +1,7 @@
 # NAT Traversal & Address Reflection Guide
 
+> Technical guide. For current verified test/build status, use `docs/CURRENT_STATE.md`.
+
 ## Overview
 
 SCMessenger implements a **sovereign mesh address discovery protocol** that replaces traditional STUN servers with peer-assisted address reflection. This maintains the "no external dependencies" principle while enabling NAT traversal.

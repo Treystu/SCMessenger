@@ -1,5 +1,7 @@
 # iOS Implementation Summary
 
+> Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
+
 ## Status: ✅ COMPLETE - All 15 Phases Implemented
 
 Successfully implemented the complete iOS app with all features from the design document.

@@ -1,5 +1,7 @@
 # Implementation Status Report - Phase 14 Checkpoint
 
+> Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
+
 ## ✅ Completed & Verified
 
 The following phases have been implemented and verified as building successfully:

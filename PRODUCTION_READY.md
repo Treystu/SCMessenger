@@ -1,5 +1,8 @@
 # SCMessenger Production Deployment - PROOF OF WORKING
 
+> Historical snapshot: this file documents a specific prior milestone and includes point-in-time counts.
+> For current verified repository state, use `docs/CURRENT_STATE.md`, `docs/TESTING_GUIDE.md`, and `REMAINING_WORK_TRACKING.md`.
+
 ## 🎯 Objective: Complete Production Deployment Readiness
 
 **Status:** ✅ **COMPLETE AND VERIFIED**

@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import VisionKit
+import Vision
 
 struct ContactsListView: View {
     @Environment(MeshRepository.self) private var repository
@@ -180,6 +182,14 @@ struct AddContactView: View {
     @State private var listeners: [String] = []
     @State private var libp2pPeerId: String = ""
     @State private var error: String?
+    @State private var showingQrScanner = false
+
+    private var canUseQrScanner: Bool {
+        if #available(iOS 16.0, *) {
+            return DataScannerViewController.isSupported && DataScannerViewController.isAvailable
+        }
+        return false
+    }
 
     var body: some View {
         NavigationStack {
@@ -187,6 +197,16 @@ struct AddContactView: View {
                 Section("Contact Information") {
                     Button(action: pasteIdentity) {
                         Label("Paste Identity Export", systemImage: "doc.on.clipboard")
+                    }
+
+                    Button(action: { showingQrScanner = true }) {
+                        Label("Scan Contact QR", systemImage: "qrcode.viewfinder")
+                    }
+                    .disabled(!canUseQrScanner)
+                    if !canUseQrScanner {
+                        Text("QR scanning is unavailable on this device.")
+                            .font(Theme.bodySmall)
+                            .foregroundStyle(.secondary)
                     }
 
                     TextField("Nickname", text: $nickname)
@@ -238,6 +258,22 @@ struct AddContactView: View {
                     if let nick = peer.nickname, !nick.isEmpty { nickname = nick }
                     if let lpid = peer.libp2pPeerId, !lpid.isEmpty { libp2pPeerId = lpid }
                     listeners = peer.listeners
+                }
+            }
+            .sheet(isPresented: $showingQrScanner) {
+                if canUseQrScanner {
+                    ContactQrScannerSheet(
+                        onScan: { payload in
+                            showingQrScanner = false
+                            importQrPayload(payload)
+                        },
+                        onFailure: { message in
+                            error = message
+                        }
+                    )
+                } else {
+                    Text("QR scanning is unavailable on this device.")
+                        .padding()
                 }
             }
         }
@@ -314,6 +350,78 @@ struct AddContactView: View {
             dismiss()
         } catch {
             self.error = error.localizedDescription
+        }
+    }
+
+    private func importQrPayload(_ raw: String) {
+        guard let data = raw.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            error = "Invalid QR format"
+            return
+        }
+
+        if let key = json["public_key"] as? String ?? json["publicKey"] as? String {
+            publicKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let nick = json["nickname"] as? String {
+            nickname = nick.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let pid = json["identity_id"] as? String ?? json["peerId"] as? String {
+            peerId = pid.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let lpid = json["libp2p_peer_id"] as? String, !lpid.isEmpty {
+            libp2pPeerId = lpid.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let list = json["listeners"] as? [String] {
+            listeners = list.map { $0.replacingOccurrences(of: " (Potential)", with: "") }
+        }
+        error = nil
+    }
+}
+
+@available(iOS 16.0, *)
+private struct ContactQrScannerSheet: UIViewControllerRepresentable {
+    var onScan: (String) -> Void
+    var onFailure: (String) -> Void
+
+    func makeUIViewController(context: Context) -> DataScannerViewController {
+        let controller = DataScannerViewController(
+            recognizedDataTypes: [.barcode(symbologies: [.qr])],
+            qualityLevel: .balanced,
+            recognizesMultipleItems: false,
+            isHighFrameRateTrackingEnabled: false,
+            isHighlightingEnabled: true
+        )
+        controller.delegate = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: DataScannerViewController, context: Context) {
+        do {
+            try uiViewController.startScanning()
+        } catch {
+            onFailure("Unable to start camera scanner: \(error.localizedDescription)")
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onScan: onScan)
+    }
+
+    final class Coordinator: NSObject, DataScannerViewControllerDelegate {
+        private let onScan: (String) -> Void
+
+        init(onScan: @escaping (String) -> Void) {
+            self.onScan = onScan
+        }
+
+        func dataScanner(
+            _ dataScanner: DataScannerViewController,
+            didTapOn item: RecognizedItem
+        ) {
+            if case let .barcode(barcode) = item, let payload = barcode.payloadStringValue {
+                onScan(payload)
+            }
         }
     }
 }

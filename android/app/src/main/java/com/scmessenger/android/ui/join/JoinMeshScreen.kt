@@ -11,8 +11,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.mlkit.common.MlKitException
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.scmessenger.android.data.MeshRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -78,6 +84,10 @@ fun JoinMeshScreen(
                             )
                         }
                     },
+                    onScanError = { message ->
+                        errorMessage = message
+                        joinState = JoinState.ERROR
+                    },
                     onCancel = onCancel
                 )
             }
@@ -105,13 +115,15 @@ fun JoinMeshScreen(
 }
 
 /**
- * QR scanner view (placeholder - would use CameraX or ML Kit).
+ * QR scanner launcher using Google Code Scanner (ML Kit).
  */
 @Composable
 private fun QrScannerView(
     onQrScanned: (String) -> Unit,
+    onScanError: (String) -> Unit,
     onCancel: () -> Unit
 ) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -132,51 +144,37 @@ private fun QrScannerView(
             textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // Placeholder for camera preview
-        Box(
-            modifier = Modifier
-                .size(300.dp)
-                .padding(16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("Camera Preview")
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         OutlinedButton(onClick = onCancel) {
             Text("Cancel")
         }
 
-        // TODO: Integrate CameraX + ML Kit Barcode Scanner
-        // Mock QR scan for development only
-        if (com.scmessenger.android.BuildConfig.DEBUG) {
-            LaunchedEffect(Unit) {
-                kotlinx.coroutines.delay(2000)
-                // Simulate QR data (debug only)
-                val mockQrData = """
-                    {
-                      "bootstrap_peers": ["/ip4/127.0.0.1/tcp/9999"],
-                      "topics": ["/scmessenger/global/v1"],
-                      "identity": "mock_peer_id",
-                      "timestamp": ${System.currentTimeMillis()}
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(onClick = {
+            val options = GmsBarcodeScannerOptions.Builder()
+                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                .build()
+            val scanner = GmsBarcodeScanning.getClient(context, options)
+            scanner.startScan()
+                .addOnSuccessListener { barcode ->
+                    val rawValue = barcode.rawValue
+                    if (rawValue.isNullOrBlank()) {
+                        onScanError("QR code was empty. Please try again.")
+                    } else {
+                        onQrScanned(rawValue)
                     }
-                """.trimIndent()
-                onQrScanned(mockQrData)
-            }
+                }
+                .addOnFailureListener { e ->
+                    Timber.w(e, "Join QR scan failed")
+                    if (e is MlKitException && e.errorCode == CommonStatusCodes.CANCELED) {
+                        return@addOnFailureListener
+                    }
+                    onScanError("Unable to scan QR code. Please try again.")
+                }
+        }) {
+            Text("Scan QR Code")
         }
     }
 }

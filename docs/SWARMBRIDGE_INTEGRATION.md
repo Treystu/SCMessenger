@@ -1,5 +1,7 @@
 # SwarmBridge Integration Guide
 
+> Integration reference. For current verified cross-platform gap status, use `docs/CURRENT_STATE.md` and `REMAINING_WORK_TRACKING.md`.
+
 ## Overview
 
 The `SwarmBridge` in `core/src/mobile_bridge.rs` provides a synchronous wrapper around the async `SwarmHandle` for mobile platform integration via UniFFI.

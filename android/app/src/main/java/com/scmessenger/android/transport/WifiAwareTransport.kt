@@ -356,8 +356,10 @@ class WifiAwareTransport(
         withContext(Dispatchers.IO) {
             var serverSocket: ServerSocket? = null
             try {
+                // Network.bindSocket only accepts Socket/DatagramSocket/FileDescriptor.
+                // For the responder path we listen on a plain ServerSocket and accept
+                // the peer connection established over the Aware data path.
                 serverSocket = ServerSocket(AWARE_PORT)
-                network.bindSocket(serverSocket)
 
                 Timber.d("WiFi Aware responder waiting for connection from $peerId on port $AWARE_PORT")
 

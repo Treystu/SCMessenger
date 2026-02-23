@@ -1,5 +1,7 @@
 # iOS Implementation Status Report
 
+> Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
+
 **Date**: February 13, 2026
 **Status**: Phase 3 Complete, Ready for Phase 4
 

@@ -1448,6 +1448,34 @@ impl SwarmBridge {
             .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
+    /// Unsubscribe from a Gossipsub topic.
+    pub fn unsubscribe_topic(&self, topic: String) -> Result<(), crate::IronCoreError> {
+        let handle_guard = self.handle.lock();
+        let handle = handle_guard
+            .as_ref()
+            .ok_or(crate::IronCoreError::NetworkError)?;
+
+        let rt = self.get_runtime_handle();
+        rt.block_on(handle.unsubscribe_topic(topic))
+            .map_err(|_| crate::IronCoreError::NetworkError)
+    }
+
+    /// Publish data to a Gossipsub topic.
+    pub fn publish_topic(
+        &self,
+        topic: String,
+        data: Vec<u8>,
+    ) -> Result<(), crate::IronCoreError> {
+        let handle_guard = self.handle.lock();
+        let handle = handle_guard
+            .as_ref()
+            .ok_or(crate::IronCoreError::NetworkError)?;
+
+        let rt = self.get_runtime_handle();
+        rt.block_on(handle.publish_topic(topic, data))
+            .map_err(|_| crate::IronCoreError::NetworkError)
+    }
+
     /// Shutdown the swarm gracefully.
     pub fn shutdown(&self) {
         let handle_guard = self.handle.lock();

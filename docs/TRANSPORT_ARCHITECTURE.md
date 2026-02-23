@@ -1,5 +1,7 @@
 # SCMessenger Transport Architecture
 
+> Design and implementation narrative. For current verified runtime/test status, use `docs/CURRENT_STATE.md`.
+
 Complete implementation of sovereign mesh networking with zero external dependencies.
 
 ## Overview

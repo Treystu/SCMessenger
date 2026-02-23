@@ -111,6 +111,7 @@ dependencies {
     // Hilt Dependency Injection
     implementation "com.google.dagger:hilt-android:$hilt_version"
     implementation "com.google.zxing:core:3.5.2"
+    implementation 'com.google.android.gms:play-services-code-scanner:16.1.0'
     ksp "com.google.dagger:hilt-android-compiler:$hilt_version"
     implementation 'androidx.hilt:hilt-navigation-compose:1.1.0'
     

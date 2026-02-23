@@ -1068,6 +1068,31 @@ final class MeshRepository {
         return swarmBridge?.getListeners() ?? []
     }
 
+    func getTopics() -> [String] {
+        return swarmBridge?.getTopics() ?? []
+    }
+
+    func subscribeTopic(_ topic: String) throws {
+        guard let swarmBridge = swarmBridge else {
+            throw MeshError.notInitialized("SwarmBridge not initialized")
+        }
+        try swarmBridge.subscribeTopic(topic: topic)
+    }
+
+    func unsubscribeTopic(_ topic: String) throws {
+        guard let swarmBridge = swarmBridge else {
+            throw MeshError.notInitialized("SwarmBridge not initialized")
+        }
+        try swarmBridge.unsubscribeTopic(topic: topic)
+    }
+
+    func publishTopic(_ topic: String, data: Data) throws {
+        guard let swarmBridge = swarmBridge else {
+            throw MeshError.notInitialized("SwarmBridge not initialized")
+        }
+        try swarmBridge.publishTopic(topic: topic, data: data)
+    }
+
     func getLocalIpAddress() -> String? {
         var address: String?
         var ifaddr: UnsafeMutablePointer<ifaddrs>?

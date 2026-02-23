@@ -185,8 +185,8 @@ if [ "$ALL_OK" = true ]; then
     echo "You're ready to build the iOS app."
     echo
     echo "Next steps:"
-    echo "  1. Run: ./ios/copy-bindings.sh"
-    echo "  2. Open Xcode project in ios/"
+    echo "  1. Run: ./iOS/copy-bindings.sh"
+    echo "  2. Open Xcode project in iOS/"
     echo "  3. Build and run on device or simulator"
     exit 0
 else

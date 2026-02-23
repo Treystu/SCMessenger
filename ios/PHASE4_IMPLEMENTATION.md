@@ -1,5 +1,7 @@
 # Phase 4: CoreBluetooth Transport - Implementation Guide
 
+> Design/implementation guide snapshot. Validate against `docs/CURRENT_STATE.md` before treating status claims as current.
+
 ## Overview
 Phase 4 requires ~900 LoC split across 4 files. This document provides the complete implementation structure.
 

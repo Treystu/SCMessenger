@@ -1,5 +1,7 @@
 # iOS Implementation - Complete Status
 
+> Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
+
 **Date**: February 13, 2026  
 **Status**: All 15 Phases Implemented
 

@@ -1,5 +1,7 @@
 # Docker Test Infrastructure - Quick Reference Card
 
+> Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
+
 ## One-Line Commands
 
 ```bash

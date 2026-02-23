@@ -1,5 +1,7 @@
 # Docker Mock Test Infrastructure - Setup Complete ✅
 
+> Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
+
 ## Executive Summary
 
 **Objective**: Set up comprehensive Docker-based mock test infrastructure for SCMessenger  

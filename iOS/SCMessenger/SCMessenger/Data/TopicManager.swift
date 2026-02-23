@@ -18,6 +18,7 @@ final class TopicManager {
     
     init(meshRepository: MeshRepository) {
         self.meshRepository = meshRepository
+        self.subscribedTopics = Set(meshRepository.getTopics())
     }
     
     // MARK: - Topic Management
@@ -30,8 +31,10 @@ final class TopicManager {
             throw TopicError.invalidTopic("Topic name cannot be empty")
         }
         
-        // Subscribe via SwarmBridge
-        try meshRepository?.swarmBridge?.subscribeTopic(topic: topic)
+        guard let meshRepository = meshRepository else {
+            throw TopicError.publishFailed("Mesh repository unavailable")
+        }
+        try meshRepository.subscribeTopic(topic)
         subscribedTopics.insert(topic)
         
         logger.info("✓ Subscribed to topic: \(topic)")
@@ -40,9 +43,10 @@ final class TopicManager {
     func unsubscribe(from topic: String) throws {
         logger.info("Unsubscribing from topic: \(topic)")
         
-        // Unsubscribe via SwarmBridge
-        // TODO: Implement unsubscribe in SwarmBridge FFI
-        // try meshRepository?.swarmBridge?.unsubscribe(topic: topic)
+        guard let meshRepository = meshRepository else {
+            throw TopicError.publishFailed("Mesh repository unavailable")
+        }
+        try meshRepository.unsubscribeTopic(topic)
         subscribedTopics.remove(topic)
         
         logger.info("✓ Unsubscribed from topic: \(topic)")
@@ -55,9 +59,10 @@ final class TopicManager {
             throw TopicError.notSubscribed("Not subscribed to topic: \(topic)")
         }
         
-        // Publish via SwarmBridge
-        // TODO: Implement gossipsub publish in SwarmBridge FFI
-        // try meshRepository?.swarmBridge?.publish(topic: topic, data: data)
+        guard let meshRepository = meshRepository else {
+            throw TopicError.publishFailed("Mesh repository unavailable")
+        }
+        try meshRepository.publishTopic(topic, data: data)
         
         logger.debug("✓ Published to topic: \(topic)")
     }

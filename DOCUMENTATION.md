@@ -1,60 +1,54 @@
 # SCMessenger Documentation Hub
 
-Welcome to the SCMessenger documentation portal. SCMessenger is a truly sovereign messenger—working everywhere, owned by no one, and unstoppable by design. This document serves as the single source of truth for all documentation.
+This file indexes current documentation and distinguishes canonical docs from historical reports.
 
-## Core Documentation
+## Canonical (Current Source of Truth)
 
-- [Introduction & Overview](README.md)
-- [Project Architecture](docs/ARCHITECTURE.md)
-- [Network Protocol Specification](docs/PROTOCOL.md)
-- [Transport Layer Architecture](docs/TRANSPORT_ARCHITECTURE.md)
-
-## Guides & Tutorials
-
-### Getting Started
-
-- [Quick Connect Guide](QUICKCONNECT.md) — Connect your node instantly to the network
-- [Installation Guide](INSTALL.md) — Build from source or use pre-compiled binaries
-- [GCP Deployment Guide](GCP_DEPLOY_GUIDE.md) — Deploy a relay node on Google Cloud
-- [Docker Quickstart](docker/README.md) — Run SCMessenger in containers
-
-### CLI Usage
-
-We have specific guides depending on your operating system:
-
-- [Linux CLI Guide](docs/CLI_LINUX.md)
-- [macOS CLI Guide](docs/CLI_MACOS.md)
-- [Windows CLI Guide](docs/CLI_WINDOWS.md)
-
-### Advanced Networking
-
-- [NAT Traversal Guide](docs/NAT_TRAVERSAL_GUIDE.md)
-- [Bootstrap Node Configuration](BOOTSTRAP.md)
-
-## Project Philosophy & AI Context
-
-- [Core Principles & Architecture (CLAUDE.md)](CLAUDE.md)
-- [SCMessenger Wiring Skill (AI Guidance)](SCMessengerSKILL.md)
-
-## Development & Contribution
-
-- [Roadmap & Remaining Work](REMAINING_WORK_TRACKING.md)
-- [Nearby Peers Implementation Tracking](HANDOFF_NEARBY_PEERS.md)
-- [Contributing Guidelines](CONTRIBUTING.md)
+- [Repository Overview](README.md)
+- [Current Verified State](docs/CURRENT_STATE.md)
+- [Active Gap Backlog](REMAINING_WORK_TRACKING.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Protocol Specification](docs/PROTOCOL.md)
 - [Testing Guide](docs/TESTING_GUIDE.md)
-- [Network Testing & Scenarios](NETWORK_TESTING.md)
-- [Security Model & Audits](SECURITY.md)
+- [CLI Guide](cli/README.md)
+- [Android Guide](android/README.md)
+- [iOS Guide](iOS/README.md)
+
+## Operational Guides
+
+- [Install](INSTALL.md)
+- [Quick Connect](QUICKCONNECT.md)
+- [Docker](docker/README.md)
+- [GCP Deploy](GCP_DEPLOY_GUIDE.md)
+- [NAT Traversal Guide](docs/NAT_TRAVERSAL_GUIDE.md)
+- [Bootstrap Notes](BOOTSTRAP.md)
+
+## Development and Policy
+
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Network Testing Notes](NETWORK_TESTING.md)
 
-## Platform SDKs & UI Design
+## Historical / Audit Snapshots
 
-- [Android App Integration](android/README.md)
-- [iOS App Integration](iOS/README.md)
-- [iOS Master Design Guide](iOS/iosdesign.md)
-- [Terminal / Web UI Design Guide](GEMINI_UI_GUIDE.md)
-- [SwarmBridge Integration](docs/SWARMBRIDGE_INTEGRATION.md)
-- [CLI Internal Details](cli/README.md)
+The files below contain useful historical context, but they are not the primary truth for current implementation status:
 
-## Legacy & Reference
+- `PRODUCTION_READY.md`
+- `INTEGRATION_COMPLETE.md`
+- `INTEGRATION_VERIFICATION.md`
+- `AUDIT_QUICK_REFERENCE.md`
+- `AUDIT_RESOLUTIONS.md`
+- `BRANCH_AUDIT_REPORT.md`
+- `DOCKER_TEST_SETUP_COMPLETE.md`
+- `DOCKER_TEST_QUICKREF.md`
+- `DOCKER_QUICKSTART.md`
+- `FEATURE_PARITY.md`
+- `FEATURE_WORKFLOW.md`
+- `NAT_REFACTOR_PLAN.md`
+- `SOVEREIGN_MESH_PLAN.md`
+- `DRIFTNET_MESH_BLUEPRINT.md`
 
-- [Crypto V1 Reference Porting](reference/README.md)
+## Reference
+
+- [Legacy Crypto Porting Reference](reference/README.md)

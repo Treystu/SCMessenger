@@ -1914,6 +1914,8 @@ public protocol SwarmBridgeProtocol : AnyObject {
     
     func getTopics()  -> [String]
     
+    func publishTopic(topic: String, data: Data) throws 
+    
     func sendMessage(peerId: String, data: Data) throws 
     
     func sendToAllPeers(data: Data) throws 
@@ -1921,6 +1923,8 @@ public protocol SwarmBridgeProtocol : AnyObject {
     func shutdown() 
     
     func subscribeTopic(topic: String) throws 
+    
+    func unsubscribeTopic(topic: String) throws 
     
 }
 
@@ -2007,6 +2011,14 @@ open func getTopics() -> [String] {
 })
 }
     
+open func publishTopic(topic: String, data: Data)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_swarmbridge_publish_topic(self.uniffiClonePointer(),
+        FfiConverterString.lower(topic),
+        FfiConverterData.lower(data),$0
+    )
+}
+}
+    
 open func sendMessage(peerId: String, data: Data)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_swarmbridge_send_message(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),
@@ -2030,6 +2042,13 @@ open func shutdown() {try! rustCall() {
     
 open func subscribeTopic(topic: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_swarmbridge_subscribe_topic(self.uniffiClonePointer(),
+        FfiConverterString.lower(topic),$0
+    )
+}
+}
+    
+open func unsubscribeTopic(topic: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_swarmbridge_unsubscribe_topic(self.uniffiClonePointer(),
         FfiConverterString.lower(topic),$0
     )
 }
@@ -4355,6 +4374,9 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_swarmbridge_get_topics() != 29012) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_swarmbridge_publish_topic() != 65103) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_swarmbridge_send_message() != 48419) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4365,6 +4387,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_swarmbridge_subscribe_topic() != 21077) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_swarmbridge_unsubscribe_topic() != 53383) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_constructor_autoadjustengine_new() != 8336) {
