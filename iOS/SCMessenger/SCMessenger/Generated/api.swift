@@ -666,6 +666,141 @@ public func FfiConverterTypeAutoAdjustEngine_lower(_ value: AutoAdjustEngine) ->
 
 
 
+public protocol BootstrapResolverProtocol : AnyObject {
+    
+    /**
+     * Resolve bootstrap nodes using the priority chain: env → remote → static.
+     * This is a synchronous, deterministic resolution (remote fetch is attempted
+     * but falls back on timeout/error). Call this once at startup.
+     */
+    func resolve()  -> [String]
+    
+    /**
+     * Return the raw static fallback list without env/remote resolution.
+     */
+    func staticFallback()  -> [String]
+    
+}
+
+open class BootstrapResolver:
+    BootstrapResolverProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_scmessenger_core_fn_clone_bootstrapresolver(self.pointer, $0) }
+    }
+public convenience init(config: BootstrapConfig) {
+    let pointer =
+        try! rustCall() {
+    uniffi_scmessenger_core_fn_constructor_bootstrapresolver_new(
+        FfiConverterTypeBootstrapConfig.lower(config),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_scmessenger_core_fn_free_bootstrapresolver(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * Resolve bootstrap nodes using the priority chain: env → remote → static.
+     * This is a synchronous, deterministic resolution (remote fetch is attempted
+     * but falls back on timeout/error). Call this once at startup.
+     */
+open func resolve() -> [String] {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_bootstrapresolver_resolve(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Return the raw static fallback list without env/remote resolution.
+     */
+open func staticFallback() -> [String] {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_bootstrapresolver_static_fallback(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+public struct FfiConverterTypeBootstrapResolver: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = BootstrapResolver
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> BootstrapResolver {
+        return BootstrapResolver(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: BootstrapResolver) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BootstrapResolver {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: BootstrapResolver, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+public func FfiConverterTypeBootstrapResolver_lift(_ pointer: UnsafeMutableRawPointer) throws -> BootstrapResolver {
+    return try FfiConverterTypeBootstrapResolver.lift(pointer)
+}
+
+public func FfiConverterTypeBootstrapResolver_lower(_ value: BootstrapResolver) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeBootstrapResolver.lower(value)
+}
+
+
+
+
 public protocol ContactManagerProtocol : AnyObject {
     
     func add(contact: Contact) throws 
@@ -2173,6 +2308,79 @@ public func FfiConverterTypeBleAdjustment_lift(_ buf: RustBuffer) throws -> BleA
 
 public func FfiConverterTypeBleAdjustment_lower(_ value: BleAdjustment) -> RustBuffer {
     return FfiConverterTypeBleAdjustment.lower(value)
+}
+
+
+public struct BootstrapConfig {
+    public var staticNodes: [String]
+    public var remoteUrl: String?
+    public var fetchTimeoutSecs: UInt32
+    public var envOverrideKey: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(staticNodes: [String], remoteUrl: String?, fetchTimeoutSecs: UInt32, envOverrideKey: String?) {
+        self.staticNodes = staticNodes
+        self.remoteUrl = remoteUrl
+        self.fetchTimeoutSecs = fetchTimeoutSecs
+        self.envOverrideKey = envOverrideKey
+    }
+}
+
+
+
+extension BootstrapConfig: Equatable, Hashable {
+    public static func ==(lhs: BootstrapConfig, rhs: BootstrapConfig) -> Bool {
+        if lhs.staticNodes != rhs.staticNodes {
+            return false
+        }
+        if lhs.remoteUrl != rhs.remoteUrl {
+            return false
+        }
+        if lhs.fetchTimeoutSecs != rhs.fetchTimeoutSecs {
+            return false
+        }
+        if lhs.envOverrideKey != rhs.envOverrideKey {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(staticNodes)
+        hasher.combine(remoteUrl)
+        hasher.combine(fetchTimeoutSecs)
+        hasher.combine(envOverrideKey)
+    }
+}
+
+
+public struct FfiConverterTypeBootstrapConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BootstrapConfig {
+        return
+            try BootstrapConfig(
+                staticNodes: FfiConverterSequenceString.read(from: &buf), 
+                remoteUrl: FfiConverterOptionString.read(from: &buf), 
+                fetchTimeoutSecs: FfiConverterUInt32.read(from: &buf), 
+                envOverrideKey: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BootstrapConfig, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.staticNodes, into: &buf)
+        FfiConverterOptionString.write(value.remoteUrl, into: &buf)
+        FfiConverterUInt32.write(value.fetchTimeoutSecs, into: &buf)
+        FfiConverterOptionString.write(value.envOverrideKey, into: &buf)
+    }
+}
+
+
+public func FfiConverterTypeBootstrapConfig_lift(_ buf: RustBuffer) throws -> BootstrapConfig {
+    return try FfiConverterTypeBootstrapConfig.lift(buf)
+}
+
+public func FfiConverterTypeBootstrapConfig_lower(_ value: BootstrapConfig) -> RustBuffer {
+    return FfiConverterTypeBootstrapConfig.lower(value)
 }
 
 
@@ -4259,6 +4467,12 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_autoadjustengine_override_relay_max_per_hour() != 39971) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_bootstrapresolver_resolve() != 35995) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_bootstrapresolver_static_fallback() != 1236) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_contactmanager_add() != 49365) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4488,6 +4702,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_constructor_autoadjustengine_new() != 8336) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_constructor_bootstrapresolver_new() != 2325) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_constructor_contactmanager_new() != 10934) {

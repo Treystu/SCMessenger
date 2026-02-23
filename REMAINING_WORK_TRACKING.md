@@ -165,6 +165,13 @@ Owner policy constraints (2026-02-23):
 - Current: TODO/FIXME markers are distributed across code/docs; external testing updates can drift from tracked backlog.
 - Target: recurring TODO/FIXME audit that syncs canonical backlog items with current implementation evidence.
 - Evidence source: `docs/TRIPLE_CHECK_REPORT.md` risk scan + direct file review.
+- Companion reference: `docs/STUBS_AND_UNIMPLEMENTED.md` — comprehensive stub/placeholder inventory (43 items across 4 severity tiers).
+
+17. Android multi-share intent handler stub
+
+- File: `android/app/src/main/java/com/scmessenger/android/utils/ShareReceiver.kt` lines 67–72.
+- Current: `handleMultipleShare()` logs a warning and shows a toast; no items are forwarded.
+- Target: either implement multi-item share handling or remove `ACTION_SEND_MULTIPLE` from the manifest intent filter so the share sheet never offers the option.
 
 ## Priority 2: Documentation Completion and Governance
 
@@ -182,6 +189,7 @@ Owner policy constraints (2026-02-23):
    - `docs/CURRENT_STATE.md`
    - `REMAINING_WORK_TRACKING.md`
    - `docs/GLOBAL_ROLLOUT_PLAN.md`
+   - `docs/STUBS_AND_UNIMPLEMENTED.md`
 
 4. Resolve `ios/` vs `iOS/` path-case split in tracked docs vs app source
    - Current: markdown docs are tracked under `ios/`, active app source is under `iOS/SCMessenger/`.

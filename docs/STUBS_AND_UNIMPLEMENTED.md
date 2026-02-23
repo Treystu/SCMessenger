@@ -39,12 +39,14 @@
 
 - **File:** `android/app/src/main/java/com/scmessenger/android/utils/ShareReceiver.kt` lines 67–72
 - **Code:**
+
   ```kotlin
   private fun handleMultipleShare(context: Context, intent: Intent) {
       Toast.makeText(context, "Multiple items sharing not yet supported", Toast.LENGTH_SHORT).show()
       Timber.w("Multiple share not implemented")
   }
   ```
+
 - **Impact:** `ACTION_SEND_MULTIPLE` intents are silently dropped with a
   user-facing toast. Users who select multiple items to share into
   SCMessenger will see a failure.

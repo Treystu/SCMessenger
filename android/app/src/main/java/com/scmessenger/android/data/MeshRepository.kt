@@ -1149,7 +1149,10 @@ class MeshRepository(private val context: Context) {
                 wifiDirectEnabled = true,
                 internetEnabled = true,
                 discoveryMode = uniffi.api.DiscoveryMode.NORMAL,
-                onionRouting = false
+                onionRouting = false,
+                coverTrafficEnabled = false,
+                messagePaddingEnabled = false,
+                timingObfuscationEnabled = false
             )
     }
 
