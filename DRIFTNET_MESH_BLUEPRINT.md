@@ -1,5 +1,11 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # THE DRIFT NET: Complete Mesh Engineering Blueprint
-## Every Node Is The Network
+## [Needs Revalidation] Every Node Is The Network
 
 **Author:** The Auditor — Claude Opus 4.6
 **Date:** 2026-02-06
@@ -8,7 +14,7 @@
 
 ---
 
-## TABLE OF CONTENTS
+## [Needs Revalidation] TABLE OF CONTENTS
 
 1. [The Core Insight: Think Backwards](#1-the-core-insight)
 2. [Background Survival Layer: Keeping Your Process Alive](#2-background-survival)
@@ -28,7 +34,7 @@
 
 ---
 
-## 1. THE CORE INSIGHT: THINK BACKWARDS {#1-the-core-insight}
+## [Needs Revalidation] 1. THE CORE INSIGHT: THINK BACKWARDS {#1-the-core-insight}
 
 The mistake every mesh project makes: fighting the OS. Trying to run a background service that Apple/Google will kill. This is a war you lose.
 
@@ -42,11 +48,11 @@ Google already proved OS-level background BLE works. It was called **Exposure No
 
 ---
 
-## 2. BACKGROUND SURVIVAL LAYER {#2-background-survival}
+## [Needs Revalidation] 2. BACKGROUND SURVIVAL LAYER {#2-background-survival}
 
 This is the foundation. If your process dies, nothing else matters.
 
-### 2.1 Android: The VPN Service Gambit
+### [Needs Revalidation] 2.1 Android: The VPN Service Gambit
 
 **This is the most powerful background survival mechanism on Android.** Apps like Blokada and NetGuard prove it works.
 
@@ -93,7 +99,7 @@ class MeshVpnService : VpnService() {
 
 **Critical limitation:** Only one VPN can be active. If the user runs another VPN (corporate, privacy), your mesh dies. Mitigation: detect VPN conflict and fall back to foreground service mode.
 
-### 2.2 Android: Companion Device Manager (BLE Keepalive)
+### [Needs Revalidation] 2.2 Android: Companion Device Manager (BLE Keepalive)
 
 For BLE-specific background survival:
 
@@ -117,7 +123,7 @@ class MeshCompanionService : CompanionDeviceService() {
 
 **The trick:** Your first SCMessenger node becomes a "companion device" for every subsequent node. When any mesh peer is in BLE range, the system wakes your service. This is DESIGNED for fitness bands and smartwatches, but the API doesn't care what the "companion" is.
 
-### 2.3 Android: WiFi Aware (NAN) Background
+### [Needs Revalidation] 2.3 Android: WiFi Aware (NAN) Background
 
 WiFi Aware provides discovery AND data transfer without an access point:
 
@@ -134,7 +140,7 @@ Android 14+: Suspend/Resume (privileged apps)
 
 WiFi Aware forms clusters of nearby devices that synchronize during Discovery Windows. This is effectively mesh topology formation handled by the OS.
 
-### 2.4 iOS: The Survival Toolkit
+### [Needs Revalidation] 2.4 iOS: The Survival Toolkit
 
 iOS is harder. There is no VPN-for-mesh trick. But there ARE sanctioned background modes:
 
@@ -223,9 +229,9 @@ Each wake event triggers a 30-second BLE scan burst. Over the course of an hour,
 
 ---
 
-## 3. DISCOVERY LAYER {#3-discovery-layer}
+## [Needs Revalidation] 3. DISCOVERY LAYER {#3-discovery-layer}
 
-### 3.1 Encrypted BLE Beacons (Custom Protocol)
+### [Needs Revalidation] 3.1 Encrypted BLE Beacons (Custom Protocol)
 
 Standard BLE advertising leaks identity. We need encrypted discovery.
 
@@ -259,7 +265,7 @@ Where:
 **Open Discovery Mode (no group key):**
 For public mesh networks, broadcast in cleartext with a well-known service UUID. Devices discover each other freely. Privacy is traded for reach.
 
-### 3.2 WiFi Aware Discovery (Android)
+### [Needs Revalidation] 3.2 WiFi Aware Discovery (Android)
 
 ```kotlin
 val publishConfig = PublishConfig.Builder()
@@ -288,11 +294,11 @@ WiFi Aware provides:
 - Works alongside normal WiFi (dual-channel on modern chipsets)
 - No user interaction required (unlike WiFi Direct)
 
-### 3.3 mDNS (Same Network Only)
+### [Needs Revalidation] 3.3 mDNS (Same Network Only)
 
 When devices share a WiFi network, use libp2p's existing mDNS. But add Dark Mode (from the previous audit) to encrypt the discovery when needed.
 
-### 3.4 Discovery Priority Stack
+### [Needs Revalidation] 3.4 Discovery Priority Stack
 
 ```
 Try in order (fastest first, most available last):
@@ -305,11 +311,11 @@ Try in order (fastest first, most available last):
 
 ---
 
-## 4. DATA TRANSFER LAYER {#4-data-transfer}
+## [Needs Revalidation] 4. DATA TRANSFER LAYER {#4-data-transfer}
 
 Once peers discover each other, how do we move bytes?
 
-### 4.1 Transport Comparison
+### [Needs Revalidation] 4.1 Transport Comparison
 
 | Transport | Throughput | Range | Setup Time | Background | Platform |
 |-----------|-----------|-------|------------|------------|----------|
@@ -321,7 +327,7 @@ Once peers discover each other, how do we move bytes?
 | libp2p TCP | ~1 Gbps | WAN | 0.1s | No (needs internet) | Universal |
 | libp2p QUIC | ~1 Gbps | WAN | 0.05s | No (needs internet) | Universal |
 
-### 4.2 BLE L2CAP Channels (The Sweet Spot)
+### [Needs Revalidation] 4.2 BLE L2CAP Channels (The Sweet Spot)
 
 L2CAP provides connection-oriented channels over BLE with higher throughput than GATT:
 
@@ -364,7 +370,7 @@ writeMeshFrame(socket.outputStream, responseFrame)
 - Lower overhead
 - Works in background on both platforms
 
-### 4.3 WiFi Aware Data Path (Android High-Bandwidth)
+### [Needs Revalidation] 4.3 WiFi Aware Data Path (Android High-Bandwidth)
 
 When BLE isn't enough (large sync), escalate to WiFi Aware:
 
@@ -388,7 +394,7 @@ connectivityManager.requestNetwork(networkRequest, object : ConnectivityManager.
 })
 ```
 
-### 4.4 Transport Escalation Protocol
+### [Needs Revalidation] 4.4 Transport Escalation Protocol
 
 ```
 Discovery: BLE beacon detected
@@ -408,9 +414,9 @@ Phase 3: After sync, close WiFi Aware, maintain BLE for discovery
 
 ---
 
-## 5. THE CUSTOM MESH PROTOCOL: "DRIFT PROTOCOL v1" {#5-drift-protocol}
+## [Needs Revalidation] 5. THE CUSTOM MESH PROTOCOL: "DRIFT PROTOCOL v1" {#5-drift-protocol}
 
-### 5.1 Design Principles
+### [Needs Revalidation] 5.1 Design Principles
 
 1. **Every node is equal.** No "server" vs "client." Every device stores, relays, and routes.
 2. **Offline-first.** The protocol assumes NO internet. Internet is a bonus.
@@ -418,7 +424,7 @@ Phase 3: After sync, close WiFi Aware, maintain BLE for discovery
 4. **Cryptographically sealed.** E2E encrypted. Relay nodes see nothing.
 5. **Epidemic with intelligence.** Messages spread like a virus, but with TTL, hop limits, and priority.
 
-### 5.2 Message Envelope (Drift Envelope)
+### [Needs Revalidation] 5.2 Message Envelope (Drift Envelope)
 
 ```
 DRIFT ENVELOPE (binary, little-endian):
@@ -456,7 +462,7 @@ TOTAL OVERHEAD: 154 bytes fixed + ciphertext (18 + 14 + 120 + 2)
 
 **Compared to current SCMessenger envelope:** ~40% smaller due to binary UUIDs, fixed-width fields, and no bincode overhead.
 
-### 5.3 Plaintext Message (Inside Ciphertext)
+### [Needs Revalidation] 5.3 Plaintext Message (Inside Ciphertext)
 
 ```
 DRIFT MESSAGE (after decryption + LZ4 decompression):
@@ -474,7 +480,7 @@ DRIFT MESSAGE (after decryption + LZ4 decompression):
   [N bytes]  Payload (UTF-8 text, or type-specific binary)
 ```
 
-### 5.4 Sync Protocol (Bloom Filter Gossip)
+### [Needs Revalidation] 5.4 Sync Protocol (Bloom Filter Gossip)
 
 When two nodes meet, they need to efficiently determine which messages to exchange.
 
@@ -527,9 +533,9 @@ Messages that are newer, higher priority, lower hop count, and have more TTL rem
 
 ---
 
-## 6. ROUTING & PRIORITIZATION {#6-routing}
+## [Needs Revalidation] 6. ROUTING & PRIORITIZATION {#6-routing}
 
-### 6.1 Epidemic Routing with Controlled Flooding
+### [Needs Revalidation] 6.1 Epidemic Routing with Controlled Flooding
 
 Pure epidemic routing (forward everything to everyone) works for small networks (<100 nodes) but doesn't scale. We use **Spray-and-Wait** with enhancements:
 
@@ -565,7 +571,7 @@ ENHANCEMENT: PROPHET (Probabilistic Routing)
 - PRoPHET ensures copies go to nodes most likely to encounter the recipient
 - Combined: fast delivery with bounded message copies (doesn't explode the network)
 
-### 6.2 Recipient Hint Routing
+### [Needs Revalidation] 6.2 Recipient Hint Routing
 
 The `recipient_hint` field (4 bytes of blake3 hash) enables nodes to make fast routing decisions without decrypting:
 
@@ -591,7 +597,7 @@ fn should_relay(&self, envelope: &DriftEnvelope) -> bool {
 }
 ```
 
-### 6.3 The 10,000 Message Car Problem (Solved)
+### [Needs Revalidation] 6.3 The 10,000 Message Car Problem (Solved)
 
 Scenario: A car carrying 10,000 messages passes a pedestrian for 5 seconds.
 
@@ -628,9 +634,9 @@ If Android-to-Android: WiFi Aware escalation at Time 2.0s could transfer ALL 10,
 
 ---
 
-## 7. SYNCHRONIZATION: EVERY NODE IS A SERVER {#7-sync-layer}
+## [Needs Revalidation] 7. SYNCHRONIZATION: EVERY NODE IS A SERVER {#7-sync-layer}
 
-### 7.1 The CRDT Message Store
+### [Needs Revalidation] 7.1 The CRDT Message Store
 
 Every node maintains a **Conflict-free Replicated Data Type (CRDT)** message store. This means:
 - Any two nodes can merge their stores without conflicts
@@ -693,7 +699,7 @@ impl MeshStore {
 }
 ```
 
-### 7.2 Vector Clocks for Causal Ordering
+### [Needs Revalidation] 7.2 Vector Clocks for Causal Ordering
 
 For conversation threading (knowing which message came before which):
 
@@ -728,9 +734,9 @@ impl VectorClock {
 
 ---
 
-## 8. INTERNET BRIDGE: NOSTR AS THE GLOBAL BACKPLANE {#8-internet-bridge}
+## [Needs Revalidation] 8. INTERNET BRIDGE: NOSTR AS THE GLOBAL BACKPLANE {#8-internet-bridge}
 
-### 8.1 Why Nostr
+### [Needs Revalidation] 8.1 Why Nostr
 
 When a mule device gets internet connectivity (WiFi hotspot, cell service), it needs to dump its mesh payload to a global network. Nostr is the ideal bridge because:
 
@@ -740,7 +746,7 @@ When a mule device gets internet connectivity (WiFi hotspot, cell service), it n
 4. **Censorship-resistant.** If one relay blocks you, connect to another.
 5. **Existing ecosystem.** Nostr clients, libraries, and relays already exist in every language.
 
-### 8.2 Drift ↔ Nostr Bridge
+### [Needs Revalidation] 8.2 Drift ↔ Nostr Bridge
 
 ```
 When node gets internet:
@@ -772,7 +778,7 @@ When node gets internet:
 
 **The BitChat Precedent:** The BitChat project (github.com/permissionlesstech/bitchat) already implements this pattern: local BLE mesh + Nostr relay bridge. It works. We're not inventing this from scratch.
 
-### 8.3 Every Node Is A Relay
+### [Needs Revalidation] 8.3 Every Node Is A Relay
 
 Here's where "every node is a server" gets real. When a node has internet, it doesn't just sync its OWN messages — it acts as a **Nostr relay** for the entire local mesh:
 
@@ -801,9 +807,9 @@ The moment ANY node in the mesh gets internet, the ENTIRE mesh syncs globally. O
 
 ---
 
-## 9. iOS SURVIVAL GUIDE: EVERY KNOWN TRICK {#9-ios-tricks}
+## [Needs Revalidation] 9. iOS SURVIVAL GUIDE: EVERY KNOWN TRICK {#9-ios-tricks}
 
-### 9.1 The Composite Background Strategy
+### [Needs Revalidation] 9.1 The Composite Background Strategy
 
 ```swift
 class MeshManager {
@@ -866,7 +872,7 @@ class MeshManager {
 }
 ```
 
-### 9.2 The State Preservation Trick
+### [Needs Revalidation] 9.2 The State Preservation Trick
 
 iOS can terminate your app at any time. When it does, CoreBluetooth offers state preservation:
 
@@ -891,7 +897,7 @@ func centralManager(_ central: CBCentralManager,
 
 This means: even if iOS kills your app, if a Drift beacon appears, iOS will relaunch your app in the background to handle the BLE event. This is the closest iOS gets to "always-on mesh."
 
-### 9.3 iOS Realistic Expectations
+### [Needs Revalidation] 9.3 iOS Realistic Expectations
 
 | Scenario | BLE Discovery Success Rate | Sync Window |
 |----------|---------------------------|-------------|
@@ -905,9 +911,9 @@ This means: even if iOS kills your app, if a Drift beacon appears, iOS will rela
 
 ---
 
-## 10. ANDROID POWER ARCHITECTURE {#10-android-power}
+## [Needs Revalidation] 10. ANDROID POWER ARCHITECTURE {#10-android-power}
 
-### 10.1 The Full Android Mesh Stack
+### [Needs Revalidation] 10.1 The Full Android Mesh Stack
 
 ```kotlin
 // AndroidManifest.xml
@@ -969,7 +975,7 @@ class MeshService : Service() {
 }
 ```
 
-### 10.2 The VPN Alternative (More Aggressive)
+### [Needs Revalidation] 10.2 The VPN Alternative (More Aggressive)
 
 If you want deeper integration:
 
@@ -1006,9 +1012,9 @@ This approach gives every device a virtual mesh IP address (10.73.x.x). Applicat
 
 ---
 
-## 11. APPLE FIND MY: THE EXISTING GLOBAL MESH {#11-find-my-exploitation}
+## [Needs Revalidation] 11. APPLE FIND MY: THE EXISTING GLOBAL MESH {#11-find-my-exploitation}
 
-### 11.1 The Architecture We're Piggybacking On
+### [Needs Revalidation] 11.1 The Architecture We're Piggybacking On
 
 Apple's Find My network is the largest mesh relay network on Earth:
 - ~1.8 billion active Apple devices
@@ -1019,7 +1025,7 @@ Apple's Find My network is the largest mesh relay network on Earth:
 
 **OpenHaystack** (TU Darmstadt) reverse-engineered the entire protocol and published open-source implementations for ESP32 and nRF51822.
 
-### 11.2 Encoding Arbitrary Data in Find My Beacons
+### [Needs Revalidation] 11.2 Encoding Arbitrary Data in Find My Beacons
 
 The **Send My** project (Positive Security) proved you can transmit arbitrary data:
 
@@ -1038,7 +1044,7 @@ Improved: ~12.5 bytes/second (TagAlong, SenSys 2022)
 Latency: 1-60 minutes (depends on Apple device density nearby)
 ```
 
-### 11.3 Find My as Drift Net Backhaul
+### [Needs Revalidation] 11.3 Find My as Drift Net Backhaul
 
 **For SCMessenger's mesh, Find My could serve as an ultra-low-bandwidth emergency backhaul:**
 
@@ -1062,7 +1068,7 @@ Use case: Absolute zero connectivity (no cell, no WiFi, no peers in range)
 
 **This is not for message content.** At 12.5 bytes/sec, you can't send a useful message. But you CAN send a "you have mail" notification that propagates globally through Apple's existing infrastructure at zero cost. The actual message content travels through the BLE/WiFi mesh or Nostr bridge.
 
-### 11.4 Legal/Ethical Considerations
+### [Needs Revalidation] 11.4 Legal/Ethical Considerations
 
 - Apple's Find My Terms of Service don't explicitly prohibit third-party beacon broadcasting
 - The protocol is designed to work with any BLE device (Find My accessory program is open)
@@ -1072,9 +1078,9 @@ Use case: Absolute zero connectivity (no cell, no WiFi, no peers in range)
 
 ---
 
-## 12. LESSONS FROM THE DEAD {#12-lessons-from-dead}
+## [Needs Revalidation] 12. LESSONS FROM THE DEAD {#12-lessons-from-dead}
 
-### 12.1 Why They Failed
+### [Needs Revalidation] 12.1 Why They Failed
 
 | Project | Peak | Death | Root Cause |
 |---------|------|-------|------------|
@@ -1084,7 +1090,7 @@ Use case: Absolute zero connectivity (no cell, no WiFi, no peers in range)
 | RightMesh | 2017-2019 | Defunct | Tried blockchain token incentives for relay. Token crashed. No token = no relay. |
 | Briar | 2018-present | Alive (niche) | Android-only. Too hard to use. No iOS = no network effect. Battery drain unacceptable for casual users. |
 
-### 12.2 What Survived and Why
+### [Needs Revalidation] 12.2 What Survived and Why
 
 | Project | Status | Why It Works |
 |---------|--------|-------------|
@@ -1093,7 +1099,7 @@ Use case: Absolute zero connectivity (no cell, no WiFi, no peers in range)
 | Signal | Dominant | Accepted the server model. Centralized relay with E2E encryption. "Good enough" privacy. |
 | Nostr | Growing | Decentralized relays. Anyone can run one. Protocol is simple. Ecosystem growing. |
 
-### 12.3 The Pattern
+### [Needs Revalidation] 12.3 The Pattern
 
 **Every successful mesh/P2P project either:**
 1. Uses dedicated hardware (Meshtastic, LoRa nodes)
@@ -1104,9 +1110,9 @@ Use case: Absolute zero connectivity (no cell, no WiFi, no peers in range)
 
 ---
 
-## 13. CUSTOM PROTOCOL SPECIFICATIONS {#13-protocol-specs}
+## [Needs Revalidation] 13. CUSTOM PROTOCOL SPECIFICATIONS {#13-protocol-specs}
 
-### 13.1 Drift Protocol Wire Format (Complete)
+### [Needs Revalidation] 13.1 Drift Protocol Wire Format (Complete)
 
 ```
 DRIFT FRAME (over BLE L2CAP or WiFi Aware):
@@ -1134,7 +1140,7 @@ PEER_INFO Payload:
   [1 byte]   connectivity_flags: { has_internet: 1, has_wifi: 1, has_ble: 1, is_relay: 1, reserved: 4 }
 ```
 
-### 13.2 BLE GATT Service Definition (Fallback)
+### [Needs Revalidation] 13.2 BLE GATT Service Definition (Fallback)
 
 For devices that don't support L2CAP:
 
@@ -1169,7 +1175,7 @@ Fragmentation:
   Final flag indicates last chunk.
 ```
 
-### 13.3 Nostr Event Kind (Custom)
+### [Needs Revalidation] 13.3 Nostr Event Kind (Custom)
 
 ```json
 {
@@ -1191,9 +1197,9 @@ Kind 20001 is an ephemeral replaceable event. Relays may discard after TTL expir
 
 ---
 
-## 14. THE MCP SERVER ARCHITECTURE {#14-mcp-servers}
+## [Needs Revalidation] 14. THE MCP SERVER ARCHITECTURE {#14-mcp-servers}
 
-### 14.1 Do We Need MCP Servers?
+### [Needs Revalidation] 14.1 Do We Need MCP Servers?
 
 **Yes, but not for the mesh itself.** MCP (Model Context Protocol) servers are useful for:
 
@@ -1205,7 +1211,7 @@ Kind 20001 is an ephemeral replaceable event. Relays may discard after TTL expir
 
 4. **Bridge Management** — An MCP server that manages Nostr relay connections, monitors relay health, and selects optimal relays for different message types.
 
-### 14.2 Proposed MCP Server Designs
+### [Needs Revalidation] 14.2 Proposed MCP Server Designs
 
 **MCP Server 1: `mesh-node` (Core Mesh Operations)**
 
@@ -1357,7 +1363,7 @@ Kind 20001 is an ephemeral replaceable event. Relays may discard after TTL expir
 }
 ```
 
-### 14.3 How MCP Servers Fit The Architecture
+### [Needs Revalidation] 14.3 How MCP Servers Fit The Architecture
 
 ```
 ┌──────────────────────────────────────────────────┐
@@ -1387,9 +1393,9 @@ MCP servers wrap the Rust core via UniFFI bindings, exposing mesh operations as 
 
 ---
 
-## 15. IMPLEMENTATION ROADMAP {#15-roadmap}
+## [Needs Revalidation] 15. IMPLEMENTATION ROADMAP {#15-roadmap}
 
-### Phase 0: Foundation — COMPLETE
+### [Needs Revalidation] Phase 0: Foundation — COMPLETE
 - [x] X25519 + XChaCha20-Poly1305 encryption
 - [x] Ed25519 identity management
 - [x] libp2p transport (TCP + mDNS)
@@ -1397,7 +1403,7 @@ MCP servers wrap the Rust core via UniFFI bindings, exposing mesh operations as 
 - [x] WASM bindings
 - [x] UniFFI mobile bindings
 
-### Phase 1: Hardening — COMPLETE
+### [Needs Revalidation] Phase 1: Hardening — COMPLETE
 - [x] Ed25519 envelope signatures
 - [x] AAD binding for sender authentication
 - [x] Persist outbox/inbox to sled
@@ -1410,7 +1416,7 @@ MCP servers wrap the Rust core via UniFFI bindings, exposing mesh operations as 
 - [x] SendResult::Queued — explicit non-delivery-confirmation type
 - [x] Full unwrap/expect/panic sweep — production code clean
 
-### Phase 2: Drift Protocol Core — COMPLETE
+### [Needs Revalidation] Phase 2: Drift Protocol Core — COMPLETE
 - [x] Bloom filter sync protocol
 - [x] CRDT message store
 - [x] Spray-and-Wait + PRoPHET routing
@@ -1418,7 +1424,7 @@ MCP servers wrap the Rust core via UniFFI bindings, exposing mesh operations as 
 - [x] Transport escalation protocol
 - [x] Vector clocks for message ordering
 
-### Phase 3: Transport Layer — COMPLETE
+### [Needs Revalidation] Phase 3: Transport Layer — COMPLETE
 - [x] BLE L2CAP transport
 - [x] Encrypted BLE discovery beacons
 - [x] WiFi Aware discovery + data paths
@@ -1426,7 +1432,7 @@ MCP servers wrap the Rust core via UniFFI bindings, exposing mesh operations as 
 - [x] Transport manager (multiplexer)
 - [x] Drift GATT service (fallback)
 
-### Phase 4: Mobile Platform — COMPLETE
+### [Needs Revalidation] Phase 4: Mobile Platform — COMPLETE
 - [x] CoreBluetooth background scanning + advertising
 - [x] L2CAP channel data transfer
 - [x] Composite background strategy
@@ -1435,7 +1441,7 @@ MCP servers wrap the Rust core via UniFFI bindings, exposing mesh operations as 
 - [x] iOS-specific background strategy
 - [x] MeshSettings (serializable config)
 
-### Phase 5: Self-Relay Network — COMPLETE
+### [Needs Revalidation] Phase 5: Self-Relay Network — COMPLETE
 - [x] Relay server (accept connections, store-and-forward)
 - [x] Relay client (connect to known relays, push/pull sync)
 - [x] Relay wire protocol (handshake, auth, sync)
@@ -1443,19 +1449,19 @@ MCP servers wrap the Rust core via UniFFI bindings, exposing mesh operations as 
 - [x] Invite system
 - [x] Find My beacon integration
 
-### Phase 6: Privacy — COMPLETE
+### [Needs Revalidation] Phase 6: Privacy — COMPLETE
 - [x] Onion-layered relay (N layers of encryption)
 - [x] Circuit construction (select N hops)
 - [x] Cover traffic generation
 - [x] Message padding to fixed sizes
 - [x] Randomized relay delays (timing obfuscation)
 
-### Phase 7: WASM Support — COMPLETE
+### [Needs Revalidation] Phase 7: WASM Support — COMPLETE
 - [x] Browser mesh participation
 - [x] WebRTC/WebSocket transport
 - [x] OPFS-backed message store
 
-### Remaining Work
+### [Needs Revalidation] Remaining Work
 - [ ] Wire IronCore (crypto/storage) to SwarmHandle (network) via CLI
 - [ ] MCP servers (mesh-node, mesh-bridge, mesh-monitor)
 - [ ] Dedicated hardware relay (ESP32/RPi)
@@ -1463,7 +1469,7 @@ MCP servers wrap the Rust core via UniFFI bindings, exposing mesh operations as 
 
 ---
 
-## APPENDIX A: REFERENCE PROJECTS
+## [Needs Revalidation] APPENDIX A: REFERENCE PROJECTS
 
 | Project | URL | Relevance |
 |---------|-----|-----------|
@@ -1480,7 +1486,7 @@ MCP servers wrap the Rust core via UniFFI bindings, exposing mesh operations as 
 | NetGuard | github.com/M66B/NetGuard | VPN Service for local packet routing |
 | Blokada | blokada.org | VPN Service background persistence proof |
 
-## APPENDIX B: KEY iOS/ANDROID API REFERENCES
+## [Needs Revalidation] APPENDIX B: KEY iOS/ANDROID API REFERENCES
 
 | API | Platform | Purpose | Background? |
 |-----|----------|---------|-------------|
@@ -1496,7 +1502,7 @@ MCP servers wrap the Rust core via UniFFI bindings, exposing mesh operations as 
 | BluetoothLeScanner | Android | BLE scanning | Yes (PendingIntent) |
 | BluetoothGattServer | Android | BLE GATT service | Yes |
 
-## APPENDIX C: BANDWIDTH BUDGET
+## [Needs Revalidation] APPENDIX C: BANDWIDTH BUDGET
 
 | Payload | Uncompressed | LZ4 Compressed | Drift Overhead | Wire Total |
 |---------|-------------|----------------|----------------|------------|

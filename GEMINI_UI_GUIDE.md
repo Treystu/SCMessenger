@@ -1,6 +1,12 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # SCMessenger UI/UX Design Guide for Gemini 3.0 Pro
 
-## Your Mission
+## [Needs Revalidation] Your Mission
 
 You are tasked with designing and building a beautiful, intuitive user interface for **SCMessenger** — the world's first truly sovereign messenger. This is not just another chat app. This is communication infrastructure that works everywhere, is owned by no one, and is unstoppable by design.
 
@@ -8,11 +14,11 @@ Your challenge: Make cutting-edge cryptographic mesh networking feel as simple a
 
 ---
 
-## Installation & Deployment Options
+## [Needs Revalidation] Installation & Deployment Options
 
 Your UI must support both local CLI installation and Docker deployment. Here are the two paths:
 
-### Option 1: Local CLI Installation
+### [Needs Revalidation] Option 1: Local CLI Installation
 
 **Prerequisites:**
 - Rust 1.70+ (install via [rustup.rs](https://rustup.rs/))
@@ -58,7 +64,7 @@ Your web UI will communicate with the locally-running CLI via:
 - **HTTP API** on `http://localhost:9000/api` (for commands)
 - Or **IPC** if wrapped in Electron/Tauri
 
-### Option 2: Docker Deployment
+### [Needs Revalidation] Option 2: Docker Deployment
 
 **Prerequisites:**
 - Docker 20.10+
@@ -123,7 +129,7 @@ volumes:
 - Ensure WebSocket connection points to the correct host (localhost vs container hostname)
 - Support both scenarios in your JavaScript (auto-detect environment)
 
-### Option 3: WASM (Browser-only, Future)
+### [Needs Revalidation] Option 3: WASM (Browser-only, Future)
 
 SCMessenger has WASM bindings for browser-native mesh participation:
 ```html
@@ -139,9 +145,9 @@ SCMessenger has WASM bindings for browser-native mesh participation:
 
 ---
 
-## What You're Building For
+## [Needs Revalidation] What You're Building For
 
-### The Application: SCMessenger
+### [Needs Revalidation] The Application: SCMessenger
 
 **Core Philosophy:**
 - **Sovereign Communication** — No corporations, no servers, no surveillance
@@ -181,16 +187,16 @@ quit                        # Shutdown
 
 ---
 
-## Design Requirements
+## [Needs Revalidation] Design Requirements
 
-### 1. Single-File Web Application
+### [Needs Revalidation] 1. Single-File Web Application
 - **ONE HTML FILE** containing CSS and JavaScript inline
 - No external dependencies, frameworks, or libraries (except what's in browser)
 - Works offline once loaded
 - Can be wrapped in Electron/Tauri for desktop deployment
 - Communicates with SCMessenger backend via WebSocket/IPC
 
-### 2. Visual Design Principles
+### [Needs Revalidation] 2. Visual Design Principles
 
 **Aesthetic:**
 - **Minimal, not minimalist** — Clean but warm
@@ -211,9 +217,9 @@ quit                        # Shutdown
 - **Sans-serif for UI** — `Inter`, `SF Pro`, or system fonts
 - **Variable font sizes** — Accessible, readable at all scales
 
-### 3. Core User Flows
+### [Needs Revalidation] 3. Core User Flows
 
-#### **First Launch (Onboarding)**
+#### [Needs Revalidation] **First Launch (Onboarding)**
 ```
 1. Splash screen with logo and tagline
 2. "Welcome to Sovereign Communication" intro
@@ -225,7 +231,7 @@ quit                        # Shutdown
 5. "You're Ready" — Enter main interface
 ```
 
-#### **Main Interface (Dashboard)**
+#### [Needs Revalidation] **Main Interface (Dashboard)**
 ```
 ┌────────────────────────────────────────────────────────┐
 │  [≡ Menu]  SCMessenger        [Network: ● Online]  [⚙] │
@@ -254,7 +260,7 @@ quit                        # Shutdown
 - **Bottom Status Bar:** Network status, relay activity, message stats
 - **Floating Action Button:** Quick actions (new message, add contact, settings)
 
-#### **Contact Management**
+#### [Needs Revalidation] **Contact Management**
 ```
 Add Contact Flow:
 1. Click "+ Add Contact"
@@ -284,7 +290,7 @@ Add Contact Flow:
 └─────────────────────────────────┘
 ```
 
-#### **Messaging Interface**
+#### [Needs Revalidation] **Messaging Interface**
 ```
 Conversation View:
 ┌──────────────────────────────────────────┐
@@ -316,7 +322,7 @@ Conversation View:
 - ✓✓ Read (opened by recipient)
 - ⚠ Failed (retry option)
 
-#### **Network Status Visualization**
+#### [Needs Revalidation] **Network Status Visualization**
 ```
 Network Graph (optional advanced view):
 - Node graph showing YOU at center
@@ -342,15 +348,15 @@ Status States:
 - **🟠 Limited** — Partial connectivity
 - **🔴 Offline** — No connections (messages queued)
 
-### 4. Key Features to Visualize
+### [Needs Revalidation] 4. Key Features to Visualize
 
-#### **Identity Display**
+#### [Needs Revalidation] **Identity Display**
 - QR code for sharing (animated generation)
 - Copy buttons with feedback ("Copied!")
 - Colorful hash visualization (identicon or gradient based on ID)
 - Security indicator (lock icon, "Encrypted" badge)
 
-#### **Relay Activity**
+#### [Needs Revalidation] **Relay Activity**
 - **Live Feed** — Scrolling list of relay events (optional advanced mode)
 - **Statistics Dashboard:**
   ```
@@ -365,7 +371,7 @@ Status States:
   ```
 - **Toggle:** "Relay ON/OFF" — But warn user: "Relaying is required to send messages"
 
-#### **Settings Panel**
+#### [Needs Revalidation] **Settings Panel**
 ```
 Categories:
 ├─ Identity
@@ -391,7 +397,7 @@ Categories:
    └─ License
 ```
 
-#### **Notifications**
+#### [Needs Revalidation] **Notifications**
 - **System Notifications:**
   - New message received
   - Peer connected/disconnected
@@ -406,7 +412,7 @@ Categories:
   - Pulsing dot for activity
   - Color changes for status
 
-### 5. Advanced Features (Power Users)
+### [Needs Revalidation] 5. Advanced Features (Power Users)
 
 **Developer Console (hidden by default, accessible via keyboard shortcut):**
 ```
@@ -436,9 +442,9 @@ Press Ctrl+Shift+D to open:
 
 ---
 
-## Technical Integration Points
+## [Needs Revalidation] Technical Integration Points
 
-### Environment Detection
+### [Needs Revalidation] Environment Detection
 Your UI must auto-detect whether it's running locally or in Docker:
 
 ```javascript
@@ -460,7 +466,7 @@ const WS_URL = detectBackendUrl();
 const socket = new WebSocket(WS_URL);
 ```
 
-### Backend Communication
+### [Needs Revalidation] Backend Communication
 Your UI needs to communicate with the SCMessenger Rust backend. Assume these interfaces:
 
 **WebSocket Events** (from backend to UI):
@@ -526,7 +532,7 @@ send_command({
 })
 ```
 
-### Data Structures
+### [Needs Revalidation] Data Structures
 
 **Contact Object:**
 ```javascript
@@ -558,9 +564,9 @@ send_command({
 
 ---
 
-## UX Principles
+## [Needs Revalidation] UX Principles
 
-### 1. **Progressive Disclosure**
+### [Needs Revalidation] 1. **Progressive Disclosure**
 - Don't overwhelm users with technical details
 - Hide advanced features behind "Advanced" toggles
 - Show crypto concepts with friendly metaphors:
@@ -569,24 +575,24 @@ send_command({
   - Private key = Your house key
   - Relay = Being a good neighbor
 
-### 2. **Zero Configuration Default**
+### [Needs Revalidation] 2. **Zero Configuration Default**
 - App should work out-of-the-box
 - Sane defaults for everything
 - Advanced users can tweak, beginners never need to
 
-### 3. **Feedback Everywhere**
+### [Needs Revalidation] 3. **Feedback Everywhere**
 - Every action gets visual feedback
 - Loading states for async operations
 - Success/error messages that make sense
 - Don't use crypto jargon in user-facing text
 
-### 4. **Graceful Degradation**
+### [Needs Revalidation] 4. **Graceful Degradation**
 - Works offline (queue messages)
 - Works without internet (mesh only)
 - Works without contacts (add contacts anytime)
 - Works with slow connections (show progress)
 
-### 5. **Privacy by Design**
+### [Needs Revalidation] 5. **Privacy by Design**
 - No telemetry, no analytics
 - All data stored locally
 - Clear indicators when data is being transmitted
@@ -594,9 +600,9 @@ send_command({
 
 ---
 
-## Example User Scenarios
+## [Needs Revalidation] Example User Scenarios
 
-### **Scenario 1: First-time user (Non-technical)**
+### [Needs Revalidation] **Scenario 1: First-time user (Non-technical)**
 ```
 1. Opens app
 2. Sees: "Welcome to Sovereign Communication"
@@ -609,7 +615,7 @@ send_command({
 9. Never sees words like "Ed25519" or "libp2p"
 ```
 
-### **Scenario 2: Power user (Technical)**
+### [Needs Revalidation] **Scenario 2: Power user (Technical)**
 ```
 1. Opens app
 2. Navigates to Settings → Network
@@ -621,7 +627,7 @@ send_command({
 8. Verifies message encryption signatures
 ```
 
-### **Scenario 3: Offline user (No internet)**
+### [Needs Revalidation] **Scenario 3: Offline user (No internet)**
 ```
 1. Opens app in area with no internet
 2. Sees: "Mesh Mode" (blue indicator)
@@ -634,23 +640,23 @@ send_command({
 
 ---
 
-## Deliverables
+## [Needs Revalidation] Deliverables
 
-### **Phase 1: Core Interface**
+### [Needs Revalidation] **Phase 1: Core Interface**
 - Single HTML file with inline CSS/JS
 - Dashboard with messaging interface
 - Contact management (add, list, view)
 - Basic settings panel
 - Network status indicator
 
-### **Phase 2: Advanced Features**
+### [Needs Revalidation] **Phase 2: Advanced Features**
 - Network visualization
 - Relay statistics dashboard
 - Developer console
 - QR code scanning
 - Export/import functionality
 
-### **Phase 3: Polish**
+### [Needs Revalidation] **Phase 3: Polish**
 - Animations and transitions
 - Dark/light theme toggle
 - Keyboard shortcuts
@@ -659,7 +665,7 @@ send_command({
 
 ---
 
-## Design Inspiration
+## [Needs Revalidation] Design Inspiration
 
 Look at these for reference (but make it uniquely SCMessenger):
 - **Signal** — Clean messaging, privacy-focused
@@ -673,7 +679,7 @@ Look at these for reference (but make it uniquely SCMessenger):
 
 ---
 
-## Final Notes
+## [Needs Revalidation] Final Notes
 
 **What makes this different:**
 - NO servers (emphasize this in design)
@@ -698,7 +704,7 @@ Look at these for reference (but make it uniquely SCMessenger):
 
 ---
 
-## Your Task
+## [Needs Revalidation] Your Task
 
 Build the **Phase 1: Core Interface** as a single HTML file. Include:
 1. Dashboard layout (sidebar, message area, status bar)

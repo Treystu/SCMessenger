@@ -1,12 +1,18 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # Security Policy
 
-## Reporting a Vulnerability
+## [Needs Revalidation] Reporting a Vulnerability
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
 If you discover a security vulnerability in SCMessenger, please report it privately to help us address it before public disclosure.
 
-### How to Report
+### [Needs Revalidation] How to Report
 
 1. **Email**: Send details to the repository maintainers via GitHub private vulnerability reporting
 2. **GitHub Security Advisories**: Use GitHub's "Report a vulnerability" feature in the Security tab
@@ -16,18 +22,18 @@ If you discover a security vulnerability in SCMessenger, please report it privat
    - Potential impact
    - Suggested fix (if any)
 
-### What to Expect
+### [Needs Revalidation] What to Expect
 
 - **Acknowledgment**: We will acknowledge receipt within 48 hours
 - **Updates**: We will provide regular updates on our progress
 - **Timeline**: We aim to address critical vulnerabilities within 7 days
 - **Credit**: We will credit you in the security advisory (unless you prefer to remain anonymous)
 
-## Security Considerations
+## [Needs Revalidation] Security Considerations
 
 SCMessenger is designed with security and privacy as core principles:
 
-### Cryptography
+### [Needs Revalidation] Cryptography
 
 - **Identity**: Ed25519 signing keys
 - **Key Exchange**: X25519 ECDH (ephemeral per-message)
@@ -35,7 +41,7 @@ SCMessenger is designed with security and privacy as core principles:
 - **Hashing**: Blake3 for identity derivation and KDF
 - **Sender Auth**: AAD binding + Ed25519 envelope signatures
 
-### Privacy Features
+### [Needs Revalidation] Privacy Features
 
 - **No Accounts**: No phone numbers, email addresses, or accounts
 - **Identity Ownership**: You control your Ed25519 keypair
@@ -43,21 +49,21 @@ SCMessenger is designed with security and privacy as core principles:
 - **Cover Traffic**: Padding and timing obfuscation
 - **No Central Servers**: Fully peer-to-peer mesh network
 
-### Known Security Considerations
+### [Needs Revalidation] Known Security Considerations
 
 1. **Local Storage**: Identity keys stored on device - protect your device
 2. **Physical Access**: An attacker with device access can read stored messages
 3. **Network Analysis**: While onion routing helps, sophisticated attackers may attempt traffic correlation
 4. **Bluetooth/WiFi**: Local transports have inherent range limitations and exposure
 
-## Supported Versions
+## [Needs Revalidation] Supported Versions
 
 | Version | Supported          |
 | ------- | ------------------ |
 | main    | :white_check_mark: |
 | < 1.0   | :x: (pre-release)  |
 
-## Security Best Practices for Users
+## [Needs Revalidation] Security Best Practices for Users
 
 - Keep your device secure with strong passwords/biometrics
 - Keep SCMessenger updated to the latest version
@@ -65,7 +71,7 @@ SCMessenger is designed with security and privacy as core principles:
 - Be cautious about the physical security of devices running SCMessenger
 - Understand that peer-to-peer networks have different threat models than server-based systems
 
-## Audit Status
+## [Needs Revalidation] Audit Status
 
 SCMessenger is an open-source project under active development. We welcome security audits and encourage responsible disclosure of any vulnerabilities discovered.
 
@@ -75,6 +81,6 @@ Current status:
 - CodeQL security scanning in CI/CD
 - No formal third-party security audit yet
 
-## Contact
+## [Needs Revalidation] Contact
 
 For security concerns, please use GitHub's private vulnerability reporting feature or contact the maintainers directly.

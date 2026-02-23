@@ -63,6 +63,9 @@ struct Receipt {
 }
 ```
 
+Cross-platform canonical identity for storage/exchange is `public_key_hex` (Ed25519 key hex).
+`sender_id` / `recipient_id` are protocol/message metadata fields and may contain derived identifiers.
+
 Maximum payload size: **64 KB**.
 
 ## Protocol IDs

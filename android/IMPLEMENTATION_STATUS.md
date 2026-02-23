@@ -1,8 +1,14 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # Implementation Status Report - Phase 14 Checkpoint
 
 > Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
 
-## ✅ Completed & Verified
+## [Needs Revalidation] ✅ Completed & Verified
 
 The following phases have been implemented and verified as building successfully:
 
@@ -27,7 +33,7 @@ The following phases have been implemented and verified as building successfully
   - Build verification complete.
   - UniFFI generation verified.
 
-## ⚠️ Partially Implemented
+## [Needs Revalidation] ⚠️ Partially Implemented
 
 - **Phase 8: Contacts UI**
   - `ContactsScreen.kt` exists (List view).
@@ -38,7 +44,7 @@ The following phases have been implemented and verified as building successfully
   - **Missing:** `ChatScreen.kt` (Detail view for actual messaging).
   - _Note:_ `ConversationsScreen` contains `TODO: Navigate to conversation detail`.
 
-## ❌ Missing / To Do
+## [Needs Revalidation] ❌ Missing / To Do
 
 The following phases from the original plan are NOT yet implemented in the codebase:
 
@@ -63,7 +69,7 @@ The following phases from the original plan are NOT yet implemented in the codeb
   - `data/TopicManager.kt`
   - `ui/join/JoinMeshScreen.kt`
 
-## Next Steps
+## [Needs Revalidation] Next Steps
 
 1.  **Implement Transport Layer (Phases 4 & 5)**: Critical for mesh connectivity.
 2.  **Complete Messaging UI (Phase 9)**: Create `ChatScreen`.

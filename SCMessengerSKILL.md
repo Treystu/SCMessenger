@@ -1,3 +1,9 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 ---
 name: scmessenger-wiring
 description: >
@@ -10,7 +16,7 @@ description: >
 
 # SCMessenger Wiring Skill
 
-## What This Repo Is
+## [Needs Revalidation] What This Repo Is
 
 A sovereign, server-less, E2E-encrypted mesh messenger written in Rust.
 **No accounts. No servers. No phone numbers.** Works over TCP/mDNS/BLE/WiFi Direct.
@@ -18,7 +24,7 @@ Licensed Unlicense (public domain). ~53K lines of Rust across a Cargo workspace.
 
 ---
 
-## Exact Repo Layout
+## [Needs Revalidation] Exact Repo Layout
 
 ```
 scmessenger/
@@ -66,7 +72,7 @@ scmessenger/
 
 ---
 
-## Cryptography Stack (Non-Negotiable)
+## [Needs Revalidation] Cryptography Stack (Non-Negotiable)
 
 | Layer | Algorithm | Notes |
 |-------|-----------|-------|
@@ -81,9 +87,9 @@ Never substitute algorithms. The reference types are `IdentityKeys`, `Envelope`,
 
 ---
 
-## The Two Core Types: IronCore and SwarmHandle
+## [Needs Revalidation] The Two Core Types: IronCore and SwarmHandle
 
-### IronCore (`core/src/lib.rs`)
+### [Needs Revalidation] IronCore (`core/src/lib.rs`)
 
 The crypto/storage spine. `Arc<RwLock<_>>` internals — cheap to clone, thread-safe.
 
@@ -136,7 +142,7 @@ pub trait CoreDelegate: Send + Sync {
 
 ---
 
-### SwarmHandle (`core/src/transport/`)
+### [Needs Revalidation] SwarmHandle (`core/src/transport/`)
 
 The libp2p network layer. Created by `transport::start_swarm(...)`.
 
@@ -176,25 +182,25 @@ SwarmEvent::ListeningOn(Multiaddr)
 
 ---
 
-## The Integration Bridge — How IronCore ↔ SwarmHandle Connect
+## [Needs Revalidation] The Integration Bridge — How IronCore ↔ SwarmHandle Connect
 
 **Contrary to what the README claims, this IS already wired in `cli/src/main.rs`.** The exact patterns:
 
-### Sending a message (UI → Network)
+### [Needs Revalidation] Sending a message (UI → Network)
 ```rust
 // In the UiCommand::Send handler:
 let env = core_rx.prepare_message(pk, message.clone())?;   // IronCore encrypts
 swarm_handle.send_message(target, env).await?;              // SwarmHandle transmits
 ```
 
-### Receiving a message (Network → App)
+### [Needs Revalidation] Receiving a message (Network → App)
 ```rust
 // In the SwarmEvent::MessageReceived handler:
 let msg = core_rx.receive_message(envelope_data)?;          // IronCore decrypts
 let text = msg.text_content().unwrap_or("<binary>");        // extract payload
 ```
 
-### Identity → Network key unification
+### [Needs Revalidation] Identity → Network key unification
 ```rust
 // SAME Ed25519 key used for both crypto identity and libp2p PeerId:
 let network_keypair = core.get_libp2p_keypair()?;
@@ -204,7 +210,7 @@ let swarm_handle = transport::start_swarm(network_keypair, Some(listen_addr), ev
 
 ---
 
-## CLI Architecture — The Main Event Loop
+## [Needs Revalidation] CLI Architecture — The Main Event Loop
 
 `cli/src/main.rs` runs a single `tokio::select!` loop over three sources:
 
@@ -225,7 +231,7 @@ Supporting crates in `cli/src/`:
 
 ---
 
-## Known Real Gaps (as of Feb 2026)
+## [Needs Revalidation] Known Real Gaps (as of Feb 2026)
 
 The README's "remaining gap" is misleading — the basic send/receive path works. The actual open issues are:
 
@@ -247,7 +253,7 @@ The README's "remaining gap" is misleading — the basic send/receive path works
 
 ---
 
-## Build & Test
+## [Needs Revalidation] Build & Test
 
 ```bash
 # Full workspace build
@@ -270,7 +276,7 @@ docker compose up
 
 ---
 
-## Dependency Notes
+## [Needs Revalidation] Dependency Notes
 
 Key external crates (from workspace `Cargo.toml`):
 - `libp2p` — core networking (gossipsub, mDNS, identify, kad, noise, yamux)
@@ -294,7 +300,7 @@ Key external crates (from workspace `Cargo.toml`):
 
 ---
 
-## How To Use This Skill
+## [Needs Revalidation] How To Use This Skill
 
 When working on SCMessenger, apply this skill by:
 
@@ -323,7 +329,7 @@ When working on SCMessenger, apply this skill by:
 
 ---
 
-## Gotchas
+## [Needs Revalidation] Gotchas
 
 - `public_key_hex` in contacts is the **Ed25519 signing key** (64 hex chars = 32 bytes), not the X25519 key. The ECDH key exchange is ephemeral and derived inside `prepare_message`.
 - `identity_id` = Blake3 hash of the Ed25519 public key. It is NOT the same as the libp2p `PeerId`.

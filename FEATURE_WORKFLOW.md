@@ -1,8 +1,14 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # SCMessenger Feature Workflow Runbook
 
 This guide outlines the streamlined process for adding new features to SCMessenger across all platforms (Core, iOS, Android, Web/WASM, CLI). Follow this checklist to ensure consistency, quality, and complete coverage.
 
-## 1. Core Implementation (Rust)
+## [Needs Revalidation] 1. Core Implementation (Rust)
 
 **Location**: `core/src/`
 
@@ -12,13 +18,13 @@ This guide outlines the streamlined process for adding new features to SCMesseng
 - [ ] **Unit Tests**: Add Rust unit tests in `core/src/...`.
 - [ ] **Verify Bindings**: Run `cargo check` and ensure `api.udl` is valid.
 
-## 2. Generate Bindings
+## [Needs Revalidation] 2. Generate Bindings
 
 - [ ] **Android**: Run `./gradlew :app:generateUniFFIBindings` (in `android/`).
 - [ ] **iOS**: Run `iOS/copy-bindings.sh`.
 - [ ] **WASM**: Run `wasm-pack build` (in `core/`).
 
-## 3. Platform Integration
+## [Needs Revalidation] 3. Platform Integration
 
 For each platform, ensure the feature is integrated into the UI and logic.
 
@@ -41,7 +47,7 @@ For each platform, ensure the feature is integrated into the UI and logic.
   - [ ] Verify buttons and interactive elements are accessible.
 - [ ] **Manual Test**: Build and run on Emulator/Device.
 
-### iOS (Swift)
+### [Needs Revalidation] iOS (Swift)
 
 **Location**: `iOS/SCMessenger/`
 
@@ -49,7 +55,7 @@ For each platform, ensure the feature is integrated into the UI and logic.
 - [ ] **Update UI**: Add SwiftUI Views/ViewModels to expose the feature.
 - [ ] **Manual Test**: Build and run in Simulator (Cmd+R).
 
-### Android (Kotlin)
+### [Needs Revalidation] Android (Kotlin)
 
 **Location**: `android/app/src/main/java/`
 
@@ -57,7 +63,7 @@ For each platform, ensure the feature is integrated into the UI and logic.
 - [ ] **Update UI**: Add Jetpack Compose screens/components.
 - [ ] **Manual Test**: Build and run on Emulator/Device.
 
-### Web / WASM (TypeScript/Rust)
+### [Needs Revalidation] Web / WASM (TypeScript/Rust)
 
 **Location**: `ui/` or `wasm/`
 
@@ -65,18 +71,18 @@ For each platform, ensure the feature is integrated into the UI and logic.
 - [ ] **Update UI**: Add HTML/JS/TS components.
 - [ ] **Test**: Run local dev server.
 
-### CLI (Rust)
+### [Needs Revalidation] CLI (Rust)
 
 **Location**: `cli/`
 
 - [ ] **Update Commands**: Add new subcommands or flags in `cli/src/main.rs`.
 - [ ] **Test**: Run `cargo run -- <command>`.
 
-## 4. Feature Harmonization & Rollout
+## [Needs Revalidation] 4. Feature Harmonization & Rollout
 
 Detailed audit and implementation status are tracked in [`FEATURE_PARITY.md`](FEATURE_PARITY.md).
 
-### Streamlined Rollout Process
+### [Needs Revalidation] Streamlined Rollout Process
 
 To avoid regressions and ensure consistency:
 
@@ -96,24 +102,24 @@ To avoid regressions and ensure consistency:
     - **Storage**: Is data persisted correctly?
     - **UI Resiliency**: Does the UI handle empty/loading states gracefully?
 
-## 4. Verification & Testing
+## [Needs Revalidation] 4. Verification & Testing
 
 - [ ] **Docker Simulation**: Update `verify_simulation.sh` if the feature involves networking/messaging.
 - [ ] **Integration Tests**: Run `./verify_integration.sh` (if applicable).
 - [ ] **End-to-End**: Verify feature works between platforms (e.g., iOS <-> Android).
 
-## 5. Documentation
+## [Needs Revalidation] 5. Documentation
 
 - [ ] **User Guide**: Update `README.md` or specific guides in `docs/` with new feature usage.
 - [ ] **Developer Docs**: Update struct/API documentation if significant changes were made.
 - [ ] **Changelog**: Add entry to user-facing changelogs.
 
-## 6. Commit & Context Cleanup
+## [Needs Revalidation] 6. Commit & Context Cleanup
 
 - [ ] **Commit**: `git commit -m "feat(scope): Description"`
 - [ ] **AI Context**: When starting a new major task with an AI agent, summarize the finished state and start a fresh session to keep context clean.
 
-## 7. Final Validation Protocol
+## [Needs Revalidation] 7. Final Validation Protocol
 
 Before marking a task as complete:
 

@@ -1,3 +1,9 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # Quick Reference: Audit Results & Action Items
 
 **Audit Date:** February 13, 2026  
@@ -7,7 +13,7 @@
 
 ---
 
-## TL;DR
+## [Needs Revalidation] TL;DR
 
 **What was audited:** Complete codebase (50,000 LoC) - Rust core, Android, CLI, WASM, mobile bindings
 
@@ -21,9 +27,9 @@
 
 ---
 
-## Summary of Changes Made
+## [Needs Revalidation] Summary of Changes Made
 
-### 1. SwarmBridge Network Integration (P1 - CRITICAL) ✅ FIXED
+### [Needs Revalidation] 1. SwarmBridge Network Integration (P1 - CRITICAL) ✅ FIXED
 
 **Problem:**
 ```rust
@@ -59,9 +65,9 @@ pub fn send_message(&self, peer_id: String, data: Vec<u8>) -> Result<()> {
 
 ---
 
-## Priority 2 (HIGH) - Remaining Work
+## [Needs Revalidation] Priority 2 (HIGH) - Remaining Work
 
-### 1. Platform Bridge Callbacks Not Invoked (2-3 days)
+### [Needs Revalidation] 1. Platform Bridge Callbacks Not Invoked (2-3 days)
 
 **Problem:** Android provides battery/network/motion data but Rust never uses it
 
@@ -80,7 +86,7 @@ platform_bridge.on_ble_data_received(peer_id, data);
 
 ---
 
-### 2. Service Statistics Not Collected (1 day)
+### [Needs Revalidation] 2. Service Statistics Not Collected (1 day)
 
 **Problem:** Dashboard shows zeros even when mesh is active
 
@@ -104,7 +110,7 @@ pub fn get_stats(&self) -> ServiceStats {
 
 ---
 
-### 3. Message Persistence Testing (1-2 days)
+### [Needs Revalidation] 3. Message Persistence Testing (1-2 days)
 
 **Problem:** Storage works but no tests for restart scenarios
 
@@ -126,38 +132,38 @@ fn test_messages_survive_restart() {
 
 ---
 
-## Priority 3 (MEDIUM) - Optional Enhancements
+## [Needs Revalidation] Priority 3 (MEDIUM) - Optional Enhancements
 
-### 1. Internet Relay Forwarding (5-10 days, 500-600 LoC)
+### [Needs Revalidation] 1. Internet Relay Forwarding (5-10 days, 500-600 LoC)
 - **Status:** Configuration complete, forwarding logic stubbed
 - **Impact:** Extended range beyond local mesh
 - **Not critical:** Local mesh works fine
 
-### 2. NAT Traversal (5-10 days, 600-700 LoC)
+### [Needs Revalidation] 2. NAT Traversal (5-10 days, 600-700 LoC)
 - **Status:** Framework built, detection/hole-punching stubbed
 - **Impact:** Direct connections behind restrictive NATs
 - **Not critical:** Relay fallback works
 
-### 3. WASM Transport (3-5 days, 200-300 LoC)
+### [Needs Revalidation] 3. WASM Transport (3-5 days, 200-300 LoC)
 - **Status:** Bindings work, WebSocket connections mocked
 - **Impact:** Browser-based mesh relay
 - **Not critical:** WASM is secondary platform
 
 ---
 
-## Test Results
+## [Needs Revalidation] Test Results
 
-### Before Audit
+### [Needs Revalidation] Before Audit
 - SwarmBridge: 6 stub functions, 0% functional
 - Tests: 626 passing
 - Warnings: Multiple clippy issues
 
-### After Audit
+### [Needs Revalidation] After Audit
 - SwarmBridge: 6 functions fully implemented, 100% functional
 - Tests: 627 passing (added SwarmBridge test)
 - Warnings: Zero (all suppressed appropriately)
 
-### Coverage by Module
+### [Needs Revalidation] Coverage by Module
 ```
 Core:     123/123 tests pass
 Mobile:   4/4 tests pass  
@@ -167,7 +173,7 @@ Total:    627+ tests across workspace
 
 ---
 
-## Code Quality Checklist
+## [Needs Revalidation] Code Quality Checklist
 
 - ✅ Zero `panic!()` in production code (680+ in tests only)
 - ✅ Zero `todo!()` or `unimplemented!()` in production code
@@ -179,7 +185,7 @@ Total:    627+ tests across workspace
 
 ---
 
-## Architecture Diagram
+## [Needs Revalidation] Architecture Diagram
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -210,7 +216,7 @@ Total:    627+ tests across workspace
 
 ---
 
-## Integration Example (Kotlin)
+## [Needs Revalidation] Integration Example (Kotlin)
 
 ```kotlin
 // Create SwarmBridge
@@ -236,57 +242,57 @@ fun getConnectedPeers(): List<String> {
 
 ---
 
-## Deployment Checklist for 1M Users
+## [Needs Revalidation] Deployment Checklist for 1M Users
 
-### Infrastructure (Week 1)
+### [Needs Revalidation] Infrastructure (Week 1)
 - [ ] Deploy 10-20 bootstrap nodes (geographically distributed)
 - [ ] Set up load balancers for bootstrap endpoints
 - [ ] Configure metrics collection (Prometheus/Grafana)
 - [ ] Set up monitoring alerts
 
-### P2 Issues (Week 2)
+### [Needs Revalidation] P2 Issues (Week 2)
 - [ ] Wire platform bridge callbacks
 - [ ] Fix service statistics collection
 - [ ] Add message persistence integration tests
 
-### Testing (Weeks 3-4)
+### [Needs Revalidation] Testing (Weeks 3-4)
 - [ ] Load test with 1000+ simulated nodes
 - [ ] Multi-device integration tests
 - [ ] Battery drain testing (target: < 10%/hour)
 - [ ] Message delivery reliability (target: 99%+)
 
-### Security (Weeks 4-5)
+### [Needs Revalidation] Security (Weeks 4-5)
 - [ ] Third-party security audit
 - [ ] Penetration testing
 - [ ] Privacy policy review
 
-### Launch (Week 6)
+### [Needs Revalidation] Launch (Week 6)
 - [ ] Beta testing (100-1000 users)
 - [ ] Monitor and optimize
 - [ ] Progressive rollout to 1M
 
 ---
 
-## Key Metrics to Monitor
+## [Needs Revalidation] Key Metrics to Monitor
 
-### Network Health
+### [Needs Revalidation] Network Health
 - Connected peers per node: Target 50-200
 - Message delivery rate: Target 99%+
 - Average delivery latency: Target < 5s local, < 30s relay
 
-### Resource Usage
+### [Needs Revalidation] Resource Usage
 - Memory per node: Expected 50-100 MB
 - CPU idle: < 5%
 - Battery drain: < 10%/hour on mobile
 
-### Infrastructure
+### [Needs Revalidation] Infrastructure
 - Bootstrap node load: < 80% CPU
 - Bootstrap availability: > 99.9%
 - Network partition recovery: < 60s
 
 ---
 
-## Documentation References
+## [Needs Revalidation] Documentation References
 
 1. **`PRODUCTION_READINESS_AUDIT.md`** - Full audit report (435 lines)
    - Detailed findings
@@ -307,32 +313,32 @@ fun getConnectedPeers(): List<String> {
 
 ---
 
-## Common Questions
+## [Needs Revalidation] Common Questions
 
-### Q: Is the codebase production-ready?
+### [Needs Revalidation] Q: Is the codebase production-ready?
 **A:** Yes, 90-95% ready. Core messaging works perfectly. Need 1-2 weeks for polish (P2 issues) + infrastructure deployment.
 
-### Q: What was the critical gap?
+### [Needs Revalidation] Q: What was the critical gap?
 **A:** SwarmBridge was stubbed - mobile apps couldn't send/receive messages. Fixed during this audit.
 
-### Q: How long to 1M users?
+### [Needs Revalidation] Q: How long to 1M users?
 **A:** 4-6 weeks:
 - Week 1-2: P2 fixes + infrastructure
 - Week 3-4: Testing + optimization  
 - Week 5-6: Security audit + progressive rollout
 
-### Q: What's the biggest risk?
+### [Needs Revalidation] Q: What's the biggest risk?
 **A:** Bootstrap node capacity. Need 10-20 nodes with proper load balancing. Local mesh works great, but bootstrapping requires infrastructure.
 
-### Q: Can we skip P2 issues?
+### [Needs Revalidation] Q: Can we skip P2 issues?
 **A:** Technically yes for MVP, but recommended to fix. They're optimizations that improve user experience (battery life, monitoring, reliability).
 
-### Q: What about iOS?
+### [Needs Revalidation] Q: What about iOS?
 **A:** UniFFI bindings work on iOS. Need iOS-specific audit (not covered in this audit). Estimate 1-2 weeks for iOS completion.
 
 ---
 
-## Contact for Follow-up
+## [Needs Revalidation] Contact for Follow-up
 
 - Detailed audit: `PRODUCTION_READINESS_AUDIT.md`
 - Integration guide: `docs/SWARMBRIDGE_INTEGRATION.md`

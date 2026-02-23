@@ -1,10 +1,16 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # SCMessenger CLI — Linux Setup Guide
 
 > Legacy OS-specific guide. Prefer `cli/README.md` for the current command surface.
 
 Complete installation and usage guide for SCMessenger command-line interface on Linux distributions.
 
-## System Requirements
+## [Needs Revalidation] System Requirements
 
 - **Distribution**: Ubuntu 20.04+, Debian 11+, Fedora 35+, Arch Linux, or compatible
 - **Kernel**: Linux 5.4 or later
@@ -13,11 +19,11 @@ Complete installation and usage guide for SCMessenger command-line interface on 
 - **Disk Space**: 100 MB for application + storage for message history
 - **Network**: Internet connection for P2P connectivity
 
-## Installation
+## [Needs Revalidation] Installation
 
-### Prerequisites
+### [Needs Revalidation] Prerequisites
 
-#### Ubuntu / Debian
+#### [Needs Revalidation] Ubuntu / Debian
 
 ```bash
 # Update package list
@@ -35,7 +41,7 @@ rustc --version
 cargo --version
 ```
 
-#### Fedora / RHEL / CentOS
+#### [Needs Revalidation] Fedora / RHEL / CentOS
 
 ```bash
 # Install development tools
@@ -51,7 +57,7 @@ rustc --version
 cargo --version
 ```
 
-#### Arch Linux / Manjaro
+#### [Needs Revalidation] Arch Linux / Manjaro
 
 ```bash
 # Install dependencies (many are already included in base-devel)
@@ -62,7 +68,7 @@ rustc --version
 cargo --version
 ```
 
-#### Alpine Linux
+#### [Needs Revalidation] Alpine Linux
 
 ```bash
 # Install dependencies
@@ -73,9 +79,9 @@ rustc --version
 cargo --version
 ```
 
-### Building SCMessenger CLI
+### [Needs Revalidation] Building SCMessenger CLI
 
-#### Option 1: Build and Install System-Wide
+#### [Needs Revalidation] Option 1: Build and Install System-Wide
 
 ```bash
 # Clone the repository
@@ -92,7 +98,7 @@ cargo install --path cli
 scm --version
 ```
 
-#### Option 2: Install to /usr/local/bin
+#### [Needs Revalidation] Option 2: Install to /usr/local/bin
 
 ```bash
 # Build release version
@@ -108,7 +114,7 @@ sudo chmod +x /usr/local/bin/scm
 scm --version
 ```
 
-#### Option 3: Install to ~/bin (User-Only)
+#### [Needs Revalidation] Option 3: Install to ~/bin (User-Only)
 
 ```bash
 # Build release version
@@ -128,9 +134,9 @@ source ~/.bashrc
 scm --version
 ```
 
-## First-Time Setup
+## [Needs Revalidation] First-Time Setup
 
-### 1. Initialize Your Identity
+### [Needs Revalidation] 1. Initialize Your Identity
 
 ```bash
 scm init
@@ -152,7 +158,7 @@ scm init
 Your Peer ID: 12D3KooWABC123...
 ```
 
-### 2. View Your Identity
+### [Needs Revalidation] 2. View Your Identity
 
 ```bash
 scm identity show
@@ -160,14 +166,14 @@ scm identity show
 
 **Save this information** — your Peer ID is how others will contact you.
 
-### 3. Configure Bootstrap Nodes (Optional)
+### [Needs Revalidation] 3. Configure Bootstrap Nodes (Optional)
 
 ```bash
 scm config bootstrap add /dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN
 scm config bootstrap add /dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa
 ```
 
-## File Locations on Linux
+## [Needs Revalidation] File Locations on Linux
 
 SCMessenger follows the XDG Base Directory Specification:
 
@@ -178,7 +184,7 @@ SCMessenger follows the XDG Base Directory Specification:
 | Contacts Database | `~/.local/share/scmessenger/contacts/` | |
 | Message History | `~/.local/share/scmessenger/history/` | |
 
-### Custom XDG Locations
+### [Needs Revalidation] Custom XDG Locations
 
 ```bash
 # Use custom config directory
@@ -189,7 +195,7 @@ export XDG_DATA_HOME=~/my-data
 scm init
 ```
 
-### Viewing Files
+### [Needs Revalidation] Viewing Files
 
 ```bash
 # View config file
@@ -206,7 +212,7 @@ du -sh ~/.local/share/scmessenger
 find ~/.local/share/scmessenger -type f
 ```
 
-### Backing Up Your Identity
+### [Needs Revalidation] Backing Up Your Identity
 
 ⚠️ **IMPORTANT**: Back up your identity to prevent data loss!
 
@@ -233,13 +239,13 @@ tar -czf - ~/.config/scmessenger ~/.local/share/scmessenger | \
     -out ~/scmessenger-backups/scm-backup-$(date +%Y%m%d).tar.gz.enc
 ```
 
-## Network Configuration
+## [Needs Revalidation] Network Configuration
 
-### Firewall Settings
+### [Needs Revalidation] Firewall Settings
 
 SCMessenger needs to accept incoming P2P connections.
 
-#### UFW (Ubuntu/Debian)
+#### [Needs Revalidation] UFW (Ubuntu/Debian)
 
 ```bash
 # Allow specific port (if you set a fixed listen_port)
@@ -254,7 +260,7 @@ sudo ufw allow from any to any app scm
 sudo ufw status
 ```
 
-#### firewalld (Fedora/RHEL/CentOS)
+#### [Needs Revalidation] firewalld (Fedora/RHEL/CentOS)
 
 ```bash
 # Allow specific port
@@ -267,7 +273,7 @@ sudo firewall-cmd --reload
 sudo firewall-cmd --list-all
 ```
 
-#### iptables (Manual)
+#### [Needs Revalidation] iptables (Manual)
 
 ```bash
 # Allow specific port
@@ -281,7 +287,7 @@ sudo netfilter-persistent save
 sudo service iptables save
 ```
 
-### Local Network Discovery (mDNS)
+### [Needs Revalidation] Local Network Discovery (mDNS)
 
 For peer discovery on your local network:
 
@@ -304,9 +310,9 @@ sudo systemctl start avahi-daemon
 scm config set enable_mdns true
 ```
 
-## Running as a System Service
+## [Needs Revalidation] Running as a System Service
 
-### systemd Service (Recommended)
+### [Needs Revalidation] systemd Service (Recommended)
 
 Create a systemd user service to run SCMessenger automatically:
 
@@ -355,7 +361,7 @@ systemctl --user stop scmessenger.service
 systemctl --user disable scmessenger.service
 ```
 
-### Enable User Services on Boot
+### [Needs Revalidation] Enable User Services on Boot
 
 To start user services before login:
 
@@ -367,9 +373,9 @@ sudo loginctl enable-linger $USER
 loginctl show-user $USER | grep Linger
 ```
 
-## Shell Integration
+## [Needs Revalidation] Shell Integration
 
-### Bash Completion
+### [Needs Revalidation] Bash Completion
 
 ```bash
 # Create completion directory
@@ -390,7 +396,7 @@ EOF
 source ~/.bashrc
 ```
 
-### Zsh Completion
+### [Needs Revalidation] Zsh Completion
 
 ```bash
 # Create completion directory
@@ -410,7 +416,7 @@ EOF
 source ~/.zshrc
 ```
 
-### Fish Completion
+### [Needs Revalidation] Fish Completion
 
 ```bash
 # Create completion directory
@@ -423,7 +429,7 @@ scm --generate-completion fish > ~/.config/fish/completions/scm.fish
 fish
 ```
 
-### Useful Aliases
+### [Needs Revalidation] Useful Aliases
 
 Add to your `~/.bashrc` or `~/.zshrc`:
 
@@ -447,9 +453,9 @@ scmbackup() {
 }
 ```
 
-## Common Usage Examples
+## [Needs Revalidation] Common Usage Examples
 
-### Example 1: Basic Messaging
+### [Needs Revalidation] Example 1: Basic Messaging
 
 ```bash
 # Add a contact
@@ -470,7 +476,7 @@ scm start
 > quit
 ```
 
-### Example 2: Offline Messaging
+### [Needs Revalidation] Example 2: Offline Messaging
 
 ```bash
 # Send message when recipient is offline
@@ -480,7 +486,7 @@ scm send Bob "I'll be at the cafe at 3pm"
 ✓ Message queued for delivery to Bob
 ```
 
-### Example 3: Search Message History
+### [Needs Revalidation] Example 3: Search Message History
 
 ```bash
 # Search messages
@@ -493,9 +499,9 @@ scm history --peer Alice --limit 50
 scm history --limit 100
 ```
 
-## Advanced Configuration
+## [Needs Revalidation] Advanced Configuration
 
-### Custom Port Configuration
+### [Needs Revalidation] Custom Port Configuration
 
 ```bash
 # Set specific port (useful for port forwarding)
@@ -505,7 +511,7 @@ scm config set listen_port 9999
 scm config get listen_port
 ```
 
-### Performance Tuning
+### [Needs Revalidation] Performance Tuning
 
 ```bash
 # Increase max connections
@@ -515,7 +521,7 @@ scm config set max_connections 200
 scm config set connection_timeout_secs 60
 ```
 
-### Storage on Separate Partition
+### [Needs Revalidation] Storage on Separate Partition
 
 ```bash
 # Mount external drive
@@ -530,9 +536,9 @@ scm config set storage_path /mnt/scmessenger
 echo "/dev/sdb1 /mnt/scmessenger ext4 defaults 0 2" | sudo tee -a /etc/fstab
 ```
 
-## Troubleshooting
+## [Needs Revalidation] Troubleshooting
 
-### Issue: Command not found
+### [Needs Revalidation] Issue: Command not found
 
 ```bash
 # Check if scm is in PATH
@@ -546,7 +552,7 @@ source ~/.bashrc
 ~/.cargo/bin/scm --version
 ```
 
-### Issue: Permission denied
+### [Needs Revalidation] Issue: Permission denied
 
 ```bash
 # Fix permissions
@@ -555,7 +561,7 @@ chmod 700 ~/.local/share/scmessenger
 chmod 600 ~/.config/scmessenger/config.json
 ```
 
-### Issue: Cannot connect to peers
+### [Needs Revalidation] Issue: Cannot connect to peers
 
 ```bash
 # Check network
@@ -574,7 +580,7 @@ scm config set enable_mdns true
 scm start
 ```
 
-### Issue: Port already in use
+### [Needs Revalidation] Issue: Port already in use
 
 ```bash
 # Find what's using the port
@@ -586,7 +592,7 @@ sudo netstat -tulpn | grep 9999
 scm config set listen_port 0  # Random port
 ```
 
-### Issue: Build failures
+### [Needs Revalidation] Issue: Build failures
 
 ```bash
 # Update Rust
@@ -605,7 +611,7 @@ cargo clean
 cargo build --release -p scmessenger-cli
 ```
 
-### Issue: Database corruption
+### [Needs Revalidation] Issue: Database corruption
 
 ```bash
 # Backup current data
@@ -619,11 +625,11 @@ rm -rf ~/.local/share/scmessenger/history
 scm init
 ```
 
-## Headless Server Setup
+## [Needs Revalidation] Headless Server Setup
 
 Running SCMessenger on a headless server (no GUI):
 
-### 1. Install and Configure
+### [Needs Revalidation] 1. Install and Configure
 
 ```bash
 # Install as described above
@@ -637,14 +643,14 @@ scm config set listen_port 9999
 scm config bootstrap add /dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7...
 ```
 
-### 2. Setup systemd Service
+### [Needs Revalidation] 2. Setup systemd Service
 
 ```bash
 # Create service (as shown above)
 systemctl --user enable --now scmessenger.service
 ```
 
-### 3. Remote Management via SSH
+### [Needs Revalidation] 3. Remote Management via SSH
 
 ```bash
 # Connect via SSH
@@ -664,7 +670,7 @@ scm history --limit 50
 journalctl --user -u scmessenger.service -f
 ```
 
-### 4. Monitoring Script
+### [Needs Revalidation] 4. Monitoring Script
 
 ```bash
 #!/bin/bash
@@ -679,9 +685,9 @@ while true; do
 done
 ```
 
-## Security Best Practices
+## [Needs Revalidation] Security Best Practices
 
-### File Permissions
+### [Needs Revalidation] File Permissions
 
 ```bash
 # Restrict config directory
@@ -692,7 +698,7 @@ chmod 600 ~/.config/scmessenger/config.json
 chmod 700 ~/.local/share/scmessenger
 ```
 
-### SELinux (RHEL/Fedora/CentOS)
+### [Needs Revalidation] SELinux (RHEL/Fedora/CentOS)
 
 ```bash
 # Check SELinux status
@@ -705,7 +711,7 @@ getenforce
 sudo setenforce 0
 ```
 
-### AppArmor (Ubuntu/Debian)
+### [Needs Revalidation] AppArmor (Ubuntu/Debian)
 
 ```bash
 # SCMessenger runs in user space and typically doesn't need AppArmor profiles
@@ -713,7 +719,7 @@ sudo setenforce 0
 sudo aa-status
 ```
 
-### Regular Security Updates
+### [Needs Revalidation] Regular Security Updates
 
 ```bash
 # Update system packages
@@ -727,9 +733,9 @@ git pull
 cargo install --path cli --force
 ```
 
-## Performance Notes
+## [Needs Revalidation] Performance Notes
 
-### Resource Usage
+### [Needs Revalidation] Resource Usage
 
 Typical resource usage on Linux:
 - **Memory**: 20-50 MB idle, 50-150 MB active
@@ -737,7 +743,7 @@ Typical resource usage on Linux:
 - **Disk I/O**: Minimal (database writes on message send/receive)
 - **Network**: < 1 KB/s idle, 1-10 KB/s active
 
-### Monitoring
+### [Needs Revalidation] Monitoring
 
 ```bash
 # Monitor resource usage
@@ -750,7 +756,7 @@ htop -p $(pgrep -f scmessenger-cli)
 sudo netstat -tulpn | grep scm
 ```
 
-## Uninstallation
+## [Needs Revalidation] Uninstallation
 
 ```bash
 # Stop service (if running)
@@ -771,20 +777,20 @@ rm -rf ~/.local/share/scmessenger
 rm -rf ~/SCMessenger
 ```
 
-## Distribution-Specific Notes
+## [Needs Revalidation] Distribution-Specific Notes
 
-### Ubuntu/Debian
+### [Needs Revalidation] Ubuntu/Debian
 
 - Snap packages: Not currently available
 - AppImage: Not currently available
 - Use cargo build method as documented above
 
-### Fedora
+### [Needs Revalidation] Fedora
 
 - RPM packages: Not currently available
 - Use cargo build method as documented above
 
-### Arch Linux
+### [Needs Revalidation] Arch Linux
 
 - AUR package: Not currently available (contributions welcome!)
 - Use cargo build or PKGBUILD method
@@ -822,7 +828,7 @@ EOF
 makepkg -si
 ```
 
-## Getting Help
+## [Needs Revalidation] Getting Help
 
 ```bash
 # Built-in help
@@ -839,7 +845,7 @@ scm status
 journalctl --user -u scmessenger.service -f
 ```
 
-## Next Steps
+## [Needs Revalidation] Next Steps
 
 1. Share your Peer ID: `scm identity show`
 2. Add contacts: `scm contact add <peer-id> <public-key> --name <nickname>`

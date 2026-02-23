@@ -1,8 +1,14 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # Docker Test Infrastructure - Quick Reference Card
 
 > Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
 
-## One-Line Commands
+## [Needs Revalidation] One-Line Commands
 
 ```bash
 # Run everything (most common)
@@ -24,7 +30,7 @@ cd docker && ./run-all-tests.sh --with-nat         # Include NAT tests
 cd docker && ./example-custom-test.sh              # Interactive demo
 ```
 
-## Infrastructure Components
+## [Needs Revalidation] Infrastructure Components
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -51,7 +57,7 @@ cd docker && ./example-custom-test.sh              # Interactive demo
 └─────────────────────────────────────────────────┘
 ```
 
-## Test Results
+## [Needs Revalidation] Test Results
 
 ```bash
 # View results
@@ -64,7 +70,7 @@ test-results/
 └── integration/ # Integration logs
 ```
 
-## Manual Testing
+## [Needs Revalidation] Manual Testing
 
 ```bash
 # Start mock infrastructure
@@ -83,7 +89,7 @@ docker compose -f docker/docker-compose.test.yml logs -f mock-relay
 docker compose -f docker/docker-compose.test.yml down
 ```
 
-## CI/CD
+## [Needs Revalidation] CI/CD
 
 ```yaml
 # .github/workflows/docker-test-suite.yml
@@ -97,7 +103,7 @@ Jobs:
 Artifacts uploaded with 7-14 day retention
 ```
 
-## File Locations
+## [Needs Revalidation] File Locations
 
 ```
 Key Files:
@@ -114,7 +120,7 @@ Test Code:
   android/.../MockTestHelper.kt        → Mock helpers
 ```
 
-## Troubleshooting
+## [Needs Revalidation] Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
@@ -124,7 +130,7 @@ Test Code:
 | Tests hang | `docker compose logs` to view errors |
 | Build fails | `./run-all-tests.sh --clean` for fresh build |
 
-## Help Commands
+## [Needs Revalidation] Help Commands
 
 ```bash
 ./run-all-tests.sh --help            # Show all options
@@ -132,7 +138,7 @@ docker compose --help                # Docker Compose help
 docker exec -it <container> bash     # Access container shell
 ```
 
-## Runtimes
+## [Needs Revalidation] Runtimes
 
 | Command | First Run | Cached |
 |---------|-----------|--------|
@@ -141,14 +147,14 @@ docker exec -it <container> bash     # Access container shell
 | Android only | 10-15 min | 5-10 min |
 | Integration only | 10-15 min | 5-10 min |
 
-## Success Indicators
+## [Needs Revalidation] Success Indicators
 
 ✅ Exit code 0 = all tests passed  
 ❌ Exit code 1 = some tests failed  
 📊 Results in `docker/test-results/`  
 🔍 Detailed logs in console output  
 
-## Documentation
+## [Needs Revalidation] Documentation
 
 📖 Start here: `docker/QUICKSTART.md`  
 📚 Full guide: `docker/TESTING_GUIDE.md`  

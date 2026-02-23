@@ -1,16 +1,22 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # SCMessenger Transport Architecture
 
 > Design and implementation narrative. For current verified runtime/test status, use `docs/CURRENT_STATE.md`.
 
 Complete implementation of sovereign mesh networking with zero external dependencies.
 
-## Overview
+## [Needs Revalidation] Overview
 
 The SCMessenger transport layer implements a fully decentralized, self-healing peer-to-peer network where every node contributes to routing, discovery, and reliability. There are no special "bootstrap nodes" or "relay servers"—all nodes are equal participants that help each other based on their capability.
 
-## Six-Phase Implementation
+## [Needs Revalidation] Six-Phase Implementation
 
-### Phase 1: Real Address Observation ✅
+### [Needs Revalidation] Phase 1: Real Address Observation ✅
 
 **Problem**: Nodes need to know their external IP addresses to advertise connectivity, but cannot rely on external STUN servers.
 
@@ -34,7 +40,7 @@ The SCMessenger transport layer implements a fully decentralized, self-healing p
 
 ---
 
-### Phase 2: Multi-Port Adaptive Listening ✅
+### [Needs Revalidation] Phase 2: Multi-Port Adaptive Listening ✅
 
 **Problem**: Restrictive networks (corporate firewalls) may block common P2P ports, limiting connectivity.
 
@@ -68,7 +74,7 @@ Priority 4: Random port (0) - OS-assigned fallback
 
 ---
 
-### Phase 3: Relay Capability ✅
+### [Needs Revalidation] Phase 3: Relay Capability ✅
 
 **Problem**: Direct peer-to-peer connections may fail due to NAT/firewall restrictions.
 
@@ -96,7 +102,7 @@ Priority 4: Random port (0) - OS-assigned fallback
 
 ---
 
-### Phase 4: Mesh-Based Discovery ✅
+### [Needs Revalidation] Phase 4: Mesh-Based Discovery ✅
 
 **Problem**: Traditional P2P networks require hardcoded "bootstrap nodes" for initial network entry.
 
@@ -126,7 +132,7 @@ Priority 4: Random port (0) - OS-assigned fallback
 
 ---
 
-### Phase 5: Reputation Tracking ✅
+### [Needs Revalidation] Phase 5: Reputation Tracking ✅
 
 **Problem**: Malicious or unreliable relays could degrade network performance.
 
@@ -159,7 +165,7 @@ Priority 4: Random port (0) - OS-assigned fallback
 
 ---
 
-### Phase 6: Continuous Retry Logic ✅
+### [Needs Revalidation] Phase 6: Continuous Retry Logic ✅
 
 **Problem**: Messages must be delivered reliably even when best paths fail.
 
@@ -204,7 +210,7 @@ Max attempts: 10 (configurable)
 
 ---
 
-## Complete Architecture
+## [Needs Revalidation] Complete Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -246,7 +252,7 @@ Max attempts: 10 (configurable)
 └──────────────────────────────────────────────────────────────┘
 ```
 
-## Message Delivery Flow
+## [Needs Revalidation] Message Delivery Flow
 
 ```
 1. User sends message to Peer B
@@ -279,34 +285,34 @@ Max attempts: 10 (configurable)
 10. Repeat until delivered (never give up)
 ```
 
-## Network Characteristics
+## [Needs Revalidation] Network Characteristics
 
-### Zero External Dependencies
+### [Needs Revalidation] Zero External Dependencies
 - ✅ No external STUN servers (Google, Twilio, etc.)
 - ✅ No hardcoded bootstrap nodes
 - ✅ No centralized relay services
 - ✅ No DNS dependencies for core functionality
 - ✅ Fully sovereign mesh network
 
-### Self-Healing & Adaptive
+### [Needs Revalidation] Self-Healing & Adaptive
 - ✅ Reputation-based routing (bad relays auto-deprioritized)
 - ✅ Multi-port listening (firewall traversal)
 - ✅ Continuous retry (eventual delivery guaranteed)
 - ✅ Peer-observed address discovery (adapts to network changes)
 
-### Democratic & Distributed
+### [Needs Revalidation] Democratic & Distributed
 - ✅ Any node can bootstrap others
 - ✅ All nodes relay based on capability
 - ✅ No special "server" roles
 - ✅ Naturally stable nodes emerge as hubs (by usage, not design)
 
-### Resilient
+### [Needs Revalidation] Resilient
 - ✅ Multi-path delivery
 - ✅ Exponential backoff prevents network flooding
 - ✅ Reputation recovery (temporary issues tolerated)
 - ✅ Messages persist until delivered
 
-## Performance Characteristics
+## [Needs Revalidation] Performance Characteristics
 
 | Metric | Value | Notes |
 |--------|-------|-------|
@@ -318,26 +324,26 @@ Max attempts: 10 (configurable)
 | Retry max backoff | 30 seconds | Prevents aggressive retry storms |
 | Memory per peer | ~1-2 KB | Connection + reputation data |
 
-## Security Notes
+## [Needs Revalidation] Security Notes
 
-### Message Confidentiality
+### [Needs Revalidation] Message Confidentiality
 - ✅ End-to-end encryption (relays cannot read)
 - ✅ Relays only see: peer IDs, message size, timing
 - ✅ No metadata leakage to external services
 
-### Relay Trust Model
+### [Needs Revalidation] Relay Trust Model
 - ⚠️ Relays can observe: who talks to whom (metadata)
 - ⚠️ Relays can drop/delay messages (but will be deprioritized)
 - ✅ Multiple relay attempts mitigate single-relay attacks
 - ✅ Reputation system disincentivizes bad behavior
 
-### Sybil Resistance
+### [Needs Revalidation] Sybil Resistance
 - ⚠️ No proof-of-work or staking for peer identity
 - ✅ Reputation builds over time (new peers start neutral)
 - ✅ Low-reputation peers filtered from routing
 - Future: Identity vouching system (web of trust)
 
-## Testing
+## [Needs Revalidation] Testing
 
 All 6 phases have comprehensive test coverage:
 
@@ -355,7 +361,7 @@ cargo test --test test_multiport
 cargo test --test test_mesh_routing
 ```
 
-## Code Structure
+## [Needs Revalidation] Code Structure
 
 ```
 core/src/transport/
@@ -374,9 +380,9 @@ core/tests/
 └── test_mesh_routing.rs           # Phases 3-6 tests
 ```
 
-## Usage Examples
+## [Needs Revalidation] Usage Examples
 
-### Basic Node Startup (Single Port)
+### [Needs Revalidation] Basic Node Startup (Single Port)
 ```rust
 use scmessenger_core::transport;
 
@@ -388,7 +394,7 @@ let swarm = transport::start_swarm(
 ).await?;
 ```
 
-### Multi-Port Adaptive Node
+### [Needs Revalidation] Multi-Port Adaptive Node
 ```rust
 use scmessenger_core::transport::{start_swarm_with_config, MultiPortConfig};
 
@@ -408,13 +414,13 @@ let swarm = start_swarm_with_config(
 ).await?;
 ```
 
-### Query External Addresses
+### [Needs Revalidation] Query External Addresses
 ```rust
 let addresses = swarm.get_external_addresses().await?;
 println!("My external addresses: {:?}", addresses);
 ```
 
-### Bootstrap from Any Peer
+### [Needs Revalidation] Bootstrap from Any Peer
 ```rust
 // Connect to ANY known peer
 swarm.dial("/ip4/203.0.113.10/tcp/9999/p2p/QmABC...".parse()?).await?;
@@ -425,27 +431,27 @@ swarm.dial("/ip4/203.0.113.10/tcp/9999/p2p/QmABC...".parse()?).await?;
 // 3. Now can help others bootstrap
 ```
 
-## Future Enhancements
+## [Needs Revalidation] Future Enhancements
 
-### Short Term
+### [Needs Revalidation] Short Term
 - [ ] Simultaneous multi-path delivery (try 3 relays at once)
 - [ ] WebRTC transport for browser support
 - [ ] Circuit relay v2 (libp2p standardized)
 - [ ] Bandwidth accounting (relay resource limits)
 
-### Medium Term
+### [Needs Revalidation] Medium Term
 - [ ] Onion routing (3-hop privacy)
 - [ ] Relay incentivization (reputation → rewards)
 - [ ] NAT-PMP/UPnP port forwarding
 - [ ] QUIC hole-punching
 
-### Long Term
+### [Needs Revalidation] Long Term
 - [ ] Distributed reputation consensus (Byzantine fault tolerance)
 - [ ] Identity vouching (web of trust)
 - [ ] Proof-of-relay (cryptographic relay receipts)
 - [ ] Anonymous relay selection (mix networks)
 
-## Conclusion
+## [Needs Revalidation] Conclusion
 
 The SCMessenger transport layer implements a complete sovereign mesh network with:
 

@@ -1,10 +1,16 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # SCMessenger CLI — Windows Setup Guide
 
 > Legacy OS-specific guide. Prefer `cli/README.md` for the current command surface.
 
 Complete installation and usage guide for SCMessenger command-line interface on Windows.
 
-## System Requirements
+## [Needs Revalidation] System Requirements
 
 - **Windows Version**: Windows 10 (1809+) or Windows 11
 - **Processor**: x86_64 (64-bit Intel/AMD)
@@ -12,11 +18,11 @@ Complete installation and usage guide for SCMessenger command-line interface on 
 - **Disk Space**: 200 MB for development tools + 100 MB for application
 - **Network**: Internet connection for P2P connectivity
 
-## Installation
+## [Needs Revalidation] Installation
 
-### Prerequisites
+### [Needs Revalidation] Prerequisites
 
-#### 1. Install Visual Studio Build Tools
+#### [Needs Revalidation] 1. Install Visual Studio Build Tools
 
 SCMessenger requires C++ build tools for compilation.
 
@@ -35,7 +41,7 @@ SCMessenger requires C++ build tools for compilation.
    - Windows 10/11 SDK
 5. Install
 
-#### 2. Install Rust
+#### [Needs Revalidation] 2. Install Rust
 
 ```powershell
 # Download and run rustup-init.exe from:
@@ -53,7 +59,7 @@ rustc --version
 cargo --version
 ```
 
-#### 3. Install Git (Optional but Recommended)
+#### [Needs Revalidation] 3. Install Git (Optional but Recommended)
 
 ```powershell
 # Download from https://git-scm.com/download/win
@@ -61,9 +67,9 @@ cargo --version
 winget install Git.Git
 ```
 
-### Building SCMessenger CLI
+### [Needs Revalidation] Building SCMessenger CLI
 
-#### Method 1: Using PowerShell
+#### [Needs Revalidation] Method 1: Using PowerShell
 
 ```powershell
 # Clone the repository
@@ -91,7 +97,7 @@ copy target\release\scmessenger-cli.exe C:\Windows\System32\scm.exe
 scm --version
 ```
 
-#### Method 2: Using Command Prompt
+#### [Needs Revalidation] Method 2: Using Command Prompt
 
 ```cmd
 :: Clone the repository
@@ -112,7 +118,7 @@ setx PATH "%PATH%;%USERPROFILE%\bin"
 scm --version
 ```
 
-#### Method 3: Using Cargo Install
+#### [Needs Revalidation] Method 3: Using Cargo Install
 
 ```powershell
 # Install directly to cargo bin directory
@@ -126,9 +132,9 @@ cargo install --path cli
 scm --version
 ```
 
-## First-Time Setup
+## [Needs Revalidation] First-Time Setup
 
-### 1. Initialize Your Identity
+### [Needs Revalidation] 1. Initialize Your Identity
 
 ```powershell
 scm init
@@ -149,7 +155,7 @@ scm init
 Your Peer ID: 12D3KooWABC123...
 ```
 
-### 2. View Your Identity
+### [Needs Revalidation] 2. View Your Identity
 
 ```powershell
 scm identity show
@@ -157,14 +163,14 @@ scm identity show
 
 **Save this information** — your Peer ID is how others will contact you.
 
-### 3. Configure Bootstrap Nodes (Optional)
+### [Needs Revalidation] 3. Configure Bootstrap Nodes (Optional)
 
 ```powershell
 scm config bootstrap add /dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN
 scm config bootstrap add /dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa
 ```
 
-## File Locations on Windows
+## [Needs Revalidation] File Locations on Windows
 
 SCMessenger uses standard Windows application data directories:
 
@@ -179,7 +185,7 @@ SCMessenger uses standard Windows application data directories:
 - Config: `C:\Users\YourName\AppData\Roaming\scmessenger\config.json`
 - Data: `C:\Users\YourName\AppData\Roaming\scmessenger\`
 
-### Viewing Files
+### [Needs Revalidation] Viewing Files
 
 ```powershell
 # Open config directory in Explorer
@@ -198,7 +204,7 @@ Get-Content $env:APPDATA\scmessenger\config.json | ConvertFrom-Json
 (Get-ChildItem -Recurse $env:APPDATA\scmessenger | Measure-Object -Property Length -Sum).Sum / 1MB
 ```
 
-### Backing Up Your Identity
+### [Needs Revalidation] Backing Up Your Identity
 
 ⚠️ **IMPORTANT**: Back up your identity to prevent data loss!
 
@@ -217,13 +223,13 @@ Compress-Archive -Path $env:APPDATA\scmessenger -DestinationPath $HOME\Documents
 Get-ChildItem $HOME\Documents\SCMessenger-Backups
 ```
 
-## Network Configuration
+## [Needs Revalidation] Network Configuration
 
-### Windows Firewall
+### [Needs Revalidation] Windows Firewall
 
 SCMessenger needs to accept incoming P2P connections.
 
-#### Configure via PowerShell (Admin Required)
+#### [Needs Revalidation] Configure via PowerShell (Admin Required)
 
 ```powershell
 # Run PowerShell as Administrator
@@ -240,7 +246,7 @@ New-NetFirewallRule -DisplayName "SCMessenger Port 9999 UDP" -Direction Inbound 
 Get-NetFirewallRule -DisplayName "*SCMessenger*"
 ```
 
-#### Configure via GUI
+#### [Needs Revalidation] Configure via GUI
 
 1. Open **Windows Security** → **Firewall & network protection**
 2. Click **Allow an app through firewall**
@@ -250,7 +256,7 @@ Get-NetFirewallRule -DisplayName "*SCMessenger*"
 6. Check both **Private** and **Public** networks
 7. Click **Add**
 
-### Port Forwarding (Optional)
+### [Needs Revalidation] Port Forwarding (Optional)
 
 For better connectivity behind NAT/router:
 
@@ -264,13 +270,13 @@ For better connectivity behind NAT/router:
    - **Protocol**: Both TCP and UDP
 5. Save settings
 
-## Running as Windows Service
+## [Needs Revalidation] Running as Windows Service
 
-### Using NSSM (Non-Sucking Service Manager)
+### [Needs Revalidation] Using NSSM (Non-Sucking Service Manager)
 
 NSSM allows running console applications as Windows services.
 
-#### 1. Install NSSM
+#### [Needs Revalidation] 1. Install NSSM
 
 ```powershell
 # Download from https://nssm.cc/download
@@ -283,7 +289,7 @@ choco install nssm
 # 3. Add C:\nssm\win64 to PATH
 ```
 
-#### 2. Create Service
+#### [Needs Revalidation] 2. Create Service
 
 ```powershell
 # Run PowerShell as Administrator
@@ -307,7 +313,7 @@ nssm status SCMessenger
 Get-Content "$env:APPDATA\scmessenger\service.log" -Tail 50 -Wait
 ```
 
-#### 3. Manage Service
+#### [Needs Revalidation] 3. Manage Service
 
 ```powershell
 # Start service
@@ -328,7 +334,7 @@ sc stop SCMessenger
 sc query SCMessenger
 ```
 
-### Using Windows Task Scheduler (Alternative)
+### [Needs Revalidation] Using Windows Task Scheduler (Alternative)
 
 ```powershell
 # Create a scheduled task to run at startup
@@ -349,9 +355,9 @@ Get-ScheduledTask -TaskName "SCMessenger"
 Unregister-ScheduledTask -TaskName "SCMessenger" -Confirm:$false
 ```
 
-## PowerShell Integration
+## [Needs Revalidation] PowerShell Integration
 
-### Tab Completion (PowerShell 5.0+)
+### [Needs Revalidation] Tab Completion (PowerShell 5.0+)
 
 ```powershell
 # Generate completion script
@@ -367,7 +373,7 @@ notepad $PROFILE
 . $PROFILE
 ```
 
-### PowerShell Aliases
+### [Needs Revalidation] PowerShell Aliases
 
 Add to your PowerShell profile:
 
@@ -395,9 +401,9 @@ function scmbackup {
 . $PROFILE
 ```
 
-## Common Usage Examples
+## [Needs Revalidation] Common Usage Examples
 
-### Example 1: Basic Messaging
+### [Needs Revalidation] Example 1: Basic Messaging
 
 ```powershell
 # Add a contact
@@ -416,7 +422,7 @@ scm start
 # > quit
 ```
 
-### Example 2: Scripted Messaging
+### [Needs Revalidation] Example 2: Scripted Messaging
 
 ```powershell
 # Send automated message
@@ -425,7 +431,7 @@ $message = "Automated backup completed at $(Get-Date)"
 scm send $recipient $message
 ```
 
-### Example 3: Message History Export
+### [Needs Revalidation] Example 3: Message History Export
 
 ```powershell
 # Export history to CSV
@@ -436,9 +442,9 @@ $history = scm history --limit 100
 $history | Select-String "Alice" | Out-File "$HOME\Documents\alice-conversation.txt"
 ```
 
-## Advanced Configuration
+## [Needs Revalidation] Advanced Configuration
 
-### Custom Data Location
+### [Needs Revalidation] Custom Data Location
 
 ```powershell
 # Use different drive for storage (e.g., D:)
@@ -448,7 +454,7 @@ scm config set storage_path "D:\SCMessenger-Data"
 scm config get storage_path
 ```
 
-### Performance Tuning
+### [Needs Revalidation] Performance Tuning
 
 ```powershell
 # Increase connection limit
@@ -461,7 +467,7 @@ scm config set listen_port 9999
 scm config set enable_dht false
 ```
 
-### Multiple Profiles
+### [Needs Revalidation] Multiple Profiles
 
 ```powershell
 # Create different config directories for multiple identities
@@ -472,9 +478,9 @@ scm init
 Remove-Item Env:\APPDATA
 ```
 
-## Troubleshooting
+## [Needs Revalidation] Troubleshooting
 
-### Issue: Command not found
+### [Needs Revalidation] Issue: Command not found
 
 ```powershell
 # Check if scm is in PATH
@@ -487,7 +493,7 @@ $env:Path += ";$HOME\.cargo\bin"
 # Restart PowerShell and try again
 ```
 
-### Issue: "OpenSSL not found" during build
+### [Needs Revalidation] Issue: "OpenSSL not found" during build
 
 ```powershell
 # Option 1: Install vcpkg and OpenSSL
@@ -504,7 +510,7 @@ $env:OPENSSL_STATIC = "1"
 cargo build --release -p scmessenger-cli
 ```
 
-### Issue: Firewall blocking connections
+### [Needs Revalidation] Issue: Firewall blocking connections
 
 ```powershell
 # Check Windows Defender Firewall status
@@ -519,7 +525,7 @@ Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
 # Or add exception (see Network Configuration section above)
 ```
 
-### Issue: Permission denied errors
+### [Needs Revalidation] Issue: Permission denied errors
 
 ```powershell
 # Check file permissions
@@ -532,7 +538,7 @@ icacls $env:APPDATA\scmessenger /grant "${env:USERNAME}:F" /T
 icacls $env:APPDATA\scmessenger /reset /T
 ```
 
-### Issue: Cannot connect to peers
+### [Needs Revalidation] Issue: Cannot connect to peers
 
 ```powershell
 # Check network connectivity
@@ -549,7 +555,7 @@ $env:RUST_LOG = "debug"
 scm start
 ```
 
-### Issue: High CPU usage
+### [Needs Revalidation] Issue: High CPU usage
 
 ```powershell
 # Check process resource usage
@@ -562,9 +568,9 @@ Get-Process scm | Select-Object *
 Stop-Process -Name scm -Force
 ```
 
-## Windows Terminal Integration
+## [Needs Revalidation] Windows Terminal Integration
 
-### Custom Profile
+### [Needs Revalidation] Custom Profile
 
 Add SCMessenger profile to Windows Terminal:
 
@@ -578,7 +584,7 @@ Add SCMessenger profile to Windows Terminal:
    - **Icon**: (optional custom icon)
 5. Save
 
-### Keyboard Shortcut
+### [Needs Revalidation] Keyboard Shortcut
 
 Add to Windows Terminal settings.json:
 
@@ -593,9 +599,9 @@ Add to Windows Terminal settings.json:
 }
 ```
 
-## Security Best Practices
+## [Needs Revalidation] Security Best Practices
 
-### Windows Defender
+### [Needs Revalidation] Windows Defender
 
 SCMessenger should not trigger Windows Defender, but if it does:
 
@@ -608,11 +614,11 @@ Add-MpPreference -ExclusionPath "$env:APPDATA\scmessenger"
 Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
 ```
 
-### User Account Control (UAC)
+### [Needs Revalidation] User Account Control (UAC)
 
 SCMessenger does not require admin privileges. If prompted for admin access, decline and check the installation path.
 
-### File Encryption
+### [Needs Revalidation] File Encryption
 
 Enable BitLocker or use EFS to encrypt your identity:
 
@@ -624,7 +630,7 @@ cipher /e $env:APPDATA\scmessenger
 cipher /c $env:APPDATA\scmessenger\config.json
 ```
 
-### Regular Backups
+### [Needs Revalidation] Regular Backups
 
 ```powershell
 # Create automatic backup script
@@ -646,9 +652,9 @@ $trigger = New-ScheduledTaskTrigger -Daily -At 2am
 Register-ScheduledTask -TaskName "SCMessenger Backup" -Action $action -Trigger $trigger
 ```
 
-## Performance Notes
+## [Needs Revalidation] Performance Notes
 
-### Resource Usage on Windows
+### [Needs Revalidation] Resource Usage on Windows
 
 Typical resource usage:
 - **Memory**: 30-60 MB idle, 80-200 MB active
@@ -656,7 +662,7 @@ Typical resource usage:
 - **Disk**: < 1 MB/s during normal operation
 - **Network**: < 1 KB/s idle, 5-20 KB/s active
 
-### Monitoring
+### [Needs Revalidation] Monitoring
 
 ```powershell
 # Monitor in real-time
@@ -673,7 +679,7 @@ netstat -ano | findstr scm
 Get-Process scm | Select-Object *
 ```
 
-## Uninstallation
+## [Needs Revalidation] Uninstallation
 
 ```powershell
 # Stop service (if running)
@@ -701,30 +707,30 @@ $newPath = ($path.Split(';') | Where-Object { $_ -ne "$HOME\bin" }) -join ';'
 Remove-NetFirewallRule -DisplayName "*SCMessenger*"
 ```
 
-## Package Managers
+## [Needs Revalidation] Package Managers
 
-### Chocolatey (Future)
+### [Needs Revalidation] Chocolatey (Future)
 
 ```powershell
 # Not yet available, but planned:
 # choco install scmessenger-cli
 ```
 
-### Scoop (Future)
+### [Needs Revalidation] Scoop (Future)
 
 ```powershell
 # Not yet available, but planned:
 # scoop install scmessenger-cli
 ```
 
-### Winget (Future)
+### [Needs Revalidation] Winget (Future)
 
 ```powershell
 # Not yet available, but planned:
 # winget install SCMessenger.CLI
 ```
 
-## Getting Help
+## [Needs Revalidation] Getting Help
 
 ```powershell
 # Built-in help
@@ -741,7 +747,7 @@ scm status
 Get-EventLog -LogName Application -Source SCMessenger -Newest 50
 ```
 
-## Next Steps
+## [Needs Revalidation] Next Steps
 
 1. Share your Peer ID: `scm identity show`
 2. Add contacts: `scm contact add <peer-id> <public-key> --name <nickname>`
@@ -749,15 +755,15 @@ Get-EventLog -LogName Application -Source SCMessenger -Newest 50
 
 For more information, see the [main CLI README](../cli/README.md).
 
-## Windows-Specific Tips
+## [Needs Revalidation] Windows-Specific Tips
 
-### Run at Startup (Simple)
+### [Needs Revalidation] Run at Startup (Simple)
 
 1. Press `Win+R`
 2. Type `shell:startup`
 3. Create shortcut to `scm.exe start`
 
-### Desktop Shortcut
+### [Needs Revalidation] Desktop Shortcut
 
 ```powershell
 # Create desktop shortcut
@@ -769,7 +775,7 @@ $Shortcut.WorkingDirectory = "$env:APPDATA\scmessenger"
 $Shortcut.Save()
 ```
 
-### Context Menu Integration
+### [Needs Revalidation] Context Menu Integration
 
 Add "Send with SCMessenger" to right-click menu (advanced, requires registry editing).
 

@@ -1,18 +1,24 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # Quick Connect Guide
 
 Get two nodes talking in under 2 minutes!
 
-## 🎉 Zero Configuration Required!
+## [Needs Revalidation] 🎉 Zero Configuration Required!
 
 **Bootstrap nodes are now embedded in all downloads.** Just run the app and you're connected to the mesh instantly. No manual setup needed!
 
-## Your Nodes Are Already Running!
+## [Needs Revalidation] Your Nodes Are Already Running!
 
 **GCP Node:** `34.168.102.7`
 - Peer ID: `12D3KooWGGdvGNJb3JwkNpmYuapgk7SAZ4DsBmQsU989yhvnTB8W`
 - Multiaddress: `/ip4/34.168.102.7/tcp/9001/p2p/12D3KooWGGdvGNJb3JwkNpmYuapgk7SAZ4DsBmQsU989yhvnTB8W`
 
-## Get Your Node Info (Any Machine)
+## [Needs Revalidation] Get Your Node Info (Any Machine)
 
 ```bash
 # Get all connection info for sharing
@@ -22,9 +28,9 @@ Get two nodes talking in under 2 minutes!
 docker logs scmessenger | grep "Peer ID"
 ```
 
-## Connect From Another Machine
+## [Needs Revalidation] Connect From Another Machine
 
-### Method 1: Docker with Embedded Bootstraps (Easiest!)
+### [Needs Revalidation] Method 1: Docker with Embedded Bootstraps (Easiest!)
 
 **Bootstrap nodes are already configured!** Just run:
 
@@ -43,7 +49,7 @@ docker logs -f scmessenger-local
 
 That's it! The node automatically connects to embedded bootstrap nodes.
 
-### Method 2: Add Additional Bootstrap Nodes (Optional)
+### [Needs Revalidation] Method 2: Add Additional Bootstrap Nodes (Optional)
 
 To connect to specific nodes in addition to defaults:
 
@@ -58,7 +64,7 @@ docker run -d \
 
 This adds your custom node to the embedded defaults.
 
-## Verify Connection
+## [Needs Revalidation] Verify Connection
 
 ```bash
 # On connecting node - should see:
@@ -70,7 +76,7 @@ docker logs scmessenger-local
 # ✓ Peer: 12D3KooWGGdvGNJb3JwkNpmYuapgk7SAZ4DsBmQsU989yhvnTB8W
 ```
 
-## Access the UI
+## [Needs Revalidation] Access the UI
 
 Once connected, open in your browser:
 
@@ -85,9 +91,9 @@ http://localhost:9000
 - ✅ Automatic reconnection
 - ✅ Offline message queue
 
-## Troubleshooting
+## [Needs Revalidation] Troubleshooting
 
-### Port Already in Use
+### [Needs Revalidation] Port Already in Use
 
 ```bash
 # Check what's using the port
@@ -98,7 +104,7 @@ lsof -i :9001
 docker run -p 8000:9000 -p 8001:9001 -e LISTEN_PORT=9000 ...
 ```
 
-### No Connection
+### [Needs Revalidation] No Connection
 
 ```bash
 # Test connectivity
@@ -113,7 +119,7 @@ gcloud compute firewall-rules create allow-scmessenger \
   --direction=INGRESS
 ```
 
-### Container Won't Start
+### [Needs Revalidation] Container Won't Start
 
 ```bash
 # Check logs
@@ -126,7 +132,7 @@ docker pull testbotz/scmessenger:latest
 # Then run again
 ```
 
-## Adding More Nodes
+## [Needs Revalidation] Adding More Nodes
 
 Once you have 2 nodes connected, add a third:
 
@@ -142,7 +148,7 @@ docker run -d \
 
 The third node will discover both nodes through the DHT!
 
-## Next Steps
+## [Needs Revalidation] Next Steps
 
 - [Docker Quick Start](DOCKER_QUICKSTART.md) - Complete Docker guide
 - [Native Install](INSTALL.md) - Build from source

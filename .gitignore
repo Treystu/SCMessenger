@@ -37,3 +37,10 @@ core/iOS/
 core/log.txt
 core/out.txt
 *.xcuserstate
+
+# Swift Build Artifacts
+.build/
+
+# AI Agent & MCP
+.quint/
+.mcp.json

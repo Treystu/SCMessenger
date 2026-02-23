@@ -1,5 +1,11 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # SCMessenger: Sovereign Mesh Implementation Plan
-## "Works everywhere, owned by no one, unstoppable by design"
+## [Needs Revalidation] "Works everywhere, owned by no one, unstoppable by design"
 
 **Date:** 2026-02-06 (plan), 2026-02-18 (last updated)
 **Status:** Phases 1-7 IMPLEMENTED. Phase 8 (WASM upgrade) scaffolded/partial.
@@ -7,9 +13,9 @@
 
 ---
 
-## FOUNDATIONAL DECISIONS
+## [Needs Revalidation] FOUNDATIONAL DECISIONS
 
-### Relay = Messaging (The Incentive Lock)
+### [Needs Revalidation] Relay = Messaging (The Incentive Lock)
 
 This is the single most important architectural decision. It solves the tragedy of the commons that killed every previous mesh project.
 
@@ -19,17 +25,17 @@ This is the single most important architectural decision. It solves the tragedy 
 
 **UX framing:** "SCMessenger is always working for you and your community. When you're connected, you're helping messages reach people who need them — and they're doing the same for you."
 
-### No Third-Party Relays
+### [Needs Revalidation] No Third-Party Relays
 
 No Nostr relays. No external WebSocket servers. No cloud infrastructure. Every node with internet connectivity IS a relay server for the mesh. The network is self-sustaining or it doesn't exist.
 
 When Node A has internet and Node B doesn't, Node A relays for Node B — not through some external service, but directly. When Node A later loses internet, Node C picks up the relay role. The network is a living organism, not a client-server architecture with extra steps.
 
-### Internet Is A Transport
+### [Needs Revalidation] Internet Is A Transport
 
 Internet (TCP/QUIC via libp2p) is the fastest, highest-bandwidth transport available. Use it aggressively when it's there. But it sits alongside BLE, WiFi Aware, WiFi Direct, and physical proximity as just another transport in the stack. The protocol doesn't care how bytes get from A to B.
 
-### Mycorrhizal Routing
+### [Needs Revalidation] Mycorrhizal Routing
 
 Modeled on fungal mycorrhizal networks — the underground communication system connecting trees in a forest:
 
@@ -75,7 +81,7 @@ DEMAND-DRIVEN ROUTE DISCOVERY:
   Analogy: A tree sending chemical signals through the mycelium to find nutrients
 ```
 
-### Smart Auto-Adjust (Background Aggressiveness)
+### [Needs Revalidation] Smart Auto-Adjust (Background Aggressiveness)
 
 The app profiles the device and adjusts automatically:
 
@@ -93,9 +99,9 @@ STATIONARY         → Decrease scan frequency (same peers, less to sync)
 
 ---
 
-## YOUR QUESTIONS, ANSWERED DIRECTLY
+## [Needs Revalidation] YOUR QUESTIONS, ANSWERED DIRECTLY
 
-### "Is it using a blockchain ledger? Could that speed up sync?"
+### [Needs Revalidation] "Is it using a blockchain ledger? Could that speed up sync?"
 
 **No. Blockchain is the wrong tool here.** Here's why:
 
@@ -139,7 +145,7 @@ NEGENTROPY (for timestamp-ordered data):
 
 **Implementation choice:** IBLT for BLE/WiFi sync (single round-trip, deterministic, simpler implementation). While Minisketch is more bandwidth-efficient, IBLT provides excellent performance with less implementation complexity. Bloom filters retired in favor of deterministic reconciliation.
 
-### "BitChat is not the same"
+### [Needs Revalidation] "BitChat is not the same"
 
 You're right. BitChat is local BLE mesh + Nostr relay bridge. It's a hybrid with third-party dependency. SCMessenger is fundamentally different:
 
@@ -150,7 +156,7 @@ You're right. BitChat is local BLE mesh + Nostr relay bridge. It's a hybrid with
 
 No other project is building a global, self-sustaining, phone-native mesh where every node is simultaneously client, server, and relay with no external infrastructure. This is genuinely new.
 
-### "Reverse engineer the problem — what tricks for stability, reliability, privacy?"
+### [Needs Revalidation] "Reverse engineer the problem — what tricks for stability, reliability, privacy?"
 
 Thinking backwards from "8 billion devices running this":
 
@@ -171,13 +177,13 @@ The routing algorithm intentionally spreads traffic across DIFFERENT paths, not 
 
 ---
 
-## IMPLEMENTATION PHASES
+## [Needs Revalidation] IMPLEMENTATION PHASES
 
 All estimates in LoC (lines of code). Ranges indicate minimum viable → full implementation.
 
 ---
 
-### PHASE 1: SECURITY HARDENING + PERSISTENCE
+### [Needs Revalidation] PHASE 1: SECURITY HARDENING + PERSISTENCE
 
 *Fix the known gaps before building on top of them.*
 
@@ -225,7 +231,7 @@ Total: 360-550 LoC
 
 ---
 
-### PHASE 2: DRIFT PROTOCOL CORE
+### [Needs Revalidation] PHASE 2: DRIFT PROTOCOL CORE
 
 *The custom wire format, sync engine, and CRDT store that make the mesh work.*
 
@@ -288,7 +294,7 @@ Total: 500-780 LoC
 
 ---
 
-### PHASE 3: MYCORRHIZAL ROUTING
+### [Needs Revalidation] PHASE 3: MYCORRHIZAL ROUTING
 
 *The intelligence layer. How messages find their way through the mesh.*
 
@@ -346,7 +352,7 @@ Total: 650-950 LoC
 
 ---
 
-### PHASE 4: TRANSPORT LAYER (MULTI-TRANSPORT)
+### [Needs Revalidation] PHASE 4: TRANSPORT LAYER (MULTI-TRANSPORT)
 
 *BLE, WiFi Aware, WiFi Direct, Internet — all equal transports.*
 
@@ -418,7 +424,7 @@ Total: 230-370 LoC
 
 ---
 
-### PHASE 5: MOBILE PLATFORM INTEGRATION
+### [Needs Revalidation] PHASE 5: MOBILE PLATFORM INTEGRATION
 
 *Making it actually work on phones in background.*
 
@@ -471,7 +477,7 @@ Total: 550-860 LoC (Rust + platform)
 
 ---
 
-### PHASE 6: SELF-RELAY NETWORK PROTOCOL
+### [Needs Revalidation] PHASE 6: SELF-RELAY NETWORK PROTOCOL
 
 *The custom relay protocol. Every node with internet is a relay server.*
 
@@ -518,7 +524,7 @@ Total: 380-570 LoC
 
 ---
 
-### PHASE 7: PRIVACY ENHANCEMENTS
+### [Needs Revalidation] PHASE 7: PRIVACY ENHANCEMENTS
 
 *Onion routing, metadata protection, plausible deniability.*
 
@@ -552,7 +558,7 @@ Total: 360-540 LoC
 
 ---
 
-### PHASE 8: WASM CLIENT UPGRADE
+### [Needs Revalidation] PHASE 8: WASM CLIENT UPGRADE
 
 *Browser as a full mesh participant (when tab is open).*
 
@@ -583,7 +589,7 @@ Total: 250-350 LoC
 
 ---
 
-## GRAND TOTAL
+## [Needs Revalidation] GRAND TOTAL
 
 | Phase | Description | LoC Range | Status |
 |-------|-------------|-----------|--------|
@@ -601,7 +607,7 @@ Total: 250-350 LoC
 
 ---
 
-## DEPENDENCY GRAPH (BUILD ORDER)
+## [Needs Revalidation] DEPENDENCY GRAPH (BUILD ORDER)
 
 ```
 Phase 1 (Security) ──→ Phase 2 (Drift Protocol) ──→ Phase 3 (Routing)
@@ -625,7 +631,7 @@ Phases 5, 6, 7, 8 can proceed in parallel once Phases 2-4 are complete.
 
 ---
 
-## KEY ARCHITECTURAL DECISIONS SUMMARY
+## [Needs Revalidation] KEY ARCHITECTURAL DECISIONS SUMMARY
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|

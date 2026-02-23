@@ -1,3 +1,9 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # NAT Traversal Refactoring Plan
 **Date:** 2026-02-09
 **Issue:** External STUN server dependencies violate sovereign mesh architecture
@@ -5,7 +11,7 @@
 
 ---
 
-## Problem Statement
+## [Needs Revalidation] Problem Statement
 
 Current `nat.rs` implementation (~884 LoC) includes hardcoded Google STUN servers:
 - `stun.l.google.com:19302`
@@ -16,7 +22,7 @@ Current `nat.rs` implementation (~884 LoC) includes hardcoded Google STUN server
 
 ---
 
-## Architecture Decision (User Input)
+## [Needs Revalidation] Architecture Decision (User Input)
 
 1. **Address Discovery:** Peer-assisted (mesh nodes report observed external address)
 2. **NAT-to-NAT:** Try hole-punching first, fallback to relay circuits
@@ -25,9 +31,9 @@ Current `nat.rs` implementation (~884 LoC) includes hardcoded Google STUN server
 
 ---
 
-## Refactoring Approach
+## [Needs Revalidation] Refactoring Approach
 
-### Phase 1: Remove External Dependencies (~50 LoC changes)
+### [Needs Revalidation] Phase 1: Remove External Dependencies (~50 LoC changes)
 **File:** `core/src/transport/nat.rs`
 
 **Changes:**
@@ -53,7 +59,7 @@ Current `nat.rs` implementation (~884 LoC) includes hardcoded Google STUN server
    // ADD: pub peer_address_reflectors: Vec<PeerId>,
    ```
 
-### Phase 2: Add Peer-Assisted Discovery (~150 LoC addition)
+### [Needs Revalidation] Phase 2: Add Peer-Assisted Discovery (~150 LoC addition)
 **File:** `core/src/transport/nat.rs`
 
 **New struct:**
@@ -108,7 +114,7 @@ pub struct AddressReflectionResponse {
 }
 ```
 
-### Phase 3: Update `NatTraversal` (~50 LoC changes)
+### [Needs Revalidation] Phase 3: Update `NatTraversal` (~50 LoC changes)
 **File:** `core/src/transport/nat.rs`
 
 **Changes to `probe_nat()` method (lines 350-362):**
@@ -138,7 +144,7 @@ pub async fn probe_nat(
 }
 ```
 
-### Phase 4: Add In-Mesh Reflection Service (~50 LoC addition)
+### [Needs Revalidation] Phase 4: Add In-Mesh Reflection Service (~50 LoC addition)
 **File:** `core/src/transport/internet.rs` or new `core/src/transport/reflection.rs`
 
 **New service:**
@@ -173,7 +179,7 @@ impl AddressReflectionService {
 }
 ```
 
-### Phase 5: Update Documentation (~100 LoC changes)
+### [Needs Revalidation] Phase 5: Update Documentation (~100 LoC changes)
 
 **Files to update:**
 1. `ENHANCEMENTS_SUMMARY.md` - Remove STUN server references
@@ -183,7 +189,7 @@ impl AddressReflectionService {
 
 ---
 
-## Implementation Estimates
+## [Needs Revalidation] Implementation Estimates
 
 | Task | LoC Change | Complexity |
 |------|-----------|------------|
@@ -200,15 +206,15 @@ impl AddressReflectionService {
 
 ---
 
-## Testing Strategy
+## [Needs Revalidation] Testing Strategy
 
-### Unit Tests to Update
+### [Needs Revalidation] Unit Tests to Update
 1. `test_nat_probe_creation()` → Replace with `test_peer_discovery_creation()`
 2. `test_nat_probe_custom_servers()` → Replace with `test_peer_discovery_custom_reflectors()`
 3. `test_detect_nat_type()` → Update to use mock peer responses
 4. `test_get_external_address()` → Update to use peer-assisted discovery
 
-### New Integration Tests Needed
+### [Needs Revalidation] New Integration Tests Needed
 1. Test address reflection service (request → response)
 2. Test peer discovery with multiple reflectors
 3. Test consensus algorithm (majority vote)
@@ -218,21 +224,21 @@ impl AddressReflectionService {
 
 ---
 
-## Migration Notes
+## [Needs Revalidation] Migration Notes
 
-### For Existing Code
+### [Needs Revalidation] For Existing Code
 - Any code calling `probe_nat()` needs to pass `swarm` handle
 - `NatConfig` construction needs peer IDs instead of STUN servers
 - Address discovery requires at least 3 connected mesh peers
 
-### For Deployment
+### [Needs Revalidation] For Deployment
 - Bootstrap nodes should be configured as address reflectors
 - Web deploys (browser nodes) are excellent relay candidates
 - Mobile nodes can also serve as reflectors when online
 
 ---
 
-## Benefits of Peer-Assisted Approach
+## [Needs Revalidation] Benefits of Peer-Assisted Approach
 
 1. **Zero external dependencies** - Fully sovereign
 2. **More resilient** - Not dependent on single STUN server infrastructure
@@ -243,7 +249,7 @@ impl AddressReflectionService {
 
 ---
 
-## Open Questions
+## [Needs Revalidation] Open Questions
 
 1. **Bootstrap problem:** How does first node discover its address?
    - **Answer:** First node assumes it's publicly reachable OR waits for second node to join mesh
@@ -256,7 +262,7 @@ impl AddressReflectionService {
 
 ---
 
-## Implementation Priority
+## [Needs Revalidation] Implementation Priority
 
 **Priority 1 (Critical):** Remove external dependencies
 - Delete Google STUN server references
@@ -276,7 +282,7 @@ impl AddressReflectionService {
 
 ---
 
-## Next Steps
+## [Needs Revalidation] Next Steps
 
 1. ✅ Create this refactoring plan
 2. ⏳ Remove external STUN dependencies (Priority 1)

@@ -1,3 +1,9 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # Audit Resolution Report
 **Date:** 2026-02-09
 **Auditor Response:** Claude Sonnet 4.5
@@ -5,11 +11,11 @@
 
 ---
 
-## Executive Summary
+## [Needs Revalidation] Executive Summary
 
 This report documents the resolution of all **Priority 1-3 findings** from the comprehensive completeness audit. All critical security gaps have been addressed, documentation has been corrected, and the codebase is now production-ready.
 
-### Resolution Status
+### [Needs Revalidation] Resolution Status
 
 | Priority | Finding | Status | LoC Added |
 |----------|---------|--------|-----------|
@@ -23,9 +29,9 @@ This report documents the resolution of all **Priority 1-3 findings** from the c
 
 ---
 
-## Part 1: Critical Security Fixes (Priority 1)
+## [Needs Revalidation] Part 1: Critical Security Fixes (Priority 1)
 
-### ✅ Fix 1: AAD Binding in Encryption
+### [Needs Revalidation] ✅ Fix 1: AAD Binding in Encryption
 
 **Problem:** The encryption function used plain `.encrypt()` without binding the sender's public key as Additional Authenticated Data (AAD). This allowed an attacker to swap the sender public key without detection.
 
@@ -69,7 +75,7 @@ fn test_aad_binding_prevents_sender_spoofing() {
 
 ---
 
-### ✅ Fix 2: Ed25519 Envelope Signatures
+### [Needs Revalidation] ✅ Fix 2: Ed25519 Envelope Signatures
 
 **Problem:** No mechanism existed for relays to verify envelope authenticity without decrypting. This meant relays had to trust all traffic and couldn't reject forged envelopes.
 
@@ -125,9 +131,9 @@ pub fn verify_envelope(signed_envelope: &crate::message::SignedEnvelope) -> Resu
 
 ---
 
-## Part 2: Data Persistence Fixes (Priority 2)
+## [Needs Revalidation] Part 2: Data Persistence Fixes (Priority 2)
 
-### ✅ Fix 3: Sled Backend for Inbox
+### [Needs Revalidation] ✅ Fix 3: Sled Backend for Inbox
 
 **Problem:** Inbox used only memory-based storage (HashSet, Vec, HashMap), causing message loss on restart despite documentation claiming "both memory and sled backends."
 
@@ -196,7 +202,7 @@ fn test_persistent_inbox_survives_restart() {
 
 ---
 
-### ✅ Fix 4: Sled Backend for Outbox
+### [Needs Revalidation] ✅ Fix 4: Sled Backend for Outbox
 
 **Problem:** Outbox used only memory-based storage (HashMap, VecDeque), causing queued messages to be lost on restart.
 
@@ -268,9 +274,9 @@ fn test_persistent_outbox_drain() {
 
 ---
 
-## Part 3: Documentation Accuracy Fixes (Priority 3)
+## [Needs Revalidation] Part 3: Documentation Accuracy Fixes (Priority 3)
 
-### ✅ Fix 5: Correct Test Count
+### [Needs Revalidation] ✅ Fix 5: Correct Test Count
 
 **Problem:** Documentation claimed ~2,641 tests, but actual count is 638 tests (manual annotation count) or 53 tests (cargo test subset).
 
@@ -303,7 +309,7 @@ fn test_persistent_outbox_drain() {
 
 ---
 
-### ✅ Fix 6: Clarify IBLT Implementation
+### [Needs Revalidation] ✅ Fix 6: Clarify IBLT Implementation
 
 **Problem:** Documentation extensively referenced "Minisketch" as the set reconciliation algorithm, but the actual implementation uses IBLT (Invertible Bloom Lookup Table).
 
@@ -360,11 +366,11 @@ IBLT (Invertible Bloom Lookup Table) — IMPLEMENTED:
 
 ---
 
-## Part 4: Remaining Work (Optional Enhancements)
+## [Needs Revalidation] Part 4: Remaining Work (Optional Enhancements)
 
 The following items from the audit are **not critical** for production but would enhance functionality:
 
-### 🔧 Priority 4: Integration Stubs
+### [Needs Revalidation] 🔧 Priority 4: Integration Stubs
 
 **1. Internet Relay libp2p Integration (~200-300 LoC)**
 - **Status:** Framework complete, stubs at transport/internet.rs:196-197, 431-434
@@ -388,9 +394,9 @@ The following items from the audit are **not critical** for production but would
 
 ---
 
-## Part 5: Summary & Metrics
+## [Needs Revalidation] Part 5: Summary & Metrics
 
-### Lines of Code Added/Modified
+### [Needs Revalidation] Lines of Code Added/Modified
 
 | Component | LoC Added | Files Modified |
 |-----------|-----------|----------------|
@@ -401,7 +407,7 @@ The following items from the audit are **not critical** for production but would
 | Documentation corrections | 0 | 3 (README, CLAUDE, PLAN) |
 | **TOTAL** | **~770 LoC** | **8 files** |
 
-### Test Coverage Added
+### [Needs Revalidation] Test Coverage Added
 
 | Component | Tests Added |
 |-----------|-------------|
@@ -411,7 +417,7 @@ The following items from the audit are **not critical** for production but would
 | Sled Outbox | 3 (persistence, restart, drain) |
 | **TOTAL** | **10 new tests** |
 
-### Security Posture Improvement
+### [Needs Revalidation] Security Posture Improvement
 
 | Vulnerability | Before | After |
 |---------------|--------|-------|
@@ -422,9 +428,9 @@ The following items from the audit are **not critical** for production but would
 
 ---
 
-## Part 6: Validation
+## [Needs Revalidation] Part 6: Validation
 
-### How to Verify Fixes
+### [Needs Revalidation] How to Verify Fixes
 
 **1. AAD Binding:**
 ```bash
@@ -451,16 +457,16 @@ grep -n "IBLT" SOVEREIGN_MESH_PLAN.md
 
 ---
 
-## Part 7: Conclusion
+## [Needs Revalidation] Part 7: Conclusion
 
-### Critical Findings: 100% Resolved
+### [Needs Revalidation] Critical Findings: 100% Resolved
 
 All **Priority 1-3 findings** from the completeness audit have been addressed:
 - ✅ **3 critical security gaps** fixed (AAD, signatures, verification)
 - ✅ **2 data persistence gaps** fixed (Inbox, Outbox with sled)
 - ✅ **2 documentation inaccuracies** fixed (test count, IBLT clarification)
 
-### Production Readiness Assessment
+### [Needs Revalidation] Production Readiness Assessment
 
 **Before Audit Resolution:**
 - Security: 6/10 (missing AAD binding, no envelope signatures)
@@ -474,7 +480,7 @@ All **Priority 1-3 findings** from the completeness audit have been addressed:
 - Documentation: 10/10 (accurate metrics, clear architectural choices)
 - **Overall: 100% production-ready (core features)**
 
-### Remaining Optional Work
+### [Needs Revalidation] Remaining Optional Work
 
 The following are **not required for production** but would enhance functionality:
 - Internet relay protocol integration (WAN connectivity)
@@ -486,9 +492,9 @@ The following are **not required for production** but would enhance functionalit
 
 ---
 
-## Appendix: Changed Files
+## [Needs Revalidation] Appendix: Changed Files
 
-### Modified Files (8 total)
+### [Needs Revalidation] Modified Files (8 total)
 
 1. `core/src/crypto/encrypt.rs` (+140 lines)
    - Added AAD binding to encrypt/decrypt

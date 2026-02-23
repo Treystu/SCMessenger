@@ -1,14 +1,20 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # NAT Traversal & Address Reflection Guide
 
 > Technical guide. For current verified test/build status, use `docs/CURRENT_STATE.md`.
 
-## Overview
+## [Needs Revalidation] Overview
 
 SCMessenger implements a **sovereign mesh address discovery protocol** that replaces traditional STUN servers with peer-assisted address reflection. This maintains the "no external dependencies" principle while enabling NAT traversal.
 
-## Architecture
+## [Needs Revalidation] Architecture
 
-### Key Principle: Peer-Assisted Discovery
+### [Needs Revalidation] Key Principle: Peer-Assisted Discovery
 
 Instead of relying on external STUN servers (like Google's stun.l.google.com), each mesh node can act as an address reflector for other peers:
 
@@ -30,18 +36,18 @@ Instead of relying on external STUN servers (like Google's stun.l.google.com), e
       │                             │
 ```
 
-## libp2p Protocol
+## [Needs Revalidation] libp2p Protocol
 
-### Protocol Definition
+### [Needs Revalidation] Protocol Definition
 
 - **Protocol ID**: `/sc/address-reflection/1.0.0`
 - **Transport**: Request-Response over libp2p
 - **Serialization**: CBOR
 - **Timeout**: 10 seconds
 
-### Message Types
+### [Needs Revalidation] Message Types
 
-#### AddressReflectionRequest
+#### [Needs Revalidation] AddressReflectionRequest
 ```rust
 {
     request_id: [u8; 16],  // Unique request identifier
@@ -49,7 +55,7 @@ Instead of relying on external STUN servers (like Google's stun.l.google.com), e
 }
 ```
 
-#### AddressReflectionResponse
+#### [Needs Revalidation] AddressReflectionResponse
 ```rust
 {
     request_id: [u8; 16],      // Matches request ID
@@ -58,9 +64,9 @@ Instead of relying on external STUN servers (like Google's stun.l.google.com), e
 }
 ```
 
-## Usage
+## [Needs Revalidation] Usage
 
-### 1. Basic Address Reflection
+### [Needs Revalidation] 1. Basic Address Reflection
 
 Request your observed address from a single peer:
 
@@ -76,7 +82,7 @@ async fn get_my_address(swarm: &SwarmHandle, peer: PeerId) -> Result<String> {
 }
 ```
 
-### 2. NAT Type Detection
+### [Needs Revalidation] 2. NAT Type Detection
 
 Detect your NAT type using multiple peer reflectors:
 
@@ -98,7 +104,7 @@ async fn detect_my_nat(swarm: &SwarmHandle, peers: Vec<String>) -> Result<NatTyp
 }
 ```
 
-### 3. Complete NAT Traversal
+### [Needs Revalidation] 3. Complete NAT Traversal
 
 Full NAT probing with external address discovery:
 
@@ -126,9 +132,9 @@ async fn setup_nat_traversal(swarm: &SwarmHandle, peer_ids: Vec<String>) -> Resu
 }
 ```
 
-## Testing
+## [Needs Revalidation] Testing
 
-### Unit Tests
+### [Needs Revalidation] Unit Tests
 
 Core address reflection logic (mocked, no network):
 
@@ -136,7 +142,7 @@ Core address reflection logic (mocked, no network):
 cargo test -p scmessenger-core reflection
 ```
 
-### Integration Tests
+### [Needs Revalidation] Integration Tests
 
 Full protocol tests with live libp2p swarms:
 
@@ -151,7 +157,7 @@ cargo test --test integration_nat_reflection test_two_node_address_reflection
 cargo test --test integration_nat_reflection -- --nocapture
 ```
 
-### Integration Test Coverage
+### [Needs Revalidation] Integration Test Coverage
 
 The test suite verifies:
 
@@ -177,9 +183,9 @@ The test suite verifies:
    - Tests graceful handling of disconnected peers
    - Verifies timeout behavior
 
-## Protocol Flow
+## [Needs Revalidation] Protocol Flow
 
-### Complete Request-Response Cycle
+### [Needs Revalidation] Complete Request-Response Cycle
 
 ```
 Application Layer
@@ -210,43 +216,43 @@ Application Layer
 Application Layer receives result
 ```
 
-## Performance Characteristics
+## [Needs Revalidation] Performance Characteristics
 
-### Latency
+### [Needs Revalidation] Latency
 - **Single reflection**: ~10-50ms (LAN)
 - **Single reflection**: ~50-200ms (WAN)
 - **NAT detection** (3 peers): ~150-600ms
 
-### Bandwidth
+### [Needs Revalidation] Bandwidth
 - **Request**: ~32 bytes
 - **Response**: ~50 bytes
 - **Total per reflection**: ~82 bytes
 
-### Scalability
+### [Needs Revalidation] Scalability
 - Each node can handle 1000+ reflection requests/second
 - No external infrastructure required
 - Scales linearly with mesh size
 
-## Security Considerations
+## [Needs Revalidation] Security Considerations
 
-### Address Authenticity
+### [Needs Revalidation] Address Authenticity
 - Addresses are observed from actual libp2p connections
 - Cannot be spoofed without controlling network path
 - Verified at transport layer (Noise encryption)
 
-### Privacy
+### [Needs Revalidation] Privacy
 - Reflector learns requester's external address
 - This is inherent to NAT traversal (STUN has same property)
 - Use Tor/VPN for additional privacy if needed
 
-### Denial of Service
+### [Needs Revalidation] Denial of Service
 - Rate limiting recommended for production
 - Currently no rate limits (trust-based mesh)
 - Consider adding in AddressReflectionService
 
-## Production Deployment
+## [Needs Revalidation] Production Deployment
 
-### Bootstrap Node Configuration
+### [Needs Revalidation] Bootstrap Node Configuration
 
 Bootstrap nodes should enable address reflection:
 
@@ -255,7 +261,7 @@ let reflection_service = AddressReflectionService::new();
 reflection_service.enable(); // Enable by default
 ```
 
-### Client Configuration
+### [Needs Revalidation] Client Configuration
 
 Mobile/browser clients should use bootstrap nodes as reflectors:
 
@@ -272,7 +278,7 @@ let config = NatConfig {
 };
 ```
 
-### Monitoring
+### [Needs Revalidation] Monitoring
 
 Key metrics to track:
 
@@ -287,7 +293,7 @@ let stats = service.stats();
 println!("Requests served: {}", stats.requests_served);
 ```
 
-## Comparison to STUN
+## [Needs Revalidation] Comparison to STUN
 
 | Feature | STUN Servers | Peer-Assisted Reflection |
 |---------|--------------|--------------------------|
@@ -298,9 +304,9 @@ println!("Requests served: {}", stats.requests_served);
 | Bandwidth | ✅ Minimal | ✅ Minimal |
 | Sovereignty | ❌ Depends on others | ✅ Fully sovereign |
 
-## Troubleshooting
+## [Needs Revalidation] Troubleshooting
 
-### No Reflectors Available
+### [Needs Revalidation] No Reflectors Available
 
 ```rust
 Error: ProbesFailed("No peer reflectors configured")
@@ -321,7 +327,7 @@ tokio::time::sleep(Duration::from_secs(2)).await;
 nat.probe_nat(&swarm).await?;
 ```
 
-### Timeout Errors
+### [Needs Revalidation] Timeout Errors
 
 ```rust
 Error: Timeout waiting for peer response
@@ -336,7 +342,7 @@ let discovery = PeerAddressDiscovery::with_peers(
 );
 ```
 
-### Symmetric NAT Detection
+### [Needs Revalidation] Symmetric NAT Detection
 
 When detecting symmetric NAT, hole-punching won't work. Enable relay:
 
@@ -347,7 +353,7 @@ if nat_type == NatType::Symmetric {
 }
 ```
 
-## Future Enhancements
+## [Needs Revalidation] Future Enhancements
 
 1. **Endpoint Observation**: Extract actual remote endpoint from libp2p connection
 2. **Rate Limiting**: Add request rate limits to AddressReflectionService
@@ -355,7 +361,7 @@ if nat_type == NatType::Symmetric {
 4. **IPv6 Support**: Full dual-stack support
 5. **TURN Integration**: Sovereign relay nodes for symmetric NAT
 
-## References
+## [Needs Revalidation] References
 
 - [RFC 5389 - STUN](https://tools.ietf.org/html/rfc5389)
 - [RFC 8445 - ICE](https://tools.ietf.org/html/rfc8445)

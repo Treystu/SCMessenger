@@ -1,8 +1,14 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # Deploying SCMessenger to Google Cloud Platform (Cloud Run)
 
 This guide explains how to deploy SCMessenger as a scalable, serverless container service on GCP Cloud Run.
 
-## ⚠️ Important: State Persistence
+## [Needs Revalidation] ⚠️ Important: State Persistence
 
 By default, **Cloud Run is stateless**. When your container restarts or scales down, **all local data (Identity, Contacts, Message History)** will be lost because SCMessenger uses an embedded database (`sled`) stored in the container.
 
@@ -11,12 +17,12 @@ By default, **Cloud Run is stateless**. When your container restarts or scales d
 
 ---
 
-## 1. Prerequisites
+## [Needs Revalidation] 1. Prerequisites
 
 - Google Cloud SDK (`gcloud`) installed and logged in.
 - A GCP Project created.
 
-## 2. One-Time Setup
+## [Needs Revalidation] 2. One-Time Setup
 
 Run these commands once to configure your environment.
 
@@ -41,7 +47,7 @@ gcloud artifacts repositories create scmessenger-repo \
 gcloud auth configure-docker us-central1-docker.pkg.dev
 ```
 
-## 3. Build & Deploy
+## [Needs Revalidation] 3. Build & Deploy
 
 You can run this sequence every time you want to update the app.
 
@@ -68,7 +74,7 @@ gcloud run deploy scmessenger-service \
     --session-affinity  # Recommended for WebSockets to stick to one instance
 ```
 
-## 4. Verify
+## [Needs Revalidation] 4. Verify
 
 After deployment, GCP will output a URL (e.g., `https://scmessenger-service-xyz.a.run.app`).
 

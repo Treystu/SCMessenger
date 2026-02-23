@@ -1,14 +1,20 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # SwarmBridge Integration Guide
 
 > Integration reference. For current verified cross-platform gap status, use `docs/CURRENT_STATE.md` and `REMAINING_WORK_TRACKING.md`.
 
-## Overview
+## [Needs Revalidation] Overview
 
 The `SwarmBridge` in `core/src/mobile_bridge.rs` provides a synchronous wrapper around the async `SwarmHandle` for mobile platform integration via UniFFI.
 
 **Status:** ✅ **WIRED** (as of Feb 2026)
 
-## Architecture
+## [Needs Revalidation] Architecture
 
 ```
 Mobile App (Android/iOS)
@@ -20,9 +26,9 @@ SwarmHandle (transport/swarm.rs)
 Swarm Task (async event loop)
 ```
 
-## Integration Steps
+## [Needs Revalidation] Integration Steps
 
-### 1. Create and Start Swarm in Rust
+### [Needs Revalidation] 1. Create and Start Swarm in Rust
 
 ```rust
 use scmessenger_core::transport::swarm::start_swarm;
@@ -38,7 +44,7 @@ let (event_tx, mut event_rx) = mpsc::channel(100);
 let swarm_handle = start_swarm(keypair, listen_addr, event_tx).await?;
 ```
 
-### 2. Wire SwarmBridge to SwarmHandle
+### [Needs Revalidation] 2. Wire SwarmBridge to SwarmHandle
 
 ```rust
 use scmessenger_core::mobile_bridge::SwarmBridge;
@@ -50,9 +56,9 @@ let bridge = SwarmBridge::new();
 bridge.set_handle(swarm_handle);
 ```
 
-### 3. Use from Mobile Platform
+### [Needs Revalidation] 3. Use from Mobile Platform
 
-#### Android/Kotlin Example
+#### [Needs Revalidation] Android/Kotlin Example
 
 ```kotlin
 import uniffi.api.*
@@ -97,7 +103,7 @@ class MeshRepository(context: Context) {
 }
 ```
 
-#### iOS/Swift Example
+#### [Needs Revalidation] iOS/Swift Example
 
 ```swift
 import scmessenger_mobile
@@ -136,9 +142,9 @@ class MeshService {
 }
 ```
 
-## Implementation Details
+## [Needs Revalidation] Implementation Details
 
-### Synchronous Bridge Pattern
+### [Needs Revalidation] Synchronous Bridge Pattern
 
 SwarmBridge uses `tokio::runtime::Handle::block_on()` to bridge synchronous UniFFI calls to async SwarmHandle:
 
@@ -159,13 +165,13 @@ pub fn send_message(&self, peer_id: String, data: Vec<u8>) -> Result<(), IronCor
 }
 ```
 
-### Thread Safety
+### [Needs Revalidation] Thread Safety
 
 - `SwarmHandle` is wrapped in `Arc<Mutex<Option<SwarmHandle>>>`
 - Multiple mobile threads can safely call SwarmBridge methods
 - Internal `tokio::runtime::Handle` ensures async operations run in correct context
 
-### Error Handling
+### [Needs Revalidation] Error Handling
 
 SwarmBridge returns `IronCoreError` variants:
 - `NotInitialized` - SwarmBridge created but handle not set
@@ -173,7 +179,7 @@ SwarmBridge returns `IronCoreError` variants:
 - `InvalidInput` - Invalid peer ID or multiaddr format
 - `Internal` - Runtime handle not available
 
-## Current Limitations
+## [Needs Revalidation] Current Limitations
 
 1. **No Event Callbacks**: SwarmBridge doesn't yet expose incoming message events to mobile. Events are currently only sent via `event_tx` channel, which is Rust-side only.
 
@@ -181,7 +187,7 @@ SwarmBridge returns `IronCoreError` variants:
 
 3. **Single Swarm**: Currently assumes one swarm per process. Multi-swarm support would require indexed bridges.
 
-## Recommended Mobile Architecture
+## [Needs Revalidation] Recommended Mobile Architecture
 
 ```
 ┌─────────────────────────────────────────┐
@@ -208,9 +214,9 @@ SwarmBridge returns `IronCoreError` variants:
 └─────────────────────────────────────────┘
 ```
 
-## Testing
+## [Needs Revalidation] Testing
 
-### Unit Tests
+### [Needs Revalidation] Unit Tests
 
 ```rust
 #[test]
@@ -222,7 +228,7 @@ fn test_swarm_bridge_creation() {
 }
 ```
 
-### Integration Tests
+### [Needs Revalidation] Integration Tests
 
 For full integration testing, you need:
 1. A tokio runtime
@@ -247,7 +253,7 @@ async fn test_swarm_bridge_integration() {
 }
 ```
 
-## Migration Path for Existing Android Code
+## [Needs Revalidation] Migration Path for Existing Android Code
 
 The Android app currently creates `SwarmBridge()` but it was a stub. With the new implementation:
 
@@ -265,7 +271,7 @@ swarmBridge = uniffi.api.SwarmBridge()
 swarmBridge?.sendMessage(peerId, data) // Actually sends via libp2p
 ```
 
-## Next Steps
+## [Needs Revalidation] Next Steps
 
 1. ✅ SwarmBridge basic wiring (DONE)
 2. 🔲 Add MeshService integration to automatically wire SwarmBridge on start
@@ -274,7 +280,7 @@ swarmBridge?.sendMessage(peerId, data) // Actually sends via libp2p
 5. 🔲 Implement bandwidth/relay statistics tracking in SwarmBridge
 6. 🔲 Add connection quality metrics for mobile UI
 
-## See Also
+## [Needs Revalidation] See Also
 
 - `core/src/mobile_bridge.rs` - SwarmBridge implementation
 - `core/src/transport/swarm.rs` - SwarmHandle async implementation

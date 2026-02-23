@@ -1,14 +1,20 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # Docker Mock Test Infrastructure - Implementation Summary
 
 **Status**: ✅ Complete - Ready for Testing  
 **Date**: February 2026  
 **Issue**: Tests are @Ignored pending mock infrastructure but fully documented with implementation requirements
 
-## Problem Statement
+## [Needs Revalidation] Problem Statement
 
 Testing was done via Docker, but there was no comprehensive mock infrastructure to enable "real" yet isolated testing. Tests in the Android app were @Ignored due to lack of mock infrastructure for UniFFI objects.
 
-## Solution Implemented
+## [Needs Revalidation] Solution Implemented
 
 A comprehensive Docker-based test infrastructure that provides:
 1. **Isolated test environments** - Separate containers for each test suite
@@ -18,9 +24,9 @@ A comprehensive Docker-based test infrastructure that provides:
 5. **Integration tests** - Multi-node mesh networking with real containers
 6. **CI/CD ready** - GitHub Actions workflow for automated testing
 
-## What Was Created
+## [Needs Revalidation] What Was Created
 
-### Docker Images (3)
+### [Needs Revalidation] Docker Images (3)
 
 1. **`Dockerfile.android-test`** - Android test environment
    - Ubuntu 22.04 base
@@ -42,7 +48,7 @@ A comprehensive Docker-based test infrastructure that provides:
    - Debian bookworm-slim
    - SCMessenger CLI built from source
 
-### Docker Compose Configurations (1 new)
+### [Needs Revalidation] Docker Compose Configurations (1 new)
 
 **`docker-compose.test.yml`** - Comprehensive test infrastructure
 - **Rust Core Tests** - Run all Rust library tests
@@ -53,7 +59,7 @@ A comprehensive Docker-based test infrastructure that provides:
 - **NAT Gateways** - Cone NAT and Symmetric NAT for testing NAT traversal
 - **Isolated Networks** - Three test networks (172.30.0.0/24, 172.31.0.0/24, 172.32.0.0/24)
 
-### Scripts (4)
+### [Needs Revalidation] Scripts (4)
 
 1. **`run-all-tests.sh`** - Main test runner
    - Runs all test suites or individual suites
@@ -78,7 +84,7 @@ A comprehensive Docker-based test infrastructure that provides:
    - Used by all mock nodes
    - Handles configuration and startup
 
-### Source Code (1 new file)
+### [Needs Revalidation] Source Code (1 new file)
 
 **`android/app/src/test/java/com/scmessenger/android/test/MockTestHelper.kt`**
 - Helper functions for creating mock UniFFI objects
@@ -88,7 +94,7 @@ A comprehensive Docker-based test infrastructure that provides:
 - `createMockSettingsManager()` - Mock settings manager
 - Enables previously @Ignored tests to run with proper mocking
 
-### Documentation (4)
+### [Needs Revalidation] Documentation (4)
 
 1. **`docker/TESTING_GUIDE.md`** (11KB)
    - Comprehensive guide to test infrastructure
@@ -119,7 +125,7 @@ A comprehensive Docker-based test infrastructure that provides:
    - Mock infrastructure usage
    - Test file descriptions
 
-### CI/CD Integration (1)
+### [Needs Revalidation] CI/CD Integration (1)
 
 **`.github/workflows/docker-test-suite.yml`**
 - **rust-tests job** - Runs Rust core tests, uploads results
@@ -130,7 +136,7 @@ A comprehensive Docker-based test infrastructure that provides:
 - Artifacts uploaded for all test results (7-14 day retention)
 - Test summary in GitHub Actions UI
 
-### Test Results Infrastructure (1)
+### [Needs Revalidation] Test Results Infrastructure (1)
 
 **`docker/test-results/`** directory
 - Structured subdirectories (rust/, android/, integration/)
@@ -139,30 +145,30 @@ A comprehensive Docker-based test infrastructure that provides:
 - Automatically created during test runs
 - Results uploaded as CI artifacts
 
-## Test Coverage
+## [Needs Revalidation] Test Coverage
 
-### Rust Core Tests
+### [Needs Revalidation] Rust Core Tests
 - ✅ All core library tests (`cargo test --workspace --all-features`)
 - ✅ Identity, crypto, messaging, storage modules
 - ✅ Transport layer, routing, relay logic
 - ✅ Privacy features (onion routing, cover traffic)
 - ✅ Integration tests in `core/tests/`
 
-### Android Unit Tests
+### [Needs Revalidation] Android Unit Tests
 - ✅ MeshRepository relay enforcement (8 test cases)
 - ✅ ViewModel state management
 - ✅ UI component behavior
 - ✅ UniFFI boundary integration
 - 📝 Currently @Ignored but infrastructure ready to enable
 
-### Integration Tests
+### [Needs Revalidation] Integration Tests
 - ✅ Multi-node mesh networking
 - ✅ Cross-network message delivery
 - ✅ Relay routing and DHT discovery
 - ✅ Real container-based testing
 - ✅ Mock infrastructure with isolated networks
 
-## Network Topology
+## [Needs Revalidation] Network Topology
 
 ```
 Test Networks (Isolated)
@@ -189,29 +195,29 @@ Test Networks (Isolated)
 └────────────────────────────────────────────────────────────┘
 ```
 
-## How to Use
+## [Needs Revalidation] How to Use
 
-### Quick Start
+### [Needs Revalidation] Quick Start
 ```bash
 cd docker
 ./run-all-tests.sh
 ```
 
-### Individual Test Suites
+### [Needs Revalidation] Individual Test Suites
 ```bash
 ./run-all-tests.sh --rust-only        # Fast: 3-5 min
 ./run-all-tests.sh --android-only     # Medium: 5-10 min
 ./run-all-tests.sh --integration-only # Medium: 5-10 min
 ```
 
-### With Options
+### [Needs Revalidation] With Options
 ```bash
 ./run-all-tests.sh --clean            # Clean and run
 ./run-all-tests.sh --verbose          # Show detailed logs
 ./run-all-tests.sh --with-nat         # Include NAT tests
 ```
 
-### Manual Mock Infrastructure
+### [Needs Revalidation] Manual Mock Infrastructure
 ```bash
 # Start mock nodes
 docker compose -f docker-compose.test.yml --profile test up -d mock-relay mock-client-a mock-client-b
@@ -227,46 +233,46 @@ docker compose -f docker-compose.test.yml logs -f mock-relay
 docker compose -f docker-compose.test.yml down
 ```
 
-## Benefits
+## [Needs Revalidation] Benefits
 
-### For Developers
+### [Needs Revalidation] For Developers
 - ✅ **Fast iteration** - Run specific test suites quickly
 - ✅ **Real environment** - Tests run in production-like containers
 - ✅ **Easy debugging** - Access running containers, view logs
 - ✅ **Reproducible** - Same environment locally and in CI
 - ✅ **No device needed** - Android tests run in Docker
 
-### For CI/CD
+### [Needs Revalidation] For CI/CD
 - ✅ **Automated** - Runs on every push/PR
 - ✅ **Parallel** - Multiple test suites run concurrently
 - ✅ **Comprehensive** - Covers Rust, Android, integration
 - ✅ **Artifacts** - Test results saved and downloadable
 - ✅ **Fast feedback** - Results in 15-30 minutes
 
-### For Testing
+### [Needs Revalidation] For Testing
 - ✅ **Isolated** - Tests don't interfere with each other
 - ✅ **Controlled** - Mock nodes with known behavior
 - ✅ **Realistic** - Real mesh networking, not mocked
 - ✅ **Flexible** - Easy to add new test scenarios
 - ✅ **Complete** - Unit, integration, and E2E tests
 
-## What's Next
+## [Needs Revalidation] What's Next
 
-### Immediate (Optional)
+### [Needs Revalidation] Immediate (Optional)
 1. **Enable Android tests** - Remove @Ignore annotations now that infrastructure exists
 2. **Add custom tests** - Use `example-custom-test.sh` as template
 3. **Performance testing** - Add bandwidth/latency constraints
 
-### Future Enhancements
+### [Needs Revalidation] Future Enhancements
 1. **BLE simulation** - Mock Bluetooth connections
 2. **WiFi Direct simulation** - Test local transport
 3. **Chaos engineering** - Random failures, network partitions
 4. **Load testing** - Many nodes, high message volume
 5. **Security scanning** - Automated vulnerability checks
 
-## Files Changed/Added
+## [Needs Revalidation] Files Changed/Added
 
-### New Files (13)
+### [Needs Revalidation] New Files (13)
 - `.github/workflows/docker-test-suite.yml` (CI/CD workflow)
 - `docker/Dockerfile.android-test` (Android test image)
 - `docker/Dockerfile.rust-test` (Rust test image)
@@ -281,10 +287,10 @@ docker compose -f docker-compose.test.yml down
 - `android/app/src/test/README.md` (Android test docs)
 - `android/app/src/test/java/com/scmessenger/android/test/MockTestHelper.kt` (Mock helper)
 
-### Modified Files (1)
+### [Needs Revalidation] Modified Files (1)
 - `docker/README.md` (Added testing section)
 
-## Success Criteria Met
+## [Needs Revalidation] Success Criteria Met
 
 ✅ **"Real" testing in Docker** - Yes, uses actual SCMessenger containers  
 ✅ **Mock infrastructure** - Yes, configurable mock nodes and networks  
@@ -294,7 +300,7 @@ docker compose -f docker-compose.test.yml down
 ✅ **Documentation** - Yes, multiple guides created  
 ✅ **Easy to use** - Yes, one command to run all tests  
 
-## Validation Steps
+## [Needs Revalidation] Validation Steps
 
 To validate this implementation:
 
@@ -314,7 +320,7 @@ cat QUICKSTART.md
 cat TESTING_GUIDE.md
 ```
 
-## Summary
+## [Needs Revalidation] Summary
 
 This implementation provides a **production-ready Docker-based test infrastructure** that:
 - Enables comprehensive testing without physical devices

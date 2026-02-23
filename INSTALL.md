@@ -1,8 +1,14 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # SCMessenger - Native Installation Guide
 
 Build and run SCMessenger directly on your system without Docker.
 
-## Quick Start
+## [Needs Revalidation] Quick Start
 
 ```bash
 # 1. Clone the repository
@@ -18,19 +24,19 @@ cargo build --release --bin scmessenger-cli
 
 ---
 
-## Prerequisites
+## [Needs Revalidation] Prerequisites
 
-### Install Rust
+### [Needs Revalidation] Install Rust
 
 SCMessenger is written in Rust. You need Rust 1.70+ installed.
 
-#### Linux & macOS
+#### [Needs Revalidation] Linux & macOS
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
 ```
 
-#### Windows
+#### [Needs Revalidation] Windows
 Download and run: https://rustup.rs/
 
 Or via PowerShell:
@@ -44,39 +50,39 @@ rustc --version
 cargo --version
 ```
 
-### System Dependencies
+### [Needs Revalidation] System Dependencies
 
-#### macOS
+#### [Needs Revalidation] macOS
 ```bash
 # Xcode Command Line Tools (usually already installed)
 xcode-select --install
 ```
 
-#### Linux (Debian/Ubuntu)
+#### [Needs Revalidation] Linux (Debian/Ubuntu)
 ```bash
 sudo apt-get update
 sudo apt-get install -y build-essential pkg-config libssl-dev
 ```
 
-#### Linux (Fedora/RHEL)
+#### [Needs Revalidation] Linux (Fedora/RHEL)
 ```bash
 sudo dnf install -y gcc openssl-devel pkg-config
 ```
 
-#### Linux (Arch)
+#### [Needs Revalidation] Linux (Arch)
 ```bash
 sudo pacman -S base-devel openssl pkg-config
 ```
 
-#### Windows
+#### [Needs Revalidation] Windows
 - Visual Studio Build Tools (required for Rust)
 - Installs automatically via rustup
 
 ---
 
-## Installation
+## [Needs Revalidation] Installation
 
-### Option 1: Build from Source (Recommended)
+### [Needs Revalidation] Option 1: Build from Source (Recommended)
 
 ```bash
 # Clone repository
@@ -91,7 +97,7 @@ cargo build --release --bin scmessenger-cli
 # - Windows: .\target\release\scmessenger-cli.exe
 ```
 
-### Option 2: Install Globally
+### [Needs Revalidation] Option 2: Install Globally
 
 ```bash
 # Build and install to ~/.cargo/bin (in your PATH)
@@ -101,7 +107,7 @@ cargo install --path cli
 scmessenger-cli start
 ```
 
-### Option 3: Create Alias
+### [Needs Revalidation] Option 3: Create Alias
 
 Add to your shell config (`~/.bashrc`, `~/.zshrc`, or `~/.config/fish/config.fish`):
 
@@ -123,9 +129,9 @@ scm contact add ...
 
 ---
 
-## First Run
+## [Needs Revalidation] First Run
 
-### 1. Initialize Identity
+### [Needs Revalidation] 1. Initialize Identity
 
 ```bash
 ./target/release/scmessenger-cli init
@@ -148,7 +154,7 @@ Next steps:
   • Start node:   scm start
 ```
 
-### 2. Start the Node
+### [Needs Revalidation] 2. Start the Node
 
 ```bash
 ./target/release/scmessenger-cli start
@@ -165,7 +171,7 @@ Or with custom port:
 
 **Both ports must be open in your firewall for internet connectivity.**
 
-### 3. View Your Identity
+### [Needs Revalidation] 3. View Your Identity
 
 ```bash
 ./target/release/scmessenger-cli identity
@@ -173,9 +179,9 @@ Or with custom port:
 
 ---
 
-## Connecting to Other Nodes
+## [Needs Revalidation] Connecting to Other Nodes
 
-### Add a Bootstrap Node
+### [Needs Revalidation] Add a Bootstrap Node
 
 To connect to an existing node (e.g., a public relay or friend's node):
 
@@ -198,13 +204,13 @@ You should see:
 ✓ Peer: 12D3KooWGhWrfkwWRxmskC8bfGGvhd3gHYBQgigRbJeZL9Yd3W2S
 ```
 
-### View Bootstrap Nodes
+### [Needs Revalidation] View Bootstrap Nodes
 
 ```bash
 ./target/release/scmessenger-cli config bootstrap list
 ```
 
-### Remove a Bootstrap Node
+### [Needs Revalidation] Remove a Bootstrap Node
 
 ```bash
 ./target/release/scmessenger-cli config bootstrap remove <multiaddr>
@@ -212,7 +218,7 @@ You should see:
 
 ---
 
-## Adding Contacts
+## [Needs Revalidation] Adding Contacts
 
 Before you can send messages, add contacts:
 
@@ -231,13 +237,13 @@ Before you can send messages, add contacts:
   --name "Bob"
 ```
 
-### List Contacts
+### [Needs Revalidation] List Contacts
 
 ```bash
 ./target/release/scmessenger-cli contact list
 ```
 
-### View Contact Details
+### [Needs Revalidation] View Contact Details
 
 ```bash
 ./target/release/scmessenger-cli contact show Bob
@@ -245,16 +251,16 @@ Before you can send messages, add contacts:
 
 ---
 
-## Sending Messages
+## [Needs Revalidation] Sending Messages
 
-### While Node is Running
+### [Needs Revalidation] While Node is Running
 
 Type in the interactive prompt:
 ```
 > send Bob "Hello from SCMessenger!"
 ```
 
-### Offline Mode (Encrypt Without Sending)
+### [Needs Revalidation] Offline Mode (Encrypt Without Sending)
 
 ```bash
 ./target/release/scmessenger-cli send Bob "This will be encrypted and queued"
@@ -264,15 +270,15 @@ The message will be encrypted and stored. It will be sent automatically next tim
 
 ---
 
-## Configuration
+## [Needs Revalidation] Configuration
 
-### View All Settings
+### [Needs Revalidation] View All Settings
 
 ```bash
 ./target/release/scmessenger-cli config list
 ```
 
-### Change Settings
+### [Needs Revalidation] Change Settings
 
 ```bash
 # Change default port
@@ -285,13 +291,13 @@ The message will be encrypted and stored. It will be sent automatically next tim
 ./target/release/scmessenger-cli config set max_peers 100
 ```
 
-### Configuration Location
+### [Needs Revalidation] Configuration Location
 
 - **Linux**: `~/.config/scmessenger/config.json`
 - **macOS**: `~/.config/scmessenger/config.json`
 - **Windows**: `%APPDATA%\scmessenger\config.json`
 
-### Data Location
+### [Needs Revalidation] Data Location
 
 - **Linux**: `~/.local/share/scmessenger/`
 - **macOS**: `~/.local/share/scmessenger/`
@@ -299,9 +305,9 @@ The message will be encrypted and stored. It will be sent automatically next tim
 
 ---
 
-## Firewall Configuration
+## [Needs Revalidation] Firewall Configuration
 
-### macOS
+### [Needs Revalidation] macOS
 
 macOS will prompt you the first time. If you denied access:
 
@@ -315,7 +321,7 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /path/to/scmessenger-
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /path/to/scmessenger-cli
 ```
 
-### Linux (UFW)
+### [Needs Revalidation] Linux (UFW)
 
 ```bash
 sudo ufw allow 9000/tcp
@@ -323,7 +329,7 @@ sudo ufw allow 9001/tcp
 sudo ufw allow 9001/udp
 ```
 
-### Linux (firewalld)
+### [Needs Revalidation] Linux (firewalld)
 
 ```bash
 sudo firewall-cmd --add-port=9000/tcp --permanent
@@ -332,7 +338,7 @@ sudo firewall-cmd --add-port=9001/udp --permanent
 sudo firewall-cmd --reload
 ```
 
-### Windows
+### [Needs Revalidation] Windows
 
 ```powershell
 # Run PowerShell as Administrator
@@ -348,9 +354,9 @@ Or use Windows Defender Firewall GUI:
 
 ---
 
-## Running as a Service
+## [Needs Revalidation] Running as a Service
 
-### Linux (systemd)
+### [Needs Revalidation] Linux (systemd)
 
 Create `/etc/systemd/system/scmessenger.service`:
 
@@ -384,7 +390,7 @@ sudo systemctl status scmessenger
 journalctl -u scmessenger -f
 ```
 
-### macOS (launchd)
+### [Needs Revalidation] macOS (launchd)
 
 Create `~/Library/LaunchAgents/com.scmessenger.node.plist`:
 
@@ -424,7 +430,7 @@ launchctl stop com.scmessenger.node
 launchctl unload ~/Library/LaunchAgents/com.scmessenger.node.plist
 ```
 
-### Windows (NSSM - Non-Sucking Service Manager)
+### [Needs Revalidation] Windows (NSSM - Non-Sucking Service Manager)
 
 Download NSSM: https://nssm.cc/download
 
@@ -444,7 +450,7 @@ nssm remove SCMessenger confirm
 
 ---
 
-## Commands Reference
+## [Needs Revalidation] Commands Reference
 
 ```bash
 # Identity
@@ -482,9 +488,9 @@ scmessenger-cli test                    # Run self-tests
 
 ---
 
-## Troubleshooting
+## [Needs Revalidation] Troubleshooting
 
-### "Permission denied" on macOS
+### [Needs Revalidation] "Permission denied" on macOS
 
 macOS blocks unsigned binaries by default:
 
@@ -500,7 +506,7 @@ sudo spctl --master-disable
 sudo spctl --master-enable
 ```
 
-### "No such file or directory" - Shared Library
+### [Needs Revalidation] "No such file or directory" - Shared Library
 
 If you see `error while loading shared libraries: libssl.so.3`:
 
@@ -518,7 +524,7 @@ sudo dnf install openssl-libs
 brew install openssl@3
 ```
 
-### Port Already in Use
+### [Needs Revalidation] Port Already in Use
 
 ```bash
 # Find what's using the port
@@ -533,7 +539,7 @@ netstat -ano | findstr :9000
 scmessenger-cli start --port 8000
 ```
 
-### Peer Count Stays at 0
+### [Needs Revalidation] Peer Count Stays at 0
 
 1. **Check firewall** - Ensure ports 9000 and 9001 are open
 2. **Add bootstrap nodes** - You need at least one peer to discover others
@@ -544,7 +550,7 @@ scmessenger-cli start --port 8000
    nc -zv <your-ip> 9001
    ```
 
-### Build Fails on Low Memory
+### [Needs Revalidation] Build Fails on Low Memory
 
 If compilation crashes:
 
@@ -561,7 +567,7 @@ sudo swapon /swapfile
 
 ---
 
-## Updating
+## [Needs Revalidation] Updating
 
 ```bash
 # Pull latest code
@@ -576,7 +582,7 @@ cargo build --release --bin scmessenger-cli
 
 ---
 
-## Uninstalling
+## [Needs Revalidation] Uninstalling
 
 ```bash
 # Remove binary
@@ -594,7 +600,7 @@ rmdir /s "%APPDATA%\scmessenger"
 
 ---
 
-## Next Steps
+## [Needs Revalidation] Next Steps
 
 - See [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) for Docker deployment
 - See [README.md](README.md) for architecture details
@@ -602,19 +608,19 @@ rmdir /s "%APPDATA%\scmessenger"
 
 ---
 
-## Platform-Specific Notes
+## [Needs Revalidation] Platform-Specific Notes
 
-### macOS M1/M2/M3 (Apple Silicon)
+### [Needs Revalidation] macOS M1/M2/M3 (Apple Silicon)
 
 SCMessenger works natively on ARM64. No Rosetta required.
 
-### Windows
+### [Needs Revalidation] Windows
 
 - Use PowerShell or Windows Terminal (not CMD)
 - Paths use backslashes: `.\target\release\scmessenger-cli.exe`
 - Windows Defender may flag the binary - add exclusion if needed
 
-### Linux ARM (Raspberry Pi)
+### [Needs Revalidation] Linux ARM (Raspberry Pi)
 
 ```bash
 # Install Rust for ARM

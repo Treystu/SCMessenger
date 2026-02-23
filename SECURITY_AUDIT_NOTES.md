@@ -1,3 +1,9 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # Security Audit Notes
 
 **Date:** 2026-02-21
@@ -7,7 +13,7 @@
 
 ---
 
-## Summary
+## [Needs Revalidation] Summary
 
 - 1 vulnerability (error-level)
 - 6 warnings (unmaintained / unsound)
@@ -15,9 +21,9 @@
 
 ---
 
-## Vulnerability (cargo audit error)
+## [Needs Revalidation] Vulnerability (cargo audit error)
 
-### ring 0.16.20 — AES panic on overflow check
+### [Needs Revalidation] ring 0.16.20 — AES panic on overflow check
 | Field | Value |
 |-------|-------|
 | Advisory | RUSTSEC-2025-0009 |
@@ -31,9 +37,9 @@
 
 ---
 
-## Warnings (unmaintained / unsound)
+## [Needs Revalidation] Warnings (unmaintained / unsound)
 
-### bincode 1.3.3 — Unmaintained
+### [Needs Revalidation] bincode 1.3.3 — Unmaintained
 | Field | Value |
 |-------|-------|
 | Advisory | RUSTSEC-2025-0141 |
@@ -48,7 +54,7 @@
 
 ---
 
-### sled 0.34.7 — Transitively pulls unmaintained deps
+### [Needs Revalidation] sled 0.34.7 — Transitively pulls unmaintained deps
 | Field | Value |
 |-------|-------|
 | Locked version | 0.34.7 (confirmed, matches expected 0.34.x) |
@@ -62,7 +68,7 @@
 
 ---
 
-### ring 0.16.20 — Unmaintained (separate from the vulnerability)
+### [Needs Revalidation] ring 0.16.20 — Unmaintained (separate from the vulnerability)
 | Field | Value |
 |-------|-------|
 | Advisory | RUSTSEC-2025-0010 |
@@ -71,7 +77,7 @@
 
 ---
 
-### lru 0.12.5 — Unsound (`IterMut` stacked borrows violation)
+### [Needs Revalidation] lru 0.12.5 — Unsound (`IterMut` stacked borrows violation)
 | Field | Value |
 |-------|-------|
 | Advisory | RUSTSEC-2026-0002 |
@@ -82,7 +88,7 @@
 
 ---
 
-### paste 1.0.15 — Unmaintained
+### [Needs Revalidation] paste 1.0.15 — Unmaintained
 | Field | Value |
 |-------|-------|
 | Advisory | RUSTSEC-2024-0436 |
@@ -92,7 +98,7 @@
 
 ---
 
-## Direct Dependency Version Status
+## [Needs Revalidation] Direct Dependency Version Status
 
 | Crate | Expected | Locked | Workspace Pin | Status |
 |-------|----------|--------|---------------|--------|
@@ -103,7 +109,7 @@
 
 ---
 
-## Action Items (priority order)
+## [Needs Revalidation] Action Items (priority order)
 
 1. **[Separate PR — libp2p bump]** Upgrade libp2p beyond 0.53 once a version ships that uses `rcgen >= 0.12`. This resolves: `ring 0.16.20` vulnerability (RUSTSEC-2025-0009), `ring` unmaintained warning (RUSTSEC-2025-0010), `lru` unsound warning (RUSTSEC-2026-0002), `instant` unmaintained warning (RUSTSEC-2024-0384, partial), and `paste` unmaintained warning (partial).
 
@@ -117,7 +123,7 @@
 
 ---
 
-## Notes on workspace Cargo.toml pinning
+## [Needs Revalidation] Notes on workspace Cargo.toml pinning
 
 `ed25519-dalek` is already correctly pinned at `version = "2.1"` in the workspace `Cargo.toml`, preventing regression to the vulnerable 1.x line (which was previously present via `cesride`, now removed per the comment in `Cargo.toml`). No change needed here.
 

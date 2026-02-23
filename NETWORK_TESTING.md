@@ -1,8 +1,14 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # SCMessenger Network Testing Guide
 
 This document explains how to use the comprehensive network testing tools for SCMessenger.
 
-## Overview
+## [Needs Revalidation] Overview
 
 SCMessenger includes three levels of testing scripts:
 
@@ -10,9 +16,9 @@ SCMessenger includes three levels of testing scripts:
 2. **`run_comprehensive_network_tests.sh`** - **NEW!** Enhanced testing with real network conditions (NAT, latency, packet loss)
 3. **`test_network_scenarios.sh`** - Advanced network scenario testing with detailed pass/fail reporting
 
-## 🆕 Enhanced Network Testing (Recommended)
+## [Needs Revalidation] 🆕 Enhanced Network Testing (Recommended)
 
-### What's New
+### [Needs Revalidation] What's New
 
 The enhanced testing suite simulates **real-world network conditions**:
 
@@ -23,7 +29,7 @@ The enhanced testing suite simulates **real-world network conditions**:
 - ✅ **Network Isolation**: Separate networks with NAT gateways
 - ✅ **Traffic Control**: Real `tc` and `iptables` rules
 
-### Why This Matters
+### [Needs Revalidation] Why This Matters
 
 The basic Docker network (bridge mode) doesn't test:
 - NAT hole punching (no actual NAT)
@@ -33,15 +39,15 @@ The basic Docker network (bridge mode) doesn't test:
 
 The enhanced setup creates **realistic conditions** where these features are actually needed and tested.
 
-## Prerequisites
+## [Needs Revalidation] Prerequisites
 
 - Docker (automatically installed on macOS if missing)
 - At least 4GB of available RAM
 - Internet connection for initial Docker image build
 
-## Quick Start
+## [Needs Revalidation] Quick Start
 
-### Option A: Enhanced Network Testing (Recommended)
+### [Needs Revalidation] Option A: Enhanced Network Testing (Recommended)
 
 Run the enhanced simulation with real network conditions:
 
@@ -64,7 +70,7 @@ Then run the comprehensive scenarios:
 ./test_network_scenarios.sh
 ```
 
-### Option B: Basic Simulation & Validation
+### [Needs Revalidation] Option B: Basic Simulation & Validation
 
 Run the basic simulation (simpler, but less realistic):
 
@@ -88,7 +94,7 @@ This script will:
 
 **Duration:** ~30-45 seconds
 
-### 2. Advanced Network Scenarios
+### [Needs Revalidation] 2. Advanced Network Scenarios
 
 Once the basic simulation is running, test advanced scenarios:
 
@@ -108,60 +114,60 @@ This script tests:
 
 **Duration:** ~60-90 seconds
 
-## Test Scenarios Explained
+## [Needs Revalidation] Test Scenarios Explained
 
-### Scenario 1: Network Partition Recovery
+### [Needs Revalidation] Scenario 1: Network Partition Recovery
 Tests mesh resilience when the relay node fails:
 - Pauses the relay container
 - Attempts to send messages during partition
 - Verifies message queueing in outbox
 - Restores relay and confirms message delivery
 
-### Scenario 2: NAT Traversal & Address Discovery
+### [Needs Revalidation] Scenario 2: NAT Traversal & Address Discovery
 Analyzes NAT behavior:
 - Address observation protocol
 - Hole punching attempts
 - Connection type analysis (direct vs relayed)
 
-### Scenario 3: Circuit Relay Protocol
+### [Needs Revalidation] Scenario 3: Circuit Relay Protocol
 Tests relay-based message forwarding:
 - Relay node activity monitoring
 - Circuit reservation tracking
 - Message delivery through relay
 
-### Scenario 4: Mesh Routing & Multi-hop
+### [Needs Revalidation] Scenario 4: Mesh Routing & Multi-hop
 Tests mycorrhizal mesh routing:
 - Routing table updates
 - DHT operations
 - Peer exchange protocol
 
-### Scenario 5: Transport Layer Analysis
+### [Needs Revalidation] Scenario 5: Transport Layer Analysis
 Tests protocol capabilities:
 - TCP/QUIC/WebSocket usage
 - Protocol escalation
 - Transport optimization
 
-### Scenario 6: Privacy Features
+### [Needs Revalidation] Scenario 6: Privacy Features
 Tests privacy-preserving features:
 - Onion routing circuits
 - Cover traffic and padding
 - Multi-hop encryption
 
-### Scenario 7: Drift Protocol & Offline Support
+### [Needs Revalidation] Scenario 7: Drift Protocol & Offline Support
 Tests asynchronous message delivery:
 - Offline message queueing
 - Drift synchronization
 - Store-and-forward reliability
 
-### Scenario 8: Performance Metrics
+### [Needs Revalidation] Scenario 8: Performance Metrics
 Analyzes system performance:
 - Message throughput (10 messages)
 - Error rate analysis
 - Performance classification
 
-## Network Capabilities Tested
+## [Needs Revalidation] Network Capabilities Tested
 
-### Core Network Features
+### [Needs Revalidation] Core Network Features
 - ✅ **Address Observation** - Peers observe each other's external addresses
 - ✅ **NAT Type Detection** - Cone vs Symmetric NAT identification
 - ✅ **Hole Punching** - Direct connection attempts through NAT
@@ -169,7 +175,7 @@ Analyzes system performance:
 - ✅ **Peer Exchange** - Bootstrap & discovery mechanisms
 - ✅ **Multi-hop Routing** - Mycorrhizal mesh routing
 
-### Advanced Features
+### [Needs Revalidation] Advanced Features
 - ✅ **Transport Escalation** - Automatic protocol upgrades
 - ✅ **Connection Resilience** - Exponential backoff & retry
 - ✅ **Onion Routing** - Privacy-preserving multi-hop circuits
@@ -177,7 +183,7 @@ Analyzes system performance:
 - ✅ **Store-and-Forward** - Reliable offline message delivery
 - ✅ **Network Partition Recovery** - Handles relay failures gracefully
 
-## Network Topology
+## [Needs Revalidation] Network Topology
 
 ```
 ┌─────────────────┐         ┌─────────────────┐
@@ -199,23 +205,23 @@ Analyzes system performance:
 - **Bob**: Network B participant, address reflection active
 - **Charlie (Relay)**: Bridges both networks, circuit relay provider
 
-## Understanding Test Output
+## [Needs Revalidation] Understanding Test Output
 
-### Success Indicators
+### [Needs Revalidation] Success Indicators
 - ✅ **Green checkmarks** - Feature working as expected
 - ℹ️ **Blue info** - Feature not needed in current scenario
 - ⚠️ **Yellow warnings** - Non-critical issues or pending operations
 
-### Failure Indicators
+### [Needs Revalidation] Failure Indicators
 - ✗ **Red X marks** - Critical failures requiring attention
 
-### Common Warnings (Non-critical)
+### [Needs Revalidation] Common Warnings (Non-critical)
 - "No address observations detected" - Normal in local Docker networks
 - "No onion routing detected" - Optional for small 3-node networks
 - "Cover traffic disabled" - Often disabled in test mode
 - "Message delivery pending" - May take extra time on slow systems
 
-## Cleanup
+## [Needs Revalidation] Cleanup
 
 Tear down the simulation:
 
@@ -229,38 +235,38 @@ Remove all containers and networks:
 docker compose -f docker/docker-compose.yml down -v
 ```
 
-## Troubleshooting
+## [Needs Revalidation] Troubleshooting
 
-### "Containers not running" Error
+### [Needs Revalidation] "Containers not running" Error
 Run `verify_simulation.sh` first before running `test_network_scenarios.sh`.
 
-### "Failed to retrieve node IDs"
+### [Needs Revalidation] "Failed to retrieve node IDs"
 Wait 5-10 seconds after starting containers, then retry.
 
-### Port Conflicts
+### [Needs Revalidation] Port Conflicts
 If port 4001 is in use, modify `docker/docker-compose.yml` to use different ports.
 
-### Docker Permission Errors
+### [Needs Revalidation] Docker Permission Errors
 On Linux, add your user to the docker group:
 ```bash
 sudo usermod -aG docker $USER
 newgrp docker
 ```
 
-### Out of Memory
+### [Needs Revalidation] Out of Memory
 Ensure at least 4GB RAM is available. Close other applications if needed.
 
-## Advanced Usage
+## [Needs Revalidation] Advanced Usage
 
-### Run Specific Scenarios Only
+### [Needs Revalidation] Run Specific Scenarios Only
 
 Edit `test_network_scenarios.sh` and comment out unwanted scenario sections.
 
-### Custom Network Topologies
+### [Needs Revalidation] Custom Network Topologies
 
 Modify `docker/docker-compose.yml` to add more nodes or change network configurations.
 
-### Extended Testing
+### [Needs Revalidation] Extended Testing
 
 Run the scenarios multiple times to test consistency:
 ```bash
@@ -271,7 +277,7 @@ for i in {1..5}; do
 done
 ```
 
-### Continuous Monitoring
+### [Needs Revalidation] Continuous Monitoring
 
 Watch logs in real-time while tests run:
 ```bash
@@ -286,7 +292,7 @@ docker logs -f scm-alice
 docker logs -f scm-bob
 ```
 
-## Integration with CI/CD
+## [Needs Revalidation] Integration with CI/CD
 
 Both scripts can be integrated into CI/CD pipelines:
 
@@ -298,7 +304,7 @@ Both scripts can be integrated into CI/CD pipelines:
     ./test_network_scenarios.sh
 ```
 
-## Performance Benchmarks
+## [Needs Revalidation] Performance Benchmarks
 
 Expected performance on modern hardware:
 
@@ -308,7 +314,7 @@ Expected performance on modern hardware:
 | Advanced Scenarios | 60-90s | 15-20 | 95-100% |
 | Total Suite | 90-135s | 16-22 | 95-100% |
 
-## Contributing
+## [Needs Revalidation] Contributing
 
 When adding new network tests:
 
@@ -318,13 +324,13 @@ When adding new network tests:
 4. Test on multiple platforms (macOS, Linux)
 5. Verify cleanup works correctly
 
-## Related Documentation
+## [Needs Revalidation] Related Documentation
 
 - [CLAUDE.md](CLAUDE.md) - Project philosophy and architecture
 - [docker/README.md](docker/README.md) - Docker setup details
 - [core/README.md](core/README.md) - Core library documentation
 
-## Support
+## [Needs Revalidation] Support
 
 For issues or questions:
 1. Check the Troubleshooting section above

@@ -2,6 +2,8 @@
 
 Last verified: **2026-02-23** (local workspace checks on this machine)
 
+For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
+
 ## Verified Commands and Results
 
 ### Rust Workspace
@@ -69,8 +71,9 @@ Last verified: **2026-02-23** (local workspace checks on this machine)
 - Topic subscribe/unsubscribe/publish is now wired through Rust bridge on Android and iOS
   - Android: `android/app/src/main/java/com/scmessenger/android/data/TopicManager.kt`
   - iOS: `iOS/SCMessenger/SCMessenger/Data/TopicManager.swift`
-- iOS privacy toggles are intentionally disabled in UI pending core toggle APIs
-  - `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift`
+- Privacy toggle parity is not complete yet across Android and iOS.
+  - Direction: parity-first wiring for all privacy controls.
+  - iOS current gap surface: `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift`
 - Android and iOS QR import/join flows are wired (Google Code Scanner on Android, VisionKit on iOS)
   - Android: `android/app/src/main/java/com/scmessenger/android/ui/join/JoinMeshScreen.kt`
   - Android contacts: `android/app/src/main/java/com/scmessenger/android/ui/contacts/AddContactScreen.kt`
@@ -92,6 +95,21 @@ Last verified: **2026-02-23** (local workspace checks on this machine)
 
 - Browser-executed WASM tests are not currently verified in this environment (`wasm-pack` missing)
 - Android build verification requires `ANDROID_HOME` to be set in-shell
+
+### Repository Structure Clarifications
+
+- Active iOS app project/code is under:
+  - `iOS/SCMessenger/SCMessenger.xcodeproj`
+  - `iOS/SCMessenger/SCMessenger/`
+- `iOS/SCMessenger-Existing/` is a legacy/reference tree and is not part of the active Xcode target.
+
+### Product Directives (2026-02-23)
+
+- Primary delivery target is one unified Android+iOS+Web app.
+- Canonical cross-platform identity is `public_key_hex`; other IDs are derived/operational.
+- Relay toggle must remain user-controlled; OFF blocks all inbound/outbound relay traffic while preserving local read access.
+- Bootstrap configuration direction is env-driven startup config plus dynamic fetch (with static fallback).
+- Web/WASM remains experimental today and must be promoted to parity before GA.
 
 ### Code Quality Gaps
 

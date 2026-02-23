@@ -1,18 +1,24 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # Full Integration Verification Report
-## All 6 Phases Now Active in Runtime
+## [Needs Revalidation] All 6 Phases Now Active in Runtime
 
 > Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
 
-### Executive Summary
+### [Needs Revalidation] Executive Summary
 **Status:** ✅ **FULLY INTEGRATED**
 
 All mesh routing logic (Phases 3-6) has been wired into the active swarm runtime. The Ferrari engine is now connected to the go-kart.
 
 ---
 
-## Phase-by-Phase Integration Status
+## [Needs Revalidation] Phase-by-Phase Integration Status
 
-### Phase 1: Real Address Observation ✅ ACTIVE
+### [Needs Revalidation] Phase 1: Real Address Observation ✅ ACTIVE
 **Location:** `core/src/transport/observation.rs`
 **Integration:** `swarm.rs` lines 293-294, 353-372
 
@@ -34,7 +40,7 @@ if let Ok(observed_addr) = response.observed_address.parse::<SocketAddr>() {
 
 ---
 
-### Phase 2: Multi-Port Adaptive Listening ✅ ACTIVE
+### [Needs Revalidation] Phase 2: Multi-Port Adaptive Listening ✅ ACTIVE
 **Location:** `core/src/transport/multiport.rs`
 **Integration:** `swarm.rs` lines 243-268
 
@@ -59,11 +65,11 @@ if let Some(config) = multiport_config {
 
 ---
 
-### Phase 3: Relay Capability ✅ **NOW ACTIVE** (Previously Inactive)
+### [Needs Revalidation] Phase 3: Relay Capability ✅ **NOW ACTIVE** (Previously Inactive)
 **Location:** `core/src/transport/mesh_routing.rs` (RelayStats)
 **Integration:** `swarm.rs` lines 494-575
 
-#### Added Relay Protocol:
+#### [Needs Revalidation] Added Relay Protocol:
 ```rust
 // behaviour.rs - New relay message types and protocol
 pub struct RelayRequest {
@@ -82,7 +88,7 @@ pub struct RelayResponse {
 pub relay: request_response::cbor::Behaviour<RelayRequest, RelayResponse>,
 ```
 
-#### Relay Request Handler:
+#### [Needs Revalidation] Relay Request Handler:
 ```rust
 SwarmEvent::Behaviour(IronCoreBehaviourEvent::Relay(
     request_response::Event::Message { peer, message, .. }
@@ -119,7 +125,7 @@ SwarmEvent::Behaviour(IronCoreBehaviourEvent::Relay(
 
 ---
 
-### Phase 4: Mesh-Based Discovery ✅ **NOW ACTIVE** (Previously Inactive)
+### [Needs Revalidation] Phase 4: Mesh-Based Discovery ✅ **NOW ACTIVE** (Previously Inactive)
 **Location:** `core/src/transport/mesh_routing.rs` (BootstrapCapability)
 **Integration:** `swarm.rs` lines 311, 586-587, 627-628
 
@@ -150,7 +156,7 @@ SwarmEvent::ConnectionEstablished { peer_id, .. } => {
 
 ---
 
-### Phase 5: Reputation Tracking ✅ **NOW ACTIVE** (Previously Inactive)
+### [Needs Revalidation] Phase 5: Reputation Tracking ✅ **NOW ACTIVE** (Previously Inactive)
 **Location:** `core/src/transport/mesh_routing.rs` (ReputationTracker)
 **Integration:** `swarm.rs` lines 310 (via MultiPathDelivery), 421, 427, 557, 563
 
@@ -187,17 +193,17 @@ if response.accepted {
 
 ---
 
-### Phase 6: Continuous Retry Logic ✅ **NOW ACTIVE** (Previously Inactive)
+### [Needs Revalidation] Phase 6: Continuous Retry Logic ✅ **NOW ACTIVE** (Previously Inactive)
 **Location:** `core/src/transport/mesh_routing.rs` (MultiPathDelivery, RetryStrategy)
 **Integration:** `swarm.rs` lines 310, 324-389, 647-691
 
-#### Multi-Path Delivery Instantiation:
+#### [Needs Revalidation] Multi-Path Delivery Instantiation:
 ```rust
 let mut multi_path_delivery = MultiPathDelivery::new();
 let mut pending_messages: HashMap<String, PendingMessage> = HashMap::new();
 ```
 
-#### SendMessage Command (No Longer Fire-and-Forget):
+#### [Needs Revalidation] SendMessage Command (No Longer Fire-and-Forget):
 ```rust
 SwarmCommand::SendMessage { peer_id, envelope_data, reply } => {
     // Generate unique message ID
@@ -227,7 +233,7 @@ SwarmCommand::SendMessage { peer_id, envelope_data, reply } => {
 }
 ```
 
-#### Continuous Retry Background Task:
+#### [Needs Revalidation] Continuous Retry Background Task:
 ```rust
 // Added to tokio::select! block:
 let mut retry_interval = tokio::time::interval(Duration::from_millis(500));
@@ -268,7 +274,7 @@ loop {
 
 ---
 
-## Key Integration Points Summary
+## [Needs Revalidation] Key Integration Points Summary
 
 | Component | File | Lines | Status |
 |-----------|------|-------|--------|
@@ -285,31 +291,31 @@ loop {
 
 ---
 
-## Gemini's Specific Complaints - RESOLVED
+## [Needs Revalidation] Gemini's Specific Complaints - RESOLVED
 
-### ❌ "swarm.rs does not import mesh_routing.rs"
+### [Needs Revalidation] ❌ "swarm.rs does not import mesh_routing.rs"
 **✅ FIXED:** Line 5 now imports `use super::mesh_routing::{MultiPathDelivery, BootstrapCapability};`
 
-### ❌ "RelayStats exists but isn't running"
+### [Needs Revalidation] ❌ "RelayStats exists but isn't running"
 **✅ FIXED:** RelayStats tracked via MultiPathDelivery.reputation (lines 421, 427, 557, 563)
 
-### ❌ "ReputationTracker defined but never instantiated"
+### [Needs Revalidation] ❌ "ReputationTracker defined but never instantiated"
 **✅ FIXED:** Instantiated inside MultiPathDelivery (line 310)
 
-### ❌ "MultiPathDelivery not used in swarm.rs"
+### [Needs Revalidation] ❌ "MultiPathDelivery not used in swarm.rs"
 **✅ FIXED:** Instantiated (line 310), used in SendMessage (647-691), retry logic (335-389), and reputation tracking (421, 427, 557, 563)
 
-### ❌ "Messages are sent once, directly"
+### [Needs Revalidation] ❌ "Messages are sent once, directly"
 **✅ FIXED:** SendMessage now uses multi_path_delivery.get_best_paths() and tries multiple routes with retry
 
-### ❌ "BootstrapCapability isolated"
+### [Needs Revalidation] ❌ "BootstrapCapability isolated"
 **✅ FIXED:** Integrated into mDNS discovery (line 587) and connection events (line 628)
 
 ---
 
-## Runtime Behavior Changes
+## [Needs Revalidation] Runtime Behavior Changes
 
-### Before Integration (Phases 3-6 Inactive):
+### [Needs Revalidation] Before Integration (Phases 3-6 Inactive):
 ```rust
 SwarmCommand::SendMessage { peer_id, envelope_data, reply } => {
     let _request_id = swarm.behaviour_mut().messaging.send_request(
@@ -320,7 +326,7 @@ SwarmCommand::SendMessage { peer_id, envelope_data, reply } => {
 }
 ```
 
-### After Integration (Phases 3-6 Active):
+### [Needs Revalidation] After Integration (Phases 3-6 Active):
 ```rust
 SwarmCommand::SendMessage { peer_id, envelope_data, reply } => {
     // Start multi-path delivery tracking
@@ -351,14 +357,14 @@ _ = retry_interval.tick() => {
 
 ---
 
-## Conclusion
+## [Needs Revalidation] Conclusion
 
 **Previous Status:** Logic Completion: 100% | Wiring/Integration: ~40%
 **Current Status:** Logic Completion: 100% | **Wiring/Integration: 100%** ✅
 
 The Ferrari engine is now connected. All 6 phases are running in production.
 
-### What Actually Happens Now:
+### [Needs Revalidation] What Actually Happens Now:
 
 1. **Phase 1:** Node discovers its real address via peer consensus ✅
 2. **Phase 2:** Node listens on multiple ports for maximum connectivity ✅

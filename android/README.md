@@ -2,6 +2,8 @@
 
 Android client app for SCMessenger using Kotlin/Compose with UniFFI integration to Rust core.
 
+Primary product target is unified Android+iOS+Web parity delivery.
+
 ## Build Prerequisites
 
 - Rust toolchain
@@ -46,6 +48,12 @@ ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew assembleDebug
   - BLE/WiFi transport managers
   - foreground service and platform callbacks
 
+## Canonical Semantics
+
+- Canonical identity for cross-platform exchange/persistence: `public_key_hex`.
+- `identity_id` and `libp2p_peer_id` are derived/operational identifiers.
+- Relay controls remain user-toggleable; OFF must block inbound/outbound relay messaging while preserving local history reads.
+
 ## Security Notes
 
 - Identity/signing: Ed25519
@@ -56,5 +64,7 @@ ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew assembleDebug
 
 - WiFi Aware transport needs device-level validation across supported hardware:
   - `android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt`
+- Bootstrap strategy currently includes static defaults; target direction is startup env config + dynamic fetch with static fallback.
+- Privacy toggle parity with iOS requires full parity-first wiring of all controls.
 
 See `docs/CURRENT_STATE.md` and `REMAINING_WORK_TRACKING.md` for prioritized backlog context.

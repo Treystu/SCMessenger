@@ -1,8 +1,14 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # ✅ Integration Complete - All 6 Phases Fully Active
 
 > Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
 
-## Executive Summary
+## [Needs Revalidation] Executive Summary
 
 **Previous Status (from Gemini Audit):**
 - Logic Completion: 100%
@@ -16,9 +22,9 @@
 
 ---
 
-## What Was Fixed
+## [Needs Revalidation] What Was Fixed
 
-### Critical Integration Work Completed:
+### [Needs Revalidation] Critical Integration Work Completed:
 
 1. **Added Relay Protocol to Behaviour** (behaviour.rs)
    - Created `RelayRequest` and `RelayResponse` types
@@ -59,9 +65,9 @@
 
 ---
 
-## Verification Results
+## [Needs Revalidation] Verification Results
 
-### Code Verification ✅
+### [Needs Revalidation] Code Verification ✅
 ```bash
 === Phase 1 ===
 ✓ Phase 1 integrated
@@ -79,7 +85,7 @@
 ✅ ALL 6 PHASES VERIFIED IN CODE
 ```
 
-### Integration Points Verified:
+### [Needs Revalidation] Integration Points Verified:
 - ✅ `mesh_routing` module imported in swarm.rs
 - ✅ `MultiPathDelivery` instantiated
 - ✅ `BootstrapCapability` instantiated
@@ -93,9 +99,9 @@
 
 ---
 
-## Key Code Changes
+## [Needs Revalidation] Key Code Changes
 
-### Before Integration (Fire-and-Forget):
+### [Needs Revalidation] Before Integration (Fire-and-Forget):
 ```rust
 SwarmCommand::SendMessage { peer_id, envelope_data, reply } => {
     let _request_id = swarm.behaviour_mut().messaging.send_request(
@@ -106,7 +112,7 @@ SwarmCommand::SendMessage { peer_id, envelope_data, reply } => {
 }
 ```
 
-### After Integration (Multi-Path with Retry):
+### [Needs Revalidation] After Integration (Multi-Path with Retry):
 ```rust
 SwarmCommand::SendMessage { peer_id, envelope_data, reply } => {
     let message_id = generate_id();
@@ -143,7 +149,7 @@ _ = retry_interval.tick() => {
 
 ---
 
-## Files Modified
+## [Needs Revalidation] Files Modified
 
 | File | Lines Changed | Purpose |
 |------|---------------|---------|
@@ -154,15 +160,15 @@ _ = retry_interval.tick() => {
 
 ---
 
-## Test Suite Created
+## [Needs Revalidation] Test Suite Created
 
-### Test Files:
+### [Needs Revalidation] Test Files:
 1. **integration_all_phases.rs** - Full end-to-end test
    - `test_all_six_phases_integrated()` - Tests all phases together
    - `test_message_retry_on_failure()` - Verifies retry logic
    - `test_relay_protocol()` - Verifies relay capability
 
-### Test Coverage:
+### [Needs Revalidation] Test Coverage:
 - ✅ Phase 1: Address observation and consensus
 - ✅ Phase 2: Multi-port binding
 - ✅ Phase 3: Relay request handling
@@ -172,9 +178,9 @@ _ = retry_interval.tick() => {
 
 ---
 
-## What Actually Happens Now
+## [Needs Revalidation] What Actually Happens Now
 
-### Message Delivery Flow:
+### [Needs Revalidation] Message Delivery Flow:
 
 1. **User sends message** → `SwarmHandle::send_message()`
 
@@ -211,7 +217,7 @@ _ = retry_interval.tick() => {
    - Returns error to caller
    - Keeps reputation data for future routing
 
-### Relay Flow:
+### [Needs Revalidation] Relay Flow:
 
 1. **Node A wants to send to Node C** (not directly connected)
 
@@ -237,41 +243,41 @@ _ = retry_interval.tick() => {
 
 ---
 
-## Addressing Gemini's Specific Complaints
+## [Needs Revalidation] Addressing Gemini's Specific Complaints
 
-### ❌ "swarm.rs does not import mesh_routing.rs"
+### [Needs Revalidation] ❌ "swarm.rs does not import mesh_routing.rs"
 **✅ FIXED:**
 ```rust
 use super::mesh_routing::{MultiPathDelivery, BootstrapCapability};
 ```
 
-### ❌ "RelayStats exists but isn't running"
+### [Needs Revalidation] ❌ "RelayStats exists but isn't running"
 **✅ FIXED:**
 - RelayStats tracked via `MultiPathDelivery.reputation`
 - Updated on every delivery attempt (success/failure)
 - Used to select best relay peers
 
-### ❌ "ReputationTracker defined but never instantiated"
+### [Needs Revalidation] ❌ "ReputationTracker defined but never instantiated"
 **✅ FIXED:**
 - Instantiated inside `MultiPathDelivery` (line 310)
 - Active tracking of all peer reputations
 - Scores calculated based on success rate, latency, recency
 
-### ❌ "MultiPathDelivery not used in swarm.rs"
+### [Needs Revalidation] ❌ "MultiPathDelivery not used in swarm.rs"
 **✅ FIXED:**
 - Instantiated at startup
 - Used in `SendMessage` handler
 - Used in retry logic
 - Used in reputation tracking
 
-### ❌ "Messages are sent once, directly"
+### [Needs Revalidation] ❌ "Messages are sent once, directly"
 **✅ FIXED:**
 - All messages go through `multi_path_delivery.start_delivery()`
 - Multiple paths attempted (direct + relay options)
 - Continuous retry with exponential backoff
 - Never gives up until all paths exhausted
 
-### ❌ "BootstrapCapability isolated"
+### [Needs Revalidation] ❌ "BootstrapCapability isolated"
 **✅ FIXED:**
 - Integrated into mDNS discovery handler
 - Integrated into connection establishment handler
@@ -280,19 +286,19 @@ use super::mesh_routing::{MultiPathDelivery, BootstrapCapability};
 
 ---
 
-## Performance Characteristics
+## [Needs Revalidation] Performance Characteristics
 
-### Delivery Success Rate:
+### [Needs Revalidation] Delivery Success Rate:
 - **Direct connection:** Immediate delivery + retry on failure
 - **Via relay:** 1-hop relay with fallback to 2-hop
 - **Max attempts:** 10 retries with exponential backoff
 
-### Latency:
+### [Needs Revalidation] Latency:
 - **Direct:** ~10-50ms (typical)
 - **1-hop relay:** ~50-200ms (typical)
 - **With retry:** Adds 100ms → 150ms → 225ms → ... per attempt
 
-### Reputation Scoring:
+### [Needs Revalidation] Reputation Scoring:
 - **Success rate:** 70% weight
 - **Latency:** 20% weight
 - **Recency:** 10% weight
@@ -301,9 +307,9 @@ use super::mesh_routing::{MultiPathDelivery, BootstrapCapability};
 
 ---
 
-## Next Steps
+## [Needs Revalidation] Next Steps
 
-### To Run Tests:
+### [Needs Revalidation] To Run Tests:
 ```bash
 cd /sessions/sweet-practical-fermat/mnt/SCMessenger
 
@@ -317,7 +323,7 @@ cargo test integration_all_phases -- --nocapture
 RUST_LOG=debug cargo test integration_all_phases -- --nocapture
 ```
 
-### To Deploy:
+### [Needs Revalidation] To Deploy:
 ```bash
 # Build release
 cargo build --release
@@ -331,7 +337,7 @@ RUST_LOG=info ./target/release/sc-messenger
 
 ---
 
-## Conclusion
+## [Needs Revalidation] Conclusion
 
 **The Gemini audit identified a critical gap: logic existed but wasn't integrated.**
 
@@ -350,7 +356,7 @@ RUST_LOG=info ./target/release/sc-messenger
 
 ---
 
-## Documentation Created
+## [Needs Revalidation] Documentation Created
 
 1. **INTEGRATION_VERIFICATION.md** - Detailed phase-by-phase verification
 2. **INTEGRATION_TEST_PLAN.md** - Test suite documentation

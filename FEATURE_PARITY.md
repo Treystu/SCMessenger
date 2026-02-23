@@ -1,9 +1,15 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # Feature Parity & Audit
 
 This document tracks the implementation status of key features across all SCMessenger platforms (CLI, iOS, Android, Web/WASM, Core).
 It serves as an audit log and a roadmap for ensuring full cross-platform functionality.
 
-## Feature Status Matrix
+## [Needs Revalidation] Feature Status Matrix
 
 | Feature                   | Core (Rust) | CLI | iOS | Android | Web/WASM | Notes                                                                                |
 | :------------------------ | :---------: | :-: | :-: | :-----: | :------: | :----------------------------------------------------------------------------------- |
@@ -17,9 +23,9 @@ It serves as an audit log and a roadmap for ensuring full cross-platform functio
 | **Ledger (Reputation)**   |     ✅      | ✅  | ✅  |   ✅    |    ⚠️    | Core implements Ledger. All platforms use it via UniFFI.                             |
 | **Swarm (TCP/IP)**        |     ✅      | ✅  | ❌  |   ❌    |    ❌    | CLI runs full `libp2p` Swarm. Mobile uses native transports + `IronCore` logic.      |
 
-## Implementation Audit
+## [Needs Revalidation] Implementation Audit
 
-### 1. Identity Export & Import
+### [Needs Revalidation] 1. Identity Export & Import
 
 **Goal:** Provide comprehensive identity information for debugging and manual connection configuration.
 
@@ -29,7 +35,7 @@ It serves as an audit log and a roadmap for ensuring full cross-platform functio
 - **Android:** `SettingsViewModel.kt` exposes `getIdentityExportString` (auto-replaces 0.0.0.0 with LAN IP). UI has "Copy Full Identity Export". `AddContactDialog` supports pasting export to auto-fill, connect, and optionally "Add & Chat".
 - **Web:** Pending implementation.
 
-### 2. Direct Connection Info
+### [Needs Revalidation] 2. Direct Connection Info
 
 **Goal:** Allow users to connect directly to a peer via IP/Port.
 
@@ -38,7 +44,7 @@ It serves as an audit log and a roadmap for ensuring full cross-platform functio
   - They do _not_ currently expose an IPv4/IPv6 listener for other peers to dial directly over the internet/LAN (unless via Relay).
   - Future Plan: Enable `SwarmBridge` to start a TCP/Quic listener on mobile if `internet_enabled` is true.
 
-### 3. Real-time Chat Updates (Reactive UI)
+### [Needs Revalidation] 3. Real-time Chat Updates (Reactive UI)
 
 **Goal:** Ensure sent and received messages reflect instantly in the chat and conversation list views.
 
@@ -46,7 +52,7 @@ It serves as an audit log and a roadmap for ensuring full cross-platform functio
 - **Android:** `MeshRepository.kt` uses `MutableSharedFlow` (`messageUpdates`) to broadcast all message events. `ChatViewModel.kt` and `ConversationsViewModel.kt` subscribe to this flow for real-time reactive updates.
 - **iOS:** `MeshRepository.swift` renamed `incomingMessages` to `messageUpdates` and now emits both sent and received messages. `ChatViewModel.swift` and `ConversationListView` subscribe to this stream via Combine, achieving parity with Android's reactive behavior.
 
-### 4. Settings Parity (Unified 2026-02-17)
+### [Needs Revalidation] 4. Settings Parity (Unified 2026-02-17)
 
 **Goal:** Full feature parity for all settings between iOS and Android.
 
@@ -55,7 +61,7 @@ It serves as an audit log and a roadmap for ensuring full cross-platform functio
   - Android: BLE Identity Rotation toggle, BLE rotation interval display
 - **Reference:** See `UNIFICATION_PLAN.md` for detailed audit.
 
-### 5. BLE UUID Unification (Fixed 2026-02-17)
+### [Needs Revalidation] 5. BLE UUID Unification (Fixed 2026-02-17)
 
 **Goal:** Ensure iOS and Android can discover each other via BLE.
 
@@ -64,7 +70,7 @@ It serves as an audit log and a roadmap for ensuring full cross-platform functio
 - **Files Changed:** `MeshBLEConstants.swift`, `BLECentralManager.swift`, `BLEPeripheralManager.swift`
 - **Reference:** See `UNIFICATION_PLAN.md` for before/after UUID table.
 
-## Rollout Process & Regression Prevention
+## [Needs Revalidation] Rollout Process & Regression Prevention
 
 To ensure consistent feature rollout and prevent regressions:
 
@@ -82,7 +88,7 @@ To ensure consistent feature rollout and prevent regressions:
 8.  **Parity Check:** Verify that the feature behaves identically (or appropriately for the platform) on all apps.
 9.  **Documentation:** Update this file and `FEATURE_WORKFLOW.md`.
 
-### Regression Prevention Checklist
+### [Needs Revalidation] Regression Prevention Checklist
 
 - [ ] Does the new feature break existing identity/storage?
 - [ ] Is the feature flag/setting persisted correctly?

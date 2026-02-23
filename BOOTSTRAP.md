@@ -1,10 +1,16 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # Bootstrap Node Configuration
 
 SCMessenger automatically embeds default bootstrap nodes into all builds (Docker images and native binaries), enabling instant network connectivity without manual configuration.
 
-## How It Works
+## [Needs Revalidation] How It Works
 
-### 1. Embedded Defaults
+### [Needs Revalidation] 1. Embedded Defaults
 
 All builds include hardcoded bootstrap nodes in `cli/src/bootstrap.rs`:
 
@@ -15,7 +21,7 @@ pub const DEFAULT_BOOTSTRAP_NODES: &[&str] = &[
 ];
 ```
 
-### 2. Automatic Merging
+### [Needs Revalidation] 2. Automatic Merging
 
 When a node starts:
 1. **First run**: Creates `config.json` with embedded bootstrap nodes
@@ -23,15 +29,15 @@ When a node starts:
 3. **Environment variables**: Adds `BOOTSTRAP_NODES` from environment to the merged list
 4. **Deduplication**: Ensures no duplicate entries
 
-### 3. Smart Updates
+### [Needs Revalidation] 3. Smart Updates
 
 - Upgrading to a new version automatically adds new bootstrap nodes
 - User-added nodes are preserved
 - Users can manually remove unwanted nodes: `scm config bootstrap remove <addr>`
 
-## For End Users
+## [Needs Revalidation] For End Users
 
-### Docker
+### [Needs Revalidation] Docker
 
 Just run - bootstrap nodes are preconfigured:
 
@@ -50,7 +56,7 @@ docker logs -f scmessenger
 #   ✓ Connected to bootstrap node 1
 ```
 
-### Native Binary
+### [Needs Revalidation] Native Binary
 
 No configuration needed - just start:
 
@@ -59,7 +65,7 @@ No configuration needed - just start:
 # Automatically connects to embedded bootstrap nodes
 ```
 
-### Adding Additional Nodes
+### [Needs Revalidation] Adding Additional Nodes
 
 Environment variable (Docker):
 
@@ -75,7 +81,7 @@ CLI command (native):
 scmessenger-cli config bootstrap add /ip4/1.2.3.4/tcp/9001/p2p/12D3Koo...
 ```
 
-### Viewing Bootstrap Nodes
+### [Needs Revalidation] Viewing Bootstrap Nodes
 
 ```bash
 # Docker
@@ -85,7 +91,7 @@ docker exec scmessenger scm config bootstrap list
 scmessenger-cli config bootstrap list
 ```
 
-### Removing Bootstrap Nodes
+### [Needs Revalidation] Removing Bootstrap Nodes
 
 ```bash
 # Docker
@@ -95,9 +101,9 @@ docker exec scmessenger scm config bootstrap remove /ip4/34.168.102.7/tcp/9001/p
 scmessenger-cli config bootstrap remove /ip4/34.168.102.7/tcp/9001/p2p/...
 ```
 
-## For Developers & Maintainers
+## [Needs Revalidation] For Developers & Maintainers
 
-### Adding New Default Bootstrap Nodes
+### [Needs Revalidation] Adding New Default Bootstrap Nodes
 
 Edit `cli/src/bootstrap.rs`:
 
@@ -122,7 +128,7 @@ docker push testbotz/scmessenger:latest
 
 Users who upgrade will automatically get the new bootstrap nodes merged into their config.
 
-### Build-Time Override
+### [Needs Revalidation] Build-Time Override
 
 Override defaults at build time using environment variable:
 
@@ -143,7 +149,7 @@ This is useful for:
 - Testing with specific bootstrap infrastructure
 - Regional deployments with nearby bootstrap nodes
 
-### Setting Up a Bootstrap Node
+### [Needs Revalidation] Setting Up a Bootstrap Node
 
 Any node can be a bootstrap node. Requirements:
 
@@ -164,7 +170,7 @@ scmessenger-cli identity
 
 Share the multiaddress with the community or add it to `DEFAULT_BOOTSTRAP_NODES`.
 
-### Bootstrap Node Strategy
+### [Needs Revalidation] Bootstrap Node Strategy
 
 **Geographic Distribution**: Place bootstrap nodes in different regions (North America, Europe, Asia, etc.) to ensure low-latency initial connections for users worldwide.
 
@@ -174,15 +180,15 @@ Share the multiaddress with the community or add it to `DEFAULT_BOOTSTRAP_NODES`
 
 **Community Nodes**: Encourage community members to run stable bootstrap nodes and submit PRs to add them to defaults.
 
-## Architecture
+## [Needs Revalidation] Architecture
 
-### Bootstrap vs Relay
+### [Needs Revalidation] Bootstrap vs Relay
 
 **Bootstrap nodes** help new peers join the network and discover other peers. They are NOT required for ongoing communication.
 
 **All nodes relay**: Every node that can relay does relay. Bootstrap nodes are just well-known entry points.
 
-### Discovery After Bootstrap
+### [Needs Revalidation] Discovery After Bootstrap
 
 Once connected to a bootstrap node:
 1. **DHT Discovery**: Node joins Kademlia DHT and discovers nearby peers
@@ -192,7 +198,7 @@ Once connected to a bootstrap node:
 
 After initial bootstrap, nodes discover each other organically through the DHT. Bootstrap nodes are no longer needed for that session.
 
-### Security Considerations
+### [Needs Revalidation] Security Considerations
 
 - **Bootstrap nodes see connection attempts** but cannot decrypt messages (end-to-end encryption)
 - **Bootstrap nodes cannot impersonate peers** (cryptographic identities)
@@ -201,9 +207,9 @@ After initial bootstrap, nodes discover each other organically through the DHT. 
 - **DDoS risk**: Bootstrap nodes are public and may be targeted
   - Mitigation: Rate limiting, connection limits, use a CDN or DDoS protection
 
-## Testing
+## [Needs Revalidation] Testing
 
-### Test Bootstrap Configuration
+### [Needs Revalidation] Test Bootstrap Configuration
 
 ```bash
 # Check embedded defaults (in source)
@@ -213,7 +219,7 @@ cat cli/src/bootstrap.rs | grep DEFAULT_BOOTSTRAP_NODES -A 10
 scmessenger-cli config bootstrap list
 ```
 
-### Test Bootstrap Connection
+### [Needs Revalidation] Test Bootstrap Connection
 
 ```bash
 # Start node with verbose logging
@@ -225,7 +231,7 @@ RUST_LOG=debug scmessenger-cli start
 #   ✓ Connected to bootstrap node 1
 ```
 
-### Test Bootstrap Merging
+### [Needs Revalidation] Test Bootstrap Merging
 
 ```bash
 # Start node (creates config with defaults)
@@ -240,9 +246,9 @@ scmessenger-cli config bootstrap add /ip4/1.2.3.4/tcp/9001/p2p/12D3Koo...
 scmessenger-cli config bootstrap list
 ```
 
-## Troubleshooting
+## [Needs Revalidation] Troubleshooting
 
-### "No bootstrap nodes configured"
+### [Needs Revalidation] "No bootstrap nodes configured"
 
 **Cause**: Something went wrong during config initialization.
 
@@ -253,7 +259,7 @@ rm ~/.config/scmessenger/config.json
 scmessenger-cli start
 ```
 
-### "Failed to connect to bootstrap nodes"
+### [Needs Revalidation] "Failed to connect to bootstrap nodes"
 
 **Causes**:
 1. Bootstrap node is down
@@ -274,7 +280,7 @@ scmessenger-cli config bootstrap list
 # Should be: /ip4/<IP>/tcp/9001/p2p/12D3Koo...
 ```
 
-### "Peer count stays at 0"
+### [Needs Revalidation] "Peer count stays at 0"
 
 **Possible causes**:
 1. All bootstrap nodes are down
@@ -303,7 +309,7 @@ gcloud compute firewall-rules create allow-scmessenger \
   --direction=INGRESS
 ```
 
-## Contributing Bootstrap Nodes
+## [Needs Revalidation] Contributing Bootstrap Nodes
 
 If you run a stable node with good uptime, consider contributing it as a default bootstrap node:
 

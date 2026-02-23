@@ -1,10 +1,16 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # SCMessenger CLI — macOS Setup Guide
 
 > Legacy OS-specific guide. Prefer `cli/README.md` for the current command surface.
 
 Complete installation and usage guide for SCMessenger command-line interface on macOS.
 
-## System Requirements
+## [Needs Revalidation] System Requirements
 
 - **macOS Version**: 10.15 (Catalina) or later
 - **Processor**: Intel or Apple Silicon (M1/M2/M3)
@@ -12,17 +18,17 @@ Complete installation and usage guide for SCMessenger command-line interface on 
 - **Disk Space**: 100 MB for application + storage for message history
 - **Network**: Internet connection for P2P connectivity
 
-## Installation
+## [Needs Revalidation] Installation
 
-### Prerequisites
+### [Needs Revalidation] Prerequisites
 
-#### 1. Install Homebrew (if not already installed)
+#### [Needs Revalidation] 1. Install Homebrew (if not already installed)
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-#### 2. Install Rust
+#### [Needs Revalidation] 2. Install Rust
 
 ```bash
 # Install via rustup (recommended)
@@ -36,9 +42,9 @@ rustc --version
 cargo --version
 ```
 
-### Building SCMessenger CLI
+### [Needs Revalidation] Building SCMessenger CLI
 
-#### Option 1: Build and Install System-Wide
+#### [Needs Revalidation] Option 1: Build and Install System-Wide
 
 ```bash
 # Clone the repository
@@ -55,7 +61,7 @@ cargo install --path cli
 scm --version
 ```
 
-#### Option 2: Build for Local Development
+#### [Needs Revalidation] Option 2: Build for Local Development
 
 ```bash
 # Clone the repository
@@ -69,7 +75,7 @@ cargo build -p scmessenger-cli
 ./target/debug/scmessenger-cli --version
 ```
 
-#### Option 3: Create Standalone Binary
+#### [Needs Revalidation] Option 3: Create Standalone Binary
 
 ```bash
 # Build optimized release binary
@@ -88,9 +94,9 @@ source ~/.zshrc
 scm --version
 ```
 
-## First-Time Setup
+## [Needs Revalidation] First-Time Setup
 
-### 1. Initialize Your Identity
+### [Needs Revalidation] 1. Initialize Your Identity
 
 ```bash
 scm init
@@ -111,7 +117,7 @@ scm init
 Your Peer ID: 12D3KooWABC123...
 ```
 
-### 2. View Your Identity
+### [Needs Revalidation] 2. View Your Identity
 
 ```bash
 scm identity show
@@ -119,7 +125,7 @@ scm identity show
 
 **Save this information** — your Peer ID is how others will contact you.
 
-### 3. Configure Bootstrap Nodes (Optional)
+### [Needs Revalidation] 3. Configure Bootstrap Nodes (Optional)
 
 For better network connectivity, add reliable bootstrap nodes:
 
@@ -128,7 +134,7 @@ scm config bootstrap add /dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNL
 scm config bootstrap add /dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa
 ```
 
-## File Locations on macOS
+## [Needs Revalidation] File Locations on macOS
 
 SCMessenger uses standard macOS directories:
 
@@ -139,7 +145,7 @@ SCMessenger uses standard macOS directories:
 | Message History | `~/Library/Application Support/scmessenger/history/` |
 | Identity Keypair | Stored in config.json |
 
-### Viewing Files
+### [Needs Revalidation] Viewing Files
 
 ```bash
 # Open config directory in Finder
@@ -152,7 +158,7 @@ cat ~/Library/Application\ Support/scmessenger/config.json
 du -sh ~/Library/Application\ Support/scmessenger
 ```
 
-### Backing Up Your Identity
+### [Needs Revalidation] Backing Up Your Identity
 
 ⚠️ **IMPORTANT**: Back up your identity to prevent data loss!
 
@@ -171,13 +177,13 @@ tar -czf - ~/Library/Application\ Support/scmessenger | \
   openssl enc -aes-256-cbc -salt -out ~/Documents/SCMessenger-Backup/scm-backup.tar.gz.enc
 ```
 
-## Network Configuration
+## [Needs Revalidation] Network Configuration
 
-### Firewall Settings
+### [Needs Revalidation] Firewall Settings
 
 SCMessenger needs to accept incoming P2P connections.
 
-#### Configure macOS Firewall
+#### [Needs Revalidation] Configure macOS Firewall
 
 1. Open **System Settings** → **Network** → **Firewall**
 2. Click **Options**
@@ -185,7 +191,7 @@ SCMessenger needs to accept incoming P2P connections.
 4. Navigate to where you installed `scm` (e.g., `/usr/local/bin/scm`)
 5. Set to **Allow incoming connections**
 
-#### Alternative: Allow specific port
+#### [Needs Revalidation] Alternative: Allow specific port
 
 ```bash
 # If you set a specific listen port
@@ -196,7 +202,7 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/local/bin/scm
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /usr/local/bin/scm
 ```
 
-### Local Network Discovery (mDNS)
+### [Needs Revalidation] Local Network Discovery (mDNS)
 
 For peer discovery on your local network (home/office):
 
@@ -210,9 +216,9 @@ scm start
 
 This allows automatic discovery of other SCMessenger users on the same WiFi/Ethernet network.
 
-## Common Usage Examples
+## [Needs Revalidation] Common Usage Examples
 
-### Example 1: Send a Message to a Friend
+### [Needs Revalidation] Example 1: Send a Message to a Friend
 
 ```bash
 # 1. Add your friend as a contact
@@ -234,7 +240,7 @@ scm start
 > quit
 ```
 
-### Example 2: Queue Messages for Later Delivery
+### [Needs Revalidation] Example 2: Queue Messages for Later Delivery
 
 ```bash
 # Send a message even when recipient is offline
@@ -244,7 +250,7 @@ scm send Alice "Check out this article: https://..."
 ✓ Message queued for delivery to Alice
 ```
 
-### Example 3: Search Your Message History
+### [Needs Revalidation] Example 3: Search Your Message History
 
 ```bash
 # Search for messages containing "meeting"
@@ -257,9 +263,9 @@ scm history --peer Bob --limit 50
 scm history
 ```
 
-## Advanced Configuration
+## [Needs Revalidation] Advanced Configuration
 
-### Custom Storage Location
+### [Needs Revalidation] Custom Storage Location
 
 ```bash
 # Use an external drive for message storage
@@ -269,7 +275,7 @@ scm config set storage_path /Volumes/External/SCMessenger
 scm config set storage_path ~/Library/Mobile\ Documents/com~apple~CloudDocs/SCMessenger
 ```
 
-### Performance Tuning
+### [Needs Revalidation] Performance Tuning
 
 ```bash
 # Increase connection limit for better connectivity
@@ -282,7 +288,7 @@ scm config set listen_port 9999
 scm config set enable_dht false
 ```
 
-### Running as Background Service
+### [Needs Revalidation] Running as Background Service
 
 Create a Launch Agent to run SCMessenger in the background:
 
@@ -325,9 +331,9 @@ tail -f /tmp/scmessenger.log
 launchctl unload ~/Library/LaunchAgents/com.scmessenger.cli.plist
 ```
 
-## Shell Integration
+## [Needs Revalidation] Shell Integration
 
-### Zsh Completion (macOS default shell)
+### [Needs Revalidation] Zsh Completion (macOS default shell)
 
 ```bash
 # Generate completion script
@@ -342,7 +348,7 @@ echo 'autoload -Uz compinit && compinit' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-### Bash Completion
+### [Needs Revalidation] Bash Completion
 
 ```bash
 # Generate completion script
@@ -355,7 +361,7 @@ echo 'source /usr/local/etc/bash_completion.d/scm' >> ~/.bash_profile
 source ~/.bash_profile
 ```
 
-### Aliases
+### [Needs Revalidation] Aliases
 
 Add convenient aliases to your shell config:
 
@@ -381,9 +387,9 @@ EOF
 source ~/.zshrc
 ```
 
-## Troubleshooting
+## [Needs Revalidation] Troubleshooting
 
-### Issue: Command not found
+### [Needs Revalidation] Issue: Command not found
 
 ```bash
 # Check if scm is in your PATH
@@ -397,7 +403,7 @@ source ~/.zshrc
 ~/.cargo/bin/scm --version
 ```
 
-### Issue: Permission denied on config directory
+### [Needs Revalidation] Issue: Permission denied on config directory
 
 ```bash
 # Fix permissions
@@ -405,7 +411,7 @@ chmod 700 ~/Library/Application\ Support/scmessenger
 chmod 600 ~/Library/Application\ Support/scmessenger/config.json
 ```
 
-### Issue: Cannot connect to any peers
+### [Needs Revalidation] Issue: Cannot connect to any peers
 
 ```bash
 # Check network connectivity
@@ -422,7 +428,7 @@ scm config set enable_mdns true
 scm start
 ```
 
-### Issue: Port already in use
+### [Needs Revalidation] Issue: Port already in use
 
 ```bash
 # Find what's using the port
@@ -435,7 +441,7 @@ scm config set listen_port 0  # Random port
 scm config set listen_port 9999
 ```
 
-### Issue: Build failures
+### [Needs Revalidation] Issue: Build failures
 
 ```bash
 # Update Rust toolchain
@@ -451,7 +457,7 @@ cargo build --release -p scmessenger-cli
 brew install cmake pkg-config openssl
 ```
 
-## Uninstallation
+## [Needs Revalidation] Uninstallation
 
 To completely remove SCMessenger:
 
@@ -472,9 +478,9 @@ rm ~/Library/LaunchAgents/com.scmessenger.cli.plist
 rm -rf ~/path/to/SCMessenger
 ```
 
-## Security Best Practices
+## [Needs Revalidation] Security Best Practices
 
-### File Permissions
+### [Needs Revalidation] File Permissions
 
 Ensure your identity is protected:
 
@@ -486,7 +492,7 @@ chmod 700 ~/Library/Application\ Support/scmessenger
 chmod 600 ~/Library/Application\ Support/scmessenger/config.json
 ```
 
-### FileVault Encryption
+### [Needs Revalidation] FileVault Encryption
 
 Enable FileVault for full-disk encryption:
 
@@ -496,7 +502,7 @@ Enable FileVault for full-disk encryption:
 
 This protects your SCMessenger identity even if your Mac is stolen.
 
-### Firewall Configuration
+### [Needs Revalidation] Firewall Configuration
 
 Enable macOS Firewall:
 
@@ -504,7 +510,7 @@ Enable macOS Firewall:
 2. Toggle **On**
 3. Enable **Block all incoming connections** (SCMessenger can still make outgoing connections)
 
-### Regular Backups
+### [Needs Revalidation] Regular Backups
 
 ```bash
 # Use Time Machine for automatic backups
@@ -522,9 +528,9 @@ tar -czf - ~/Library/Application\ Support/scmessenger | \
 echo "Backup created: $BACKUP_DIR/scm-$DATE.tar.gz.enc"
 ```
 
-## Performance Notes
+## [Needs Revalidation] Performance Notes
 
-### Apple Silicon (M1/M2/M3) Optimization
+### [Needs Revalidation] Apple Silicon (M1/M2/M3) Optimization
 
 The CLI is compiled for your architecture automatically:
 
@@ -539,20 +545,20 @@ file $(which scm)
 # /usr/local/bin/scm: Mach-O 64-bit executable x86_64
 ```
 
-### Memory Usage
+### [Needs Revalidation] Memory Usage
 
 Typical memory usage:
 - **Idle**: 20-40 MB
 - **Active**: 50-100 MB
 - **With large history**: 100-200 MB
 
-### Network Bandwidth
+### [Needs Revalidation] Network Bandwidth
 
 - **Idle**: < 1 KB/s (keepalives)
 - **Active messaging**: 1-10 KB/s
 - **Initial DHT sync**: 100-500 KB burst
 
-## Getting Help
+## [Needs Revalidation] Getting Help
 
 ```bash
 # Built-in help
@@ -571,7 +577,7 @@ For more help:
 - **Documentation**: https://scmessenger.org/docs
 - **Community**: #scmessenger on Matrix
 
-## Updates
+## [Needs Revalidation] Updates
 
 ```bash
 # Update to latest version
@@ -583,7 +589,7 @@ cargo install --path cli --force
 scm --version
 ```
 
-## Next Steps
+## [Needs Revalidation] Next Steps
 
 Now that you have SCMessenger installed:
 

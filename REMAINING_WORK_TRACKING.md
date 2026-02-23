@@ -2,41 +2,149 @@
 
 This is the active implementation backlog based on repository state verified on **2026-02-23**.
 
-## Priority 0: Core Parity + Correctness
+Primary delivery target: **one unified Android + iOS + Web app**.
 
-1. Wire iOS privacy feature toggles into Rust core settings path
-   - File: `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift`
-   - Current: non-core privacy toggles intentionally disabled in UI and not forwarded to Rust core
-   - Target: propagate to core privacy config once API surface supports per-feature toggles
+## Priority 0: Tri-Platform Semantics and Reliability
 
-2. Validate end-to-end Internet/NAT traversal across real networks (core requirement)
-   - Scope: CLI node <-> commodity host nodes <-> Android/iOS clients over mixed LAN/WAN paths
-   - Current: transport code and local tests pass; no full field matrix run captured in this repo state
-   - Target: scripted verification matrix with success criteria for relay fallback, NAT traversal, and message delivery latency
+1. Privacy parity-first wiring (all toggles) on Android, iOS, and Web
+   - Current: parity is incomplete.
+   - Target: every privacy toggle is implemented and behaviorally equivalent across all client platforms.
+   - Key files:
+     - `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift`
+     - `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt`
+     - `wasm/src/lib.rs`
+     - `core/src/api.udl`
 
-3. Validate Android WiFi Aware responder behavior on physical devices
+2. Relay toggle enforcement parity (mandatory OFF behavior on all clients)
+   - Requirement: relay controls remain user-toggleable; when OFF, block all inbound and outbound relay messaging while allowing local history reads.
+   - Target: explicit parity tests for Android+iOS+Web and documented behavior in platform READMEs.
+
+3. Canonical identity normalization to `public_key_hex`
+   - Current: code and docs use mixed identifiers (`identity_id`, `libp2p_peer_id`, key hex) across flows.
+   - Target: `public_key_hex` as canonical persisted/exchange identity; other IDs treated as derived/operational metadata.
+   - Scope: identity export/import, QR payloads, contacts, routing hints, history attribution docs.
+
+4. Bootstrap configuration model implementation
+   - Requirement: startup environment config + dynamic fetch, with static fallback.
+   - Current: Android and iOS repositories include static bootstrap defaults.
+   - Android evidence: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` uses `DEFAULT_BOOTSTRAP_NODES` directly during service init.
+   - iOS evidence: `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift` uses `defaultBootstrapNodes` directly in startup and routing helpers.
+   - Core evidence: `core/src/mobile_bridge.rs` accepts injected bootstrap lists (`set_bootstrap_nodes`) but does not implement env/dynamic source-of-truth resolution itself.
+   - Target:
+     - env-driven bootstrap override path
+     - remote bootstrap list fetch path
+     - deterministic fallback behavior and timeout policy
+
+5. Android peer discovery parity hardening
+   - Source: `ANDROID_DISCOVERY_ISSUES.md` investigation notes.
+   - Open items:
+     - protocol negotiation disconnect loops (`Failed to negotiate transport protocol(s)`)
+     - bootstrap relay visibility policy in nearby UI
+     - delayed identity-resolution retry path after initial peer connect
+
+6. Real-network NAT traversal field matrix
+   - Scope: CLI host nodes + Android + iOS + Web over mixed LAN/WAN/NAT.
+   - Target: scripted verification matrix with delivery latency + fallback success criteria.
+
+7. Android WiFi Aware physical-device validation
    - File: `android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt`
-   - Current: compile blocker fixed (`Network.bindSocket(ServerSocket)` removed), but no device-level interoperability report
-   - Target: verify subscriber/responder connectivity on supported hardware and document pass/fail by Android version/device
+   - Target: compatibility results by Android version/device class with documented pass/fail outcomes.
 
-4. Immediate functionality wiring audit and fix pass (FULL SCAN)
-   - Scope: audit all core and app-facing flows for incorrectly wired, partially wired, duplicated, or dead/unreachable code paths
-   - Current: latest pass completed on 2026-02-23; core flows, QR import/export paths, Android+iOS builds, and iOS device-target compile were verified
-   - Remaining: non-core follow-ups only (privacy toggle API exposure, warnings cleanup, physical device field-matrix validation)
+8. Web parity promotion from experimental to first-class client
+   - Current: Web/WASM is functionally present but thinner than mobile app surfaces.
+   - Target: parity for identity import/export, relay/bootstrap controls, history UX, and critical messaging paths.
+   - Key files:
+     - `wasm/src/lib.rs`
+     - `wasm/src/transport.rs`
+     - `ui/index.html`
+     - `core/src/wasm_support/*`
 
-## Priority 1: Tooling and Validation Coverage
+## Priority 1: Tooling, CI, and Experimental Surface
 
-1. Add browser-executed WASM test job
-   - Current: workspace tests cover native/non-browser WASM paths only
-   - Gap: no `wasm-pack test` verification in this environment/flow
+1. Align CI with tri-platform target status
+   - Current: `.github/workflows/ci.yml` validates Rust workspace on Linux/macOS only.
+   - Gap: no canonical Android+iOS+Web parity gates in the primary CI workflow.
+   - Target: enforce Android+iOS+Web build-readiness checks in gating CI for mainline changes.
 
-2. Resolve integration test warnings in core tests
-   - Current: `cargo test --workspace` passes but emits unused imports/variables in integration suites
-   - Target: warning-clean test suite for stricter CI (`-D warnings`) readiness
+2. Add browser-executed WASM test job (parity gate)
+   - Current: native/non-browser WASM tests only in workspace run.
+   - Target: `wasm-pack` runtime test coverage in CI.
 
-3. Standardize Android CI environment setup for `ANDROID_HOME`
-   - Current: local build passes with explicit `ANDROID_HOME`; generic environments still fail without it
-   - Target: documented CI setup and/or preflight script guardrails
+3. Resolve integration test warnings in core tests
+   - Current: workspace tests pass with warning noise.
+   - Target: warning-clean path for strict CI.
+
+4. Standardize Android CI environment setup for `ANDROID_HOME`
+   - Current: local build requires explicit shell env setup.
+   - Target: consistent CI env bootstrap and preflight enforcement.
+
+5. iOS legacy tree cleanup policy
+   - Active app lives in `iOS/SCMessenger/SCMessenger/`.
+   - `iOS/SCMessenger-Existing/` should be explicitly retained as archive/reference or removed once migration confidence is complete.
+
+6. Docker test/ops script consistency cleanup
+   - Current: mixed compose filename references and stale command paths across `docker/*.sh` and docs.
+   - Target: one canonical compose naming set and verified command examples that match checked-in files.
+
+7. CLI surface normalization for long-term dependability
+   - Current: `cli/src/main.rs.backup` and mixed identity/public-key field naming remain in the CLI surface.
+   - Target: remove backup artifacts from runtime path, align CLI identity/contact semantics with canonical `public_key_hex`, and revalidate relay/bootstrap controls.
+
+8. Reference artifact hygiene
+   - Current: `reference/Androidlogs.txt` includes non-SCMessenger application logs; `reference/` mixes active porting guides with raw captures.
+   - Target: isolate SCMessenger-specific evidence logs and keep reference crypto sources clearly separated from runtime diagnostics.
+
+9. Android test execution truthfulness cleanup
+   - Current: `android/app/src/test/README.md` says previously `@Ignored` tests are enabled, but `android/app/src/test/java/com/scmessenger/android/test/MeshRepositoryTest.kt` still contains broad `@Ignore` usage.
+   - Target: either enable those tests with stable mocks or update docs/scripts to match actual execution status.
+
+10. Android ABI build coverage alignment
+   - Current: `android/app/build.gradle` declares multiple ABI filters, while `buildRustAndroid` currently builds only `aarch64-linux-android`.
+   - Target: align Rust artifact production with declared ABI support or explicitly narrow supported ABI scope in build config/docs.
+
+11. Core settings model convergence (critical reliability debt)
+   - Current: multiple overlapping settings models diverge in defaults/semantics:
+     - `core/src/mobile_bridge.rs` (`MeshSettings`, DiscoveryMode `Normal/Cautious/Paranoid`)
+     - `core/src/mobile/settings.rs` (`MeshSettings`, DiscoveryMode from transport layer)
+     - `core/src/platform/settings.rs` (`MeshSettings`, DiscoveryMode `Open/Closed/Stealth`)
+   - Target: one canonical settings schema and mapping strategy used by UniFFI/mobile/runtime layers.
+
+12. iOS verification script integrity
+   - Current: `iOS/verify-test.sh` is a placeholder (`test`) and does not verify anything.
+   - Target: real automated check script or explicit deprecation with canonical replacement.
+
+13. iOS background capability hardening
+   - Current: `iOS/SCMessenger/SCMessenger/Info.plist` declares a broad background mode set.
+   - Target: retain only modes required by implemented behavior and provisioning policy; remove speculative extras.
+
+14. iOS generated-binding path normalization
+   - Current: `iOS/copy-bindings.sh` writes generated files into both `iOS/SCMessenger/SCMessenger/Generated/` and `iOS/SCMessenger/Generated/`.
+   - Target: one canonical generated artifact path tied to active Xcode targets and docs.
+
+15. iOS historical artifact segmentation
+   - Current: `iOS/iosdesign.md` and `iOS/SCMessenger/build_*.txt` mix design/historical/runtime evidence in active tree.
+   - Target: section-level historical tagging and relocation/retention policy to keep active docs concise.
+
+## Priority 2: Documentation Completion and Governance
+
+1. Full-file documentation pass completion using `docs/DOC_PASS_TRACKER.md` (completed)
+   - Current: all tracked files are reviewed (`pending` = 0, checked = 392).
+   - Ongoing target: keep this at 0 pending via delta checks on new/changed files.
+
+2. Historical-heavy docs section-status sweep
+   - Requirement: stale/current components tagged at section level (`[Current]`, `[Historical]`, `[Needs Revalidation]`) with canonical pointers.
+
+3. Keep canonical chain authoritative
+   - `README.md`
+   - `DOCUMENTATION.md`
+   - `docs/REPO_CONTEXT.md`
+   - `docs/CURRENT_STATE.md`
+   - `REMAINING_WORK_TRACKING.md`
+   - `docs/GLOBAL_ROLLOUT_PLAN.md`
+
+4. Resolve `ios/` vs `iOS/` path-case split in tracked docs vs app source
+   - Current: markdown docs are tracked under `ios/`, active app source is under `iOS/SCMessenger/`.
+   - Target: explicit documented convention and eventual normalization strategy for case-sensitive environments.
 
 ## Verified Stable Areas (No Active Gap)
 
@@ -44,7 +152,6 @@ This is the active implementation backlog based on repository state verified on 
 - Core NAT reflection integration tests pass
 - iOS build verification script passes, including static library build
 - iOS simulator app build passes (`SCMessenger` scheme, iPhone 17 simulator)
-- iOS repository background helpers are wired (sync/discovery/ledger/background hooks)
 - Android build verification script passes when `ANDROID_HOME` is set
 - Android app build passes (`./gradlew assembleDebug`)
 - Topic subscribe/unsubscribe/publish paths are wired on Android and iOS
@@ -54,4 +161,5 @@ This is the active implementation backlog based on repository state verified on 
 ## Change Control Notes
 
 - Use `docs/CURRENT_STATE.md` as the verification snapshot.
+- Use `docs/GLOBAL_ROLLOUT_PLAN.md` for release-phase execution.
 - Treat older completion/audit reports as historical context unless reconfirmed.

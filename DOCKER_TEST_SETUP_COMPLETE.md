@@ -1,8 +1,14 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # Docker Mock Test Infrastructure - Setup Complete ✅
 
 > Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
 
-## Executive Summary
+## [Needs Revalidation] Executive Summary
 
 **Objective**: Set up comprehensive Docker-based mock test infrastructure for SCMessenger  
 **Status**: ✅ Complete and Ready to Use  
@@ -15,7 +21,7 @@ This implementation provides a complete Docker-based testing solution that enabl
 - Automated CI/CD testing via GitHub Actions
 - Manual testing with mock infrastructure
 
-## Quick Start
+## [Needs Revalidation] Quick Start
 
 ```bash
 cd docker
@@ -32,9 +38,9 @@ That's it! This single command will:
 
 **Expected time**: 15-30 minutes first run, 5-10 minutes subsequent runs
 
-## What Was Delivered
+## [Needs Revalidation] What Was Delivered
 
-### Infrastructure Files (18 new/modified)
+### [Needs Revalidation] Infrastructure Files (18 new/modified)
 
 **Docker Images (3)**
 - `Dockerfile.android-test` - Android SDK 34 + NDK 26 + Rust + Gradle
@@ -74,7 +80,7 @@ That's it! This single command will:
 - `test-results/` - Directory for test outputs (gitignored)
 - `test-results/README.md` - Test results documentation
 
-### Test Coverage
+### [Needs Revalidation] Test Coverage
 
 **Rust Core Tests**
 - All 638+ test functions in core library
@@ -96,9 +102,9 @@ That's it! This single command will:
 - DHT/Kademlia peer discovery
 - NAT traversal simulation
 
-## Architecture
+## [Needs Revalidation] Architecture
 
-### Network Topology
+### [Needs Revalidation] Network Topology
 ```
 Test Networks (Docker Bridge Networks)
 ┌──────────────────────────────────────────────────────┐
@@ -123,7 +129,7 @@ Test Networks (Docker Bridge Networks)
 └──────────────────────────────────────────────────────┘
 ```
 
-### Test Flow
+### [Needs Revalidation] Test Flow
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ CI/CD or Local Developer                                     │
@@ -163,51 +169,51 @@ Test Networks (Docker Bridge Networks)
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Usage Examples
+## [Needs Revalidation] Usage Examples
 
-### 1. Run All Tests (Most Common)
+### [Needs Revalidation] 1. Run All Tests (Most Common)
 ```bash
 cd docker
 ./run-all-tests.sh
 ```
 
-### 2. Fast Iteration During Development
+### [Needs Revalidation] 2. Fast Iteration During Development
 ```bash
 cd docker
 ./run-all-tests.sh --rust-only  # 3-5 minutes
 ```
 
-### 3. Test Android Changes
+### [Needs Revalidation] 3. Test Android Changes
 ```bash
 cd docker
 ./run-all-tests.sh --android-only  # 5-10 minutes
 ```
 
-### 4. Test Integration
+### [Needs Revalidation] 4. Test Integration
 ```bash
 cd docker
 ./run-all-tests.sh --integration-only  # 5-10 minutes
 ```
 
-### 5. Clean and Rebuild
+### [Needs Revalidation] 5. Clean and Rebuild
 ```bash
 cd docker
 ./run-all-tests.sh --clean  # Clears caches, rebuilds images
 ```
 
-### 6. Debug with Verbose Logging
+### [Needs Revalidation] 6. Debug with Verbose Logging
 ```bash
 cd docker
 ./run-all-tests.sh --verbose  # Shows all container logs
 ```
 
-### 7. Test with NAT Simulation
+### [Needs Revalidation] 7. Test with NAT Simulation
 ```bash
 cd docker
 ./run-all-tests.sh --integration-only --with-nat
 ```
 
-### 8. Manual Testing with Mock Infrastructure
+### [Needs Revalidation] 8. Manual Testing with Mock Infrastructure
 ```bash
 cd docker
 ./example-custom-test.sh  # Interactive demo
@@ -233,9 +239,9 @@ docker compose -f docker-compose.test.yml logs -f mock-relay
 docker compose -f docker-compose.test.yml down
 ```
 
-## CI/CD Integration
+## [Needs Revalidation] CI/CD Integration
 
-### GitHub Actions Workflow
+### [Needs Revalidation] GitHub Actions Workflow
 
 The workflow automatically runs on:
 - Push to `main` or `develop` branches
@@ -269,7 +275,7 @@ The workflow automatically runs on:
    - Runs with NAT simulation enabled
    - Tests NAT traversal scenarios
 
-### Artifacts
+### [Needs Revalidation] Artifacts
 All test results are uploaded as GitHub Actions artifacts:
 - `rust-test-results` (7 days)
 - `android-test-results` (7 days)
@@ -277,30 +283,30 @@ All test results are uploaded as GitHub Actions artifacts:
 - `full-test-results` (14 days)
 - `nat-test-results` (7 days)
 
-## Benefits
+## [Needs Revalidation] Benefits
 
-### For Development
+### [Needs Revalidation] For Development
 ✅ Fast iteration on code changes  
 ✅ No need for physical Android devices  
 ✅ Consistent environment (local = CI)  
 ✅ Easy debugging with container access  
 ✅ Isolated tests don't interfere  
 
-### For Testing
+### [Needs Revalidation] For Testing
 ✅ Real mesh networking, not mocked  
 ✅ Configurable test scenarios  
 ✅ Mock infrastructure behaves like production  
 ✅ NAT traversal testing  
 ✅ Previously @Ignored tests can now run  
 
-### For CI/CD
+### [Needs Revalidation] For CI/CD
 ✅ Automated testing on every commit  
 ✅ Parallel test execution  
 ✅ Test results as downloadable artifacts  
 ✅ Fast feedback (15-30 minutes)  
 ✅ No external dependencies  
 
-## Documentation
+## [Needs Revalidation] Documentation
 
 All documentation is in the `docker/` directory:
 
@@ -310,14 +316,14 @@ All documentation is in the `docker/` directory:
 4. **README.md** - Updated with testing section
 5. **android/app/src/test/README.md** - Android-specific testing
 
-## Next Steps (Optional)
+## [Needs Revalidation] Next Steps (Optional)
 
-### Immediate
+### [Needs Revalidation] Immediate
 1. ✅ Infrastructure is complete and tested
 2. ⏭️ Remove @Ignore annotations from Android tests (optional)
 3. ⏭️ Add custom test scenarios using examples
 
-### Future Enhancements
+### [Needs Revalidation] Future Enhancements
 - BLE transport simulation
 - WiFi Direct simulation
 - Chaos engineering (random failures)
@@ -325,7 +331,7 @@ All documentation is in the `docker/` directory:
 - Performance benchmarking
 - Security scanning integration
 
-## Validation
+## [Needs Revalidation] Validation
 
 All components have been validated:
 
@@ -336,7 +342,7 @@ All components have been validated:
 ✅ File structure: All paths correct  
 ✅ Permissions: Scripts are executable  
 
-## File Summary
+## [Needs Revalidation] File Summary
 
 **Total Files**: 18 new + 1 modified = 19 files
 
@@ -358,7 +364,7 @@ docker/test-results/README.md                    # Results docs
 docker/test-results/.gitignore                   # Ignore outputs
 ```
 
-## Success Metrics
+## [Needs Revalidation] Success Metrics
 
 | Metric | Target | Actual | Status |
 |--------|--------|--------|--------|
@@ -370,7 +376,7 @@ docker/test-results/.gitignore                   # Ignore outputs
 | Ease of use | Single command | `./run-all-tests.sh` | ✅ |
 | @Ignored tests | Infrastructure ready | Mock helpers available | ✅ |
 
-## Conclusion
+## [Needs Revalidation] Conclusion
 
 The Docker mock test infrastructure is **complete and production-ready**. It provides:
 

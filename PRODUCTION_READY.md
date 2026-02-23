@@ -1,18 +1,24 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # SCMessenger Production Deployment - PROOF OF WORKING
 
 > Historical snapshot: this file documents a specific prior milestone and includes point-in-time counts.
 > For current verified repository state, use `docs/CURRENT_STATE.md`, `docs/TESTING_GUIDE.md`, and `REMAINING_WORK_TRACKING.md`.
 
-## 🎯 Objective: Complete Production Deployment Readiness
+## [Needs Revalidation] 🎯 Objective: Complete Production Deployment Readiness
 
 **Status:** ✅ **COMPLETE AND VERIFIED**
 
-## 📊 What Was Accomplished
+## [Needs Revalidation] 📊 What Was Accomplished
 
-### Phase 1: Core Infrastructure (~350 LoC)
+### [Needs Revalidation] Phase 1: Core Infrastructure (~350 LoC)
 **Commit:** `ece5a8a` - "Complete production deployment readiness"
 
-#### Web-sys Configuration (~20 LoC)
+#### [Needs Revalidation] Web-sys Configuration (~20 LoC)
 ```toml
 web-sys = { version = "0.3", features = [
   "WebSocket", "MessageEvent", "ErrorEvent", "CloseEvent",
@@ -21,23 +27,23 @@ web-sys = { version = "0.3", features = [
 ]}
 ```
 
-#### libp2p Address Reflection Protocol (~150 LoC)
+#### [Needs Revalidation] libp2p Address Reflection Protocol (~150 LoC)
 - Added protocol to `IronCoreBehaviour`
 - Protocol ID: `/sc/address-reflection/1.0.0`
 - Request-response cycle with CBOR serialization
 - Event handling in swarm loop
 - `SwarmHandle::request_address_reflection()` API
 
-#### NAT Discovery Integration (~100 LoC)
+#### [Needs Revalidation] NAT Discovery Integration (~100 LoC)
 - Updated `PeerAddressDiscovery` to use SwarmHandle
 - Live libp2p calls instead of mocks
 - `detect_nat_type()` with real protocol
 - `NatTraversal::probe_nat()` fully integrated
 
-### Phase 2: Integration Tests & Validation (~1000 LoC)
+### [Needs Revalidation] Phase 2: Integration Tests & Validation (~1000 LoC)
 **Commit:** `9835051` - "Add comprehensive NAT traversal integration tests & documentation"
 
-#### Integration Tests (~250 LoC)
+#### [Needs Revalidation] Integration Tests (~250 LoC)
 File: `core/tests/integration_nat_reflection.rs`
 
 5 comprehensive tests:
@@ -63,7 +69,7 @@ File: `core/tests/integration_nat_reflection.rs`
    - Tests disconnected peer handling
    - Verifies timeout behavior
 
-#### Documentation (~600 LoC)
+#### [Needs Revalidation] Documentation (~600 LoC)
 - **NAT_TRAVERSAL_GUIDE.md** (~300 LoC)
   - Complete architecture explanation
   - Protocol specification
@@ -76,16 +82,16 @@ File: `core/tests/integration_nat_reflection.rs`
   - Debugging guide
   - Coverage reporting
 
-#### Demo Application (~150 LoC)
+#### [Needs Revalidation] Demo Application (~150 LoC)
 File: `core/examples/nat_reflection_demo.rs`
 - Interactive demonstration
 - Shows 3-node network
 - Live address reflection
 - NAT type detection
 
-## 🧪 PROOF: Test Results
+## [Needs Revalidation] 🧪 PROOF: Test Results
 
-### Integration Tests
+### [Needs Revalidation] Integration Tests
 ```bash
 $ cargo test --test integration_nat_reflection -- --nocapture
 
@@ -116,7 +122,7 @@ test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 **Status:** ✅ **ALL TESTS PASSING**
 
-### Live Demo
+### [Needs Revalidation] Live Demo
 ```bash
 $ cargo run --example nat_reflection_demo
 
@@ -179,7 +185,7 @@ $ cargo run --example nat_reflection_demo
 
 **Status:** ✅ **DEMO RUNS SUCCESSFULLY**
 
-### Full Test Suite
+### [Needs Revalidation] Full Test Suite
 ```bash
 $ cargo test --lib
 
@@ -201,29 +207,29 @@ $ cargo test -p scmessenger-wasm
 
 **Total:** ✅ **137/145 tests passing (94.5%)**
 
-## 🏗️ Architecture Verification
+## [Needs Revalidation] 🏗️ Architecture Verification
 
-### Sovereign Mesh Principle: ✅ VERIFIED
+### [Needs Revalidation] Sovereign Mesh Principle: ✅ VERIFIED
 - ❌ No Google STUN servers
 - ❌ No external dependencies
 - ✅ Peer-assisted address discovery
 - ✅ Fully decentralized
 
-### libp2p Integration: ✅ VERIFIED
+### [Needs Revalidation] libp2p Integration: ✅ VERIFIED
 - ✅ Protocol registered: `/sc/address-reflection/1.0.0`
 - ✅ Request-response cycle working
 - ✅ Event handling functional
 - ✅ Swarm integration complete
 
-### Performance: ✅ VERIFIED
+### [Needs Revalidation] Performance: ✅ VERIFIED
 - ✅ ~82 bytes per reflection (minimal)
 - ✅ ~10-200ms latency (acceptable)
 - ✅ Handles multiple rapid requests
 - ✅ Scales with mesh size
 
-## 📈 Code Statistics
+## [Needs Revalidation] 📈 Code Statistics
 
-### Lines of Code Added
+### [Needs Revalidation] Lines of Code Added
 ```
 Phase 1 (Production Core):        ~350 LoC
   - Web-sys config:                ~20 LoC
@@ -245,7 +251,7 @@ Previous Session:                 ~450 LoC
 GRAND TOTAL:                     ~1800 LoC
 ```
 
-### Test Coverage
+### [Needs Revalidation] Test Coverage
 ```
 Unit Tests:          106/113 (93.8%)
 Integration Tests:    11/11  (100%)
@@ -255,9 +261,9 @@ WASM Tests:          17/18  (94.4%)
 TOTAL:              137/145 (94.5%)
 ```
 
-## 🚀 How to Use/Test
+## [Needs Revalidation] 🚀 How to Use/Test
 
-### Quick Start
+### [Needs Revalidation] Quick Start
 ```bash
 # Clone and build
 git clone <repo>
@@ -277,7 +283,7 @@ cargo test
 cargo test -p scmessenger-core transport::reflection
 ```
 
-### Usage in Code
+### [Needs Revalidation] Usage in Code
 ```rust
 use scmessenger_core::transport::{
     swarm::{start_swarm, SwarmHandle},
@@ -297,15 +303,15 @@ let nat = NatTraversal::new(config)?;
 let nat_type = nat.probe_nat(&swarm).await?;
 ```
 
-### Documentation
+### [Needs Revalidation] Documentation
 - **Usage Guide:** `docs/NAT_TRAVERSAL_GUIDE.md`
 - **Testing Guide:** `docs/TESTING_GUIDE.md`
 - **Architecture:** `docs/ARCHITECTURE.md`
 - **Demo:** `core/examples/nat_reflection_demo.rs`
 
-## ✅ Production Readiness Checklist
+## [Needs Revalidation] ✅ Production Readiness Checklist
 
-### Core Functionality
+### [Needs Revalidation] Core Functionality
 - [x] Sovereign mesh address discovery
 - [x] libp2p protocol integration
 - [x] NAT type detection
@@ -314,7 +320,7 @@ let nat_type = nat.probe_nat(&swarm).await?;
 - [x] Event handling
 - [x] Error handling & timeouts
 
-### Testing
+### [Needs Revalidation] Testing
 - [x] Unit tests (106 passing)
 - [x] Integration tests (11 passing)
 - [x] Live demo working
@@ -322,7 +328,7 @@ let nat_type = nat.probe_nat(&swarm).await?;
 - [x] Stress testing (rapid requests)
 - [x] Error conditions tested
 
-### Documentation
+### [Needs Revalidation] Documentation
 - [x] Complete usage guide
 - [x] Protocol specification
 - [x] Testing guide
@@ -331,21 +337,21 @@ let nat_type = nat.probe_nat(&swarm).await?;
 - [x] Troubleshooting guide
 - [x] Production deployment guide
 
-### Infrastructure
+### [Needs Revalidation] Infrastructure
 - [x] Web-sys features configured
 - [x] Browser API support
 - [x] WASM compatibility
 - [x] Mobile bindings working
 - [x] CLI integration
 
-### Verification
+### [Needs Revalidation] Verification
 - [x] Builds successfully
 - [x] Tests pass
 - [x] Demo runs
 - [x] No external dependencies
 - [x] Architecture principles maintained
 
-## 🎉 Summary
+## [Needs Revalidation] 🎉 Summary
 
 **Status: PRODUCTION READY ✅**
 
@@ -357,11 +363,11 @@ The SCMessenger NAT traversal system is:
 - ✅ **Sovereign mesh** (no external dependencies)
 - ✅ **Production grade** (error handling, timeouts, stress tested)
 
-### Commits
+### [Needs Revalidation] Commits
 1. **ece5a8a** - Core production deployment (~350 LoC)
 2. **9835051** - Tests, docs, demo (~1000 LoC)
 
-### Try It
+### [Needs Revalidation] Try It
 ```bash
 # See it work!
 cargo test --test integration_nat_reflection -- --nocapture

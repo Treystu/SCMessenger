@@ -2,6 +2,10 @@
 
 This document describes the current implemented architecture as verified on **2026-02-23**.
 
+For the cross-component repository map (core + CLI + mobile + WASM + Android + iOS), see `docs/REPO_CONTEXT.md`.
+
+Primary delivery target is one unified Android+iOS+Web app. Web/WASM remains experimental today but is on the parity-critical path before GA.
+
 ## Design Principles
 
 1. No central account system; identity is key-based.
@@ -60,6 +64,7 @@ Primary modules:
 
 - Crypto identity and network identity are derived from the same key material in current CLI flow (`get_libp2p_keypair()` from core identity path).
 - UI and docs should treat `identity_id` (Blake3) and libp2p `Peer ID` as distinct identifiers with different purposes.
+- Canonical cross-platform identity for persistence and exchange is `public_key_hex` (Ed25519 public key hex).
 
 ## Platform Strategy
 

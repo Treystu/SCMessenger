@@ -1,14 +1,20 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # Android Build Errors - Complete Resolution
 
-## Executive Summary
+## [Needs Revalidation] Executive Summary
 **Status:** ✅ **RESOLVED**
 
 Successfully fixed 66 Android compilation errors by correcting the UniFFI Kotlin bindings generation task in the Gradle build configuration.
 
-## Problem Description
+## [Needs Revalidation] Problem Description
 The Android build was failing with 66 "unresolved reference" compilation errors, all related to missing `uniffi.api.*` types that should have been generated from the Rust core library via UniFFI.
 
-## Root Cause Analysis
+## [Needs Revalidation] Root Cause Analysis
 The Gradle task `generateUniFFIBindings` in `android/app/build.gradle` had incorrect command-line arguments:
 
 ```gradle
@@ -21,9 +27,9 @@ The `gen_kotlin` binary at `core/src/bin/gen_kotlin.rs` doesn't accept command-l
 - Generate Kotlin bindings using UniFFI
 - Output to `core/target/generated-sources/uniffi/kotlin`
 
-## Solution Implemented
+## [Needs Revalidation] Solution Implemented
 
-### 1. Fixed Gradle Task (Commit 5ff0d2f)
+### [Needs Revalidation] 1. Fixed Gradle Task (Commit 5ff0d2f)
 **File:** `android/app/build.gradle` line 186
 
 ```gradle
@@ -31,7 +37,7 @@ The `gen_kotlin` binary at `core/src/bin/gen_kotlin.rs` doesn't accept command-l
 commandLine 'cargo', 'run', '--bin', 'gen_kotlin', '--features', 'gen-bindings'
 ```
 
-### 2. Added Build Documentation (Commit 404cc07)
+### [Needs Revalidation] 2. Added Build Documentation (Commit 404cc07)
 Created comprehensive documentation to prevent future issues:
 
 **`android/BUILD_FIX_SUMMARY.md`** (145 lines)
@@ -59,16 +65,16 @@ Created comprehensive documentation to prevent future issues:
 - Troubleshooting section
 - Corrected prerequisites (removed uniffi-bindgen, clarified custom binary usage)
 
-## Verification
+## [Needs Revalidation] Verification
 
-### Test 1: Bindings Generation
+### [Needs Revalidation] Test 1: Bindings Generation
 ```bash
 cd core
 cargo run --bin gen_kotlin --features gen-bindings
 ```
 ✅ **PASS** - Generates `core/target/generated-sources/uniffi/kotlin/uniffi/api/api.kt` (235,217 bytes)
 
-### Test 2: Type Completeness
+### [Needs Revalidation] Test 2: Type Completeness
 Verified all 24 required types are present in generated bindings:
 
 **Interfaces (8):**
@@ -102,7 +108,7 @@ Verified all 24 required types are present in generated bindings:
 
 ✅ **PASS** - All types present with correct package (`uniffi.api`)
 
-### Test 3: Verification Script
+### [Needs Revalidation] Test 3: Verification Script
 ```bash
 cd android
 ./verify-build-setup.sh
@@ -113,7 +119,7 @@ cd android
 - Verifies project structure
 - **Tests bindings generation successfully**
 
-## Build Process (Automated by Gradle)
+## [Needs Revalidation] Build Process (Automated by Gradle)
 
 When `./gradlew assembleDebug` runs:
 
@@ -133,22 +139,22 @@ When `./gradlew assembleDebug` runs:
    - Includes JNI libraries for all ABIs
    - Output: `android/app/build/outputs/apk/debug/app-debug.apk`
 
-## Impact
+## [Needs Revalidation] Impact
 
-### Before Fix
+### [Needs Revalidation] Before Fix
 - ❌ 66 compilation errors
 - ❌ All Kotlin files using `uniffi.api.*` failed to compile
 - ❌ Android build completely broken
 - ❌ No clear documentation of the issue
 
-### After Fix
+### [Needs Revalidation] After Fix
 - ✅ 0 compilation errors (resolved all 66)
 - ✅ All Kotlin files compile successfully
 - ✅ Android build works end-to-end
 - ✅ Comprehensive documentation and verification tools
 - ✅ Clear troubleshooting path for future issues
 
-## Files Changed
+## [Needs Revalidation] Files Changed
 
 ```
 android/BUILD_FIX_SUMMARY.md      | 145 +++++ (NEW)
@@ -159,32 +165,32 @@ android/app/build.gradle          |   2 +-
 4 files changed, 346 insertions(+), 9 deletions(-)
 ```
 
-## Dependencies
+## [Needs Revalidation] Dependencies
 
-### Runtime
+### [Needs Revalidation] Runtime
 - Rust 1.93+ (for building core library)
 - cargo-ndk (for cross-compiling to Android)
 - Android Rust targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android, i686-linux-android
 - Java 17+ (for Gradle)
 - Android NDK 26.1.10909125 (auto-downloaded by Android Studio)
 
-### Build
+### [Needs Revalidation] Build
 - UniFFI 0.27.3 (via Cargo dependency)
 - Custom gen_kotlin binary (in project, built on-demand)
 
-### Not Required
+### [Needs Revalidation] Not Required
 - ❌ No need to install `uniffi-bindgen` CLI separately
 - ❌ No manual bindings generation step
 - ❌ No pre-build scripts outside Gradle
 
-## Future Maintenance
+## [Needs Revalidation] Future Maintenance
 
-### If Bindings Change
+### [Needs Revalidation] If Bindings Change
 1. Update `core/src/api.udl` with new types
 2. Gradle will automatically regenerate bindings on next build
 3. Update Kotlin code to use new types
 
-### If Build Fails
+### [Needs Revalidation] If Build Fails
 1. Run `android/verify-build-setup.sh` to check prerequisites
 2. Check that bindings can be manually generated:
    ```bash
@@ -192,19 +198,19 @@ android/app/build.gradle          |   2 +-
    ```
 3. Verify `core/target/generated-sources/uniffi/kotlin/uniffi/api/api.kt` exists
 
-### For CI/CD
+### [Needs Revalidation] For CI/CD
 - Ensure Rust toolchain, cargo-ndk, and Android targets are pre-installed
 - Android SDK/NDK can be auto-downloaded by Gradle
 - Use `verify-build-setup.sh` as a pre-build check (exit code 0 = ready)
 
-## Lessons Learned
+## [Needs Revalidation] Lessons Learned
 
 1. **Custom binaries don't accept arbitrary arguments** - The gen_kotlin.rs binary is hardcoded, unlike standard CLIs
 2. **UniFFI bindings are build artifacts** - Should be in .gitignore, generated on build
 3. **Verification scripts save time** - Catches environment issues before long builds
 4. **Document the non-obvious** - The custom binary approach isn't standard UniFFI usage
 
-## Conclusion
+## [Needs Revalidation] Conclusion
 
 The 66 Android build errors have been completely resolved by fixing a single line in the Gradle build configuration. The issue was caused by incorrect command-line arguments being passed to a custom binary that doesn't accept them. With the fix in place, the UniFFI Kotlin bindings are now correctly generated during the build process, and all Android code compiles successfully.
 

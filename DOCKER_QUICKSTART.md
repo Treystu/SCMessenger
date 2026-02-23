@@ -1,13 +1,19 @@
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
 # SCMessenger Docker Quick Start
 
 This guide gets you up and running with SCMessenger in Docker in under 5 minutes.
 
-## Prerequisites
+## [Needs Revalidation] Prerequisites
 
 - Docker and Docker Compose installed
 - Ports 9000 and 9001 available (or configure different ports)
 
-## Single Node Setup
+## [Needs Revalidation] Single Node Setup
 
 The simplest way to run SCMessenger:
 
@@ -25,9 +31,9 @@ docker compose logs -f
 docker compose exec scmessenger bash -c "scm identity"
 ```
 
-## GCP or Cloud Deployment
+## [Needs Revalidation] GCP or Cloud Deployment
 
-### One-Command Deploy
+### [Needs Revalidation] One-Command Deploy
 
 ```bash
 # Build and run on a GCP VM or any cloud server
@@ -47,7 +53,7 @@ docker run -d \
 docker logs scmessenger
 ```
 
-### With Bootstrap Nodes
+### [Needs Revalidation] With Bootstrap Nodes
 
 To connect your node to an existing network, add bootstrap nodes:
 
@@ -66,9 +72,9 @@ docker run -d \
   scmessenger
 ```
 
-## Connect Two Nodes (Local + Cloud)
+## [Needs Revalidation] Connect Two Nodes (Local + Cloud)
 
-### Step 1: Start your cloud node (GCP)
+### [Needs Revalidation] Step 1: Start your cloud node (GCP)
 
 ```bash
 # On your GCP VM
@@ -93,7 +99,7 @@ curl ifconfig.me
 /ip4/<YOUR_PUBLIC_IP>/tcp/9001/p2p/<YOUR_PEER_ID>
 ```
 
-### Step 2: Start your local node (Mac/Linux)
+### [Needs Revalidation] Step 2: Start your local node (Mac/Linux)
 
 ```bash
 # On your local machine
@@ -109,7 +115,7 @@ docker run -d \
 docker logs -f scmessenger-local
 ```
 
-### Step 3: Verify Connection
+### [Needs Revalidation] Step 3: Verify Connection
 
 ```bash
 # On local machine - check peer count
@@ -118,7 +124,7 @@ docker exec scmessenger-local scm status
 # You should see "Peers: 1" or more
 ```
 
-## Without Docker (Native Binary)
+## [Needs Revalidation] Without Docker (Native Binary)
 
 If you prefer to run the binary directly:
 
@@ -137,7 +143,7 @@ cargo build --release --bin scmessenger-cli
 ./target/release/scmessenger-cli start --port 9000
 ```
 
-## Port Configuration
+## [Needs Revalidation] Port Configuration
 
 SCMessenger uses **two ports** by default:
 
@@ -148,7 +154,7 @@ When you specify `--port 9000`, the P2P port becomes 9001.
 
 **Both ports must be open in your firewall for internet connectivity.**
 
-### GCP Firewall Example
+### [Needs Revalidation] GCP Firewall Example
 
 ```bash
 gcloud compute firewall-rules create allow-scmessenger \
@@ -157,7 +163,7 @@ gcloud compute firewall-rules create allow-scmessenger \
   --direction=INGRESS
 ```
 
-## Data Persistence
+## [Needs Revalidation] Data Persistence
 
 Your identity and messages are stored in:
 - **Linux/Mac**: `~/.local/share/scmessenger/storage/`
@@ -166,9 +172,9 @@ Your identity and messages are stored in:
 **Important**: The network keypair (which determines your Peer ID) is now persisted in:
 - `network_keypair.dat` - Your Peer ID will remain constant across restarts
 
-## Troubleshooting
+## [Needs Revalidation] Troubleshooting
 
-### Peer Count Stays at 0
+### [Needs Revalidation] Peer Count Stays at 0
 
 **Check 1**: Verify both nodes show "Listening on" messages:
 ```bash
@@ -192,13 +198,13 @@ All three components must be correct.
 docker logs scmessenger | grep -i bootstrap
 ```
 
-### Identity Changes on Restart
+### [Needs Revalidation] Identity Changes on Restart
 
 This should be fixed now! The network keypair is persisted. If you still see changing Peer IDs:
 - Ensure your volume mount is working (`-v ~/scm_data:/root/.local/share/scmessenger`)
 - Check that `network_keypair.dat` exists in the data directory
 
-### Port Already in Use
+### [Needs Revalidation] Port Already in Use
 
 ```bash
 # Find what's using the port
@@ -209,9 +215,9 @@ lsof -i :9001
 docker run -p 8000:9000 -p 8001:9001 -e LISTEN_PORT=9000 scmessenger
 ```
 
-## Commands Reference
+## [Needs Revalidation] Commands Reference
 
-### Docker
+### [Needs Revalidation] Docker
 
 ```bash
 # Start node
@@ -230,7 +236,7 @@ docker compose restart
 docker compose down -v
 ```
 
-### CLI (inside container)
+### [Needs Revalidation] CLI (inside container)
 
 ```bash
 # Show identity
@@ -253,13 +259,13 @@ docker exec scmessenger scm config bootstrap list
 docker exec scmessenger scm config bootstrap add <multiaddr>
 ```
 
-## Next Steps
+## [Needs Revalidation] Next Steps
 
 1. Open the web UI: `http://localhost:9000` (UI implementation in progress)
 2. Add contacts via CLI
 3. Send messages!
 
-## Support
+## [Needs Revalidation] Support
 
 - Report issues: https://github.com/Treystu/SCMessenger/issues
 - See main README.md for architecture details

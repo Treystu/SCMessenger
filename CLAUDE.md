@@ -1,8 +1,14 @@
-## Philosophy: Sovereign Communication
+> **Component Status Notice (2026-02-23)**
+> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
+> If a section has no marker, treat it as `[Needs Revalidation]`.
+> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
+## [Needs Revalidation] Philosophy: Sovereign Communication
 
 SCMessenger is the world's first truly sovereign messenger — works everywhere, owned by no one, unstoppable by design. Works WITH internet, never depends on it.
 
-### Core Principles
+### [Needs Revalidation] Core Principles
 
 1. **Relay = Messaging.** You cannot message without relaying. You cannot relay without messaging. Single toggle. Non-negotiable coupling. This IS the incentive model — want to talk? You relay for others. No free riders.
 2. **Every node IS the network.** No third-party relays, no external infrastructure. When your device has internet, it IS a relay for the mesh. The mesh IS the infrastructure.
@@ -12,7 +18,7 @@ SCMessenger is the world's first truly sovereign messenger — works everywhere,
 6. **Privacy + Infrastructure independence + Identity ownership.** All three, always. No phone numbers, no emails, no accounts. You ARE your keypair.
 7. **Mass market UX.** Grandma should be able to use this. Technical complexity hidden behind simple defaults. Power users get granular controls.
 
-## Architecture
+## [Needs Revalidation] Architecture
 
 - `core/` — Rust library: identity (Ed25519), crypto (XChaCha20-Poly1305), messaging, storage (sled), transport (libp2p), mesh relay, Drift Protocol
 - `cli/` — Development/demo CLI tool
@@ -20,7 +26,7 @@ SCMessenger is the world's first truly sovereign messenger — works everywhere,
 - `wasm/` — WASM bindings for browser
 - `reference/` — V1 TypeScript crypto algorithms (read-only porting guides)
 
-## Code Conventions
+## [Needs Revalidation] Code Conventions
 
 - All new code is Rust. No TypeScript, no JavaScript.
 - Use `thiserror` for error types, `anyhow` for error propagation in binaries
@@ -31,12 +37,12 @@ SCMessenger is the world's first truly sovereign messenger — works everywhere,
 - Serialization: `bincode` for wire format, `serde_json` for human-readable
 - Tests go in `#[cfg(test)] mod tests` in the same file, integration tests in `tests/`
 
-## Key Dependencies
+## [Needs Revalidation] Key Dependencies
 
 libp2p 0.53 with: tcp, quic, noise, yamux, gossipsub, kad, relay, identify, ping, mdns, request-response, cbor
 Crypto: ed25519-dalek 2.1, x25519-dalek 2.0, chacha20poly1305 0.10, blake3 1.5
 
-## Current State
+## [Needs Revalidation] Current State
 
 All core modules are built and unit-tested through Phase 7 (Privacy):
 
@@ -55,18 +61,18 @@ All core modules are built and unit-tested through Phase 7 (Privacy):
 **Integration gap resolved:** CLI now passes `DiscoveryConfig::default()` to `start_swarm()`,
 completing the IronCore → SwarmHandle wiring. `prepare_message()` → encrypted bytes → `send_message()`.
 
-## Planning & Estimation
+## [Needs Revalidation] Planning & Estimation
 
 - **LoC estimates ONLY.** Never use time-based estimates (days, weeks, months). All planning uses lines-of-code estimates for effort sizing.
 - Break phases into concrete deliverables with LoC ranges.
 
-## Codebase Stats
+## [Needs Revalidation] Codebase Stats
 
 - 71 .rs files in core/src/ across 12 modules
 - ~53,000 lines of Rust across workspace (core: ~29K, lib.rs: ~19K, cli: ~500, wasm: ~2.4K)
 - ~638 test functions
 
-## Hardening (Feb 2026)
+## [Needs Revalidation] Hardening (Feb 2026)
 
 **Dynamic analysis fixes — COMPLETED**
 
@@ -75,7 +81,7 @@ completing the IronCore → SwarmHandle wiring. `prepare_message()` → encrypte
 - **Slow Loris** (MEDIUM): `FRAME_READ_TIMEOUT` (5s) constant + `FRAME_MAX_PAYLOAD` (64KB) limit + async `read_with_timeout()` on DriftFrame, plus `Timeout` and `IoError` variants on DriftError
 - **Key Leak** (LOW): All intermediate crypto buffers zeroized — `shared_secret_bytes`, `ephemeral_bytes`, `nonce_bytes` in encrypt.rs (encrypt + decrypt paths)
 
-## Known Technical Debt
+## [Needs Revalidation] Known Technical Debt
 
 **unwrap() / expect() / panic!() sweep — COMPLETED**
 
@@ -89,7 +95,7 @@ completing the IronCore → SwarmHandle wiring. `prepare_message()` → encrypte
 - Zero `todo!()` or `unimplemented!()` (good)
 - Production code consistently uses: `?`, `.map_err()`, `.unwrap_or_default()`, `.unwrap_or()`
 
-## Known Remaining Gaps (Feb 2026)
+## [Needs Revalidation] Known Remaining Gaps (Feb 2026)
 
 All previously-listed gaps resolved in Feb 2026 hardening sprint. Minor WebRTC TODOs remain:
 
@@ -98,7 +104,7 @@ All previously-listed gaps resolved in Feb 2026 hardening sprint. Minor WebRTC T
 - **WebRTC answerer path** (`wasm/src/transport.rs`): ~60 LOC — `set_remote_offer()` + `create_answer()`. Mirrors `create_offer()` exactly.
 - **`RtcSdpType` feature**: add `"RtcSdpType"` to workspace `web-sys` features in `Cargo.toml` to replace the current `js_sys::Reflect` workaround in `WebRtcTransport::create_offer()`
 
-## Resolved (Feb 2026 sprint)
+## [Needs Revalidation] Resolved (Feb 2026 sprint)
 
 - Internet relay: `connect_to_relay_via_swarm()` added to `InternetRelay` — real `swarm.dial()` call
 - Offline store-and-forward: outbox flushed on `PeerDiscovered` in CLI; `cmd_send_offline` now truly enqueues
@@ -106,7 +112,7 @@ All previously-listed gaps resolved in Feb 2026 hardening sprint. Minor WebRTC T
 - Integration tests: `core/tests/integration_ironcore_roundtrip.rs` — 7 tests, no network (encrypt→decrypt, wrong-recipient rejection, tamper detection, replay rejection, multi-message, self-send, empty payload)
 - WASM WebSocket transport: full `connect()`/`send_envelope()`/`disconnect()` with real `web_sys::WebSocket`, buffered sends during connecting, state machine, `subscribe()` ingress channel
 
-## Do NOT
+## [Needs Revalidation] Do NOT
 
 - Add unnecessary abstractions or trait objects where concrete types work
 - Use `unwrap()` in library code (use `?` or `expect()` with context)
