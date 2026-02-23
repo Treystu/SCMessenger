@@ -8,17 +8,18 @@
 - `keep`: retain this file as supporting context and workflow/reference detail.
 - `delete/replace`: do not use this file alone as authoritative current-state truth; use canonical docs above.
 
-
 This directory contains unit tests for the SCMessenger Android app.
 
 ## Running Tests
 
 ### Locally
+
 ```bash
 ./gradlew test
 ```
 
 ### In Docker
+
 ```bash
 cd docker
 ./run-all-tests.sh --android-only
@@ -27,11 +28,12 @@ cd docker
 ## Test Infrastructure
 
 ### Mock Infrastructure
+
 Tests use MockK for mocking UniFFI objects. See `MockTestHelper.kt` for common mock setups.
 
-### Previously @Ignored Tests
-Tests that were previously @Ignored due to missing mock infrastructure are now enabled.
-They run in Docker with full mock support.
+### @Ignored Tests (UniFFI Mock Limitations)
+
+Tests requiring complex UniFFI mock infrastructure or initialization of the native Rust `libuniffi_api` library are currently `@Ignore`d. These tests serve as architectural documentation of expected repository behavior, pending a stable JNA-compatible test harness mapping. They do not currently run in CI or Docker.
 
 ## Test Files
 

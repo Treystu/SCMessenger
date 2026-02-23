@@ -125,9 +125,10 @@ Owner policy constraints (2026-02-23):
    - Active app lives in `iOS/SCMessenger/SCMessenger/`.
    - `iOS/SCMessenger-Existing/` should be explicitly retained as archive/reference or removed once migration confidence is complete.
 
-6. Docker test/ops script consistency cleanup
+6. [x] Docker test/ops script consistency cleanup
    - Current: mixed compose filename references and stale command paths across `docker/*.sh` and docs.
    - Target: one canonical compose naming set and verified command examples that match checked-in files.
+   - Outcome: Normalized all references to use canonical compose naming (`docker compose` CLI standard and `docker-compose*.yml` filename format without spaces).
 
 7. CLI surface normalization for long-term dependability
    - Current: `cli/src/main.rs.backup` and mixed identity/public-key field naming remain in the CLI surface.
@@ -137,9 +138,10 @@ Owner policy constraints (2026-02-23):
    - Current: `reference/Androidlogs.txt` includes non-SCMessenger application logs; `reference/` mixes active porting guides with raw captures.
    - Target: isolate SCMessenger-specific evidence logs and keep reference crypto sources clearly separated from runtime diagnostics.
 
-9. Android test execution truthfulness cleanup
+9. [x] Android test execution truthfulness cleanup
    - Current: `android/app/src/test/README.md` says previously `@Ignored` tests are enabled, but `android/app/src/test/java/com/scmessenger/android/test/MeshRepositoryTest.kt` still contains broad `@Ignore` usage.
    - Target: either enable those tests with stable mocks or update docs/scripts to match actual execution status.
+   - Outcome: Updated `android/app/src/test/README.md` to truthfully explain that UniFFI MockK limitations natively prevent complete CI verification for generated files, serving as architectural documentation pending a stable JNA harness setup instead.
 
 10. Android ABI build coverage alignment
 

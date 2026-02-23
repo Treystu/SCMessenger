@@ -8,17 +8,18 @@
 - `keep`: retain this file as supporting context and workflow/reference detail.
 - `delete/replace`: do not use this file alone as authoritative current-state truth; use canonical docs above.
 
-
 Comprehensive Docker-based testing infrastructure for verifying all SCMessenger features in a simulated multi-network environment.
 
 ## Quick Start
 
 ### Run All Tests
+
 ```bash
 ./run-all-tests.sh
 ```
 
 ### Run Specific Tests
+
 ```bash
 ./run-all-tests.sh --rust-only      # Rust core tests
 ./run-all-tests.sh --android-only   # Android unit tests
@@ -68,30 +69,33 @@ Multi-hop:      Alice ↔ Eve (via Relay1 → Relay2)
 
 ### Node Configuration
 
-| Node    | Network(s)      | Role                    | Port |
-|---------|-----------------|-------------------------|------|
-| relay1  | A, B            | Primary bootstrap relay | 4001 |
-| relay2  | B, C            | Secondary relay         | 4002 |
-| alice   | A               | Client node             | -    |
-| bob     | B               | Client node             | -    |
-| carol   | A               | Client node             | -    |
-| david   | B               | Client node             | -    |
-| eve     | C               | Client node             | -    |
+| Node   | Network(s) | Role                    | Port |
+| ------ | ---------- | ----------------------- | ---- |
+| relay1 | A, B       | Primary bootstrap relay | 4001 |
+| relay2 | B, C       | Secondary relay         | 4002 |
+| alice  | A          | Client node             | -    |
+| bob    | B          | Client node             | -    |
+| carol  | A          | Client node             | -    |
+| david  | B          | Client node             | -    |
+| eve    | C          | Client node             | -    |
 
 ## Files
 
 ### Docker Images
+
 - `Dockerfile` - Multi-stage build for SCMessenger CLI (production)
 - `Dockerfile.android-test` - Android test environment with SDK, NDK, Rust
 - `Dockerfile.rust-test` - Rust test environment with all tooling
 
 ### Docker Compose Configurations
-- `docker compose.yml` - Basic 3-node setup (relay, alice, bob)
-- `docker compose-extended.yml` - Full 7-node testing environment
+
+- `docker-compose.yml` - Basic 3-node setup (relay, alice, bob)
+- `docker-compose-extended.yml` - Full 7-node testing environment
 - `docker-compose.test.yml` - **NEW: Comprehensive test infrastructure**
-- `docker compose.network-test.yml` - Network simulation with NAT
+- `docker-compose.network-test.yml` - Network simulation with NAT
 
 ### Scripts
+
 - `run-all-tests.sh` - **NEW: Main test runner for all test suites**
 - `run-tests.sh` - Quick start script for Docker environments
 - `setup-android-test-mocks.sh` - **NEW: Set up Android test mocks**
@@ -99,6 +103,7 @@ Multi-hop:      Alice ↔ Eve (via Relay1 → Relay2)
 - `manage.sh` - Docker management utilities
 
 ### Documentation
+
 - `README.md` - This file
 - `TESTING_GUIDE.md` - **NEW: Comprehensive testing guide**
 - `test-scripts/` - Integration test scripts
@@ -116,6 +121,7 @@ docker compose up --build
 ```
 
 This creates:
+
 - 1 relay node (bridges network-a and network-b)
 - Alice on network-a
 - Bob on network-b
@@ -126,10 +132,11 @@ Start the full testing environment:
 
 ```bash
 cd docker
-docker compose -f docker compose-extended.yml up --build
+docker compose -f docker-compose-extended.yml up --build
 ```
 
 This creates:
+
 - 2 relay nodes (relay1, relay2)
 - 5 client nodes across 3 networks
 - Full mesh topology for comprehensive testing
@@ -140,10 +147,11 @@ Execute the full integration test suite:
 
 ```bash
 cd docker
-docker compose -f docker compose-extended.yml --profile test up --build
+docker compose -f docker-compose-extended.yml --profile test up --build
 ```
 
 The test runner will:
+
 1. Wait for all nodes to initialize
 2. Verify network connectivity
 3. Test direct P2P messaging
@@ -177,7 +185,7 @@ scm history
 Monitor logs from all nodes:
 
 ```bash
-docker compose -f docker compose-extended.yml logs -f
+docker compose -f docker-compose-extended.yml logs -f
 ```
 
 View logs from specific node:
@@ -191,51 +199,63 @@ docker logs -f scm-alice
 Stop all containers:
 
 ```bash
-docker compose -f docker compose-extended.yml down
+docker compose -f docker-compose-extended.yml down
 ```
 
 Clean up volumes and networks:
 
 ```bash
-docker compose -f docker compose-extended.yml down -v
+docker compose -f docker-compose-extended.yml down -v
 ```
 
 ## Test Suite Details
 
 ### Test 1: Relay Node Operational Status
+
 Verifies both relay nodes start successfully and listen on configured ports.
 
 ### Test 2: Client Node Connectivity
+
 Ensures all 5 client nodes can connect to the network and establish libp2p swarms.
 
 ### Test 3: Identity Creation
+
 Validates that each node successfully generates Ed25519 keypairs and peer IDs.
 
 ### Test 4: Direct P2P Messaging
+
 Tests message delivery between two nodes on the same network (Alice → Carol).
 
 ### Test 5: Single-Relay Routing
+
 Tests message delivery across networks via one relay (Alice → Bob).
 
 ### Test 6: Multi-Hop Relay
+
 Tests message delivery requiring multiple relay hops (Alice → Eve).
 
 ### Test 7: DHT Peer Discovery
+
 Validates Kademlia DHT functionality and peer discovery.
 
 ### Test 8: Bidirectional Messaging
+
 Tests message delivery in both directions (Bob → Alice).
 
 ### Test 9: Mesh Routing
+
 Tests messaging between nodes on the same network (Bob ↔ David).
 
 ### Test 10: Message Queueing
+
 Simulates network delays and verifies message queuing.
 
 ### Test 11: Connection Stability
+
 Monitors persistent connections over time.
 
 ### Test 12: Relay Load Distribution
+
 Verifies both relay nodes are active and handling traffic.
 
 ## Troubleshooting
@@ -243,6 +263,7 @@ Verifies both relay nodes are active and handling traffic.
 ### Nodes fail to connect
 
 Check network configuration:
+
 ```bash
 docker network ls
 docker network inspect docker_network-a
@@ -251,6 +272,7 @@ docker network inspect docker_network-a
 ### Messages not delivered
 
 Check logs for routing errors:
+
 ```bash
 docker logs scm-alice | grep -i "routing\|relay\|send"
 ```
@@ -258,6 +280,7 @@ docker logs scm-alice | grep -i "routing\|relay\|send"
 ### Tests fail
 
 View detailed test logs:
+
 ```bash
 cat docker/test-results/test_run_*.log
 ```
