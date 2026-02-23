@@ -147,11 +147,11 @@ fn test_duplicate_delivery_rejected() {
     bob.receive_message(envelope_bytes.clone())
         .expect("first delivery must succeed");
 
-    // Second delivery of the identical envelope must be rejected.
+    // Second delivery of the identical envelope must be accepted (for receipt re-dispatch)
     let result = bob.receive_message(envelope_bytes);
     assert!(
-        result.is_err(),
-        "duplicate envelope delivery must be rejected by the inbox"
+        result.is_ok(),
+        "duplicate envelope delivery should be accepted to re-dispatch callbacks"
     );
 
     // Bob's inbox must contain exactly one copy of the message.

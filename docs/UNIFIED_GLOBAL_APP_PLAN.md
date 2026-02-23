@@ -9,6 +9,7 @@ Deliver one **singular, dependable SCMessenger product** that works consistently
 - regional communication (same city/country, limited connectivity)
 - international communication (cross-region, cross-continent, mixed NAT/firewall conditions)
 - all primary clients: **Android, iOS, Web**
+- global organic adoption (no geo-targeted rollout gates)
 
 ## 2) Current Baseline (Verified)
 
@@ -17,6 +18,19 @@ Deliver one **singular, dependable SCMessenger product** that works consistently
 - Canonical tracker pending count: **0** (`docs/DOC_PASS_TRACKER.md`)
 
 This plan covers completion work from that baseline.
+
+## 2.1) Owner Directives (2026-02-23)
+
+1. Rollout model: global and organic, not region-targeted.
+2. Infrastructure model: community-operated network (self-hosted and third-party relays/bootstrap nodes are both valid).
+3. Legal/compliance gate: none required for alpha launch.
+4. Reliability objective: app should stay available while open/relaying, and messages must not be dropped; durable store-and-forward is mandatory.
+5. Device strategy: 80/20 coverage (focus on the smallest platform set that covers most users).
+6. Language scope: English-only for alpha; broader i18n is a backlog track.
+7. Storage policy: bounded retention so local storage cannot grow unbounded.
+8. Abuse controls: not an alpha blocker (post-alpha hardening track).
+9. UX policy: mandatory first-run consent gate explaining security/privacy boundaries.
+10. Bootstrap governance mode: pending final product choice (tracked as an explicit decision item).
 
 ## 3) Non-Negotiable Product Invariants
 
@@ -34,6 +48,10 @@ This plan covers completion work from that baseline.
    - local history, drafts, and queued outbox available without network
 5. Cross-platform UX intent parity:
    - same mental model and critical controls on Android/iOS/Web
+6. Retention is bounded by policy:
+   - history/outbox storage uses enforceable limits and pruning behavior
+7. First-run consent gate is mandatory:
+   - users must explicitly acknowledge privacy/security model before first use
 
 ## 4) Unified System Contract
 
@@ -79,18 +97,20 @@ Exit gate:
 
 - deterministic relay behavior under automated parity test suite on all three clients.
 
-## C. Bootstrap and Multi-Region Connectivity
+## C. Bootstrap and Community-Operated Connectivity
 
 - Implement bootstrap resolution order:
   - env/startup overrides
   - remote bootstrap config fetch
   - static signed fallback
-- Introduce multi-region bootstrap pools (Americas, EMEA, APAC) with health scoring.
+- Support mixed operator models:
+  - self-hosted nodes (for example Raspberry Pi/home servers)
+  - third-party-hosted nodes (for example cloud relay services)
 - Add failover and stale-config TTL behavior.
 
 Exit gate:
 
-- node startup reaches healthy peers from any region using configured resolution order.
+- node startup reaches healthy peers through configured resolution order under mixed operator topologies.
 
 ## D. Web Promotion from Experimental to First-Class
 
@@ -119,44 +139,45 @@ Exit gate:
 
 ## F. Localization, Accessibility, and International UX
 
-- Add i18n pipeline (string catalogs for Android/iOS/Web).
-- Ship at least tier-1 languages and RTL readiness.
+- Alpha language scope: English-only across Android/iOS/Web.
+- Add i18n pipeline scaffolding now (string catalog extraction + locale plumbing), but defer non-English copy launch.
+- Keep RTL/language expansion as a post-alpha track.
 - Enforce accessibility baseline (screen readers, dynamic text, contrast).
 
 Exit gate:
 
-- locale and accessibility test suites pass on all clients.
+- English locale and accessibility test suites pass on all clients.
 
 ## G. Security and Abuse Resistance
 
 - Keep E2E boundaries strict and testable.
 - Add key-rotation and compromise-recovery flows.
-- Add abuse controls for relay spam/flood and malformed payloads.
+- Keep abuse controls (relay spam/flood controls) explicitly tracked for post-alpha.
 - Expand threat model and red-team style protocol tests.
 
 Exit gate:
 
-- security acceptance checklist passed for all three clients and relay layer.
+- alpha security acceptance checklist passed for all three clients and relay layer (without abuse-control hard gate).
 
 ## H. Compliance and Data Governance
 
 - Define data retention defaults and user-controlled deletion behavior.
 - Ensure no platform stores plaintext outside approved boundaries.
-- Prepare regional compliance map (store only required metadata).
+- Compliance mapping is a post-alpha expansion track, not an alpha launch gate.
 
 Exit gate:
 
-- compliance checklist signed for target regions before GA expansion.
+- retention and deletion policy is enforced and documented on all clients.
 
 ## I. Observability and Operations
 
 - Unified telemetry model (privacy-preserving) across Android/iOS/Web.
 - Error taxonomy aligned to operator actions.
-- SLOs for delivery, startup, discovery, and reconnect.
+- Reliability targets include active-session availability and durable eventual delivery semantics.
 
 Exit gate:
 
-- operational dashboards and runbooks exist for launch tiers.
+- operational dashboards and runbooks exist for launch tiers, including queue-durability and delivery-recovery signals.
 
 ## J. Release Engineering and CI/CD
 
@@ -207,20 +228,20 @@ Exit gate:
 
 ## Phase 3: Global Network Hardening
 
-- multi-region bootstrap and field matrix execution
+- community-operated bootstrap/relay matrix and field matrix execution
 - routing/delivery reliability tuning
 
 ## Phase 4: Operational Readiness
 
-- observability, runbooks, incident response, compliance readiness
+- observability, runbooks, incident response, and reliability readiness
 - CI gate completion and release rehearsals
 
-## Phase 5: Staged Global Rollout
+## Phase 5: Organic Global Rollout
 
 1. Internal dogfood (all 3 clients)
-2. Regional closed beta
-3. International open beta
-4. General availability
+2. Open global alpha (organic community growth)
+3. Community scale-up with reliability guardrails
+4. GA readiness review and release
 
 ## 7) Definition of Done (Strict)
 
@@ -232,7 +253,8 @@ The app is considered fully unified and launch-ready only when all are true:
 4. Bootstrap resolution (env + dynamic + fallback) is implemented and tested.
 5. Regional/international network matrix targets are met.
 6. CI enforces tri-platform gates by default.
-7. Canonical docs and backlog accurately match runtime behavior.
+7. Retention bounds and consent gate behavior are verified on all clients.
+8. Canonical docs and backlog accurately match runtime behavior.
 
 ## 8) Active Execution Source
 

@@ -17,6 +17,13 @@ These decisions are now canonical unless explicitly superseded:
    - Local history remains readable offline.
 5. Privacy controls: **parity-first** across Android, iOS, and Web for all privacy toggles.
 6. Web/WASM status: currently thinner than mobile and must be promoted to parity before global GA.
+7. Rollout model: **global organic growth**, no region-targeted gate sequencing.
+8. Infrastructure model: **community-operated** (self-hosted and third-party relays/bootstrap nodes are both valid).
+9. Alpha language scope: **English-only**, with i18n scaffold kept as backlog.
+10. First-run UX: **mandatory consent gate** describing security/privacy boundaries.
+11. Storage: **policy-bounded retention** (no unbounded local growth).
+12. Alpha launch scope: abuse controls and regional compliance mapping are **not blocking gates**.
+13. Device strategy: **80/20 support matrix** (smallest support set covering most users).
 
 ## 2) Scope of Documentation Pass
 
@@ -139,6 +146,7 @@ Acceptance criteria:
 
 - No doc suggests inconsistent identity canonicalization.
 - No doc suggests partial inbound/outbound behavior when relay is OFF.
+- Bootstrap docs explicitly allow community-operated node topologies (self-hosted and third-party).
 
 ## Workstream D: Historical Snapshot Consolidation
 
@@ -164,6 +172,7 @@ Acceptance criteria:
 
 - Launch criteria are measurable and tied to scripts/tests in repo.
 - CI verifies Android, iOS, and Web build/runtime readiness in addition to Rust workspace checks.
+- Rollout sequencing is documented as organic/global (not region-targeted cohorts).
 
 ## 5) Phase Plan (Execution)
 
@@ -219,12 +228,12 @@ Gate:
 - Keep existing Rust workspace checks and Docker suites, but add tri-platform parity gates.
 - Ensure release criteria are enforceable by automation, not only manual runs.
 
-## Phase 5: Global Rollout (Staged)
+## Phase 5: Organic Global Rollout
 
 1. Internal dogfood cohort
-2. Closed beta cohort
-3. Open beta
-4. General availability
+2. Open global alpha (organic growth, no region gating)
+3. Community scale-up with tri-platform reliability guardrails
+4. GA readiness review and release
 
 Each stage requires:
 
@@ -249,10 +258,16 @@ Each stage requires:
    - `public_key_hex` canonical end-to-end in storage/export/import docs
 4. Bootstrap behavior:
    - env override + dynamic fetch + fallback path verified
+   - community-operated topology support documented and validated
 5. Privacy parity:
    - toggles mapped and behaviorally equivalent across Android/iOS/Web
 6. Observability:
    - connection/discovery failure classes documented with operator actions
+7. Consent + retention policy:
+   - first-run consent gate implemented on Android/iOS/Web
+   - bounded retention policy implemented and verified
+8. Support policy:
+   - 80/20 support matrix documented and enforced in release criteria
 
 ## 7) Risks and Mitigations
 
@@ -264,6 +279,8 @@ Each stage requires:
    - Mitigation: fallback node set + cached bootstrap list + timeout strategy.
 4. NAT/discovery regressions in field
    - Mitigation: staged rollout with transport telemetry and quick rollback.
+5. Stale TODO/FIXME backlog drifts from real implementation state
+   - Mitigation: recurring TODO/FIXME audit pass with canonical backlog sync.
 
 ## 8) Ownership Model
 
@@ -280,3 +297,4 @@ Each stage requires:
 3. Update canonical docs with locked identity/relay/bootstrap/WASM decisions.
 4. Convert unresolved discovery/remediation notes into backlog items with owners and test criteria.
 5. Add Android+iOS+Web CI gating strategy to close the current Rust-only `ci.yml` gap.
+6. Run TODO/FIXME accuracy sweep and sync backlog wording with current code paths.

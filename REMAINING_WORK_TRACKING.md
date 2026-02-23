@@ -4,6 +4,13 @@ This is the active implementation backlog based on repository state verified on 
 
 Primary delivery target: **one unified Android + iOS + Web app**.
 
+Owner policy constraints (2026-02-23):
+
+- Global organic growth (no region-targeted rollout sequence).
+- Community-operated infrastructure model (self-hosted and third-party nodes are both valid).
+- English-only alpha UI language (i18n expansion tracked as backlog).
+- No abuse-control or regional compliance hard gate for alpha.
+
 ## Priority 0: Tri-Platform Semantics and Reliability
 
 1. Privacy parity-first wiring (all toggles) on Android, iOS, and Web
@@ -58,6 +65,36 @@ Primary delivery target: **one unified Android + iOS + Web app**.
      - `wasm/src/transport.rs`
      - `ui/index.html`
      - `core/src/wasm_support/*`
+
+9. Active-session reliability + durable eventual delivery guarantees
+   - Requirement: while app is open/relaying, service should remain available and messages should not be dropped.
+   - Target: explicit durability contract (persisted outbox/inbox semantics, resend/recovery behavior) plus failure-mode tests.
+   - Scope: crash/restart recovery, relay outage handling, offline queue replay, duplicate-safe redelivery.
+
+10. Bounded retention policy implementation
+   - Requirement: local history/outbox storage must be policy-bound to avoid unbounded disk growth.
+   - Target: configurable retention caps + deterministic pruning behavior + docs for user expectations.
+   - Scope: Android, iOS, and Web local storage behavior and defaults.
+
+11. First-run consent gate (mandatory)
+   - Requirement: first app launch must present consent text explaining privacy/security boundaries.
+   - Target: consent acknowledgment gate on Android/iOS/Web before first messaging actions.
+   - Scope: UX copy parity, acceptance persistence, and re-display rules after major policy changes.
+
+12. 80/20 platform support matrix
+   - Requirement: prioritize the smallest support matrix that covers the majority of active users.
+   - Target: explicit minimum OS/browser matrix and validation plan tied to release gates.
+   - Scope: Android API levels, iOS versions/devices, and browser families/versions.
+
+13. Community-operated relay/bootstrap topology support
+   - Requirement: both self-hosted and third-party-operated infra must be valid without protocol-level assumptions.
+   - Target: operator docs + connectivity tests for cloud-hosted and home-hosted relays/bootstrap nodes.
+   - Scope: examples for GCP-style deployments and low-resource/self-hosted setups.
+
+14. Bootstrap governance mode decision (product choice pending)
+   - Requirement: choose how clients trust and discover bootstrap updates.
+   - Target: lock one governance mode and document it in canonical docs.
+   - Scope: trust source, update cadence, and fallback behavior.
 
 ## Priority 1: Tooling, CI, and Experimental Surface
 
@@ -124,6 +161,11 @@ Primary delivery target: **one unified Android + iOS + Web app**.
 15. iOS historical artifact segmentation
    - Current: `iOS/iosdesign.md` and `iOS/SCMessenger/build_*.txt` mix design/historical/runtime evidence in active tree.
    - Target: section-level historical tagging and relocation/retention policy to keep active docs concise.
+
+16. TODO/FIXME accuracy sync pass (including external test/update signals)
+   - Current: TODO/FIXME markers are distributed across code/docs; external testing updates can drift from tracked backlog.
+   - Target: recurring TODO/FIXME audit that syncs canonical backlog items with current implementation evidence.
+   - Evidence source: `docs/TRIPLE_CHECK_REPORT.md` risk scan + direct file review.
 
 ## Priority 2: Documentation Completion and Governance
 

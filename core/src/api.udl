@@ -239,6 +239,9 @@ dictionary MeshSettings {
     boolean internet_enabled;
     DiscoveryMode discovery_mode;
     boolean onion_routing;
+    boolean cover_traffic_enabled;
+    boolean message_padding_enabled;
+    boolean timing_obfuscation_enabled;
 };
 
 interface MeshSettingsManager {

@@ -380,7 +380,10 @@ private fun uniffi.api.MeshSettings.copy(
     wifiDirectEnabled: Boolean = this.wifiDirectEnabled,
     internetEnabled: Boolean = this.internetEnabled,
     discoveryMode: uniffi.api.DiscoveryMode = this.discoveryMode,
-    onionRouting: Boolean = this.onionRouting
+    onionRouting: Boolean = this.onionRouting,
+    coverTrafficEnabled: Boolean = this.coverTrafficEnabled,
+    messagePaddingEnabled: Boolean = this.messagePaddingEnabled,
+    timingObfuscationEnabled: Boolean = this.timingObfuscationEnabled
 ) = uniffi.api.MeshSettings(
     relayEnabled = relayEnabled,
     maxRelayBudget = maxRelayBudget,
@@ -390,5 +393,8 @@ private fun uniffi.api.MeshSettings.copy(
     wifiDirectEnabled = wifiDirectEnabled,
     internetEnabled = internetEnabled,
     discoveryMode = discoveryMode,
-    onionRouting = onionRouting
+    onionRouting = onionRouting,
+    coverTrafficEnabled = coverTrafficEnabled,
+    messagePaddingEnabled = messagePaddingEnabled,
+    timingObfuscationEnabled = timingObfuscationEnabled
 )

@@ -49,6 +49,11 @@ Interpretation:
 - Most core hits are test assertions (`panic!` in test match arms), not production runtime panics.
 - Android high-value hits remain around test `@Ignore` status mismatch and a small number of TODOs.
 
+TODO/FIXME sync outcome:
+
+- Canonical backlog was refreshed to include a recurring TODO/FIXME accuracy sync pass:
+  - `REMAINING_WORK_TRACKING.md` -> Priority 1, item 16.
+
 ## Pass 3: Cross-Platform Parity Signal Scan
 
 Keyword distribution (`core`, `android`, `iOS`, `wasm`, `ui`, `cli`, `mobile`, `docs`):

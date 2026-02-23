@@ -2648,10 +2648,13 @@ public struct MeshSettings {
     public var internetEnabled: Bool
     public var discoveryMode: DiscoveryMode
     public var onionRouting: Bool
+    public var coverTrafficEnabled: Bool
+    public var messagePaddingEnabled: Bool
+    public var timingObfuscationEnabled: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(relayEnabled: Bool, maxRelayBudget: UInt32, batteryFloor: UInt8, bleEnabled: Bool, wifiAwareEnabled: Bool, wifiDirectEnabled: Bool, internetEnabled: Bool, discoveryMode: DiscoveryMode, onionRouting: Bool) {
+    public init(relayEnabled: Bool, maxRelayBudget: UInt32, batteryFloor: UInt8, bleEnabled: Bool, wifiAwareEnabled: Bool, wifiDirectEnabled: Bool, internetEnabled: Bool, discoveryMode: DiscoveryMode, onionRouting: Bool, coverTrafficEnabled: Bool, messagePaddingEnabled: Bool, timingObfuscationEnabled: Bool) {
         self.relayEnabled = relayEnabled
         self.maxRelayBudget = maxRelayBudget
         self.batteryFloor = batteryFloor
@@ -2661,6 +2664,9 @@ public struct MeshSettings {
         self.internetEnabled = internetEnabled
         self.discoveryMode = discoveryMode
         self.onionRouting = onionRouting
+        self.coverTrafficEnabled = coverTrafficEnabled
+        self.messagePaddingEnabled = messagePaddingEnabled
+        self.timingObfuscationEnabled = timingObfuscationEnabled
     }
 }
 
@@ -2695,6 +2701,15 @@ extension MeshSettings: Equatable, Hashable {
         if lhs.onionRouting != rhs.onionRouting {
             return false
         }
+        if lhs.coverTrafficEnabled != rhs.coverTrafficEnabled {
+            return false
+        }
+        if lhs.messagePaddingEnabled != rhs.messagePaddingEnabled {
+            return false
+        }
+        if lhs.timingObfuscationEnabled != rhs.timingObfuscationEnabled {
+            return false
+        }
         return true
     }
 
@@ -2708,6 +2723,9 @@ extension MeshSettings: Equatable, Hashable {
         hasher.combine(internetEnabled)
         hasher.combine(discoveryMode)
         hasher.combine(onionRouting)
+        hasher.combine(coverTrafficEnabled)
+        hasher.combine(messagePaddingEnabled)
+        hasher.combine(timingObfuscationEnabled)
     }
 }
 
@@ -2724,7 +2742,10 @@ public struct FfiConverterTypeMeshSettings: FfiConverterRustBuffer {
                 wifiDirectEnabled: FfiConverterBool.read(from: &buf), 
                 internetEnabled: FfiConverterBool.read(from: &buf), 
                 discoveryMode: FfiConverterTypeDiscoveryMode.read(from: &buf), 
-                onionRouting: FfiConverterBool.read(from: &buf)
+                onionRouting: FfiConverterBool.read(from: &buf), 
+                coverTrafficEnabled: FfiConverterBool.read(from: &buf), 
+                messagePaddingEnabled: FfiConverterBool.read(from: &buf), 
+                timingObfuscationEnabled: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -2738,6 +2759,9 @@ public struct FfiConverterTypeMeshSettings: FfiConverterRustBuffer {
         FfiConverterBool.write(value.internetEnabled, into: &buf)
         FfiConverterTypeDiscoveryMode.write(value.discoveryMode, into: &buf)
         FfiConverterBool.write(value.onionRouting, into: &buf)
+        FfiConverterBool.write(value.coverTrafficEnabled, into: &buf)
+        FfiConverterBool.write(value.messagePaddingEnabled, into: &buf)
+        FfiConverterBool.write(value.timingObfuscationEnabled, into: &buf)
     }
 }
 

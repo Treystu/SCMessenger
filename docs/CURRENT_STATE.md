@@ -106,9 +106,16 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 ### Product Directives (2026-02-23)
 
 - Primary delivery target is one unified Android+iOS+Web app.
+- Rollout model is global and organic (no region-targeted gating sequence).
+- Infra model is community-operated (self-hosted and third-party relay/bootstrap operators are both valid).
 - Canonical cross-platform identity is `public_key_hex`; other IDs are derived/operational.
 - Relay toggle must remain user-controlled; OFF blocks all inbound/outbound relay traffic while preserving local read access.
 - Bootstrap configuration direction is env-driven startup config plus dynamic fetch (with static fallback).
+- Reliability objective is active-session availability plus durable eventual delivery (messages are retained/retried until route availability).
+- Storage policy must be bounded so local history/outbox cannot grow unbounded.
+- First-run consent gate is required before first messaging actions.
+- Alpha language scope is English-only (i18n expansion remains backlog work).
+- Abuse controls and regional compliance mapping are explicitly post-alpha tracks.
 - Web/WASM remains experimental today and must be promoted to parity before GA.
 
 ### Code Quality Gaps

@@ -524,7 +524,11 @@ impl MeshService {
                 tracing::info!(
                     "Battery recovered from critical ({}%{})",
                     new_state.battery_level,
-                    if new_state.is_charging { ", charging" } else { "" }
+                    if new_state.is_charging {
+                        ", charging"
+                    } else {
+                        ""
+                    }
                 );
             } else if !was_low && is_low {
                 tracing::warn!(
@@ -535,7 +539,11 @@ impl MeshService {
                 tracing::info!(
                     "Battery recovered from low ({}%{})",
                     new_state.battery_level,
-                    if new_state.is_charging { ", charging" } else { "" }
+                    if new_state.is_charging {
+                        ", charging"
+                    } else {
+                        ""
+                    }
                 );
             }
         } else {
@@ -838,6 +846,9 @@ pub struct MeshSettings {
     pub internet_enabled: bool,
     pub discovery_mode: DiscoveryMode,
     pub onion_routing: bool,
+    pub cover_traffic_enabled: bool,
+    pub message_padding_enabled: bool,
+    pub timing_obfuscation_enabled: bool,
 }
 
 impl Default for MeshSettings {
@@ -852,6 +863,9 @@ impl Default for MeshSettings {
             internet_enabled: true,
             discovery_mode: DiscoveryMode::Normal,
             onion_routing: false,
+            cover_traffic_enabled: false,
+            message_padding_enabled: false,
+            timing_obfuscation_enabled: false,
         }
     }
 }
@@ -1488,11 +1502,7 @@ impl SwarmBridge {
     }
 
     /// Publish data to a Gossipsub topic.
-    pub fn publish_topic(
-        &self,
-        topic: String,
-        data: Vec<u8>,
-    ) -> Result<(), crate::IronCoreError> {
+    pub fn publish_topic(&self, topic: String, data: Vec<u8>) -> Result<(), crate::IronCoreError> {
         let handle_guard = self.handle.lock();
         let handle = handle_guard
             .as_ref()

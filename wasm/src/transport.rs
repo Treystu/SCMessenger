@@ -190,7 +190,7 @@ impl WebSocketRelay {
             // The sender is cloned out of `inner` under a read lock so the
             // closure does not capture the entire `Arc<RwLock<>>`. If no
             // subscriber has called `subscribe()` yet, frames are logged and
-            // dropped (the same behaviour as the previous TODO state).
+            // dropped.
             let inner_msg = Arc::clone(&self.inner);
             let onmessage = Closure::wrap(Box::new(move |event: MessageEvent| {
                 match event.data().dyn_into::<js_sys::ArrayBuffer>() {
@@ -310,7 +310,11 @@ impl WebSocketRelay {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            tracing::debug!("WebSocket simulation: sent {} bytes to {}", data.len(), self.url);
+            tracing::debug!(
+                "WebSocket simulation: sent {} bytes to {}",
+                data.len(),
+                self.url
+            );
         }
 
         Ok(())
@@ -462,12 +466,12 @@ impl WebRtcTransport {
             // Wire dc.onopen → mark state Connected.
             {
                 let inner_open = Arc::clone(&inner);
-                let onopen = wasm_bindgen::closure::Closure::wrap(
-                    Box::new(move |_: web_sys::Event| {
+                let onopen =
+                    wasm_bindgen::closure::Closure::wrap(Box::new(move |_: web_sys::Event| {
                         tracing::info!("WebRTC DataChannel open");
                         inner_open.write().state = TransportState::Connected;
-                    }) as Box<dyn FnMut(web_sys::Event)>,
-                );
+                    })
+                        as Box<dyn FnMut(web_sys::Event)>);
                 dc.set_onopen(Some(onopen.as_ref().unchecked_ref()));
                 onopen.forget();
             }
@@ -475,12 +479,12 @@ impl WebRtcTransport {
             // Wire dc.onclose → mark state Disconnected.
             {
                 let inner_close = Arc::clone(&inner);
-                let onclose = wasm_bindgen::closure::Closure::wrap(
-                    Box::new(move |_: web_sys::Event| {
+                let onclose =
+                    wasm_bindgen::closure::Closure::wrap(Box::new(move |_: web_sys::Event| {
                         tracing::info!("WebRTC DataChannel closed");
                         inner_close.write().state = TransportState::Disconnected;
-                    }) as Box<dyn FnMut(web_sys::Event)>,
-                );
+                    })
+                        as Box<dyn FnMut(web_sys::Event)>);
                 dc.set_onclose(Some(onclose.as_ref().unchecked_ref()));
                 onclose.forget();
             }
@@ -488,12 +492,12 @@ impl WebRtcTransport {
             // Wire dc.onerror → mark state Error.
             {
                 let inner_err = Arc::clone(&inner);
-                let onerror = wasm_bindgen::closure::Closure::wrap(
-                    Box::new(move |e: web_sys::Event| {
+                let onerror =
+                    wasm_bindgen::closure::Closure::wrap(Box::new(move |e: web_sys::Event| {
                         tracing::error!("WebRTC DataChannel error: {:?}", e);
                         inner_err.write().state = TransportState::Error;
-                    }) as Box<dyn FnMut(web_sys::Event)>,
-                );
+                    })
+                        as Box<dyn FnMut(web_sys::Event)>);
                 dc.set_onerror(Some(onerror.as_ref().unchecked_ref()));
                 onerror.forget();
             }
@@ -501,41 +505,46 @@ impl WebRtcTransport {
             // Wire dc.onmessage → forward bytes to ingress channel.
             {
                 let inner_msg = Arc::clone(&inner);
-                let onmessage =
-                    wasm_bindgen::closure::Closure::wrap(Box::new(move |evt: web_sys::MessageEvent| {
-                        match evt.data().dyn_into::<js_sys::ArrayBuffer>() {
-                            Ok(ab) => {
-                                let bytes = js_sys::Uint8Array::new(&ab).to_vec();
-                                let byte_len = bytes.len();
-                                let tx_opt = inner_msg.read().ingress_tx.clone();
-                                match tx_opt {
-                                    Some(tx) => {
-                                        if let Err(e) = tx.unbounded_send(bytes) {
-                                            tracing::warn!(
+                let onmessage = wasm_bindgen::closure::Closure::wrap(Box::new(
+                    move |evt: web_sys::MessageEvent| match evt
+                        .data()
+                        .dyn_into::<js_sys::ArrayBuffer>()
+                    {
+                        Ok(ab) => {
+                            let bytes = js_sys::Uint8Array::new(&ab).to_vec();
+                            let byte_len = bytes.len();
+                            let tx_opt = inner_msg.read().ingress_tx.clone();
+                            match tx_opt {
+                                Some(tx) => {
+                                    if let Err(e) = tx.unbounded_send(bytes) {
+                                        tracing::warn!(
                                                 "WebRTC ingress channel closed, dropping {} byte frame: {}",
                                                 byte_len,
                                                 e
                                             );
-                                        } else {
-                                            tracing::debug!(
-                                                "WebRTC DataChannel received {} bytes → ingress",
-                                                byte_len
-                                            );
-                                        }
-                                    }
-                                    None => {
+                                    } else {
                                         tracing::debug!(
-                                            "WebRTC DataChannel received {} bytes but no subscriber; dropped",
+                                            "WebRTC DataChannel received {} bytes → ingress",
                                             byte_len
                                         );
                                     }
                                 }
-                            }
-                            Err(_) => {
-                                tracing::warn!("WebRTC DataChannel received non-ArrayBuffer frame; ignored");
+                                None => {
+                                    tracing::debug!(
+                                            "WebRTC DataChannel received {} bytes but no subscriber; dropped",
+                                            byte_len
+                                        );
+                                }
                             }
                         }
-                    }) as Box<dyn FnMut(web_sys::MessageEvent)>);
+                        Err(_) => {
+                            tracing::warn!(
+                                "WebRTC DataChannel received non-ArrayBuffer frame; ignored"
+                            );
+                        }
+                    },
+                )
+                    as Box<dyn FnMut(web_sys::MessageEvent)>);
                 dc.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
                 onmessage.forget();
             }
@@ -550,36 +559,38 @@ impl WebRtcTransport {
             {
                 let inner_dc = Arc::clone(&inner);
                 let dc_store = Arc::clone(&data_channel_store);
-                let ondatachannel =
-                    wasm_bindgen::closure::Closure::wrap(Box::new(move |evt: web_sys::RtcDataChannelEvent| {
+                let ondatachannel = wasm_bindgen::closure::Closure::wrap(Box::new(
+                    move |evt: web_sys::RtcDataChannelEvent| {
                         let inbound_dc = evt.channel();
                         tracing::info!("WebRTC inbound DataChannel received");
 
                         // onopen
                         let inner_open2 = Arc::clone(&inner_dc);
-                        let onopen2 = wasm_bindgen::closure::Closure::wrap(
-                            Box::new(move |_: web_sys::Event| {
+                        let onopen2 = wasm_bindgen::closure::Closure::wrap(Box::new(
+                            move |_: web_sys::Event| {
                                 tracing::info!("Inbound WebRTC DataChannel open");
                                 inner_open2.write().state = TransportState::Connected;
-                            }) as Box<dyn FnMut(web_sys::Event)>,
-                        );
+                            },
+                        )
+                            as Box<dyn FnMut(web_sys::Event)>);
                         inbound_dc.set_onopen(Some(onopen2.as_ref().unchecked_ref()));
                         onopen2.forget();
 
                         // onmessage
                         let inner_msg2 = Arc::clone(&inner_dc);
                         let onmessage2 = wasm_bindgen::closure::Closure::wrap(Box::new(
-                            move |evt: web_sys::MessageEvent| {
-                                match evt.data().dyn_into::<js_sys::ArrayBuffer>() {
-                                    Ok(ab) => {
-                                        let bytes = js_sys::Uint8Array::new(&ab).to_vec();
-                                        let tx_opt = inner_msg2.read().ingress_tx.clone();
-                                        if let Some(tx) = tx_opt {
-                                            let _ = tx.unbounded_send(bytes);
-                                        }
+                            move |evt: web_sys::MessageEvent| match evt
+                                .data()
+                                .dyn_into::<js_sys::ArrayBuffer>()
+                            {
+                                Ok(ab) => {
+                                    let bytes = js_sys::Uint8Array::new(&ab).to_vec();
+                                    let tx_opt = inner_msg2.read().ingress_tx.clone();
+                                    if let Some(tx) = tx_opt {
+                                        let _ = tx.unbounded_send(bytes);
                                     }
-                                    Err(_) => {}
                                 }
+                                Err(_) => {}
                             },
                         )
                             as Box<dyn FnMut(web_sys::MessageEvent)>);
@@ -588,7 +599,9 @@ impl WebRtcTransport {
 
                         // Store inbound channel, replacing the offerer placeholder.
                         *dc_store.write() = Some(inbound_dc);
-                    }) as Box<dyn FnMut(web_sys::RtcDataChannelEvent)>);
+                    },
+                )
+                    as Box<dyn FnMut(web_sys::RtcDataChannelEvent)>);
                 peer_conn.set_ondatachannel(Some(ondatachannel.as_ref().unchecked_ref()));
                 ondatachannel.forget();
             }
@@ -601,8 +614,8 @@ impl WebRtcTransport {
             // `add_ice_candidate()`.
             {
                 let inner_ice = Arc::clone(&inner);
-                let onicecandidate =
-                    wasm_bindgen::closure::Closure::wrap(Box::new(move |evt: web_sys::RtcPeerConnectionIceEvent| {
+                let onicecandidate = wasm_bindgen::closure::Closure::wrap(Box::new(
+                    move |evt: web_sys::RtcPeerConnectionIceEvent| {
                         if let Some(candidate) = evt.candidate() {
                             // to_json() returns an RTCIceCandidateInit-shaped JS object;
                             // stringify it so we can hand an opaque JSON string to the
@@ -614,12 +627,16 @@ impl WebRtcTransport {
                                 tracing::debug!("WebRTC ICE candidate gathered");
                                 inner_ice.write().ice_candidates.push(json);
                             } else {
-                                tracing::warn!("WebRTC ICE candidate stringify failed; candidate dropped");
+                                tracing::warn!(
+                                    "WebRTC ICE candidate stringify failed; candidate dropped"
+                                );
                             }
                         } else {
                             tracing::debug!("WebRTC ICE gathering complete");
                         }
-                    }) as Box<dyn FnMut(web_sys::RtcPeerConnectionIceEvent)>);
+                    },
+                )
+                    as Box<dyn FnMut(web_sys::RtcPeerConnectionIceEvent)>);
                 peer_conn.set_onicecandidate(Some(onicecandidate.as_ref().unchecked_ref()));
                 onicecandidate.forget();
             }
@@ -671,9 +688,12 @@ impl WebRtcTransport {
                 };
 
                 // Step 2 — extract the SDP string from the resolved JS value.
-                let sdp_str = match js_sys::Reflect::get(&offer_jsval, &wasm_bindgen::JsValue::from_str("sdp"))
-                    .ok()
-                    .and_then(|v| v.as_string())
+                let sdp_str = match js_sys::Reflect::get(
+                    &offer_jsval,
+                    &wasm_bindgen::JsValue::from_str("sdp"),
+                )
+                .ok()
+                .and_then(|v| v.as_string())
                 {
                     Some(s) => s,
                     None => {
@@ -755,7 +775,9 @@ impl WebRtcTransport {
                 {
                     Some(s) => s,
                     None => {
-                        tracing::warn!("set_remote_answer: could not parse SDP from JSON; using raw string");
+                        tracing::warn!(
+                            "set_remote_answer: could not parse SDP from JSON; using raw string"
+                        );
                         sdp.clone()
                     }
                 };
@@ -764,10 +786,8 @@ impl WebRtcTransport {
                     web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Answer);
                 desc_init.sdp(&sdp_str);
 
-                match wasm_bindgen_futures::JsFuture::from(
-                    pc.set_remote_description(&desc_init),
-                )
-                .await
+                match wasm_bindgen_futures::JsFuture::from(pc.set_remote_description(&desc_init))
+                    .await
                 {
                     Ok(_) => tracing::info!("WebRTC remote answer set successfully"),
                     Err(e) => {
@@ -812,7 +832,9 @@ impl WebRtcTransport {
                 {
                     Some(s) => s,
                     None => {
-                        tracing::warn!("set_remote_offer: could not parse SDP from JSON; using raw string");
+                        tracing::warn!(
+                            "set_remote_offer: could not parse SDP from JSON; using raw string"
+                        );
                         sdp.clone()
                     }
                 };
@@ -821,10 +843,8 @@ impl WebRtcTransport {
                     web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Offer);
                 desc_init.sdp(&sdp_str);
 
-                match wasm_bindgen_futures::JsFuture::from(
-                    pc.set_remote_description(&desc_init),
-                )
-                .await
+                match wasm_bindgen_futures::JsFuture::from(pc.set_remote_description(&desc_init))
+                    .await
                 {
                     Ok(_) => tracing::info!("WebRTC remote offer set; call create_answer() next"),
                     Err(e) => {
@@ -954,8 +974,7 @@ impl WebRtcTransport {
             wasm_bindgen_futures::spawn_local(async move {
                 match js_sys::JSON::parse(&cand_str) {
                     Ok(obj) => {
-                        let candidate_init =
-                            obj.unchecked_into::<web_sys::RtcIceCandidateInit>();
+                        let candidate_init = obj.unchecked_into::<web_sys::RtcIceCandidateInit>();
                         if let Err(e) = wasm_bindgen_futures::JsFuture::from(
                             pc.add_ice_candidate_with_opt_rtc_ice_candidate_init(Some(
                                 &candidate_init,

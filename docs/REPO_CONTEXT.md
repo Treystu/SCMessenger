@@ -28,6 +28,7 @@ The system is designed so cryptography and identity live in Rust core, while pla
 
 Primary product surface is **one unified Android + iOS + Web delivery target**.
 CLI remains a critical operator/runtime tool, and Web/WASM is experimental today but parity-critical before GA.
+Rollout model is global/organic (no region-targeted cohorts), and network infrastructure is community-operated across self-hosted and third-party nodes.
 
 ## 2) Workspace and App Topology
 

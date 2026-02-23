@@ -178,9 +178,10 @@ final class SettingsViewModel {
         get { UserDefaults.standard.object(forKey: "privacy_cover_traffic") as? Bool ?? false }
         set {
             UserDefaults.standard.set(newValue, forKey: "privacy_cover_traffic")
-            // TODO: forward to core when UniFFI exposes CoverTrafficConfig toggle
-            // e.g. guard var s = settings else { return }
-            //      s.coverTrafficEnabled = newValue; settings = s; saveSettings()
+            guard var s = settings else { return }
+            s.coverTrafficEnabled = newValue
+            settings = s
+            saveSettings()
         }
     }
 
@@ -188,7 +189,10 @@ final class SettingsViewModel {
         get { UserDefaults.standard.object(forKey: "privacy_message_padding") as? Bool ?? false }
         set {
             UserDefaults.standard.set(newValue, forKey: "privacy_message_padding")
-            // TODO: forward to core when UniFFI exposes PaddingConfig toggle
+            guard var s = settings else { return }
+            s.messagePaddingEnabled = newValue
+            settings = s
+            saveSettings()
         }
     }
 
@@ -196,7 +200,10 @@ final class SettingsViewModel {
         get { UserDefaults.standard.object(forKey: "privacy_timing_obfuscation") as? Bool ?? false }
         set {
             UserDefaults.standard.set(newValue, forKey: "privacy_timing_obfuscation")
-            // TODO: forward to core when UniFFI exposes TimingObfuscationConfig toggle
+            guard var s = settings else { return }
+            s.timingObfuscationEnabled = newValue
+            settings = s
+            saveSettings()
         }
     }
 
