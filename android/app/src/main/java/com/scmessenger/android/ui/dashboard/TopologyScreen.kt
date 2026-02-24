@@ -30,7 +30,7 @@ import kotlin.math.sin
 /**
  * Topology screen - Canvas-based network graph visualization.
  *
- * Displays the mesh network topology as an interactive graph:
+ * Displays the mesh topology as an interactive graph:
  * - Nodes represent peers (self node highlighted)
  * - Edges represent connections (colored by transport type)
  * - Layout uses circular arrangement for clarity
@@ -52,7 +52,7 @@ fun TopologyScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Network Topology") },
+                title = { Text("Mesh Topology") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -93,7 +93,7 @@ fun TopologyScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = "Start the mesh service to see network topology",
+                            text = "Start the mesh service to see mesh topology",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

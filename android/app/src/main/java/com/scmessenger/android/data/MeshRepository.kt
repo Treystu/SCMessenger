@@ -1,6 +1,9 @@
 package com.scmessenger.android.data
 
 import android.content.Context
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import com.scmessenger.android.utils.Permissions
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -9,6 +12,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import java.io.File
 
 /**
@@ -90,6 +95,7 @@ class MeshRepository(private val context: Context) {
     private var pendingOutboxRetryJob: kotlinx.coroutines.Job? = null
     private val pendingOutboxFile = File(storagePath, "pending_outbox.json")
     private val receiptAwaitSeconds: Long = 8L
+    private val identitySyncSentPeers = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     @Volatile
     private var lastRelayBootstrapDialMs: Long = 0L
 
@@ -111,7 +117,8 @@ class MeshRepository(private val context: Context) {
     private data class TransportIdentityResolution(
         val canonicalPeerId: String,
         val publicKey: String,
-        val nickname: String?
+        val nickname: String?,
+        val localNickname: String? = null
     )
 
     private data class PendingOutboundEnvelope(
@@ -126,9 +133,48 @@ class MeshRepository(private val context: Context) {
         val nextAttemptAtEpochSec: Long
     )
 
+    private data class MessageIdentityHints(
+        val identityId: String?,
+        val publicKey: String?,
+        val nickname: String?,
+        val libp2pPeerId: String?,
+        val listeners: List<String>,
+        val externalAddresses: List<String>,
+        val connectionHints: List<String>
+    )
+
+    private data class DecodedMessagePayload(
+        val kind: String,
+        val text: String,
+        val hints: MessageIdentityHints?
+    )
+
+    // Track discovered peers (both headless and full)
+    private val _discoveredPeers = MutableStateFlow<Map<String, PeerDiscoveryInfo>>(emptyMap())
+    val discoveredPeers: StateFlow<Map<String, PeerDiscoveryInfo>> = _discoveredPeers.asStateFlow()
+
+    data class PeerDiscoveryInfo(
+        val peerId: String,          // Key (libp2p or canonical)
+        val publicKey: String?,      // Extracted from PeerId or from identity beacon
+        val nickname: String?,       // From Identity Beacon or Contact DB
+        val localNickname: String? = null,
+        val transport: com.scmessenger.android.service.TransportType,
+        val isFull: Boolean,         // True if peer identity is authenticated (non-relay)
+        val lastSeen: ULong = System.currentTimeMillis().toULong() / 1000u
+    )
+
     private data class DeliveryAttemptResult(
         val acked: Boolean,
         val routePeerId: String?
+    )
+
+    private data class ReplayDiscoveredIdentity(
+        var canonicalPeerId: String,
+        var publicKey: String?,
+        var nickname: String?,
+        var localNickname: String?,
+        var routePeerId: String?,
+        var transport: com.scmessenger.android.service.TransportType
     )
 
     init {
@@ -198,12 +244,38 @@ class MeshRepository(private val context: Context) {
                             return@launch
                         }
 
-                        if (isBootstrapRelayPeer(peerId)) {
-                            Timber.d("Ignoring bootstrap relay peer discovery event: $peerId")
-                            return@launch
+                        val isRelay = isBootstrapRelayPeer(peerId)
+                        if (isRelay) {
+                            Timber.d("Reporting discovery of bootstrap relay peer: $peerId")
                         }
 
                         val transportIdentity = resolveTransportIdentity(peerId)
+                        val extractedKey = try { ironCore?.extractPublicKeyFromPeerId(peerId) } catch (_: Exception) { null }
+
+                        val discoveredNickname = prepopulateDiscoveryNickname(
+                            nickname = transportIdentity?.nickname,
+                            peerId = transportIdentity?.canonicalPeerId ?: peerId,
+                            publicKey = transportIdentity?.publicKey ?: extractedKey
+                        )
+
+                        // Update discovery map
+                        val discoveryInfo = PeerDiscoveryInfo(
+                            peerId = transportIdentity?.canonicalPeerId ?: peerId,
+                            publicKey = transportIdentity?.publicKey ?: extractedKey,
+                            nickname = discoveredNickname,
+                            localNickname = transportIdentity?.localNickname,
+                            transport = com.scmessenger.android.service.TransportType.INTERNET, // Default for swarm
+                            isFull = !isRelay && (
+                                transportIdentity != null ||
+                                    !extractedKey.isNullOrBlank()
+                                ),
+                            lastSeen = System.currentTimeMillis().toULong() / 1000u
+                        )
+                        updateDiscoveredPeer(peerId, discoveryInfo)
+                        if (discoveryInfo.peerId != peerId) {
+                            updateDiscoveredPeer(discoveryInfo.peerId, discoveryInfo)
+                        }
+
                         if (transportIdentity != null) {
                             val relayHints = buildDialCandidatesForPeer(
                                 routePeerId = peerId,
@@ -214,25 +286,35 @@ class MeshRepository(private val context: Context) {
                                 com.scmessenger.android.service.PeerEvent.IdentityDiscovered(
                                     peerId = transportIdentity.canonicalPeerId,
                                     publicKey = transportIdentity.publicKey,
-                                    nickname = transportIdentity.nickname,
+                                    nickname = discoveredNickname,
                                     libp2pPeerId = peerId,
                                     listeners = relayHints
                                 )
+                            )
+                            annotateIdentityInLedger(
+                                routePeerId = peerId,
+                                listeners = relayHints,
+                                publicKey = transportIdentity.publicKey,
+                                nickname = discoveredNickname
                             )
                             persistRouteHintsForTransportPeer(
                                 libp2pPeerId = peerId,
                                 listeners = relayHints,
                                 knownPublicKey = transportIdentity.publicKey
                             )
-                            upsertFederatedContact(
-                                canonicalPeerId = transportIdentity.canonicalPeerId,
-                                publicKey = transportIdentity.publicKey,
-                                nickname = transportIdentity.nickname,
-                                libp2pPeerId = peerId,
-                                listeners = relayHints
-                            )
+                                upsertFederatedContact(
+                                    canonicalPeerId = transportIdentity.canonicalPeerId,
+                                    publicKey = transportIdentity.publicKey,
+                                    nickname = transportIdentity.nickname,
+                                    libp2pPeerId = peerId,
+                                    listeners = relayHints,
+                                    createIfMissing = false
+                                )
                             try { contactManager?.updateLastSeen(transportIdentity.canonicalPeerId) } catch (_: Exception) { }
                             try { contactManager?.updateLastSeen(peerId) } catch (_: Exception) { }
+                            if (!isRelay && relayHints.isNotEmpty()) {
+                                connectToPeer(peerId, relayHints)
+                            }
                         } else {
                             com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
                                 com.scmessenger.android.service.PeerEvent.Discovered(
@@ -263,15 +345,43 @@ class MeshRepository(private val context: Context) {
                             Timber.i("Treating bootstrap peer $peerId as transport relay only")
                         } else {
                             val transportIdentity = resolveTransportIdentity(peerId)
+
+                            val discoveredNickname = prepopulateDiscoveryNickname(
+                                nickname = transportIdentity?.nickname,
+                                peerId = transportIdentity?.canonicalPeerId ?: peerId,
+                                publicKey = transportIdentity?.publicKey
+                            )
+
+                            // Update discovery map
+                            val discoveryInfo = PeerDiscoveryInfo(
+                                peerId = transportIdentity?.canonicalPeerId ?: peerId,
+                                publicKey = transportIdentity?.publicKey,
+                                nickname = discoveredNickname,
+                                localNickname = transportIdentity?.localNickname,
+                                transport = com.scmessenger.android.service.TransportType.INTERNET,
+                                isFull = transportIdentity != null,
+                                lastSeen = System.currentTimeMillis().toULong() / 1000u
+                            )
+                            updateDiscoveredPeer(peerId, discoveryInfo)
+                            if (discoveryInfo.peerId != peerId) {
+                                updateDiscoveredPeer(discoveryInfo.peerId, discoveryInfo)
+                            }
+
                             if (transportIdentity != null) {
                                 com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
                                     com.scmessenger.android.service.PeerEvent.IdentityDiscovered(
                                         peerId = transportIdentity.canonicalPeerId,
                                         publicKey = transportIdentity.publicKey,
-                                        nickname = transportIdentity.nickname,
+                                        nickname = discoveredNickname,
                                         libp2pPeerId = peerId,
                                         listeners = dialCandidates
                                     )
+                                )
+                                annotateIdentityInLedger(
+                                    routePeerId = peerId,
+                                    listeners = dialCandidates,
+                                    publicKey = transportIdentity.publicKey,
+                                    nickname = discoveredNickname
                                 )
                                 try { contactManager?.updateLastSeen(transportIdentity.canonicalPeerId) } catch (_: Exception) { }
                                 try { contactManager?.updateLastSeen(peerId) } catch (_: Exception) { }
@@ -295,9 +405,14 @@ class MeshRepository(private val context: Context) {
                                     publicKey = transportIdentity.publicKey,
                                     nickname = transportIdentity.nickname,
                                     libp2pPeerId = peerId,
-                                    listeners = dialCandidates
+                                    listeners = dialCandidates,
+                                    createIfMissing = false
                                 )
                             }
+                            sendIdentitySyncIfNeeded(
+                                routePeerId = peerId,
+                                knownPublicKey = transportIdentity?.publicKey
+                            )
                         }
 
                         // Identified implies an active session exists; avoid immediate re-dial loops.
@@ -315,7 +430,13 @@ class MeshRepository(private val context: Context) {
                     }
                 }
 
-                override fun onMessageReceived(senderId: String, senderPublicKeyHex: String, messageId: String, data: ByteArray) {
+                override fun onMessageReceived(
+                    senderId: String,
+                    senderPublicKeyHex: String,
+                    messageId: String,
+                    senderTimestamp: ULong,
+                    data: ByteArray
+                ) {
                     Timber.i("Message from $senderId: $messageId")
                     try {
                         // Check if relay/messaging is enabled (bidirectional control)
@@ -330,7 +451,54 @@ class MeshRepository(private val context: Context) {
                         }
 
                         val normalizedSenderKey = normalizePublicKey(senderPublicKeyHex)
-                        val canonicalPeerId = resolveCanonicalPeerId(senderId, senderPublicKeyHex)
+                        val rawContent = data.toString(Charsets.UTF_8)
+                        val decodedPayload = decodeMessageWithIdentityHints(rawContent)
+                        val hintedIdentity = decodedPayload.hints
+                        val hintedKey = normalizePublicKey(hintedIdentity?.publicKey)
+                        val verifiedHints = if (
+                            hintedKey != null &&
+                                normalizedSenderKey != null &&
+                                hintedKey != normalizedSenderKey
+                        ) {
+                            Timber.w(
+                                "Ignoring forged message identity hint for $senderId: key mismatch " +
+                                    "(hint=${hintedKey.take(8)}..., envelope=${normalizedSenderKey.take(8)}...)"
+                            )
+                            null
+                        } else {
+                            hintedIdentity
+                        }
+
+                        var canonicalPeerId = resolveCanonicalPeerId(senderId, senderPublicKeyHex)
+                        canonicalPeerId = resolveCanonicalPeerIdFromMessageHints(
+                            resolvedCanonicalPeerId = canonicalPeerId,
+                            senderId = senderId,
+                            senderPublicKeyHex = senderPublicKeyHex,
+                            hintedIdentityId = verifiedHints?.identityId
+                        )
+
+                        val hintedRoutePeerId = verifiedHints?.libp2pPeerId
+                            ?.trim()
+                            ?.takeIf { isLibp2pPeerId(it) }
+                        val routePeerId = senderId.takeIf { isLibp2pPeerId(it) } ?: hintedRoutePeerId
+                        val hintedAddresses = (
+                            verifiedHints?.listeners.orEmpty() +
+                                verifiedHints?.externalAddresses.orEmpty() +
+                                verifiedHints?.connectionHints.orEmpty()
+                            )
+                        val hintedDialCandidates = buildDialCandidatesForPeer(
+                            routePeerId = routePeerId,
+                            rawAddresses = hintedAddresses,
+                            includeRelayCircuits = true
+                        )
+                        val knownNickname = selectAuthoritativeNickname(
+                            verifiedHints?.nickname,
+                            resolveKnownPeerNickname(
+                                canonicalPeerId = canonicalPeerId,
+                                routePeerId = routePeerId,
+                                publicKey = normalizedSenderKey
+                            )
+                        )
                         if (canonicalPeerId != senderId) {
                             Timber.i("Canonicalized sender $senderId -> $canonicalPeerId using public key match")
                         }
@@ -344,14 +512,19 @@ class MeshRepository(private val context: Context) {
                         // (Rust only fires this callback after successful decryption)
                         val existingContact = try { contactManager?.get(canonicalPeerId) } catch (e: Exception) { null }
                         if (existingContact == null && normalizedSenderKey != null) {
-                            val routeNotes = if (isLibp2pPeerId(senderId)) {
-                                appendRoutingHint(notes = null, key = "libp2p_peer_id", value = senderId)
+                            var routeNotes = if (!routePeerId.isNullOrBlank()) {
+                                appendRoutingHint(notes = null, key = "libp2p_peer_id", value = routePeerId)
                             } else {
                                 null
                             }
+                            routeNotes = upsertRoutingListeners(
+                                routeNotes,
+                                normalizeOutboundListenerHints(hintedDialCandidates)
+                            )
                             val autoContact = uniffi.api.Contact(
                                 peerId = canonicalPeerId,
-                                nickname = null,
+                                nickname = knownNickname,
+                                localNickname = null,
                                 publicKey = normalizedSenderKey,
                                 addedAt = (System.currentTimeMillis() / 1000).toULong(),
                                 lastSeen = (System.currentTimeMillis() / 1000).toULong(),
@@ -368,21 +541,43 @@ class MeshRepository(private val context: Context) {
                                 Timber.d("updateLastSeen failed: ${e.message}")
                             }
 
+                            if (existingContact.nickname.isNullOrBlank() && !knownNickname.isNullOrBlank()) {
+                                val updatedContact = uniffi.api.Contact(
+                                    peerId = existingContact.peerId,
+                                    nickname = knownNickname,
+                                    localNickname = existingContact.localNickname,
+                                    publicKey = existingContact.publicKey,
+                                    addedAt = existingContact.addedAt,
+                                    lastSeen = existingContact.lastSeen,
+                                    notes = existingContact.notes
+                                )
+                                try {
+                                    contactManager?.add(updatedContact)
+                                } catch (e: Exception) {
+                                    Timber.d("Failed to persist nickname hint for ${existingContact.peerId}: ${e.message}")
+                                }
+                            }
+
                             // Persist explicit libp2p alias mapping when known so identity/libp2p IDs
                             // stay canonicalized to one conversation thread.
-                            if (isLibp2pPeerId(senderId) &&
+                            if (!routePeerId.isNullOrBlank() &&
                                 normalizedSenderKey != null &&
                                 normalizePublicKey(existingContact.publicKey) == normalizedSenderKey &&
                                 parseRoutingHints(existingContact.notes).libp2pPeerId.isNullOrBlank()
                             ) {
-                                val updatedNotes = appendRoutingHint(existingContact.notes, "libp2p_peer_id", senderId)
+                                val updatedNotes = appendRoutingHint(existingContact.notes, "libp2p_peer_id", routePeerId)
+                                val updatedNotesWithListeners = upsertRoutingListeners(
+                                    updatedNotes,
+                                    normalizeOutboundListenerHints(hintedDialCandidates)
+                                )
                                 val updatedContact = uniffi.api.Contact(
                                     peerId = existingContact.peerId,
                                     nickname = existingContact.nickname,
+                                    localNickname = existingContact.localNickname,
                                     publicKey = existingContact.publicKey,
                                     addedAt = existingContact.addedAt,
                                     lastSeen = existingContact.lastSeen,
-                                    notes = updatedNotes
+                                    notes = updatedNotesWithListeners
                                 )
                                 try {
                                     contactManager?.add(updatedContact)
@@ -390,6 +585,63 @@ class MeshRepository(private val context: Context) {
                                     Timber.d("Failed to persist libp2p alias hint for ${existingContact.peerId}: ${e.message}")
                                 }
                             }
+                        }
+
+                        if (normalizedSenderKey != null) {
+                            upsertFederatedContact(
+                                canonicalPeerId = canonicalPeerId,
+                                publicKey = normalizedSenderKey,
+                                nickname = knownNickname,
+                                libp2pPeerId = routePeerId,
+                                listeners = hintedDialCandidates,
+                                createIfMissing = false
+                            )
+                            val discoveredNickname = prepopulateDiscoveryNickname(
+                                nickname = knownNickname,
+                                peerId = canonicalPeerId,
+                                publicKey = normalizedSenderKey
+                            )
+                            val discoveryInfo = PeerDiscoveryInfo(
+                                peerId = canonicalPeerId,
+                                publicKey = normalizedSenderKey,
+                                nickname = discoveredNickname,
+                                localNickname = existingContact?.localNickname,
+                                transport = com.scmessenger.android.service.TransportType.INTERNET,
+                                isFull = true,
+                                lastSeen = (System.currentTimeMillis() / 1000).toULong()
+                            )
+                            updateDiscoveredPeer(canonicalPeerId, discoveryInfo)
+                            if (!routePeerId.isNullOrBlank() && routePeerId != canonicalPeerId) {
+                                updateDiscoveredPeer(routePeerId, discoveryInfo)
+                            }
+                            val listeners = (
+                                routePeerId?.let(::getDialHintsForRoutePeer).orEmpty() +
+                                    hintedDialCandidates
+                                ).distinct()
+                            repoScope.launch {
+                                com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
+                                    com.scmessenger.android.service.PeerEvent.IdentityDiscovered(
+                                        peerId = canonicalPeerId,
+                                        publicKey = normalizedSenderKey,
+                                        nickname = discoveredNickname,
+                                        libp2pPeerId = routePeerId,
+                                        listeners = listeners
+                                    )
+                                )
+                            }
+                            annotateIdentityInLedger(
+                                routePeerId = routePeerId,
+                                listeners = listeners,
+                                publicKey = normalizedSenderKey,
+                                nickname = discoveredNickname
+                            )
+                        }
+
+                        val messageKind = decodedPayload.kind.trim().lowercase()
+                        if (messageKind == "identity_sync") {
+                            Timber.d("Processed identity sync from $canonicalPeerId (route=$routePeerId)")
+                            sendDeliveryReceiptAsync(senderPublicKeyHex, messageId, senderId)
+                            return
                         }
 
                         val existingRecord = try {
@@ -403,13 +655,15 @@ class MeshRepository(private val context: Context) {
                             return
                         }
 
-                        val content = data.toString(Charsets.UTF_8)
+                        val content = decodedPayload.text
+                        val fallbackNow = (System.currentTimeMillis() / 1000).toULong()
+                        val canonicalTimestamp = if (senderTimestamp > 0uL) senderTimestamp else fallbackNow
                         val record = uniffi.api.MessageRecord(
                             id = messageId,
                             direction = uniffi.api.MessageDirection.RECEIVED,
                             peerId = canonicalPeerId,
                             content = content,
-                            timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                            timestamp = canonicalTimestamp,
                             delivered = true
                         )
                         historyManager?.add(record)
@@ -461,6 +715,7 @@ class MeshRepository(private val context: Context) {
                 throw IllegalStateException("MeshService did not reach RUNNING state")
             }
             updateStats()
+            startPeriodicStatsUpdate()
 
             Timber.i("Mesh service started successfully")
         } catch (e: Exception) {
@@ -485,30 +740,54 @@ class MeshRepository(private val context: Context) {
         }
     }
 
+    private fun sendIdentitySyncIfNeeded(routePeerId: String, knownPublicKey: String? = null) {
+        val normalizedRoute = routePeerId.trim()
+        if (normalizedRoute.isEmpty() || !isLibp2pPeerId(normalizedRoute) || isBootstrapRelayPeer(normalizedRoute)) return
+        val shouldSend = identitySyncSentPeers.add(normalizedRoute)
+        if (!shouldSend) return
+
+        repoScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val recipientPublicKey = normalizePublicKey(knownPublicKey)
+                    ?: normalizePublicKey(
+                        try {
+                            ironCore?.extractPublicKeyFromPeerId(normalizedRoute)
+                        } catch (_: Exception) {
+                            null
+                        }
+                    )
+                if (recipientPublicKey == null) {
+                    identitySyncSentPeers.remove(normalizedRoute)
+                    return@launch
+                }
+
+                val payload = encodeIdentitySyncPayload()
+                val prepared = ironCore?.prepareMessageWithId(recipientPublicKey, payload)
+                if (prepared == null) {
+                    identitySyncSentPeers.remove(normalizedRoute)
+                    return@launch
+                }
+                swarmBridge?.sendMessage(normalizedRoute, prepared.envelopeData)
+                Timber.d("Identity sync sent to $normalizedRoute")
+            } catch (e: Exception) {
+                identitySyncSentPeers.remove(normalizedRoute)
+                Timber.d("Failed to send identity sync to $normalizedRoute: ${e.message}")
+            }
+        }
+    }
+
     private fun initializeAndStartBle() {
         val settings = loadSettings()
         if (!settings.bleEnabled) {
             Timber.d("BLE disabled in settings")
             return
         }
-
-        // BLE Scanner: Feeds discovered peers to MeshService and handles GATT connections
-        if (bleScanner == null) {
-            bleScanner = com.scmessenger.android.transport.ble.BleScanner(
-                context,
-                onPeerDiscovered = { peerId ->
-                    meshService?.onPeerDiscovered(peerId)
-                    // Connect via GATT client to read identity if needed
-                    bleGattClient?.connect(peerId)
-                },
-                onDataReceived = { peerId, data ->
-                    meshService?.onDataReceived(peerId, data)
-                }
-            )
+        if (!hasAllPermissions(Permissions.bluetooth)) {
+            Timber.w("Skipping BLE transport start: missing Bluetooth permissions")
+            return
         }
-        bleScanner?.startScanning()
 
-        // BLE GATT Client: Manages connections to discovered peers
+        // BLE GATT Client: must exist before scanner callbacks to avoid missing first identity reads.
         if (bleGattClient == null) {
             bleGattClient = com.scmessenger.android.transport.ble.BleGattClient(
                 context,
@@ -520,6 +799,23 @@ class MeshRepository(private val context: Context) {
                 }
             )
         }
+
+        // BLE Scanner: Feeds discovered peers to MeshService and handles GATT connections
+        if (bleScanner == null) {
+            bleScanner = com.scmessenger.android.transport.ble.BleScanner(
+                context,
+                onPeerDiscovered = { peerId ->
+                    meshService?.onPeerDiscovered(peerId)
+                    // Connect via GATT client to read identity if needed.
+                    kotlin.runCatching { bleGattClient?.connect(peerId) }
+                        .onFailure { Timber.w(it, "BLE GATT connect failed for $peerId") }
+                },
+                onDataReceived = { peerId, data ->
+                    meshService?.onDataReceived(peerId, data)
+                }
+            )
+        }
+        bleScanner?.startScanning()
 
         // BLE Advertiser: Broadcasts our presence
         if (bleAdvertiser == null) {
@@ -555,21 +851,51 @@ class MeshRepository(private val context: Context) {
                     attempts++
                 }
                 try {
-                    val resolvedListeners = normalizeOutboundListenerHints(listeners)
-                    val relayConfirmedExternal = normalizeExternalAddressHints(getExternalAddresses())
-                    val connectionHints = (resolvedListeners + relayConfirmedExternal).distinct()
-                    val beaconJson = org.json.JSONObject()
-                        .put("identity_id", identity.identityId ?: "")
-                        .put("public_key", publicKeyHex)
-                        .put("nickname", identity.nickname ?: "")
-                        .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
-                        .put("listeners", org.json.JSONArray(resolvedListeners))
-                        .put("external_addresses", org.json.JSONArray(relayConfirmedExternal))
-                        .put("connection_hints", org.json.JSONArray(connectionHints))
-                        .toString()
-                        .toByteArray(Charsets.UTF_8)
+                    // Keep BLE identity beacons compact; oversized values can fail GATT reads
+                    // on peer platforms and drop nickname propagation.
+                    var resolvedListeners = normalizeOutboundListenerHints(listeners).take(2)
+                    var resolvedExternal = normalizeExternalAddressHints(getExternalAddresses()).take(2)
+                    val nickname = (identity.nickname ?: "").take(32)
+                    fun buildBeacon(): org.json.JSONObject {
+                        val connectionHints = (resolvedListeners + resolvedExternal).distinct()
+                        return org.json.JSONObject()
+                            .put("identity_id", identity.identityId ?: "")
+                            .put("public_key", publicKeyHex)
+                            .put("nickname", nickname)
+                            .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
+                            .put("listeners", org.json.JSONArray(resolvedListeners))
+                            .put("external_addresses", org.json.JSONArray(resolvedExternal))
+                            .put("connection_hints", org.json.JSONArray(connectionHints))
+                    }
+
+                    var beaconJsonObject = buildBeacon()
+                    var beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
+
+                    if (beaconJson.size > 480) {
+                        resolvedListeners = resolvedListeners.take(1)
+                        resolvedExternal = resolvedExternal.take(1)
+                        beaconJsonObject = buildBeacon()
+                        beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
+                    }
+                    if (beaconJson.size > 480) {
+                        resolvedListeners = emptyList()
+                        resolvedExternal = emptyList()
+                        beaconJsonObject = buildBeacon()
+                        beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
+                    }
+                    if (beaconJson.size > 480) {
+                        beaconJsonObject = org.json.JSONObject()
+                            .put("identity_id", identity.identityId ?: "")
+                            .put("public_key", publicKeyHex)
+                            .put("nickname", nickname)
+                            .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
+                            .put("listeners", org.json.JSONArray())
+                            .put("external_addresses", org.json.JSONArray())
+                            .put("connection_hints", org.json.JSONArray())
+                        beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
+                    }
                     bleGattServer?.setIdentityData(beaconJson)
-                    Timber.i("BLE GATT identity beacon set: ${publicKeyHex.take(8)}... (includes relay-confirmed hints)")
+                    Timber.i("BLE GATT identity beacon set: ${publicKeyHex.take(8)}... (${beaconJson.size} bytes)")
                 } catch (e: Exception) {
                     Timber.w("Failed to set BLE GATT identity beacon: ${e.message}")
                 }
@@ -590,15 +916,30 @@ class MeshRepository(private val context: Context) {
                     Timber.w("Ignoring BLE identity from $blePeerId: invalid public key")
                     return
                 }
-            val identityId = json.optString("identity_id", blePeerId).takeIf { it.isNotBlank() } ?: blePeerId
-            val nickname = json.optString("nickname")
+            val identityId = json.optString("identity_id", "")
+                .trim()
+                .takeIf { it.isNotBlank() }
+                ?: blePeerId
+            val rawNickname = (
+                json.optString("nickname", "")
+                    .ifBlank { json.optString("name", "") }
+                ).trim()
             val libp2pPeerId = json.optString("libp2p_peer_id")
             val listeners = json.optJSONArray("listeners")
             val externalAddresses = json.optJSONArray("external_addresses")
             val connectionHints = json.optJSONArray("connection_hints")
             val normalizedLibp2p = libp2pPeerId.takeIf { !it.isNullOrBlank() }?.trim()
 
-            Timber.i("Peer identity read from $blePeerId: ${publicKeyHex.take(8)}...")
+            val discoveredNickname = prepopulateDiscoveryNickname(
+                nickname = rawNickname,
+                peerId = identityId,
+                publicKey = publicKeyHex
+            )
+
+            Timber.i(
+                "Peer identity read from $blePeerId: ${publicKeyHex.take(8)}... " +
+                    "identity=${identityId.take(12)} nickname='${discoveredNickname?.take(24) ?: ""}'"
+            )
             val selfIdentity = ironCore?.getIdentityInfo()
             val selfKey = normalizePublicKey(selfIdentity?.publicKeyHex)
             val selfIdentityId = selfIdentity?.identityId?.trim().orEmpty()
@@ -609,6 +950,21 @@ class MeshRepository(private val context: Context) {
             ) {
                 Timber.d("Ignoring self BLE identity beacon from $blePeerId")
                 return
+            }
+
+            // Update discovery map
+            val discoveryInfo = PeerDiscoveryInfo(
+                peerId = identityId,
+                publicKey = publicKeyHex,
+                nickname = discoveredNickname,
+                localNickname = try { contactManager?.get(identityId)?.localNickname } catch (_: Exception) { null },
+                transport = com.scmessenger.android.service.TransportType.BLE,
+                isFull = true,
+                lastSeen = System.currentTimeMillis().toULong() / 1000u
+            )
+            updateDiscoveredPeer(identityId, discoveryInfo)
+            if (!normalizedLibp2p.isNullOrBlank()) {
+                updateDiscoveredPeer(normalizedLibp2p, discoveryInfo)
             }
 
             // Emit identity to nearby peers bus — UI will show peer in Nearby section for user to add
@@ -634,13 +990,19 @@ class MeshRepository(private val context: Context) {
                     com.scmessenger.android.service.PeerEvent.IdentityDiscovered(
                         peerId = identityId,
                         publicKey = publicKeyHex,
-                        nickname = nickname.takeIf { it.isNotEmpty() },
+                        nickname = discoveredNickname,
                         libp2pPeerId = routePeerId,
                         listeners = listenersStrings,
                         blePeerId = blePeerId
                     )
                 )
             }
+            annotateIdentityInLedger(
+                routePeerId = routePeerId,
+                listeners = listenersStrings,
+                publicKey = publicKeyHex,
+                nickname = discoveredNickname
+            )
             Timber.i("Emitted IdentityDiscovered for $blePeerId: ${publicKeyHex.take(8)}...")
             // Update lastSeen if already a saved contact
             try { contactManager?.updateLastSeen(blePeerId) } catch (_: Exception) { }
@@ -651,9 +1013,10 @@ class MeshRepository(private val context: Context) {
             upsertFederatedContact(
                 canonicalPeerId = identityId,
                 publicKey = publicKeyHex,
-                nickname = nickname.takeIf { it.isNotBlank() },
+                nickname = rawNickname.takeIf { it.isNotBlank() },
                 libp2pPeerId = routePeerId,
-                listeners = listenersStrings
+                listeners = listenersStrings,
+                createIfMissing = false
             )
 
             // Attempt to dial via Swarm if we have libp2p info
@@ -662,6 +1025,38 @@ class MeshRepository(private val context: Context) {
             }
         } catch (e: Exception) {
             Timber.w("Failed to parse peer identity read: ${e.message}")
+        }
+    }
+
+    private fun updateDiscoveredPeer(key: String, info: PeerDiscoveryInfo) {
+        _discoveredPeers.update { current ->
+            val existing = current[key]
+            if (existing != null && existing.isFull && !info.isFull && (info.lastSeen - existing.lastSeen < 300u)) {
+                // Don't downgrade a full identity to headless if we've seen it recently.
+                current
+            } else {
+                val merged = if (existing == null) {
+                    info
+                } else {
+                    info.copy(
+                        peerId = selectCanonicalPeerId(info.peerId, existing.peerId),
+                        publicKey = info.publicKey ?: existing.publicKey,
+                        nickname = selectAuthoritativeNickname(info.nickname, existing.nickname),
+                        localNickname = normalizeNickname(info.localNickname) ?: normalizeNickname(existing.localNickname),
+                        transport = if (
+                            info.transport == com.scmessenger.android.service.TransportType.INTERNET ||
+                                existing.transport == com.scmessenger.android.service.TransportType.INTERNET
+                        ) {
+                            com.scmessenger.android.service.TransportType.INTERNET
+                        } else {
+                            info.transport
+                        },
+                        isFull = info.isFull || existing.isFull,
+                        lastSeen = maxOf(info.lastSeen, existing.lastSeen)
+                    )
+                }
+                current + (key to merged)
+            }
         }
     }
 
@@ -674,6 +1069,11 @@ class MeshRepository(private val context: Context) {
             // But WifiTransportManager likely starts both.
             // Assuming strict check:
              return
+        }
+        val wifiPermissions = Permissions.location + Permissions.nearbyWifi
+        if (!hasAllPermissions(wifiPermissions)) {
+            Timber.w("Skipping WiFi transport start: missing Location/Nearby WiFi permissions")
+            return
         }
 
         if (wifiTransportManager == null) {
@@ -776,6 +1176,7 @@ class MeshRepository(private val context: Context) {
 
         kotlin.runCatching { meshService?.stop() }
             .onFailure { Timber.w(it, "Failed to stop Rust mesh service") }
+        identitySyncSentPeers.clear()
 
         // Clear references to avoid stale lifecycle state on next start.
         coreDelegate = null
@@ -822,9 +1223,37 @@ class MeshRepository(private val context: Context) {
      */
     private fun updateStats() {
         try {
-            _serviceStats.value = meshService?.getStats()
+            val stats = meshService?.getStats()
+            if (stats != null) {
+                // Combine swarm stats with our own discovery map
+                val discovered = _discoveredPeers.value
+                val fullCount = discovered.values.count { it.isFull }
+                val headlessCount = discovered.values.count { !it.isFull }
+                
+                // We use a custom stats object or just update the one from core
+                // For now, let's keep the core one but maybe log the detailed count
+                Timber.d("Mesh Stats: ${stats.peersDiscovered} peers (Core), $fullCount full, $headlessCount headless (Repo)")
+                
+                _serviceStats.value = stats
+                
+                // Emit event for UI
+                repoScope.launch {
+                    com.scmessenger.android.service.MeshEventBus.emitStatusEvent(
+                        com.scmessenger.android.service.StatusEvent.StatsUpdated(stats)
+                    )
+                }
+            }
         } catch (e: Exception) {
             Timber.e(e, "Failed to get service stats")
+        }
+    }
+
+    private fun startPeriodicStatsUpdate() {
+        repoScope.launch {
+            while (isActive) {
+                kotlinx.coroutines.delay(5000) // Update every 5 seconds
+                updateStats()
+            }
         }
     }
 
@@ -834,6 +1263,13 @@ class MeshRepository(private val context: Context) {
 
     fun addContact(contact: uniffi.api.Contact) {
         contactManager?.add(contact)
+        val routing = parseRoutingHints(contact.notes)
+        annotateIdentityInLedger(
+            routePeerId = routing.libp2pPeerId,
+            listeners = routing.listeners,
+            publicKey = contact.publicKey,
+            nickname = contact.nickname
+        )
         Timber.d("Contact added: ${contact.peerId}")
     }
 
@@ -877,9 +1313,42 @@ class MeshRepository(private val context: Context) {
     }
 
     fun setNickname(nickname: String) {
-        ironCore?.setNickname(nickname)
-        Timber.i("Nickname set to: $nickname")
+        val trimmed = nickname.trim()
+        if (trimmed.isEmpty()) {
+            Timber.w("Refusing to set blank nickname")
+            return
+        }
+        ironCore?.setNickname(trimmed)
+        Timber.i("Nickname set to: $trimmed")
         updateBleIdentityBeacon()
+        identitySyncSentPeers.clear()
+        val connectedPeers = try {
+            swarmBridge?.getPeers().orEmpty()
+        } catch (e: Exception) {
+            Timber.d("Unable to enumerate peers for nickname sync: ${e.message}")
+            emptyList()
+        }
+        connectedPeers.forEach { routePeerId ->
+            sendIdentitySyncIfNeeded(routePeerId = routePeerId)
+        }
+    }
+
+    fun setLocalNickname(peerId: String, nickname: String?) {
+        try {
+            contactManager?.setLocalNickname(peerId, nickname)
+            Timber.i("Local nickname for $peerId set to: $nickname")
+            // Refresh discovery map if this peer is in it
+                _discoveredPeers.update { current ->
+                    val existing = current[peerId]
+                    if (existing != null) {
+                        current + (peerId to existing.copy(localNickname = nickname))
+                    } else {
+                        current
+                    }
+                }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to set local nickname for $peerId")
+        }
     }
 
     suspend fun sendMessage(peerId: String, content: String) {
@@ -924,7 +1393,8 @@ class MeshRepository(private val context: Context) {
                 }
                 val preferredRoutePeerId = routePeerCandidates.firstOrNull()
                 // 2. Encrypt/Prepare message (use trimmed key)
-                val prepared = ironCore?.prepareMessageWithId(publicKey, content)
+                val outboundContent = encodeMessageWithIdentityHints(content)
+                val prepared = ironCore?.prepareMessageWithId(publicKey, outboundContent)
                     ?: throw IllegalStateException("Failed to prepare message: IronCore not initialized")
                 val messageId = prepared.messageId.trim()
                 if (messageId.isBlank()) {
@@ -1008,6 +1478,22 @@ class MeshRepository(private val context: Context) {
         return ironCore?.getIdentityInfo()?.initialized == true
     }
 
+    fun hasRequiredRuntimePermissions(): Boolean = hasAllPermissions(Permissions.required)
+
+    @Synchronized
+    fun onRuntimePermissionsGranted() {
+        if (meshService?.getState() != uniffi.api.ServiceState.RUNNING) {
+            Timber.d("Permission refresh skipped: mesh service is not running")
+            return
+        }
+        kotlin.runCatching { initializeAndStartBle() }
+            .onFailure { Timber.w(it, "BLE transport failed to start after permission grant") }
+        kotlin.runCatching { initializeAndStartWifi() }
+            .onFailure { Timber.w(it, "WiFi transport failed to start after permission grant") }
+        kotlin.runCatching { initializeAndStartSwarm() }
+            .onFailure { Timber.w(it, "Swarm transport failed to refresh after permission grant") }
+    }
+
     suspend fun createIdentity() {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
@@ -1054,6 +1540,11 @@ class MeshRepository(private val context: Context) {
         }
         ensureLocalIdentityFederation()
     }
+
+    private fun hasAllPermissions(permissions: List<String>): Boolean =
+        permissions.all { permission ->
+            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        }
 
     // Keep legacy addMessage for receiving side or manual adds
     fun addMessage(record: uniffi.api.MessageRecord) {
@@ -1113,6 +1604,102 @@ class MeshRepository(private val context: Context) {
 
     fun getDialableAddresses(): List<uniffi.api.LedgerEntry> {
         return ledgerManager?.dialableAddresses() ?: emptyList()
+    }
+
+    fun getDialHintsForRoutePeer(routePeerId: String): List<String> {
+        val normalizedRoute = routePeerId.trim()
+        if (!isLibp2pPeerId(normalizedRoute)) return emptyList()
+        val fromLedger = ledgerManager
+            ?.dialableAddresses()
+            ?.asSequence()
+            ?.filter { it.peerId == normalizedRoute }
+            ?.map { it.multiaddr }
+            ?.toList()
+            .orEmpty()
+        return buildDialCandidatesForPeer(
+            routePeerId = normalizedRoute,
+            rawAddresses = fromLedger,
+            includeRelayCircuits = true
+        )
+    }
+
+    fun replayDiscoveredPeerEvents() {
+        repoScope.launch {
+            val snapshot = _discoveredPeers.value
+            if (snapshot.isEmpty()) return@launch
+
+            val aggregates = linkedMapOf<String, ReplayDiscoveredIdentity>()
+
+            snapshot.forEach { (mapKey, info) ->
+                val canonicalPeerId = info.peerId.trim().ifEmpty { mapKey.trim() }
+                if (canonicalPeerId.isEmpty()) return@forEach
+
+                val normalizedKey = normalizePublicKey(info.publicKey)
+                val aggregateKey = normalizedKey ?: canonicalPeerId
+                val routeCandidate = when {
+                    isLibp2pPeerId(mapKey) -> mapKey
+                    isLibp2pPeerId(canonicalPeerId) -> canonicalPeerId
+                    else -> null
+                }
+                val discoveredNickname = prepopulateDiscoveryNickname(
+                    nickname = info.nickname,
+                    peerId = canonicalPeerId,
+                    publicKey = normalizedKey
+                )
+
+                val existing = aggregates[aggregateKey]
+                if (existing == null) {
+                    aggregates[aggregateKey] = ReplayDiscoveredIdentity(
+                        canonicalPeerId = canonicalPeerId,
+                        publicKey = normalizedKey,
+                        nickname = discoveredNickname,
+                        localNickname = info.localNickname,
+                        routePeerId = routeCandidate,
+                        transport = info.transport
+                    )
+                } else {
+                    if (existing.publicKey.isNullOrBlank() && !normalizedKey.isNullOrBlank()) {
+                        existing.publicKey = normalizedKey
+                    }
+                    existing.canonicalPeerId = selectCanonicalPeerId(canonicalPeerId, existing.canonicalPeerId)
+                    existing.nickname = selectAuthoritativeNickname(discoveredNickname, existing.nickname)
+                    if (existing.localNickname.isNullOrBlank() && !info.localNickname.isNullOrBlank()) {
+                        existing.localNickname = info.localNickname
+                    }
+                    if (existing.routePeerId.isNullOrBlank() && !routeCandidate.isNullOrBlank()) {
+                        existing.routePeerId = routeCandidate
+                    }
+                    if (existing.transport != com.scmessenger.android.service.TransportType.INTERNET &&
+                        info.transport == com.scmessenger.android.service.TransportType.INTERNET
+                    ) {
+                        existing.transport = info.transport
+                    }
+                }
+            }
+
+            aggregates.values.forEach { peer ->
+                val listeners = peer.routePeerId?.let(::getDialHintsForRoutePeer).orEmpty()
+                val publicKey = peer.publicKey
+                if (!publicKey.isNullOrBlank()) {
+                    com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
+                        com.scmessenger.android.service.PeerEvent.IdentityDiscovered(
+                            peerId = peer.canonicalPeerId,
+                            publicKey = publicKey,
+                            nickname = peer.nickname,
+                            libp2pPeerId = peer.routePeerId,
+                            listeners = listeners
+                        )
+                    )
+                } else {
+                    com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
+                        com.scmessenger.android.service.PeerEvent.Discovered(
+                            peerId = peer.canonicalPeerId,
+                            transport = peer.transport
+                        )
+                    )
+                }
+            }
+        }
     }
 
     fun getAllKnownTopics(): List<String> {
@@ -1383,6 +1970,7 @@ class MeshRepository(private val context: Context) {
         val now = System.currentTimeMillis() / 1000
         val queue = loadPendingOutbox().toMutableList()
         if (queue.isEmpty()) return
+        Timber.d("Flushing pending outbox (${queue.size} item(s)); reason=$reason")
 
         var updated = false
         val iterator = queue.listIterator()
@@ -1630,11 +2218,302 @@ class MeshRepository(private val context: Context) {
         }
     }
 
+    private fun resolveCanonicalPeerIdFromMessageHints(
+        resolvedCanonicalPeerId: String,
+        senderId: String,
+        senderPublicKeyHex: String,
+        hintedIdentityId: String?
+    ): String {
+        val normalizedHint = hintedIdentityId?.trim()?.takeIf { isIdentityId(it) } ?: return resolvedCanonicalPeerId
+        if (normalizedHint == resolvedCanonicalPeerId) return resolvedCanonicalPeerId
+        if (isBootstrapRelayPeer(normalizedHint)) return resolvedCanonicalPeerId
+
+        val normalizedSenderKey = normalizePublicKey(senderPublicKeyHex)
+        val contacts = try {
+            contactManager?.list().orEmpty()
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        if (normalizedSenderKey != null) {
+            val hintedContact = contacts.firstOrNull { it.peerId == normalizedHint }
+            if (hintedContact != null && normalizePublicKey(hintedContact.publicKey) == normalizedSenderKey) {
+                return normalizedHint
+            }
+
+            val keyMatches = contacts.filter { normalizePublicKey(it.publicKey) == normalizedSenderKey }
+            if (keyMatches.size == 1) return keyMatches.first().peerId
+            if (keyMatches.isNotEmpty()) return resolvedCanonicalPeerId
+        }
+
+        return if (resolvedCanonicalPeerId == senderId || isLibp2pPeerId(resolvedCanonicalPeerId)) {
+            normalizedHint
+        } else {
+            resolvedCanonicalPeerId
+        }
+    }
+
+    private fun encodeMessageWithIdentityHints(content: String): String {
+        return encodeMeshMessagePayload(content = content, kind = "text")
+    }
+
+    private fun encodeIdentitySyncPayload(): String {
+        return encodeMeshMessagePayload(content = "", kind = "identity_sync")
+    }
+
+    private fun encodeMeshMessagePayload(content: String, kind: String): String {
+        val identity = ironCore?.getIdentityInfo() ?: return content
+        val publicKeyHex = normalizePublicKey(identity.publicKeyHex) ?: return content
+
+        val identityId = identity.identityId?.trim().orEmpty()
+        val nickname = normalizeNickname(identity.nickname)?.take(64).orEmpty()
+        val libp2pPeerId = identity.libp2pPeerId?.trim().orEmpty()
+        val listeners = normalizeOutboundListenerHints(getListeningAddresses()).take(3)
+        val externalAddresses = normalizeExternalAddressHints(getExternalAddresses()).take(3)
+        val connectionHints = (listeners + externalAddresses).distinct().take(6)
+
+        return try {
+            org.json.JSONObject()
+                .put("schema", "scm.message.identity.v1")
+                .put("kind", kind)
+                .put("text", content)
+                .put(
+                    "sender",
+                    org.json.JSONObject()
+                        .put("identity_id", identityId)
+                        .put("public_key", publicKeyHex)
+                        .put("nickname", nickname)
+                        .put("libp2p_peer_id", libp2pPeerId)
+                        .put("listeners", org.json.JSONArray(listeners))
+                        .put("external_addresses", org.json.JSONArray(externalAddresses))
+                        .put("connection_hints", org.json.JSONArray(connectionHints))
+                )
+                .toString()
+        } catch (_: Exception) {
+            content
+        }
+    }
+
+    private fun decodeMessageWithIdentityHints(raw: String): DecodedMessagePayload {
+        val trimmed = raw.trim()
+        if (!trimmed.startsWith("{")) {
+            return DecodedMessagePayload(kind = "text", text = raw, hints = null)
+        }
+
+        return try {
+            val json = org.json.JSONObject(trimmed)
+            if (json.optString("schema") != "scm.message.identity.v1") {
+                return DecodedMessagePayload(kind = "text", text = raw, hints = null)
+            }
+
+            val sender = json.optJSONObject("sender")
+            val hints = sender?.let {
+                MessageIdentityHints(
+                    identityId = it.optString("identity_id", "").trim().takeIf { value -> value.isNotBlank() },
+                    publicKey = normalizePublicKey(it.optString("public_key", "")),
+                    nickname = normalizeNickname(it.optString("nickname", "")),
+                    libp2pPeerId = it.optString("libp2p_peer_id", "").trim().takeIf { value ->
+                        value.isNotBlank() && isLibp2pPeerId(value)
+                    },
+                    listeners = jsonArrayToStringList(it.optJSONArray("listeners")),
+                    externalAddresses = jsonArrayToStringList(it.optJSONArray("external_addresses")),
+                    connectionHints = jsonArrayToStringList(it.optJSONArray("connection_hints"))
+                )
+            }
+
+            val text = json.optString("text", raw)
+            val kind = json.optString("kind", "text").trim().ifEmpty { "text" }
+            DecodedMessagePayload(
+                kind = kind,
+                text = text,
+                hints = hints
+            )
+        } catch (_: Exception) {
+            DecodedMessagePayload(kind = "text", text = raw, hints = null)
+        }
+    }
+
+    private fun jsonArrayToStringList(array: org.json.JSONArray?): List<String> {
+        if (array == null) return emptyList()
+        return buildList {
+            for (i in 0 until array.length()) {
+                val value = array.optString(i).trim()
+                if (value.isNotEmpty()) add(value)
+            }
+        }.distinct()
+    }
+
     private fun normalizePublicKey(value: String?): String? {
         val trimmed = value?.trim() ?: return null
         if (trimmed.length != 64) return null
         if (!trimmed.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
         return trimmed.lowercase()
+    }
+
+    private fun normalizeNickname(value: String?): String? {
+        return value?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun isSyntheticFallbackNickname(value: String?): Boolean {
+        val normalized = normalizeNickname(value)?.lowercase() ?: return false
+        // "peer-xxxxxx" is our receiver-side placeholder. It should never
+        // overwrite a sender-provided nickname.
+        return normalized.startsWith("peer-")
+    }
+
+    private fun selectAuthoritativeNickname(incoming: String?, existing: String?): String? {
+        val incomingNormalized = normalizeNickname(incoming)
+        val existingNormalized = normalizeNickname(existing)
+
+        val incomingSynthetic = isSyntheticFallbackNickname(incomingNormalized)
+        val existingSynthetic = isSyntheticFallbackNickname(existingNormalized)
+
+        return when {
+            incomingNormalized == null && existingSynthetic -> null
+            incomingNormalized == null -> existingNormalized
+            incomingSynthetic && existingNormalized == null -> null
+            incomingSynthetic && existingSynthetic -> null
+            incomingSynthetic -> existingNormalized
+            existingSynthetic -> incomingNormalized
+            else -> incomingNormalized
+        }
+    }
+
+    private fun isBlePeerId(value: String): Boolean {
+        return kotlin.runCatching { java.util.UUID.fromString(value.trim()) }.isSuccess
+    }
+
+    private fun selectCanonicalPeerId(incomingPeerId: String, existingPeerId: String): String {
+        val incoming = incomingPeerId.trim()
+        val existing = existingPeerId.trim()
+        if (incoming.isEmpty()) return existing
+        if (existing.isEmpty() || existing == incoming) return incoming
+
+        val incomingIsLibp2p = isLibp2pPeerId(incoming)
+        val existingIsLibp2p = isLibp2pPeerId(existing)
+        val incomingIsIdentity = isIdentityId(incoming)
+        val existingIsIdentity = isIdentityId(existing)
+        val incomingIsBle = isBlePeerId(incoming)
+        val existingIsBle = isBlePeerId(existing)
+
+        return when {
+            existingIsIdentity && incomingIsLibp2p -> existing
+            incomingIsIdentity && existingIsLibp2p -> incoming
+            existingIsBle && !incomingIsBle -> incoming
+            !existingIsBle && incomingIsBle -> existing
+            else -> incoming
+        }
+    }
+
+    private fun prepopulateDiscoveryNickname(
+        nickname: String?,
+        peerId: String,
+        publicKey: String?
+    ): String? {
+        val incomingNickname = normalizeNickname(nickname)
+
+        val normalizedKey = normalizePublicKey(publicKey)
+        val contacts = try {
+            contactManager?.list().orEmpty()
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        val fromContact = contacts.firstOrNull {
+            it.peerId == peerId ||
+                (
+                    normalizedKey != null &&
+                        normalizePublicKey(it.publicKey) == normalizedKey
+                    )
+        }?.nickname
+        return selectAuthoritativeNickname(incomingNickname, fromContact)
+    }
+
+    private fun resolveKnownPeerNickname(
+        canonicalPeerId: String,
+        routePeerId: String?,
+        publicKey: String?
+    ): String? {
+        val normalizedKey = normalizePublicKey(publicKey)
+        val routeCandidate = routePeerId?.trim()?.takeIf { it.isNotBlank() }
+
+        val fromDiscovery = _discoveredPeers.value.values
+            .asSequence()
+            .filter { info ->
+                info.peerId == canonicalPeerId ||
+                    (!routeCandidate.isNullOrBlank() && info.peerId == routeCandidate) ||
+                    (
+                        normalizedKey != null &&
+                            normalizePublicKey(info.publicKey) == normalizedKey
+                        )
+            }
+            .mapNotNull { normalizeNickname(it.nickname) }
+            .firstOrNull()
+
+        val fromLedger = ledgerManager?.dialableAddresses()
+            ?.asSequence()
+            ?.filter { entry ->
+                entry.peerId == canonicalPeerId ||
+                    (!routeCandidate.isNullOrBlank() && entry.peerId == routeCandidate) ||
+                    (
+                        normalizedKey != null &&
+                            normalizePublicKey(entry.publicKey) == normalizedKey
+                        )
+            }
+            ?.mapNotNull { normalizeNickname(it.nickname) }
+            ?.firstOrNull()
+
+        val fromContact = try {
+            contactManager?.list()
+                ?.asSequence()
+                ?.filter { contact ->
+                    contact.peerId == canonicalPeerId ||
+                        (!routeCandidate.isNullOrBlank() && contact.peerId == routeCandidate) ||
+                        (
+                            normalizedKey != null &&
+                                normalizePublicKey(contact.publicKey) == normalizedKey
+                            )
+                }
+                ?.mapNotNull { normalizeNickname(it.nickname) }
+                ?.firstOrNull()
+        } catch (_: Exception) {
+            null
+        }
+
+        val discoveryOrLedger = selectAuthoritativeNickname(fromDiscovery, fromLedger)
+        return selectAuthoritativeNickname(discoveryOrLedger, fromContact)
+    }
+
+    private fun annotateIdentityInLedger(
+        routePeerId: String?,
+        listeners: List<String>,
+        publicKey: String?,
+        nickname: String?
+    ) {
+        val normalizedRoute = routePeerId?.trim().orEmpty()
+        if (normalizedRoute.isEmpty() || !isLibp2pPeerId(normalizedRoute)) return
+
+        val dialHints = buildDialCandidatesForPeer(
+            routePeerId = normalizedRoute,
+            rawAddresses = listeners,
+            includeRelayCircuits = true
+        )
+        if (dialHints.isEmpty()) return
+
+        val normalizedKey = normalizePublicKey(publicKey)
+        val normalizedNickname = nickname?.trim()?.takeIf { it.isNotEmpty() }
+        dialHints.forEach { multiaddr ->
+            kotlin.runCatching {
+                ledgerManager?.annotateIdentity(
+                    multiaddr,
+                    normalizedRoute,
+                    normalizedKey,
+                    normalizedNickname
+                )
+            }.onFailure {
+                Timber.d("Failed to annotate identity for ledger entry $multiaddr: ${it.message}")
+            }
+        }
     }
 
     private fun appendRoutingHint(notes: String?, key: String, value: String?): String? {
@@ -1692,7 +2571,8 @@ class MeshRepository(private val context: Context) {
         return TransportIdentityResolution(
             canonicalPeerId = canonicalContact?.peerId ?: libp2pPeerId,
             publicKey = normalizedKey,
-            nickname = canonicalContact?.nickname?.takeIf { it.isNotBlank() }
+            nickname = canonicalContact?.nickname?.takeIf { it.isNotBlank() },
+            localNickname = canonicalContact?.localNickname?.takeIf { it.isNotBlank() }
         )
     }
 
@@ -1738,6 +2618,7 @@ class MeshRepository(private val context: Context) {
             val updated = uniffi.api.Contact(
                 peerId = contact.peerId,
                 nickname = contact.nickname,
+                localNickname = contact.localNickname,
                 publicKey = contact.publicKey,
                 addedAt = contact.addedAt,
                 lastSeen = contact.lastSeen,
@@ -1756,7 +2637,8 @@ class MeshRepository(private val context: Context) {
         publicKey: String,
         nickname: String?,
         libp2pPeerId: String?,
-        listeners: List<String>
+        listeners: List<String>,
+        createIfMissing: Boolean = true
     ) {
         val normalizedPeerId = canonicalPeerId.trim()
         val normalizedKey = normalizePublicKey(publicKey) ?: return
@@ -1774,7 +2656,28 @@ class MeshRepository(private val context: Context) {
 
         val existingByKey = contacts.firstOrNull { normalizePublicKey(it.publicKey) == normalizedKey }
         val existingById = contacts.firstOrNull { it.peerId == normalizedPeerId }
+
+        // Auth guard: for an existing canonical peerId, only accept federated updates
+        // when the source public key is consistent with the stored contact key.
+        if (existingById != null && normalizePublicKey(existingById.publicKey) != normalizedKey) {
+            Timber.w(
+                "Rejected federated nickname update for $normalizedPeerId: key mismatch " +
+                    "(stored=${existingById.publicKey.take(8)}..., incoming=${normalizedKey.take(8)}...)"
+            )
+            return
+        }
+       
+        // If we found them by key but they have a different PeerID now,
+        // we should merge them to prevent duplicates.
+        if (existingByKey != null && existingById != null && existingByKey.peerId != existingById.peerId) {
+            Timber.i("Merging duplicate identities for key ${normalizedKey.take(8)}...: ${existingById.peerId} -> ${existingByKey.peerId}")
+            try { contactManager?.remove(existingById.peerId) } catch (_: Exception) {}
+        }
+       
         val existing = existingByKey ?: existingById
+        if (existing == null && !createIfMissing) {
+            return
+        }
 
         var notes = existing?.notes
         if (!routePeer.isNullOrBlank()) {
@@ -1785,12 +2688,14 @@ class MeshRepository(private val context: Context) {
         val now = (System.currentTimeMillis() / 1000).toULong()
         val resolvedPeerId = existing?.peerId ?: normalizedPeerId
         val resolvedPublicKey = existingByKey?.publicKey ?: normalizedKey
-        val resolvedNickname = existing?.nickname?.takeIf { it.isNotBlank() }
-            ?: nickname?.trim()?.takeIf { it.isNotBlank() }
+        val incomingNickname = normalizeNickname(nickname)
+        val resolvedNickname = selectAuthoritativeNickname(incomingNickname, existing?.nickname)
+        val resolvedLocalNickname = normalizeNickname(existing?.localNickname)
 
         val updated = uniffi.api.Contact(
             peerId = resolvedPeerId,
             nickname = resolvedNickname,
+            localNickname = resolvedLocalNickname,
             publicKey = resolvedPublicKey,
             addedAt = existing?.addedAt ?: now,
             lastSeen = now,
@@ -1802,6 +2707,13 @@ class MeshRepository(private val context: Context) {
         } catch (e: Exception) {
             Timber.d("Failed to upsert federated contact for $resolvedPeerId: ${e.message}")
         }
+
+        annotateIdentityInLedger(
+            routePeerId = routePeer,
+            listeners = listeners,
+            publicKey = resolvedPublicKey,
+            nickname = resolvedNickname
+        )
     }
 
     private fun upsertRoutingListeners(notes: String?, listeners: List<String>): String? {

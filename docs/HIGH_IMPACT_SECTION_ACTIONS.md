@@ -17,10 +17,10 @@ Action key:
 | `FEATURE_PARITY.md` | parity status claims, rollout checklist | `move` + `rewrite` | `REMAINING_WORK_TRACKING.md`, `docs/CURRENT_STATE.md` | done |
 | `FEATURE_WORKFLOW.md` | workflow/checklist steps | `rewrite` | keep in file, aligned to tri-platform | done |
 | `BOOTSTRAP.md` | bootstrap model + strategy | `rewrite` + `move` | `docs/UNIFIED_GLOBAL_APP_PLAN.md`, `REMAINING_WORK_TRACKING.md` | done |
-| `ios/IMPLEMENTATION_SUMMARY.md` | untagged snapshot sections | `delete/replace` (usage) | `docs/CURRENT_STATE.md`, `ios/README.md` | done |
-| `ios/FINAL_STATUS.md` | untagged snapshot sections | `delete/replace` (usage) | `docs/CURRENT_STATE.md`, `ios/README.md` | done |
-| `ios/COMPLETE_STATUS.md` | untagged snapshot sections | `delete/replace` (usage) | `docs/CURRENT_STATE.md`, `ios/README.md` | done |
-| `ios/IMPLEMENTATION_STATUS.md` | untagged snapshot sections | `delete/replace` (usage) | `docs/CURRENT_STATE.md`, `ios/README.md` | done |
+| `iOS/IMPLEMENTATION_SUMMARY.md` | untagged snapshot sections | `delete/replace` (usage) | `docs/CURRENT_STATE.md`, `iOS/README.md` | done |
+| `iOS/FINAL_STATUS.md` | untagged snapshot sections | `delete/replace` (usage) | `docs/CURRENT_STATE.md`, `iOS/README.md` | done |
+| `iOS/COMPLETE_STATUS.md` | untagged snapshot sections | `delete/replace` (usage) | `docs/CURRENT_STATE.md`, `iOS/README.md` | done |
+| `iOS/IMPLEMENTATION_STATUS.md` | untagged snapshot sections | `delete/replace` (usage) | `docs/CURRENT_STATE.md`, `iOS/README.md` | done |
 | `PRODUCTION_READY.md` | readiness proof, checklists, summary claims | `move` + `delete/replace` | `docs/CURRENT_STATE.md`, `docs/TESTING_GUIDE.md` | done |
 | `INTEGRATION_COMPLETE.md` | integration verdict and performance claims | `move` + `delete/replace` | `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md` | done |
 | `INTEGRATION_VERIFICATION.md` | phase activation claims | `move` + `delete/replace` | `docs/CURRENT_STATE.md`, `docs/REPO_CONTEXT.md` | done |

@@ -457,8 +457,8 @@ All background modes working together.
 
 ```
 Files:
-  mobile/src/ios/background.rs       — NEW: iOS background mode orchestration (~200-300 LoC Rust)
-  mobile/src/ios/auto_adjust.rs      — NEW: iOS-specific auto-adjust (accounts for iOS restrictions) (~100-150 LoC)
+  mobile/src/iOS/background.rs       — NEW: iOS background mode orchestration (~200-300 LoC Rust)
+  mobile/src/iOS/auto_adjust.rs      — NEW: iOS-specific auto-adjust (accounts for iOS restrictions) (~100-150 LoC)
 
 Platform-side Swift (generated + custom):
   MeshManager.swift                  — CoreBluetooth + location + BGTask composite (~250-350 LoC Swift)
@@ -522,7 +522,7 @@ Use Apple Find My beacon protocol to send "you have mail" wakeups through Apple'
 ```
 Files:
   core/src/relay/findmy.rs          — NEW: Find My beacon encoding/decoding (~200-300 LoC)
-  mobile/src/ios/findmy_beacon.rs   — NEW: iOS Find My beacon broadcasting (~100-150 LoC)
+  mobile/src/iOS/findmy_beacon.rs   — NEW: iOS Find My beacon broadcasting (~100-150 LoC)
   core/src/relay/tests_findmy.rs    — Beacon encode/decode tests (~80-120 LoC)
 
 Total: 380-570 LoC

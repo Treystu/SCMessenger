@@ -1266,6 +1266,8 @@ impl HistoryManager {
 pub struct LedgerEntry {
     pub multiaddr: String,
     pub peer_id: Option<String>,
+    pub public_key: Option<String>,
+    pub nickname: Option<String>,
     pub success_count: u32,
     pub failure_count: u32,
     pub last_seen: Option<u64>,
@@ -1320,6 +1322,8 @@ impl LedgerManager {
             entries.push(LedgerEntry {
                 multiaddr,
                 peer_id: Some(peer_id),
+                public_key: None,
+                nickname: None,
                 success_count: 1,
                 failure_count: 0,
                 last_seen: Some(current_timestamp()),
@@ -1333,6 +1337,57 @@ impl LedgerManager {
         if let Some(entry) = entries.iter_mut().find(|e| e.multiaddr == multiaddr) {
             entry.failure_count += 1;
         }
+    }
+
+    pub fn annotate_identity(
+        &self,
+        multiaddr: String,
+        peer_id: String,
+        public_key: Option<String>,
+        nickname: Option<String>,
+    ) {
+        let normalized_public_key = public_key
+            .and_then(|value| {
+                let trimmed = value.trim().to_string();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed)
+                }
+            });
+        let normalized_nickname = nickname
+            .and_then(|value| {
+                let trimmed = value.trim().to_string();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed)
+                }
+            });
+
+        let mut entries = self.entries.lock().unwrap();
+        if let Some(entry) = entries.iter_mut().find(|e| e.multiaddr == multiaddr) {
+            entry.peer_id = Some(peer_id);
+            if normalized_public_key.is_some() {
+                entry.public_key = normalized_public_key;
+            }
+            if normalized_nickname.is_some() {
+                entry.nickname = normalized_nickname;
+            }
+            entry.last_seen = Some(current_timestamp());
+            return;
+        }
+
+        entries.push(LedgerEntry {
+            multiaddr,
+            peer_id: Some(peer_id),
+            public_key: normalized_public_key,
+            nickname: normalized_nickname,
+            success_count: 0,
+            failure_count: 0,
+            last_seen: Some(current_timestamp()),
+            topics: Vec::new(),
+        });
     }
 
     pub fn dialable_addresses(&self) -> Vec<LedgerEntry> {

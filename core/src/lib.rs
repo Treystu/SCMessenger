@@ -134,6 +134,7 @@ pub trait CoreDelegate: Send + Sync {
         sender_id: String,
         sender_public_key_hex: String,
         message_id: String,
+        sender_timestamp: u64,
         data: Vec<u8>,
     );
     /// A delivery receipt was received
@@ -564,6 +565,7 @@ impl IronCore {
                         msg.sender_id.clone(),
                         sender_pub_key_hex,
                         msg.id.clone(),
+                        msg.timestamp,
                         msg.payload.clone(),
                     );
                 }
@@ -593,6 +595,7 @@ impl IronCore {
                     msg.sender_id.clone(),
                     sender_pub_key_hex,
                     msg.id.clone(),
+                    msg.timestamp,
                     msg.payload.clone(),
                 );
             }

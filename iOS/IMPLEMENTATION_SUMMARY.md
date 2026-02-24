@@ -4,7 +4,7 @@
 
 ## [Current] Section Action Outcome (2026-02-23)
 
-- `delete/replace`: this file is not a source of current launch readiness; use `docs/CURRENT_STATE.md` and `ios/README.md`.
+- `delete/replace`: this file is not a source of current launch readiness; use `docs/CURRENT_STATE.md` and `iOS/README.md`.
 - `keep`: retain as historical summary of a prior implementation pass.
 
 ## Status: ✅ COMPLETE - All 15 Phases Implemented
@@ -98,8 +98,8 @@ if !isRelayEnabled {
 The iOS app is **ready for compilation in Xcode**:
 
 1. Open Xcode on macOS
-2. Follow `ios/XCODE_SETUP.md` to create project
-3. Add all source files from `ios/SCMessenger/`
+2. Follow `iOS/XCODE_SETUP.md` to create project
+3. Add all source files from `iOS/SCMessenger/`
 4. Configure build settings and phases
 5. Compile and test
 6. Deploy to simulator/device

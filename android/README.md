@@ -38,6 +38,15 @@ cd android
 ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew assembleDebug
 ```
 
+## Fresh Device Install (Recommended)
+
+```bash
+./android/install-clean.sh
+```
+
+This runs `clean + :app:installDebug` and can uninstall the previous package first so physical-device testing always uses the newest APK.
+It also grants required runtime permissions (`Bluetooth`, `Location`, `Nearby WiFi`, `Notifications`) after install so discovery transports come up immediately.
+
 ## Runtime Architecture
 
 - Rust core (`scmessenger-core`) provides identity, crypto, transport, and storage.

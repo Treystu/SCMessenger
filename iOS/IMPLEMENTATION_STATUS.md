@@ -154,7 +154,7 @@ Unlike Android's persistent foreground service, iOS uses:
 ## Next Steps
 
 ### Immediate: Create Xcode Project (Phase 2 Completion)
-1. Follow `ios/XCODE_SETUP.md` guide
+1. Follow `iOS/XCODE_SETUP.md` guide
 2. Create SCMessenger.xcodeproj
 3. Add source files to project
 4. Configure build settings
@@ -189,33 +189,33 @@ Files to create:
 ### Created in This Session
 
 **Phase 2 Files (4 files + directories):**
-- `ios/SCMessenger/Info.plist`
-- `ios/SCMessenger/Bridging-Header.h`
-- `ios/SCMessenger/SCMessengerApp.swift`
-- `ios/XCODE_SETUP.md`
+- `iOS/SCMessenger/Info.plist`
+- `iOS/SCMessenger/Bridging-Header.h`
+- `iOS/SCMessenger/SCMessengerApp.swift`
+- `iOS/XCODE_SETUP.md`
 - Directory structure: Services/, Data/, Transport/, ViewModels/, Views/, Models/, Utils/, Assets.xcassets/
 
 **Phase 3 Files (6 files):**
-- `ios/SCMessenger/Services/MeshBackgroundService.swift`
-- `ios/SCMessenger/Services/IosPlatformBridge.swift`
-- `ios/SCMessenger/Services/CoreDelegateImpl.swift`
-- `ios/SCMessenger/Services/MeshEventBus.swift`
-- `ios/SCMessenger/Data/MeshRepository.swift`
-- `ios/XCODE_SETUP.md`
+- `iOS/SCMessenger/Services/MeshBackgroundService.swift`
+- `iOS/SCMessenger/Services/IosPlatformBridge.swift`
+- `iOS/SCMessenger/Services/CoreDelegateImpl.swift`
+- `iOS/SCMessenger/Services/MeshEventBus.swift`
+- `iOS/SCMessenger/Data/MeshRepository.swift`
+- `iOS/XCODE_SETUP.md`
 
 **Previously Created (Phase 1):**
 - `core/src/bin/gen_swift.rs`
 - `core/Cargo.toml` (updated)
-- `ios/build-rust.sh`
-- `ios/copy-bindings.sh`
-- `ios/verify-build-setup.sh`
-- `ios/README.md`
-- `ios/PLAN_REVIEW.md`
+- `iOS/build-rust.sh`
+- `iOS/copy-bindings.sh`
+- `iOS/verify-build-setup.sh`
+- `iOS/README.md`
+- `iOS/PLAN_REVIEW.md`
 
 **Generated (Phase 1):**
-- `ios/SCMessenger/Generated/api.swift` (4200 lines)
-- `ios/SCMessenger/Generated/apiFFI.h`
-- `ios/SCMessenger/Generated/apiFFI.modulemap`
+- `iOS/SCMessenger/SCMessenger/Generated/api.swift` (4200 lines)
+- `iOS/SCMessenger/SCMessenger/Generated/apiFFI.h`
+- `iOS/SCMessenger/SCMessenger/Generated/apiFFI.modulemap`
 
 ### Total Lines of Code
 

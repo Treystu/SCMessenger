@@ -8,15 +8,15 @@ This report captures the three-pass repository verification requested for full-c
 
 Scope note: inventory uses `rg --files` (source-relevant files) and excludes transient hidden build outputs such as `.build/`.
 
-- Total tracked files (`rg --files`): **357**
-- Tracker entries (`docs/DOC_PASS_TRACKER.md`): **357**
-- Checked entries: **357**
+- Total tracked files (`rg --files`): **356**
+- Tracker entries (`docs/DOC_PASS_TRACKER.md`): **356**
+- Checked entries: **356**
 - Pending entries: **0**
 
 Directory counts:
 
 - `core/`: 88
-- `android/`: 90
+- `android/`: 89
 - `iOS/`: 55
 - `docs/`: 22
 - `docker/`: 21
@@ -76,7 +76,7 @@ Interpretation:
 
 ## Confirmed Outcome
 
-- Repository-wide file coverage is complete (**357/357 checked**).
+- Repository-wide file coverage is complete (**356/356 checked**).
 - No unreviewed tracker entries remain.
 - Remaining work is implementation/parity/operational hardening, not discovery.
 

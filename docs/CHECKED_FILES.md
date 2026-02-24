@@ -2,7 +2,7 @@
 
 Generated: 2026-02-23
 
-Total checked files: **356**
+Total checked files: **357**
 
 Status legend:
 - `validated`: reviewed and aligned with canonical docs
@@ -266,6 +266,7 @@ Status legend:
 - `docs/DOC_PASS_TRACKER.md — validated`
 - `docs/GLOBAL_ROLLOUT_PLAN.md — validated`
 - `docs/HIGH_IMPACT_SECTION_ACTIONS.md — validated`
+- `docs/IMPLEMENTATION_PATH_BUCKETS.md — validated`
 - `docs/NAT_TRAVERSAL_GUIDE.md — validated`
 - `docs/NAT_TRAVERSAL_PLAN.md — validated`
 - `docs/NON_MD_FOLLOWUP_CLASSIFICATION.md — validated`

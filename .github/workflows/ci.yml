@@ -10,6 +10,51 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  check-path-governance:
+    name: Enforce iOS Path Case
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject tracked lowercase ios/ entries
+        run: |
+          if git ls-files | rg -n "^ios/"; then
+            echo "Tracked lowercase ios/ paths are not allowed."
+            exit 1
+          fi
+      - name: Reject case-colliding tracked paths
+        run: |
+          COLLISIONS=$(git ls-files | awk '{k=tolower($0); seen[k]=seen[k]"\n"$0} END {for (k in seen) {n=split(seen[k],a,"\n"); if (n>2) {for(i=2;i<=n;i++) print a[i]}}}')
+          if [ -n "$COLLISIONS" ]; then
+            echo "Case-colliding tracked paths detected:"
+            echo "$COLLISIONS"
+            exit 1
+          fi
+      - name: Reject nested git repositories
+        run: |
+          NESTED_REPOS=$(find . -type d -name .git -not -path "./.git")
+          if [ -n "$NESTED_REPOS" ]; then
+            echo "Nested git repositories are not allowed:"
+            echo "$NESTED_REPOS"
+            exit 1
+          fi
+      - name: Enforce canonical copy-bindings policy
+        run: |
+          if rg -n "mkdir -p ../iOS/SCMessenger/Generated|SCMessenger/Generated/api.swift|SCMessenger/Generated/apiFFI.h|SCMessenger/Generated/apiFFI.modulemap" iOS/copy-bindings.sh; then
+            echo "copy-bindings.sh contains legacy dual-copy logic."
+            exit 1
+          fi
+      - name: Reject lowercase ios/ path references
+        run: |
+          # Allow non-path prose tokens like iOS/Android and target triples like apple-ios.
+          VIOLATIONS=$(rg -n "\bios/" README.md DOCUMENTATION.md docs REMAINING_WORK_TRACKING.md iOS mobile android core cli wasm scripts docker ui \
+            | rg -v "apple-ios/|iOS/Android|Android/iOS|iOS/ANDROID|Path-case governance|Resolve ios/|lowercase ios/" \
+            | rg -v "^docs/IOS_PATH_MIGRATION_REPORT.md:|^docs/REPO_CONTEXT.md:|^REMAINING_WORK_TRACKING.md:" || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "Found non-canonical lowercase ios/ references:"
+            echo "$VIOLATIONS"
+            exit 1
+          fi
+
   check-core:
     name: Build & Test Core (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

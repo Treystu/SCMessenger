@@ -13,7 +13,8 @@ use std::sync::{Arc, Mutex};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Contact {
     pub peer_id: String,
-    pub nickname: Option<String>,
+    pub nickname: Option<String>, // Federated nickname (from the peer)
+    pub local_nickname: Option<String>, // Local override set by the user
     pub public_key: String,
     pub added_at: u64,
     pub last_seen: Option<u64>,
@@ -25,6 +26,7 @@ impl Contact {
         Self {
             peer_id,
             nickname: None,
+            local_nickname: None,
             public_key,
             added_at: current_timestamp(),
             last_seen: None,
@@ -38,7 +40,14 @@ impl Contact {
     }
 
     pub fn display_name(&self) -> &str {
+        if let Some(ref local) = self.local_nickname {
+            return local;
+        }
         self.nickname.as_deref().unwrap_or(&self.peer_id)
+    }
+
+    pub fn federated_nickname(&self) -> Option<&str> {
+        self.nickname.as_deref()
     }
 }
 
@@ -147,14 +156,33 @@ impl ContactManager {
         Ok(results)
     }
 
-    /// Set or update contact nickname
+    /// Set or update contact federated nickname
     pub fn set_nickname(
         &self,
         peer_id: String,
         nickname: Option<String>,
     ) -> Result<(), crate::IronCoreError> {
         if let Some(mut contact) = self.get(peer_id.clone())? {
-            contact.nickname = nickname;
+            contact.nickname = nickname
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty());
+            self.add(contact)?;
+            Ok(())
+        } else {
+            Err(crate::IronCoreError::InvalidInput)
+        }
+    }
+
+    /// Set or update local nickname override
+    pub fn set_local_nickname(
+        &self,
+        peer_id: String,
+        nickname: Option<String>,
+    ) -> Result<(), crate::IronCoreError> {
+        if let Some(mut contact) = self.get(peer_id.clone())? {
+            contact.local_nickname = nickname
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty());
             self.add(contact)?;
             Ok(())
         } else {

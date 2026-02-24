@@ -1,5 +1,8 @@
 package com.scmessenger.android.utils
 
+import org.json.JSONArray
+import org.json.JSONObject
+
 data class ImportedContactPayload(
     val peerId: String,
     val publicKey: String,
@@ -16,29 +19,63 @@ sealed class ContactImportParseResult {
 fun parseContactImportPayload(raw: String): ContactImportParseResult {
     if (raw.isBlank()) return ContactImportParseResult.Invalid("No identity data found.")
 
-    val peerId = """"identity_id"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
-        ?: """"identityId"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
-        ?: """"peerId"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
+    val json = runCatching { JSONObject(raw) }.getOrNull()
 
-    val publicKey = """"public_key"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
-        ?: """"publicKeyHex"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
-        ?: """"publicKey"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
+    val peerId = firstNonBlank(
+        json?.optString("identity_id"),
+        json?.optString("identityId"),
+        json?.optString("peerId"),
+        """"identity_id"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1),
+        """"identityId"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1),
+        """"peerId"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
+    )
+
+    val publicKey = firstNonBlank(
+        json?.optString("public_key"),
+        json?.optString("publicKeyHex"),
+        json?.optString("publicKey"),
+        """"public_key"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1),
+        """"publicKeyHex"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1),
+        """"publicKey"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
+    )
 
     if (peerId.isNullOrBlank()) return ContactImportParseResult.Invalid("Missing identity ID in payload.")
     if (publicKey.isNullOrBlank()) return ContactImportParseResult.Invalid("Missing public key in payload.")
 
-    val nickname = """"nickname"\s*:\s*"([^"]*)"""".toRegex()
-        .find(raw)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }?.trim()
+    val nickname = firstNonBlank(
+        json?.optString("nickname"),
+        """"nickname"\s*:\s*"([^"]*)"""".toRegex().find(raw)?.groupValues?.get(1)
+    )
 
-    val libp2pPeerId = """"libp2p_peer_id"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
-        ?: """"libp2pPeerId"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
+    val libp2pPeerId = firstNonBlank(
+        json?.optString("libp2p_peer_id"),
+        json?.optString("libp2pPeerId"),
+        """"libp2p_peer_id"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1),
+        """"libp2pPeerId"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
+    )
 
-    val listenersRaw = """"listeners"\s*:\s*\[(.*?)\]""".toRegex()
-        .find(raw)?.groupValues?.get(1).orEmpty()
-    val listeners = listenersRaw
-        .split(",")
-        .map { it.trim().trim('"').replace(" (Potential)", "") }
-        .filter { it.isNotBlank() }
+    val listeners = if (json != null) {
+        (
+            parseStringArray(json.optJSONArray("listeners")) +
+                parseStringArray(json.optJSONArray("external_addresses")) +
+                parseStringArray(json.optJSONArray("connection_hints"))
+            )
+            .map { it.replace(" (Potential)", "").trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+    } else {
+        val listenersRaw = """"listeners"\s*:\s*\[(.*?)\]""".toRegex()
+            .find(raw)?.groupValues?.get(1).orEmpty()
+        val externalRaw = """"external_addresses"\s*:\s*\[(.*?)\]""".toRegex()
+            .find(raw)?.groupValues?.get(1).orEmpty()
+        val hintsRaw = """"connection_hints"\s*:\s*\[(.*?)\]""".toRegex()
+            .find(raw)?.groupValues?.get(1).orEmpty()
+        (listenersRaw + "," + externalRaw + "," + hintsRaw)
+            .split(",")
+            .map { it.trim().trim('"').replace(" (Potential)", "") }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
 
     return ContactImportParseResult.Valid(
         ImportedContactPayload(
@@ -49,4 +86,21 @@ fun parseContactImportPayload(raw: String): ContactImportParseResult {
             listeners = listeners
         )
     )
+}
+
+private fun firstNonBlank(vararg values: String?): String? {
+    return values
+        .asSequence()
+        .mapNotNull { it?.trim() }
+        .firstOrNull { it.isNotEmpty() }
+}
+
+private fun parseStringArray(array: JSONArray?): List<String> {
+    if (array == null) return emptyList()
+    return buildList {
+        for (i in 0 until array.length()) {
+            val value = array.optString(i).trim()
+            if (value.isNotEmpty()) add(value)
+        }
+    }
 }

@@ -8,12 +8,17 @@ reference/rust-1.92.0-aarch64-unknown-linux-gnu.tar.gz
 .scm.pid
 ds_store
 .DS_Store
+**/.DS_Store
 
 # Local Data (Should not be committed)
 contacts.db
 history.db
 identity.json
 config.json
+logs/*
+
+# Temporary migration/debug inventories
+docs/_ios_*
 
 # IDEs
 .idea/
@@ -30,13 +35,15 @@ android/local.properties
 # UniFFI Generated
 core/target/generated-sources/
 core/target/android-libs/
-iOS/SCMessenger/Generated/
+iOS/SCMessenger/SCMessenger/Generated/
 *.a
 
 core/iOS/
 core/log.txt
 core/out.txt
 *.xcuserstate
+**/xcuserdata/
+**/*.xcuserstate
 
 # Swift Build Artifacts
 .build/

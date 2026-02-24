@@ -43,7 +43,12 @@ struct ContactsListView: View {
             // MARK: Saved contacts
             Section {
                 ForEach(viewModel?.filteredContacts ?? [], id: \.peerId) { contact in
-                    NavigationLink(value: Conversation(peerId: contact.peerId, peerNickname: contact.nickname ?? "Unknown")) {
+                    NavigationLink(
+                        value: Conversation(
+                            peerId: contact.peerId,
+                            peerNickname: conversationDisplayName(for: contact)
+                        )
+                    ) {
                         ContactRow(contact: contact)
                     }
                 }
@@ -137,6 +142,7 @@ struct ContactsListView: View {
         let contact = Contact(
             peerId: peer.peerId,
             nickname: peer.nickname,
+            localNickname: nil,
             publicKey: publicKey,
             addedAt: UInt64(Date().timeIntervalSince1970),
             lastSeen: nil,
@@ -156,6 +162,15 @@ struct ContactsListView: View {
             quickConnectError = error.localizedDescription
         }
     }
+
+    private func conversationDisplayName(for contact: Contact) -> String {
+        let local = contact.localNickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !local.isEmpty { return local }
+        let federated = contact.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !federated.isEmpty { return federated }
+        return String(contact.peerId.prefix(8)) + "..."
+    }
+
 }
 
 // MARK: - Nearby Peer Row
@@ -207,19 +222,26 @@ struct ContactRow: View {
     let contact: Contact
 
     var body: some View {
+        let local = contact.localNickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let primaryName = !local.isEmpty ? local : (contact.nickname ?? "Unknown")
         HStack(spacing: Theme.spacingMedium) {
             Circle()
                 .fill(Theme.primaryContainer)
                 .frame(width: 44, height: 44)
                 .overlay {
-                    Text((contact.nickname ?? "?").prefix(1).uppercased())
+                    Text(primaryName.prefix(1).uppercased())
                         .font(Theme.titleMedium)
                         .foregroundStyle(Theme.onPrimaryContainer)
                 }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(contact.nickname ?? "Unknown")
+                Text(primaryName)
                     .font(Theme.titleMedium)
+                if contact.localNickname != nil, let federated = contact.nickname, !federated.isEmpty {
+                    Text("@\(federated)")
+                        .font(.caption)
+                        .foregroundStyle(Theme.onSurfaceVariant)
+                }
 
                 Text(contact.peerId.prefix(8))
                     .font(.system(.caption, design: .monospaced))
@@ -381,6 +403,7 @@ struct AddContactView: View {
         let contact = Contact(
             peerId: finalPeerId,
             nickname: nickname,
+            localNickname: nil,
             publicKey: finalPublicKey,
             addedAt: UInt64(Date().timeIntervalSince1970),
             lastSeen: nil,
@@ -396,7 +419,9 @@ struct AddContactView: View {
             }
 
             if andChat {
-                pendingChatConversation = Conversation(peerId: finalPeerId, peerNickname: nickname)
+                let normalizedNickname = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+                let displayName = normalizedNickname.isEmpty ? String(finalPeerId.prefix(8)) + "..." : normalizedNickname
+                pendingChatConversation = Conversation(peerId: finalPeerId, peerNickname: displayName)
             } else {
                 pendingChatConversation = nil
             }
@@ -454,16 +479,32 @@ struct AddContactView: View {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedLibp2pPeerId = (libp2pPeerId?.isEmpty == false) ? libp2pPeerId : nil
 
-        let listeners = (json["listeners"] as? [String])?
-            .map { $0.replacingOccurrences(of: " (Potential)", with: "") }
+        let listeners = (
+            (json["listeners"] as? [String] ?? []) +
+                (json["external_addresses"] as? [String] ?? []) +
+                (json["connection_hints"] as? [String] ?? [])
+        )
+        .map { $0.replacingOccurrences(of: " (Potential)", with: "").trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+        .reduce(into: [String]()) { acc, value in
+            if !acc.contains(value) { acc.append(value) }
+        }
 
         return ImportedContactPayload(
             peerId: peerId?.isEmpty == false ? peerId : nil,
             publicKey: publicKey?.isEmpty == false ? publicKey : nil,
             nickname: nickname?.isEmpty == false ? nickname : nil,
             libp2pPeerId: normalizedLibp2pPeerId,
-            listeners: listeners
+            listeners: listeners.isEmpty ? nil : listeners
         )
+    }
+
+    private func conversationDisplayName(for contact: Contact) -> String {
+        let local = contact.localNickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !local.isEmpty { return local }
+        let federated = contact.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !federated.isEmpty { return federated }
+        return String(contact.peerId.prefix(8)) + "..."
     }
 }
 

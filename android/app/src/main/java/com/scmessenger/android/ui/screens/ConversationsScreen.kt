@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.scmessenger.android.service.MeshEventBus
 import com.scmessenger.android.ui.viewmodels.ConversationsViewModel
 import com.scmessenger.android.utils.toEpochMillis
 import java.text.SimpleDateFormat
@@ -31,6 +32,12 @@ fun ConversationsScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val stats by viewModel.stats.collectAsState()
+    val peerEventRefreshTick by MeshEventBus.peerEvents.collectAsState(initial = null)
+
+    // Keep compose aware of peer identity updates so display names refresh
+    // even when message content is unchanged.
+    @Suppress("UNUSED_VARIABLE")
+    val _refresh = peerEventRefreshTick
 
     Scaffold(
         topBar = {
@@ -124,7 +131,13 @@ fun ConversationsScreen(
                 ) {
                     items(conversations) { (peerId, messages) ->
                         val contact = viewModel.getContactForPeer(peerId)
-                        val displayName = contact?.nickname ?: peerId.take(8) + "..."
+                        val localNickname = contact?.localNickname?.trim().orEmpty()
+                        val federatedNickname = contact?.nickname?.trim().orEmpty()
+                        val displayName = when {
+                            localNickname.isNotEmpty() -> localNickname
+                            federatedNickname.isNotEmpty() -> federatedNickname
+                            else -> peerId.take(8) + "..."
+                        }
                         ConversationItem(
                             displayName = displayName,
                             peerId = peerId,
@@ -231,7 +244,7 @@ fun ConversationItem(
                 }
 
                 Text(
-                    text = "${messages.size} messages",
+                    text = "${messages.size} messages • ${peerId.take(12)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -123,7 +123,7 @@ Acceptance criteria:
 Deliverables:
 
 - `android/README.md` updated for parity-first directives.
-- `ios/README.md` updated with authoritative path mapping:
+- `iOS/README.md` updated with authoritative path mapping:
   - active project path
   - legacy/reference paths
 - `wasm/README.md` updated with parity directives, known gaps, and CI/runtime expectations.

@@ -12,6 +12,7 @@ This is the documentation index and governance map for the repository.
 - [Unified Global App Plan (Android+iOS+Web)](docs/UNIFIED_GLOBAL_APP_PLAN.md)
 - [Full File Documentation Tracker](docs/DOC_PASS_TRACKER.md)
 - [Non-Markdown Followup Classification](docs/NON_MD_FOLLOWUP_CLASSIFICATION.md)
+- [Implementation Path Buckets](docs/IMPLEMENTATION_PATH_BUCKETS.md)
 - [Triple-Check Verification Report](docs/TRIPLE_CHECK_REPORT.md)
 - [High-Impact Section Action Matrix](docs/HIGH_IMPACT_SECTION_ACTIONS.md)
 - [Architecture](docs/ARCHITECTURE.md)
@@ -26,7 +27,7 @@ This is the documentation index and governance map for the repository.
 - [Mobile Bindings Crate](mobile/README.md)
 - [WASM Bindings Crate](wasm/README.md)
 - [Android App](android/README.md)
-- [iOS App](ios/README.md)
+- [iOS App](iOS/README.md)
 
 ## Operations and Setup
 
@@ -70,18 +71,19 @@ Use these as mixed-status context. Do not treat the entire file as current or de
 - `SECURITY_AUDIT_NOTES.md`
 - `docs/REMEDIATION_PLAN.md`
 - `android/IMPLEMENTATION_STATUS.md`
-- `ios/IMPLEMENTATION_STATUS.md`
-- `ios/IMPLEMENTATION_SUMMARY.md`
-- `ios/FINAL_STATUS.md`
-- `ios/COMPLETE_STATUS.md`
-- `ios/PHASE4_IMPLEMENTATION.md`
-- `ios/PHASES_4-15_GUIDE.md`
-- `ios/PLAN_REVIEW.md`
+- `iOS/IMPLEMENTATION_STATUS.md`
+- `iOS/IMPLEMENTATION_SUMMARY.md`
+- `iOS/FINAL_STATUS.md`
+- `iOS/COMPLETE_STATUS.md`
+- `iOS/PHASE4_IMPLEMENTATION.md`
+- `iOS/PHASES_4-15_GUIDE.md`
+- `iOS/PLAN_REVIEW.md`
 
 ## Documentation Placement Rules
 
 - Cross-cutting architecture, protocol, and verification docs belong in `docs/`.
-- Package-specific usage docs belong in local module READMEs (`core/`, `cli/`, `mobile/`, `wasm/`, `android/`, `ios/`), with active iOS app code under `iOS/SCMessenger/`.
+- Package-specific usage docs belong in local module READMEs (`core/`, `cli/`, `mobile/`, `wasm/`, `android/`, `iOS/`), with active iOS app code under `iOS/SCMessenger/`.
+- Path-case governance: `iOS/` is the only canonical iOS root path for docs, scripts, and references; do not introduce new `ios/` references.
 - Backlog and delivery tracking belongs in `REMAINING_WORK_TRACKING.md`.
 - Repo-wide rollout and execution plans belong in `docs/GLOBAL_ROLLOUT_PLAN.md` and `docs/UNIFIED_GLOBAL_APP_PLAN.md`, and should reference `docs/DOC_PASS_TRACKER.md`.
 - If a document becomes outdated, update canonical docs first, then keep the old file marked as historical rather than creating a competing "final" document.

@@ -76,6 +76,13 @@ struct MainTabView: View {
             }
         }
         .onAppear {
+            let nickname = repository.getIdentityInfo()?.nickname?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if nickname.isEmpty {
+                hasCompletedOnboarding = false
+                return
+            }
+
             repository.start()
 
             // Check if identity is truly available after service start
@@ -113,6 +120,15 @@ struct ConversationListView: View {
         .onReceive(repository.messageUpdates) { _ in
             loadConversations()
         }
+        .onReceive(MeshEventBus.shared.peerEvents) { event in
+            switch event {
+            case .identityDiscovered:
+                // Refresh display names when federated identity metadata changes.
+                loadConversations()
+            default:
+                break
+            }
+        }
     }
     
     private func loadConversations() {
@@ -121,7 +137,10 @@ struct ConversationListView: View {
             let contacts = try repository.getContacts()
             let deduped = deduplicateContactsByPublicKey(contacts)
             conversations = deduped.map { contact in
-                let displayName = contact.nickname ?? String(contact.peerId.prefix(8)) + "..."
+                let local = contact.localNickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let displayName = !local.isEmpty
+                    ? local
+                    : (contact.nickname ?? String(contact.peerId.prefix(8)) + "...")
                 return Conversation(peerId: contact.peerId, peerNickname: displayName)
             }
         } catch {
@@ -151,8 +170,10 @@ struct ConversationListView: View {
     }
 
     private func preferredContact(_ a: Contact, _ b: Contact) -> Contact {
-        let aName = a.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let bName = b.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let aLocal = a.localNickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let bLocal = b.localNickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let aName = !aLocal.isEmpty ? aLocal : (a.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
+        let bName = !bLocal.isEmpty ? bLocal : (b.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
 
         if !aName.isEmpty && bName.isEmpty { return a }
         if !bName.isEmpty && aName.isEmpty { return b }

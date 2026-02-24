@@ -52,7 +52,14 @@ class ContactsViewModel @Inject constructor(
         if (query.isBlank()) {
             contacts
         } else {
-            meshRepository.searchContacts(query)
+            val needle = query.trim()
+            contacts.filter { contact ->
+                contact.peerId.contains(needle, ignoreCase = true) ||
+                    contact.publicKey.contains(needle, ignoreCase = true) ||
+                    (contact.nickname?.contains(needle, ignoreCase = true) == true) ||
+                    (contact.localNickname?.contains(needle, ignoreCase = true) == true) ||
+                    (contact.notes?.contains(needle, ignoreCase = true) == true)
+            }
         }
     }.stateIn(
         scope = viewModelScope,
@@ -75,6 +82,99 @@ class ContactsViewModel @Inject constructor(
     init {
         loadContacts()
         observeNearbyPeers()
+        viewModelScope.launch {
+            // Contacts can open after discovery already happened; replay cached identities
+            // so Nearby stays aligned with Dashboard/Settings discovery state.
+            kotlinx.coroutines.delay(100)
+            meshRepository.replayDiscoveredPeerEvents()
+        }
+    }
+
+    private fun normalizeNickname(value: String?): String? {
+        return value?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun isSyntheticFallbackNickname(value: String?): Boolean {
+        val normalized = normalizeNickname(value)?.lowercase() ?: return false
+        return normalized.startsWith("peer-")
+    }
+
+    private fun selectAuthoritativeNickname(incoming: String?, existing: String?): String? {
+        val incomingNormalized = normalizeNickname(incoming)
+        val existingNormalized = normalizeNickname(existing)
+
+        val incomingSynthetic = isSyntheticFallbackNickname(incomingNormalized)
+        val existingSynthetic = isSyntheticFallbackNickname(existingNormalized)
+
+        return when {
+            incomingNormalized == null && existingSynthetic -> null
+            incomingNormalized == null -> existingNormalized
+            incomingSynthetic && existingNormalized == null -> null
+            incomingSynthetic && existingSynthetic -> null
+            incomingSynthetic -> existingNormalized
+            existingSynthetic -> incomingNormalized
+            else -> incomingNormalized
+        }
+    }
+
+    private fun isLibp2pPeerId(value: String?): Boolean {
+        val normalized = value?.trim().orEmpty()
+        return normalized.startsWith("12D3Koo") || normalized.startsWith("Qm")
+    }
+
+    private fun isIdentityId(value: String?): Boolean {
+        val normalized = value?.trim().orEmpty()
+        return normalized.length == 64 && normalized.all {
+            (it in '0'..'9') || (it in 'a'..'f') || (it in 'A'..'F')
+        }
+    }
+
+    private fun isBlePeerId(value: String?): Boolean {
+        val normalized = value?.trim().orEmpty()
+        if (normalized.isEmpty()) return false
+        return runCatching { java.util.UUID.fromString(normalized) }.isSuccess
+    }
+
+    private fun selectStablePeerId(incomingPeerId: String, existingPeerId: String?): String {
+        val incoming = incomingPeerId.trim()
+        val existing = existingPeerId?.trim().orEmpty()
+        if (existing.isEmpty() || existing == incoming) return incoming
+
+        val incomingIsLibp2p = isLibp2pPeerId(incoming)
+        val existingIsLibp2p = isLibp2pPeerId(existing)
+        val incomingIsIdentity = isIdentityId(incoming)
+        val existingIsIdentity = isIdentityId(existing)
+        val incomingIsBle = isBlePeerId(incoming)
+        val existingIsBle = isBlePeerId(existing)
+
+        return when {
+            existingIsIdentity && incomingIsLibp2p -> existing
+            incomingIsIdentity && existingIsLibp2p -> incoming
+            existingIsBle && !incomingIsBle -> incoming
+            !existingIsBle && incomingIsBle -> existing
+            else -> incoming
+        }
+    }
+
+    private fun isSameNearbyIdentity(peer: NearbyPeer, event: PeerEvent.IdentityDiscovered): Boolean {
+        val incomingPeerId = event.peerId.trim()
+        val incomingLibp2p = event.libp2pPeerId?.trim().orEmpty()
+        val incomingBle = event.blePeerId?.trim().orEmpty()
+        val peerLibp2p = peer.libp2pPeerId?.trim().orEmpty()
+        val peerBle = peer.blePeerId?.trim().orEmpty()
+
+        val sameById = peer.peerId == incomingPeerId ||
+            (incomingLibp2p.isNotEmpty() && (
+                peer.peerId == incomingLibp2p ||
+                    peerLibp2p == incomingLibp2p
+                )) ||
+            (incomingBle.isNotEmpty() && (
+                peer.peerId == incomingBle ||
+                    peerBle == incomingBle
+                ))
+        val sameByPublicKey = !peer.publicKey.isNullOrBlank() &&
+            peer.publicKey.equals(event.publicKey, ignoreCase = true)
+        return sameById || sameByPublicKey
     }
 
     /**
@@ -95,30 +195,43 @@ class ContactsViewModel @Inject constructor(
                             contact.peerId == event.peerId ||
                                 contact.publicKey.equals(event.publicKey, ignoreCase = true)
                         }
+                        if (alreadyContact) {
+                            // Federated nickname/route hints can update in repository upsert;
+                            // refresh saved contacts so local UI reflects latest values.
+                            loadContacts()
+                            return@collect
+                        }
                         if (!alreadyContact) {
                             val current = _nearbyPeers.value.toMutableList()
-                            if (event.blePeerId != null && event.blePeerId != event.peerId) {
-                                current.removeAll { it.peerId == event.blePeerId }
+                            val matches = current.filter { peer -> isSameNearbyIdentity(peer, event) }
+                            val existing = matches.maxByOrNull { peer ->
+                                val hasNickname = if (normalizeNickname(peer.nickname) != null) 2 else 0
+                                val hasStableId = if (!isLibp2pPeerId(peer.peerId)) 1 else 0
+                                hasNickname + hasStableId
                             }
-                            current.removeAll {
-                                it.peerId != event.peerId &&
-                                    !it.publicKey.isNullOrBlank() &&
-                                    it.publicKey?.equals(event.publicKey, ignoreCase = true) == true
+                            if (matches.isNotEmpty()) {
+                                current.removeAll(matches.toSet())
                             }
-                            val idx = current.indexOfFirst { it.peerId == event.peerId }
-                            val existing = if (idx >= 0) current[idx] else null
+                            cancelPendingNearbyRemoval(existing?.peerId)
+
+                            val resolvedPeerId = selectStablePeerId(event.peerId, existing?.peerId)
+                            val resolvedLibp2pPeerId = event.libp2pPeerId?.trim()?.takeIf { it.isNotEmpty() }
+                                ?: existing?.libp2pPeerId?.trim()?.takeIf { it.isNotEmpty() }
+                                ?: event.peerId.takeIf { isLibp2pPeerId(it) }
+                            val resolvedBlePeerId = event.blePeerId?.trim()?.takeIf { it.isNotEmpty() }
+                                ?: existing?.blePeerId?.trim()?.takeIf { it.isNotEmpty() }
                             val updated = NearbyPeer(
-                                peerId = event.peerId,
+                                peerId = resolvedPeerId,
                                 publicKey = event.publicKey,
-                                nickname = event.nickname ?: existing?.nickname,
-                                blePeerId = event.blePeerId,
-                                libp2pPeerId = event.libp2pPeerId,
+                                nickname = selectAuthoritativeNickname(event.nickname, existing?.nickname),
+                                blePeerId = resolvedBlePeerId,
+                                libp2pPeerId = resolvedLibp2pPeerId,
                                 listeners = if (event.listeners.isNotEmpty()) event.listeners else (existing?.listeners ?: emptyList()),
                                 isOnline = true
                             )
-                            if (idx >= 0) current[idx] = updated else current.add(updated)
+                            current.add(updated)
                             _nearbyPeers.value = current
-                            Timber.d("Nearby identity discovered: ${event.peerId.take(16)}")
+                            Timber.d("Nearby identity discovered: ${resolvedPeerId.take(16)}")
                         }
                     }
                     is PeerEvent.Discovered -> {
@@ -240,6 +353,7 @@ class ContactsViewModel @Inject constructor(
                 val contact = uniffi.api.Contact(
                     peerId = peerId.trim(),
                     nickname = nickname,
+                    localNickname = null,
                     publicKey = trimmedKey,
                     addedAt = (System.currentTimeMillis() / 1000).toULong(),
                     lastSeen = null,
@@ -284,18 +398,23 @@ class ContactsViewModel @Inject constructor(
     /**
      * Update contact nickname.
      */
-    fun setNickname(peerId: String, nickname: String?) {
+    fun setLocalNickname(peerId: String, nickname: String?) {
         viewModelScope.launch {
             try {
-                meshRepository.setContactNickname(peerId, nickname)
+                meshRepository.setLocalNickname(peerId, nickname)
                 loadContacts()
 
-                Timber.d("Nickname updated for $peerId")
+                Timber.d("Local nickname updated for $peerId")
             } catch (e: Exception) {
-                _error.value = "Failed to update nickname: ${e.message}"
-                Timber.e(e, "Failed to update nickname")
+                _error.value = "Failed to update local nickname: ${e.message}"
+                Timber.e(e, "Failed to update local nickname")
             }
         }
+    }
+
+    fun setNickname(peerId: String, nickname: String?) {
+        // Backward-compatible alias for existing callers.
+        setLocalNickname(peerId, nickname)
     }
 
     /**

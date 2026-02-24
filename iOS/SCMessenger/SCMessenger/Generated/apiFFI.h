@@ -274,7 +274,7 @@ typedef void (*UniffiCallbackInterfaceCoreDelegateMethod2)(uint64_t, RustBuffer,
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_CORE_DELEGATE_METHOD3
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_CORE_DELEGATE_METHOD3
-typedef void (*UniffiCallbackInterfaceCoreDelegateMethod3)(uint64_t, RustBuffer, RustBuffer, RustBuffer, RustBuffer, void* _Nonnull, 
+typedef void (*UniffiCallbackInterfaceCoreDelegateMethod3)(uint64_t, RustBuffer, RustBuffer, RustBuffer, uint64_t, RustBuffer, void* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
@@ -477,6 +477,11 @@ void uniffi_scmessenger_core_fn_method_contactmanager_remove(void*_Nonnull ptr, 
 RustBuffer uniffi_scmessenger_core_fn_method_contactmanager_search(void*_Nonnull ptr, RustBuffer query, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_SET_LOCAL_NICKNAME
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_SET_LOCAL_NICKNAME
+void uniffi_scmessenger_core_fn_method_contactmanager_set_local_nickname(void*_Nonnull ptr, RustBuffer peer_id, RustBuffer nickname, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_SET_NICKNAME
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_SET_NICKNAME
 void uniffi_scmessenger_core_fn_method_contactmanager_set_nickname(void*_Nonnull ptr, RustBuffer peer_id, RustBuffer nickname, RustCallStatus *_Nonnull out_status
@@ -676,6 +681,11 @@ void*_Nonnull uniffi_scmessenger_core_fn_constructor_ledgermanager_new(RustBuffe
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_ALL_KNOWN_TOPICS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_ALL_KNOWN_TOPICS
 RustBuffer uniffi_scmessenger_core_fn_method_ledgermanager_all_known_topics(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_ANNOTATE_IDENTITY
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_ANNOTATE_IDENTITY
+void uniffi_scmessenger_core_fn_method_ledgermanager_annotate_identity(void*_Nonnull ptr, RustBuffer multiaddr, RustBuffer peer_id, RustBuffer public_key, RustBuffer nickname, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_DIALABLE_ADDRESSES
@@ -1303,6 +1313,12 @@ uint16_t uniffi_scmessenger_core_checksum_method_contactmanager_search(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_CONTACTMANAGER_SET_LOCAL_NICKNAME
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_CONTACTMANAGER_SET_LOCAL_NICKNAME
+uint16_t uniffi_scmessenger_core_checksum_method_contactmanager_set_local_nickname(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_CONTACTMANAGER_SET_NICKNAME
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_CONTACTMANAGER_SET_NICKNAME
 uint16_t uniffi_scmessenger_core_checksum_method_contactmanager_set_nickname(void
@@ -1480,6 +1496,12 @@ uint16_t uniffi_scmessenger_core_checksum_method_ironcore_verify_signature(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_LEDGERMANAGER_ALL_KNOWN_TOPICS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_LEDGERMANAGER_ALL_KNOWN_TOPICS
 uint16_t uniffi_scmessenger_core_checksum_method_ledgermanager_all_known_topics(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_LEDGERMANAGER_ANNOTATE_IDENTITY
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_LEDGERMANAGER_ANNOTATE_IDENTITY
+uint16_t uniffi_scmessenger_core_checksum_method_ledgermanager_annotate_identity(void
     
 );
 #endif

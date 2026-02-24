@@ -186,7 +186,7 @@ xcodebuild -create-xcframework \
   -library target/aarch64-apple-ios-sim/release/libscmessenger_mobile.a \
   -headers core/target/generated-sources/uniffi/swift/ \
   -output SCMessengerCore.xcframework
-Verify Build Script (ios/verify-build-setup.sh)
+Verify Build Script (iOS/verify-build-setup.sh)
 Mirror android/verify-build-setup.sh — checks:
 
 Rust toolchain installed
@@ -250,7 +250,7 @@ LoC: ~500 (project config, scripts, resources)
 
 Project Structure
 Code
-ios/
+iOS/
 ├── SCMessenger.xcodeproj/
 │   └── project.pbxproj
 ├── SCMessenger/
@@ -354,8 +354,8 @@ bash
 set -e
 cd "$(dirname "$0")/.."
 cargo run --bin gen_swift --features gen-bindings --manifest-path core/Cargo.toml
-cp core/target/generated-sources/uniffi/swift/api.swift ios/SCMessenger/Generated/api.swift
-cp core/target/generated-sources/uniffi/swift/apiFFI.h ios/SCMessenger/Generated/apiFFI.h
+cp core/target/generated-sources/uniffi/swift/api.swift iOS/SCMessenger/SCMessenger/Generated/api.swift
+cp core/target/generated-sources/uniffi/swift/apiFFI.h iOS/SCMessenger/SCMessenger/Generated/apiFFI.h
 echo "Swift bindings copied successfully"
 ~10 LoC.
 

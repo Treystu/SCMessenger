@@ -75,6 +75,7 @@ struct IdentityView: View {
     @Environment(OnboardingViewModel.self) private var viewModel
     @State private var isGenerating = false
     @State private var identity: IdentityInfo?
+    @State private var nickname = ""
     
     var body: some View {
         VStack(spacing: Theme.spacingLarge) {
@@ -104,6 +105,12 @@ struct IdentityView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(isGenerating)
             }
+
+            TextField("Choose a nickname", text: $nickname)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .padding(12)
+                .background(Theme.primaryContainer, in: RoundedRectangle(cornerRadius: 12))
             
             Spacer()
             
@@ -111,7 +118,7 @@ struct IdentityView: View {
                 viewModel.advance()
             }
             .buttonStyle(.borderedProminent)
-            .disabled(identity == nil)
+            .disabled(identity == nil || nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .padding(Theme.spacingLarge)
     }
@@ -123,6 +130,10 @@ struct IdentityView: View {
             
             do {
                 try repository.createIdentity()
+                let trimmedNickname = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedNickname.isEmpty {
+                    try repository.setNickname(trimmedNickname)
+                }
                 identity = repository.getIdentityInfo()
             } catch {
                 logger.error("Failed to generate identity: \(error.localizedDescription)")

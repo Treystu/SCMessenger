@@ -183,7 +183,7 @@ total unit tests).
 ### 11. UniFFI-generated TODOs
 
 - **Files:** `iOS/SCMessenger/SCMessenger/Generated/api.swift`,
-  `iOS/SCMessenger/Generated/api.swift`,
+  `iOS/SCMessenger/SCMessenger/Generated/api.swift`,
   `core/target/generated-sources/uniffi/swift/api.swift`,
   `core/target/generated-sources/uniffi/kotlin/uniffi/api/api.kt`
 - **Content:** UniFFI boilerplate comments such as:

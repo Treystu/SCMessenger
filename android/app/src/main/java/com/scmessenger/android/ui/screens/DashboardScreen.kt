@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.NetworkWifi
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
@@ -21,24 +22,30 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.scmessenger.android.ui.viewmodels.MeshServiceViewModel
+import com.scmessenger.android.ui.viewmodels.DashboardViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
-    viewModel: MeshServiceViewModel = hiltViewModel()
+    serviceViewModel: MeshServiceViewModel = hiltViewModel(),
+    dashboardViewModel: DashboardViewModel = hiltViewModel()
 ) {
-    val serviceState by viewModel.serviceState.collectAsState()
-    val isRunning by viewModel.isRunning.collectAsState()
-    val stats by viewModel.serviceStats.collectAsState()
+    val serviceState by serviceViewModel.serviceState.collectAsState()
+    val isRunning by serviceViewModel.isRunning.collectAsState()
+    val stats by serviceViewModel.serviceStats.collectAsState()
+    
+    val fullPeers by dashboardViewModel.fullPeersCount.collectAsState()
+    val headlessPeers by dashboardViewModel.headlessPeersCount.collectAsState()
+    val totalPeers by dashboardViewModel.totalPeersCount.collectAsState()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Mesh Dashboard") }
+                title = { Text("Mesh") }
             )
         }
     ) { paddingValues ->
@@ -53,8 +60,7 @@ fun DashboardScreen(
             // Service Status Card
             StatusCard(
                 isRunning = isRunning,
-                stateName = serviceState.name,
-                onToggle = { viewModel.toggleService() }
+                stateName = serviceState.name
             )
 
             // Quick Stats Grid
@@ -63,9 +69,9 @@ fun DashboardScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 StatCard(
-                    modifier = Modifier.weight(1f),
-                    title = "Peers",
-                    value = stats?.peersDiscovered?.toString() ?: "0",
+                    modifier = Modifier.weight(1.5f),
+                    title = "Nodes ($fullPeers Full / $headlessPeers Headless)",
+                    value = totalPeers.toString(),
                     icon = Icons.Filled.People,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -90,7 +96,7 @@ fun DashboardScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Network Performance",
+                        text = "Mesh Performance",
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
@@ -99,6 +105,102 @@ fun DashboardScreen(
                     TextDetailRow("Data Transferred", formatBytes(stats?.bytesTransferred ?: 0uL))
                 }
             }
+
+            // Discovered Nodes List
+            Text(
+                text = "Discovered Nodes",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+
+            val peers by dashboardViewModel.peers.collectAsState()
+            if (peers.isEmpty()) {
+                Text(
+                    text = "No nodes discovered yet",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                peers.forEach { peer ->
+                    PeerItem(peer)
+                    Divider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PeerItem(peer: com.scmessenger.android.ui.viewmodels.PeerInfo) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(
+                    if (peer.isOnline) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                    CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                when {
+                    peer.isRelay -> Icons.Filled.Router
+                    peer.isFull -> Icons.Filled.Person
+                    else -> Icons.Filled.People
+                },
+                contentDescription = null,
+                tint = if (peer.isOnline) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = peer.localNickname
+                    ?: peer.nickname
+                    ?: if (peer.isRelay) "Headless Relay" else if (peer.isFull) "Full Node" else "Headless Node",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold
+            )
+            if (peer.nickname != null && peer.localNickname != null) {
+                Text(
+                    text = "@${peer.nickname}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                text = buildString {
+                    append("ID: ")
+                    append(peer.peerId.take(12))
+                    append("... • ")
+                    append(peer.transport)
+                    append(" • ")
+                    append(
+                        when {
+                            peer.isRelay -> "Relay"
+                            peer.isFull -> "Full"
+                            else -> "Headless"
+                        }
+                    )
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (peer.isOnline) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(Color.Green, CircleShape)
+            )
         }
     }
 }
@@ -106,8 +208,7 @@ fun DashboardScreen(
 @Composable
 fun StatusCard(
     isRunning: Boolean,
-    stateName: String,
-    onToggle: () -> Unit
+    stateName: String
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -133,17 +234,6 @@ fun StatusCard(
                     text = "State: $stateName",
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (isRunning) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            FloatingActionButton(
-                onClick = onToggle,
-                containerColor = if (isRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                contentColor = Color.White
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Bolt,
-                    contentDescription = if (isRunning) "Stop" else "Start"
                 )
             }
         }

@@ -48,6 +48,7 @@ fun OnboardingScreen(
     var isCreating by remember { mutableStateOf(false) }
     var showImportDialog by remember { mutableStateOf(false) }
     var importCode by remember { mutableStateOf("") }
+    var nickname by remember { mutableStateOf("") }
 
     LaunchedEffect(importSuccess) {
         if (importSuccess) {
@@ -117,12 +118,24 @@ fun OnboardingScreen(
                 Text("Generating Identity keys...")
             } else {
                 if (permissionsState.allPermissionsGranted) {
+                    OutlinedTextField(
+                        value = nickname,
+                        onValueChange = { nickname = it },
+                        label = { Text("Your nickname") },
+                        placeholder = { Text("e.g. christy") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     Button(
                         onClick = {
                             isCreating = true
-                            viewModel.createIdentity()
+                            viewModel.createIdentity(nickname)
                             onOnboardingComplete()
                         },
+                        enabled = nickname.trim().isNotEmpty(),
                         modifier = Modifier.fillMaxWidth().height(56.dp)
                     ) {
                         Text("Create New Identity")

@@ -69,7 +69,7 @@ scmessenger/
 ├── mobile/                     # crate: scmessenger-mobile (UniFFI Swift/Kotlin bindings)
 ├── wasm/                       # scmessenger-wasm (wasm-bindgen, excluded from workspace)
 ├── iOS/                        # Xcode project
-├── ios/                        # Swift sources
+├── iOS/                        # Swift sources
 ├── android/                    # Kotlin/Gradle project
 ├── SCMessengerCore.xcframework  # Pre-built iOS framework
 ├── docker/                     # Docker configs

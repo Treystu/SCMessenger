@@ -815,6 +815,8 @@ public protocol ContactManagerProtocol : AnyObject {
     
     func search(query: String) throws  -> [Contact]
     
+    func setLocalNickname(peerId: String, nickname: String?) throws 
+    
     func setNickname(peerId: String, nickname: String?) throws 
     
     func updateLastSeen(peerId: String) throws 
@@ -912,6 +914,14 @@ open func search(query: String)throws  -> [Contact] {
         FfiConverterString.lower(query),$0
     )
 })
+}
+    
+open func setLocalNickname(peerId: String, nickname: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_contactmanager_set_local_nickname(self.uniffiClonePointer(),
+        FfiConverterString.lower(peerId),
+        FfiConverterOptionString.lower(nickname),$0
+    )
+}
 }
     
 open func setNickname(peerId: String, nickname: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
@@ -1458,6 +1468,8 @@ public protocol LedgerManagerProtocol : AnyObject {
     
     func allKnownTopics()  -> [String]
     
+    func annotateIdentity(multiaddr: String, peerId: String, publicKey: String?, nickname: String?) 
+    
     func dialableAddresses()  -> [LedgerEntry]
     
     func getPreferredRelays(limit: UInt32)  -> [LedgerEntry]
@@ -1528,6 +1540,16 @@ open func allKnownTopics() -> [String] {
     uniffi_scmessenger_core_fn_method_ledgermanager_all_known_topics(self.uniffiClonePointer(),$0
     )
 })
+}
+    
+open func annotateIdentity(multiaddr: String, peerId: String, publicKey: String?, nickname: String?) {try! rustCall() {
+    uniffi_scmessenger_core_fn_method_ledgermanager_annotate_identity(self.uniffiClonePointer(),
+        FfiConverterString.lower(multiaddr),
+        FfiConverterString.lower(peerId),
+        FfiConverterOptionString.lower(publicKey),
+        FfiConverterOptionString.lower(nickname),$0
+    )
+}
 }
     
 open func dialableAddresses() -> [LedgerEntry] {
@@ -2387,6 +2409,7 @@ public func FfiConverterTypeBootstrapConfig_lower(_ value: BootstrapConfig) -> R
 public struct Contact {
     public var peerId: String
     public var nickname: String?
+    public var localNickname: String?
     public var publicKey: String
     public var addedAt: UInt64
     public var lastSeen: UInt64?
@@ -2394,9 +2417,10 @@ public struct Contact {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(peerId: String, nickname: String?, publicKey: String, addedAt: UInt64, lastSeen: UInt64?, notes: String?) {
+    public init(peerId: String, nickname: String?, localNickname: String?, publicKey: String, addedAt: UInt64, lastSeen: UInt64?, notes: String?) {
         self.peerId = peerId
         self.nickname = nickname
+        self.localNickname = localNickname
         self.publicKey = publicKey
         self.addedAt = addedAt
         self.lastSeen = lastSeen
@@ -2412,6 +2436,9 @@ extension Contact: Equatable, Hashable {
             return false
         }
         if lhs.nickname != rhs.nickname {
+            return false
+        }
+        if lhs.localNickname != rhs.localNickname {
             return false
         }
         if lhs.publicKey != rhs.publicKey {
@@ -2432,6 +2459,7 @@ extension Contact: Equatable, Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(peerId)
         hasher.combine(nickname)
+        hasher.combine(localNickname)
         hasher.combine(publicKey)
         hasher.combine(addedAt)
         hasher.combine(lastSeen)
@@ -2446,6 +2474,7 @@ public struct FfiConverterTypeContact: FfiConverterRustBuffer {
             try Contact(
                 peerId: FfiConverterString.read(from: &buf), 
                 nickname: FfiConverterOptionString.read(from: &buf), 
+                localNickname: FfiConverterOptionString.read(from: &buf), 
                 publicKey: FfiConverterString.read(from: &buf), 
                 addedAt: FfiConverterUInt64.read(from: &buf), 
                 lastSeen: FfiConverterOptionUInt64.read(from: &buf), 
@@ -2456,6 +2485,7 @@ public struct FfiConverterTypeContact: FfiConverterRustBuffer {
     public static func write(_ value: Contact, into buf: inout [UInt8]) {
         FfiConverterString.write(value.peerId, into: &buf)
         FfiConverterOptionString.write(value.nickname, into: &buf)
+        FfiConverterOptionString.write(value.localNickname, into: &buf)
         FfiConverterString.write(value.publicKey, into: &buf)
         FfiConverterUInt64.write(value.addedAt, into: &buf)
         FfiConverterOptionUInt64.write(value.lastSeen, into: &buf)
@@ -2703,6 +2733,8 @@ public func FfiConverterTypeIdentityInfo_lower(_ value: IdentityInfo) -> RustBuf
 public struct LedgerEntry {
     public var multiaddr: String
     public var peerId: String?
+    public var publicKey: String?
+    public var nickname: String?
     public var successCount: UInt32
     public var failureCount: UInt32
     public var lastSeen: UInt64?
@@ -2710,9 +2742,11 @@ public struct LedgerEntry {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(multiaddr: String, peerId: String?, successCount: UInt32, failureCount: UInt32, lastSeen: UInt64?, topics: [String]) {
+    public init(multiaddr: String, peerId: String?, publicKey: String?, nickname: String?, successCount: UInt32, failureCount: UInt32, lastSeen: UInt64?, topics: [String]) {
         self.multiaddr = multiaddr
         self.peerId = peerId
+        self.publicKey = publicKey
+        self.nickname = nickname
         self.successCount = successCount
         self.failureCount = failureCount
         self.lastSeen = lastSeen
@@ -2728,6 +2762,12 @@ extension LedgerEntry: Equatable, Hashable {
             return false
         }
         if lhs.peerId != rhs.peerId {
+            return false
+        }
+        if lhs.publicKey != rhs.publicKey {
+            return false
+        }
+        if lhs.nickname != rhs.nickname {
             return false
         }
         if lhs.successCount != rhs.successCount {
@@ -2748,6 +2788,8 @@ extension LedgerEntry: Equatable, Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(multiaddr)
         hasher.combine(peerId)
+        hasher.combine(publicKey)
+        hasher.combine(nickname)
         hasher.combine(successCount)
         hasher.combine(failureCount)
         hasher.combine(lastSeen)
@@ -2762,6 +2804,8 @@ public struct FfiConverterTypeLedgerEntry: FfiConverterRustBuffer {
             try LedgerEntry(
                 multiaddr: FfiConverterString.read(from: &buf), 
                 peerId: FfiConverterOptionString.read(from: &buf), 
+                publicKey: FfiConverterOptionString.read(from: &buf), 
+                nickname: FfiConverterOptionString.read(from: &buf), 
                 successCount: FfiConverterUInt32.read(from: &buf), 
                 failureCount: FfiConverterUInt32.read(from: &buf), 
                 lastSeen: FfiConverterOptionUInt64.read(from: &buf), 
@@ -2772,6 +2816,8 @@ public struct FfiConverterTypeLedgerEntry: FfiConverterRustBuffer {
     public static func write(_ value: LedgerEntry, into buf: inout [UInt8]) {
         FfiConverterString.write(value.multiaddr, into: &buf)
         FfiConverterOptionString.write(value.peerId, into: &buf)
+        FfiConverterOptionString.write(value.publicKey, into: &buf)
+        FfiConverterOptionString.write(value.nickname, into: &buf)
         FfiConverterUInt32.write(value.successCount, into: &buf)
         FfiConverterUInt32.write(value.failureCount, into: &buf)
         FfiConverterOptionUInt64.write(value.lastSeen, into: &buf)
@@ -3768,7 +3814,7 @@ public protocol CoreDelegate : AnyObject {
     
     func onPeerIdentified(peerId: String, listenAddrs: [String]) 
     
-    func onMessageReceived(senderId: String, senderPublicKeyHex: String, messageId: String, data: Data) 
+    func onMessageReceived(senderId: String, senderPublicKeyHex: String, messageId: String, senderTimestamp: UInt64, data: Data) 
     
     func onReceiptReceived(messageId: String, status: String) 
     
@@ -3867,6 +3913,7 @@ fileprivate struct UniffiCallbackInterfaceCoreDelegate {
             senderId: RustBuffer,
             senderPublicKeyHex: RustBuffer,
             messageId: RustBuffer,
+            senderTimestamp: UInt64,
             data: RustBuffer,
             uniffiOutReturn: UnsafeMutableRawPointer,
             uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
@@ -3880,6 +3927,7 @@ fileprivate struct UniffiCallbackInterfaceCoreDelegate {
                      senderId: try FfiConverterString.lift(senderId),
                      senderPublicKeyHex: try FfiConverterString.lift(senderPublicKeyHex),
                      messageId: try FfiConverterString.lift(messageId),
+                     senderTimestamp: try FfiConverterUInt64.lift(senderTimestamp),
                      data: try FfiConverterData.lift(data)
                 )
             }
@@ -4491,6 +4539,9 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_contactmanager_search() != 8112) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_contactmanager_set_local_nickname() != 27487) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_contactmanager_set_nickname() != 37981) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4579,6 +4630,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ledgermanager_all_known_topics() != 39576) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ledgermanager_annotate_identity() != 63553) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ledgermanager_dialable_addresses() != 27481) {
@@ -4743,7 +4797,7 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_coredelegate_on_peer_identified() != 56716) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_scmessenger_core_checksum_method_coredelegate_on_message_received() != 11956) {
+    if (uniffi_scmessenger_core_checksum_method_coredelegate_on_message_received() != 39348) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_coredelegate_on_receipt_received() != 33338) {

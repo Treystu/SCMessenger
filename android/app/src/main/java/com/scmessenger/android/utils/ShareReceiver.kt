@@ -16,7 +16,7 @@ import timber.log.Timber
 /**
  * BroadcastReceiver for handling share intents.
  *
- * Receives Intent.ACTION_SEND/ACTION_SEND_MULTIPLE and presents a contact picker
+ * Receives Intent.ACTION_SEND and presents a contact picker
  * to encrypt and queue the shared content as a mesh message.
  *
  * Features:
@@ -32,7 +32,6 @@ class ShareReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_SEND -> handleSingleShare(context, intent)
-            Intent.ACTION_SEND_MULTIPLE -> handleMultipleShare(context, intent)
             else -> Timber.w("Unhandled intent action: ${intent.action}")
         }
     }
@@ -61,14 +60,6 @@ class ShareReceiver : BroadcastReceiver() {
                 Timber.w("Unsupported share type: $type")
             }
         }
-    }
-
-    /**
-     * Handle multiple items share (currently not supported).
-     */
-    private fun handleMultipleShare(context: Context, intent: Intent) {
-        Toast.makeText(context, "Multiple items sharing not yet supported", Toast.LENGTH_SHORT).show()
-        Timber.w("Multiple share not implemented")
     }
 
     /**

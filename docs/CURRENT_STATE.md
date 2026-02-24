@@ -1,6 +1,6 @@
 # SCMessenger Current State (Verified)
 
-Last verified: **2026-02-23** (local workspace checks on this machine)
+Last verified: **2026-02-24** (local workspace checks on this machine)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
 
@@ -36,11 +36,26 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - Android:
   - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew assembleDebug`
   - Result: **pass**
+  - `./android/install-clean.sh`
+  - Result: **pass** (fresh install on connected Pixel 6a: Gradle `clean` + `:app:installDebug` + runtime permission grant pass for Bluetooth/Location/Nearby WiFi/Notifications)
+  - Multi-device note: `android/install-clean.sh` now supports `ANDROID_SERIAL=<serial>` and defaults to a single connected device (prefers TCP/IP transport when duplicates are present).
 - iOS:
   - `xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj -scheme SCMessenger -destination 'platform=iOS Simulator,name=iPhone 17' build`
   - Result: **pass**
   - `xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj -scheme SCMessenger -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build`
   - Result: **pass** (device-target compile path verified)
+  - `APPLE_TEAM_ID=<team> DEVICE_UDID=<udid> ./iOS/install-device.sh`
+  - Result: **pass** (clean DerivedData + reinstall + launch on connected iPhone)
+  - iOS runtime crash guard: `NSMotionUsageDescription` restored in `iOS/SCMessenger/SCMessenger/Info.plist` for motion-based power adaptation.
+
+### Live Smoke Automation
+
+- Cross-device smoke harness: `scripts/live-smoke.sh`
+  - Runs optional clean installs (`android/install-clean.sh`, `iOS/install-device.sh`)
+  - Supports deterministic Android targeting via `ANDROID_SERIAL=<serial>` (auto-selects one serial if omitted)
+  - Supports simulator-only runs via `IOS_TARGET=simulator`
+  - Captures Android runtime logcat for a configurable interaction window
+  - Stores artifacts under `logs/live-smoke/<timestamp>/`
 
 ### Browser/WASM Runtime Validation
 
@@ -52,6 +67,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 
 - Sovereign identity and key management (Ed25519), persisted storage
 - Message encryption/signing pipeline (X25519 + XChaCha20-Poly1305 + signatures)
+- Inbound message chronology now uses original sender timestamp from core callbacks (`sender_timestamp`) rather than local receive-time
 - Store-and-forward queues with persistence
 - libp2p swarm transport with discovery, messaging, relay, and NAT reflection
 - Interactive CLI with:
@@ -71,9 +87,10 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - Topic subscribe/unsubscribe/publish is now wired through Rust bridge on Android and iOS
   - Android: `android/app/src/main/java/com/scmessenger/android/data/TopicManager.kt`
   - iOS: `iOS/SCMessenger/SCMessenger/Data/TopicManager.swift`
-- Privacy toggle parity is not complete yet across Android and iOS.
-  - Direction: parity-first wiring for all privacy controls.
-  - iOS current gap surface: `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift`
+- Privacy toggle parity is wired across Android, iOS, and Web/WASM for the canonical settings surface.
+  - Android: `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt`
+  - iOS: `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift`
+  - Web/WASM: `wasm/src/lib.rs`
 - Android and iOS QR import/join flows are wired (Google Code Scanner on Android, VisionKit on iOS)
   - Android: `android/app/src/main/java/com/scmessenger/android/ui/join/JoinMeshScreen.kt`
   - Android contacts: `android/app/src/main/java/com/scmessenger/android/ui/contacts/AddContactScreen.kt`
@@ -87,7 +104,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - iOS export source: `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift`
 - iOS physical-device helper scripts are available:
   - Build signed device artifact: `iOS/build-device.sh`
-  - Build + install on connected iPhone: `iOS/install-device.sh`
+  - Build + clean-install on connected iPhone: `iOS/install-device.sh`
 - Android `WifiAwareTransport` compile issue was fixed; runtime behavior still needs field validation across devices/NAT scenarios
   - `android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt`
 
@@ -95,6 +112,8 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 
 - Browser-executed WASM tests are not currently verified in this environment (`wasm-pack` missing)
 - Android build verification requires `ANDROID_HOME` to be set in-shell
+- App-update continuity hardening is still pending:
+  - upgrade-path guarantees for identity/contact/history persistence and automatic legacy-store import are tracked as a Priority 1 backlog item in `REMAINING_WORK_TRACKING.md`.
 
 ### Non-Markdown Extraction Highlights (2026-02-23)
 
@@ -108,6 +127,8 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - `scripts/get-node-info.sh` documents and automates extraction of `Peer ID`, external address API query (`/api/external-address` on port `9876`), and shareable bootstrap multiaddr formatting.
 - `iOS/verify-test.sh` is now an actual build verification script (simulator workspace build), not a placeholder.
 - `android/app/build.gradle` currently aligns ABI filters and Rust build targets to `arm64-v8a` + `x86_64` (earlier mismatch note is outdated).
+- `android/verify-build-setup.sh` now validates the same ABI matrix (`aarch64-linux-android` + `x86_64-linux-android`).
+- `iOS/copy-bindings.sh` is normalized to the active generated path only: `iOS/SCMessenger/SCMessenger/Generated/`.
 
 ### Repository Structure Clarifications
 
@@ -130,10 +151,6 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - Alpha language scope is English-only (i18n expansion remains backlog work).
 - Abuse controls and regional compliance mapping are explicitly post-alpha tracks.
 - Web/WASM remains experimental today and must be promoted to parity before GA.
-
-### Code Quality Gaps
-
-- Several integration tests compile with warnings (unused imports/variables in core integration test files)
 
 ## Source of Truth
 
