@@ -11,6 +11,7 @@
 import Foundation
 import Combine
 import os
+import Security
 
 /// Default settings for mesh service configuration
 private enum DefaultSettings {
@@ -34,6 +35,10 @@ private enum DefaultSettings {
 @MainActor
 @Observable
 final class MeshRepository {
+    private enum IdentityBackupStore {
+        static let service = "com.scmessenger.identity"
+        static let account = "identity_backup_v1"
+    }
     private let logger = Logger(subsystem: "com.scmessenger", category: "Repository")
     private let storagePath: String
 
@@ -48,17 +53,13 @@ final class MeshRepository {
     /// Resolved bootstrap nodes using the core BootstrapResolver.
     /// Priority: SC_BOOTSTRAP_NODES env var → remote URL → static fallback.
     static let defaultBootstrapNodes: [String] = {
-        do {
-            let config = BootstrapConfig(
-                staticNodes: staticBootstrapNodes,
-                remoteUrl: nil,  // Set to a bootstrap-list URL when available
-                fetchTimeoutSecs: 5,
-                envOverrideKey: "SC_BOOTSTRAP_NODES"
-            )
-            return BootstrapResolver(config: config).resolve()
-        } catch {
-            return staticBootstrapNodes
-        }
+        let config = BootstrapConfig(
+            staticNodes: staticBootstrapNodes,
+            remoteUrl: nil,  // Set to a bootstrap-list URL when available
+            fetchTimeoutSecs: 5,
+            envOverrideKey: "SC_BOOTSTRAP_NODES"
+        )
+        return BootstrapResolver(config: config).resolve()
     }()
 
     private static let bootstrapRelayPeerIds: Set<String> = Set(
@@ -540,9 +541,16 @@ final class MeshRepository {
 
         var info = ironCore.getIdentityInfo()
         if !info.initialized {
+            let restored = restoreIdentityFromKeychain(ironCore: ironCore)
+            if restored {
+                info = ironCore.getIdentityInfo()
+            }
+        }
+        if !info.initialized {
             logger.info("Auto-initializing new identity for first run")
             try ironCore.initializeIdentity()
             info = ironCore.getIdentityInfo()
+            persistIdentityBackupToKeychain(ironCore: ironCore)
         }
 
         let nickname = info.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -550,6 +558,72 @@ final class MeshRepository {
             let defaultNickname = buildDefaultLocalNickname(info: info)
             try ironCore.setNickname(nickname: defaultNickname)
             logger.info("Auto-set local nickname: \(defaultNickname)")
+            persistIdentityBackupToKeychain(ironCore: ironCore)
+        } else {
+            persistIdentityBackupToKeychain(ironCore: ironCore)
+        }
+    }
+
+    @discardableResult
+    private func restoreIdentityFromKeychain(ironCore: IronCore) -> Bool {
+        guard let backupPayload = readIdentityBackupFromKeychain() else {
+            return false
+        }
+        do {
+            try ironCore.importIdentityBackup(backup: backupPayload)
+            logger.info("Restored identity from iOS Keychain backup payload")
+            return true
+        } catch {
+            logger.warning("Identity Keychain restore failed: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    private func persistIdentityBackupToKeychain(ironCore: IronCore?) {
+        guard let ironCore else { return }
+        do {
+            let backup = try ironCore.exportIdentityBackup()
+            writeIdentityBackupToKeychain(backup)
+        } catch {
+            logger.warning("Failed to persist identity backup payload: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func readIdentityBackupFromKeychain() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: IdentityBackupStore.service,
+            kSecAttrAccount as String: IdentityBackupStore.account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let data = result as? Data else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private func writeIdentityBackupToKeychain(_ payload: String) {
+        guard let data = payload.data(using: .utf8) else { return }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: IdentityBackupStore.service,
+            kSecAttrAccount as String: IdentityBackupStore.account,
+        ]
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
+        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if updateStatus == errSecSuccess {
+            return
+        }
+        if updateStatus == errSecItemNotFound {
+            var addQuery = query
+            addQuery.merge(attributes) { _, new in new }
+            _ = SecItemAdd(addQuery as CFDictionary, nil)
         }
     }
 
@@ -1286,22 +1360,51 @@ final class MeshRepository {
            info.lastSeen - existing.lastSeen < 300 {
             return
         }
-        guard let existing else {
-            discoveredPeerMap[key] = info
-            return
+        let merged: PeerDiscoveryInfo
+        if let existing {
+            merged = PeerDiscoveryInfo(
+                canonicalPeerId: selectCanonicalPeerId(
+                    incoming: info.canonicalPeerId,
+                    existing: existing.canonicalPeerId
+                ),
+                publicKey: info.publicKey ?? existing.publicKey,
+                nickname: selectAuthoritativeNickname(incoming: info.nickname, existing: existing.nickname),
+                transport: (info.transport == .internet || existing.transport == .internet) ? .internet : info.transport,
+                lastSeen: max(info.lastSeen, existing.lastSeen)
+            )
+        } else {
+            merged = info
         }
 
-        let merged = PeerDiscoveryInfo(
-            canonicalPeerId: selectCanonicalPeerId(
-                incoming: info.canonicalPeerId,
-                existing: existing.canonicalPeerId
-            ),
-            publicKey: info.publicKey ?? existing.publicKey,
-            nickname: selectAuthoritativeNickname(incoming: info.nickname, existing: existing.nickname),
-            transport: (info.transport == .internet || existing.transport == .internet) ? .internet : info.transport,
-            lastSeen: max(info.lastSeen, existing.lastSeen)
-        )
-        discoveredPeerMap[key] = merged
+        let canonicalPeerId = merged.canonicalPeerId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? key.trimmingCharacters(in: .whitespacesAndNewlines)
+            : merged.canonicalPeerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let canonicalPublicKey = normalizePublicKey(merged.publicKey)
+
+        discoveredPeerMap[canonicalPeerId] = merged
+        discoveredPeerMap = discoveredPeerMap.filter { mapKey, candidate in
+            if mapKey == canonicalPeerId { return true }
+            let sameCanonicalPeerId = candidate.canonicalPeerId.trimmingCharacters(in: .whitespacesAndNewlines) == canonicalPeerId
+            let samePublicKey = canonicalPublicKey != nil &&
+                normalizePublicKey(candidate.publicKey) == canonicalPublicKey
+            return !(sameCanonicalPeerId || samePublicKey)
+        }
+    }
+
+    private func pruneDisconnectedPeer(_ peerId: String) {
+        let normalizedPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedPeerId.isEmpty else { return }
+
+        let disconnectedPublicKey = normalizePublicKey(discoveredPeerMap[normalizedPeerId]?.publicKey)
+        discoveredPeerMap = discoveredPeerMap.filter { key, info in
+            if key == normalizedPeerId { return false }
+            if info.canonicalPeerId == normalizedPeerId { return false }
+            if let disconnectedPublicKey,
+               normalizePublicKey(info.publicKey) == disconnectedPublicKey {
+                return false
+            }
+            return true
+        }
     }
 
     private func annotateIdentityInLedger(
@@ -1945,6 +2048,10 @@ final class MeshRepository {
             updateDiscoveredPeer(peerId, info: discoveryInfo)
             MeshEventBus.shared.peerEvents.send(.discovered(peerId: peerId))
         }
+    }
+
+    func handleTransportPeerDisconnected(peerId: String) {
+        pruneDisconnectedPeer(peerId)
     }
 
     func handleTransportPeerIdentified(peerId: String, listenAddrs: [String]) {
@@ -3068,6 +3175,7 @@ final class MeshRepository {
             throw MeshError.invalidInput("Nickname cannot be empty")
         }
         try ironCore.setNickname(nickname: trimmedNickname)
+        persistIdentityBackupToKeychain(ironCore: ironCore)
         logger.info("✓ Nickname set to: \(trimmedNickname)")
         broadcastIdentityBeacon()
         identitySyncSentPeers.removeAll()

@@ -27,6 +27,7 @@ This release optimizes for **continuity, determinism, and resilience** over net-
 - Consistent behavior for send/receive, contact add/import, conversation list, retry state.
 - Unified inbox/outbox/pending state semantics.
 - Equivalent error taxonomy for connection and delivery failures.
+- WASM uses libp2p swarm as first-class transport path (no standalone relay-only bypass).
 
 ### C. Internet-ready routing behavior
 - Reach GCP bootstrap from non-LAN networks.
@@ -147,6 +148,20 @@ Deterministic, event-driven transitions to ensure cross-platform parity.
 - Integration tests (direct/relay/transitions): **300–500 LOC**
 - **Subtotal: 1,150–2,000 LOC**
 
+#### 5.2.5 WASM swarm parity (required)
+- Implement `start_swarm_with_config()` on `wasm32` using `SwarmBuilder::with_wasm_bindgen()`.
+- Use browser-capable websocket transport (`websocket-websys`) with Noise + Yamux.
+- Keep protocol IDs stable:
+  - `/sc/message/1.0.0`
+  - `/sc/address-reflection/1.0.0`
+  - `/sc/relay/1.0.0`
+  - `/sc/ledger-exchange/1.0.0`
+  - `/sc/id/1.0.0`
+- Preserve deterministic wasm command semantics:
+  - `Listen`: unsupported on browser transport
+  - `GetListeners`: empty list
+  - `Dial`, `SendMessage`, `GetPeers`, `SubscribeTopic`, `PublishTopic`: supported
+
 ### Workstream 3 — API parity and binding consistency
 
 #### 5.3.1 UniFFI/WASM API consolidation
@@ -202,7 +217,8 @@ Deterministic, event-driven transitions to ensure cross-platform parity.
 ### WASM/Web
 - IndexedDB-backed persistence with migration/version support.
 - Align lifecycle behavior for tab suspend/resume reconnect.
-- Keep browser constraints abstracted without changing core semantics.
+- Ship browser libp2p swarm runtime (`startSwarm/stopSwarm/sendPreparedEnvelope/getPeers`).
+- Keep `startReceiveLoop(relayUrl)` only as deprecated shim that delegates to swarm bootstrap.
 
 ---
 
@@ -223,6 +239,10 @@ Deterministic, event-driven transitions to ensure cross-platform parity.
 - Contract tests:
   - Swift/Kotlin/WASM decode/encode parity,
   - status/error mapping parity.
+- Browser/native compatibility matrix:
+  - Browser `v0.1.2-alpha` ↔ native tag `v0.1.0`
+  - Browser `v0.1.2-alpha` ↔ native tag `v0.1.1`
+  - Browser `v0.1.2-alpha` ↔ current head
 
 ### 7.2 Manual alpha scenarios (required)
 - Same-LAN direct messaging.
@@ -271,12 +291,31 @@ Deterministic, event-driven transitions to ensure cross-platform parity.
 
 - [ ] Migration framework validated across Core/iOS/Android/WASM.
 - [ ] Identity/contact/message continuity verified across update flows.
-- [ ] Unified connection orchestrator live across all clients.
+- [x] Unified connection orchestrator live across all clients.
 - [ ] GCP bootstrap + direct P2P + relay fallback validated.
+- [x] WASM swarm path validated (no `wasm32` swarm bail-out).
 - [ ] ACK-safe path switching validated (no duplicates/loss on transitions).
-- [ ] Parity audit closed for core chat workflows.
-- [ ] Structured diagnostics export available for partner bug reports.
-- [ ] Release notes + partner test playbook published.
+- [x] Parity audit closed for core chat workflows.
+- [x] Structured diagnostics export available for partner bug reports.
+- [x] Release notes + partner test playbook published.
+
+### 9.1 Current execution status (in-repo verifiable)
+
+- Completed:
+  - wasm32 core swarm path implemented and compiled.
+  - browser swarm wasm bindings implemented (`startSwarm`, `stopSwarm`, `sendPreparedEnvelope`, `getPeers`).
+  - legacy `startReceiveLoop(relayUrl)` converted to deprecated swarm bootstrap shim.
+  - CI checks added for wasm32 core+wasm crate compile.
+  - docs updated for wasm swarm-first architecture.
+  - connection path state contract exported in UniFFI and WASM APIs.
+  - structured diagnostics export implemented for mobile and web clients.
+  - release notes, parity audit, and partner test playbook documents added.
+  - storage layout/schema hardening and persistent outbox/inbox initialization implemented.
+- Remaining (requires additional feature work and/or external validation):
+  - full migration continuity signoff across mobile/web upgrade runs.
+  - cross-network + relay fallback operational matrix signoff against live infrastructure.
+  - ACK/path-switch reliability acceptance across partner scenarios.
+  - parity audit closure and release-note/test-playbook publication.
 
 ---
 

@@ -33,6 +33,8 @@ libp2p = { version = "0.53", features = [
   "macros",
   "request-response",
   "cbor",
+  "wasm-bindgen",
+  "websocket-websys",
 ] }
 
 # Serialization

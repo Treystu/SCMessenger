@@ -10,6 +10,8 @@ use std::sync::Arc;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::closure::Closure;
 #[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsCast;
+#[cfg(target_arch = "wasm32")]
 use web_sys::{CloseEvent, ErrorEvent, MessageEvent, RtcPeerConnection, WebSocket};
 
 /// Managed WebSocket connection with proper callback lifecycle
@@ -191,9 +193,7 @@ impl ManagedRtcConnection {
 
     /// Create a data channel
     pub fn create_data_channel(&self, label: &str) -> Result<web_sys::RtcDataChannel, String> {
-        self.peer_connection
-            .create_data_channel(label)
-            .ok_or_else(|| "Failed to create data channel".to_string())
+        Ok(self.peer_connection.create_data_channel(label))
     }
 
     /// Get connection state

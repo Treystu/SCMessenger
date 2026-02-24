@@ -94,6 +94,10 @@ jobs:
           toolchain: stable
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+      - name: Check Core wasm32 Swarm Build
+        run: cargo check -p scmessenger-core --target wasm32-unknown-unknown
+      - name: Check WASM Crate Build
+        run: cargo check -p scmessenger-wasm --target wasm32-unknown-unknown
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - name: Test Web/WASM

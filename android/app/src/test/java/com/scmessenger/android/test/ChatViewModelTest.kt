@@ -1,99 +1,130 @@
 package com.scmessenger.android.test
 
+import com.scmessenger.android.data.MeshRepository
+import com.scmessenger.android.service.MeshEventBus
+import com.scmessenger.android.service.MessageEvent
+import com.scmessenger.android.service.PeerEvent
+import com.scmessenger.android.service.TransportType
 import com.scmessenger.android.ui.viewmodels.ChatViewModel
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import org.junit.Assert.assertTrue
 
-/**
- * Unit tests for ChatViewModel.
- *
- * Tests:
- * - Send message flow
- * - Receive message flow
- * - Delivery status updates
- * - Message pagination
- * - Peer online/offline status
- *
- * Note: These are placeholder tests. Full implementation requires:
- * - MeshRepository mock
- * - Coroutines test dispatcher
- * - Flow test utilities (turbine library recommended)
- */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ChatViewModelTest {
 
+    private lateinit var repository: MeshRepository
     private lateinit var viewModel: ChatViewModel
+    private val testDispatcher = StandardTestDispatcher()
+    private val incoming = MutableSharedFlow<uniffi.api.MessageRecord>(replay = 0)
+
+    private fun message(id: String, peerId: String, delivered: Boolean = false): uniffi.api.MessageRecord {
+        return uniffi.api.MessageRecord(
+            id = id,
+            peerId = peerId,
+            direction = uniffi.api.MessageDirection.SENT,
+            content = "hello",
+            timestamp = 1u,
+            delivered = delivered
+        )
+    }
 
     @Before
     fun setup() {
-        // viewModel = ChatViewModel(mockRepository)
+        Dispatchers.setMain(testDispatcher)
+        repository = mockk(relaxed = true)
+        every { repository.incomingMessages } returns incoming
+        every { repository.getConversation(any(), any()) } returns listOf(message("m1", "peer1"))
+        every { repository.getContact(any()) } returns null
+        coEvery { repository.sendMessage(any(), any()) } returns Unit
+        viewModel = ChatViewModel(repository)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
     }
 
     @Test
-    fun `test sendMessage - updates UI state correctly`() {
-        // Given
-        val content = "Test message"
+    fun `setPeer loads conversation`() = runTest {
+        viewModel.setPeer("peer1")
+        advanceUntilIdle()
 
-        // When
-        // viewModel.sendMessage(content)
-
-        // Then
-        // assertEquals(SendState.SENDING, viewModel.sendState.value)
-        assertTrue("Placeholder - requires ViewModel instantiation", true)
+        assertEquals("peer1", viewModel.peerId.value)
+        assertEquals(1, viewModel.messages.value.size)
+        verify { repository.getConversation("peer1", 200u) }
     }
 
     @Test
-    fun `test receiveMessage - adds to message list`() {
-        // Given
-        // val messageEvent = MessageEvent.Received(...)
+    fun `sendMessage sends and clears input`() = runTest {
+        viewModel.setPeer("peer1")
+        viewModel.updateInputText("hello world")
+        viewModel.sendMessage()
+        advanceUntilIdle()
 
-        // When
-        // MeshEventBus.emitMessageEvent(messageEvent)
-
-        // Then
-        // assertTrue(viewModel.messages.value.isNotEmpty())
-        assertTrue("Placeholder - requires event emission", true)
+        coVerify(exactly = 1) { repository.sendMessage("peer1", "hello world") }
+        assertEquals("", viewModel.inputText.value)
     }
 
     @Test
-    fun `test delivery status - updates when receipt received`() {
-        // Given
-        val messageId = "msg123"
-
-        // When
-        // val statusEvent = MessageEvent.Delivered(messageId)
-        // MeshEventBus.emitMessageEvent(statusEvent)
-
-        // Then
-        // val message = viewModel.messages.value.find { it.id == messageId }
-        // assertTrue(message?.delivered == true)
-        assertTrue("Placeholder - requires status tracking", true)
+    fun `sendMessage without selected peer sets error`() {
+        viewModel.updateInputText("hello")
+        viewModel.sendMessage()
+        assertEquals("No peer selected", viewModel.error.value)
     }
 
     @Test
-    fun `test peer status - reflects online state`() {
-        // Given
-        val peerId = "peer123"
+    fun `delivery status event marks message delivered`() = runTest {
+        viewModel.setPeer("peer1")
+        advanceUntilIdle()
 
-        // When
-        // val peerEvent = PeerEvent.Connected(peerId, TransportType.BLE)
-        // MeshEventBus.emitPeerEvent(peerEvent)
+        MeshEventBus.emitMessageEvent(MessageEvent.Delivered("m1"))
+        advanceUntilIdle()
 
-        // Then
-        // assertEquals(PeerStatus.ONLINE, viewModel.peerStatus.value)
-        assertTrue("Placeholder - requires peer tracking", true)
+        assertTrue(viewModel.messages.value.first { it.id == "m1" }.delivered)
     }
 
     @Test
-    fun `test pagination - loads more messages`() {
-        // Given
-        // viewModel already has 50 messages
+    fun `peer events update online status`() = runTest {
+        val collectJob = launch { viewModel.isOnline.collect { } }
+        viewModel.setPeer("peer1")
+        advanceUntilIdle()
 
-        // When
-        // viewModel.loadMore()
+        MeshEventBus.emitPeerEvent(PeerEvent.Connected("peer1", TransportType.BLE))
+        advanceUntilIdle()
+        assertTrue(viewModel.isOnline.value)
 
-        // Then
-        // assertTrue(viewModel.messages.value.size > 50)
-        assertTrue("Placeholder - requires pagination logic", true)
+        MeshEventBus.emitPeerEvent(PeerEvent.Disconnected("peer1"))
+        advanceUntilIdle()
+        assertFalse(viewModel.isOnline.value)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `loadMoreMessages increases conversation limit`() = runTest {
+        viewModel.setPeer("peer1")
+        advanceUntilIdle()
+
+        viewModel.loadMoreMessages()
+        advanceUntilIdle()
+
+        verify { repository.getConversation("peer1", 300u) }
     }
 }

@@ -18,6 +18,7 @@ pub mod contacts_bridge;
 pub mod mobile_bridge;
 
 use parking_lot::RwLock;
+use std::path::Path;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -113,6 +114,13 @@ pub struct PreparedMessage {
     pub envelope_data: Vec<u8>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+struct IdentityBackupV1 {
+    version: u8,
+    secret_key_hex: String,
+    nickname: Option<String>,
+}
+
 // ============================================================================
 // CORE DELEGATE TRAIT
 // ============================================================================
@@ -159,6 +167,32 @@ pub struct IronCore {
     delegate: Arc<RwLock<Option<Arc<dyn CoreDelegate>>>>,
 }
 
+const STORAGE_SCHEMA_VERSION: u32 = 1;
+
+fn ensure_storage_layout(storage_path: &str) -> Result<(), IronCoreError> {
+    let base = Path::new(storage_path);
+    std::fs::create_dir_all(base.join("identity")).map_err(|_| IronCoreError::StorageError)?;
+    std::fs::create_dir_all(base.join("outbox")).map_err(|_| IronCoreError::StorageError)?;
+    std::fs::create_dir_all(base.join("inbox")).map_err(|_| IronCoreError::StorageError)?;
+
+    let version_file = base.join("SCHEMA_VERSION");
+    if version_file.exists() {
+        let current =
+            std::fs::read_to_string(&version_file).map_err(|_| IronCoreError::StorageError)?;
+        let current = current
+            .trim()
+            .parse::<u32>()
+            .map_err(|_| IronCoreError::StorageError)?;
+        if current > STORAGE_SCHEMA_VERSION {
+            return Err(IronCoreError::StorageError);
+        }
+    } else {
+        std::fs::write(&version_file, STORAGE_SCHEMA_VERSION.to_string())
+            .map_err(|_| IronCoreError::StorageError)?;
+    }
+    Ok(())
+}
+
 impl IronCore {
     /// Create a new Iron Core instance with in-memory storage
     pub fn new() -> Self {
@@ -179,18 +213,60 @@ impl IronCore {
             )
             .try_init();
 
-        let identity = if let Some(path) = storage_path {
-            Arc::new(RwLock::new(
-                IdentityManager::with_path(&path).unwrap_or_else(|_| IdentityManager::new()),
-            ))
+        let storage_ready = if let Some(path) = &storage_path {
+            match ensure_storage_layout(path) {
+                Ok(()) => true,
+                Err(e) => {
+                    tracing::error!("Storage layout check failed at {}: {:?}", path, e);
+                    false
+                }
+            }
+        } else {
+            false
+        };
+
+        let identity = if let Some(path) = &storage_path {
+            if !storage_ready {
+                Arc::new(RwLock::new(IdentityManager::new()))
+            } else {
+                let identity_path = Path::new(path).join("identity");
+                Arc::new(RwLock::new(
+                    IdentityManager::with_path(identity_path.to_string_lossy().as_ref())
+                        .unwrap_or_else(|_| IdentityManager::new()),
+                ))
+            }
         } else {
             Arc::new(RwLock::new(IdentityManager::new()))
         };
 
+        let outbox = if let Some(path) = &storage_path {
+            if !storage_ready {
+                store::Outbox::new()
+            } else {
+                let outbox_path = Path::new(path).join("outbox");
+                store::Outbox::persistent(outbox_path.to_string_lossy().as_ref())
+                    .unwrap_or_else(|_| store::Outbox::new())
+            }
+        } else {
+            store::Outbox::new()
+        };
+
+        let inbox = if let Some(path) = &storage_path {
+            if !storage_ready {
+                store::Inbox::new()
+            } else {
+                let inbox_path = Path::new(path).join("inbox");
+                store::Inbox::persistent(inbox_path.to_string_lossy().as_ref())
+                    .unwrap_or_else(|_| store::Inbox::new())
+            }
+        } else {
+            store::Inbox::new()
+        };
+
         Self {
             identity,
-            outbox: Arc::new(RwLock::new(store::Outbox::new())),
-            inbox: Arc::new(RwLock::new(store::Inbox::new())),
+            outbox: Arc::new(RwLock::new(outbox)),
+            inbox: Arc::new(RwLock::new(inbox)),
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
         }
@@ -279,6 +355,40 @@ impl IronCore {
             .write()
             .set_nickname(nickname)
             .map_err(|_| IronCoreError::StorageError)
+    }
+
+    /// Export identity key material for platform-secure backup.
+    pub fn export_identity_backup(&self) -> Result<String, IronCoreError> {
+        let identity = self.identity.read();
+        let key_bytes = identity
+            .export_key_bytes()
+            .ok_or(IronCoreError::NotInitialized)?;
+        let payload = IdentityBackupV1 {
+            version: 1,
+            secret_key_hex: hex::encode(key_bytes),
+            nickname: identity.nickname(),
+        };
+        serde_json::to_string(&payload).map_err(|_| IronCoreError::Internal)
+    }
+
+    /// Import identity key material from a platform-secure backup payload.
+    pub fn import_identity_backup(&self, backup: String) -> Result<(), IronCoreError> {
+        let payload: IdentityBackupV1 =
+            serde_json::from_str(&backup).map_err(|_| IronCoreError::InvalidInput)?;
+        if payload.version != 1 {
+            return Err(IronCoreError::InvalidInput);
+        }
+        let key_bytes = hex::decode(payload.secret_key_hex).map_err(|_| IronCoreError::InvalidInput)?;
+        let mut identity = self.identity.write();
+        identity
+            .import_key_bytes(&key_bytes)
+            .map_err(|_| IronCoreError::StorageError)?;
+        if let Some(nickname) = payload.nickname {
+            identity
+                .set_nickname(nickname)
+                .map_err(|_| IronCoreError::StorageError)?;
+        }
+        Ok(())
     }
 
     /// Sign data with this node's identity key
@@ -433,6 +543,21 @@ impl IronCore {
         // Serialize envelope for wire
         let envelope_bytes =
             message::encode_envelope(&envelope).map_err(|_| IronCoreError::Internal)?;
+
+        // Persist outbound envelope for retry/reconciliation.
+        self.outbox
+            .write()
+            .enqueue(store::QueuedMessage {
+                message_id: message_id.clone(),
+                recipient_id: recipient_key_trimmed.clone(),
+                envelope_data: envelope_bytes.clone(),
+                queued_at: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+                attempts: 0,
+            })
+            .map_err(|_| IronCoreError::StorageError)?;
 
         Ok(PreparedMessage {
             message_id,
@@ -650,6 +775,7 @@ impl Default for IronCore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn test_iron_core_creation() {
@@ -828,5 +954,48 @@ mod tests {
             extracted_hex, original_hex,
             "Extracted public key must match the identity's own public key"
         );
+    }
+
+    #[test]
+    fn test_outbox_persists_across_restart_with_storage() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_string_lossy().to_string();
+
+        let alice = IronCore::with_storage(path.clone());
+        let bob = IronCore::new();
+        alice.initialize_identity().unwrap();
+        bob.initialize_identity().unwrap();
+
+        let bob_pk = bob.get_identity_info().public_key_hex.unwrap();
+        let _ = alice
+            .prepare_message(bob_pk, "persist me".to_string())
+            .unwrap();
+        assert_eq!(alice.outbox_count(), 1);
+        drop(alice);
+
+        let reloaded = IronCore::with_storage(path);
+        assert_eq!(reloaded.outbox_count(), 1);
+    }
+
+    #[test]
+    fn test_inbox_persists_across_restart_with_storage() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_string_lossy().to_string();
+
+        let alice = IronCore::with_storage(path.clone());
+        let bob = IronCore::new();
+        alice.initialize_identity().unwrap();
+        bob.initialize_identity().unwrap();
+
+        let alice_pk = alice.get_identity_info().public_key_hex.unwrap();
+        let envelope = bob
+            .prepare_message(alice_pk, "hi from bob".to_string())
+            .unwrap();
+        alice.receive_message(envelope).unwrap();
+        assert_eq!(alice.inbox_count(), 1);
+        drop(alice);
+
+        let reloaded = IronCore::with_storage(path);
+        assert_eq!(reloaded.inbox_count(), 1);
     }
 }

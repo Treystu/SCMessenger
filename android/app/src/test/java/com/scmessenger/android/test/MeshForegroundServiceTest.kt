@@ -1,141 +1,88 @@
-package com.scmessenger.android.test
+package com.scmessenger.android.service
 
 import com.scmessenger.android.service.MeshForegroundService
-import org.junit.Before
+import org.junit.Assert.assertEquals
 import org.junit.Test
-import org.junit.Assert.assertTrue
 
-/**
- * Unit tests for MeshForegroundService.
- *
- * Tests:
- * - Service lifecycle (create, start, stop)
- * - CoreDelegate callback routing
- * - PlatformBridge events
- * - AutoAdjust profile changes
- * - Notification updates
- *
- * Note: Service tests typically require Robolectric or instrumented tests.
- */
 class MeshForegroundServiceTest {
 
-    private lateinit var service: MeshForegroundService
-
-    @Before
-    fun setup() {
-        // Requires Robolectric or instrumented test setup
-        // service = Robolectric.buildService(MeshForegroundService::class.java).create().get()
+    @Test
+    fun `null action resolves to Start`() {
+        val result = MeshForegroundService.decideCommand(
+            action = null,
+            serviceRunning = false,
+            repositoryRunning = false
+        )
+        assertEquals(MeshForegroundService.Companion.StartDecision.Start, result)
     }
 
     @Test
-    fun `test service creation`() {
-        // Given/When
-        // Service is created in setup
-
-        // Then
-        // assertNotNull(service)
-        assertTrue("Placeholder - requires service framework", true)
+    fun `pause resolves to NoOp when service not running`() {
+        val result = MeshForegroundService.decideCommand(
+            action = MeshForegroundService.ACTION_PAUSE,
+            serviceRunning = false,
+            repositoryRunning = false
+        )
+        assertEquals(MeshForegroundService.Companion.StartDecision.NoOp, result)
     }
 
     @Test
-    fun `test service start - starts mesh network`() {
-        // Given
-        // val startIntent = Intent(context, MeshForegroundService::class.java)
-        // startIntent.action = MeshForegroundService.ACTION_START
-
-        // When
-        // service.onStartCommand(startIntent, 0, 1)
-
-        // Then
-        // Verify mesh service was started
-        // verify { mockMeshRepository.startMeshService(any()) }
-        assertTrue("Placeholder - requires intent handling", true)
+    fun `pause resolves to Pause when repository running`() {
+        val result = MeshForegroundService.decideCommand(
+            action = MeshForegroundService.ACTION_PAUSE,
+            serviceRunning = false,
+            repositoryRunning = true
+        )
+        assertEquals(MeshForegroundService.Companion.StartDecision.Pause, result)
     }
 
     @Test
-    fun `test service stop - stops mesh network`() {
-        // Given
-        // Service is running
-
-        // When
-        // val stopIntent = Intent(context, MeshForegroundService::class.java)
-        // stopIntent.action = MeshForegroundService.ACTION_STOP
-        // service.onStartCommand(stopIntent, 0, 2)
-
-        // Then
-        // verify { mockMeshRepository.stopMeshService() }
-        assertTrue("Placeholder - requires stop logic", true)
+    fun `resume resolves to Resume only when both running`() {
+        val result = MeshForegroundService.decideCommand(
+            action = MeshForegroundService.ACTION_RESUME,
+            serviceRunning = true,
+            repositoryRunning = true
+        )
+        assertEquals(MeshForegroundService.Companion.StartDecision.Resume, result)
     }
 
     @Test
-    fun `test CoreDelegate onPeerDiscovered - emits event`() {
-        // Given
-        val peerId = "peer123"
-
-        // When
-        // CoreDelegate callback is triggered
-        // coreDelegate.onPeerDiscovered(peerId)
-
-        // Then
-        // Verify MeshEventBus.emitPeerEvent was called
-        assertTrue("Placeholder - requires callback testing", true)
+    fun `resume resolves to Start when state is incomplete`() {
+        val result = MeshForegroundService.decideCommand(
+            action = MeshForegroundService.ACTION_RESUME,
+            serviceRunning = true,
+            repositoryRunning = false
+        )
+        assertEquals(MeshForegroundService.Companion.StartDecision.Start, result)
     }
 
     @Test
-    fun `test CoreDelegate onMessageReceived - stores and notifies`() {
-        // Given
-        val senderId = "sender456"
-        val messageId = "msg789"
-        val data = "Hello".toByteArray()
-
-        // When
-        // coreDelegate.onMessageReceived(senderId, messageId, data)
-
-        // Then
-        // Verify message was stored in HistoryManager
-        // Verify notification was shown
-        assertTrue("Placeholder - requires message handling", true)
+    fun `stop resolves to Stop`() {
+        val result = MeshForegroundService.decideCommand(
+            action = MeshForegroundService.ACTION_STOP,
+            serviceRunning = true,
+            repositoryRunning = true
+        )
+        assertEquals(MeshForegroundService.Companion.StartDecision.Stop, result)
     }
 
     @Test
-    fun `test PlatformBridge battery state - triggers AutoAdjust`() {
-        // Given
-        val batteryLevel = 15
-        val isCharging = false
-
-        // When
-        // platformBridge.onBatteryChanged(batteryLevel, isCharging)
-
-        // Then
-        // Verify AutoAdjustEngine computed new profile
-        // Verify BLE scan interval was adjusted
-        assertTrue("Placeholder - requires battery monitoring", true)
+    fun `unknown action defaults to Start`() {
+        val result = MeshForegroundService.decideCommand(
+            action = "unknown",
+            serviceRunning = true,
+            repositoryRunning = true
+        )
+        assertEquals(MeshForegroundService.Companion.StartDecision.Start, result)
     }
 
     @Test
-    fun `test notification update - shows peer count`() {
-        // Given
-        val peerCount = 5
-
-        // When
-        // Service receives peer count update
-
-        // Then
-        // Verify notification was updated with count
-        assertTrue("Placeholder - requires notification testing", true)
-    }
-
-    @Test
-    fun `test WakeLock - acquired during BLE scan`() {
-        // Given
-        // Service is running
-
-        // When
-        // BLE scan window starts
-
-        // Then
-        // Verify WakeLock was acquired
-        // Verify WakeLock was released after scan
-        assertTrue("Placeholder - requires WakeLock testing", true)
+    fun `explicit start resolves to Start`() {
+        val result = MeshForegroundService.decideCommand(
+            action = MeshForegroundService.ACTION_START,
+            serviceRunning = false,
+            repositoryRunning = false
+        )
+        assertEquals(MeshForegroundService.Companion.StartDecision.Start, result)
     }
 }

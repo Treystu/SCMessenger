@@ -10,6 +10,8 @@ Owner policy constraints (2026-02-23):
 - Community-operated infrastructure model (self-hosted and third-party nodes are both valid).
 - English-only alpha UI language (i18n expansion tracked as backlog).
 - No abuse-control or regional compliance hard gate for alpha.
+- Anti-abuse controls are required before beta release.
+- Critical UX controls must stay in Android+iOS+Web parity with no temporary lead platform.
 
 ## Priority 0: Tri-Platform Semantics and Reliability
 
@@ -57,36 +59,41 @@ Owner policy constraints (2026-02-23):
      - `ui/index.html`
      - `core/src/wasm_support/*`
 
-10. Active-session reliability + durable eventual delivery guarantees
+10. Beta anti-abuse gate implementation and validation
+   - Requirement: abuse controls are non-blocking in alpha but mandatory before beta.
+   - Target: enable and validate anti-abuse protections with measurable pass criteria across Android, iOS, Web, and relay-critical paths.
+   - Scope: relay spam/flood controls, abuse detection thresholds, and regression coverage in CI/release checks.
+
+11. Active-session reliability + durable eventual delivery guarantees
     - Requirement: while app is open/relaying, service should remain available and messages should not be dropped.
     - Target: explicit durability contract (persisted outbox/inbox semantics, resend/recovery behavior) plus failure-mode tests.
     - Scope: crash/restart recovery, relay outage handling, offline queue replay, duplicate-safe redelivery.
 
-11. Bounded retention policy implementation
+12. Bounded retention policy implementation
 
 - Requirement: local history/outbox storage must be policy-bound to avoid unbounded disk growth.
 - Target: configurable retention caps + deterministic pruning behavior + docs for user expectations.
 - Scope: Android, iOS, and Web local storage behavior and defaults.
 
-11. First-run consent gate (mandatory)
+13. First-run consent gate (mandatory)
 
 - Requirement: first app launch must present consent text explaining privacy/security boundaries.
 - Target: consent acknowledgment gate on Android/iOS/Web before first messaging actions.
 - Scope: UX copy parity, acceptance persistence, and re-display rules after major policy changes.
 
-12. 80/20 platform support matrix
+14. 80/20 platform support matrix
 
 - Requirement: prioritize the smallest support matrix that covers the majority of active users.
 - Target: explicit minimum OS/browser matrix and validation plan tied to release gates.
 - Scope: Android API levels, iOS versions/devices, and browser families/versions.
 
-13. Community-operated relay/bootstrap topology support
+15. Community-operated relay/bootstrap topology support
 
 - Requirement: both self-hosted and third-party-operated infra must be valid without protocol-level assumptions.
 - Target: operator docs + connectivity tests for cloud-hosted and home-hosted relays/bootstrap nodes.
 - Scope: examples for GCP-style deployments and low-resource/self-hosted setups.
 
-14. Bootstrap governance mode decision (product choice pending)
+16. Bootstrap governance mode decision (product choice pending)
 
 - Requirement: choose how clients trust and discover bootstrap updates.
 - Target: lock one governance mode and document it in canonical docs.
@@ -197,6 +204,13 @@ Owner policy constraints (2026-02-23):
 - Requirement: app upgrades must preserve identity, contacts, and message history without manual re-import.
 - Target: deterministic migration/verification path across Android and iOS app updates, including storage-path continuity checks and automatic import fallback for legacy stores.
 - Scope: core storage versioning, mobile app startup migration hooks, and update smoke tests that assert post-update continuity.
+- Current progress:
+  - Added core storage layout/schema guard (`SCHEMA_VERSION`) and explicit `identity/`, `outbox/`, `inbox/` sub-store initialization.
+  - `IronCore::with_storage()` now initializes persistent inbox/outbox backends (not memory-only fallback by default).
+  - Added core persistence restart tests for inbox/outbox continuity under storage-backed initialization.
+- Remaining:
+  - Platform-level upgrade simulations on Android/iOS/WASM package installs with real prior-app data.
+  - Legacy-store automatic import fallback verification in mobile startup paths.
 
 ## Priority 2: Documentation Completion and Governance
 

@@ -2,6 +2,7 @@ package com.scmessenger.android.data
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.SharedPreferences
 import androidx.core.content.ContextCompat
 import com.scmessenger.android.utils.Permissions
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -32,6 +33,8 @@ import java.io.File
 class MeshRepository(private val context: Context) {
 
     companion object {
+        private const val IDENTITY_BACKUP_PREFS = "identity_backup_prefs"
+        private const val IDENTITY_BACKUP_KEY = "identity_backup_v1"
         /** Static fallback bootstrap nodes for NAT traversal and internet roaming.
          *  These are used if env override and remote fetch both fail/are absent. */
         private val STATIC_BOOTSTRAP_NODES: List<String> = listOf(
@@ -54,9 +57,24 @@ class MeshRepository(private val context: Context) {
                 STATIC_BOOTSTRAP_NODES
             }
         }
+
+        internal fun isMeshParticipationEnabled(settings: uniffi.api.MeshSettings?): Boolean {
+            return settings?.relayEnabled == true
+        }
+
+        internal fun requireMeshParticipationEnabled(settings: uniffi.api.MeshSettings?) {
+            if (!isMeshParticipationEnabled(settings)) {
+                throw IllegalStateException(
+                    "Cannot send messages: mesh participation is disabled. Enable mesh participation in settings to send and receive messages."
+                )
+            }
+        }
     }
 
     private val storagePath: String = context.filesDir.absolutePath
+    private val identityBackupPrefs: SharedPreferences by lazy {
+        context.getSharedPreferences(IDENTITY_BACKUP_PREFS, Context.MODE_PRIVATE)
+    }
 
     // Mesh service instance (lazy init)
     private var meshService: uniffi.api.MeshService? = null
@@ -424,6 +442,7 @@ class MeshRepository(private val context: Context) {
                 override fun onPeerDisconnected(peerId: String) {
                     Timber.d("Core notified disconnect: $peerId")
                     repoScope.launch {
+                        pruneDisconnectedPeer(peerId)
                         com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
                             com.scmessenger.android.service.PeerEvent.Disconnected(peerId)
                         )
@@ -443,9 +462,7 @@ class MeshRepository(private val context: Context) {
                         // Treat null/missing settings as disabled (fail-safe)
                         // Cache settings value to avoid race condition during check
                         val currentSettings = settingsManager?.load()
-                        val isRelayEnabled = currentSettings?.relayEnabled == true
-
-                        if (!isRelayEnabled) {
+                        if (!Companion.isMeshParticipationEnabled(currentSettings)) {
                             Timber.w("Dropping received message - mesh participation is disabled or settings unavailable")
                             return
                         }
@@ -1055,8 +1072,42 @@ class MeshRepository(private val context: Context) {
                         lastSeen = maxOf(info.lastSeen, existing.lastSeen)
                     )
                 }
-                current + (key to merged)
+                val canonicalPeerId = merged.peerId.trim().ifEmpty { key.trim() }
+                val canonicalPublicKey = normalizePublicKey(merged.publicKey)
+
+                val withCanonical = current + (canonicalPeerId to merged)
+                withCanonical.filterNot { (mapKey, candidate) ->
+                    if (mapKey == canonicalPeerId) return@filterNot false
+
+                    val sameCanonicalPeerId = candidate.peerId.trim() == canonicalPeerId
+                    val samePublicKey = canonicalPublicKey != null &&
+                        normalizePublicKey(candidate.publicKey) == canonicalPublicKey
+                    sameCanonicalPeerId || samePublicKey
+                }
             }
+        }
+    }
+
+    private fun pruneDisconnectedPeer(peerId: String) {
+        val normalizedPeerId = peerId.trim()
+        if (normalizedPeerId.isEmpty()) return
+
+        _discoveredPeers.update { current ->
+            if (current.isEmpty()) return@update current
+
+            val disconnectedPublicKey = normalizePublicKey(current[normalizedPeerId]?.publicKey)
+            val keysToRemove = current
+                .filter { (key, info) ->
+                    key == normalizedPeerId ||
+                        info.peerId == normalizedPeerId ||
+                        (
+                            disconnectedPublicKey != null &&
+                                normalizePublicKey(info.publicKey) == disconnectedPublicKey
+                            )
+                }
+                .keys
+
+            if (keysToRemove.isEmpty()) current else current - keysToRemove
         }
     }
 
@@ -1125,26 +1176,48 @@ class MeshRepository(private val context: Context) {
         try {
             var info = core.getIdentityInfo()
             if (!info.initialized) {
-                Timber.i("Auto-initializing identity for first run...")
-                core.initializeIdentity()
-                info = core.getIdentityInfo()
+                val restored = restoreIdentityFromBackup(core)
+                if (restored) {
+                    info = core.getIdentityInfo()
+                }
+            }
+            if (!info.initialized) {
+                Timber.i("Identity not initialized; onboarding required")
+                return
             }
 
             val nickname = info.nickname?.trim().orEmpty()
-            if (nickname.isEmpty()) {
-                val defaultNickname = buildDefaultLocalNickname(info)
-                core.setNickname(defaultNickname)
-                Timber.i("Auto-set local nickname: $defaultNickname")
+            if (nickname.isNotEmpty()) {
+                persistIdentityBackup(core)
             }
         } catch (e: Exception) {
             Timber.w("Failed to ensure local identity federation: ${e.message}")
         }
     }
 
-    private fun buildDefaultLocalNickname(info: uniffi.api.IdentityInfo): String {
-        val source = info.publicKeyHex ?: info.identityId ?: info.libp2pPeerId ?: "peer"
-        val suffix = source.takeLast(6).ifBlank { "peer" }
-        return "android-$suffix".lowercase()
+    private fun restoreIdentityFromBackup(core: uniffi.api.IronCore): Boolean {
+        val backup = identityBackupPrefs.getString(IDENTITY_BACKUP_KEY, null)
+        if (backup.isNullOrBlank()) {
+            return false
+        }
+        return try {
+            core.importIdentityBackup(backup)
+            Timber.i("Restored identity from Android backup payload")
+            true
+        } catch (e: Exception) {
+            Timber.w("Identity backup restore failed; fallback to new identity: ${e.message}")
+            false
+        }
+    }
+
+    private fun persistIdentityBackup(core: uniffi.api.IronCore?) {
+        val activeCore = core ?: return
+        try {
+            val backup = activeCore.exportIdentityBackup()
+            identityBackupPrefs.edit().putString(IDENTITY_BACKUP_KEY, backup).apply()
+        } catch (e: Exception) {
+            Timber.w("Failed to persist identity backup payload: ${e.message}")
+        }
     }
 
     fun setPlatformBridge(bridge: uniffi.api.PlatformBridge) {
@@ -1309,6 +1382,9 @@ class MeshRepository(private val context: Context) {
     // ========================================================================
 
     fun getIdentityInfo(): uniffi.api.IdentityInfo? {
+        ensureServiceInitialized()
+        kotlin.runCatching { ensureLocalIdentityFederation() }
+            .onFailure { Timber.w(it, "Failed to hydrate identity before getIdentityInfo") }
         return ironCore?.getIdentityInfo()
     }
 
@@ -1320,6 +1396,7 @@ class MeshRepository(private val context: Context) {
         }
         ironCore?.setNickname(trimmed)
         Timber.i("Nickname set to: $trimmed")
+        persistIdentityBackup(ironCore)
         updateBleIdentityBeacon()
         identitySyncSentPeers.clear()
         val connectedPeers = try {
@@ -1358,11 +1435,7 @@ class MeshRepository(private val context: Context) {
                 // Treat null/missing settings as disabled (fail-safe)
                 // Cache settings value to avoid race condition during check
                 val currentSettings = settingsManager?.load()
-                val isRelayEnabled = currentSettings?.relayEnabled == true
-
-                if (!isRelayEnabled) {
-                    throw IllegalStateException("Cannot send messages: mesh participation is disabled. Enable mesh participation in settings to send and receive messages.")
-                }
+                Companion.requireMeshParticipationEnabled(currentSettings)
 
                 // 1. Get recipient's public key
                 val contact = contactManager?.get(peerId)
@@ -1505,6 +1578,7 @@ class MeshRepository(private val context: Context) {
                 Timber.d("Calling ironCore.initializeIdentity()...")
                 ironCore?.initializeIdentity()
                 ensureLocalIdentityFederation()
+                persistIdentityBackup(ironCore)
                 Timber.i("Identity created successfully")
                 updateBleIdentityBeacon()
             } catch (e: Exception) {
