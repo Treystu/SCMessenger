@@ -68,39 +68,13 @@ class MeshForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action
-        when (action) {
-            null -> {
-                // START_STICKY restart without explicit action: always rebuild full
-                // foreground state so OS doesn't classify us as a background service.
-                Timber.w("Service restarted with null action; promoting to ACTION_START")
-                startMeshService()
-            }
-            ACTION_START -> startMeshService()
-            ACTION_STOP -> stopMeshService()
-            ACTION_PAUSE -> {
-                val repoRunning = meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING
-                if (isRunning || repoRunning) {
-                    pauseMeshService()
-                } else {
-                    Timber.w("Ignoring pause request while service is not running")
-                }
-            }
-            ACTION_RESUME -> {
-                val repoRunning = meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING
-                if (isRunning && repoRunning) {
-                    resumeMeshService()
-                } else {
-                    // Critical for persistence: if process was recreated with ACTION_RESUME,
-                    // we must call startMeshService() to re-enter foreground mode.
-                    Timber.w("Resume requested while service not fully running; promoting to full start")
-                    startMeshService()
-                }
-            }
-            else -> {
-                Timber.w("Unknown action '$action'; defaulting to ACTION_START")
-                startMeshService()
-            }
+        val repoRunning = meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING
+        when (decideCommand(intent?.action, isRunning, repoRunning)) {
+            StartDecision.Start -> startMeshService()
+            StartDecision.Stop -> stopMeshService()
+            StartDecision.Pause -> pauseMeshService()
+            StartDecision.Resume -> resumeMeshService()
+            StartDecision.NoOp -> Timber.w("Ignoring pause request while service is not running")
         }
 
         return START_STICKY
@@ -455,5 +429,36 @@ class MeshForegroundService : Service() {
         const val ACTION_STOP = "com.scmessenger.android.service.STOP"
         const val ACTION_PAUSE = "com.scmessenger.android.service.PAUSE"
         const val ACTION_RESUME = "com.scmessenger.android.service.RESUME"
+
+        internal enum class StartDecision {
+            Start,
+            Stop,
+            Pause,
+            Resume,
+            NoOp
+        }
+
+        internal fun decideCommand(
+            action: String?,
+            serviceRunning: Boolean,
+            repositoryRunning: Boolean
+        ): StartDecision {
+            return when (action) {
+                null -> StartDecision.Start
+                ACTION_START -> StartDecision.Start
+                ACTION_STOP -> StartDecision.Stop
+                ACTION_PAUSE -> if (serviceRunning || repositoryRunning) {
+                    StartDecision.Pause
+                } else {
+                    StartDecision.NoOp
+                }
+                ACTION_RESUME -> if (serviceRunning && repositoryRunning) {
+                    StartDecision.Resume
+                } else {
+                    StartDecision.Start
+                }
+                else -> StartDecision.Start
+            }
+        }
     }
 }

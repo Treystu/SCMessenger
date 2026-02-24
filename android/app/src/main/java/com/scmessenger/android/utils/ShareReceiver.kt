@@ -3,6 +3,7 @@ package com.scmessenger.android.utils
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import com.scmessenger.android.R
@@ -32,6 +33,7 @@ class ShareReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_SEND -> handleSingleShare(context, intent)
+            Intent.ACTION_SEND_MULTIPLE -> handleMultipleShare(context, intent)
             else -> Timber.w("Unhandled intent action: ${intent.action}")
         }
     }
@@ -60,6 +62,48 @@ class ShareReceiver : BroadcastReceiver() {
                 Timber.w("Unsupported share type: $type")
             }
         }
+    }
+
+    /**
+     * Handle multi-item shares from ACTION_SEND_MULTIPLE.
+     * Supported payloads:
+     * - EXTRA_TEXT as ArrayList<CharSequence>
+     * - EXTRA_STREAM as ArrayList<Uri> (serialized as URIs in message body)
+     */
+    private fun handleMultipleShare(context: Context, intent: Intent) {
+        val textItems = intent.getCharSequenceArrayListExtra(Intent.EXTRA_TEXT)
+            ?.map { it.toString().trim() }
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+
+        val streamItems = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            ?.map { it.toString() }
+            ?.filter { it.isNotBlank() }
+            .orEmpty()
+
+        if (textItems.isEmpty() && streamItems.isEmpty()) {
+            Toast.makeText(context, "No shareable items found", Toast.LENGTH_SHORT).show()
+            Timber.w("ACTION_SEND_MULTIPLE had no supported payloads")
+            return
+        }
+
+        val content = buildString {
+            if (textItems.isNotEmpty()) {
+                append("Shared text items:")
+                textItems.forEachIndexed { index, item ->
+                    append("\n${index + 1}. $item")
+                }
+            }
+            if (streamItems.isNotEmpty()) {
+                if (isNotEmpty()) append("\n\n")
+                append("Shared attachments (URI references):")
+                streamItems.forEachIndexed { index, uri ->
+                    append("\n${index + 1}. $uri")
+                }
+            }
+        }
+
+        showContactPicker(context, content)
     }
 
     /**

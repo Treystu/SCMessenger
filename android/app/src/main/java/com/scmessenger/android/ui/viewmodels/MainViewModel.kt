@@ -33,9 +33,10 @@ class MainViewModel @Inject constructor(
 
     private fun checkIdentity() {
         viewModelScope.launch {
+            val initialized = meshRepository.isIdentityInitialized()
             val info = meshRepository.getIdentityInfo()
             val hasNickname = !info?.nickname.isNullOrBlank()
-            if (meshRepository.isIdentityInitialized() && hasNickname) {
+            if (initialized && hasNickname) {
                 _isReady.value = true
             } else {
                 // Stay not ready, waiting for onboarding

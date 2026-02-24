@@ -48,6 +48,10 @@ interface IronCore {
     [Throws=IronCoreError]
     void set_nickname(string nickname);
     [Throws=IronCoreError]
+    string export_identity_backup();
+    [Throws=IronCoreError]
+    void import_identity_backup(string backup);
+    [Throws=IronCoreError]
     SignatureResult sign_data(bytes data);
     [Throws=IronCoreError]
     boolean verify_signature(bytes data, bytes signature, string public_key_hex);
@@ -118,6 +122,15 @@ enum ServiceState {
     "Stopping",
 };
 
+/// Canonical connection-path state contract for all clients.
+enum ConnectionPathState {
+    "Disconnected",
+    "Bootstrapping",
+    "DirectPreferred",
+    "RelayFallback",
+    "RelayOnly",
+};
+
 enum MotionState {
     "Still",
     "Walking",
@@ -159,6 +172,9 @@ interface MeshService {
 
     /// Get the current NAT status as a string: "open", "restricted", "symmetric", or "unknown".
     string get_nat_status();
+    ConnectionPathState get_connection_path_state();
+    /// Export a structured diagnostics JSON payload for support and partner testing.
+    string export_diagnostics();
 
     void update_device_state(DeviceProfile profile);
     void set_relay_budget(u32 messages_per_hour);

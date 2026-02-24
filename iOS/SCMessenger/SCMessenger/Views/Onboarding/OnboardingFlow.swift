@@ -121,6 +121,16 @@ struct IdentityView: View {
             .disabled(identity == nil || nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .padding(Theme.spacingLarge)
+        .onAppear {
+            if identity == nil {
+                identity = repository.getIdentityInfo()
+            }
+            if nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               let existing = repository.getIdentityInfo()?.nickname,
+               !existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                nickname = existing
+            }
+        }
     }
     
     private func generateIdentity() {

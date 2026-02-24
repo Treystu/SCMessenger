@@ -1,10 +1,13 @@
 //! Relay Client — connects to relay peers and synchronizes messages
 
 use super::protocol::{RelayCapability, RelayMessage, PROTOCOL_VERSION};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
-use tokio::sync::RwLock;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio::sync::{Mutex, RwLock};
 
 /// Relay client configuration
 #[derive(Debug, Clone)]
@@ -114,7 +117,9 @@ pub struct RelayClient {
     /// Active connections
     connections: Arc<RwLock<Vec<RelayConnection>>>,
     /// Last pull timestamp per relay address
-    last_pull: Arc<RwLock<std::collections::HashMap<String, u64>>>,
+    last_pull: Arc<RwLock<HashMap<String, u64>>>,
+    /// Active network sockets by relay address
+    sockets: Arc<RwLock<HashMap<String, Arc<Mutex<TcpStream>>>>>,
 }
 
 impl RelayClient {
@@ -125,7 +130,8 @@ impl RelayClient {
             our_peer_id: peer_id,
             our_capabilities: RelayCapability::full_relay(),
             connections: Arc::new(RwLock::new(Vec::new())),
-            last_pull: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            last_pull: Arc::new(RwLock::new(HashMap::new())),
+            sockets: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -147,12 +153,25 @@ impl RelayClient {
     pub async fn connect(&self, relay_address: String) -> Result<RelayConnection, RelayClientError> {
         let mut connection = RelayConnection::new(relay_address.clone());
         connection.set_state(ConnectionState::Connecting);
+        let dial_addr = relay_address
+            .strip_prefix("tcp://")
+            .unwrap_or(&relay_address)
+            .to_string();
 
-        // Simulate connection establishment
-        // In real implementation, this would create actual TCP/TLS socket
-        // For now, transition to Handshaking
+        let stream = TcpStream::connect(&dial_addr)
+            .await
+            .map_err(|e| RelayClientError::ConnectionFailed(e.to_string()))?;
+        let stream = Arc::new(Mutex::new(stream));
         connection.set_state(ConnectionState::Handshaking);
 
+        let handshake = self.create_handshake();
+        let response = self.send_and_receive_raw(&stream, handshake).await?;
+        self.complete_handshake(&mut connection, response)?;
+
+        self.sockets
+            .write()
+            .await
+            .insert(relay_address, Arc::clone(&stream));
         Ok(connection)
     }
 
@@ -212,10 +231,21 @@ impl RelayClient {
         }
 
         let _message = RelayMessage::StoreRequest { envelopes };
+        let socket = self
+            .sockets
+            .read()
+            .await
+            .get(&connection.address)
+            .cloned()
+            .ok_or_else(|| RelayClientError::ConnectionFailed("No active socket".to_string()))?;
 
-        // In real implementation, this would send over the network
-        // For now, return a simulated response
-        Ok((0, 0))
+        match self.send_and_receive_raw(&socket, _message).await? {
+            RelayMessage::StoreAck { accepted, rejected } => Ok((accepted, rejected)),
+            other => Err(RelayClientError::MessageError(format!(
+                "Unexpected response to StoreRequest: {}",
+                other.message_type()
+            ))),
+        }
     }
 
     /// Pull stored envelopes from relays
@@ -240,7 +270,7 @@ impl RelayClient {
             ));
         }
 
-        let _message = RelayMessage::PullRequest {
+        let message = RelayMessage::PullRequest {
             since_timestamp,
             hints: Vec::new(),
         };
@@ -249,9 +279,21 @@ impl RelayClient {
         let mut last_pull = self.last_pull.write().await;
         last_pull.insert(connection.address.clone(), since_timestamp);
 
-        // In real implementation, this would send over the network
-        // For now, return empty
-        Ok(Vec::new())
+        let socket = self
+            .sockets
+            .read()
+            .await
+            .get(&connection.address)
+            .cloned()
+            .ok_or_else(|| RelayClientError::ConnectionFailed("No active socket".to_string()))?;
+
+        match self.send_and_receive_raw(&socket, message).await? {
+            RelayMessage::PullResponse { envelopes } => Ok(envelopes),
+            other => Err(RelayClientError::MessageError(format!(
+                "Unexpected response to PullRequest: {}",
+                other.message_type()
+            ))),
+        }
     }
 
     /// Get current number of active connections
@@ -273,6 +315,7 @@ impl RelayClient {
     pub async fn remove_connection(&self, relay_address: &str) {
         let mut connections = self.connections.write().await;
         connections.retain(|c| c.address != relay_address);
+        self.sockets.write().await.remove(relay_address);
     }
 
     /// Send a ping to all relays
@@ -283,7 +326,19 @@ impl RelayClient {
             return Err(RelayClientError::NotConnected);
         }
 
-        // In real implementation, this would send Ping messages
+        for connection in connections.iter().filter(|c| c.is_connected()) {
+            if let Some(socket) = self.sockets.read().await.get(&connection.address).cloned() {
+                match self.send_and_receive_raw(&socket, RelayMessage::Ping).await? {
+                    RelayMessage::Pong => {}
+                    other => {
+                        return Err(RelayClientError::MessageError(format!(
+                            "Unexpected ping response: {}",
+                            other.message_type()
+                        )));
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
@@ -297,6 +352,48 @@ impl RelayClient {
         let base_ms = self.config.reconnect_interval.as_millis() as u64;
         let backoff_ms = base_ms * (2u64.pow(std::cmp::min(attempt, 5)));
         Duration::from_millis(std::cmp::min(backoff_ms, 60000)) // Cap at 60 seconds
+    }
+
+    async fn send_and_receive_raw(
+        &self,
+        socket: &Arc<Mutex<TcpStream>>,
+        message: RelayMessage,
+    ) -> Result<RelayMessage, RelayClientError> {
+        let payload = message
+            .to_bytes()
+            .map_err(|e| RelayClientError::SerializationError(e.to_string()))?;
+
+        let mut stream = socket.lock().await;
+        let len = payload.len() as u32;
+        stream
+            .write_u32(len)
+            .await
+            .map_err(|e| RelayClientError::ConnectionFailed(e.to_string()))?;
+        stream
+            .write_all(&payload)
+            .await
+            .map_err(|e| RelayClientError::ConnectionFailed(e.to_string()))?;
+        stream
+            .flush()
+            .await
+            .map_err(|e| RelayClientError::ConnectionFailed(e.to_string()))?;
+
+        let response_len = stream
+            .read_u32()
+            .await
+            .map_err(|e| RelayClientError::ConnectionFailed(e.to_string()))? as usize;
+        if response_len == 0 || response_len > (16 * 1024 * 1024) {
+            return Err(RelayClientError::MessageError(
+                "Invalid response frame length".to_string(),
+            ));
+        }
+        let mut response_buf = vec![0u8; response_len];
+        stream
+            .read_exact(&mut response_buf)
+            .await
+            .map_err(|e| RelayClientError::ConnectionFailed(e.to_string()))?;
+        RelayMessage::from_bytes(&response_buf)
+            .map_err(|e| RelayClientError::SerializationError(e.to_string()))
     }
 }
 
@@ -352,13 +449,33 @@ mod tests {
 
     #[tokio::test]
     async fn test_connect_to_relay() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let msg_len = stream.read_u32().await.unwrap() as usize;
+            let mut buf = vec![0u8; msg_len];
+            stream.read_exact(&mut buf).await.unwrap();
+            let msg = RelayMessage::from_bytes(&buf).unwrap();
+            assert!(matches!(msg, RelayMessage::Handshake { .. }));
+            let ack = RelayMessage::HandshakeAck {
+                version: PROTOCOL_VERSION,
+                peer_id: "relay-peer".to_string(),
+                capabilities: RelayCapability::full_relay(),
+            };
+            let ack_bytes = ack.to_bytes().unwrap();
+            stream.write_u32(ack_bytes.len() as u32).await.unwrap();
+            stream.write_all(&ack_bytes).await.unwrap();
+            stream.flush().await.unwrap();
+        });
+
         let client = test_client();
-        let result = client.connect("127.0.0.1:8080".to_string()).await;
+        let result = client.connect(addr.to_string()).await;
 
         assert!(result.is_ok());
         let connection = result.unwrap();
-        assert_eq!(connection.address, "127.0.0.1:8080");
-        assert_eq!(connection.state, ConnectionState::Handshaking);
+        assert_eq!(connection.address, addr.to_string());
+        assert_eq!(connection.state, ConnectionState::Connected);
     }
 
     #[test]
@@ -472,6 +589,60 @@ mod tests {
 
         // Verify it's gone by checking we can't use it
         // (would fail anyway since it's not connected)
+    }
+
+    #[tokio::test]
+    async fn test_push_pull_and_ping_over_network() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            loop {
+                let len = match stream.read_u32().await {
+                    Ok(v) => v as usize,
+                    Err(_) => break,
+                };
+                let mut buf = vec![0u8; len];
+                stream.read_exact(&mut buf).await.unwrap();
+                let request = RelayMessage::from_bytes(&buf).unwrap();
+                let response = match request {
+                    RelayMessage::Handshake { .. } => RelayMessage::HandshakeAck {
+                        version: PROTOCOL_VERSION,
+                        peer_id: "relay-peer".to_string(),
+                        capabilities: RelayCapability::full_relay(),
+                    },
+                    RelayMessage::StoreRequest { envelopes } => RelayMessage::StoreAck {
+                        accepted: envelopes.len() as u32,
+                        rejected: 0,
+                    },
+                    RelayMessage::PullRequest { .. } => RelayMessage::PullResponse {
+                        envelopes: vec![vec![9, 8, 7]],
+                    },
+                    RelayMessage::Ping => RelayMessage::Pong,
+                    _ => RelayMessage::Disconnect {
+                        reason: "unsupported".to_string(),
+                    },
+                };
+                let bytes = response.to_bytes().unwrap();
+                stream.write_u32(bytes.len() as u32).await.unwrap();
+                stream.write_all(&bytes).await.unwrap();
+                stream.flush().await.unwrap();
+            }
+        });
+
+        let client = test_client();
+        let connection = client.connect(addr.to_string()).await.unwrap();
+        client.add_connection(connection).await;
+
+        let (accepted, rejected) = client.push_envelopes(vec![vec![1], vec![2]]).await.unwrap();
+        assert_eq!(accepted, 2);
+        assert_eq!(rejected, 0);
+
+        let envelopes = client.pull_envelopes(0).await.unwrap();
+        assert_eq!(envelopes, vec![vec![9, 8, 7]]);
+
+        client.send_ping().await.unwrap();
     }
 
     #[tokio::test]

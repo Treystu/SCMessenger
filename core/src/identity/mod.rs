@@ -95,6 +95,19 @@ impl IdentityManager {
     pub fn nickname(&self) -> Option<String> {
         self.nickname.clone()
     }
+
+    /// Export raw identity key bytes for secure platform backup.
+    pub fn export_key_bytes(&self) -> Option<Vec<u8>> {
+        self.keys.as_ref().map(|keys| keys.to_bytes())
+    }
+
+    /// Import raw identity key bytes and persist them in the configured store.
+    pub fn import_key_bytes(&mut self, bytes: &[u8]) -> Result<()> {
+        let keys = IdentityKeys::from_bytes(bytes)?;
+        self.store.save_keys(&keys)?;
+        self.keys = Some(keys);
+        Ok(())
+    }
 }
 
 impl Default for IdentityManager {
@@ -183,5 +196,20 @@ mod tests {
 
         assert_eq!(id1, id2);
         assert_eq!(nick2, Some("Alice".to_string()));
+    }
+
+    #[test]
+    fn test_identity_import_export_roundtrip() {
+        let mut manager1 = IdentityManager::new();
+        manager1.initialize().unwrap();
+        let exported = manager1.export_key_bytes().unwrap();
+        let original_id = manager1.identity_id();
+        let original_pub = manager1.public_key_hex();
+
+        let mut manager2 = IdentityManager::new();
+        manager2.import_key_bytes(&exported).unwrap();
+
+        assert_eq!(manager2.identity_id(), original_id);
+        assert_eq!(manager2.public_key_hex(), original_pub);
     }
 }

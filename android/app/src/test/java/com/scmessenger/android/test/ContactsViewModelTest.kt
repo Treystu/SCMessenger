@@ -1,93 +1,123 @@
 package com.scmessenger.android.test
 
+import com.scmessenger.android.data.MeshRepository
+import com.scmessenger.android.service.MeshEventBus
+import com.scmessenger.android.service.PeerEvent
+import com.scmessenger.android.service.TransportType
 import com.scmessenger.android.ui.viewmodels.ContactsViewModel
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.launch
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import org.junit.Assert.assertTrue
 
-/**
- * Unit tests for ContactsViewModel.
- *
- * Tests:
- * - Contact list loading/filtering
- * - Add/remove operations
- * - Online status updates
- * - Search functionality
- */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ContactsViewModelTest {
 
     private lateinit var viewModel: ContactsViewModel
+    private lateinit var repository: MeshRepository
+    private val testDispatcher = StandardTestDispatcher()
+
+    private fun contact(peerId: String, nickname: String? = null): uniffi.api.Contact {
+        return uniffi.api.Contact(
+            peerId = peerId,
+            nickname = nickname,
+            localNickname = null,
+            publicKey = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+            addedAt = 1u,
+            lastSeen = null,
+            notes = null
+        )
+    }
 
     @Before
     fun setup() {
-        // viewModel = ContactsViewModel(mockRepository)
+        Dispatchers.setMain(testDispatcher)
+        repository = mockk(relaxed = true)
+        every { repository.listContacts() } returns listOf(
+            contact("peer-alice", "Alice"),
+            contact("peer-bob", "Bob")
+        )
+        viewModel = ContactsViewModel(repository)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
     }
 
     @Test
-    fun `test loadContacts - populates contact list`() {
-        // Given
-        // mockRepository.listContacts() returns listOf(contact1, contact2)
-
-        // When
-        // viewModel.loadContacts()
-
-        // Then
-        // assertEquals(2, viewModel.contacts.value.size)
-        assertTrue("Placeholder - requires data loading", true)
+    fun `loadContacts populates contacts state`() = runTest {
+        advanceUntilIdle()
+        assertEquals(2, viewModel.contacts.value.size)
+        assertEquals("Alice", viewModel.contacts.value.first().nickname)
     }
 
     @Test
-    fun `test addContact - adds to list`() {
-        // Given
-        val publicKey = ByteArray(32) { it.toByte() }
-        val nickname = "Alice"
+    fun `addContact validates key and persists contact`() = runTest {
+        every { repository.addContact(any()) } returns Unit
+        every { repository.connectToPeer(any(), any()) } returns Unit
 
-        // When
-        // viewModel.addContact(publicKey, nickname)
+        viewModel.addContact(
+            peerId = "peer-new",
+            publicKey = "a".repeat(64),
+            nickname = "New",
+            libp2pPeerId = "12D3KooWxyz",
+            listeners = listOf("/ip4/1.2.3.4/tcp/4001")
+        )
+        advanceUntilIdle()
 
-        // Then
-        // assertTrue(viewModel.contacts.value.any { it.nickname == nickname })
-        assertTrue("Placeholder - requires add logic", true)
+        verify(exactly = 1) { repository.addContact(any()) }
+        verify(exactly = 1) { repository.connectToPeer("12D3KooWxyz", any()) }
     }
 
     @Test
-    fun `test removeContact - removes from list`() {
-        // Given
-        val peerId = "peer123"
+    fun `removeContact forwards removal to repository`() = runTest {
+        every { repository.removeContact(any()) } returns Unit
 
-        // When
-        // viewModel.removeContact(peerId)
+        viewModel.removeContact("peer-alice")
+        advanceUntilIdle()
 
-        // Then
-        // assertFalse(viewModel.contacts.value.any { it.peerId == peerId })
-        assertTrue("Placeholder - requires remove logic", true)
+        verify(exactly = 1) { repository.removeContact("peer-alice") }
     }
 
     @Test
-    fun `test searchContacts - filters by query`() {
-        // Given
-        val query = "Alice"
+    fun `search filters contacts by nickname`() = runTest {
+        val collectJob = launch { viewModel.filteredContacts.collect() }
+        advanceUntilIdle()
 
-        // When
-        // viewModel.searchContacts(query)
+        viewModel.setSearchQuery("Alice")
+        advanceUntilIdle()
 
-        // Then
-        // assertTrue(viewModel.filteredContacts.value.all { it.nickname?.contains(query) == true })
-        assertTrue("Placeholder - requires search logic", true)
+        assertEquals(1, viewModel.filteredContacts.value.size)
+        assertEquals("peer-alice", viewModel.filteredContacts.value.first().peerId)
+        collectJob.cancel()
     }
 
     @Test
-    fun `test online status - updates from peer events`() {
-        // Given
-        val peerId = "peer123"
+    fun `online status updates nearby peers from peer events`() = runTest {
+        every { repository.replayDiscoveredPeerEvents() } returns Unit
+        val nearbyJob = launch { viewModel.nearbyPeers.collect() }
 
-        // When
-        // val peerEvent = PeerEvent.Connected(peerId, TransportType.BLE)
-        // MeshEventBus.emitPeerEvent(peerEvent)
+        MeshEventBus.emitPeerEvent(PeerEvent.Discovered("peer-online", TransportType.BLE))
+        advanceUntilIdle()
+        assertTrue(viewModel.nearbyPeers.value.any { it.peerId == "peer-online" && it.isOnline })
 
-        // Then
-        // val contact = viewModel.contacts.value.find { it.peerId == peerId }
-        // assertEquals(true, contact?.isOnline)
-        assertTrue("Placeholder - requires online status", true)
+        MeshEventBus.emitPeerEvent(PeerEvent.Disconnected("peer-online"))
+        advanceUntilIdle()
+        assertTrue(viewModel.nearbyPeers.value.none { it.peerId == "peer-online" && it.isOnline })
+        nearbyJob.cancel()
     }
 }

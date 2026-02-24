@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
+    <!-- Include exported identity backup payload (restores across reinstall/update). -->
+    <include domain="sharedpref" path="identity_backup_prefs.xml" />
     <!-- Exclude sensitive identity files from backup -->
     <exclude domain="file" path="identity/" />
     <exclude domain="file" path="contacts.db/" />

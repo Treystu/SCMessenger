@@ -60,7 +60,7 @@ async fn test_all_six_phases_integrated() {
     println!("\n✓ Alice started (Phase 2: Multi-port listening)");
 
     // Wait for Alice to start listening
-    let mut alice_addr: Option<Multiaddr>;
+    let alice_addr: Option<Multiaddr>;
     loop {
         match timeout(Duration::from_secs(5), alice_event_rx.recv()).await {
             Ok(Some(SwarmEvent::ListeningOn(addr))) => {
@@ -92,7 +92,7 @@ async fn test_all_six_phases_integrated() {
     println!("\n✓ Bob started (Phase 2: Multi-port listening)");
 
     // Wait for Bob to start listening
-    let mut bob_addr: Option<Multiaddr>;
+    let bob_addr: Option<Multiaddr>;
     loop {
         match timeout(Duration::from_secs(5), bob_event_rx.recv()).await {
             Ok(Some(SwarmEvent::ListeningOn(addr))) => {
@@ -379,8 +379,8 @@ async fn test_relay_protocol() {
     .expect("Failed to start Charlie");
 
     // Get listening addresses
-    let mut bob_addr: Option<Multiaddr>;
-    let mut charlie_addr: Option<Multiaddr>;
+    let bob_addr: Option<Multiaddr>;
+    let charlie_addr: Option<Multiaddr>;
 
     // Wait for Bob's address
     loop {
