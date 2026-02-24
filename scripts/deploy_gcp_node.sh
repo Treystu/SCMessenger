@@ -15,11 +15,13 @@ echo -e "${BLUE}2. Updating the container on GCP Compute Instance...${NC}"
 gcloud compute instances update-container scmessenger-bootstrap \
     --zone=us-central1-a \
     --container-image=us-central1-docker.pkg.dev/scmessenger-bootstrapnode/scmessenger-repo/scmessenger-cli:latest \
-    --container-arg="scm" \
-    --container-arg="start" \
-    --container-arg="--bootstrap-mode" \
+    --container-arg="relay" \
     --container-arg="--listen" \
-    --container-arg="/ip4/0.0.0.0/tcp/4001"
+    --container-arg="/ip4/0.0.0.0/tcp/9001" \
+    --container-arg="--http-port" \
+    --container-arg="9000" \
+    --container-arg="--name" \
+    --container-arg="gcp-bootstrap-1"
 echo -e "${GREEN}✓ Container updated on the VM.${NC}"
 
 echo -e "${BLUE}3. Restarting the VM to ensure the newly built image is pulled...${NC}"
@@ -27,5 +29,6 @@ gcloud compute instances stop scmessenger-bootstrap --zone=us-central1-a
 gcloud compute instances start scmessenger-bootstrap --zone=us-central1-a
 
 echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  GCP Node Updated successfully and running a clean build! ${NC}"
+echo -e "${GREEN}  GCP Relay Node Updated successfully!                    ${NC}"
+echo -e "${GREEN}  Running: scm relay --listen /ip4/0.0.0.0/tcp/9001      ${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"

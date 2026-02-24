@@ -36,12 +36,8 @@
 	<string>SCMessenger uses the camera to scan QR codes for quickly adding contacts and joining mesh networks.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>SCMessenger uses the local network to find nearby mesh nodes via WiFi Direct and establish peer-to-peer connections.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Location helps SCMessenger maintain mesh connectivity in the background and optimize routing to nearby peers.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Location helps SCMessenger optimize mesh routing for nearby peers and improve connection reliability.</string>
 	<key>NSMotionUsageDescription</key>
-	<string>SCMessenger uses motion data to optimize battery usage and network activity based on whether you are stationary or moving.</string>
+	<string>SCMessenger uses motion activity to adapt mesh power behavior and reduce battery drain while preserving connectivity.</string>
 	<key>NSUserNotificationsUsageDescription</key>
 	<string>SCMessenger sends notifications when new messages arrive or when mesh events occur.</string>
 	<key>UIApplicationSceneManifest</key>
@@ -55,8 +51,6 @@
 		<string>bluetooth-peripheral</string>
 		<string>fetch</string>
 		<string>processing</string>
-		<string>location</string>
-		<string>remote-notification</string>
 	</array>
 	<key>UILaunchScreen</key>
 	<dict>

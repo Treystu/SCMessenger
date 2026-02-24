@@ -39,11 +39,27 @@ final class MeshRepository {
 
     // MARK: - Bootstrap Nodes for NAT Traversal
 
-    /// Default bootstrap node multiaddrs for NAT traversal and internet roaming.
-    /// Update these when a production bootstrap VPS is deployed.
-    static let defaultBootstrapNodes: [String] = [
+    /// Static fallback bootstrap node multiaddrs for NAT traversal and internet roaming.
+    /// These are used only if env override and remote fetch both fail/are absent.
+    private static let staticBootstrapNodes: [String] = [
         "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWL6KesqENjgojaLTxJiwXdvgmEkbvh1znyu8FdJQEizmV",
     ]
+
+    /// Resolved bootstrap nodes using the core BootstrapResolver.
+    /// Priority: SC_BOOTSTRAP_NODES env var → remote URL → static fallback.
+    static let defaultBootstrapNodes: [String] = {
+        do {
+            let config = BootstrapConfig(
+                staticNodes: staticBootstrapNodes,
+                remoteUrl: nil,  // Set to a bootstrap-list URL when available
+                fetchTimeoutSecs: 5,
+                envOverrideKey: "SC_BOOTSTRAP_NODES"
+            )
+            return BootstrapResolver(config: config).resolve()
+        } catch {
+            return staticBootstrapNodes
+        }
+    }()
 
     private static let bootstrapRelayPeerIds: Set<String> = Set(
         defaultBootstrapNodes.compactMap { parseBootstrapRelay(from: $0)?.relayPeerId }
@@ -72,6 +88,7 @@ final class MeshRepository {
     private var pendingOutboxRetryTask: Task<Void, Never>?
     private var lastRelayBootstrapDialAt: Date = .distantPast
     private let receiptAwaitSeconds: UInt64 = 8
+    private var identitySyncSentPeers: Set<String> = []
 
     private var pendingOutboxURL: URL {
         URL(fileURLWithPath: storagePath).appendingPathComponent("pending_outbox.json")
@@ -100,21 +117,55 @@ final class MeshRepository {
         let nextAttemptAtEpochSec: UInt64
     }
 
+    private struct MessageIdentityHints {
+        let identityId: String?
+        let publicKey: String?
+        let nickname: String?
+        let libp2pPeerId: String?
+        let listeners: [String]
+        let externalAddresses: [String]
+        let connectionHints: [String]
+    }
+
+    private struct DecodedMessagePayload {
+        let kind: String
+        let text: String
+        let hints: MessageIdentityHints?
+    }
+
     private struct DeliveryAttemptResult {
         let acked: Bool
         let routePeerId: String?
+    }
+
+    private struct PeerDiscoveryInfo {
+        let canonicalPeerId: String
+        let publicKey: String?
+        let nickname: String?
+        let transport: MeshEventBus.TransportType
+        let lastSeen: UInt64
+    }
+
+    private struct ReplayDiscoveredIdentity {
+        var canonicalPeerId: String
+        var publicKey: String?
+        var nickname: String?
+        var routePeerId: String?
+        var transport: MeshEventBus.TransportType
     }
 
     // Device state for auto-adjustment
     private var currentBatteryPct: UInt8 = 100
     private var currentIsCharging: Bool = true
     private var currentMotionState: MotionState = .unknown
+    private var lastAppliedPowerSnapshot: String?
 
     // MARK: - Published State
 
     var serviceState: ServiceState = .stopped
     var serviceStats: ServiceStats?
     var networkStatus = NetworkStatus()
+    private var discoveredPeerMap: [String: PeerDiscoveryInfo] = [:]
 
     struct NetworkStatus {
         var wifi: Bool = false
@@ -137,6 +188,10 @@ final class MeshRepository {
             UserDefaults.standard.set(newValue, forKey: "ble_rotation_interval")
             blePeripheralManager?.setRotationInterval(newValue)
         }
+    }
+
+    var isAutoAdjustEnabled: Bool {
+        UserDefaults.standard.object(forKey: "auto_adjust_enabled") as? Bool ?? true
     }
 
     // MARK: - Event Streams
@@ -347,6 +402,7 @@ final class MeshRepository {
             // Start BLE advertising and scanning
             blePeripheralManager?.startAdvertising()
             bleCentralManager?.startScanning()
+            applyPowerAdjustments(reason: "service_started")
             startPendingOutboxRetryLoop()
             Task { await flushPendingOutbox(reason: "service_started") }
 
@@ -374,6 +430,7 @@ final class MeshRepository {
         meshService?.stop()
         pendingOutboxRetryTask?.cancel()
         pendingOutboxRetryTask = nil
+        identitySyncSentPeers.removeAll()
 
         serviceState = .stopped
         statusEvents.send(.serviceStateChanged(.stopped))
@@ -560,7 +617,8 @@ final class MeshRepository {
         let preferredRoutePeerId = routePeerCandidates.first
 
         // Prepare and send message (use trimmed key to handle any stored whitespace)
-        let prepared = try ironCore.prepareMessageWithId(recipientPublicKeyHex: trimmedKey, text: content)
+        let outboundContent = encodeMessageWithIdentityHints(content)
+        let prepared = try ironCore.prepareMessageWithId(recipientPublicKeyHex: trimmedKey, text: outboundContent)
         let messageId = prepared.messageId.trimmingCharacters(in: .whitespacesAndNewlines)
         if messageId.isEmpty {
             throw MeshError.notInitialized("Core returned empty message ID")
@@ -614,7 +672,13 @@ final class MeshRepository {
     }
 
     /// Handle incoming message (from CoreDelegate callback)
-    func onMessageReceived(senderId: String, senderPublicKeyHex: String, messageId: String, data: Data) {
+    func onMessageReceived(
+        senderId: String,
+        senderPublicKeyHex: String,
+        messageId: String,
+        senderTimestamp: UInt64,
+        data: Data
+    ) {
         logger.info("Message from \(senderId): \(messageId)")
 
         // RELAY ENFORCEMENT (matches Android pattern exactly)
@@ -631,22 +695,76 @@ final class MeshRepository {
         }
 
         let normalizedSenderKey = normalizePublicKey(senderPublicKeyHex)
-        let canonicalPeerId = resolveCanonicalPeerId(senderId: senderId, senderPublicKeyHex: senderPublicKeyHex)
+        let rawContent = String(data: data, encoding: .utf8) ?? "[binary]"
+        let decodedPayload = decodeMessageWithIdentityHints(rawContent)
+        let hintedIdentity = decodedPayload.hints
+        let hintedKey = normalizePublicKey(hintedIdentity?.publicKey)
+        let verifiedHints: MessageIdentityHints? = {
+            if let hintedKey, let normalizedSenderKey, hintedKey != normalizedSenderKey {
+                logger.warning(
+                    "Ignoring forged message identity hint for \(senderId): key mismatch (hint=\(hintedKey.prefix(8))..., envelope=\(normalizedSenderKey.prefix(8))...)"
+                )
+                return nil
+            }
+            return hintedIdentity
+        }()
+
+        var canonicalPeerId = resolveCanonicalPeerId(senderId: senderId, senderPublicKeyHex: senderPublicKeyHex)
+        canonicalPeerId = resolveCanonicalPeerIdFromMessageHints(
+            resolvedCanonicalPeerId: canonicalPeerId,
+            senderId: senderId,
+            senderPublicKeyHex: senderPublicKeyHex,
+            hintedIdentityId: verifiedHints?.identityId
+        )
+
+        let hintedRoutePeerId = verifiedHints?.libp2pPeerId?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        let routePeerId: String? = isLibp2pPeerId(senderId) ? senderId : hintedRoutePeerId
+        let hintedAddresses = (verifiedHints?.listeners ?? []) +
+            (verifiedHints?.externalAddresses ?? []) +
+            (verifiedHints?.connectionHints ?? [])
+        let hintedDialCandidates = buildDialCandidatesForPeer(
+            routePeerId: routePeerId,
+            rawAddresses: hintedAddresses,
+            includeRelayCircuits: true
+        )
+        let knownNickname = selectAuthoritativeNickname(
+            incoming: verifiedHints?.nickname,
+            existing: resolveKnownPeerNickname(
+                canonicalPeerId: canonicalPeerId,
+                routePeerId: routePeerId,
+                publicKey: normalizedSenderKey
+            )
+        )
         if canonicalPeerId != senderId {
             logger.info("Canonicalized sender \(senderId) -> \(canonicalPeerId) using public key match")
+        }
+        if isBootstrapRelayPeer(canonicalPeerId) {
+            logger.info("Ignoring payload attributed to bootstrap relay peer \(canonicalPeerId)")
+            return
         }
 
         // Auto-upsert contact: senderPublicKeyHex is guaranteed valid (Rust verified it during decrypt)
         let existingContact = try? contactManager?.get(peerId: canonicalPeerId)
         if existingContact == nil {
             if let normalizedSenderKey {
+                var routeNotes: String?
+                if let routePeerId, !routePeerId.isEmpty {
+                    routeNotes = appendRoutingHint(notes: nil, key: "libp2p_peer_id", value: routePeerId)
+                }
+                routeNotes = upsertRoutingListeners(
+                    notes: routeNotes,
+                    listeners: normalizeOutboundListenerHints(hintedDialCandidates)
+                )
                 let autoContact = Contact(
                     peerId: canonicalPeerId,
-                    nickname: nil,
+                    nickname: knownNickname,
+                    localNickname: nil,
                     publicKey: normalizedSenderKey,
                     addedAt: UInt64(Date().timeIntervalSince1970),
                     lastSeen: UInt64(Date().timeIntervalSince1970),
-                    notes: isLibp2pPeerId(senderId) ? appendRoutingHint(notes: nil, key: "libp2p_peer_id", value: senderId) : nil
+                    notes: routeNotes
                 )
                 do {
                     try contactManager?.add(contact: autoContact)
@@ -658,24 +776,97 @@ final class MeshRepository {
         } else if let existingContact {
             try? contactManager?.updateLastSeen(peerId: canonicalPeerId)
 
-            if isLibp2pPeerId(senderId),
-               let normalizedSenderKey,
-               normalizePublicKey(existingContact.publicKey) == normalizedSenderKey,
-               parseRoutingHintsFromNotes(existingContact.notes).libp2pPeerId == nil {
+            if (existingContact.nickname?.isEmpty ?? true), let knownNickname, !knownNickname.isEmpty {
                 let updatedContact = Contact(
                     peerId: existingContact.peerId,
-                    nickname: existingContact.nickname,
+                    nickname: knownNickname,
+                    localNickname: existingContact.localNickname,
                     publicKey: existingContact.publicKey,
                     addedAt: existingContact.addedAt,
                     lastSeen: existingContact.lastSeen,
-                    notes: appendRoutingHint(notes: existingContact.notes, key: "libp2p_peer_id", value: senderId)
+                    notes: existingContact.notes
+                )
+                try? contactManager?.add(contact: updatedContact)
+            }
+
+            if let routePeerId, !routePeerId.isEmpty,
+               let normalizedSenderKey,
+               normalizePublicKey(existingContact.publicKey) == normalizedSenderKey,
+               parseRoutingHintsFromNotes(existingContact.notes).libp2pPeerId == nil {
+                let updatedNotes = appendRoutingHint(notes: existingContact.notes, key: "libp2p_peer_id", value: routePeerId)
+                let updatedNotesWithListeners = upsertRoutingListeners(
+                    notes: updatedNotes,
+                    listeners: normalizeOutboundListenerHints(hintedDialCandidates)
+                )
+                let updatedContact = Contact(
+                    peerId: existingContact.peerId,
+                    nickname: existingContact.nickname,
+                    localNickname: existingContact.localNickname,
+                    publicKey: existingContact.publicKey,
+                    addedAt: existingContact.addedAt,
+                    lastSeen: existingContact.lastSeen,
+                    notes: updatedNotesWithListeners
                 )
                 try? contactManager?.add(contact: updatedContact)
             }
         }
 
+        if let normalizedSenderKey {
+            upsertFederatedContact(
+                canonicalPeerId: canonicalPeerId,
+                publicKey: normalizedSenderKey,
+                nickname: knownNickname,
+                libp2pPeerId: routePeerId,
+                listeners: hintedDialCandidates,
+                createIfMissing: false
+            )
+            let discoveredNickname = prepopulateDiscoveryNickname(
+                nickname: knownNickname,
+                peerId: canonicalPeerId,
+                publicKey: normalizedSenderKey
+            )
+            let discoveryInfo = PeerDiscoveryInfo(
+                canonicalPeerId: canonicalPeerId,
+                publicKey: normalizedSenderKey,
+                nickname: discoveredNickname,
+                transport: .internet,
+                lastSeen: UInt64(Date().timeIntervalSince1970)
+            )
+            updateDiscoveredPeer(canonicalPeerId, info: discoveryInfo)
+            if let routePeerId, routePeerId != canonicalPeerId {
+                updateDiscoveredPeer(routePeerId, info: discoveryInfo)
+            }
+            let listeners = ((routePeerId.map(getDialHintsForRoutePeer(_:)) ?? []) + hintedDialCandidates)
+                .reduce(into: [String]()) { acc, addr in
+                    if !acc.contains(addr) { acc.append(addr) }
+                }
+            MeshEventBus.shared.peerEvents.send(.identityDiscovered(
+                peerId: canonicalPeerId,
+                publicKey: normalizedSenderKey,
+                nickname: discoveredNickname,
+                libp2pPeerId: routePeerId,
+                listeners: listeners,
+                blePeerId: nil
+            ))
+            annotateIdentityInLedger(
+                routePeerId: routePeerId,
+                listeners: listeners,
+                publicKey: normalizedSenderKey,
+                nickname: discoveredNickname
+            )
+        }
+
+        let messageKind = decodedPayload.kind
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if messageKind == "identity_sync" {
+            logger.debug("Processed identity sync from \(canonicalPeerId) (route=\(routePeerId ?? "none"))")
+            sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId)
+            return
+        }
+
         // Process message
-        let content = String(data: data, encoding: .utf8) ?? "[binary]"
+        let content = decodedPayload.text
 
         if let existing = try? historyManager?.get(id: messageId),
            existing.direction == .received {
@@ -684,12 +875,14 @@ final class MeshRepository {
             return
         }
 
+        let fallbackNow = UInt64(Date().timeIntervalSince1970)
+        let canonicalTimestamp = senderTimestamp > 0 ? senderTimestamp : fallbackNow
         let messageRecord = MessageRecord(
             id: messageId,
             direction: .received,
             peerId: canonicalPeerId,
             content: content,
-            timestamp: UInt64(Date().timeIntervalSince1970),
+            timestamp: canonicalTimestamp,
             delivered: true
         )
 
@@ -723,6 +916,48 @@ final class MeshRepository {
                 }
             } catch {
                 logger.debug("Failed to send delivery receipt for \(messageId): \(error)")
+            }
+        }
+    }
+
+    private func sendIdentitySyncIfNeeded(routePeerId: String, knownPublicKey: String? = nil) {
+        let normalizedRoute = routePeerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedRoute.isEmpty,
+              isLibp2pPeerId(normalizedRoute),
+              !isBootstrapRelayPeer(normalizedRoute) else {
+            return
+        }
+        guard identitySyncSentPeers.insert(normalizedRoute).inserted else {
+            return
+        }
+
+        Task { @MainActor in
+            let extractedPublicKey: String? = {
+                guard let ironCore else { return nil }
+                return try? ironCore.extractPublicKeyFromPeerId(peerId: normalizedRoute)
+            }()
+            let recipientPublicKey = normalizePublicKey(knownPublicKey) ??
+                normalizePublicKey(extractedPublicKey)
+            guard let recipientPublicKey else {
+                identitySyncSentPeers.remove(normalizedRoute)
+                return
+            }
+
+            do {
+                let payload = encodeIdentitySyncPayload()
+                let prepared = try ironCore?.prepareMessageWithId(
+                    recipientPublicKeyHex: recipientPublicKey,
+                    text: payload
+                )
+                guard let prepared else {
+                    identitySyncSentPeers.remove(normalizedRoute)
+                    return
+                }
+                try swarmBridge?.sendMessage(peerId: normalizedRoute, data: Data(prepared.envelopeData))
+                logger.debug("Identity sync sent to \(normalizedRoute)")
+            } catch {
+                identitySyncSentPeers.remove(normalizedRoute)
+                logger.debug("Failed to send identity sync to \(normalizedRoute): \(error.localizedDescription)")
             }
         }
     }
@@ -786,6 +1021,132 @@ final class MeshRepository {
         return senderId
     }
 
+    private func resolveCanonicalPeerIdFromMessageHints(
+        resolvedCanonicalPeerId: String,
+        senderId: String,
+        senderPublicKeyHex: String,
+        hintedIdentityId: String?
+    ) -> String {
+        guard let normalizedHint = hintedIdentityId?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty,
+              isIdentityId(normalizedHint) else {
+            return resolvedCanonicalPeerId
+        }
+        if normalizedHint == resolvedCanonicalPeerId { return resolvedCanonicalPeerId }
+        if isBootstrapRelayPeer(normalizedHint) { return resolvedCanonicalPeerId }
+
+        let normalizedSenderKey = normalizePublicKey(senderPublicKeyHex)
+        let contacts = (try? contactManager?.list()) ?? []
+
+        if let normalizedSenderKey {
+            if let hintedContact = contacts.first(where: { $0.peerId == normalizedHint }),
+               normalizePublicKey(hintedContact.publicKey) == normalizedSenderKey {
+                return normalizedHint
+            }
+
+            let keyMatches = contacts.filter { normalizePublicKey($0.publicKey) == normalizedSenderKey }
+            if keyMatches.count == 1 {
+                return keyMatches[0].peerId
+            }
+            if !keyMatches.isEmpty {
+                return resolvedCanonicalPeerId
+            }
+        }
+
+        if resolvedCanonicalPeerId == senderId || isLibp2pPeerId(resolvedCanonicalPeerId) {
+            return normalizedHint
+        }
+        return resolvedCanonicalPeerId
+    }
+
+    private func encodeMessageWithIdentityHints(_ content: String) -> String {
+        return encodeMeshMessagePayload(content: content, kind: "text")
+    }
+
+    private func encodeIdentitySyncPayload() -> String {
+        return encodeMeshMessagePayload(content: "", kind: "identity_sync")
+    }
+
+    private func encodeMeshMessagePayload(content: String, kind: String) -> String {
+        guard let info = ironCore?.getIdentityInfo(),
+              let publicKeyHex = normalizePublicKey(info.publicKeyHex) else {
+            return kind == "identity_sync" ? "" : content
+        }
+
+        let listeners = Array(normalizeOutboundListenerHints(getListeningAddresses()).prefix(3))
+        let externalAddresses = Array(normalizeExternalAddressHints(getExternalAddresses()).prefix(3))
+        let connectionHints = (listeners + externalAddresses).reduce(into: [String]()) { acc, addr in
+            if !acc.contains(addr) { acc.append(addr) }
+        }
+
+        let sender: [String: Any] = [
+            "identity_id": info.identityId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            "public_key": publicKeyHex,
+            "nickname": String((normalizeNickname(info.nickname) ?? "").prefix(64)),
+            "libp2p_peer_id": info.libp2pPeerId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            "listeners": listeners,
+            "external_addresses": externalAddresses,
+            "connection_hints": connectionHints
+        ]
+        let payload: [String: Any] = [
+            "schema": "scm.message.identity.v1",
+            "kind": kind,
+            "text": content,
+            "sender": sender
+        ]
+        guard JSONSerialization.isValidJSONObject(payload),
+              let data = try? JSONSerialization.data(withJSONObject: payload),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return kind == "identity_sync" ? "" : content
+        }
+        return encoded
+    }
+
+    private func decodeMessageWithIdentityHints(_ raw: String) -> DecodedMessagePayload {
+        guard let data = raw.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              (json["schema"] as? String) == "scm.message.identity.v1" else {
+            return DecodedMessagePayload(kind: "text", text: raw, hints: nil)
+        }
+
+        let kind = ((json["kind"] as? String) ?? "text")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty ?? "text"
+        let text = (json["text"] as? String) ?? raw
+        let sender = json["sender"] as? [String: Any]
+        let hintedLibp2p = (sender?["libp2p_peer_id"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        let hints = MessageIdentityHints(
+            identityId: (sender?["identity_id"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty,
+            publicKey: normalizePublicKey(sender?["public_key"] as? String),
+            nickname: normalizeNickname(sender?["nickname"] as? String),
+            libp2pPeerId: (hintedLibp2p != nil && isLibp2pPeerId(hintedLibp2p!)) ? hintedLibp2p : nil,
+            listeners: parseStringArray(sender?["listeners"]),
+            externalAddresses: parseStringArray(sender?["external_addresses"]),
+            connectionHints: parseStringArray(sender?["connection_hints"])
+        )
+        return DecodedMessagePayload(kind: kind, text: text, hints: hints)
+    }
+
+    private func parseStringArray(_ value: Any?) -> [String] {
+        guard let array = value as? [Any] else { return [] }
+        return array
+            .compactMap { item in
+                if let str = item as? String {
+                    let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return trimmed.isEmpty ? nil : trimmed
+                }
+                return nil
+            }
+            .reduce(into: [String]()) { acc, item in
+                if !acc.contains(item) { acc.append(item) }
+            }
+    }
+
     private func normalizePublicKey(_ key: String?) -> String? {
         guard let value = key?.trimmingCharacters(in: .whitespacesAndNewlines),
               value.count == 64 else {
@@ -796,6 +1157,264 @@ final class MeshRepository {
         }
         guard validHex else { return nil }
         return value.lowercased()
+    }
+
+    private func normalizeNickname(_ nickname: String?) -> String? {
+        let normalized = nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private func isSyntheticFallbackNickname(_ nickname: String?) -> Bool {
+        guard let normalized = normalizeNickname(nickname)?.lowercased() else { return false }
+        // "peer-xxxxxx" is a receiver-side placeholder and should never overwrite
+        // a sender-provided nickname.
+        return normalized.hasPrefix("peer-")
+    }
+
+    private func selectAuthoritativeNickname(incoming: String?, existing: String?) -> String? {
+        let incomingNormalized = normalizeNickname(incoming)
+        let existingNormalized = normalizeNickname(existing)
+
+        let incomingSynthetic = isSyntheticFallbackNickname(incomingNormalized)
+        let existingSynthetic = isSyntheticFallbackNickname(existingNormalized)
+
+        if incomingNormalized == nil && existingSynthetic { return nil }
+        if incomingNormalized == nil { return existingNormalized }
+        if incomingSynthetic && existingNormalized == nil { return nil }
+        if incomingSynthetic && existingSynthetic { return nil }
+        if incomingSynthetic { return existingNormalized }
+        if existingSynthetic { return incomingNormalized }
+        return incomingNormalized
+    }
+
+    private func isBlePeerId(_ value: String) -> Bool {
+        UUID(uuidString: value.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
+    }
+
+    private func selectCanonicalPeerId(incoming: String, existing: String) -> String {
+        let incomingId = incoming.trimmingCharacters(in: .whitespacesAndNewlines)
+        let existingId = existing.trimmingCharacters(in: .whitespacesAndNewlines)
+        if incomingId.isEmpty { return existingId }
+        if existingId.isEmpty || existingId == incomingId { return incomingId }
+
+        let incomingIsLibp2p = isLibp2pPeerId(incomingId)
+        let existingIsLibp2p = isLibp2pPeerId(existingId)
+        let incomingIsIdentity = isIdentityId(incomingId)
+        let existingIsIdentity = isIdentityId(existingId)
+        let incomingIsBle = isBlePeerId(incomingId)
+        let existingIsBle = isBlePeerId(existingId)
+
+        if existingIsIdentity && incomingIsLibp2p { return existingId }
+        if incomingIsIdentity && existingIsLibp2p { return incomingId }
+        if existingIsBle && !incomingIsBle { return incomingId }
+        if !existingIsBle && incomingIsBle { return existingId }
+        return incomingId
+    }
+
+    private func prepopulateDiscoveryNickname(
+        nickname: String?,
+        peerId: String,
+        publicKey: String?
+    ) -> String? {
+        let incomingNickname = normalizeNickname(nickname)
+
+        let normalizedKey = normalizePublicKey(publicKey)
+        let contacts = (try? contactManager?.list()) ?? []
+        let fromContact = contacts.first(where: {
+            $0.peerId == peerId ||
+            (
+                normalizedKey != nil &&
+                normalizePublicKey($0.publicKey) == normalizedKey
+            )
+        })?.nickname
+        return selectAuthoritativeNickname(incoming: incomingNickname, existing: fromContact)
+    }
+
+    private func resolveKnownPeerNickname(
+        canonicalPeerId: String,
+        routePeerId: String?,
+        publicKey: String?
+    ) -> String? {
+        let normalizedKey = normalizePublicKey(publicKey)
+        let routeCandidate = routePeerId?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+
+        let fromDiscovery = discoveredPeerMap.values
+            .first(where: { info in
+                info.canonicalPeerId == canonicalPeerId ||
+                (routeCandidate != nil && info.canonicalPeerId == routeCandidate) ||
+                (
+                    normalizedKey != nil &&
+                    normalizePublicKey(info.publicKey) == normalizedKey
+                )
+            })?
+            .nickname
+
+        let fromLedger = (ledgerManager?.dialableAddresses() ?? [])
+            .first(where: { entry in
+                entry.peerId == canonicalPeerId ||
+                (routeCandidate != nil && entry.peerId == routeCandidate) ||
+                (
+                    normalizedKey != nil &&
+                    normalizePublicKey(entry.publicKey) == normalizedKey
+                )
+            })?
+            .nickname
+
+        let fromContact = ((try? contactManager?.list()) ?? [])
+            .first(where: { contact in
+                contact.peerId == canonicalPeerId ||
+                (routeCandidate != nil && contact.peerId == routeCandidate) ||
+                (
+                    normalizedKey != nil &&
+                    normalizePublicKey(contact.publicKey) == normalizedKey
+                )
+            })?
+            .nickname
+
+        let discoveryOrLedger = selectAuthoritativeNickname(incoming: fromDiscovery, existing: fromLedger)
+        return selectAuthoritativeNickname(incoming: discoveryOrLedger, existing: fromContact)
+    }
+
+    private func updateDiscoveredPeer(_ key: String, info: PeerDiscoveryInfo) {
+        let existing = discoveredPeerMap[key]
+        if let existing,
+           existing.publicKey != nil,
+           info.publicKey == nil,
+           info.lastSeen >= existing.lastSeen,
+           info.lastSeen - existing.lastSeen < 300 {
+            return
+        }
+        guard let existing else {
+            discoveredPeerMap[key] = info
+            return
+        }
+
+        let merged = PeerDiscoveryInfo(
+            canonicalPeerId: selectCanonicalPeerId(
+                incoming: info.canonicalPeerId,
+                existing: existing.canonicalPeerId
+            ),
+            publicKey: info.publicKey ?? existing.publicKey,
+            nickname: selectAuthoritativeNickname(incoming: info.nickname, existing: existing.nickname),
+            transport: (info.transport == .internet || existing.transport == .internet) ? .internet : info.transport,
+            lastSeen: max(info.lastSeen, existing.lastSeen)
+        )
+        discoveredPeerMap[key] = merged
+    }
+
+    private func annotateIdentityInLedger(
+        routePeerId: String?,
+        listeners: [String],
+        publicKey: String?,
+        nickname: String?
+    ) {
+        guard let routePeerId = routePeerId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !routePeerId.isEmpty,
+              isLibp2pPeerId(routePeerId) else {
+            return
+        }
+
+        let dialHints = buildDialCandidatesForPeer(
+            routePeerId: routePeerId,
+            rawAddresses: listeners,
+            includeRelayCircuits: true
+        )
+        guard !dialHints.isEmpty else { return }
+
+        let normalizedKey = normalizePublicKey(publicKey)
+        let normalizedNickname = nickname?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+
+        for multiaddr in dialHints {
+            ledgerManager?.annotateIdentity(
+                multiaddr: multiaddr,
+                peerId: routePeerId,
+                publicKey: normalizedKey,
+                nickname: normalizedNickname
+            )
+        }
+    }
+
+    func getDialHintsForRoutePeer(_ routePeerId: String) -> [String] {
+        let normalizedRoute = routePeerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isLibp2pPeerId(normalizedRoute) else { return [] }
+
+        let fromLedger = (ledgerManager?.dialableAddresses() ?? [])
+            .filter { $0.peerId == normalizedRoute }
+            .map { $0.multiaddr }
+        return buildDialCandidatesForPeer(
+            routePeerId: normalizedRoute,
+            rawAddresses: fromLedger,
+            includeRelayCircuits: true
+        )
+    }
+
+    func replayDiscoveredPeerEvents() {
+        guard !discoveredPeerMap.isEmpty else { return }
+
+        var aggregates: [String: ReplayDiscoveredIdentity] = [:]
+
+        for (mapKey, info) in discoveredPeerMap {
+            let canonicalPeerId = info.canonicalPeerId.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !canonicalPeerId.isEmpty else { continue }
+
+            let normalizedKey = normalizePublicKey(info.publicKey)
+            let aggregateKey = normalizedKey ?? canonicalPeerId
+            let routeCandidate: String? = {
+                if isLibp2pPeerId(mapKey) { return mapKey }
+                if isLibp2pPeerId(canonicalPeerId) { return canonicalPeerId }
+                return nil
+            }()
+            let discoveredNickname = prepopulateDiscoveryNickname(
+                nickname: info.nickname,
+                peerId: canonicalPeerId,
+                publicKey: normalizedKey
+            )
+
+            if var existing = aggregates[aggregateKey] {
+                if existing.publicKey == nil, let normalizedKey { existing.publicKey = normalizedKey }
+                existing.canonicalPeerId = selectCanonicalPeerId(
+                    incoming: canonicalPeerId,
+                    existing: existing.canonicalPeerId
+                )
+                existing.nickname = selectAuthoritativeNickname(
+                    incoming: discoveredNickname,
+                    existing: existing.nickname
+                )
+                if (existing.routePeerId?.isEmpty ?? true), let routeCandidate { existing.routePeerId = routeCandidate }
+                if existing.transport != .internet, info.transport == .internet {
+                    existing.transport = info.transport
+                }
+                aggregates[aggregateKey] = existing
+            } else {
+                aggregates[aggregateKey] = ReplayDiscoveredIdentity(
+                    canonicalPeerId: canonicalPeerId,
+                    publicKey: normalizedKey,
+                    nickname: discoveredNickname,
+                    routePeerId: routeCandidate,
+                    transport: info.transport
+                )
+            }
+        }
+
+        for peer in aggregates.values {
+            let listeners = peer.routePeerId.map(getDialHintsForRoutePeer(_:)) ?? []
+            if let publicKey = peer.publicKey, !publicKey.isEmpty {
+                MeshEventBus.shared.peerEvents.send(.identityDiscovered(
+                    peerId: peer.canonicalPeerId,
+                    publicKey: publicKey,
+                    nickname: peer.nickname,
+                    libp2pPeerId: peer.routePeerId,
+                    listeners: listeners,
+                    blePeerId: nil
+                ))
+            } else {
+                MeshEventBus.shared.peerEvents.send(.discovered(peerId: peer.canonicalPeerId))
+            }
+        }
     }
 
     private func appendRoutingHint(notes: String?, key: String, value: String?) -> String? {
@@ -958,6 +1577,13 @@ final class MeshRepository {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
         try contactManager.add(contact: contact)
+        let routing = parseRoutingHintsFromNotes(contact.notes)
+        annotateIdentityInLedger(
+            routePeerId: routing.libp2pPeerId,
+            listeners: routing.addresses,
+            publicKey: contact.publicKey,
+            nickname: contact.nickname
+        )
         logger.info("✓ Contact added: \(contact.peerId)")
     }
 
@@ -981,8 +1607,22 @@ final class MeshRepository {
         guard let contactManager = contactManager else {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
-        try contactManager.setNickname(peerId: peerId, nickname: nickname)
+        let normalizedNickname = nickname?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        try contactManager.setNickname(peerId: peerId, nickname: normalizedNickname)
         logger.info("✓ Contact nickname updated: \(peerId)")
+    }
+
+    func setLocalNickname(peerId: String, nickname: String?) throws {
+        guard let contactManager = contactManager else {
+            throw MeshError.notInitialized("ContactManager not initialized")
+        }
+        let normalizedNickname = nickname?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        try contactManager.setLocalNickname(peerId: peerId, nickname: normalizedNickname)
+        logger.info("✓ Local nickname updated: \(peerId)")
     }
 
     func getContactCount() throws -> UInt32 {
@@ -1082,20 +1722,7 @@ final class MeshRepository {
             motionState: currentMotionState
         )
         meshService?.updateDeviceState(profile: profile)
-
-        // 2. Auto-adjust local transport and relay budgets
-        if let engine = autoAdjustEngine {
-            let adjProfile = engine.computeProfile(device: profile)
-            let relayAdj = engine.computeRelayAdjustment(profile: adjProfile)
-
-            // Apply new budget to MeshService
-            meshService?.setRelayBudget(messagesPerHour: relayAdj.maxPerHour)
-
-            // Adjust BLE intervals if needed
-            let bleAdj = engine.computeBleAdjustment(profile: adjProfile)
-            bleCentralManager?.applyScanSettings(intervalMs: bleAdj.scanIntervalMs)
-            logger.info("Auto-adjusted relay budget: \(relayAdj.maxPerHour)/hr")
-        }
+        applyPowerAdjustments(reason: "battery_changed")
     }
 
     func reportNetwork(wifi: Bool, cellular: Bool) {
@@ -1111,6 +1738,7 @@ final class MeshRepository {
             motionState: currentMotionState
         )
         meshService?.updateDeviceState(profile: profile)
+        applyPowerAdjustments(reason: "network_changed")
     }
 
     func reportMotion(state: MotionState) {
@@ -1125,6 +1753,13 @@ final class MeshRepository {
             motionState: state
         )
         meshService?.updateDeviceState(profile: profile)
+        applyPowerAdjustments(reason: "motion_changed")
+    }
+
+    func setAutoAdjustEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: "auto_adjust_enabled")
+        logger.info("AutoAdjust toggled: \(enabled)")
+        applyPowerAdjustments(reason: "settings_toggled")
     }
 
     // MARK: - Background Operations
@@ -1246,19 +1881,41 @@ final class MeshRepository {
         }
 
         if let transportIdentity = resolveTransportIdentity(libp2pPeerId: peerId) {
+            let discoveredNickname = prepopulateDiscoveryNickname(
+                nickname: transportIdentity.nickname,
+                peerId: transportIdentity.canonicalPeerId,
+                publicKey: transportIdentity.publicKey
+            )
             let relayHints = buildDialCandidatesForPeer(
                 routePeerId: peerId,
                 rawAddresses: [],
                 includeRelayCircuits: true
             )
+            let discoveryInfo = PeerDiscoveryInfo(
+                canonicalPeerId: transportIdentity.canonicalPeerId,
+                publicKey: transportIdentity.publicKey,
+                nickname: discoveredNickname,
+                transport: .internet,
+                lastSeen: UInt64(Date().timeIntervalSince1970)
+            )
+            updateDiscoveredPeer(peerId, info: discoveryInfo)
+            if transportIdentity.canonicalPeerId != peerId {
+                updateDiscoveredPeer(transportIdentity.canonicalPeerId, info: discoveryInfo)
+            }
             MeshEventBus.shared.peerEvents.send(.identityDiscovered(
                 peerId: transportIdentity.canonicalPeerId,
                 publicKey: transportIdentity.publicKey,
-                nickname: transportIdentity.nickname,
+                nickname: discoveredNickname,
                 libp2pPeerId: peerId,
                 listeners: relayHints,
                 blePeerId: nil
             ))
+            annotateIdentityInLedger(
+                routePeerId: peerId,
+                listeners: relayHints,
+                publicKey: transportIdentity.publicKey,
+                nickname: discoveredNickname
+            )
             persistRouteHintsForTransportPeer(
                 libp2pPeerId: peerId,
                 listeners: relayHints,
@@ -1269,11 +1926,23 @@ final class MeshRepository {
                 publicKey: transportIdentity.publicKey,
                 nickname: transportIdentity.nickname,
                 libp2pPeerId: peerId,
-                listeners: relayHints
+                listeners: relayHints,
+                createIfMissing: false
             )
             try? contactManager?.updateLastSeen(peerId: transportIdentity.canonicalPeerId)
             try? contactManager?.updateLastSeen(peerId: peerId)
+            if !relayHints.isEmpty {
+                connectToPeer(peerId, addresses: relayHints)
+            }
         } else {
+            let discoveryInfo = PeerDiscoveryInfo(
+                canonicalPeerId: peerId,
+                publicKey: nil,
+                nickname: nil,
+                transport: .internet,
+                lastSeen: UInt64(Date().timeIntervalSince1970)
+            )
+            updateDiscoveredPeer(peerId, info: discoveryInfo)
             MeshEventBus.shared.peerEvents.send(.discovered(peerId: peerId))
         }
     }
@@ -1297,17 +1966,47 @@ final class MeshRepository {
         } else {
             let transportIdentity = resolveTransportIdentity(libp2pPeerId: peerId)
             if let transportIdentity {
+                let discoveredNickname = prepopulateDiscoveryNickname(
+                    nickname: transportIdentity.nickname,
+                    peerId: transportIdentity.canonicalPeerId,
+                    publicKey: transportIdentity.publicKey
+                )
+                let discoveryInfo = PeerDiscoveryInfo(
+                    canonicalPeerId: transportIdentity.canonicalPeerId,
+                    publicKey: transportIdentity.publicKey,
+                    nickname: discoveredNickname,
+                    transport: .internet,
+                    lastSeen: UInt64(Date().timeIntervalSince1970)
+                )
+                updateDiscoveredPeer(peerId, info: discoveryInfo)
+                if transportIdentity.canonicalPeerId != peerId {
+                    updateDiscoveredPeer(transportIdentity.canonicalPeerId, info: discoveryInfo)
+                }
                 MeshEventBus.shared.peerEvents.send(.identityDiscovered(
                     peerId: transportIdentity.canonicalPeerId,
                     publicKey: transportIdentity.publicKey,
-                    nickname: transportIdentity.nickname,
+                    nickname: discoveredNickname,
                     libp2pPeerId: peerId,
                     listeners: dialCandidates,
                     blePeerId: nil
                 ))
+                annotateIdentityInLedger(
+                    routePeerId: peerId,
+                    listeners: dialCandidates,
+                    publicKey: transportIdentity.publicKey,
+                    nickname: discoveredNickname
+                )
                 try? contactManager?.updateLastSeen(peerId: transportIdentity.canonicalPeerId)
                 try? contactManager?.updateLastSeen(peerId: peerId)
             } else {
+                let discoveryInfo = PeerDiscoveryInfo(
+                    canonicalPeerId: peerId,
+                    publicKey: nil,
+                    nickname: nil,
+                    transport: .internet,
+                    lastSeen: UInt64(Date().timeIntervalSince1970)
+                )
+                updateDiscoveredPeer(peerId, info: discoveryInfo)
                 logger.debug("Transport identity unavailable for \(peerId)")
             }
             MeshEventBus.shared.peerEvents.send(.connected(peerId: peerId))
@@ -1322,9 +2021,11 @@ final class MeshRepository {
                     publicKey: transportIdentity.publicKey,
                     nickname: transportIdentity.nickname,
                     libp2pPeerId: peerId,
-                    listeners: dialCandidates
+                    listeners: dialCandidates,
+                    createIfMissing: false
                 )
             }
+            sendIdentitySyncIfNeeded(routePeerId: peerId, knownPublicKey: transportIdentity?.publicKey)
         }
 
         // Identified implies an active session already exists; avoid re-dial loops here.
@@ -1361,16 +2062,24 @@ final class MeshRepository {
     /// Automatically creates a contact if none exists for this peer.
     func onPeerIdentityRead(blePeerId: String, info: [String: Any]) {
         guard let publicKeyHex = info["public_key"] as? String else { return }
-        let nickname = info["nickname"] as? String
+        let rawNickname = ((info["nickname"] as? String) ?? (info["name"] as? String) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let libp2pPeerId = info["libp2p_peer_id"] as? String
         let listeners = info["listeners"] as? [String]
         let externalAddresses = info["external_addresses"] as? [String]
         let connectionHints = info["connection_hints"] as? [String]
 
         let idFromInfo = (info["identity_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let identityId = (idFromInfo?.isEmpty == false) ? idFromInfo! : blePeerId
+        let identityId = (idFromInfo?.isEmpty == false) ? (idFromInfo ?? blePeerId) : blePeerId
 
-        logger.info("Peer BLE identity read: \(blePeerId.prefix(8)) key: \(publicKeyHex.prefix(8))...")
+        let discoveredNickname = prepopulateDiscoveryNickname(
+            nickname: rawNickname,
+            peerId: identityId,
+            publicKey: publicKeyHex
+        )
+        logger.info(
+            "Peer BLE identity read: \(blePeerId.prefix(8)) key: \(publicKeyHex.prefix(8))... identity=\(identityId.prefix(12)) nickname='\((discoveredNickname ?? "").prefix(24))'"
+        )
         guard let normalizedKey = normalizePublicKey(publicKeyHex) else {
             let trimmed = publicKeyHex.trimmingCharacters(in: .whitespacesAndNewlines)
             logger.warning("Ignoring BLE identity from \(blePeerId.prefix(8)): invalid key (\(trimmed.count) chars)")
@@ -1395,7 +2104,7 @@ final class MeshRepository {
         }
 
         // Emit to nearby peers bus — UI will show peer in Nearby section for user to manually add
-        let nonEmptyNickname = (nickname?.isEmpty == false) ? nickname : nil
+        let nonEmptyNickname = rawNickname.isEmpty ? nil : rawNickname
         let nonEmptyLibp2p = normalizedLibp2p
         let mergedHints = (listeners ?? []) + (externalAddresses ?? []) + (connectionHints ?? [])
         let dialCandidates = buildDialCandidatesForPeer(
@@ -1403,14 +2112,31 @@ final class MeshRepository {
             rawAddresses: mergedHints,
             includeRelayCircuits: true
         )
+        let discoveryInfo = PeerDiscoveryInfo(
+            canonicalPeerId: identityId,
+            publicKey: normalizedKey,
+            nickname: discoveredNickname,
+            transport: .ble,
+            lastSeen: UInt64(Date().timeIntervalSince1970)
+        )
+        updateDiscoveredPeer(identityId, info: discoveryInfo)
+        if let nonEmptyLibp2p, nonEmptyLibp2p != identityId {
+            updateDiscoveredPeer(nonEmptyLibp2p, info: discoveryInfo)
+        }
         MeshEventBus.shared.peerEvents.send(.identityDiscovered(
             peerId: identityId,
             publicKey: normalizedKey,
-            nickname: nonEmptyNickname,
+            nickname: discoveredNickname,
             libp2pPeerId: nonEmptyLibp2p,
             listeners: dialCandidates,
             blePeerId: blePeerId
         ))
+        annotateIdentityInLedger(
+            routePeerId: nonEmptyLibp2p,
+            listeners: dialCandidates,
+            publicKey: normalizedKey,
+            nickname: discoveredNickname
+        )
         logger.info("Emitted identityDiscovered for \(blePeerId.prefix(8)) key: \(normalizedKey.prefix(8))...")
         // Update lastSeen if already a saved contact
         try? contactManager?.updateLastSeen(peerId: blePeerId)
@@ -1423,7 +2149,8 @@ final class MeshRepository {
             publicKey: normalizedKey,
             nickname: nonEmptyNickname,
             libp2pPeerId: nonEmptyLibp2p,
-            listeners: dialCandidates
+            listeners: dialCandidates,
+            createIfMissing: false
         )
 
         // Auto-dial discovered peer via Swarm if we have libp2p info
@@ -1933,6 +2660,7 @@ final class MeshRepository {
             let updated = Contact(
                 peerId: contact.peerId,
                 nickname: contact.nickname,
+                localNickname: contact.localNickname,
                 publicKey: contact.publicKey,
                 addedAt: contact.addedAt,
                 lastSeen: contact.lastSeen,
@@ -1947,7 +2675,8 @@ final class MeshRepository {
         publicKey: String,
         nickname: String?,
         libp2pPeerId: String?,
-        listeners: [String]
+        listeners: [String],
+        createIfMissing: Bool = true
     ) {
         let normalizedPeerId = canonicalPeerId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedPeerId.isEmpty else { return }
@@ -1961,7 +2690,20 @@ final class MeshRepository {
         let contacts = (try? contactManager?.list()) ?? []
         let existingByKey = contacts.first { normalizePublicKey($0.publicKey) == normalizedKey }
         let existingById = contacts.first { $0.peerId == normalizedPeerId }
+
+        // Auth guard: do not accept federated nickname updates for an existing peerId
+        // unless the source key matches the stored key for that identity.
+        if let existingById,
+           normalizePublicKey(existingById.publicKey) != normalizedKey {
+            logger.warning(
+                "Rejected federated nickname update for \(normalizedPeerId, privacy: .public): key mismatch"
+            )
+            return
+        }
         let existing = existingByKey ?? existingById
+        if existing == nil && !createIfMissing {
+            return
+        }
 
         var notes = existing?.notes
         if let normalizedLibp2p, !normalizedLibp2p.isEmpty {
@@ -1972,21 +2714,28 @@ final class MeshRepository {
         let now = UInt64(Date().timeIntervalSince1970)
         let resolvedPeerId = existing?.peerId ?? normalizedPeerId
         let resolvedPublicKey = existingByKey?.publicKey ?? normalizedKey
-        let existingNickname = existing?.nickname?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let incomingNickname = nickname?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedNickname = (existingNickname?.isEmpty == false)
-            ? existingNickname
-            : ((incomingNickname?.isEmpty == false) ? incomingNickname : nil)
+        let incomingNickname = normalizeNickname(nickname)
+        let resolvedNickname = selectAuthoritativeNickname(
+            incoming: incomingNickname,
+            existing: existing?.nickname
+        )
 
         let updated = Contact(
             peerId: resolvedPeerId,
             nickname: resolvedNickname,
+            localNickname: existing?.localNickname,
             publicKey: resolvedPublicKey,
             addedAt: existing?.addedAt ?? now,
             lastSeen: now,
             notes: notes
         )
         try? contactManager?.add(contact: updated)
+        annotateIdentityInLedger(
+            routePeerId: normalizedLibp2p,
+            listeners: listeners,
+            publicKey: resolvedPublicKey,
+            nickname: resolvedNickname
+        )
     }
 
     private func upsertRoutingListeners(notes: String?, listeners: [String]) -> String? {
@@ -2003,24 +2752,57 @@ final class MeshRepository {
         guard let info = ironCore?.getIdentityInfo(),
               let publicKeyHex = info.publicKeyHex else { return }
 
-        let listeners = normalizeOutboundListenerHints(getListeningAddresses())
-        let externalAddresses = normalizeExternalAddressHints(getExternalAddresses())
-        let connectionHints = Array(Set(listeners + externalAddresses))
-        let beacon: [String: Any] = [
-            "identity_id": info.identityId ?? "",
-            "public_key": publicKeyHex,
-            "nickname": info.nickname ?? "",
-            "libp2p_peer_id": info.libp2pPeerId ?? "",
-            "listeners": listeners,
-            "external_addresses": externalAddresses,
-            "connection_hints": connectionHints
-        ]
-        guard let data = try? JSONSerialization.data(withJSONObject: beacon) else {
+        // Keep BLE identity beacons compact to avoid platform read failures.
+        // Android/iOS both have observed issues when payload exceeds ~512 bytes.
+        var listeners = Array(normalizeOutboundListenerHints(getListeningAddresses()).prefix(2))
+        var externalAddresses = Array(normalizeExternalAddressHints(getExternalAddresses()).prefix(2))
+        let nickname = String((info.nickname ?? "").prefix(32))
+
+        func buildBeacon() -> [String: Any] {
+            let connectionHints = Array(Set(listeners + externalAddresses)).sorted()
+            return [
+                "identity_id": info.identityId ?? "",
+                "public_key": publicKeyHex,
+                "nickname": nickname,
+                "libp2p_peer_id": info.libp2pPeerId ?? "",
+                "listeners": listeners,
+                "external_addresses": externalAddresses,
+                "connection_hints": connectionHints
+            ]
+        }
+
+        var beacon: [String: Any] = buildBeacon()
+        var data = try? JSONSerialization.data(withJSONObject: beacon)
+        if let encoded = data, encoded.count > 480 {
+            listeners = Array(listeners.prefix(1))
+            externalAddresses = Array(externalAddresses.prefix(1))
+            beacon = buildBeacon()
+            data = try? JSONSerialization.data(withJSONObject: beacon)
+        }
+        if let encoded = data, encoded.count > 480 {
+            listeners = []
+            externalAddresses = []
+            beacon = buildBeacon()
+            data = try? JSONSerialization.data(withJSONObject: beacon)
+        }
+        if let encoded = data, encoded.count > 480 {
+            beacon = [
+                "identity_id": info.identityId ?? "",
+                "public_key": publicKeyHex,
+                "nickname": nickname,
+                "libp2p_peer_id": info.libp2pPeerId ?? "",
+                "listeners": [],
+                "external_addresses": [],
+                "connection_hints": []
+            ]
+            data = try? JSONSerialization.data(withJSONObject: beacon)
+        }
+        guard let data else {
             logger.error("Failed to serialize identity beacon")
             return
         }
         blePeripheralManager?.setIdentityData(data)
-        logger.info("BLE identity beacon set: \(publicKeyHex.prefix(8))... (includes relay-confirmed hints)")
+        logger.info("BLE identity beacon set: \(publicKeyHex.prefix(8))... (\(data.count) bytes)")
     }
 
     // MARK: - Auto-Adjustment Engine
@@ -2069,6 +2851,58 @@ final class MeshRepository {
         }
         autoAdjustEngine.clearOverrides()
         logger.info("✓ Adjustment overrides cleared")
+        applyPowerAdjustments(reason: "overrides_cleared")
+    }
+
+    private func applyPowerAdjustments(reason: String) {
+        guard let meshService = meshService else { return }
+        guard let engine = autoAdjustEngine else {
+            logger.debug("Power profile skipped (\(reason)): AutoAdjustEngine unavailable")
+            return
+        }
+
+        guard isAutoAdjustEnabled else {
+            if lastAppliedPowerSnapshot != "disabled" {
+                logger.info("Power profile skipped (\(reason)): AutoAdjust disabled")
+                lastAppliedPowerSnapshot = "disabled"
+            }
+            return
+        }
+
+        let profile = DeviceProfile(
+            batteryPct: currentBatteryPct,
+            isCharging: currentIsCharging,
+            hasWifi: networkStatus.wifi,
+            motionState: currentMotionState
+        )
+
+        let adjustmentProfile = engine.computeProfile(device: profile)
+        let relayAdjustment = engine.computeRelayAdjustment(profile: adjustmentProfile)
+        let bleAdjustment = engine.computeBleAdjustment(profile: adjustmentProfile)
+
+        meshService.setRelayBudget(messagesPerHour: relayAdjustment.maxPerHour)
+        bleCentralManager?.applyScanSettings(intervalMs: bleAdjustment.scanIntervalMs)
+
+        let snapshot = [
+            "p:\(adjustmentProfile)",
+            "relay:\(relayAdjustment.maxPerHour)",
+            "scan:\(bleAdjustment.scanIntervalMs)",
+            "adv:\(bleAdjustment.advertiseIntervalMs)",
+            "tx:\(bleAdjustment.txPowerDbm)",
+            "bat:\(profile.batteryPct)",
+            "chg:\(profile.isCharging)",
+            "wifi:\(profile.hasWifi)",
+            "motion:\(profile.motionState)"
+        ].joined(separator: "|")
+
+        if lastAppliedPowerSnapshot != snapshot {
+            logger.info(
+                "Power profile applied (\(reason)): profile=\(String(describing: adjustmentProfile)) relay=\(relayAdjustment.maxPerHour)/h scan=\(bleAdjustment.scanIntervalMs)ms adv=\(bleAdjustment.advertiseIntervalMs)ms tx=\(bleAdjustment.txPowerDbm)dBm battery=\(profile.batteryPct)% charging=\(profile.isCharging) wifi=\(profile.hasWifi) motion=\(String(describing: profile.motionState))"
+            )
+            lastAppliedPowerSnapshot = snapshot
+        } else {
+            logger.debug("Power profile unchanged (\(reason)): \(snapshot)")
+        }
     }
 
     // MARK: - Identity Export Helpers
@@ -2229,9 +3063,18 @@ final class MeshRepository {
         guard let ironCore = ironCore else {
             throw MeshError.notInitialized("IronCore not initialized")
         }
-        try ironCore.setNickname(nickname: nickname)
-        logger.info("✓ Nickname set to: \(nickname)")
+        let trimmedNickname = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedNickname.isEmpty else {
+            throw MeshError.invalidInput("Nickname cannot be empty")
+        }
+        try ironCore.setNickname(nickname: trimmedNickname)
+        logger.info("✓ Nickname set to: \(trimmedNickname)")
         broadcastIdentityBeacon()
+        identitySyncSentPeers.removeAll()
+        let connectedPeers = swarmBridge?.getPeers() ?? []
+        for routePeerId in connectedPeers {
+            sendIdentitySyncIfNeeded(routePeerId: routePeerId)
+        }
     }
 }
 
@@ -2241,6 +3084,7 @@ enum MeshError: LocalizedError {
     case notInitialized(String)
     case relayDisabled(String)
     case contactNotFound(String)
+    case invalidInput(String)
     case alreadyRunning
 
     var errorDescription: String? {
@@ -2248,7 +3092,14 @@ enum MeshError: LocalizedError {
         case .notInitialized(let msg): return msg
         case .relayDisabled(let msg): return msg
         case .contactNotFound(let msg): return msg
+        case .invalidInput(let msg): return msg
         case .alreadyRunning: return "Service is already running"
         }
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }

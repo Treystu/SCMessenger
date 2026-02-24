@@ -33,7 +33,9 @@ class MainViewModel @Inject constructor(
 
     private fun checkIdentity() {
         viewModelScope.launch {
-            if (meshRepository.isIdentityInitialized()) {
+            val info = meshRepository.getIdentityInfo()
+            val hasNickname = !info?.nickname.isNullOrBlank()
+            if (meshRepository.isIdentityInitialized() && hasNickname) {
                 _isReady.value = true
             } else {
                 // Stay not ready, waiting for onboarding
@@ -42,10 +44,17 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun createIdentity() {
+    fun createIdentity(nickname: String) {
         viewModelScope.launch {
             try {
+                val trimmedNickname = nickname.trim()
+                if (trimmedNickname.isEmpty()) {
+                    Timber.w("Refusing identity creation with blank nickname")
+                    _isReady.value = false
+                    return@launch
+                }
                 meshRepository.createIdentity()
+                meshRepository.setNickname(trimmedNickname)
                 _isReady.value = true
             } catch (e: Exception) {
                 Timber.e(e, "Failed to create identity")
@@ -76,8 +85,13 @@ class MainViewModel @Inject constructor(
                     }
                 }
                 val contact = uniffi.api.Contact(
-                    peerId = identityId, nickname = nickname, publicKey = publicKey,
-                    addedAt = (System.currentTimeMillis() / 1000).toULong(), lastSeen = null, notes = notes
+                    peerId = identityId,
+                    nickname = nickname,
+                    localNickname = null,
+                    publicKey = publicKey,
+                    addedAt = (System.currentTimeMillis() / 1000).toULong(),
+                    lastSeen = null,
+                    notes = notes
                 )
                 meshRepository.addContact(contact)
                 Timber.i("Contact imported: ${identityId.take(8)}...")

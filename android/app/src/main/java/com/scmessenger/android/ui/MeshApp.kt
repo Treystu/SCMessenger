@@ -31,16 +31,9 @@ fun MeshApp() {
     val isReady by mainViewModel.isReady.collectAsState()
 
     if (!isReady) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Initializing Identity...")
-            }
-        }
+        OnboardingScreen(
+            onOnboardingComplete = { /* MainViewModel will drive isReady=true after identity + nickname */ }
+        )
     } else {
         val navController = rememberNavController()
 
@@ -149,7 +142,7 @@ fun MeshBottomBar(navController: NavHostController) {
 sealed class Screen(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     object Conversations : Screen("conversations", "Chats", androidx.compose.material.icons.Icons.Default.Chat)
     object Contacts : Screen("contacts", "Contacts", androidx.compose.material.icons.Icons.Default.People)
-    object Dashboard: Screen("dashboard", "Network", androidx.compose.material.icons.Icons.Filled.Router)
+    object Dashboard: Screen("dashboard", "Mesh", androidx.compose.material.icons.Icons.Filled.Router)
     object Settings : Screen("settings", "Settings", androidx.compose.material.icons.Icons.Default.Settings)
     object Identity : Screen("identity", "Identity", androidx.compose.material.icons.Icons.Default.Settings)
 

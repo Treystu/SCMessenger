@@ -24,6 +24,7 @@ class WifiTransportManager(
 
     private var channel: WifiP2pManager.Channel? = null
     private var isDiscovering = false
+    private var receiverRegistered = false
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -44,6 +45,10 @@ class WifiTransportManager(
     }
 
     fun startDiscovery() {
+        if (isDiscovering) {
+            Timber.d("WiFi P2P discovery already active; skipping duplicate start")
+            return
+        }
         val c = channel ?: return
 
         manager?.discoverPeers(c, object : WifiP2pManager.ActionListener {
@@ -73,7 +78,10 @@ class WifiTransportManager(
                 }
             })
             try {
-                context.unregisterReceiver(receiver)
+                if (receiverRegistered) {
+                    context.unregisterReceiver(receiver)
+                    receiverRegistered = false
+                }
             } catch (e: IllegalArgumentException) {
                 // Ignore if not registered
             }
@@ -81,11 +89,13 @@ class WifiTransportManager(
     }
 
     private fun registerReceiver() {
+        if (receiverRegistered) return
         val intentFilter = IntentFilter().apply {
             addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
             addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION)
         }
         context.registerReceiver(receiver, intentFilter)
+        receiverRegistered = true
     }
 
     private fun requestPeers() {

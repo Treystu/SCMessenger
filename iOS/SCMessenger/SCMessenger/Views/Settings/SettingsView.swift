@@ -462,26 +462,6 @@ struct PrivacySettingsView: View {
     }
 }
 
-private struct FeaturePlaceholderRow: View {
-    let title: String
-    let description: String
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading) {
-                Text(title)
-                Text(description)
-                    .font(Theme.bodySmall)
-                    .foregroundStyle(Theme.onSurfaceVariant)
-            }
-            Spacer()
-            Toggle("", isOn: .constant(false))
-                .labelsHidden()
-                .disabled(true)
-        }
-    }
-}
-
 // MARK: - Power Settings (NEW - mirrors Android PowerSettingsScreen.kt)
 
 struct PowerSettingsView: View {

@@ -52,7 +52,7 @@ fun ContactDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(contact?.nickname ?: "Contact Details") },
+                title = { Text(contact?.localNickname ?: contact?.nickname ?: "Contact Details") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -135,23 +135,23 @@ fun ContactDetailScreen(
 
     // Edit nickname dialog
     if (showEditDialog && contact != null) {
-        var newNickname by remember { mutableStateOf(contact.nickname ?: "") }
+        var newNickname by remember { mutableStateOf(contact.localNickname ?: "") }
 
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
-            title = { Text("Edit Nickname") },
+            title = { Text("Edit Local Nickname") },
             text = {
                 OutlinedTextField(
                     value = newNickname,
                     onValueChange = { newNickname = it },
-                    label = { Text("Nickname") },
+                    label = { Text("Local nickname") },
                     singleLine = true
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.setNickname(
+                        viewModel.setLocalNickname(
                             contactId,
                             newNickname.takeIf { it.isNotBlank() }
                         )
@@ -207,10 +207,17 @@ private fun ContactDetailContent(
                 )
 
                 Text(
-                    text = contact.nickname ?: "Unknown",
+                    text = contact.localNickname ?: contact.nickname ?: "Unknown",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold
                 )
+                if (contact.localNickname != null && contact.nickname != null) {
+                    Text(
+                        text = "@${contact.nickname}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 // Online status
                 Row(

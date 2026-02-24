@@ -70,6 +70,12 @@ class MeshServiceViewModel @Inject constructor(
     fun startService() {
         viewModelScope.launch {
             try {
+                val nickname = meshRepository.getIdentityInfo()?.nickname?.trim().orEmpty()
+                if (nickname.isEmpty()) {
+                    Timber.w("Refusing mesh start: identity nickname is required before launch")
+                    return@launch
+                }
+
                 val intent = Intent(context, MeshForegroundService::class.java).apply {
                     action = MeshForegroundService.ACTION_START
                 }

@@ -234,8 +234,8 @@ final class SettingsViewModel {
     // MARK: - Auto-Adjust (mirrors Android PowerSettingsScreen)
 
     var isAutoAdjustEnabled: Bool {
-        get { UserDefaults.standard.object(forKey: "auto_adjust_enabled") as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: "auto_adjust_enabled") }
+        get { repository?.isAutoAdjustEnabled ?? (UserDefaults.standard.object(forKey: "auto_adjust_enabled") as? Bool ?? true) }
+        set { repository?.setAutoAdjustEnabled(newValue) }
     }
 
     func overrideBleInterval(_ intervalMs: UInt32) {

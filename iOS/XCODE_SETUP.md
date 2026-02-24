@@ -122,7 +122,7 @@ All source files are already in the `SCMessenger/` directory. Add them to Xcode:
 
 1. Right-click on SCMessenger group in Xcode
 2. Add Files to "SCMessenger"...
-3. Navigate to `SCMessenger/Generated/`
+3. Navigate to `SCMessenger/SCMessenger/Generated/`
 4. Select folder
 5. Options:
    - Create groups (not folder references)

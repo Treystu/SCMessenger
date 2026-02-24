@@ -23,6 +23,9 @@ import javax.inject.Inject
 class DashboardViewModel @Inject constructor(
     private val meshRepository: MeshRepository
 ) : ViewModel() {
+    private val bootstrapRelayPeerIds: Set<String> = MeshRepository.DEFAULT_BOOTSTRAP_NODES
+        .mapNotNull { parseBootstrapRelayPeerId(it) }
+        .toSet()
 
     // Service stats
     private val _stats = MutableStateFlow<uniffi.api.ServiceStats?>(null)
@@ -35,6 +38,22 @@ class DashboardViewModel @Inject constructor(
     // Network topology data (for graph visualization)
     private val _topology = MutableStateFlow<NetworkTopology>(NetworkTopology())
     val topology: StateFlow<NetworkTopology> = _topology.asStateFlow()
+
+    // Peer counts from discovery tracking
+    val fullPeersCount = meshRepository.discoveredPeers.map { discovered ->
+        deduplicateDiscoveredPeers(discovered).values.count { peer -> peer.isFull }
+    }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val headlessPeersCount = meshRepository.discoveredPeers.map { discovered ->
+        deduplicateDiscoveredPeers(discovered).values.count { peer -> !peer.isFull }
+    }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val totalPeersCount = meshRepository.discoveredPeers.map { discovered ->
+        deduplicateDiscoveredPeers(discovered).size
+    }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     // Loading state
     private val _isLoading = MutableStateFlow(false)
@@ -78,26 +97,131 @@ class DashboardViewModel @Inject constructor(
     }
 
     /**
-     * Load active peers from ledger.
+     * Load active peers from discovery map and ledger.
      */
     private fun loadPeers() {
         try {
+            val discoveredSnapshot = meshRepository.discoveredPeers.value
+            val discovered = deduplicateDiscoveredPeers(discoveredSnapshot)
             val ledgerEntries = meshRepository.getDialableAddresses()
-            val peerList = ledgerEntries.map { entry ->
+            val routeAliasToCanonical = discoveredSnapshot
+                .mapNotNull { (routeKey, info) ->
+                    val alias = routeKey.trim()
+                    val canonical = info.peerId.trim()
+                    if (alias.isNotEmpty() && canonical.isNotEmpty() && alias != canonical) {
+                        alias to canonical
+                    } else {
+                        null
+                    }
+                }
+                .toMap()
+            val canonicalByPublicKey = discovered.values
+                .mapNotNull { info ->
+                    normalizePublicKey(info.publicKey)?.let { publicKey ->
+                        publicKey to info.peerId
+                    }
+                }
+                .toMap()
+           
+            val peerMap = discovered.mapValues { (_, info) ->
                 PeerInfo(
-                    peerId = entry.peerId ?: "Unknown",
-                    multiaddr = entry.multiaddr,
-                    lastSeen = entry.lastSeen,
-                    transport = determineTransport(entry.multiaddr),
-                    isOnline = isRecent(entry.lastSeen)
+                    peerId = info.peerId,
+                    nickname = info.nickname,
+                    localNickname = info.localNickname,
+                    multiaddr = "", // Might be empty for BLE/headless
+                    lastSeen = info.lastSeen,
+                    transport = when (info.transport) {
+                        com.scmessenger.android.service.TransportType.BLE -> "BLE"
+                        com.scmessenger.android.service.TransportType.WIFI_AWARE -> "WiFi Aware"
+                        com.scmessenger.android.service.TransportType.WIFI_DIRECT -> "WiFi Direct"
+                        com.scmessenger.android.service.TransportType.INTERNET -> "Internet"
+                    },
+                    isOnline = isRecent(info.lastSeen),
+                    isFull = info.isFull,
+                    isRelay = isBootstrapRelayPeer(info.peerId)
                 )
+            }.toMutableMap()
+           
+            // Enrich/Add with ledger entries (dialable peers)
+            ledgerEntries.forEach { entry ->
+                val rawPeerId = entry.peerId ?: return@forEach
+                val peerId = routeAliasToCanonical[rawPeerId]
+                    ?: normalizePublicKey(entry.publicKey)?.let { canonicalByPublicKey[it] }
+                    ?: rawPeerId
+                val existing = peerMap[peerId]
+                if (existing != null) {
+                    val entryLastSeen = entry.lastSeen
+                    val existingLastSeen = existing.lastSeen
+                    peerMap[peerId] = existing.copy(
+                        nickname = existing.nickname ?: entry.nickname,
+                        multiaddr = entry.multiaddr,
+                        lastSeen = when {
+                            entryLastSeen == null -> existingLastSeen
+                            existingLastSeen == null || entryLastSeen > existingLastSeen -> entryLastSeen
+                            else -> existingLastSeen
+                        },
+                        isOnline = isRecent(entry.lastSeen) || existing.isOnline,
+                        isRelay = existing.isRelay || isBootstrapRelayPeer(peerId)
+                    )
+                } else {
+                    peerMap[peerId] = PeerInfo(
+                        peerId = peerId,
+                        nickname = entry.nickname,
+                        multiaddr = entry.multiaddr,
+                        lastSeen = entry.lastSeen,
+                        transport = determineTransport(entry.multiaddr),
+                        isOnline = isRecent(entry.lastSeen),
+                        isFull = false,
+                        isRelay = isBootstrapRelayPeer(peerId)
+                    )
+                }
             }
+           
+            val peerList = peerMap.values.toList()
             _peers.value = peerList
 
-            Timber.d("Loaded ${peerList.size} peers")
+            Timber.d("Loaded ${peerList.size} discovered peers (${peerList.count { it.isFull }} full)")
         } catch (e: Exception) {
             Timber.e(e, "Failed to load peers")
         }
+    }
+
+    private fun deduplicateDiscoveredPeers(
+        discovered: Map<String, MeshRepository.PeerDiscoveryInfo>
+    ): Map<String, MeshRepository.PeerDiscoveryInfo> {
+        val merged = linkedMapOf<String, MeshRepository.PeerDiscoveryInfo>()
+        discovered.values.forEach { info ->
+            val canonicalPeerId = info.peerId.trim()
+            if (canonicalPeerId.isEmpty()) return@forEach
+            val existing = merged[canonicalPeerId]
+            if (existing == null) {
+                merged[canonicalPeerId] = info.copy(peerId = canonicalPeerId)
+            } else {
+                merged[canonicalPeerId] = existing.copy(
+                    publicKey = existing.publicKey ?: info.publicKey,
+                    nickname = existing.nickname ?: info.nickname,
+                    localNickname = existing.localNickname ?: info.localNickname,
+                    transport = if (
+                        existing.transport == com.scmessenger.android.service.TransportType.INTERNET ||
+                            info.transport == com.scmessenger.android.service.TransportType.INTERNET
+                    ) {
+                        com.scmessenger.android.service.TransportType.INTERNET
+                    } else {
+                        existing.transport
+                    },
+                    isFull = existing.isFull || info.isFull,
+                    lastSeen = maxOf(existing.lastSeen, info.lastSeen)
+                )
+            }
+        }
+        return merged
+    }
+
+    private fun normalizePublicKey(value: String?): String? {
+        val trimmed = value?.trim() ?: return null
+        if (trimmed.length != 64) return null
+        if (!trimmed.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
+        return trimmed.lowercase()
     }
 
     /**
@@ -155,16 +279,8 @@ class DashboardViewModel @Inject constructor(
      */
     private fun observeNetworkEvents() {
         viewModelScope.launch {
-            MeshEventBus.peerEvents.collect { event ->
-                when (event) {
-                    is PeerEvent.Discovered, is PeerEvent.Connected -> {
-                        refreshData()
-                    }
-                    is PeerEvent.Disconnected -> {
-                        refreshData()
-                    }
-                    else -> {}
-                }
+            meshRepository.discoveredPeers.collect {
+                refreshData()
             }
         }
 
@@ -201,6 +317,18 @@ class DashboardViewModel @Inject constructor(
         return seenAt <= now && (now - seenAt) < fiveMinutes
     }
 
+    private fun isBootstrapRelayPeer(peerId: String): Boolean {
+        return bootstrapRelayPeerIds.contains(peerId)
+    }
+
+    private fun parseBootstrapRelayPeerId(multiaddr: String): String? {
+        val marker = "/p2p/"
+        val idx = multiaddr.lastIndexOf(marker)
+        if (idx < 0 || idx + marker.length >= multiaddr.length) return null
+        val relayPeerId = multiaddr.substring(idx + marker.length).trim()
+        return relayPeerId.takeIf { it.isNotEmpty() }
+    }
+
     /**
      * Clear error state.
      */
@@ -214,10 +342,14 @@ class DashboardViewModel @Inject constructor(
  */
 data class PeerInfo(
     val peerId: String,
+    val nickname: String?,
+    val localNickname: String? = null,
     val multiaddr: String,
     val lastSeen: ULong?,
     val transport: String,
-    val isOnline: Boolean
+    val isOnline: Boolean,
+    val isFull: Boolean,
+    val isRelay: Boolean = false
 )
 
 /**

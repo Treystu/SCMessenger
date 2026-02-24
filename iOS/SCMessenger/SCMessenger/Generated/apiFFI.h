@@ -274,7 +274,7 @@ typedef void (*UniffiCallbackInterfaceCoreDelegateMethod2)(uint64_t, RustBuffer,
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_CORE_DELEGATE_METHOD3
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_CORE_DELEGATE_METHOD3
-typedef void (*UniffiCallbackInterfaceCoreDelegateMethod3)(uint64_t, RustBuffer, RustBuffer, RustBuffer, RustBuffer, void* _Nonnull, 
+typedef void (*UniffiCallbackInterfaceCoreDelegateMethod3)(uint64_t, RustBuffer, RustBuffer, RustBuffer, uint64_t, RustBuffer, void* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
@@ -407,6 +407,31 @@ void uniffi_scmessenger_core_fn_method_autoadjustengine_override_ble_scan_interv
 void uniffi_scmessenger_core_fn_method_autoadjustengine_override_relay_max_per_hour(void*_Nonnull ptr, uint32_t max, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_BOOTSTRAPRESOLVER
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_BOOTSTRAPRESOLVER
+void*_Nonnull uniffi_scmessenger_core_fn_clone_bootstrapresolver(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_BOOTSTRAPRESOLVER
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_BOOTSTRAPRESOLVER
+void uniffi_scmessenger_core_fn_free_bootstrapresolver(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_BOOTSTRAPRESOLVER_NEW
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_BOOTSTRAPRESOLVER_NEW
+void*_Nonnull uniffi_scmessenger_core_fn_constructor_bootstrapresolver_new(RustBuffer config, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_BOOTSTRAPRESOLVER_RESOLVE
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_BOOTSTRAPRESOLVER_RESOLVE
+RustBuffer uniffi_scmessenger_core_fn_method_bootstrapresolver_resolve(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_BOOTSTRAPRESOLVER_STATIC_FALLBACK
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_BOOTSTRAPRESOLVER_STATIC_FALLBACK
+RustBuffer uniffi_scmessenger_core_fn_method_bootstrapresolver_static_fallback(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_CONTACTMANAGER
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_CONTACTMANAGER
 void*_Nonnull uniffi_scmessenger_core_fn_clone_contactmanager(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
@@ -450,6 +475,11 @@ void uniffi_scmessenger_core_fn_method_contactmanager_remove(void*_Nonnull ptr, 
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_SEARCH
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_SEARCH
 RustBuffer uniffi_scmessenger_core_fn_method_contactmanager_search(void*_Nonnull ptr, RustBuffer query, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_SET_LOCAL_NICKNAME
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_SET_LOCAL_NICKNAME
+void uniffi_scmessenger_core_fn_method_contactmanager_set_local_nickname(void*_Nonnull ptr, RustBuffer peer_id, RustBuffer nickname, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_SET_NICKNAME
@@ -651,6 +681,11 @@ void*_Nonnull uniffi_scmessenger_core_fn_constructor_ledgermanager_new(RustBuffe
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_ALL_KNOWN_TOPICS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_ALL_KNOWN_TOPICS
 RustBuffer uniffi_scmessenger_core_fn_method_ledgermanager_all_known_topics(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_ANNOTATE_IDENTITY
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_ANNOTATE_IDENTITY
+void uniffi_scmessenger_core_fn_method_ledgermanager_annotate_identity(void*_Nonnull ptr, RustBuffer multiaddr, RustBuffer peer_id, RustBuffer public_key, RustBuffer nickname, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_DIALABLE_ADDRESSES
@@ -1230,6 +1265,18 @@ uint16_t uniffi_scmessenger_core_checksum_method_autoadjustengine_override_relay
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_BOOTSTRAPRESOLVER_RESOLVE
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_BOOTSTRAPRESOLVER_RESOLVE
+uint16_t uniffi_scmessenger_core_checksum_method_bootstrapresolver_resolve(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_BOOTSTRAPRESOLVER_STATIC_FALLBACK
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_BOOTSTRAPRESOLVER_STATIC_FALLBACK
+uint16_t uniffi_scmessenger_core_checksum_method_bootstrapresolver_static_fallback(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_CONTACTMANAGER_ADD
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_CONTACTMANAGER_ADD
 uint16_t uniffi_scmessenger_core_checksum_method_contactmanager_add(void
@@ -1263,6 +1310,12 @@ uint16_t uniffi_scmessenger_core_checksum_method_contactmanager_remove(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_CONTACTMANAGER_SEARCH
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_CONTACTMANAGER_SEARCH
 uint16_t uniffi_scmessenger_core_checksum_method_contactmanager_search(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_CONTACTMANAGER_SET_LOCAL_NICKNAME
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_CONTACTMANAGER_SET_LOCAL_NICKNAME
+uint16_t uniffi_scmessenger_core_checksum_method_contactmanager_set_local_nickname(void
     
 );
 #endif
@@ -1443,6 +1496,12 @@ uint16_t uniffi_scmessenger_core_checksum_method_ironcore_verify_signature(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_LEDGERMANAGER_ALL_KNOWN_TOPICS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_LEDGERMANAGER_ALL_KNOWN_TOPICS
 uint16_t uniffi_scmessenger_core_checksum_method_ledgermanager_all_known_topics(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_LEDGERMANAGER_ANNOTATE_IDENTITY
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_LEDGERMANAGER_ANNOTATE_IDENTITY
+uint16_t uniffi_scmessenger_core_checksum_method_ledgermanager_annotate_identity(void
     
 );
 #endif
@@ -1689,6 +1748,12 @@ uint16_t uniffi_scmessenger_core_checksum_method_swarmbridge_unsubscribe_topic(v
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_CONSTRUCTOR_AUTOADJUSTENGINE_NEW
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_CONSTRUCTOR_AUTOADJUSTENGINE_NEW
 uint16_t uniffi_scmessenger_core_checksum_constructor_autoadjustengine_new(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_CONSTRUCTOR_BOOTSTRAPRESOLVER_NEW
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_CONSTRUCTOR_BOOTSTRAPRESOLVER_NEW
+uint16_t uniffi_scmessenger_core_checksum_constructor_bootstrapresolver_new(void
     
 );
 #endif

@@ -278,9 +278,16 @@ fun ContactItem(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = contact.nickname ?: contact.peerId.take(16) + "...",
+                    text = contact.localNickname ?: contact.nickname ?: contact.peerId.take(16) + "...",
                     style = MaterialTheme.typography.titleMedium
                 )
+                if (contact.localNickname != null && contact.nickname != null) {
+                    Text(
+                        text = "@${contact.nickname}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
                     text = "ID: ${contact.peerId.take(16)}...",
                     style = MaterialTheme.typography.bodySmall,
@@ -311,7 +318,7 @@ fun ContactItem(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Delete Contact?") },
             text = {
-                Text("Are you sure you want to delete ${contact.nickname ?: "this contact"}?")
+                Text("Are you sure you want to delete ${contact.localNickname ?: contact.nickname ?: "this contact"}?")
             },
             confirmButton = {
                 TextButton(

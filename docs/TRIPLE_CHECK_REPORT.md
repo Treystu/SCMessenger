@@ -8,24 +8,24 @@ This report captures the three-pass repository verification requested for full-c
 
 Scope note: inventory uses `rg --files` (source-relevant files) and excludes transient hidden build outputs such as `.build/`.
 
-- Total tracked files (`rg --files`): **393**
-- Tracker entries (`docs/DOC_PASS_TRACKER.md`): **393**
-- Checked entries: **393**
+- Total tracked files (`rg --files`): **356**
+- Tracker entries (`docs/DOC_PASS_TRACKER.md`): **356**
+- Checked entries: **356**
 - Pending entries: **0**
 
 Directory counts:
 
-- `core/`: 90
-- `android/`: 90
-- `iOS/`: 88
-- `docs/`: 20
+- `core/`: 88
+- `android/`: 89
+- `iOS/`: 55
+- `docs/`: 22
 - `docker/`: 21
-- `cli/`: 12
+- `cli/`: 11
 - `mobile/`: 4
 - `wasm/`: 8
 - `ui/`: 1
-- `reference/`: 9
-- `scripts/`: 6
+- `reference/`: 7
+- `scripts/`: 7
 
 ## Pass 2: Global Risk Scan
 
@@ -35,12 +35,12 @@ Pattern set:
 
 Results:
 
-- Total hits: **352**
+- Total hits: **279**
 - Highest-concentration roots:
-  - `iOS`: 182
+  - `iOS`: 98
   - `core`: 29
   - `android`: 23
-  - `docs`: 25
+  - `docs`: 47
   - `docker`: 17
 
 Interpretation:
@@ -58,14 +58,14 @@ TODO/FIXME sync outcome:
 
 Keyword distribution (`core`, `android`, `iOS`, `wasm`, `ui`, `cli`, `mobile`, `docs`):
 
-- `relay`: `1574, 167, 499, 129, 4, 20, 0, 142`
-- `bootstrap`: `141, 44, 49, 0, 3, 120, 0, 112`
-- `public_key_hex`: `45, 1, 8, 8, 0, 22, 2, 12`
-- `identity_id`: `37, 9, 5, 2, 0, 14, 1, 8`
-- `libp2p_peer_id`: `6, 17, 15, 0, 0, 2, 0, 7`
-- `privacy`: `29, 18, 85, 1, 0, 0, 0, 35`
-- `qr`: `16, 68, 81, 0, 0, 0, 0, 9`
-- `history`: `15, 71, 427, 0, 1, 67, 0, 44`
+- `relay`: `1455, 167, 390, 144, 4, 36, 0, 171`
+- `bootstrap`: `162, 53, 117, 0, 3, 135, 0, 116`
+- `public_key_hex`: `52, 1, 6, 8, 0, 15, 2, 12`
+- `identity_id`: `40, 9, 5, 2, 0, 11, 1, 8`
+- `libp2p_peer_id`: `9, 17, 14, 0, 0, 2, 0, 7`
+- `privacy`: `9, 18, 72, 1, 0, 0, 0, 45`
+- `qr`: `17, 68, 79, 0, 0, 0, 0, 9`
+- `history`: `16, 71, 291, 0, 1, 74, 0, 45`
 
 Interpretation:
 
@@ -76,7 +76,7 @@ Interpretation:
 
 ## Confirmed Outcome
 
-- Repository-wide file coverage is complete (**393/393 checked**).
+- Repository-wide file coverage is complete (**356/356 checked**).
 - No unreviewed tracker entries remain.
 - Remaining work is implementation/parity/operational hardening, not discovery.
 

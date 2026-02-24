@@ -66,6 +66,18 @@ enum Commands {
         #[arg(short, long)]
         port: Option<u16>,
     },
+    /// Run headless relay/bootstrap node (no interactive console)
+    Relay {
+        /// P2P listen multiaddr (default: /ip4/0.0.0.0/tcp/9001)
+        #[arg(short, long, default_value = "/ip4/0.0.0.0/tcp/9001")]
+        listen: String,
+        /// HTTP status/landing page port (default: 9000)
+        #[arg(long, default_value = "9000")]
+        http_port: u16,
+        /// Node name for logging/status (default: auto from peer ID)
+        #[arg(short, long)]
+        name: Option<String>,
+    },
     /// Send a message (offline mode)
     Send { recipient: String, message: String },
     /// Show network status
@@ -148,6 +160,11 @@ async fn main() -> Result<()> {
             limit,
         } => cmd_history(peer, search, limit).await,
         Commands::Start { port } => cmd_start(port).await,
+        Commands::Relay {
+            listen,
+            http_port,
+            name,
+        } => cmd_relay(listen, http_port, name).await,
         Commands::Stop => cmd_stop().await,
         Commands::Send { recipient, message } => cmd_send_offline(recipient, message).await,
         Commands::Status => cmd_status().await,
@@ -629,7 +646,10 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let outbox = match Outbox::persistent(&outbox_path_str) {
         Ok(ob) => Arc::new(tokio::sync::Mutex::new(ob)),
         Err(e) => {
-            tracing::warn!("Failed to open persistent outbox, falling back to in-memory: {}", e);
+            tracing::warn!(
+                "Failed to open persistent outbox, falling back to in-memory: {}",
+                e
+            );
             Arc::new(tokio::sync::Mutex::new(Outbox::new()))
         }
     };
@@ -1252,6 +1272,415 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     Ok(())
 }
 
+/// Headless relay/bootstrap node — runs the full mesh functionality without
+/// interactive console. Designed for server, Docker, and GCP deployment.
+///
+/// Capabilities:
+/// - Auto-initializes identity if absent
+/// - Starts libp2p swarm listening on configurable multiaddr
+/// - Operates as a relay node: forwards all mesh traffic
+/// - Subscribes to lobby + mesh gossipsub topics
+/// - Serves HTTP landing page and REST API for status
+/// - Periodically re-dials bootstrap peers for mesh continuity
+/// - Runs forever (no stdin, no quit command)
+async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String>) -> Result<()> {
+    let data_dir = config::Config::data_dir()?;
+    let storage_path = data_dir.join("storage");
+    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+
+    // Auto-init identity if this is a fresh node
+    if core.get_identity_info().public_key_hex.is_none() {
+        println!("{}", "Auto-initializing relay identity...".yellow());
+        core.initialize_identity()
+            .context("Failed to initialize identity for relay")?;
+    } else {
+        core.initialize_identity()
+            .context("Failed to load identity")?;
+    }
+
+    let info = core.get_identity_info();
+    let network_keypair = core
+        .get_libp2p_keypair()
+        .context("Failed to get network keypair from identity")?;
+    let local_peer_id = network_keypair.public().to_peer_id();
+    let display_name =
+        node_name.unwrap_or_else(|| format!("relay-{}", &local_peer_id.to_string()[..8]));
+
+    if let Some(name) = info.nickname.as_ref() {
+        if name.is_empty() {
+            let _ = core.set_nickname(display_name.clone());
+        }
+    } else {
+        let _ = core.set_nickname(display_name.clone());
+    }
+
+    println!();
+    println!(
+        "{}",
+        "╔══════════════════════════════════════════════════════════╗".bright_cyan()
+    );
+    println!(
+        "{}",
+        "║        SCMessenger Relay/Bootstrap Node (headless)       ║".bright_cyan()
+    );
+    println!(
+        "{}",
+        "╚══════════════════════════════════════════════════════════╝".bright_cyan()
+    );
+    println!();
+    println!("  Node Name:    {}", display_name.bright_green());
+    println!(
+        "  Peer ID:      {}",
+        local_peer_id.to_string().bright_cyan()
+    );
+    println!(
+        "  Public Key:   {}",
+        info.public_key_hex
+            .as_deref()
+            .unwrap_or("(none)")
+            .bright_yellow()
+    );
+    println!("  P2P Listen:   {}", listen_addr.green());
+    println!("  HTTP Status:  http://0.0.0.0:{}", http_port);
+    println!();
+
+    // Load config for bootstrap nodes
+    let config = config::Config::load()?;
+    let all_bootstrap = bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes.clone());
+    println!(
+        "  Bootstrap:    {} node(s)",
+        all_bootstrap.len().to_string().bright_cyan()
+    );
+    for (i, node) in all_bootstrap.iter().enumerate() {
+        println!("    {}. {}", i + 1, node.dimmed());
+    }
+    println!();
+
+    // Connection ledger
+    let mut connection_ledger = ledger::ConnectionLedger::load(&data_dir)?;
+    let known_topics = connection_ledger.all_known_topics();
+    for node in &all_bootstrap {
+        connection_ledger.add_bootstrap(node, Some(&local_peer_id.to_string()));
+    }
+    let ledger = Arc::new(tokio::sync::Mutex::new(connection_ledger));
+
+    // Peers map
+    let peers: Arc<tokio::sync::Mutex<HashMap<libp2p::PeerId, Option<String>>>> =
+        Arc::new(tokio::sync::Mutex::new(HashMap::new()));
+
+    // Web context for landing page + API
+    let web_ctx = Arc::new(server::WebContext {
+        node_peer_id: local_peer_id.to_string(),
+        node_public_key: info.public_key_hex.clone().unwrap_or_default(),
+        bootstrap_nodes: all_bootstrap.clone(),
+        ledger: ledger.clone(),
+        peers: peers.clone(),
+        start_time: std::time::Instant::now(),
+    });
+
+    // Start HTTP server (landing page + WebSocket)
+    let (ui_broadcast, _ui_cmd_rx) = server::start(http_port, web_ctx).await?;
+    println!("{} HTTP server started on port {}", "✓".green(), http_port);
+
+    // Start swarm
+    let listen_multiaddr: libp2p::Multiaddr =
+        listen_addr.parse().context("Invalid listen multiaddr")?;
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);
+    let swarm_handle =
+        transport::start_swarm(network_keypair, Some(listen_multiaddr), event_tx).await?;
+    println!("{} P2P swarm started on {}", "✓".green(), listen_addr);
+
+    // Subscribe to topics
+    for topic in known_topics {
+        let _ = swarm_handle.subscribe_topic(topic).await;
+    }
+    for topic in bootstrap::default_topics() {
+        let _ = swarm_handle.subscribe_topic(topic).await;
+    }
+    println!("{} Subscribed to mesh topics", "✓".green());
+
+    // Contacts + History (for relay message handling)
+    let contacts_db = data_dir.join("contacts");
+    let contacts = Arc::new(contacts::ContactList::open(contacts_db)?);
+    let history_db = data_dir.join("history");
+    let history = Arc::new(history::MessageHistory::open(history_db)?);
+
+    // Outbox
+    let outbox_path = data_dir.join("outbox");
+    let outbox_path_str = outbox_path.to_str().unwrap_or("outbox").to_string();
+    let outbox = match Outbox::persistent(&outbox_path_str) {
+        Ok(ob) => Arc::new(tokio::sync::Mutex::new(ob)),
+        Err(e) => {
+            tracing::warn!(
+                "Failed to open persistent outbox, falling back to in-memory: {}",
+                e
+            );
+            Arc::new(tokio::sync::Mutex::new(Outbox::new()))
+        }
+    };
+
+    // Control API
+    let core = Arc::new(core);
+    let api_ctx = api::ApiContext {
+        core: core.clone(),
+        contacts: contacts.clone(),
+        history: history.clone(),
+        swarm_handle: Arc::new(swarm_handle.clone()),
+        peers: peers.clone(),
+    };
+    tokio::spawn(async move {
+        if let Err(e) = api::start_api_server(api_ctx).await {
+            tracing::error!("API server error: {}", e);
+        }
+    });
+    println!(
+        "{} Control API: {}",
+        "✓".green(),
+        format!("http://127.0.0.1:{}", api::API_PORT).dimmed()
+    );
+
+    // ── Initial bootstrap dial ──────────────────────────────────────────
+    {
+        let swarm_clone = swarm_handle.clone();
+        let ledger_clone = ledger.clone();
+        tokio::spawn(async move {
+            let addrs = {
+                let l = ledger_clone.lock().await;
+                l.dialable_addresses(Some(&local_peer_id.to_string()))
+            };
+            for (i, (multiaddr_str, _)) in addrs.iter().enumerate() {
+                let stripped = ledger::strip_peer_id(multiaddr_str);
+                if let Ok(addr) = stripped.parse::<Multiaddr>() {
+                    let label = ledger::extract_ip_port(multiaddr_str)
+                        .unwrap_or_else(|| multiaddr_str.clone());
+                    println!("  {}. 📞 Dialing {} ...", i + 1, label);
+                    match swarm_clone.dial(addr).await {
+                        Ok(_) => println!("  {} Dial initiated to {}", "✓".green(), label),
+                        Err(e) => {
+                            tracing::warn!("Dial failed to {}: {}", label, e);
+                            ledger_clone.lock().await.record_failure(multiaddr_str);
+                        }
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+                }
+            }
+        });
+    }
+
+    // ── Periodic bootstrap re-dial (every 120 seconds) ──────────────────
+    {
+        let swarm_clone = swarm_handle.clone();
+        let ledger_clone = ledger.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(120)).await;
+                let addrs = {
+                    let l = ledger_clone.lock().await;
+                    l.dialable_addresses(Some(&local_peer_id.to_string()))
+                };
+                for (multiaddr_str, _) in &addrs {
+                    let stripped = ledger::strip_peer_id(multiaddr_str);
+                    if let Ok(addr) = stripped.parse::<Multiaddr>() {
+                        let _ = swarm_clone.dial(addr).await;
+                    }
+                }
+                tracing::info!("Periodic re-dial: {} addresses attempted", addrs.len());
+            }
+        });
+    }
+
+    // ── Status broadcast (every 10 seconds) ─────────────────────────────
+    let ui_broadcast_clone = ui_broadcast.clone();
+    let peers_status = peers.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+            let count = peers_status.lock().await.len();
+            let _ = ui_broadcast_clone.send(server::UiEvent::NetworkStatus {
+                status: "online".to_string(),
+                peer_count: count,
+            });
+        }
+    });
+
+    // ── Periodic ledger save (every 60 seconds) ─────────────────────────
+    let ledger_save = ledger.clone();
+    let data_dir_save = data_dir.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+            let mut l = ledger_save.lock().await;
+            if let Err(e) = l.save(&data_dir_save) {
+                tracing::error!("Failed to save ledger: {}", e);
+            }
+        }
+    });
+
+    println!();
+    println!("{}", "Relay node is running. Press Ctrl+C to stop.".bold());
+    println!();
+
+    // ── Main event loop (headless — no stdin) ───────────────────────────
+    let core_rx = core.clone();
+    let contacts_rx = contacts.clone();
+    let history_rx = history.clone();
+    let ledger_rx = ledger.clone();
+    let outbox_rx = outbox.clone();
+
+    loop {
+        tokio::select! {
+            Some(event) = event_rx.recv() => {
+                match event {
+                    SwarmEvent::PeerDiscovered(peer_id) => {
+                        let mut p = peers.lock().await;
+                        if let std::collections::hash_map::Entry::Vacant(e) = p.entry(peer_id) {
+                            e.insert(None);
+                            tracing::info!("Peer discovered: {}", peer_id);
+                            let _ = contacts_rx.update_last_seen(&peer_id.to_string());
+
+                            let (public_key, identity) = contacts_rx.get(&peer_id.to_string())
+                                .ok().flatten()
+                                .map(|c| (Some(c.public_key), Some(c.peer_id.clone())))
+                                .unwrap_or((None, None));
+
+                            let _ = ui_broadcast.send(server::UiEvent::PeerDiscovered {
+                                peer_id: peer_id.to_string(),
+                                transport: "tcp".to_string(),
+                                public_key,
+                                identity,
+                            });
+
+                            // Share ledger with new peer
+                            let entries = {
+                                let l = ledger_rx.lock().await;
+                                l.to_shared_entries()
+                            };
+                            if let Err(e) = swarm_handle.share_ledger(peer_id, entries).await {
+                                tracing::warn!("Failed to share ledger with {}: {}", peer_id, e);
+                            }
+
+                            // Flush outbox for this peer
+                            let queued = {
+                                let mut ob = outbox_rx.lock().await;
+                                ob.drain_for_peer(&peer_id.to_string())
+                            };
+                            if !queued.is_empty() {
+                                tracing::info!("Flushing {} queued message(s) to {}", queued.len(), peer_id);
+                            }
+                            for msg in queued {
+                                let msg_id = msg.message_id.clone();
+                                if let Err(e) = swarm_handle.send_message(peer_id, msg.envelope_data.clone()).await {
+                                    tracing::warn!("Failed to flush queued message {} to {}: {}", msg_id, peer_id, e);
+                                    let mut ob = outbox_rx.lock().await;
+                                    let _ = ob.enqueue(msg);
+                                }
+                            }
+                        }
+                    }
+                    SwarmEvent::PeerDisconnected(peer_id) => {
+                        peers.lock().await.remove(&peer_id);
+                        let mut l = ledger_rx.lock().await;
+                        if let Some(entry) = l.find_by_peer_id(&peer_id.to_string()) {
+                            let multiaddr = entry.multiaddr.clone();
+                            l.record_failure(&multiaddr);
+                        }
+                        tracing::info!("Peer disconnected: {}", peer_id);
+                    }
+                    SwarmEvent::LedgerReceived { from_peer, entries } => {
+                        let mut l = ledger_rx.lock().await;
+                        let new_count = l.merge_shared_entries(&entries);
+                        if new_count > 0 {
+                            tracing::info!("Learned {} new peers from {}", new_count, from_peer);
+                            if let Err(e) = l.save(&data_dir) {
+                                tracing::error!("Failed to save ledger: {}", e);
+                            }
+                            let new_addrs: Vec<String> = entries.iter()
+                                .map(|e| ledger::strip_peer_id(&e.multiaddr))
+                                .collect();
+                            drop(l);
+                            for addr_str in new_addrs {
+                                if let Ok(addr) = addr_str.parse::<Multiaddr>() {
+                                    let _ = swarm_handle.dial(addr).await;
+                                }
+                            }
+                        }
+                    }
+                    SwarmEvent::PeerIdentified { peer_id, listen_addrs, .. } => {
+                        let mut l = ledger_rx.lock().await;
+                        for addr in &listen_addrs {
+                            l.record_connection(&addr.to_string(), &peer_id.to_string());
+                        }
+                    }
+                    SwarmEvent::TopicDiscovered { peer_id, topic } => {
+                        tracing::info!("Topic discovered from {}: {}", peer_id, topic);
+                        let mut l = ledger_rx.lock().await;
+                        if let Some(entry) = l.find_by_peer_id(&peer_id.to_string()) {
+                            let multiaddr = entry.multiaddr.clone();
+                            l.record_topic(&multiaddr, &topic);
+                        }
+                    }
+                    SwarmEvent::MessageReceived { peer_id, envelope_data } => {
+                        // Relay node: log and relay messages, also decrypt if addressed to us
+                        let sender_public_key_hex = decode_envelope(&envelope_data)
+                            .ok()
+                            .map(|env| hex::encode(&env.sender_public_key));
+
+                        if let Ok(msg) = core_rx.receive_message(envelope_data) {
+                            match msg.message_type {
+                                MessageType::Text => {
+                                    let text = msg.text_content().unwrap_or_else(|| "<binary>".into());
+                                    tracing::info!("Message from {}: {}", peer_id, &text[..text.len().min(80)]);
+
+                                    let record = history::MessageRecord::new_received(
+                                        peer_id.to_string(),
+                                        text.clone(),
+                                    );
+                                    let _ = history_rx.add(record);
+                                    let _ = ui_broadcast.send(server::UiEvent::MessageReceived {
+                                        from: peer_id.to_string(),
+                                        content: text,
+                                        timestamp: std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .unwrap_or_default()
+                                            .as_secs(),
+                                        message_id: msg.id.clone(),
+                                    });
+
+                                    // Send delivery receipt
+                                    if let Some(ref spk) = sender_public_key_hex {
+                                        if let Ok(receipt_data) = core_rx.prepare_receipt(spk.clone(), msg.id.clone()) {
+                                            let _ = swarm_handle.send_message(peer_id, receipt_data).await;
+                                        }
+                                    }
+                                }
+                                MessageType::Receipt => {
+                                    tracing::debug!("Receipt from {}: {}", peer_id, msg.id);
+                                }
+                            }
+                        }
+                    }
+                    SwarmEvent::ListeningOn(addr) => {
+                        tracing::info!("Listening on {}", addr);
+                    }
+                    _ => {}
+                }
+            }
+
+            // Ctrl+C shutdown
+            _ = tokio::signal::ctrl_c() => {
+                println!("\nShutting down relay node...");
+                let _ = swarm_handle.shutdown().await;
+                let mut l = ledger.lock().await;
+                let _ = l.save(&data_dir);
+                break;
+            }
+        }
+    }
+
+    println!("{} Relay node stopped.", "✓".green());
+    Ok(())
+}
+
 async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
     // Guard: catch the common mistake of supplying a Blake3 identity_id instead
     // of a contact nickname / libp2p Peer ID.
@@ -1323,11 +1752,7 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
                 }
                 Err(e) => {
                     tracing::warn!("Failed to enqueue message for {}: {}", contact.peer_id, e);
-                    println!(
-                        "{} Could not queue message: {}",
-                        "⚠".yellow(),
-                        e
-                    );
+                    println!("{} Could not queue message: {}", "⚠".yellow(), e);
                 }
             }
         }

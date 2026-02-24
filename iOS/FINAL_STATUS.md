@@ -343,36 +343,36 @@ if !isRelayEnabled {
 - core/Cargo.toml (updated)
 
 **Phase 2 (Configuration):**
-- ios/SCMessenger/Info.plist
-- ios/SCMessenger/Bridging-Header.h
-- ios/SCMessenger/SCMessengerApp.swift
-- ios/build-rust.sh
-- ios/copy-bindings.sh
-- ios/verify-build-setup.sh
+- iOS/SCMessenger/Info.plist
+- iOS/SCMessenger/Bridging-Header.h
+- iOS/SCMessenger/SCMessengerApp.swift
+- iOS/build-rust.sh
+- iOS/copy-bindings.sh
+- iOS/verify-build-setup.sh
 
 **Phase 3 (Services):**
-- ios/SCMessenger/Services/MeshBackgroundService.swift
-- ios/SCMessenger/Services/IosPlatformBridge.swift
-- ios/SCMessenger/Services/CoreDelegateImpl.swift
-- ios/SCMessenger/Services/MeshEventBus.swift
-- ios/SCMessenger/Data/MeshRepository.swift
+- iOS/SCMessenger/Services/MeshBackgroundService.swift
+- iOS/SCMessenger/Services/IosPlatformBridge.swift
+- iOS/SCMessenger/Services/CoreDelegateImpl.swift
+- iOS/SCMessenger/Services/MeshEventBus.swift
+- iOS/SCMessenger/Data/MeshRepository.swift
 
 **Phase 4 (Transport - Partial):**
-- ios/SCMessenger/Transport/MeshBLEConstants.swift
-- ios/SCMessenger/Transport/BLECentralManager.swift
+- iOS/SCMessenger/Transport/MeshBLEConstants.swift
+- iOS/SCMessenger/Transport/BLECentralManager.swift
 
 **Documentation:**
-- ios/README.md
-- ios/PLAN_REVIEW.md
-- ios/XCODE_SETUP.md
-- ios/IMPLEMENTATION_STATUS.md
-- ios/PHASE4_IMPLEMENTATION.md
-- ios/PHASES_4-15_GUIDE.md
+- iOS/README.md
+- iOS/PLAN_REVIEW.md
+- iOS/XCODE_SETUP.md
+- iOS/IMPLEMENTATION_STATUS.md
+- iOS/PHASE4_IMPLEMENTATION.md
+- iOS/PHASES_4-15_GUIDE.md
 
 **Generated:**
-- ios/SCMessenger/Generated/api.swift (4,200 lines)
-- ios/SCMessenger/Generated/apiFFI.h
-- ios/SCMessenger/Generated/apiFFI.modulemap
+- iOS/SCMessenger/SCMessenger/Generated/api.swift (4,200 lines)
+- iOS/SCMessenger/SCMessenger/Generated/apiFFI.h
+- iOS/SCMessenger/SCMessenger/Generated/apiFFI.modulemap
 
 ### Total: 25 files created/documented
 
@@ -404,7 +404,7 @@ All technical decisions finalized. All patterns documented. Implementation is no
 ### Immediate Actions
 
 1. **Create Xcode Project** (1-2 hours)
-   - Follow ios/XCODE_SETUP.md step-by-step
+   - Follow iOS/XCODE_SETUP.md step-by-step
    - Create SCMessenger.xcodeproj
    - Add all source files
    - Configure build settings and phases

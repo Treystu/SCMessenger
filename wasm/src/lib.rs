@@ -126,6 +126,12 @@ impl IronCore {
         recipient_public_key_hex: String,
         text: String,
     ) -> Result<Vec<u8>, JsValue> {
+        // Relay enforcement: when OFF, block all outbound messaging (parity with Android/iOS)
+        if !self.settings.lock().relay_enabled {
+            return Err(JsValue::from_str(
+                "Messaging blocked: mesh participation is disabled (relay toggle OFF)",
+            ));
+        }
         self.inner
             .prepare_message(recipient_public_key_hex, text)
             .map_err(|e| JsValue::from_str(&format!("{}", e)))
@@ -133,6 +139,12 @@ impl IronCore {
 
     #[wasm_bindgen(js_name = receiveMessage)]
     pub fn receive_message(&self, envelope_bytes: Vec<u8>) -> Result<JsValue, JsValue> {
+        // Relay enforcement: when OFF, silently drop inbound messages (parity with Android/iOS)
+        if !self.settings.lock().relay_enabled {
+            return Err(JsValue::from_str(
+                "Message dropped: mesh participation is disabled (relay toggle OFF)",
+            ));
+        }
         self.inner
             .receive_message(envelope_bytes)
             .map(|msg| {
@@ -183,6 +195,7 @@ impl IronCore {
         // reference-count bumps; no locks are held across the await point.
         let inner = Arc::clone(&self.inner);
         let rx_messages = Arc::clone(&self.rx_messages);
+        let settings = Arc::clone(&self.settings);
 
         wasm_bindgen_futures::spawn_local(async move {
             // `relay` is moved here so the WebSocket handle (and therefore the
@@ -190,6 +203,11 @@ impl IronCore {
             let _relay_keep_alive = relay;
 
             while let Some(bytes) = rx.next().await {
+                // Relay enforcement: drop inbound frames when relay is OFF
+                if !settings.lock().relay_enabled {
+                    tracing::debug!("Dropping inbound frame: relay toggle OFF");
+                    continue;
+                }
                 match inner.receive_message(bytes) {
                     Ok(msg) => {
                         let wasm_msg = WasmMessage {

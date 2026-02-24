@@ -57,14 +57,26 @@ final class CoreDelegateImpl: CoreDelegate {
         }
     }
 
-    func onMessageReceived(senderId: String, senderPublicKeyHex: String, messageId: String, data: Data) {
-        logger.info("Message received: \(messageId) from \(senderId) (\(data.count) bytes)")
+    func onMessageReceived(
+        senderId: String,
+        senderPublicKeyHex: String,
+        messageId: String,
+        senderTimestamp: UInt64,
+        data: Data
+    ) {
+        logger.info("Message received: \(messageId) from \(senderId) ts=\(senderTimestamp) (\(data.count) bytes)")
 
         // UniFFI callbacks arrive on a Rust thread; MeshRepository is @MainActor.
         // Capture values before the dispatch to avoid capturing self or mutable state.
         let repo = meshRepository
         DispatchQueue.main.async {
-            repo?.onMessageReceived(senderId: senderId, senderPublicKeyHex: senderPublicKeyHex, messageId: messageId, data: data)
+            repo?.onMessageReceived(
+                senderId: senderId,
+                senderPublicKeyHex: senderPublicKeyHex,
+                messageId: messageId,
+                senderTimestamp: senderTimestamp,
+                data: data
+            )
         }
 
         // Publish event (PassthroughSubject is thread-safe for send())

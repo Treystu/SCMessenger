@@ -66,10 +66,10 @@ struct MeshBLEConstants {
     // MARK: - Timing
     
     /// Default scan interval (seconds)
-    static let defaultScanInterval: TimeInterval = 10.0
+    static let defaultScanInterval: TimeInterval = 30.0
     
     /// Default scan window (seconds)
-    static let defaultScanWindow: TimeInterval = 30.0
+    static let defaultScanWindow: TimeInterval = 10.0
     
     /// Peer cache timeout (seconds) - for deduplication
     static let peerCacheTimeout: TimeInterval = 5.0

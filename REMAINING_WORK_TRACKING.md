@@ -13,34 +13,17 @@ Owner policy constraints (2026-02-23):
 
 ## Priority 0: Tri-Platform Semantics and Reliability
 
-1. Privacy parity-first wiring (all toggles) on Android, iOS, and Web
-   - Current: parity is incomplete.
-   - Target: every privacy toggle is implemented and behaviorally equivalent across all client platforms.
-   - Key files:
-     - `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift`
-     - `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt`
-     - `wasm/src/lib.rs`
-     - `core/src/api.udl`
+1. [x] Privacy parity-first wiring (all toggles) on Android, iOS, and Web
+   - Outcome: All four privacy toggles (onion routing, cover traffic, message padding, timing obfuscation) are now implemented with live UI bindings on Android (`SwitchSetting`), iOS (`Toggle`), and Web/WASM (`getSettings`/`updateSettings`). Dead placeholder components removed from both mobile platforms.
 
-2. Relay toggle enforcement parity (mandatory OFF behavior on all clients)
-   - Requirement: relay controls remain user-toggleable; when OFF, block all inbound and outbound relay messaging while allowing local history reads.
-   - Target: explicit parity tests for Android+iOS+Web and documented behavior in platform READMEs.
+2. [x] Relay toggle enforcement parity (mandatory OFF behavior on all clients)
+   - Outcome: WASM `prepareMessage`, `receiveMessage`, and WebSocket receive loop now enforce `relay_enabled` check, matching Android/iOS behavior. When OFF, outbound messages are blocked and inbound frames are dropped.
 
-3. Canonical identity normalization to `public_key_hex`
-   - Current: code and docs use mixed identifiers (`identity_id`, `libp2p_peer_id`, key hex) across flows.
-   - Target: `public_key_hex` as canonical persisted/exchange identity; other IDs treated as derived/operational metadata.
-   - Scope: identity export/import, QR payloads, contacts, routing hints, history attribution docs.
+3. [x] Canonical identity normalization to `public_key_hex`
+   - Outcome: `IdentityInfo` struct and `api.udl` now document `public_key_hex` as the canonical persisted/exchange identity. `identity_id` (Blake3) and `libp2p_peer_id` are documented as derived/operational metadata.
 
-4. Bootstrap configuration model implementation
-   - Requirement: startup environment config + dynamic fetch, with static fallback.
-   - Current: Android and iOS repositories include static bootstrap defaults.
-   - Android evidence: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` uses `DEFAULT_BOOTSTRAP_NODES` directly during service init.
-   - iOS evidence: `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift` uses `defaultBootstrapNodes` directly in startup and routing helpers.
-   - Core evidence: `core/src/mobile_bridge.rs` accepts injected bootstrap lists (`set_bootstrap_nodes`) but does not implement env/dynamic source-of-truth resolution itself.
-   - Target:
-     - env-driven bootstrap override path
-     - remote bootstrap list fetch path
-     - deterministic fallback behavior and timeout policy
+4. [x] Bootstrap configuration model implementation
+   - Outcome: Added `BootstrapConfig` dictionary and `BootstrapResolver` interface to `api.udl` with full Rust implementation. Resolution chain: env override (`SC_BOOTSTRAP_NODES`) → remote URL fetch (via `ureq` HTTP client) → static fallback list. Android and iOS both wired to use resolver instead of hardcoded lists. WASM uses env → static path (no sync HTTP in browser).
 
 5. Android peer discovery parity hardening
    - Source: `ANDROID_DISCOVERY_ISSUES.md` investigation notes.
@@ -53,11 +36,19 @@ Owner policy constraints (2026-02-23):
    - Scope: CLI host nodes + Android + iOS + Web over mixed LAN/WAN/NAT.
    - Target: scripted verification matrix with delivery latency + fallback success criteria.
 
-7. Android WiFi Aware physical-device validation
+7. Nearby Peer Discovery and Identity Federation (Android Focus)
+   - [x] Prevent permission-race startup regression: Android mesh now permission-gates BLE/WiFi init and auto-retries transport init when runtime permissions are granted (no restart required).
+   - [ ] Ensure Bluetooth, LAN, and Relay discovery are accounted for and routed to Mesh tab.
+   - [ ] Display total node count (headless and full) in Mesh UI.
+   - [ ] Fix nickname federation (ensure nicknames are correctly passed to neighbors over BLE/Swarm).
+   - [ ] Fix iOS -> Android nearby identity nickname propagation (Android currently discovers peer identity/public key but often misses federated nickname).
+   - [ ] Implement local nickname overrides in contacts (show both official and private nicknames).
+
+8. Android WiFi Aware physical-device validation
    - File: `android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt`
    - Target: compatibility results by Android version/device class with documented pass/fail outcomes.
 
-8. Web parity promotion from experimental to first-class client
+9. Web parity promotion from experimental to first-class client
    - Current: Web/WASM is functionally present but thinner than mobile app surfaces.
    - Target: parity for identity import/export, relay/bootstrap controls, history UX, and critical messaging paths.
    - Key files:
@@ -66,12 +57,12 @@ Owner policy constraints (2026-02-23):
      - `ui/index.html`
      - `core/src/wasm_support/*`
 
-9. Active-session reliability + durable eventual delivery guarantees
-   - Requirement: while app is open/relaying, service should remain available and messages should not be dropped.
-   - Target: explicit durability contract (persisted outbox/inbox semantics, resend/recovery behavior) plus failure-mode tests.
-   - Scope: crash/restart recovery, relay outage handling, offline queue replay, duplicate-safe redelivery.
+10. Active-session reliability + durable eventual delivery guarantees
+    - Requirement: while app is open/relaying, service should remain available and messages should not be dropped.
+    - Target: explicit durability contract (persisted outbox/inbox semantics, resend/recovery behavior) plus failure-mode tests.
+    - Scope: crash/restart recovery, relay outage handling, offline queue replay, duplicate-safe redelivery.
 
-10. Bounded retention policy implementation
+11. Bounded retention policy implementation
 
 - Requirement: local history/outbox storage must be policy-bound to avoid unbounded disk growth.
 - Target: configurable retention caps + deterministic pruning behavior + docs for user expectations.
@@ -143,10 +134,11 @@ Owner policy constraints (2026-02-23):
    - Target: either enable those tests with stable mocks or update docs/scripts to match actual execution status.
    - Outcome: Updated `android/app/src/test/README.md` to truthfully explain that UniFFI MockK limitations natively prevent complete CI verification for generated files, serving as architectural documentation pending a stable JNA harness setup instead.
 
-10. Android ABI build coverage alignment
+10. [x] Android ABI and verification script alignment
 
-- Current: `android/app/build.gradle` declares multiple ABI filters, while `buildRustAndroid` currently builds only `aarch64-linux-android`.
-- Target: align Rust artifact production with declared ABI support or explicitly narrow supported ABI scope in build config/docs.
+- Current: `android/app/build.gradle` and `buildRustAndroid` are aligned on `arm64-v8a` + `x86_64`, but `android/verify-build-setup.sh` still checks for legacy extra Rust targets (`armv7`, `i686`).
+- Target: align environment verification script with actual supported ABI matrix and documentation.
+- Outcome: `android/verify-build-setup.sh` now validates only `aarch64-linux-android` and `x86_64-linux-android`, and install guidance was updated to match the supported ABI matrix.
 
 11. [x] Core settings model convergence (critical reliability debt)
 
@@ -157,36 +149,59 @@ Owner policy constraints (2026-02-23):
 - Target: one canonical settings schema and mapping strategy used by UniFFI/mobile/runtime layers.
 - Outcome: Deleted the unused `mobile/settings.rs` and `platform/settings.rs` completely. Unified purely behind the single UniFFI-verified `mobile_bridge::MeshSettings` exported transparently through `api.udl`. Web clients will default to "always plugged in" behavior via this schema.
 
-12. iOS verification script integrity
+12. [x] iOS verification script hardening
 
-- Current: `iOS/verify-test.sh` is a placeholder (`test`) and does not verify anything.
-- Target: real automated check script or explicit deprecation with canonical replacement.
+- Current: `iOS/verify-test.sh` now performs simulator build verification.
+- Target: harden script behavior (deterministic destination selection, warning handling policy, and explicit failure output) for stable CI/operator use.
+- Outcome: `iOS/verify-test.sh` now uses strict shell flags, deterministic `generic/platform=iOS Simulator` destination, explicit failure handling, and an explicit warning count policy.
 
-13. iOS background capability hardening
+13. [x] iOS background capability hardening
 
 - Current: `iOS/SCMessenger/SCMessenger/Info.plist` declares a broad background mode set.
 - Target: retain only modes required by implemented behavior and provisioning policy; remove speculative extras.
+- Outcome: removed speculative `location` and `remote-notification` background modes and removed unused location/motion permission strings from `Info.plist`; retained BLE + fetch + processing modes used by implemented services.
 
-14. iOS generated-binding path normalization
+14. [ ] iOS power settings runtime observability and enforcement verification
 
-- Current: `iOS/copy-bindings.sh` writes generated files into both `iOS/SCMessenger/SCMessenger/Generated/` and `iOS/SCMessenger/Generated/`.
+- Current: explicit runtime logging/enforcement hooks are now wired in `MeshRepository` (`setAutoAdjustEnabled`, `applyPowerAdjustments`, and profile-application logs across battery/network/motion updates), and Settings toggle now drives repository state directly.
+- Remaining: capture active-session device evidence confirming power profile transitions under real motion/network/battery changes.
+- Follow-up: simplify iOS power UX to a single automatic mode and remove manual Low/Standard/High style overrides; drive gradual adaptation from battery %, bandwidth quality, and latency measurements.
+
+15. [x] iOS generated-binding path normalization
+
+- Current: `iOS/copy-bindings.sh` wrote generated files into both `iOS/SCMessenger/SCMessenger/Generated/` and `iOS/SCMessenger/Generated/`.
 - Target: one canonical generated artifact path tied to active Xcode targets and docs.
+- Outcome: `iOS/copy-bindings.sh` now writes only to `iOS/SCMessenger/SCMessenger/Generated/`, which matches active Xcode target paths.
 
-15. iOS historical artifact segmentation
+16. iOS historical artifact segmentation
 
 - Current: `iOS/iosdesign.md` and `iOS/SCMessenger/build_*.txt` mix design/historical/runtime evidence in active tree.
 - Target: section-level historical tagging and relocation/retention policy to keep active docs concise.
 
-16. TODO/FIXME accuracy sync pass (including external test/update signals)
+17. TODO/FIXME accuracy sync pass (including external test/update signals)
 
 - Current: TODO/FIXME markers are distributed across code/docs; external testing updates can drift from tracked backlog.
 - Target: recurring TODO/FIXME audit that syncs canonical backlog items with current implementation evidence.
 - Evidence source: `docs/TRIPLE_CHECK_REPORT.md` risk scan + direct file review.
+- Companion reference: `docs/STUBS_AND_UNIMPLEMENTED.md` — comprehensive stub/placeholder inventory (43 items across 4 severity tiers).
+
+18. [x] Android multi-share intent handler stub
+
+- File: `android/app/src/main/java/com/scmessenger/android/utils/ShareReceiver.kt` lines 67–72.
+- Current: `handleMultipleShare()` logs a warning and shows a toast; no items are forwarded.
+- Target: either implement multi-item share handling or remove `ACTION_SEND_MULTIPLE` from the manifest intent filter so the share sheet never offers the option.
+- Outcome: removed `ACTION_SEND_MULTIPLE` handling path and dead stub from `ShareReceiver.kt`; runtime now exposes only implemented `ACTION_SEND` behavior.
+
+19. [ ] App-update persistence migration hardening (identity, contacts, message history)
+
+- Requirement: app upgrades must preserve identity, contacts, and message history without manual re-import.
+- Target: deterministic migration/verification path across Android and iOS app updates, including storage-path continuity checks and automatic import fallback for legacy stores.
+- Scope: core storage versioning, mobile app startup migration hooks, and update smoke tests that assert post-update continuity.
 
 ## Priority 2: Documentation Completion and Governance
 
 1. Full-file documentation pass completion using `docs/DOC_PASS_TRACKER.md` (completed)
-   - Current: all tracked files are reviewed (`pending` = 0, checked = 393).
+   - Current: all tracked files are reviewed (`pending` = 0, checked = 356).
    - Ongoing target: keep this at 0 pending via delta checks on new/changed files.
 
 2. Historical-heavy docs section-status sweep
@@ -199,10 +214,10 @@ Owner policy constraints (2026-02-23):
    - `docs/CURRENT_STATE.md`
    - `REMAINING_WORK_TRACKING.md`
    - `docs/GLOBAL_ROLLOUT_PLAN.md`
+   - `docs/STUBS_AND_UNIMPLEMENTED.md`
 
-4. Resolve `ios/` vs `iOS/` path-case split in tracked docs vs app source
-   - Current: markdown docs are tracked under `ios/`, active app source is under `iOS/SCMessenger/`.
-   - Target: explicit documented convention and eventual normalization strategy for case-sensitive environments.
+4. [x] Resolve `ios/` vs `iOS/` path-case split in tracked docs vs app source
+   - Outcome: canonicalized documentation/script references to `iOS/` and recorded governance rule to prevent lowercase-path drift.
 
 ## Verified Stable Areas (No Active Gap)
 

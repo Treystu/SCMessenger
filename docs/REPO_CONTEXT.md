@@ -104,6 +104,7 @@ iOS directory authority:
 
 - Active app project/code: `iOS/SCMessenger/SCMessenger.xcodeproj` and `iOS/SCMessenger/SCMessenger/`
 - Legacy reference tree (not part of active Xcode target): `iOS/SCMessenger-Existing/`
+- Canonical path rule: use `iOS/` (uppercase-I) in all repository references; lowercase `ios/` references are considered drift and should be normalized.
 
 ### WASM (`wasm/src/lib.rs`)
 

@@ -4,7 +4,7 @@
 
 ## [Current] Section Action Outcome (2026-02-23)
 
-- `delete/replace`: do not treat this file as current truth for completion/readiness; use `docs/CURRENT_STATE.md` and `ios/README.md`.
+- `delete/replace`: do not treat this file as current truth for completion/readiness; use `docs/CURRENT_STATE.md` and `iOS/README.md`.
 - `keep`: retain detailed historical inventory for forensic/reference use.
 
 **Date**: February 13, 2026  
@@ -219,7 +219,7 @@ All code implemented and ready for compilation in Xcode.
 ## Next Steps
 
 ### Immediate: Test on macOS + Xcode
-1. Open Xcode project (follow ios/XCODE_SETUP.md)
+1. Open Xcode project (follow iOS/XCODE_SETUP.md)
 2. Add all source files to project
 3. Configure build settings
 4. Compile and fix any Swift syntax issues

@@ -142,6 +142,15 @@ else
     ALL_OK=false
     echo -e "   ${YELLOW}Check cargo output above for errors${NC}"
 fi
+
+echo
+echo "5b. Verifying generated path invariants..."
+if bash "$PROJECT_ROOT/iOS/assert-generated-path.sh"; then
+    echo -e "${GREEN}✓${NC} Generated path guard passed"
+else
+    echo -e "${RED}✗${NC} Generated path guard failed"
+    ALL_OK=false
+fi
 echo
 
 # 6. Test static library compilation (optional, can be slow)

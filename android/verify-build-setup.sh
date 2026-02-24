@@ -74,10 +74,10 @@ else
 fi
 echo
 
-# 3. Check Android Rust targets
+# 3. Check Android Rust targets (supported ABI matrix)
 echo "3. Checking Android Rust targets..."
 TARGETS_OK=true
-for target in aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android; do
+for target in aarch64-linux-android x86_64-linux-android; do
     if rustup target list | grep -q "$target (installed)"; then
         echo -e "   ${GREEN}✓${NC} $target installed"
     else
@@ -87,7 +87,7 @@ for target in aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
 done
 if [ "$TARGETS_OK" = false ]; then
     ALL_OK=false
-    echo -e "   ${YELLOW}Install: rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android${NC}"
+    echo -e "   ${YELLOW}Install: rustup target add aarch64-linux-android x86_64-linux-android${NC}"
 fi
 echo
 

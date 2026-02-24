@@ -5,6 +5,9 @@ namespace api {
 // IDENTITY
 // ============================================================================
 
+// IdentityInfo — canonical identity = public_key_hex (Ed25519 hex).
+// identity_id (Blake3 hash) and libp2p_peer_id are derived/operational metadata.
+// Always use public_key_hex for persistence, exchange, and cross-platform resolution.
 dictionary IdentityInfo {
     string? identity_id;
     string? public_key_hex;
@@ -80,7 +83,7 @@ callback interface CoreDelegate {
     void on_peer_identified(string peer_id, sequence<string> listen_addrs);
     // sender_public_key_hex: Ed25519 hex (64 chars) — use this with prepare_receipt()
     // sender_id: Blake3 identity_id (64 hex chars) — use this for display / history
-    void on_message_received(string sender_id, string sender_public_key_hex, string message_id, bytes data);
+    void on_message_received(string sender_id, string sender_public_key_hex, string message_id, u64 sender_timestamp, bytes data);
     void on_receipt_received(string message_id, string status);
 };
 
@@ -260,12 +263,44 @@ interface MeshSettingsManager {
 };
 
 // ============================================================================
+// BOOTSTRAP CONFIGURATION
+// ============================================================================
+
+// Bootstrap resolution order: env_override → remote_url fetch → static_nodes fallback.
+// The BootstrapResolver deterministically applies this priority chain.
+dictionary BootstrapConfig {
+    // Static fallback multiaddr strings (always consulted if env/remote are empty).
+    sequence<string> static_nodes;
+    // Optional remote URL to fetch a JSON array of multiaddr strings.
+    // Fetched with a timeout of `fetch_timeout_secs`; on failure, falls back to static_nodes.
+    string? remote_url;
+    // Timeout for the remote fetch, in seconds (default: 5).
+    u32 fetch_timeout_secs;
+    // Optional environment variable name containing a comma-separated list of multiaddrs.
+    // If set and non-empty, this overrides both remote_url and static_nodes.
+    string? env_override_key;
+};
+
+interface BootstrapResolver {
+    constructor(BootstrapConfig config);
+
+    /// Resolve bootstrap nodes using the priority chain: env → remote → static.
+    /// This is a synchronous, deterministic resolution (remote fetch is attempted
+    /// but falls back on timeout/error). Call this once at startup.
+    sequence<string> resolve();
+
+    /// Return the raw static fallback list without env/remote resolution.
+    sequence<string> static_fallback();
+};
+
+// ============================================================================
 // CONTACTS
 // ============================================================================
 
 dictionary Contact {
     string peer_id;
-    string? nickname;
+    string? nickname;       // Federated nickname (from the peer)
+    string? local_nickname; // Local override set by the user
     string public_key;
     u64 added_at;
     u64? last_seen;
@@ -293,6 +328,9 @@ interface ContactManager {
 
     [Throws=IronCoreError]
     void set_nickname(string peer_id, string? nickname);
+
+    [Throws=IronCoreError]
+    void set_local_nickname(string peer_id, string? nickname);
 
     [Throws=IronCoreError]
     void update_last_seen(string peer_id);
@@ -369,6 +407,8 @@ interface HistoryManager {
 dictionary LedgerEntry {
     string multiaddr;
     string? peer_id;
+    string? public_key;
+    string? nickname;
     u32 success_count;
     u32 failure_count;
     u64? last_seen;
@@ -386,6 +426,7 @@ interface LedgerManager {
 
     void record_connection(string multiaddr, string peer_id);
     void record_failure(string multiaddr);
+    void annotate_identity(string multiaddr, string peer_id, string? public_key, string? nickname);
 
     sequence<LedgerEntry> dialable_addresses();
     sequence<LedgerEntry> get_preferred_relays(u32 limit);
