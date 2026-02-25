@@ -50,7 +50,7 @@ pub enum MotionState {
 }
 
 /// Network connectivity type reported by the platform.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum NetworkType {
     /// No connectivity.
     None,
@@ -61,13 +61,8 @@ pub enum NetworkType {
     /// Both WiFi and cellular available.
     WifiAndCellular,
     /// Unknown / not yet reported.
+    #[default]
     Unknown,
-}
-
-impl Default for NetworkType {
-    fn default() -> Self {
-        NetworkType::Unknown
-    }
 }
 
 /// Snapshot of device state as reported by the platform layer.

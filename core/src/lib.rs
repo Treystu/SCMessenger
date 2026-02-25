@@ -1161,4 +1161,70 @@ mod tests {
         let reloaded = IronCore::with_storage(path);
         assert_eq!(reloaded.inbox_count(), 1);
     }
+
+    #[test]
+    fn test_identity_backup_roundtrip() {
+        let core = IronCore::new();
+        core.initialize_identity().unwrap();
+
+        let backup = core.export_identity_backup().unwrap();
+        assert!(!backup.is_empty());
+
+        // Backup payload is valid JSON
+        let parsed: serde_json::Value = serde_json::from_str(&backup).unwrap();
+        assert_eq!(parsed["version"], 1);
+        assert!(parsed["secret_key_hex"].is_string());
+
+        // Import into a fresh core and verify identity is restored
+        let core2 = IronCore::new();
+        core2.import_identity_backup(backup).unwrap();
+
+        let orig = core.get_identity_info();
+        let restored = core2.get_identity_info();
+        assert_eq!(
+            orig.public_key_hex, restored.public_key_hex,
+            "public key must be identical after import"
+        );
+    }
+
+    #[test]
+    fn test_import_identity_backup_invalid_version() {
+        let core = IronCore::new();
+        let bad = r#"{"version":99,"secret_key_hex":"aabb","nickname":null}"#.to_string();
+        assert!(core.import_identity_backup(bad).is_err());
+    }
+
+    #[test]
+    fn test_import_identity_backup_invalid_hex() {
+        let core = IronCore::new();
+        let bad = r#"{"version":1,"secret_key_hex":"not-hex!!","nickname":null}"#.to_string();
+        assert!(core.import_identity_backup(bad).is_err());
+    }
+
+    #[test]
+    fn test_mark_message_sent_removes_from_outbox() {
+        let core = IronCore::new();
+        let recipient = IronCore::new();
+        core.initialize_identity().unwrap();
+        recipient.initialize_identity().unwrap();
+
+        let recipient_pk = recipient.get_identity_info().public_key_hex.unwrap();
+        let prepared = core
+            .prepare_message_with_id(recipient_pk, "hello".to_string())
+            .unwrap();
+        assert_eq!(core.outbox_count(), 1);
+
+        // Mark the message as sent — it should be removed from the outbox.
+        let removed = core.mark_message_sent(prepared.message_id);
+        assert!(removed);
+        assert_eq!(core.outbox_count(), 0);
+    }
+
+    #[test]
+    fn test_mark_message_sent_unknown_id_returns_false() {
+        let core = IronCore::new();
+        core.initialize_identity().unwrap();
+        let removed = core.mark_message_sent("nonexistent-id".to_string());
+        assert!(!removed);
+    }
 }

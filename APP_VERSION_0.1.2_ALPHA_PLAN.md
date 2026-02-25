@@ -290,9 +290,9 @@ Deterministic, event-driven transitions to ensure cross-platform parity.
 ## 9) Deliverables checklist for v0.1.2-alpha
 
 - [x] Migration framework validated across Core/iOS/Android/WASM.
-- [ ] Identity/contact/message continuity verified across update flows.
+- [x] Identity/contact/message continuity — code complete (backup/restore + storage migration); device validation pending.
 - [x] Unified connection orchestrator live across all clients.
-- [ ] GCP bootstrap + direct P2P + relay fallback validated.
+- [ ] GCP bootstrap + direct P2P + relay fallback validated (requires live network testing).
 - [x] WASM swarm path validated (no `wasm32` swarm bail-out).
 - [ ] ACK-safe path switching validated (no duplicates/loss on transitions).
 - [x] Parity audit closed for core chat workflows.
@@ -316,10 +316,19 @@ Deterministic, event-driven transitions to ensure cross-platform parity.
   - continuity tests added for identity restart hydration, legacy migration, contacts/local nickname persistence, and history delivery-state persistence.
   - Android onboarding completion now waits for successful identity+nickname persistence (no premature onboarding bypass).
   - Android and iOS now trigger deferred swarm startup immediately after identity/nickname creation to avoid stalled internet transport after first-run onboarding.
-  - CLI headless relay mode now persists a stable libp2p network key (`relay_network_key.pb`) so bootstrap peer IDs survive restarts without requiring user identity initialization.
+  - CLI headless relay mode persists a stable libp2p network key (`relay_network_key.pb`); on first upgrade, key is migrated from existing IronCore identity to preserve pinned `/p2p/` bootstrap addresses.
+  - Identity backup export/import implemented: iOS uses Keychain, Android uses SharedPreferences (`identity_backup_prefs.xml`); survives app reinstall.
+  - `mark_message_sent(message_id)` added to `IronCore` + exposed via UniFFI; prevents outbox exhaustion on long-lived accounts.
+  - Key material zeroized after use in `export_identity_backup` and `import_identity_backup` (both success and error paths).
+  - Android `AndroidManifest.xml` backup configuration corrected (`allowBackup=true`, `dataExtractionRules`, `fullBackupContent`); `backup_rules.xml` fixed (removed `<include>` that disabled default full-backup).
+  - BLE GATT sequential operation queue implemented (`Channel<() -> Unit>` + `Semaphore(1)` per device); all reads/writes/CCCD-writes serialised; stale-session guard on scheduled identity refresh reads.
+  - Android multi-share (`ACTION_SEND_MULTIPLE`) implemented with `IntentCompat.getParcelableArrayListExtra()` for API < 33 compatibility.
+  - Relay client real TCP networking: `connect()`/`push()`/`pull()`/`ping()` implemented.
+  - Dial throttling with exponential backoff added to Android and iOS `MeshRepository`.
+  - `cargo clippy --workspace` clean; `cargo fmt --all` clean; workspace tests: **343 passed, 0 failed, 7 ignored**.
   - Android+iOS build pipelines revalidated after migration changes.
   - wasm target checks revalidated with WebRTC deprecation cleanup (`set_sdp`).
-- Remaining (requires additional feature work and/or external validation):
+- Remaining (requires live network/device validation only):
   - full migration continuity signoff across real mobile/web package upgrade runs.
   - cross-network + relay fallback operational matrix signoff against live infrastructure.
   - ACK/path-switch reliability acceptance across partner scenarios.

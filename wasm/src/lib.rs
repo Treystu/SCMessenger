@@ -38,12 +38,14 @@ impl IronCore {
     pub fn new() -> Self {
         init_logging();
         // Web defaults: always plugged in, internet-only transport
-        let mut defaults = MeshSettings::default();
-        defaults.battery_floor = 0; // Web = always plugged in
-        defaults.ble_enabled = false; // No BLE in browser
-        defaults.wifi_aware_enabled = false; // No WiFi Aware in browser
-        defaults.wifi_direct_enabled = false; // No WiFi Direct in browser
-        defaults.internet_enabled = true;
+        let defaults = MeshSettings {
+            battery_floor: 0,           // Web = always plugged in
+            ble_enabled: false,         // No BLE in browser
+            wifi_aware_enabled: false,  // No WiFi Aware in browser
+            wifi_direct_enabled: false, // No WiFi Direct in browser
+            internet_enabled: true,
+            ..MeshSettings::default()
+        };
         Self {
             inner: Arc::new(RustIronCore::new()),
             rx_messages: Arc::new(Mutex::new(Vec::new())),
@@ -57,14 +59,13 @@ impl IronCore {
     pub fn with_storage(storage_path: String) -> Self {
         init_logging();
         let manager = MeshSettingsManager::new(storage_path.clone());
-        let loaded = manager.load().unwrap_or_else(|_| {
-            let mut defaults = MeshSettings::default();
-            defaults.battery_floor = 0;
-            defaults.ble_enabled = false;
-            defaults.wifi_aware_enabled = false;
-            defaults.wifi_direct_enabled = false;
-            defaults.internet_enabled = true;
-            defaults
+        let loaded = manager.load().unwrap_or_else(|_| MeshSettings {
+            battery_floor: 0,
+            ble_enabled: false,
+            wifi_aware_enabled: false,
+            wifi_direct_enabled: false,
+            internet_enabled: true,
+            ..MeshSettings::default()
         });
         Self {
             inner: Arc::new(RustIronCore::with_storage(storage_path)),
@@ -277,7 +278,10 @@ impl IronCore {
 
     #[wasm_bindgen(js_name = exportDiagnostics)]
     pub async fn export_diagnostics(&self) -> Result<String, JsValue> {
-        let peers = if let Some(handle) = self.swarm_handle.lock().clone() {
+        // Clone the handle out of the lock before any await so the MutexGuard
+        // is not held across the suspension point.
+        let handle_opt = self.swarm_handle.lock().clone();
+        let peers = if let Some(handle) = handle_opt {
             handle
                 .get_peers()
                 .await
@@ -388,13 +392,15 @@ impl IronCore {
     /// Return the default settings for the Web platform.
     #[wasm_bindgen(js_name = getDefaultSettings)]
     pub fn get_default_settings(&self) -> JsValue {
-        let mut defaults = MeshSettings::default();
-        defaults.battery_floor = 0;
-        defaults.ble_enabled = false;
-        defaults.wifi_aware_enabled = false;
-        defaults.wifi_direct_enabled = false;
-        defaults.internet_enabled = true;
-        serde_wasm_bindgen::to_value(&WasmMeshSettings::from(defaults)).unwrap()
+        serde_wasm_bindgen::to_value(&WasmMeshSettings::from(MeshSettings {
+            battery_floor: 0,
+            ble_enabled: false,
+            wifi_aware_enabled: false,
+            wifi_direct_enabled: false,
+            internet_enabled: true,
+            ..MeshSettings::default()
+        }))
+        .unwrap()
     }
 }
 

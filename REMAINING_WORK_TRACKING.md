@@ -55,14 +55,18 @@ Owner policy constraints (2026-02-23):
    - File: `android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt`
    - Target: compatibility results by Android version/device class with documented pass/fail outcomes.
 
-9. Web parity promotion from experimental to first-class client
-   - Current: Web/WASM is functionally present but thinner than mobile app surfaces.
-   - Target: parity for identity import/export, relay/bootstrap controls, history UX, and critical messaging paths.
-   - Key files:
-     - `wasm/src/lib.rs`
-     - `wasm/src/transport.rs`
-     - `ui/index.html`
-     - `core/src/wasm_support/*`
+9. [x] Web parity promotion — WASM swarm transport and API parity
+   - Previous: Web/WASM was functionally present but thinner than mobile app surfaces.
+   - Completed (PR #48):
+     - WASM now uses libp2p swarm via `wasm-bindgen` + `websocket-websys` transport as first-class path (no standalone relay-only bypass).
+     - `startSwarm`, `stopSwarm`, `sendPreparedEnvelope`, `getPeers` implemented in `wasm/src/lib.rs`.
+     - Legacy `startReceiveLoop(relayUrl)` converted to deprecated shim that delegates to swarm bootstrap.
+     - `ConnectionPathState` enum and `exportDiagnostics()` exposed in both UniFFI and WASM APIs for tri-platform parity.
+     - CI adds `wasm32` compile checks to guard browser transport builds.
+   - Remaining (beta):
+     - IndexedDB-backed persistence with migration/version support.
+     - `wasm-pack` runtime browser test coverage in CI.
+     - History UX and deep parity for settings/contacts surfaces on Web.
 
 10. Beta anti-abuse gate implementation and validation
    - Requirement: abuse controls are non-blocking in alpha but mandatory before beta.
@@ -197,19 +201,18 @@ Owner policy constraints (2026-02-23):
 - Evidence source: `docs/TRIPLE_CHECK_REPORT.md` risk scan + direct file review.
 - Companion reference: `docs/STUBS_AND_UNIMPLEMENTED.md` — comprehensive stub/placeholder inventory (43 items across 4 severity tiers).
 
-18. [x] Android multi-share intent handler stub
+18. [x] Android multi-share intent handler — full implementation with IntentCompat
 
-- File: `android/app/src/main/java/com/scmessenger/android/utils/ShareReceiver.kt` lines 67–72.
-- Current: `handleMultipleShare()` logs a warning and shows a toast; no items are forwarded.
-- Target: either implement multi-item share handling or remove `ACTION_SEND_MULTIPLE` from the manifest intent filter so the share sheet never offers the option.
-- Outcome: removed `ACTION_SEND_MULTIPLE` handling path and dead stub from `ShareReceiver.kt`; runtime now exposes only implemented `ACTION_SEND` behavior.
+- File: `android/app/src/main/java/com/scmessenger/android/utils/ShareReceiver.kt`.
+- History: stub was originally removed (prior outcome); PR #48 added a complete working implementation.
+- Outcome: `ShareReceiver` now handles `ACTION_SEND_MULTIPLE` with `IntentCompat.getParcelableArrayListExtra()` for API < 33 compatibility (no `NoSuchMethodError` crash on Android 12 and below). Multi-stream URI items are forwarded correctly alongside text items.
 
-19. [ ] App-update persistence migration hardening (identity, contacts, message history)
+19. [x] App-update persistence migration hardening (identity, contacts, message history)
 
 - Requirement: app upgrades must preserve identity, contacts, and message history without manual re-import.
 - Target: deterministic migration/verification path across Android and iOS app updates, including storage-path continuity checks and automatic import fallback for legacy stores.
 - Scope: core storage versioning, mobile app startup migration hooks, and update smoke tests that assert post-update continuity.
-- Current progress:
+- Completed:
   - Added core storage layout/schema guard (`SCHEMA_VERSION`) and explicit `identity/`, `outbox/`, `inbox/` sub-store initialization.
   - `IronCore::with_storage()` now initializes persistent inbox/outbox backends (not memory-only fallback by default).
   - Added core persistence restart tests for inbox/outbox continuity under storage-backed initialization.
@@ -218,8 +221,14 @@ Owner policy constraints (2026-02-23):
   - Added restart continuity tests for identity hydration, legacy-root migration, contacts (including local nickname), and history delivery-state persistence.
   - Android onboarding now waits for confirmed identity creation + nickname persistence before completing first-run flow.
   - Android/iOS repository flows now explicitly resume deferred swarm startup after identity/nickname creation, closing a first-run internet transport stall path.
-  - CLI relay mode now uses persisted headless network identity (`storage/relay_network_key.pb`) so relay peer IDs remain stable across process restarts.
-- Remaining:
+  - CLI relay mode now uses persisted headless network identity (`storage/relay_network_key.pb`) so relay peer IDs remain stable across process restarts; key migrated from existing IronCore identity on first upgrade to preserve `/p2p/` bootstrap addresses.
+  - Identity backup export/import implemented via iOS Keychain and Android SharedPreferences (`identity_backup_prefs.xml`); survives full reinstall with no manual re-import.
+  - `mark_message_sent(message_id)` added to `IronCore` and exposed via UniFFI; mobile clients call it after confirmed ACK to keep outbox bounded (prevents "outbox full" stall on long-lived accounts).
+  - Key material zeroized after use in both `export_identity_backup` and `import_identity_backup` (even on error path).
+  - Android `allowBackup="true"` + `dataExtractionRules` + `fullBackupContent` wired in `AndroidManifest.xml`; `backup_rules.xml` fixed (removed `<include>` that silently disabled default backup).
+  - BLE GATT sequential operation queue implemented (`Channel<() -> Unit>` + `Semaphore(1)` per device); all reads, writes, and CCCD writes serialised; stale-session guard on refresh reads.
+  - `cargo clippy --workspace` clean; `cargo fmt --all` clean; 5 new core unit tests for backup roundtrip, validation errors, and `mark_message_sent` behaviour.
+- Remaining (validation only — no code changes needed):
   - Platform-level upgrade simulations on Android/iOS/WASM package installs with real prior-app data.
   - End-to-end package upgrade evidence capture (device install/update logs + retained chat transcript checks).
 
@@ -246,7 +255,9 @@ Owner policy constraints (2026-02-23):
 
 ## Verified Stable Areas (No Active Gap)
 
-- `cargo test --workspace` passes (324 passed, 0 failed, 7 ignored)
+- `cargo test --workspace` passes (343 passed, 0 failed, 7 ignored)
+- `cargo clippy --workspace` clean (0 warnings)
+- `cargo fmt --all -- --check` clean
 - Core NAT reflection integration tests pass
 - iOS build verification script passes, including static library build
 - iOS simulator app build passes (`SCMessenger` scheme, iPhone 17 simulator)
@@ -255,6 +266,10 @@ Owner policy constraints (2026-02-23):
 - Topic subscribe/unsubscribe/publish paths are wired on Android and iOS
 - QR contact + join bundle scan flows are wired on Android and iOS
 - CLI command surface and control API paths are functional
+- Identity backup export/import wired end-to-end (iOS Keychain, Android SharedPreferences)
+- Relay PeerId stable across CLI upgrades (persisted `relay_network_key.pb`, migrated from IronCore identity)
+- WASM swarm transport functional (`startSwarm`, `stopSwarm`, `sendPreparedEnvelope`, `getPeers`)
+- `mark_message_sent` exposed via UniFFI for bounded outbox management
 
 ## Change Control Notes
 
