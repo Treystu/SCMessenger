@@ -53,6 +53,7 @@ async fn test_all_six_phases_integrated() {
         alice_event_tx,
         Some(multiport_config.clone()),
         Vec::new(),
+        false,
     )
     .await
     .expect("Failed to start Alice");
@@ -85,6 +86,7 @@ async fn test_all_six_phases_integrated() {
         bob_event_tx,
         Some(multiport_config.clone()),
         Vec::new(),
+        false,
     )
     .await
     .expect("Failed to start Bob");
@@ -271,6 +273,7 @@ async fn test_message_retry_on_failure() {
         alice_event_tx,
         Some(multiport_config),
         Vec::new(),
+        false,
     )
     .await
     .expect("Failed to start Alice");
@@ -352,6 +355,7 @@ async fn test_relay_protocol() {
         alice_event_tx,
         Some(multiport_config.clone()),
         Vec::new(),
+        false,
     )
     .await
     .expect("Failed to start Alice");
@@ -363,6 +367,7 @@ async fn test_relay_protocol() {
         bob_event_tx,
         Some(multiport_config.clone()),
         Vec::new(),
+        false,
     )
     .await
     .expect("Failed to start Bob");
@@ -374,6 +379,7 @@ async fn test_relay_protocol() {
         charlie_event_tx,
         Some(multiport_config),
         Vec::new(),
+        false,
     )
     .await
     .expect("Failed to start Charlie");

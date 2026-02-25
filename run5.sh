@@ -1,36 +1,82 @@
 #!/bin/bash
+# run5.sh — Start all 5 mesh nodes and collect logs
+# Nodes: GCP (headless), OSX (headless), Android (Pixel 6a), iOS Device, iOS Sim
+set -euo pipefail
+
 mkdir -p logs/5mesh
 
-echo "1. Getting GCP logs in background..."
-gcloud compute ssh scmessenger-bootstrap --zone=us-central1-a --command="sudo docker logs -f \$(sudo docker ps -q)" > logs/5mesh/gcp.log 2>&1 &
+# --- GCP relay node ---
+echo "1. Streaming GCP relay logs..."
+gcloud compute ssh scmessenger-bootstrap --zone=us-central1-a \
+  --command="sudo docker logs -f \$(sudo docker ps -q)" \
+  > logs/5mesh/gcp.log 2>&1 &
 GCP_PID=$!
 
-echo "2. Getting OSX Core headless logs in background..."
-# This is already running inside an earlier background command, but let's just do it again cleanly to group the logs
-pkill scmessenger-cli || true
-cargo run -p scmessenger-cli -- relay --listen /ip4/0.0.0.0/tcp/9010 --http-port 9011 > logs/5mesh/osx.log 2>&1 &
+# --- OSX headless relay ---
+echo "2. Starting OSX relay node..."
+pkill -f scmessenger-cli 2>/dev/null || true
+sleep 0.5
+RUST_LOG=info cargo run -p scmessenger-cli -- relay \
+  --listen /ip4/0.0.0.0/tcp/9010 \
+  --http-port 9011 \
+  > logs/5mesh/osx.log 2>&1 &
 OSX_PID=$!
 
-echo "3. Starting Android App and getting logs..."
-adb wait-for-device
-adb logcat -c
-adb shell monkey -p com.scmessenger.android -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
-adb logcat | grep -i scmessenger > logs/5mesh/android.log 2>&1 &
+# --- Android (Pixel 6a) ---
+echo "3. Bringing SCMessenger to foreground on Android and collecting logs..."
+# Use 'am start' — brings app to foreground without killing it (preserves history/state)
+# Do NOT use force-stop or logcat -c here
+adb shell am start -n com.scmessenger.android/.ui.MainActivity > /dev/null 2>&1 || true
+# Capture: SCMessenger app tags + Rust bridge
+adb logcat -v time \
+  MeshRepository:V \
+  SwarmBridge:V \
+  IronCore:V \
+  CoreDelegateImpl:V \
+  MainViewModel:V \
+  BleGattClient:V \
+  BleGattServer:V \
+  "*:S" \
+  > logs/5mesh/android.log 2>&1 &
 ANDROID_PID=$!
 
-echo "4. Starting iOS Device App and getting logs..."
-# Using the pre-identified device UDID
+# --- iOS Device (iPhone 15 Pro Max) ---
+echo "4. Launching SCMessenger on iOS Device and streaming console logs..."
 IOS_DEVICE_UDID="4731D564-2F8F-5BC6-B713-D7774AF598F9"
-xcrun devicectl device process log stream --device "$IOS_DEVICE_UDID" --predicate 'subsystem == "com.scmessenger" OR process == "SCMessenger"' > logs/5mesh/ios-device.log 2>&1 &
+# devicectl (Xcode 16): launch app with --console captures stdout + NSLog to terminal
+# --terminate-existing restarts any already-running instance cleanly
+xcrun devicectl device process launch \
+  --device "$IOS_DEVICE_UDID" \
+  --console \
+  --terminate-existing \
+  "SovereignCommunications.SCMessenger" \
+  > logs/5mesh/ios-device.log 2>&1 &
 IOS_DEV_PID=$!
 
-echo "5. Starting iOS Simulator App and getting logs..."
+# --- iOS Simulator ---
+echo "5. Launching SCMessenger on iOS Simulator and collecting logs..."
 SIM_UDID="F7AAF4C8-8431-4660-93FE-6E54C559C6B9"
-xcrun simctl launch "$SIM_UDID" SovereignCommunications.SCMessenger >/dev/null 2>&1 || echo "Could not launch app on simulator. Make sure it is installed."
-xcrun simctl spawn "$SIM_UDID" log stream --style compact --predicate 'subsystem == "com.scmessenger" OR process == "SCMessenger"' > logs/5mesh/ios-sim.log 2>&1 &
+# Launch app (ignore if already running)
+xcrun simctl launch "$SIM_UDID" SovereignCommunications.SCMessenger > /dev/null 2>&1 || true
+# Stream logs: all output from the SCMessenger process
+xcrun simctl spawn "$SIM_UDID" log stream --level info --style compact \
+  --predicate 'process == "SCMessenger"' \
+  > logs/5mesh/ios-sim.log 2>&1 &
 IOS_SIM_PID=$!
 
-echo "All 5 nodes are logging to 'logs/5mesh/'."
-echo "PIDs: GCP=$GCP_PID, OSX=$OSX_PID, AND=$ANDROID_PID, IOS_DEV=$IOS_DEV_PID, IOS_SIM=$IOS_SIM_PID"
-echo "Press Ctrl+C to stop logging..."
-wait 
+echo ""
+echo "========================================"
+echo "All 5 nodes started. Logs → logs/5mesh/"
+echo "  GCP    PID=$GCP_PID      → logs/5mesh/gcp.log"
+echo "  OSX    PID=$OSX_PID      → logs/5mesh/osx.log"
+echo "  Android PID=$ANDROID_PID → logs/5mesh/android.log"
+echo "  iOS Dev PID=$IOS_DEV_PID → logs/5mesh/ios-device.log"
+echo "  iOS Sim PID=$IOS_SIM_PID → logs/5mesh/ios-sim.log"
+echo "========================================"
+echo ""
+echo "Run in another terminal: python3 analyze_mesh.py"
+echo "Press Ctrl+C to stop all logging..."
+
+# Clean shutdown on Ctrl+C
+trap "echo 'Stopping...'; kill $GCP_PID $OSX_PID $ANDROID_PID $IOS_DEV_PID $IOS_SIM_PID 2>/dev/null; exit 0" INT TERM
+wait

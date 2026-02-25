@@ -141,8 +141,16 @@ struct ConversationListView: View {
                 let displayName = !local.isEmpty
                     ? local
                     : (contact.nickname ?? String(contact.peerId.prefix(8)) + "...")
-                return Conversation(peerId: contact.peerId, peerNickname: displayName)
-            }
+                let recentMsgs = (try? repository.getConversation(peerId: contact.peerId, limit: 1)) ?? []
+                let lastMsg = recentMsgs.last
+                let lastTime = lastMsg != nil ? Date(timeIntervalSince1970: Double(lastMsg!.timestamp)) : nil
+                return Conversation(
+                    peerId: contact.peerId, 
+                    peerNickname: displayName,
+                    lastMessage: lastMsg?.content,
+                    lastMessageTime: lastTime
+                )
+            }.sorted { ($0.lastMessageTime ?? Date.distantPast) > ($1.lastMessageTime ?? Date.distantPast) }
         } catch {
             // Handle error
         }
@@ -211,14 +219,23 @@ struct ConversationRow: View {
             
             Spacer()
             
-            if conversation.unreadCount > 0 {
-                Text("\(conversation.unreadCount)")
-                    .font(Theme.labelSmall)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Theme.onPrimaryContainer)
-                    .clipShape(Capsule())
+            VStack(alignment: .trailing, spacing: 4) {
+                if let lastTime = conversation.lastMessageTime {
+                    let isToday = Calendar.current.isDateInToday(lastTime)
+                    Text(lastTime.formatted(date: isToday ? .omitted : .abbreviated, time: .shortened))
+                        .font(Theme.labelSmall)
+                        .foregroundStyle(Theme.onSurfaceVariant)
+                }
+                
+                if conversation.unreadCount > 0 {
+                    Text("\(conversation.unreadCount)")
+                        .font(Theme.labelSmall)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Theme.onPrimaryContainer)
+                        .clipShape(Capsule())
+                }
             }
         }
         .padding(.vertical, 4)
@@ -286,12 +303,20 @@ struct MessageBubble: View {
         HStack {
             if isSent { Spacer() }
             
-            Text(message.content)
-                .font(Theme.bodyMedium)
-                .padding(Theme.spacingMedium)
-                .background(isSent ? Theme.primaryContainer : Theme.surfaceVariant)
-                .foregroundStyle(isSent ? Theme.onPrimaryContainer : Theme.onSurface)
-                .cornerRadius(Theme.cornerRadiusMedium)
+            VStack(alignment: isSent ? .trailing : .leading, spacing: 2) {
+                Text(message.content)
+                    .font(Theme.bodyMedium)
+                
+                let msgDate = Date(timeIntervalSince1970: Double(message.timestamp))
+                let isToday = Calendar.current.isDateInToday(msgDate)
+                Text(msgDate.formatted(date: isToday ? .omitted : .abbreviated, time: .shortened))
+                    .font(Theme.labelSmall)
+                    .foregroundStyle(isSent ? Theme.onPrimaryContainer.opacity(0.8) : Theme.onSurface.opacity(0.8))
+            }
+            .padding(Theme.spacingMedium)
+            .background(isSent ? Theme.primaryContainer : Theme.surfaceVariant)
+            .foregroundStyle(isSent ? Theme.onPrimaryContainer : Theme.onSurface)
+            .cornerRadius(Theme.cornerRadiusMedium)
             
             if !isSent { Spacer() }
         }

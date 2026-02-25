@@ -288,7 +288,7 @@ fn test_reputation_recovery_after_failures() {
         tracker.record_relay_attempt(peer, false, 5000, 1024);
     }
 
-    let rep1 = tracker.get_reputation(&peer).unwrap();
+    let rep1 = tracker.all_reputations().into_iter().find(|r| r.peer_id == peer).unwrap();
     let score1 = rep1.score;
 
     // Then succeed
@@ -296,7 +296,7 @@ fn test_reputation_recovery_after_failures() {
         tracker.record_relay_attempt(peer, true, 100, 1024);
     }
 
-    let rep2 = tracker.get_reputation(&peer).unwrap();
+    let rep2 = tracker.all_reputations().into_iter().find(|r| r.peer_id == peer).unwrap();
     let score2 = rep2.score;
 
     assert!(score2 > score1, "Score should recover after successes");

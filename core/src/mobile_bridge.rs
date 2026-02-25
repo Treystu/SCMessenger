@@ -1318,6 +1318,65 @@ impl HistoryManager {
         let db = self.db.lock().unwrap();
         db.len() as u32
     }
+
+    /// Enforce a maximum message retention cap.
+    ///
+    /// Keeps the `max_messages` most recent messages (by timestamp) and
+    /// removes the rest.  Returns the number of pruned records.
+    pub fn enforce_retention(&self, max_messages: u32) -> Result<u32, crate::IronCoreError> {
+        let db = self.db.lock().unwrap();
+        let total = db.len();
+        if total <= max_messages as usize {
+            return Ok(0);
+        }
+
+        // Collect all (key, timestamp) pairs
+        let mut entries: Vec<(Vec<u8>, u64)> = Vec::with_capacity(total);
+        for item in db.iter() {
+            let (key, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
+            let record: MessageRecord =
+                serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
+            entries.push((key.to_vec(), record.timestamp));
+        }
+
+        // Sort by timestamp descending (newest first)
+        entries.sort_by(|a, b| b.1.cmp(&a.1));
+
+        // Remove everything after max_messages
+        let mut pruned: u32 = 0;
+        for (key, _) in entries.into_iter().skip(max_messages as usize) {
+            db.remove(key)
+                .map_err(|_| crate::IronCoreError::StorageError)?;
+            pruned += 1;
+        }
+
+        Ok(pruned)
+    }
+
+    /// Remove all messages with timestamp before the given Unix epoch seconds.
+    ///
+    /// Returns the number of pruned records.
+    pub fn prune_before(&self, before_timestamp: u64) -> Result<u32, crate::IronCoreError> {
+        let db = self.db.lock().unwrap();
+        let mut keys_to_remove = Vec::new();
+
+        for item in db.iter() {
+            let (key, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
+            let record: MessageRecord =
+                serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
+            if record.timestamp < before_timestamp {
+                keys_to_remove.push(key.to_vec());
+            }
+        }
+
+        let pruned = keys_to_remove.len() as u32;
+        for key in keys_to_remove {
+            db.remove(key)
+                .map_err(|_| crate::IronCoreError::StorageError)?;
+        }
+
+        Ok(pruned)
+    }
 }
 
 // ============================================================================

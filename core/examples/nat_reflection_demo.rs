@@ -42,13 +42,13 @@ async fn main() -> anyhow::Result<()> {
     let (event_tx2, mut event_rx2) = mpsc::channel(256);
     let (event_tx3, mut event_rx3) = mpsc::channel(256);
 
-    let swarm1 = start_swarm(keypair1, None, event_tx1).await?;
+    let swarm1 = start_swarm(keypair1, None, event_tx1, false).await?;
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let swarm2 = start_swarm(keypair2, None, event_tx2).await?;
+    let swarm2 = start_swarm(keypair2, None, event_tx2, false).await?;
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let swarm3 = start_swarm(keypair3, None, event_tx3).await?;
+    let swarm3 = start_swarm(keypair3, None, event_tx3, false).await?;
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Get listening addresses

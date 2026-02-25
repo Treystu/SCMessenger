@@ -267,7 +267,7 @@ typedef void (*UniffiCallbackInterfaceCoreDelegateMethod1)(uint64_t, RustBuffer,
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_CORE_DELEGATE_METHOD2
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_CORE_DELEGATE_METHOD2
-typedef void (*UniffiCallbackInterfaceCoreDelegateMethod2)(uint64_t, RustBuffer, RustBuffer, void* _Nonnull, 
+typedef void (*UniffiCallbackInterfaceCoreDelegateMethod2)(uint64_t, RustBuffer, RustBuffer, RustBuffer, void* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
@@ -532,6 +532,11 @@ RustBuffer uniffi_scmessenger_core_fn_method_historymanager_conversation(void*_N
 uint32_t uniffi_scmessenger_core_fn_method_historymanager_count(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_ENFORCE_RETENTION
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_ENFORCE_RETENTION
+uint32_t uniffi_scmessenger_core_fn_method_historymanager_enforce_retention(void*_Nonnull ptr, uint32_t max_messages, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_GET
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_GET
 RustBuffer uniffi_scmessenger_core_fn_method_historymanager_get(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
@@ -540,6 +545,11 @@ RustBuffer uniffi_scmessenger_core_fn_method_historymanager_get(void*_Nonnull pt
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_MARK_DELIVERED
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_MARK_DELIVERED
 void uniffi_scmessenger_core_fn_method_historymanager_mark_delivered(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_PRUNE_BEFORE
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_PRUNE_BEFORE
+uint32_t uniffi_scmessenger_core_fn_method_historymanager_prune_before(void*_Nonnull ptr, uint64_t before_timestamp, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_RECENT
@@ -1386,6 +1396,12 @@ uint16_t uniffi_scmessenger_core_checksum_method_historymanager_count(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_HISTORYMANAGER_ENFORCE_RETENTION
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_HISTORYMANAGER_ENFORCE_RETENTION
+uint16_t uniffi_scmessenger_core_checksum_method_historymanager_enforce_retention(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_HISTORYMANAGER_GET
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_HISTORYMANAGER_GET
 uint16_t uniffi_scmessenger_core_checksum_method_historymanager_get(void
@@ -1395,6 +1411,12 @@ uint16_t uniffi_scmessenger_core_checksum_method_historymanager_get(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_HISTORYMANAGER_MARK_DELIVERED
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_HISTORYMANAGER_MARK_DELIVERED
 uint16_t uniffi_scmessenger_core_checksum_method_historymanager_mark_delivered(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_HISTORYMANAGER_PRUNE_BEFORE
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_HISTORYMANAGER_PRUNE_BEFORE
+uint16_t uniffi_scmessenger_core_checksum_method_historymanager_prune_before(void
     
 );
 #endif

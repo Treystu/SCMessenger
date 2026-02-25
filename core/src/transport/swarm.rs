@@ -40,6 +40,49 @@ use std::time::SystemTime;
 use std::time::{Duration, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
+/// Returns true if a Multiaddr is globally routable and safe to add to Kademlia.
+///
+/// We exclude:
+/// - Loopback (127.x.x.x, ::1, 127.0.2.x Android special loopback)
+/// - RFC1918 private ranges (10.x, 172.16-31.x, 192.168.x)
+/// - Link-local (169.254.x.x, fe80::)
+/// - Relay circuit addresses (/p2p-circuit) — handled separately by relay reservations
+/// - Unspecified (0.0.0.0, ::)
+///
+/// Only WAN IPs and /dns* addresses are admitted to the routing table.
+/// This prevents relay nodes from trying to dial mobile peers at their
+/// internal/loopback addresses (e.g. Android 127.0.2.3) and causing
+/// rapid connect/disconnect loops.
+fn is_globally_routable_multiaddr(addr: &Multiaddr) -> bool {
+    use libp2p::multiaddr::Protocol;
+    for proto in addr.iter() {
+        match proto {
+            Protocol::Ip4(ip) => {
+                let o = ip.octets();
+                if ip.is_loopback()                            { return false; } // 127.x
+                if ip.is_unspecified()                         { return false; } // 0.0.0.0
+                if ip.is_link_local()                          { return false; } // 169.254.x
+                if o[0] == 10                                  { return false; } // RFC1918
+                if o[0] == 172 && (16..=31).contains(&o[1])   { return false; } // RFC1918
+                if o[0] == 192 && o[1] == 168                  { return false; } // RFC1918
+                if o[0] == 127 && o[1] == 0 && o[2] == 2      { return false; } // Android VPN loopback
+                if o[0] == 100 && (64..=127).contains(&o[1])  { return false; } // CGNAT (RFC6598)
+            }
+            Protocol::Ip6(ip) => {
+                if ip.is_loopback()     { return false; } // ::1
+                if ip.is_unspecified()  { return false; } // ::
+                // fe80:: link-local
+                if (ip.segments()[0] & 0xffc0) == 0xfe80 { return false; }
+                // fc00::/7 ULA
+                if (ip.segments()[0] & 0xfe00) == 0xfc00 { return false; }
+            }
+            Protocol::P2pCircuit => { return false; } // relay circuits go through relay, not kad
+            _ => {}
+        }
+    }
+    true
+}
+
 /// Pending message delivery tracking
 #[derive(Debug)]
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
@@ -499,6 +542,15 @@ pub async fn start_swarm_with_config(
         // Track peers we've already exchanged ledgers with (avoid spamming)
         let mut ledger_exchanged_peers: HashSet<PeerId> = HashSet::new();
 
+        // Track relay peers and their publicly-routable addresses for circuit reservation.
+        // When we identify a relay, we save its WAN addrs here and attempt
+        // swarm.listen_on(<relay_addr>/p2p-circuit) to register a reservation,
+        // which lets the relay dial us back on behalf of other nodes.
+        let mut relay_peer_addrs: HashMap<PeerId, Vec<Multiaddr>> = HashMap::new();
+
+        // Track relay reconnect backoff state: (peer_id, attempt_count, next_dial_at)
+        let mut relay_reconnect_pending: Vec<(PeerId, u32, std::time::Instant)> = Vec::new();
+
         // Auto-dial bootstrap nodes for cross-network discovery
         if !bootstrap_addrs.is_empty() {
             tracing::info!(
@@ -530,6 +582,9 @@ pub async fn start_swarm_with_config(
             let mut relay_budget: u32 = 200;
             let mut relay_count_this_hour: u32 = 0;
             let mut relay_hour_start = std::time::Instant::now();
+
+            // Check for pending relay reconnects frequently
+            let mut relay_reconnect_interval = tokio::time::interval(Duration::from_secs(5));
 
             loop {
                 tokio::select! {
@@ -596,6 +651,62 @@ pub async fn start_swarm_with_config(
                                 }
                             }
                         }
+                    }
+
+                    // P0.11: Relay reconnect backoff processing
+                    _ = relay_reconnect_interval.tick() => {
+                        let now = std::time::Instant::now();
+                        let mut next_pending = Vec::new();
+                        let connected_peers: HashSet<PeerId> = swarm.connected_peers().cloned().collect();
+
+                        for (peer_id, attempts, next_dial) in relay_reconnect_pending.drain(..) {
+                            if connected_peers.contains(&peer_id) {
+                                // Already connected; drop from pending queue
+                                tracing::debug!("✅ Relay {} reconnected successfully", peer_id);
+                                continue;
+                            }
+
+                            if now >= next_dial {
+                                // Time to try dialing!
+                                if let Some(addrs) = relay_peer_addrs.get(&peer_id) {
+                                    if let Some(addr) = addrs.first() {
+                                        tracing::info!(
+                                            "🔄 Attempting to re-dial relay {} (Attempt {}): {}",
+                                            peer_id, attempts + 1, addr
+                                        );
+                                        match swarm.dial(addr.clone()) {
+                                            Ok(_) => {
+                                                // Re-enqueue with backoff for next attempt if this fails.
+                                                // Backoff: 10s -> 30s -> 60s
+                                                let backoff_secs = match attempts {
+                                                    0 => 10,
+                                                    1 => 30,
+                                                    _ => 60,
+                                                };
+                                                next_pending.push((
+                                                    peer_id,
+                                                    attempts + 1,
+                                                    now + Duration::from_secs(backoff_secs),
+                                                ));
+                                            }
+                                            Err(e) => {
+                                                tracing::warn!("⚠️ Re-dial to relay {} failed immediately: {}", peer_id, e);
+                                                // Re-enqueue with max backoff
+                                                next_pending.push((
+                                                    peer_id,
+                                                    attempts + 1,
+                                                    now + Duration::from_secs(60),
+                                                ));
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Not time yet, keep in queue
+                                next_pending.push((peer_id, attempts, next_dial));
+                            }
+                        }
+                        relay_reconnect_pending = next_pending;
                     }
 
                     // Bootstrap reconnection: re-dial bootstrap nodes periodically
@@ -850,8 +961,10 @@ pub async fn start_swarm_with_config(
                                             if let Some(ref pid_str) = entry.last_peer_id {
                                                 if let Ok(pid) = pid_str.parse::<PeerId>() {
                                                     if let Ok(addr) = entry.multiaddr.parse::<Multiaddr>() {
-                                                        swarm.behaviour_mut().kademlia.add_address(&pid, addr);
-                                                        new_count += 1;
+                                                        if is_globally_routable_multiaddr(&addr) {
+                                                            swarm.behaviour_mut().kademlia.add_address(&pid, addr);
+                                                            new_count += 1;
+                                                        }
                                                     }
                                                 }
                                             }
@@ -897,12 +1010,14 @@ pub async fn start_swarm_with_config(
                                                 entries: response.peers.clone(),
                                             }).await;
 
-                                            // Add to Kademlia immediately
+                                            // Add routable addresses to Kademlia
                                             for entry in &response.peers {
                                                 if let Some(ref pid_str) = entry.last_peer_id {
                                                     if let Ok(pid) = pid_str.parse::<PeerId>() {
                                                         if let Ok(addr) = entry.multiaddr.parse::<Multiaddr>() {
-                                                            swarm.behaviour_mut().kademlia.add_address(&pid, addr);
+                                                            if is_globally_routable_multiaddr(&addr) {
+                                                                swarm.behaviour_mut().kademlia.add_address(&pid, addr);
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -970,7 +1085,9 @@ pub async fn start_swarm_with_config(
                             )) => {
                                 for (peer_id, addr) in peers {
                                     tracing::info!("mDNS discovered peer: {} at {}", peer_id, addr);
-                                    swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+                                    if is_globally_routable_multiaddr(&addr) {
+                                        swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+                                    }
 
                                     bootstrap_capability.add_peer(peer_id);
                                     let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
@@ -1019,9 +1136,16 @@ pub async fn start_swarm_with_config(
                                     );
                                 }
 
-                                // Add ALL reported addresses to Kademlia — no filtering
+                                // Add only globally-routable addresses to Kademlia.
+                                // Private/loopback/RFC1918/Android-loopback addresses are
+                                // excluded to prevent relay nodes from attempting direct
+                                // connections to mobile peers' internal interfaces.
                                 for addr in &info.listen_addrs {
-                                    swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
+                                    if is_globally_routable_multiaddr(addr) {
+                                        swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
+                                    } else {
+                                        tracing::debug!("🚫 Skipping non-routable Kademlia addr for {}: {}", peer_id, addr);
+                                    }
                                 }
 
                                 // Check if peer advertises relay capability
@@ -1030,6 +1154,49 @@ pub async fn start_swarm_with_config(
                                     tracing::info!("🔄 Peer {} is a relay node", peer_id);
                                     bootstrap_capability.add_peer(peer_id);
                                     multi_path_delivery.add_relay(peer_id);
+
+                                    // P0.5B: Register a circuit relay reservation with this relay.
+                                    // This allows the relay to accept inbound connections on our behalf
+                                    // and dial us back via /p2p/<relay_id>/p2p-circuit.
+                                    // We use the relay's WAN listen addresses from the identify info.
+                                    let routable_relay_addrs: Vec<Multiaddr> = info.listen_addrs
+                                        .iter()
+                                        .filter(|a| is_globally_routable_multiaddr(a))
+                                        .cloned()
+                                        .collect();
+
+                                    if !routable_relay_addrs.is_empty() {
+                                        relay_peer_addrs.insert(peer_id, routable_relay_addrs.clone());
+
+                                        // Pick the first routable relay address and register a circuit reservation.
+                                        // Format: /ip4/<relay-ip>/tcp/<port>/p2p/<relay-peer-id>/p2p-circuit
+                                        use libp2p::multiaddr::Protocol;
+                                        let relay_circuit_addr = routable_relay_addrs[0]
+                                            .clone()
+                                            .with(Protocol::P2p(peer_id))
+                                            .with(Protocol::P2pCircuit);
+
+                                        tracing::info!(
+                                            "📡 Attempting relay circuit reservation via {}: {}",
+                                            peer_id, relay_circuit_addr
+                                        );
+                                        match swarm.listen_on(relay_circuit_addr.clone()) {
+                                            Ok(listener_id) => tracing::info!(
+                                                "✅ Relay circuit reservation registered: {:?} via {}",
+                                                listener_id, peer_id
+                                            ),
+                                            Err(e) => tracing::warn!(
+                                                "⚠️ Could not register relay circuit reservation via {}: {}",
+                                                peer_id, e
+                                            ),
+                                        }
+                                    } else {
+                                        tracing::debug!(
+                                            "🔄 Relay {} has no WAN-routable addresses yet; \
+                                             will retry reservation after reconnect",
+                                            peer_id
+                                        );
+                                    }
                                 }
 
                                 // Emit event for application layer
@@ -1083,15 +1250,29 @@ pub async fn start_swarm_with_config(
                                 connection_tracker.remove_connection(&peer_id);
                                 // Allow re-exchange if they reconnect
                                 ledger_exchanged_peers.remove(&peer_id);
+
+                                // P0.11: If this was a known relay, schedule a reconnect with backoff.
+                                // Backoff: 10s → 30s → 60s → 60s (capped).
+                                if relay_peer_addrs.contains_key(&peer_id) {
+                                    tracing::info!(
+                                        "🔄 Lost relay peer {}; scheduling reconnect with backoff",
+                                        peer_id
+                                    );
+                                    relay_reconnect_pending.push((peer_id, 0, std::time::Instant::now()));
+                                }
+
                                 let _ = event_tx.send(SwarmEvent2::PeerDisconnected(peer_id)).await;
                             }
 
                             // Handle outgoing connection errors gracefully — don't panic
                             SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                                // Downgraded to debug: Kademlia DHT explores many stale addresses
+                                // from the routing table; timeouts here are expected churn, not
+                                // actionable errors. Relay/identity failures surface at info/warn.
                                 if let Some(pid) = peer_id {
-                                    tracing::warn!("⚠ Outgoing connection error to {}: {}", pid, error);
+                                    tracing::debug!("⚠ Outgoing connection error to {}: {}", pid, error);
                                 } else {
-                                    tracing::warn!("⚠ Outgoing connection error: {}", error);
+                                    tracing::debug!("⚠ Outgoing connection error: {}", error);
                                 }
                             }
 
@@ -1213,7 +1394,9 @@ pub async fn start_swarm_with_config(
                             }
 
                             SwarmCommand::AddKadAddress { peer_id, addr } => {
-                                swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+                                if is_globally_routable_multiaddr(&addr) {
+                                    swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+                                }
                             }
 
                             SwarmCommand::SubscribeTopic { topic } => {
@@ -1469,7 +1652,9 @@ pub async fn start_swarm_with_config(
                                     .await;
                             }
                             SwarmCommand::AddKadAddress { peer_id, addr } => {
-                                swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+                                if is_globally_routable_multiaddr(&addr) {
+                                    swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+                                }
                             }
                             SwarmCommand::SubscribeTopic { topic } => {
                                 if !subscribed_topics.contains(&topic) {
@@ -1701,7 +1886,9 @@ pub async fn start_swarm_with_config(
                                 identify::Event::Received { peer_id, info, .. }
                             )) => {
                                 for addr in &info.listen_addrs {
-                                    swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
+                                    if is_globally_routable_multiaddr(addr) {
+                                        swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
+                                    }
                                 }
                                 if let Some(observed_addr) =
                                     ConnectionTracker::extract_socket_addr(&info.observed_addr)
@@ -1734,10 +1921,11 @@ pub async fn start_swarm_with_config(
                                 let _ = event_tx.send(SwarmEvent2::PeerDisconnected(peer_id)).await;
                             }
                             SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                                // Kademlia churn — expected at debug level
                                 if let Some(pid) = peer_id {
-                                    tracing::warn!("⚠ Outgoing connection error to {}: {}", pid, error);
+                                    tracing::debug!("⚠ Outgoing connection error to {}: {}", pid, error);
                                 } else {
-                                    tracing::warn!("⚠ Outgoing connection error: {}", error);
+                                    tracing::debug!("⚠ Outgoing connection error: {}", error);
                                 }
                             }
                             SwarmEvent::IncomingConnectionError { local_addr, send_back_addr, error, .. } => {

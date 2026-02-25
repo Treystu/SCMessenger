@@ -32,6 +32,7 @@ async fn test_address_observation_between_peers() {
         alice_keypair,
         Some("/ip4/127.0.0.1/tcp/0".parse().unwrap()),
         alice_event_tx,
+        false,
     )
     .await
     .expect("Failed to start Alice's swarm");
@@ -40,6 +41,7 @@ async fn test_address_observation_between_peers() {
         bob_keypair,
         Some("/ip4/127.0.0.1/tcp/0".parse().unwrap()),
         bob_event_tx,
+        false,
     )
     .await
     .expect("Failed to start Bob's swarm");

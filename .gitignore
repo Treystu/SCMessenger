@@ -5,6 +5,8 @@ reference/rust-1.92.0-aarch64-unknown-linux-gnu.tar.gz
 
 # SCMessenger Runtime
 *.log
+*.logarchive
+system_logs.*
 .scm.pid
 ds_store
 .DS_Store

@@ -597,6 +597,7 @@ async fn start_swarm_runtime(
         event_tx,
         None,
         bootstrap_multiaddrs,
+        false, // WASM browser clients are full user nodes, not headless relays
     )
     .await
     .map_err(|e| JsValue::from_str(&format!("Failed to start swarm: {}", e)))?;

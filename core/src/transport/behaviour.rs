@@ -238,7 +238,7 @@ impl IronCoreBehaviour {
         let identify = identify::Behaviour::new(
             identify::Config::new("/sc/id/1.0.0".to_string(), keypair.public())
                 .with_push_listen_addr_updates(true)
-                .with_interval(Duration::from_secs(30)) // More frequent than before (was 60s)
+                .with_interval(Duration::from_secs(60)) // Reduced frequency to prevent identify storms
                 .with_agent_version(format!("scmessenger/0.1.0/{}/relay/{}", type_str, peer_id)),
         );
 

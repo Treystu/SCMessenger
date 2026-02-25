@@ -5,6 +5,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -51,6 +54,8 @@ fun OnboardingScreen(
     var showImportDialog by remember { mutableStateOf(false) }
     var importCode by remember { mutableStateOf("") }
     var nickname by remember { mutableStateOf("") }
+    var hasAcceptedConsent by remember { mutableStateOf(false) }
+    var consentChecked by remember { mutableStateOf(false) }
 
     LaunchedEffect(isReady) {
         if (isReady) {
@@ -118,7 +123,71 @@ fun OnboardingScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // ── Consent Gate ──
+            if (!hasAcceptedConsent) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "Before You Begin",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+
+                        ConsentInfoItem(
+                            icon = Icons.Filled.Lock,
+                            title = "Keypair Identity",
+                            detail = "Your identity is a cryptographic keypair stored only on this device. No phone numbers, emails, or accounts."
+                        )
+                        ConsentInfoItem(
+                            icon = Icons.Filled.Shield,
+                            title = "Local-Only Data & E2E Encryption",
+                            detail = "All data is stored locally. Messages are end-to-end encrypted. Only the recipient can read them."
+                        )
+                        ConsentInfoItem(
+                            icon = Icons.Filled.CheckCircle,
+                            title = "Relay Participation",
+                            detail = "Your device relays encrypted messages for others. This is how the mesh network operates."
+                        )
+                        ConsentInfoItem(
+                            icon = Icons.Filled.Warning,
+                            title = "Alpha Software",
+                            detail = "Expect bugs and breaking changes. Do not rely on this for critical communications."
+                        )
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Checkbox(
+                                checked = consentChecked,
+                                onCheckedChange = { consentChecked = it }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "I understand and accept these terms",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+
+                        Button(
+                            onClick = { hasAcceptedConsent = true },
+                            enabled = consentChecked,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Continue")
+                        }
+                    }
+                }
+            } else {
 
             if (isCreating) {
                 CircularProgressIndicator()
@@ -187,6 +256,37 @@ fun OnboardingScreen(
                     Text("Import Contact / Join Existing Mesh")
                 }
             }
+            } // end consent else
+        }
+    }
+}
+
+@Composable
+private fun ConsentInfoItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    detail: String
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Column {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                text = detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

@@ -415,6 +415,16 @@ interface HistoryManager {
     HistoryStats stats();
 
     u32 count();
+
+    /// Enforce a maximum message cap — keeps ``max_messages`` newest, prunes the rest.
+    /// Returns the number of pruned records.
+    [Throws=IronCoreError]
+    u32 enforce_retention(u32 max_messages);
+
+    /// Remove all messages older than ``before_timestamp`` (Unix epoch seconds).
+    /// Returns the number of pruned records.
+    [Throws=IronCoreError]
+    u32 prune_before(u64 before_timestamp);
 };
 
 // ============================================================================

@@ -1,0 +1,32 @@
+ M DOCUMENTATION.md
+ M REMAINING_WORK_TRACKING.md
+ M android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt
+ M android/app/src/main/java/com/scmessenger/android/ui/MainActivity.kt
+ M android/app/src/main/java/com/scmessenger/android/ui/MeshApp.kt
+ M android/app/src/main/java/com/scmessenger/android/ui/dashboard/TopologyScreen.kt
+ M android/app/src/main/java/com/scmessenger/android/ui/screens/ConversationsScreen.kt
+ M android/app/src/main/java/com/scmessenger/android/ui/screens/DashboardScreen.kt
+ M android/app/src/main/java/com/scmessenger/android/ui/screens/OnboardingScreen.kt
+ M android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt
+ M android/app/src/main/java/com/scmessenger/android/ui/viewmodels/DashboardViewModel.kt
+ M android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MainViewModel.kt
+ M android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MeshServiceViewModel.kt
+ M android/app/src/main/java/com/scmessenger/android/utils/ShareReceiver.kt
+ M android/verify-build-setup.sh
+ M core/src/api.udl
+ M core/src/contacts_bridge.rs
+ M docs/CHECKED_FILES.md
+ M docs/CURRENT_STATE.md
+ M docs/DOC_PASS_TRACKER.md
+ M docs/TRIPLE_CHECK_REPORT.md
+ M iOS/SCMessenger/SCMessenger.xcodeproj/project.xcworkspace/xcuserdata/christymaxwell.xcuserdatad/UserInterfaceState.xcuserstate
+ M iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift
+ M iOS/SCMessenger/SCMessenger/Generated/api.swift
+ M iOS/SCMessenger/SCMessenger/Generated/apiFFI.h
+ M iOS/SCMessenger/SCMessenger/Info.plist
+ M iOS/SCMessenger/SCMessenger/Views/Contacts/ContactsListView.swift
+ M iOS/SCMessenger/SCMessenger/Views/Navigation/MainTabView.swift
+ M iOS/SCMessenger/SCMessenger/Views/Onboarding/OnboardingFlow.swift
+ M iOS/verify-test.sh
+?? docs/IMPLEMENTATION_PATH_BUCKETS.md
+?? docs/_ios_migration_pre_status.txt

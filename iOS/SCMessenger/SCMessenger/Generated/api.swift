@@ -999,9 +999,21 @@ public protocol HistoryManagerProtocol : AnyObject {
     
     func count()  -> UInt32
     
+    /**
+     * Enforce a maximum message cap — keeps ``max_messages`` newest, prunes the rest.
+     * Returns the number of pruned records.
+     */
+    func enforceRetention(maxMessages: UInt32) throws  -> UInt32
+    
     func get(id: String) throws  -> MessageRecord?
     
     func markDelivered(id: String) throws 
+    
+    /**
+     * Remove all messages older than ``before_timestamp`` (Unix epoch seconds).
+     * Returns the number of pruned records.
+     */
+    func pruneBefore(beforeTimestamp: UInt64) throws  -> UInt32
     
     func recent(peerFilter: String?, limit: UInt32) throws  -> [MessageRecord]
     
@@ -1098,6 +1110,18 @@ open func count() -> UInt32 {
 })
 }
     
+    /**
+     * Enforce a maximum message cap — keeps ``max_messages`` newest, prunes the rest.
+     * Returns the number of pruned records.
+     */
+open func enforceRetention(maxMessages: UInt32)throws  -> UInt32 {
+    return try  FfiConverterUInt32.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_historymanager_enforce_retention(self.uniffiClonePointer(),
+        FfiConverterUInt32.lower(maxMessages),$0
+    )
+})
+}
+    
 open func get(id: String)throws  -> MessageRecord? {
     return try  FfiConverterOptionTypeMessageRecord.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_historymanager_get(self.uniffiClonePointer(),
@@ -1111,6 +1135,18 @@ open func markDelivered(id: String)throws  {try rustCallWithError(FfiConverterTy
         FfiConverterString.lower(id),$0
     )
 }
+}
+    
+    /**
+     * Remove all messages older than ``before_timestamp`` (Unix epoch seconds).
+     * Returns the number of pruned records.
+     */
+open func pruneBefore(beforeTimestamp: UInt64)throws  -> UInt32 {
+    return try  FfiConverterUInt32.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_historymanager_prune_before(self.uniffiClonePointer(),
+        FfiConverterUInt64.lower(beforeTimestamp),$0
+    )
+})
 }
     
 open func recent(peerFilter: String?, limit: UInt32)throws  -> [MessageRecord] {
@@ -3943,7 +3979,7 @@ public protocol CoreDelegate : AnyObject {
     
     func onPeerDisconnected(peerId: String) 
     
-    func onPeerIdentified(peerId: String, listenAddrs: [String]) 
+    func onPeerIdentified(peerId: String, agentVersion: String, listenAddrs: [String]) 
     
     func onMessageReceived(senderId: String, senderPublicKeyHex: String, messageId: String, senderTimestamp: UInt64, data: Data) 
     
@@ -4016,6 +4052,7 @@ fileprivate struct UniffiCallbackInterfaceCoreDelegate {
         onPeerIdentified: { (
             uniffiHandle: UInt64,
             peerId: RustBuffer,
+            agentVersion: RustBuffer,
             listenAddrs: RustBuffer,
             uniffiOutReturn: UnsafeMutableRawPointer,
             uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
@@ -4027,6 +4064,7 @@ fileprivate struct UniffiCallbackInterfaceCoreDelegate {
                 }
                 return uniffiObj.onPeerIdentified(
                      peerId: try FfiConverterString.lift(peerId),
+                     agentVersion: try FfiConverterString.lift(agentVersion),
                      listenAddrs: try FfiConverterSequenceString.lift(listenAddrs)
                 )
             }
@@ -4694,10 +4732,16 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_historymanager_count() != 35021) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_historymanager_enforce_retention() != 40579) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_historymanager_get() != 40713) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_historymanager_mark_delivered() != 49295) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_historymanager_prune_before() != 62632) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_historymanager_recent() != 56247) {
@@ -4940,7 +4984,7 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_coredelegate_on_peer_disconnected() != 46680) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_scmessenger_core_checksum_method_coredelegate_on_peer_identified() != 56716) {
+    if (uniffi_scmessenger_core_checksum_method_coredelegate_on_peer_identified() != 17729) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_coredelegate_on_message_received() != 39348) {
