@@ -50,11 +50,19 @@ struct SCMessengerApp: App {
         backgroundService = MeshBackgroundService(meshRepository: meshRepository)
         backgroundService?.registerBackgroundTasks()
         
-        // Initialize repository
+        // Initialize + start repository so identity/service state is hydrated at launch.
         do {
             try meshRepository.initialize()
+            meshRepository.start()
+            if let info = meshRepository.getIdentityInfo() {
+                let hasNickname = !(info.nickname?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                hasCompletedOnboarding = info.initialized && hasNickname
+            } else {
+                hasCompletedOnboarding = false
+            }
         } catch {
             print("❌ Failed to initialize repository: \(error)")
+            hasCompletedOnboarding = false
         }
     }
     

@@ -24,6 +24,11 @@ class BleGattClient(
     private val onIdentityReceived: (deviceAddress: String, identity: ByteArray) -> Unit,
     private val onDataReceived: (deviceAddress: String, data: ByteArray) -> Unit
 ) {
+    companion object {
+        // Initial identity beacon can arrive before the peer publishes final nickname.
+        // Re-read shortly after connect to surface nickname promptly in Nearby UI.
+        private val IDENTITY_REFRESH_DELAYS_MS = listOf(900L, 2200L)
+    }
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
 
@@ -225,6 +230,7 @@ class BleGattClient(
 
                     // Read identity beacon
                     readIdentityBeacon(gatt)
+                    scheduleIdentityRefreshReads(deviceAddress)
 
                     // Enable notifications for message characteristic
                     enableMessageNotifications(gatt)
@@ -336,6 +342,17 @@ class BleGattClient(
             Timber.e(e, "Security exception reading identity")
         } catch (e: Exception) {
             Timber.e(e, "Failed to read identity beacon")
+        }
+    }
+
+    private fun scheduleIdentityRefreshReads(deviceAddress: String) {
+        IDENTITY_REFRESH_DELAYS_MS.forEach { delayMs ->
+            scope.launch {
+                delay(delayMs)
+                val gatt = activeConnections[deviceAddress] ?: return@launch
+                if (connectionStates[deviceAddress] != ConnectionState.CONNECTED) return@launch
+                readIdentityBeacon(gatt)
+            }
         }
     }
 

@@ -289,7 +289,7 @@ Deterministic, event-driven transitions to ensure cross-platform parity.
 
 ## 9) Deliverables checklist for v0.1.2-alpha
 
-- [ ] Migration framework validated across Core/iOS/Android/WASM.
+- [x] Migration framework validated across Core/iOS/Android/WASM.
 - [ ] Identity/contact/message continuity verified across update flows.
 - [x] Unified connection orchestrator live across all clients.
 - [ ] GCP bootstrap + direct P2P + relay fallback validated.
@@ -311,11 +311,18 @@ Deterministic, event-driven transitions to ensure cross-platform parity.
   - structured diagnostics export implemented for mobile and web clients.
   - release notes, parity audit, and partner test playbook documents added.
   - storage layout/schema hardening and persistent outbox/inbox initialization implemented.
+  - schema v2 legacy-root migration added for identity/outbox/inbox continuity on upgrade.
+  - identity manager now hydrates persisted identity+nickname on startup without auto-generation.
+  - continuity tests added for identity restart hydration, legacy migration, contacts/local nickname persistence, and history delivery-state persistence.
+  - Android onboarding completion now waits for successful identity+nickname persistence (no premature onboarding bypass).
+  - Android and iOS now trigger deferred swarm startup immediately after identity/nickname creation to avoid stalled internet transport after first-run onboarding.
+  - CLI headless relay mode now persists a stable libp2p network key (`relay_network_key.pb`) so bootstrap peer IDs survive restarts without requiring user identity initialization.
+  - Android+iOS build pipelines revalidated after migration changes.
+  - wasm target checks revalidated with WebRTC deprecation cleanup (`set_sdp`).
 - Remaining (requires additional feature work and/or external validation):
-  - full migration continuity signoff across mobile/web upgrade runs.
+  - full migration continuity signoff across real mobile/web package upgrade runs.
   - cross-network + relay fallback operational matrix signoff against live infrastructure.
   - ACK/path-switch reliability acceptance across partner scenarios.
-  - parity audit closure and release-note/test-playbook publication.
 
 ---
 

@@ -167,26 +167,134 @@ pub struct IronCore {
     delegate: Arc<RwLock<Option<Arc<dyn CoreDelegate>>>>,
 }
 
-const STORAGE_SCHEMA_VERSION: u32 = 1;
+const STORAGE_SCHEMA_VERSION: u32 = 2;
+
+const LEGACY_IDENTITY_KEY: &[u8] = b"identity_keys";
+const LEGACY_NICKNAME_KEY: &[u8] = b"identity_nickname";
+const LEGACY_OUTBOX_PREFIX: &[u8] = b"outbox_";
+const LEGACY_INBOX_SEEN_KEY: &[u8] = b"inbox_seen_ids";
+const LEGACY_INBOX_MSG_PREFIX: &[u8] = b"inbox_msg_";
+const LEGACY_ROOT_MIGRATION_SENTINEL: &str = "LEGACY_ROOT_SLED_MIGRATED";
+
+fn read_schema_version(version_file: &Path) -> Result<u32, IronCoreError> {
+    if !version_file.exists() {
+        return Ok(0);
+    }
+    let current = std::fs::read_to_string(version_file).map_err(|_| IronCoreError::StorageError)?;
+    current
+        .trim()
+        .parse::<u32>()
+        .map_err(|_| IronCoreError::StorageError)
+}
+
+fn has_legacy_root_sled(base: &Path) -> bool {
+    // Sled stores these files at the DB root. If present, old single-db layout
+    // may still hold identity/outbox/inbox keys.
+    base.join("conf").exists() || base.join("db").exists()
+}
+
+fn copy_missing_key(
+    source: &sled::Db,
+    destination: &sled::Db,
+    key: &[u8],
+) -> Result<bool, IronCoreError> {
+    if destination
+        .get(key)
+        .map_err(|_| IronCoreError::StorageError)?
+        .is_some()
+    {
+        return Ok(false);
+    }
+    if let Some(value) = source.get(key).map_err(|_| IronCoreError::StorageError)? {
+        destination
+            .insert(key, value)
+            .map_err(|_| IronCoreError::StorageError)?;
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+fn copy_missing_prefix(
+    source: &sled::Db,
+    destination: &sled::Db,
+    prefix: &[u8],
+) -> Result<usize, IronCoreError> {
+    let mut copied = 0usize;
+    for item in source.scan_prefix(prefix) {
+        let (key, value) = item.map_err(|_| IronCoreError::StorageError)?;
+        if destination
+            .get(&key)
+            .map_err(|_| IronCoreError::StorageError)?
+            .is_none()
+        {
+            destination
+                .insert(key, value)
+                .map_err(|_| IronCoreError::StorageError)?;
+            copied += 1;
+        }
+    }
+    Ok(copied)
+}
+
+fn migrate_legacy_root_store(base: &Path) -> Result<(), IronCoreError> {
+    let sentinel = base.join(LEGACY_ROOT_MIGRATION_SENTINEL);
+    if sentinel.exists() || !has_legacy_root_sled(base) {
+        return Ok(());
+    }
+
+    let legacy = sled::open(base).map_err(|_| IronCoreError::StorageError)?;
+    let identity_db = sled::open(base.join("identity")).map_err(|_| IronCoreError::StorageError)?;
+    let outbox_db = sled::open(base.join("outbox")).map_err(|_| IronCoreError::StorageError)?;
+    let inbox_db = sled::open(base.join("inbox")).map_err(|_| IronCoreError::StorageError)?;
+
+    let mut copied_keys = 0usize;
+    copied_keys += usize::from(copy_missing_key(
+        &legacy,
+        &identity_db,
+        LEGACY_IDENTITY_KEY,
+    )?);
+    copied_keys += usize::from(copy_missing_key(
+        &legacy,
+        &identity_db,
+        LEGACY_NICKNAME_KEY,
+    )?);
+    copied_keys += copy_missing_prefix(&legacy, &outbox_db, LEGACY_OUTBOX_PREFIX)?;
+    copied_keys += usize::from(copy_missing_key(&legacy, &inbox_db, LEGACY_INBOX_SEEN_KEY)?);
+    copied_keys += copy_missing_prefix(&legacy, &inbox_db, LEGACY_INBOX_MSG_PREFIX)?;
+
+    identity_db
+        .flush()
+        .map_err(|_| IronCoreError::StorageError)?;
+    outbox_db.flush().map_err(|_| IronCoreError::StorageError)?;
+    inbox_db.flush().map_err(|_| IronCoreError::StorageError)?;
+
+    std::fs::write(&sentinel, format!("migrated_keys={copied_keys}\n"))
+        .map_err(|_| IronCoreError::StorageError)?;
+    tracing::info!(
+        "Legacy root sled migration completed (copied {} key(s))",
+        copied_keys
+    );
+    Ok(())
+}
 
 fn ensure_storage_layout(storage_path: &str) -> Result<(), IronCoreError> {
     let base = Path::new(storage_path);
+    std::fs::create_dir_all(base).map_err(|_| IronCoreError::StorageError)?;
     std::fs::create_dir_all(base.join("identity")).map_err(|_| IronCoreError::StorageError)?;
     std::fs::create_dir_all(base.join("outbox")).map_err(|_| IronCoreError::StorageError)?;
     std::fs::create_dir_all(base.join("inbox")).map_err(|_| IronCoreError::StorageError)?;
 
     let version_file = base.join("SCHEMA_VERSION");
-    if version_file.exists() {
-        let current =
-            std::fs::read_to_string(&version_file).map_err(|_| IronCoreError::StorageError)?;
-        let current = current
-            .trim()
-            .parse::<u32>()
-            .map_err(|_| IronCoreError::StorageError)?;
-        if current > STORAGE_SCHEMA_VERSION {
-            return Err(IronCoreError::StorageError);
-        }
-    } else {
+    let current = read_schema_version(&version_file)?;
+    if current > STORAGE_SCHEMA_VERSION {
+        return Err(IronCoreError::StorageError);
+    }
+
+    if current < 2 {
+        migrate_legacy_root_store(base)?;
+    }
+
+    if current != STORAGE_SCHEMA_VERSION {
         std::fs::write(&version_file, STORAGE_SCHEMA_VERSION.to_string())
             .map_err(|_| IronCoreError::StorageError)?;
     }
@@ -284,13 +392,8 @@ impl IronCore {
 
         tracing::info!("Iron Core V2 starting...");
 
-        // Initialize identity if not already done
-        if self.identity.read().keys().is_none() {
-            self.identity
-                .write()
-                .initialize()
-                .map_err(|_| IronCoreError::StorageError)?;
-        }
+        // Identity lifecycle is explicit. Do not auto-generate keys on service start.
+        // This preserves clean-wipe onboarding semantics and avoids silent identity drift.
 
         *running = true;
         tracing::info!("Iron Core V2 started");
@@ -378,7 +481,8 @@ impl IronCore {
         if payload.version != 1 {
             return Err(IronCoreError::InvalidInput);
         }
-        let key_bytes = hex::decode(payload.secret_key_hex).map_err(|_| IronCoreError::InvalidInput)?;
+        let key_bytes =
+            hex::decode(payload.secret_key_hex).map_err(|_| IronCoreError::InvalidInput)?;
         let mut identity = self.identity.write();
         identity
             .import_key_bytes(&key_bytes)
@@ -930,14 +1034,61 @@ mod tests {
     }
 
     #[test]
-    fn test_auto_initialize_on_start() {
+    fn test_start_does_not_auto_initialize_identity() {
         let core = IronCore::new();
         core.start().unwrap();
 
         let info = core.get_identity_info();
-        assert!(info.initialized);
+        assert!(!info.initialized);
 
         core.stop();
+    }
+
+    #[test]
+    fn test_with_storage_hydrates_existing_identity_without_initialize_call() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_string_lossy().to_string();
+
+        let first = IronCore::with_storage(path.clone());
+        first.initialize_identity().unwrap();
+        first.set_nickname("persisted-hydrate".to_string()).unwrap();
+        let original_identity = first.get_identity_info().identity_id;
+        drop(first);
+
+        let second = IronCore::with_storage(path);
+        let reloaded = second.get_identity_info();
+        assert!(reloaded.initialized);
+        assert_eq!(reloaded.nickname.as_deref(), Some("persisted-hydrate"));
+        assert_eq!(reloaded.identity_id, original_identity);
+    }
+
+    #[test]
+    fn test_with_storage_migrates_legacy_root_identity_layout() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_string_lossy().to_string();
+
+        // Simulate pre-schema-split storage where identity keys lived in root sled.
+        let legacy_store = identity::IdentityStore::persistent(&path).unwrap();
+        let legacy_keys = identity::IdentityKeys::generate();
+        legacy_store.save_keys(&legacy_keys).unwrap();
+        legacy_store.save_nickname("legacy-nick").unwrap();
+        drop(legacy_store);
+
+        let core = IronCore::with_storage(path.clone());
+        let info = core.get_identity_info();
+        assert!(info.initialized);
+        assert_eq!(
+            info.public_key_hex.as_deref(),
+            Some(legacy_keys.public_key_hex().as_str())
+        );
+        assert_eq!(info.nickname.as_deref(), Some("legacy-nick"));
+
+        let schema =
+            std::fs::read_to_string(std::path::Path::new(&path).join("SCHEMA_VERSION")).unwrap();
+        assert_eq!(schema.trim(), STORAGE_SCHEMA_VERSION.to_string());
+        assert!(std::path::Path::new(&path)
+            .join(LEGACY_ROOT_MIGRATION_SENTINEL)
+            .exists());
     }
 
     #[test]

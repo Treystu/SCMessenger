@@ -40,11 +40,16 @@ Owner policy constraints (2026-02-23):
 
 7. Nearby Peer Discovery and Identity Federation (Android Focus)
    - [x] Prevent permission-race startup regression: Android mesh now permission-gates BLE/WiFi init and auto-retries transport init when runtime permissions are granted (no restart required).
-   - [ ] Ensure Bluetooth, LAN, and Relay discovery are accounted for and routed to Mesh tab.
-   - [ ] Display total node count (headless and full) in Mesh UI.
-   - [ ] Fix nickname federation (ensure nicknames are correctly passed to neighbors over BLE/Swarm).
-   - [ ] Fix iOS -> Android nearby identity nickname propagation (Android currently discovers peer identity/public key but often misses federated nickname).
-   - [ ] Implement local nickname overrides in contacts (show both official and private nicknames).
+   - [x] Ensure Bluetooth, LAN, and Relay discovery are accounted for and routed to Mesh tab.
+   - [x] Display total node count (headless and full) in Mesh UI.
+   - [x] Fix nickname federation (ensure nicknames are correctly passed to neighbors over BLE/Swarm).
+   - [x] Fix iOS -> Android nearby identity nickname propagation (Android currently discovers peer identity/public key but often misses federated nickname).
+   - [x] Implement local nickname overrides in contacts (show both official and private nicknames).
+   - Outcome (2026-02-24):
+     - Android and iOS repositories now emit deduplicated identity/connected discovery events for BLE + internet peers, including headless relay visibility.
+     - Dashboard surfaces aggregate full/headless totals from canonical discovery state.
+     - BLE identity reads now perform delayed refresh pulls after initial connect to capture nickname updates quickly.
+     - Contacts screens display local override nickname as primary with federated nickname retained as secondary (`@nickname`) on both mobile clients.
 
 8. Android WiFi Aware physical-device validation
    - File: `android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt`
@@ -208,9 +213,15 @@ Owner policy constraints (2026-02-23):
   - Added core storage layout/schema guard (`SCHEMA_VERSION`) and explicit `identity/`, `outbox/`, `inbox/` sub-store initialization.
   - `IronCore::with_storage()` now initializes persistent inbox/outbox backends (not memory-only fallback by default).
   - Added core persistence restart tests for inbox/outbox continuity under storage-backed initialization.
+  - Added schema v2 legacy-root migration to copy old identity/outbox/inbox keys into split sub-stores on upgrade.
+  - Identity manager now hydrates persisted identity/nickname on startup without auto-generating fresh identities.
+  - Added restart continuity tests for identity hydration, legacy-root migration, contacts (including local nickname), and history delivery-state persistence.
+  - Android onboarding now waits for confirmed identity creation + nickname persistence before completing first-run flow.
+  - Android/iOS repository flows now explicitly resume deferred swarm startup after identity/nickname creation, closing a first-run internet transport stall path.
+  - CLI relay mode now uses persisted headless network identity (`storage/relay_network_key.pb`) so relay peer IDs remain stable across process restarts.
 - Remaining:
   - Platform-level upgrade simulations on Android/iOS/WASM package installs with real prior-app data.
-  - Legacy-store automatic import fallback verification in mobile startup paths.
+  - End-to-end package upgrade evidence capture (device install/update logs + retained chat transcript checks).
 
 ## Priority 2: Documentation Completion and Governance
 

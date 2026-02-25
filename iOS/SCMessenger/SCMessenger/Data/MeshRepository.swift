@@ -39,8 +39,14 @@ final class MeshRepository {
         static let service = "com.scmessenger.identity"
         static let account = "identity_backup_v1"
     }
+    private enum InstallMarker {
+        static let key = "mesh_install_marker_v1"
+    }
     private let logger = Logger(subsystem: "com.scmessenger", category: "Repository")
     private let storagePath: String
+    private let diagnosticsLogFileName = "mesh_diagnostics.log"
+    private var diagnosticsBuffer: [String] = []
+    private let diagnosticsMaxLines = 800
 
     // MARK: - Bootstrap Nodes for NAT Traversal
 
@@ -88,11 +94,16 @@ final class MeshRepository {
     private var coreDelegateImpl: CoreDelegateImpl?
     private var pendingOutboxRetryTask: Task<Void, Never>?
     private var lastRelayBootstrapDialAt: Date = .distantPast
+    private var dialThrottleState: [String: (attempts: Int, nextAllowedAt: Date)] = [:]
     private let receiptAwaitSeconds: UInt64 = 8
     private var identitySyncSentPeers: Set<String> = []
 
     private var pendingOutboxURL: URL {
         URL(fileURLWithPath: storagePath).appendingPathComponent("pending_outbox.json")
+    }
+
+    private var diagnosticsLogURL: URL {
+        URL(fileURLWithPath: storagePath).appendingPathComponent(diagnosticsLogFileName)
     }
 
     private struct RoutingHints {
@@ -155,11 +166,23 @@ final class MeshRepository {
         var transport: MeshEventBus.TransportType
     }
 
+    private struct IdentityEmissionSignature: Equatable {
+        let canonicalPeerId: String
+        let publicKey: String
+        let nickname: String?
+        let libp2pPeerId: String?
+        let blePeerId: String?
+    }
+
     // Device state for auto-adjustment
     private var currentBatteryPct: UInt8 = 100
     private var currentIsCharging: Bool = true
     private var currentMotionState: MotionState = .unknown
     private var lastAppliedPowerSnapshot: String?
+    private var identityEmissionCache: [String: (signature: IdentityEmissionSignature, emittedAt: Date)] = [:]
+    private let identityReemitInterval: TimeInterval = 15
+    private var connectedEmissionCache: [String: Date] = [:]
+    private let connectedReemitInterval: TimeInterval = 15
 
     // MARK: - Published State
 
@@ -235,6 +258,9 @@ final class MeshRepository {
         values.isExcludedFromBackup = true
         var mutableMeshPath = meshPath
         try? mutableMeshPath.setResourceValues(values)
+
+        reconcileInstallScopedIdentityState()
+        appendDiagnostic("repo_init storage=\(self.storagePath)")
     }
 
     /// Initialize all managers
@@ -337,6 +363,7 @@ final class MeshRepository {
     /// Start the mesh service with configuration
     func startMeshService(config: MeshServiceConfig) throws {
         logger.info("Starting mesh service")
+        appendDiagnostic("service_start requested")
 
         guard serviceState == .stopped else {
             logger.warning("Service already started or starting")
@@ -371,13 +398,6 @@ final class MeshRepository {
             ironCore?.setDelegate(delegate: coreDelegate)
             logger.info("CoreDelegate registered for Rust->Swift callbacks")
 
-            // Ensure identity exists (foundational requirement)
-            if !isIdentityInitialized() {
-                logger.info("Auto-initializing new identity for first run")
-                try? ironCore?.initializeIdentity()
-                try? ensureLocalIdentityFederation()
-            }
-
             // Broadcast BLE identity beacon so nearby peers can read our public key
             broadcastIdentityBeacon()
 
@@ -408,10 +428,12 @@ final class MeshRepository {
             Task { await flushPendingOutbox(reason: "service_started") }
 
             logger.info("✓ Mesh service started successfully")
+            appendDiagnostic("service_start success")
         } catch {
             serviceState = .stopped
             statusEvents.send(.serviceStateChanged(.stopped))
             logger.error("Failed to start mesh service: \(error.localizedDescription)")
+            appendDiagnostic("service_start failure error=\(error.localizedDescription)")
             throw error
         }
     }
@@ -419,6 +441,7 @@ final class MeshRepository {
     /// Stop the mesh service
     func stopMeshService() {
         logger.info("Stopping mesh service")
+        appendDiagnostic("service_stop requested")
 
         guard serviceState == .running else {
             logger.warning("Service not running")
@@ -432,6 +455,8 @@ final class MeshRepository {
         pendingOutboxRetryTask?.cancel()
         pendingOutboxRetryTask = nil
         identitySyncSentPeers.removeAll()
+        identityEmissionCache.removeAll()
+        connectedEmissionCache.removeAll()
 
         serviceState = .stopped
         statusEvents.send(.serviceStateChanged(.stopped))
@@ -440,6 +465,7 @@ final class MeshRepository {
         blePeripheralManager?.stopAdvertising()
 
         logger.info("✓ Mesh service stopped")
+        appendDiagnostic("service_stop success")
     }
 
     /// Pause the mesh service (background mode)
@@ -527,6 +553,7 @@ final class MeshRepository {
             try ironCore.initializeIdentity()
             try ensureLocalIdentityFederation()
             logger.info("✓ Identity created successfully")
+            initializeAndStartSwarm()
             broadcastIdentityBeacon()
         } catch {
             logger.error("Failed to create identity: \(error.localizedDescription)")
@@ -547,19 +574,12 @@ final class MeshRepository {
             }
         }
         if !info.initialized {
-            logger.info("Auto-initializing new identity for first run")
-            try ironCore.initializeIdentity()
-            info = ironCore.getIdentityInfo()
-            persistIdentityBackupToKeychain(ironCore: ironCore)
+            logger.info("Identity not initialized; onboarding required")
+            return
         }
 
         let nickname = info.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if nickname.isEmpty {
-            let defaultNickname = buildDefaultLocalNickname(info: info)
-            try ironCore.setNickname(nickname: defaultNickname)
-            logger.info("Auto-set local nickname: \(defaultNickname)")
-            persistIdentityBackupToKeychain(ironCore: ironCore)
-        } else {
+        if !nickname.isEmpty {
             persistIdentityBackupToKeychain(ironCore: ironCore)
         }
     }
@@ -627,11 +647,14 @@ final class MeshRepository {
         }
     }
 
-    private func buildDefaultLocalNickname(info: IdentityInfo) -> String {
-        let source = info.publicKeyHex ?? info.identityId ?? info.libp2pPeerId ?? "peer"
-        let suffix = String(source.suffix(6))
-        let normalizedSuffix = suffix.isEmpty ? "peer" : suffix
-        return "ios-\(normalizedSuffix)".lowercased()
+    private func reconcileInstallScopedIdentityState() {
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: InstallMarker.key) {
+            return
+        }
+
+        defaults.set(true, forKey: InstallMarker.key)
+        appendDiagnostic("install_marker_initialized")
     }
 
     // MARK: - Messaging (with Relay Enforcement)
@@ -754,6 +777,7 @@ final class MeshRepository {
         data: Data
     ) {
         logger.info("Message from \(senderId): \(messageId)")
+        appendDiagnostic("msg_rx sender=\(senderId) msg=\(messageId)")
 
         // RELAY ENFORCEMENT (matches Android pattern exactly)
         // Check if relay/messaging is enabled (bidirectional control)
@@ -914,14 +938,13 @@ final class MeshRepository {
                 .reduce(into: [String]()) { acc, addr in
                     if !acc.contains(addr) { acc.append(addr) }
                 }
-            MeshEventBus.shared.peerEvents.send(.identityDiscovered(
+            emitIdentityDiscoveredIfChanged(
                 peerId: canonicalPeerId,
                 publicKey: normalizedSenderKey,
                 nickname: discoveredNickname,
                 libp2pPeerId: routePeerId,
-                listeners: listeners,
-                blePeerId: nil
-            ))
+                listeners: listeners
+            )
             annotateIdentityInLedger(
                 routePeerId: routePeerId,
                 listeners: listeners,
@@ -935,6 +958,7 @@ final class MeshRepository {
             .lowercased()
         if messageKind == "identity_sync" {
             logger.debug("Processed identity sync from \(canonicalPeerId) (route=\(routePeerId ?? "none"))")
+            appendDiagnostic("msg_identity_sync peer=\(canonicalPeerId) route=\(routePeerId ?? "none")")
             sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId)
             return
         }
@@ -965,6 +989,7 @@ final class MeshRepository {
         // Notify UI
         messageUpdates.send(messageRecord)
         logger.info("Message received and processed from \(canonicalPeerId)")
+        appendDiagnostic("msg_rx_processed peer=\(canonicalPeerId) msg=\(messageId)")
 
         // Send delivery receipt ACK back to sender
         sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId)
@@ -975,6 +1000,7 @@ final class MeshRepository {
     func onDeliveryReceipt(messageId: String, status: String) {
         let normalized = status.lowercased()
         guard normalized == "delivered" || normalized == "read" else { return }
+        appendDiagnostic("receipt_rx msg=\(messageId) status=\(normalized)")
         try? historyManager?.markDelivered(id: messageId)
         removePendingOutbound(historyRecordId: messageId)
         MeshEventBus.shared.messageEvents.send(.delivered(messageId: messageId))
@@ -1506,14 +1532,13 @@ final class MeshRepository {
         for peer in aggregates.values {
             let listeners = peer.routePeerId.map(getDialHintsForRoutePeer(_:)) ?? []
             if let publicKey = peer.publicKey, !publicKey.isEmpty {
-                MeshEventBus.shared.peerEvents.send(.identityDiscovered(
+                emitIdentityDiscoveredIfChanged(
                     peerId: peer.canonicalPeerId,
                     publicKey: publicKey,
                     nickname: peer.nickname,
                     libp2pPeerId: peer.routePeerId,
-                    listeners: listeners,
-                    blePeerId: nil
-                ))
+                    listeners: listeners
+                )
             } else {
                 MeshEventBus.shared.peerEvents.send(.discovered(peerId: peer.canonicalPeerId))
             }
@@ -1650,6 +1675,35 @@ final class MeshRepository {
             throw MeshError.notInitialized("LedgerManager not initialized")
         }
         return ledgerManager.summary()
+    }
+
+    func getConnectionPathState() -> ConnectionPathState {
+        return meshService?.getConnectionPathState() ?? .disconnected
+    }
+
+    func getNatStatus() -> String {
+        return meshService?.getNatStatus() ?? "unknown"
+    }
+
+    func exportDiagnostics() -> String {
+        if let diagnostics = meshService?.exportDiagnostics(),
+           !diagnostics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return diagnostics
+        }
+
+        let fallback: [String: Any] = [
+            "service_state": String(describing: serviceState),
+            "connection_path_state": String(describing: getConnectionPathState()),
+            "nat_status": getNatStatus(),
+            "discovered_peers": discoveredPeerMap.count,
+            "pending_outbox": loadPendingOutbox().count,
+            "generated_at_ms": Int(Date().timeIntervalSince1970 * 1000),
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: fallback),
+              let json = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return json
     }
 
     func saveLedger() throws {
@@ -2005,14 +2059,13 @@ final class MeshRepository {
             if transportIdentity.canonicalPeerId != peerId {
                 updateDiscoveredPeer(transportIdentity.canonicalPeerId, info: discoveryInfo)
             }
-            MeshEventBus.shared.peerEvents.send(.identityDiscovered(
+            emitIdentityDiscoveredIfChanged(
                 peerId: transportIdentity.canonicalPeerId,
                 publicKey: transportIdentity.publicKey,
                 nickname: discoveredNickname,
                 libp2pPeerId: peerId,
-                listeners: relayHints,
-                blePeerId: nil
-            ))
+                listeners: relayHints
+            )
             annotateIdentityInLedger(
                 routePeerId: peerId,
                 listeners: relayHints,
@@ -2051,10 +2104,16 @@ final class MeshRepository {
     }
 
     func handleTransportPeerDisconnected(peerId: String) {
+        connectedEmissionCache.removeValue(forKey: peerId.trimmingCharacters(in: .whitespacesAndNewlines))
         pruneDisconnectedPeer(peerId)
     }
 
     func handleTransportPeerIdentified(peerId: String, listenAddrs: [String]) {
+        appendDiagnostic("peer_identified transport=\(peerId) addrs=\(listenAddrs.count)")
+        let resetSuffix = "/p2p/\(peerId)"
+        for key in dialThrottleState.keys where key.hasSuffix(resetSuffix) || key == peerId {
+            dialThrottleState.removeValue(forKey: key)
+        }
         let selfLibp2p = ironCore?.getIdentityInfo().libp2pPeerId?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if let selfLibp2p, !selfLibp2p.isEmpty, selfLibp2p == peerId {
@@ -2069,7 +2128,17 @@ final class MeshRepository {
         )
 
         if isBootstrapRelayPeer(peerId) {
-            logger.info("Treating bootstrap peer \(peerId) as transport relay only")
+            logger.info("Headless transport node identified: \(peerId)")
+            let relayDiscovery = PeerDiscoveryInfo(
+                canonicalPeerId: peerId,
+                publicKey: nil,
+                nickname: nil,
+                transport: .internet,
+                lastSeen: UInt64(Date().timeIntervalSince1970)
+            )
+            updateDiscoveredPeer(peerId, info: relayDiscovery)
+            MeshEventBus.shared.peerEvents.send(.discovered(peerId: peerId))
+            emitConnectedIfChanged(peerId: peerId)
         } else {
             let transportIdentity = resolveTransportIdentity(libp2pPeerId: peerId)
             if let transportIdentity {
@@ -2089,14 +2158,13 @@ final class MeshRepository {
                 if transportIdentity.canonicalPeerId != peerId {
                     updateDiscoveredPeer(transportIdentity.canonicalPeerId, info: discoveryInfo)
                 }
-                MeshEventBus.shared.peerEvents.send(.identityDiscovered(
+                emitIdentityDiscoveredIfChanged(
                     peerId: transportIdentity.canonicalPeerId,
                     publicKey: transportIdentity.publicKey,
                     nickname: discoveredNickname,
                     libp2pPeerId: peerId,
-                    listeners: dialCandidates,
-                    blePeerId: nil
-                ))
+                    listeners: dialCandidates
+                )
                 annotateIdentityInLedger(
                     routePeerId: peerId,
                     listeners: dialCandidates,
@@ -2116,7 +2184,7 @@ final class MeshRepository {
                 updateDiscoveredPeer(peerId, info: discoveryInfo)
                 logger.debug("Transport identity unavailable for \(peerId)")
             }
-            MeshEventBus.shared.peerEvents.send(.connected(peerId: peerId))
+            emitConnectedIfChanged(peerId: peerId)
             persistRouteHintsForTransportPeer(
                 libp2pPeerId: peerId,
                 listeners: dialCandidates,
@@ -2230,14 +2298,14 @@ final class MeshRepository {
         if let nonEmptyLibp2p, nonEmptyLibp2p != identityId {
             updateDiscoveredPeer(nonEmptyLibp2p, info: discoveryInfo)
         }
-        MeshEventBus.shared.peerEvents.send(.identityDiscovered(
+        emitIdentityDiscoveredIfChanged(
             peerId: identityId,
             publicKey: normalizedKey,
             nickname: discoveredNickname,
             libp2pPeerId: nonEmptyLibp2p,
             listeners: dialCandidates,
             blePeerId: blePeerId
-        ))
+        )
         annotateIdentityInLedger(
             routePeerId: nonEmptyLibp2p,
             listeners: dialCandidates,
@@ -2295,6 +2363,76 @@ final class MeshRepository {
 
         guard let peerId = libp2pPeerId else { return nil }
         return (peerId, addresses)
+    }
+
+    private func emitIdentityDiscoveredIfChanged(
+        peerId: String,
+        publicKey: String,
+        nickname: String?,
+        libp2pPeerId: String?,
+        listeners: [String],
+        blePeerId: String? = nil
+    ) {
+        let canonicalPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !canonicalPeerId.isEmpty,
+              let normalizedKey = normalizePublicKey(publicKey) else {
+            return
+        }
+
+        let normalizedNickname = normalizeNickname(nickname)
+        let normalizedRoute = {
+            let trimmed = libp2pPeerId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? nil : trimmed
+        }()
+        let normalizedBle = {
+            let trimmed = blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? nil : trimmed
+        }()
+        let normalizedListeners = Array(
+            Set(
+                listeners
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            )
+        ).sorted()
+
+        let signature = IdentityEmissionSignature(
+            canonicalPeerId: canonicalPeerId,
+            publicKey: normalizedKey,
+            nickname: normalizedNickname,
+            libp2pPeerId: normalizedRoute,
+            blePeerId: normalizedBle
+        )
+        let cacheKey = "\(canonicalPeerId)|\(normalizedKey)"
+        let now = Date()
+        if let previous = identityEmissionCache[cacheKey],
+           previous.signature == signature,
+           now.timeIntervalSince(previous.emittedAt) < identityReemitInterval {
+            return
+        }
+        identityEmissionCache[cacheKey] = (signature, now)
+
+        MeshEventBus.shared.peerEvents.send(.identityDiscovered(
+            peerId: canonicalPeerId,
+            publicKey: normalizedKey,
+            nickname: normalizedNickname,
+            libp2pPeerId: normalizedRoute,
+            listeners: normalizedListeners,
+            blePeerId: normalizedBle
+        ))
+    }
+
+    private func emitConnectedIfChanged(peerId: String) {
+        let normalizedPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedPeerId.isEmpty else { return }
+
+        let now = Date()
+        if let previous = connectedEmissionCache[normalizedPeerId],
+           now.timeIntervalSince(previous) < connectedReemitInterval {
+            return
+        }
+        connectedEmissionCache[normalizedPeerId] = now
+        MeshEventBus.shared.peerEvents.send(.connected(peerId: normalizedPeerId))
     }
 
     private func parseRoutingHintsFromNotes(_ notes: String?) -> RoutingHints {
@@ -2728,6 +2866,7 @@ final class MeshRepository {
 
         for addr in Self.defaultBootstrapNodes {
             do {
+                if !shouldAttemptDial(addr) { continue }
                 try swarmBridge.dial(multiaddr: addr)
             } catch {
                 logger.debug("Relay bootstrap dial skipped for \(addr): \(error.localizedDescription)")
@@ -3019,6 +3158,7 @@ final class MeshRepository {
     }
 
     func connectToPeer(_ peerId: String, addresses: [String]) {
+        appendDiagnostic("connect_to_peer peer=\(peerId) addr_count=\(addresses.count)")
         let dialCandidates = buildDialCandidatesForPeer(
             routePeerId: peerId,
             rawAddresses: addresses,
@@ -3034,11 +3174,61 @@ final class MeshRepository {
                 finalAddr = "\(addr)/p2p/\(peerId)"
             }
             do {
+                if !shouldAttemptDial(finalAddr) { continue }
                 try swarmBridge?.dial(multiaddr: finalAddr)
                 logger.info("Dialing \(finalAddr)")
+                appendDiagnostic("dial_attempt addr=\(finalAddr)")
             } catch {
                 logger.error("Failed to dial \(finalAddr): \(error.localizedDescription)")
+                appendDiagnostic("dial_failure addr=\(finalAddr) error=\(error.localizedDescription)")
             }
+        }
+    }
+
+    private func shouldAttemptDial(_ multiaddr: String) -> Bool {
+        let key = multiaddr.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return false }
+
+        let now = Date()
+        if let state = dialThrottleState[key], now < state.nextAllowedAt {
+            appendDiagnostic("dial_throttled addr=\(key)")
+            return false
+        }
+
+        let attempts = min((dialThrottleState[key]?.attempts ?? 0) + 1, 8)
+        let backoffSeconds: TimeInterval
+        switch attempts {
+        case 1: backoffSeconds = 0.5
+        case 2: backoffSeconds = 1.5
+        case 3: backoffSeconds = 3
+        case 4: backoffSeconds = 6
+        case 5: backoffSeconds = 10
+        default: backoffSeconds = 15
+        }
+        dialThrottleState[key] = (attempts: attempts, nextAllowedAt: now.addingTimeInterval(backoffSeconds))
+        return true
+    }
+
+    func diagnosticsLogPath() -> String {
+        diagnosticsLogURL.path
+    }
+
+    func diagnosticsSnapshot(limit: Int = 120) -> String {
+        diagnosticsBuffer.suffix(max(1, limit)).joined(separator: "\n")
+    }
+
+    private func appendDiagnostic(_ message: String) {
+        let ts = ISO8601DateFormatter().string(from: Date())
+        let line = "\(ts) \(message)"
+        diagnosticsBuffer.append(line)
+        if diagnosticsBuffer.count > diagnosticsMaxLines {
+            diagnosticsBuffer.removeFirst(diagnosticsBuffer.count - diagnosticsMaxLines)
+        }
+        let payload = diagnosticsBuffer.joined(separator: "\n") + "\n"
+        do {
+            try payload.write(to: diagnosticsLogURL, atomically: true, encoding: .utf8)
+        } catch {
+            logger.debug("Failed to write diagnostics log: \(error.localizedDescription)")
         }
     }
 
@@ -3177,6 +3367,8 @@ final class MeshRepository {
         try ironCore.setNickname(nickname: trimmedNickname)
         persistIdentityBackupToKeychain(ironCore: ironCore)
         logger.info("✓ Nickname set to: \(trimmedNickname)")
+        // If swarm start was postponed before identity/nickname was ready, resume now.
+        initializeAndStartSwarm()
         broadcastIdentityBeacon()
         identitySyncSentPeers.removeAll()
         let connectedPeers = swarmBridge?.getPeers() ?? []

@@ -27,24 +27,33 @@ impl IdentityManager {
 
     /// Create a new identity manager with persistent storage
     pub fn with_path(path: &str) -> Result<Self> {
-        Ok(Self {
+        let mut manager = Self {
             store: IdentityStore::persistent(path)?,
             keys: None,
             nickname: None,
-        })
+        };
+        // Load any previously-persisted identity material without generating
+        // a new identity. Fresh installs remain uninitialized.
+        manager.hydrate_from_store()?;
+        Ok(manager)
+    }
+
+    fn hydrate_from_store(&mut self) -> Result<()> {
+        if let Some(nickname) = self.store.load_nickname()? {
+            self.nickname = Some(nickname);
+        }
+        if let Some(keys) = self.store.load_keys()? {
+            self.keys = Some(keys);
+        }
+        Ok(())
     }
 
     /// Generate or load identity keys
     pub fn initialize(&mut self) -> Result<()> {
-        // Load nickname
-        if let Ok(Some(nickname)) = self.store.load_nickname() {
-            self.nickname = Some(nickname);
-        }
+        self.hydrate_from_store()?;
 
-        // Try to load existing keys
-        if let Some(keys) = self.store.load_keys()? {
+        if self.keys.is_some() {
             tracing::info!("🔑 Loaded existing identity");
-            self.keys = Some(keys);
         } else {
             // Generate new keys
             tracing::info!("🔑 Generating new identity");
@@ -211,5 +220,28 @@ mod tests {
 
         assert_eq!(manager2.identity_id(), original_id);
         assert_eq!(manager2.public_key_hex(), original_pub);
+    }
+
+    #[test]
+    fn test_with_path_hydrates_existing_identity_without_initialize() {
+        use tempfile::tempdir;
+
+        let dir = tempdir().unwrap();
+        let path = dir
+            .path()
+            .join("existing_identity")
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        {
+            let mut manager = IdentityManager::with_path(&path).unwrap();
+            manager.initialize().unwrap();
+            manager.set_nickname("PersistedNick".to_string()).unwrap();
+        }
+
+        let manager = IdentityManager::with_path(&path).unwrap();
+        assert!(manager.keys().is_some());
+        assert_eq!(manager.nickname(), Some("PersistedNick".to_string()));
     }
 }

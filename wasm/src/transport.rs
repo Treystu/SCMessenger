@@ -705,9 +705,8 @@ impl WebRtcTransport {
 
                 // Step 3 — build a typed RtcSessionDescriptionInit using the now-available
                 // RtcSdpType enum (added to workspace web-sys features in Cargo.toml).
-                let mut desc_init =
-                    web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Offer);
-                desc_init.sdp(&sdp_str);
+                let desc_init = web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Offer);
+                desc_init.set_sdp(&sdp_str);
 
                 // Step 4 — set_local_description → JS Promise.
                 if let Err(e) = JsFuture::from(pc.set_local_description(&desc_init)).await {
@@ -782,9 +781,9 @@ impl WebRtcTransport {
                     }
                 };
 
-                let mut desc_init =
+                let desc_init =
                     web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Answer);
-                desc_init.sdp(&sdp_str);
+                desc_init.set_sdp(&sdp_str);
 
                 match wasm_bindgen_futures::JsFuture::from(pc.set_remote_description(&desc_init))
                     .await
@@ -839,9 +838,8 @@ impl WebRtcTransport {
                     }
                 };
 
-                let mut desc_init =
-                    web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Offer);
-                desc_init.sdp(&sdp_str);
+                let desc_init = web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Offer);
+                desc_init.set_sdp(&sdp_str);
 
                 match wasm_bindgen_futures::JsFuture::from(pc.set_remote_description(&desc_init))
                     .await
@@ -908,9 +906,9 @@ impl WebRtcTransport {
                 };
 
                 // Step 3 — set_local_description with the answer SDP.
-                let mut desc_init =
+                let desc_init =
                     web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Answer);
-                desc_init.sdp(&sdp_str);
+                desc_init.set_sdp(&sdp_str);
 
                 if let Err(e) = JsFuture::from(pc.set_local_description(&desc_init)).await {
                     tracing::error!("set_local_description(answer) failed: {:?}", e);

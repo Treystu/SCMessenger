@@ -1938,6 +1938,36 @@ mod tests {
         assert!(v.get("timestamp_ms").is_some());
     }
 
+    #[test]
+    fn test_history_manager_persists_across_restart() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_str().unwrap().to_string();
+
+        {
+            let history = HistoryManager::new(path.clone()).unwrap();
+            history
+                .add(MessageRecord {
+                    id: "msg-persist-1".to_string(),
+                    direction: MessageDirection::Sent,
+                    peer_id: "peer-one".to_string(),
+                    content: "hello".to_string(),
+                    timestamp: 1_777_000_000,
+                    delivered: false,
+                })
+                .unwrap();
+            history.mark_delivered("msg-persist-1".to_string()).unwrap();
+            assert_eq!(history.count(), 1);
+        }
+
+        let reloaded = HistoryManager::new(path).unwrap();
+        let record = reloaded
+            .get("msg-persist-1".to_string())
+            .unwrap()
+            .expect("message record should persist");
+        assert_eq!(record.peer_id, "peer-one");
+        assert!(record.delivered);
+    }
+
     // -----------------------------------------------------------------------
     // Existing tests
     // -----------------------------------------------------------------------
