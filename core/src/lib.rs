@@ -21,6 +21,7 @@ use parking_lot::RwLock;
 use std::path::Path;
 use std::sync::Arc;
 use thiserror::Error;
+use zeroize::Zeroize;
 
 pub use crypto::{decrypt_message, encrypt_message};
 pub use identity::IdentityManager;
@@ -463,14 +464,15 @@ impl IronCore {
     /// Export identity key material for platform-secure backup.
     pub fn export_identity_backup(&self) -> Result<String, IronCoreError> {
         let identity = self.identity.read();
-        let key_bytes = identity
+        let mut key_bytes = identity
             .export_key_bytes()
             .ok_or(IronCoreError::NotInitialized)?;
         let payload = IdentityBackupV1 {
             version: 1,
-            secret_key_hex: hex::encode(key_bytes),
+            secret_key_hex: hex::encode(&key_bytes),
             nickname: identity.nickname(),
         };
+        key_bytes.zeroize();
         serde_json::to_string(&payload).map_err(|_| IronCoreError::Internal)
     }
 
@@ -481,12 +483,14 @@ impl IronCore {
         if payload.version != 1 {
             return Err(IronCoreError::InvalidInput);
         }
-        let key_bytes =
+        let mut key_bytes =
             hex::decode(payload.secret_key_hex).map_err(|_| IronCoreError::InvalidInput)?;
         let mut identity = self.identity.write();
-        identity
+        let result = identity
             .import_key_bytes(&key_bytes)
-            .map_err(|_| IronCoreError::StorageError)?;
+            .map_err(|_| IronCoreError::StorageError);
+        key_bytes.zeroize();
+        result?;
         if let Some(nickname) = payload.nickname {
             identity
                 .set_nickname(nickname)

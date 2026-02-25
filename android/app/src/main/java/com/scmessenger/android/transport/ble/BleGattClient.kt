@@ -6,9 +6,18 @@ import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.sync.Semaphore
 
 /**
  * GATT client for connecting to discovered SCMessenger peripherals.
+ *
+ * Android GATT requires strictly sequential operations per connection: a second
+ * operation must not be initiated until the callback for the first one fires.
+ * All GATT reads and writes are funnelled through a per-device
+ * [Channel]<[() -> Unit]> + [Semaphore](1) queue. The consumer coroutine
+ * acquires the semaphore before launching each op, and the GATT callback
+ * releases it once the result arrives, allowing the next op to proceed.
  *
  * Responsibilities:
  * - Connects to discovered SCMessenger BLE peripherals
@@ -39,10 +48,53 @@ class BleGattClient(
     // Connection state tracking
     private val connectionStates = ConcurrentHashMap<String, ConnectionState>()
 
-    // Write queue for handling async writeCharacteristic
+    // Write queue for handling async writeCharacteristic fragmentation
     private val pendingWrites = ConcurrentHashMap<String, MutableList<ByteArray>>()
 
+    // Per-device GATT operation queue.
+    // Android GATT is strictly sequential per connection: initiating a new op
+    // before the previous callback fires causes the new op to silently return
+    // false. Each device gets a Channel<() -> Unit> that is consumed one-at-a-
+    // time; the consumer holds a Semaphore(1) permit for the duration of each
+    // in-flight operation, and the corresponding GATT callback releases it once
+    // the result arrives so the next enqueued op can proceed.
+    private val gattOpQueues = ConcurrentHashMap<String, Channel<() -> Unit>>()
+    private val gattOpSemaphores = ConcurrentHashMap<String, Semaphore>()
+
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    // ---------- GATT op queue helpers ----------
+
+    /** Returns (creating if necessary) the serialised op channel for a device. */
+    private fun gattQueue(deviceAddress: String): Channel<() -> Unit> =
+        gattOpQueues.getOrPut(deviceAddress) {
+            Channel<() -> Unit>(Channel.UNLIMITED).also { ch ->
+                val sem = Semaphore(1)
+                gattOpSemaphores[deviceAddress] = sem
+                scope.launch {
+                    for (op in ch) {
+                        // Wait until the previous op's callback has fired before
+                        // starting the next one.
+                        sem.acquire()
+                        op()
+                    }
+                }
+            }
+        }
+
+    /** Enqueue a GATT operation for sequential execution on the given device. */
+    private fun enqueueGattOp(deviceAddress: String, op: () -> Unit) {
+        scope.launch { gattQueue(deviceAddress).send(op) }
+    }
+
+    /**
+     * Signal that the in-flight GATT operation for [deviceAddress] has completed.
+     * Must be called from every GATT callback path (success and failure) so the
+     * next queued operation is unblocked.
+     */
+    private fun releaseGattOp(deviceAddress: String) {
+        gattOpSemaphores[deviceAddress]?.release()
+    }
 
     /**
      * Connect to a discovered peripheral.
@@ -102,6 +154,8 @@ class BleGattClient(
             gatt.disconnect()
             gatt.close()
             connectionStates.remove(deviceAddress)
+            gattOpQueues.remove(deviceAddress)?.close()
+            gattOpSemaphores.remove(deviceAddress)
             Timber.d("Disconnected from $deviceAddress")
         } catch (e: SecurityException) {
             Timber.e(e, "Security exception disconnecting from $deviceAddress")
@@ -113,6 +167,8 @@ class BleGattClient(
     /**
      * Send data to a connected peripheral.
      * Handles fragmentation if data exceeds MTU.
+     * The write is enqueued so it cannot interleave with concurrent reads or
+     * other in-progress writes on the same device.
      */
     fun sendData(deviceAddress: String, data: ByteArray): Boolean {
         val gatt = activeConnections[deviceAddress] ?: run {
@@ -126,31 +182,37 @@ class BleGattClient(
             return false
         }
 
-        return try {
-            val service = gatt.getService(BleGattServer.SERVICE_UUID)
-            val characteristic = service?.getCharacteristic(BleGattServer.MESSAGE_CHAR_UUID)
-
-            if (characteristic == null) {
-                Timber.e("Message characteristic not found on $deviceAddress")
-                return false
-            }
-
-            // Handle MTU fragmentation
-            val mtu = 512 // Assumed negotiated MTU
-            if (data.size > mtu - 3) {
-                sendFragmented(gatt, characteristic, data, mtu)
-            } else {
-                characteristic.value = data
-                gatt.writeCharacteristic(characteristic)
-                true
-            }
-        } catch (e: SecurityException) {
-            Timber.e(e, "Security exception sending data")
-            false
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to send data to $deviceAddress")
-            false
+        val service = gatt.getService(BleGattServer.SERVICE_UUID)
+        val characteristic = service?.getCharacteristic(BleGattServer.MESSAGE_CHAR_UUID)
+        if (characteristic == null) {
+            Timber.e("Message characteristic not found on $deviceAddress")
+            return false
         }
+
+        val mtu = 512 // Assumed negotiated MTU
+        enqueueGattOp(deviceAddress) {
+            try {
+                if (data.size > mtu - 3) {
+                    if (!sendFragmented(gatt, characteristic, data, mtu)) {
+                        releaseGattOp(deviceAddress)
+                    }
+                    // else: semaphore released by onCharacteristicWrite when last fragment ack'd
+                } else {
+                    characteristic.value = data
+                    if (!gatt.writeCharacteristic(characteristic)) {
+                        releaseGattOp(deviceAddress)
+                    }
+                    // else: semaphore released in onCharacteristicWrite
+                }
+            } catch (e: SecurityException) {
+                Timber.e(e, "Security exception sending data to $deviceAddress")
+                releaseGattOp(deviceAddress)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to send data to $deviceAddress")
+                releaseGattOp(deviceAddress)
+            }
+        }
+        return true
     }
 
     private fun sendFragmented(
@@ -269,6 +331,8 @@ class BleGattClient(
             } else {
                 Timber.e("Characteristic read failed on $deviceAddress: $status")
             }
+            // Read op complete — unblock the next queued operation.
+            releaseGattOp(deviceAddress)
         }
 
         override fun onCharacteristicWrite(
@@ -284,16 +348,40 @@ class BleGattClient(
                 Timber.d("Characteristic write successful to $deviceAddress")
                 val queue = pendingWrites[deviceAddress]
                 if (queue != null && queue.isNotEmpty()) {
+                    // More fragments remain — write the next one and keep the
+                    // semaphore held until the last fragment is acknowledged.
                     val nextChunk = queue.removeAt(0)
                     characteristic.value = nextChunk
-                    gatt.writeCharacteristic(characteristic)
+                    if (!gatt.writeCharacteristic(characteristic)) {
+                        pendingWrites.remove(deviceAddress)
+                        releaseGattOp(deviceAddress)
+                    }
                 } else {
+                    // Last (or only) fragment acknowledged — op complete.
                     pendingWrites.remove(deviceAddress)
+                    releaseGattOp(deviceAddress)
                 }
             } else {
                 Timber.e("Characteristic write failed to $deviceAddress: $status")
                 pendingWrites.remove(deviceAddress)
+                releaseGattOp(deviceAddress)
             }
+        }
+
+        override fun onDescriptorWrite(
+            gatt: BluetoothGatt,
+            descriptor: BluetoothGattDescriptor,
+            status: Int
+        ) {
+            super.onDescriptorWrite(gatt, descriptor, status)
+            val deviceAddress = gatt.device.address
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                Timber.d("Descriptor write successful for $deviceAddress")
+            } else {
+                Timber.e("Descriptor write failed for $deviceAddress: $status")
+            }
+            // CCCD write op complete — unblock the next queued operation.
+            releaseGattOp(deviceAddress)
         }
 
         override fun onCharacteristicChanged(
@@ -334,21 +422,34 @@ class BleGattClient(
     }
 
     private fun readIdentityBeacon(gatt: BluetoothGatt) {
-        try {
-            val service = gatt.getService(BleGattServer.SERVICE_UUID) ?: return
-            val characteristic = service.getCharacteristic(BleGattServer.IDENTITY_CHAR_UUID) ?: return
-            gatt.readCharacteristic(characteristic)
-        } catch (e: SecurityException) {
-            Timber.e(e, "Security exception reading identity")
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to read identity beacon")
+        enqueueGattOp(gatt.device.address) {
+            try {
+                val service = gatt.getService(BleGattServer.SERVICE_UUID)
+                val characteristic = service?.getCharacteristic(BleGattServer.IDENTITY_CHAR_UUID)
+                if (characteristic == null || !gatt.readCharacteristic(characteristic)) {
+                    // If the op couldn't be initiated, release immediately so the
+                    // queue doesn't stall.
+                    releaseGattOp(gatt.device.address)
+                }
+                // else: semaphore released in onCharacteristicRead
+            } catch (e: SecurityException) {
+                Timber.e(e, "Security exception reading identity")
+                releaseGattOp(gatt.device.address)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to read identity beacon")
+                releaseGattOp(gatt.device.address)
+            }
         }
     }
 
     private fun scheduleIdentityRefreshReads(deviceAddress: String) {
         val originalGatt = activeConnections[deviceAddress] ?: return
-        IDENTITY_REFRESH_DELAYS_MS.forEach { delayMs ->
-            scope.launch {
+        // All refresh reads run in a single sequential coroutine to preserve their
+        // intended ordering (T+900 ms, then T+2200 ms after connection).  Each
+        // read is submitted through enqueueGattOp so it cannot overlap with any
+        // other in-flight operation on the same device.
+        scope.launch {
+            for (delayMs in IDENTITY_REFRESH_DELAYS_MS) {
                 delay(delayMs)
                 val gatt = activeConnections[deviceAddress] ?: return@launch
                 if (gatt !== originalGatt) return@launch
@@ -359,24 +460,38 @@ class BleGattClient(
     }
 
     private fun enableMessageNotifications(gatt: BluetoothGatt) {
-        try {
-            val service = gatt.getService(BleGattServer.SERVICE_UUID) ?: return
-            val characteristic = service.getCharacteristic(BleGattServer.MESSAGE_CHAR_UUID) ?: return
+        enqueueGattOp(gatt.device.address) {
+            try {
+                val service = gatt.getService(BleGattServer.SERVICE_UUID)
+                val characteristic = service?.getCharacteristic(BleGattServer.MESSAGE_CHAR_UUID)
+                if (characteristic == null) {
+                    releaseGattOp(gatt.device.address)
+                    return@enqueueGattOp
+                }
 
-            // Enable local notifications
-            gatt.setCharacteristicNotification(characteristic, true)
+                // Enable local notification routing (no GATT round-trip needed)
+                gatt.setCharacteristicNotification(characteristic, true)
 
-            // Write to CCCD
-            val descriptor = characteristic.getDescriptor(BleGattServer.CLIENT_CONFIG_DESCRIPTOR_UUID)
-            if (descriptor != null) {
-                descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                gatt.writeDescriptor(descriptor)
-                Timber.d("Enabled notifications for ${gatt.device.address}")
+                // Write to CCCD — completion signalled via onDescriptorWrite
+                val descriptor = characteristic.getDescriptor(BleGattServer.CLIENT_CONFIG_DESCRIPTOR_UUID)
+                if (descriptor != null) {
+                    descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                    if (!gatt.writeDescriptor(descriptor)) {
+                        releaseGattOp(gatt.device.address)
+                    } else {
+                        Timber.d("Enabling notifications for ${gatt.device.address}")
+                    }
+                    // else: semaphore released in onDescriptorWrite
+                } else {
+                    releaseGattOp(gatt.device.address)
+                }
+            } catch (e: SecurityException) {
+                Timber.e(e, "Security exception enabling notifications")
+                releaseGattOp(gatt.device.address)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to enable notifications")
+                releaseGattOp(gatt.device.address)
             }
-        } catch (e: SecurityException) {
-            Timber.e(e, "Security exception enabling notifications")
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to enable notifications")
         }
     }
 
