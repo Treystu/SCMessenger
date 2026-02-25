@@ -415,6 +415,7 @@ impl MeshService {
                                 event_tx,
                                 None,
                                 bootstrap_multiaddrs,
+                                false, // Mobile nodes are NOT headless (they have identities)
                             )
                             .await
                             {
@@ -481,12 +482,14 @@ impl MeshService {
                                             }
                                             crate::transport::SwarmEvent::PeerIdentified {
                                                 peer_id,
+                                                agent_version,
                                                 listen_addrs,
                                                 ..
                                             } => {
                                                 tracing::info!(
-                                                    "Peer identified via Swarm: {}",
-                                                    peer_id
+                                                    "Peer identified via Swarm: {} (agent: {})",
+                                                    peer_id,
+                                                    agent_version
                                                 );
                                                 let core_guard = core.lock();
                                                 if let Some(core_ref) = core_guard.as_ref() {
@@ -499,6 +502,7 @@ impl MeshService {
                                                             .collect();
                                                         delegate.on_peer_identified(
                                                             peer_id.to_string(),
+                                                            agent_version.clone(),
                                                             addrs_str,
                                                         );
                                                     }

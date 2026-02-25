@@ -773,7 +773,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
     let listen_addr: libp2p::Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", p2p_port).parse()?;
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);
-    let swarm_handle = transport::start_swarm(network_keypair, Some(listen_addr), event_tx).await?;
+    let swarm_handle =
+        transport::start_swarm(network_keypair, Some(listen_addr), event_tx, false).await?;
 
     println!("{} Network started", "✓".green());
 
@@ -1420,7 +1421,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         listen_addr.parse().context("Invalid listen multiaddr")?;
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);
     let swarm_handle =
-        transport::start_swarm(network_keypair, Some(listen_multiaddr), event_tx).await?;
+        transport::start_swarm(network_keypair, Some(listen_multiaddr), event_tx, true).await?;
     println!("{} P2P swarm started on {}", "✓".green(), listen_addr);
 
     // Subscribe to topics

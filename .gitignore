@@ -51,3 +51,9 @@ core/out.txt
 # AI Agent & MCP
 .quint/
 .mcp.json
+
+# iOS Build Artifacts
+iOS/SCMessenger/Build/
+iOS/SCMessenger/DerivedData/
+*.sdkstatcache
+**/*.pcm

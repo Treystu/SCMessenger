@@ -53,7 +53,7 @@ final class MeshRepository {
     /// Static fallback bootstrap node multiaddrs for NAT traversal and internet roaming.
     /// These are used only if env override and remote fetch both fail/are absent.
     private static let staticBootstrapNodes: [String] = [
-        "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWL6KesqENjgojaLTxJiwXdvgmEkbvh1znyu8FdJQEizmV",
+        "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWMyngfNZajWRNRPdtc32uxn1sBYZE126NDD4b547BAMLj",
     ]
 
     /// Resolved bootstrap nodes using the core BootstrapResolver.
@@ -109,7 +109,8 @@ final class MeshRepository {
 
     private struct RoutingHints {
         let libp2pPeerId: String?
-        let addresses: [String]
+        let listeners: [String]
+        let blePeerId: String?
     }
 
     private struct TransportIdentityResolution {
@@ -156,6 +157,7 @@ final class MeshRepository {
         let publicKey: String?
         let nickname: String?
         let transport: MeshEventBus.TransportType
+        let isFull: Bool
         let lastSeen: UInt64
     }
 
@@ -744,7 +746,7 @@ final class MeshRepository {
         // Mobile app passes identity/routing hints; Rust core owns path selection.
         let delivery = await attemptDirectSwarmDelivery(
             routePeerCandidates: routePeerCandidates,
-            addresses: routing.addresses,
+            addresses: routing.listeners,
             envelopeData: envelopeData
         )
         let selectedRoutePeerId = delivery.routePeerId ?? preferredRoutePeerId
@@ -754,7 +756,7 @@ final class MeshRepository {
                 historyRecordId: messageId,
                 peerId: peerId,
                 routePeerId: selectedRoutePeerId,
-                addresses: routing.addresses,
+                addresses: routing.listeners,
                 envelopeData: envelopeData,
                 initialAttemptCount: 1,
                 initialDelaySec: receiptAwaitSeconds
@@ -764,7 +766,7 @@ final class MeshRepository {
                 historyRecordId: messageId,
                 peerId: peerId,
                 routePeerId: selectedRoutePeerId,
-                addresses: routing.addresses,
+                addresses: routing.listeners,
                 envelopeData: envelopeData,
                 initialAttemptCount: 1,
                 initialDelaySec: 0
@@ -932,6 +934,7 @@ final class MeshRepository {
                 publicKey: normalizedSenderKey,
                 nickname: discoveredNickname,
                 transport: .internet,
+                isFull: true,
                 lastSeen: UInt64(Date().timeIntervalSince1970)
             )
             updateDiscoveredPeer(canonicalPeerId, info: discoveryInfo)
@@ -963,7 +966,7 @@ final class MeshRepository {
         if messageKind == "identity_sync" {
             logger.debug("Processed identity sync from \(canonicalPeerId) (route=\(routePeerId ?? "none"))")
             appendDiagnostic("msg_identity_sync peer=\(canonicalPeerId) route=\(routePeerId ?? "none")")
-            sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId)
+            sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId, senderId: canonicalPeerId)
             return
         }
 
@@ -973,7 +976,7 @@ final class MeshRepository {
         if let existing = try? historyManager?.get(id: messageId),
            existing.direction == .received {
             logger.debug("Duplicate inbound message \(messageId); acknowledging without UI emit")
-            sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId)
+            sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId, senderId: canonicalPeerId)
             return
         }
 
@@ -996,7 +999,7 @@ final class MeshRepository {
         appendDiagnostic("msg_rx_processed peer=\(canonicalPeerId) msg=\(messageId)")
 
         // Send delivery receipt ACK back to sender
-        sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId)
+        sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId, senderId: canonicalPeerId)
     }
 
     /// Handle delivery receipt callbacks from CoreDelegate.
@@ -1011,14 +1014,26 @@ final class MeshRepository {
         MeshEventBus.shared.messageEvents.send(.delivered(messageId: messageId))
     }
 
-    private func sendDeliveryReceiptAsync(senderPublicKeyHex: String, messageId: String) {
+    private func sendDeliveryReceiptAsync(senderPublicKeyHex: String, messageId: String, senderId: String) {
         Task {
             do {
-                let receiptBytes = try ironCore?.prepareReceipt(recipientPublicKeyHex: senderPublicKeyHex, messageId: messageId)
-                if let receiptBytes = receiptBytes {
-                    try swarmBridge?.sendToAllPeers(data: receiptBytes)
-                    logger.debug("Delivery receipt broadcast for \(messageId)")
-                }
+                guard let receiptBytes = try ironCore?.prepareReceipt(recipientPublicKeyHex: senderPublicKeyHex, messageId: messageId) else { return }
+                
+                let contact = try? contactManager?.get(peerId: senderId)
+                let hints = parseRoutingHintsFromNotes(contact?.notes)
+                let routeCandidates = buildRoutePeerCandidates(
+                    peerId: senderId,
+                    cachedRoutePeerId: hints.libp2pPeerId,
+                    notes: contact?.notes
+                )
+                
+                _ = await attemptDirectSwarmDelivery(
+                    routePeerCandidates: routeCandidates,
+                    addresses: hints.listeners,
+                    envelopeData: receiptBytes,
+                    blePeerId: hints.blePeerId
+                )
+                logger.debug("Targeted delivery receipt sent for \(messageId) to \(senderId)")
             } catch {
                 logger.debug("Failed to send delivery receipt for \(messageId): \(error)")
             }
@@ -1036,7 +1051,7 @@ final class MeshRepository {
             return
         }
 
-        Task { @MainActor in
+        Task {
             let extractedPublicKey: String? = {
                 guard let ironCore else { return nil }
                 return try? ironCore.extractPublicKeyFromPeerId(peerId: normalizedRoute)
@@ -1054,11 +1069,27 @@ final class MeshRepository {
                     recipientPublicKeyHex: recipientPublicKey,
                     text: payload
                 )
-                guard let prepared else {
+                guard let prepared = prepared else {
                     identitySyncSentPeers.remove(normalizedRoute)
                     return
                 }
-                try swarmBridge?.sendMessage(peerId: normalizedRoute, data: Data(prepared.envelopeData))
+                
+                let contact = (try? contactManager?.list())?.first(where: { 
+                    $0.peerId == normalizedRoute || parseRoutingHintsFromNotes($0.notes).libp2pPeerId == normalizedRoute 
+                })
+                let hints = parseRoutingHintsFromNotes(contact?.notes)
+                let routeCandidates = buildRoutePeerCandidates(
+                    peerId: contact?.peerId ?? normalizedRoute,
+                    cachedRoutePeerId: normalizedRoute,
+                    notes: contact?.notes
+                )
+
+                _ = await attemptDirectSwarmDelivery(
+                    routePeerCandidates: routeCandidates,
+                    addresses: hints.listeners,
+                    envelopeData: Data(prepared.envelopeData),
+                    blePeerId: hints.blePeerId
+                )
                 logger.debug("Identity sync sent to \(normalizedRoute)")
             } catch {
                 identitySyncSentPeers.remove(normalizedRoute)
@@ -1401,6 +1432,7 @@ final class MeshRepository {
                 publicKey: info.publicKey ?? existing.publicKey,
                 nickname: selectAuthoritativeNickname(incoming: info.nickname, existing: existing.nickname),
                 transport: (info.transport == .internet || existing.transport == .internet) ? .internet : info.transport,
+                isFull: info.isFull || existing.isFull,
                 lastSeen: max(info.lastSeen, existing.lastSeen)
             )
         } else {
@@ -1742,7 +1774,7 @@ final class MeshRepository {
         let routing = parseRoutingHintsFromNotes(contact.notes)
         annotateIdentityInLedger(
             routePeerId: routing.libp2pPeerId,
-            listeners: routing.addresses,
+            listeners: routing.listeners,
             publicKey: contact.publicKey,
             nickname: contact.nickname
         )
@@ -2058,6 +2090,7 @@ final class MeshRepository {
                 publicKey: transportIdentity.publicKey,
                 nickname: discoveredNickname,
                 transport: .internet,
+                isFull: true,
                 lastSeen: UInt64(Date().timeIntervalSince1970)
             )
             updateDiscoveredPeer(peerId, info: discoveryInfo)
@@ -2101,6 +2134,7 @@ final class MeshRepository {
                 publicKey: nil,
                 nickname: nil,
                 transport: .internet,
+                isFull: false,
                 lastSeen: UInt64(Date().timeIntervalSince1970)
             )
             updateDiscoveredPeer(peerId, info: discoveryInfo)
@@ -2113,8 +2147,8 @@ final class MeshRepository {
         pruneDisconnectedPeer(peerId)
     }
 
-    func handleTransportPeerIdentified(peerId: String, listenAddrs: [String]) {
-        appendDiagnostic("peer_identified transport=\(peerId) addrs=\(listenAddrs.count)")
+    func handleTransportPeerIdentified(peerId: String, agentVersion: String, listenAddrs: [String]) {
+        appendDiagnostic("peer_identified transport=\(peerId) agent=\(agentVersion) addrs=\(listenAddrs.count)")
         let resetSuffix = "/p2p/\(peerId)"
         for key in dialThrottleState.keys where key.hasSuffix(resetSuffix) || key == peerId {
             dialThrottleState.removeValue(forKey: key)
@@ -2132,13 +2166,15 @@ final class MeshRepository {
             includeRelayCircuits: true
         )
 
-        if isBootstrapRelayPeer(peerId) {
-            logger.info("Headless transport node identified: \(peerId)")
+        let isHeadless = agentVersion.contains("/headless/")
+        if isBootstrapRelayPeer(peerId) || isHeadless {
+            logger.info("Headless/Relay transport node identified: \(peerId) (agent: \(agentVersion))")
             let relayDiscovery = PeerDiscoveryInfo(
                 canonicalPeerId: peerId,
                 publicKey: nil,
                 nickname: nil,
                 transport: .internet,
+                isFull: false,
                 lastSeen: UInt64(Date().timeIntervalSince1970)
             )
             updateDiscoveredPeer(peerId, info: relayDiscovery)
@@ -2157,6 +2193,7 @@ final class MeshRepository {
                     publicKey: transportIdentity.publicKey,
                     nickname: discoveredNickname,
                     transport: .internet,
+                    isFull: true,
                     lastSeen: UInt64(Date().timeIntervalSince1970)
                 )
                 updateDiscoveredPeer(peerId, info: discoveryInfo)
@@ -2184,6 +2221,7 @@ final class MeshRepository {
                     publicKey: nil,
                     nickname: nil,
                     transport: .internet,
+                    isFull: false,
                     lastSeen: UInt64(Date().timeIntervalSince1970)
                 )
                 updateDiscoveredPeer(peerId, info: discoveryInfo)
@@ -2297,6 +2335,7 @@ final class MeshRepository {
             publicKey: normalizedKey,
             nickname: discoveredNickname,
             transport: .ble,
+            isFull: true,
             lastSeen: UInt64(Date().timeIntervalSince1970)
         )
         updateDiscoveredPeer(identityId, info: discoveryInfo)
@@ -2330,6 +2369,7 @@ final class MeshRepository {
             nickname: nonEmptyNickname,
             libp2pPeerId: nonEmptyLibp2p,
             listeners: dialCandidates,
+            blePeerId: blePeerId,
             createIfMissing: false
         )
 
@@ -2441,11 +2481,36 @@ final class MeshRepository {
     }
 
     private func parseRoutingHintsFromNotes(_ notes: String?) -> RoutingHints {
-        guard let notes,
-              let parsed = parseRoutingInfo(notes: notes) else {
-            return RoutingHints(libp2pPeerId: nil, addresses: [])
+        guard let notes else { return RoutingHints(libp2pPeerId: nil, listeners: [], blePeerId: nil) }
+        let segments = notes
+            .split(whereSeparator: { $0 == ";" || $0 == "\n" })
+            .map { String($0) }
+        var libp2pPeerId: String?
+        var listeners: [String] = []
+        var blePeerId: String?
+
+        for segment in segments {
+            let trimmed = segment.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("libp2p_peer_id:") {
+                let value = trimmed.replacingOccurrences(of: "libp2p_peer_id:", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !value.isEmpty { libp2pPeerId = value }
+            } else if trimmed.hasPrefix("ble_peer_id:") {
+                let value = trimmed.replacingOccurrences(of: "ble_peer_id:", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !value.isEmpty { blePeerId = value }
+            } else if trimmed.hasPrefix("listeners:") {
+                let value = trimmed.replacingOccurrences(of: "listeners:", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !value.isEmpty {
+                    listeners = value
+                        .split(separator: ",")
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                }
+            }
         }
-        return RoutingHints(libp2pPeerId: parsed.libp2pPeerId, addresses: parsed.addresses)
+        return RoutingHints(libp2pPeerId: libp2pPeerId, listeners: listeners, blePeerId: blePeerId)
     }
 
     private func parseAllRoutingPeerIds(from notes: String?) -> [String] {
@@ -2532,7 +2597,8 @@ final class MeshRepository {
     private func attemptDirectSwarmDelivery(
         routePeerCandidates: [String],
         addresses: [String],
-        envelopeData: Data
+        envelopeData: Data,
+        blePeerId: String? = nil
     ) async -> DeliveryAttemptResult {
         guard let swarmBridge else {
             return DeliveryAttemptResult(acked: false, routePeerId: routePeerCandidates.first)
@@ -2565,7 +2631,16 @@ final class MeshRepository {
                 logger.info("✓ Direct delivery ACK from \(routePeerId)")
                 return DeliveryAttemptResult(acked: true, routePeerId: routePeerId)
             } catch {
-                logger.warning("Core-routed delivery failed for \(routePeerId): \(error.localizedDescription); retrying via relay-circuit")
+                logger.warning("Core-routed delivery failed for \(routePeerId): \(error.localizedDescription); trying alternative transports")
+                
+                // Fallback to BLE before relay retry loop
+                if let bleAddr = blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines), !bleAddr.isEmpty, let uuid = UUID(uuidString: bleAddr) {
+                    if let central = bleCentralManager {
+                        central.sendData(to: uuid, data: envelopeData)
+                        logger.info("✓ Delivery via BLE for \(routePeerId) (target=\(bleAddr))")
+                        return DeliveryAttemptResult(acked: true, routePeerId: routePeerId)
+                    }
+                }
             }
 
             let relayOnly = relayCircuitAddresses(for: routePeerId)
@@ -2658,7 +2733,7 @@ final class MeshRepository {
             let resolvedRoutePeerId = routePeerCandidates.first
             let resolvedAddresses = buildDialCandidatesForPeer(
                 routePeerId: resolvedRoutePeerId,
-                rawAddresses: item.addresses + latestRouting.addresses,
+                rawAddresses: item.addresses + latestRouting.listeners,
                 includeRelayCircuits: true
             )
 
@@ -2948,6 +3023,7 @@ final class MeshRepository {
         nickname: String?,
         libp2pPeerId: String?,
         listeners: [String],
+        blePeerId: String? = nil,
         createIfMissing: Bool = true
     ) {
         let normalizedPeerId = canonicalPeerId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2980,6 +3056,9 @@ final class MeshRepository {
         var notes = existing?.notes
         if let normalizedLibp2p, !normalizedLibp2p.isEmpty {
             notes = appendRoutingHint(notes: notes, key: "libp2p_peer_id", value: normalizedLibp2p)
+        }
+        if let normalizedBle = blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines), !normalizedBle.isEmpty {
+            notes = appendRoutingHint(notes: notes, key: "ble_peer_id", value: normalizedBle)
         }
         notes = upsertRoutingListeners(notes: notes, listeners: normalizeOutboundListenerHints(listeners))
 

@@ -142,6 +142,7 @@ impl IronCoreBehaviour {
     pub fn new(
         keypair: &libp2p::identity::Keypair,
         relay_client: relay::client::Behaviour,
+        headless: bool,
     ) -> anyhow::Result<Self> {
         let peer_id = keypair.public().to_peer_id();
         let dcutr = dcutr::Behaviour::new(peer_id);
@@ -231,12 +232,14 @@ impl IronCoreBehaviour {
         // Identify protocol — advertise this node as a relay
         //
         // agent_version includes "relay" to signal we're a mandatory relay.
+        // We also distinguish "headless" (infrastructure) vs "full" (human) nodes.
         // push_listen_addr_updates ensures peers learn our addresses quickly.
+        let type_str = if headless { "headless" } else { "full" };
         let identify = identify::Behaviour::new(
             identify::Config::new("/sc/id/1.0.0".to_string(), keypair.public())
                 .with_push_listen_addr_updates(true)
                 .with_interval(Duration::from_secs(30)) // More frequent than before (was 60s)
-                .with_agent_version(format!("scmessenger/0.1.0/relay/{}", peer_id)),
+                .with_agent_version(format!("scmessenger/0.1.0/{}/relay/{}", type_str, peer_id)),
         );
 
         Ok(Self {

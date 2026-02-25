@@ -53,11 +53,11 @@ final class CoreDelegateImpl: CoreDelegate {
         }
     }
 
-    func onPeerIdentified(peerId: String, listenAddrs: [String]) {
-        logger.info("Peer identified: \(peerId) with \(listenAddrs.count) addresses")
+    func onPeerIdentified(peerId: String, agentVersion: String, listenAddrs: [String]) {
+        logger.info("Peer identified: \(peerId) (agent: \(agentVersion)) with \(listenAddrs.count) addresses")
         let repo = meshRepository
         DispatchQueue.main.async {
-            repo?.handleTransportPeerIdentified(peerId: peerId, listenAddrs: listenAddrs)
+            repo?.handleTransportPeerIdentified(peerId: peerId, agentVersion: agentVersion, listenAddrs: listenAddrs)
         }
     }
 

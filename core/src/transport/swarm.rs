@@ -345,8 +345,9 @@ pub async fn start_swarm(
     keypair: Keypair,
     listen_addr: Option<Multiaddr>,
     event_tx: mpsc::Sender<SwarmEvent2>,
+    headless: bool,
 ) -> Result<SwarmHandle> {
-    start_swarm_with_config(keypair, listen_addr, event_tx, None, Vec::new()).await
+    start_swarm_with_config(keypair, listen_addr, event_tx, None, Vec::new(), headless).await
 }
 
 /// Build and start the libp2p swarm with custom multi-port configuration.
@@ -360,6 +361,7 @@ pub async fn start_swarm_with_config(
     event_tx: mpsc::Sender<SwarmEvent2>,
     multiport_config: Option<MultiPortConfig>,
     bootstrap_addrs: Vec<Multiaddr>,
+    headless: bool,
 ) -> Result<SwarmHandle> {
     #[cfg(target_arch = "wasm32")]
     let _ = &multiport_config;
@@ -378,7 +380,7 @@ pub async fn start_swarm_with_config(
             .with_quic()
             .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)?
             .with_behaviour(|key, relay_client| {
-                IronCoreBehaviour::new(key, relay_client)
+                IronCoreBehaviour::new(key, relay_client, headless)
                     .expect("Failed to create network behaviour")
             })?
             .with_swarm_config(|cfg| {

@@ -108,6 +108,38 @@ Owner policy constraints (2026-02-23):
 - Requirement: choose how clients trust and discover bootstrap updates.
 - Target: lock one governance mode and document it in canonical docs.
 - Scope: trust source, update cadence, and fallback behavior.
+- Outcome (2026-02-25): Registered newly identified peers as potential relays in the reputation tracker to expedite relay connectivity.
+
+17. Fast Bootstrap and Graceful Identity Handling
+
+- Requirement: Support hardcoded or dynamically updated IPs for bootstrap nodes without mandatorily hardcoding their peer identities.
+- Target: Allow the mesh service to gracefully accept the new or changing identity of a static-IP bootstrap node instead of failing the connection layout or validation.
+- Scope: Refactor connection validation / Noise payload handling so that a known static bootstrap IP can dynamically rotate or present any valid peer identity without breaking clients.
+
+17. Multi-Transport Reliability and Targeted Acknowledgements
+
+- Requirement: replies and metadata sync must not fail when peers move between LAN, BLE, and Internet (GCP Relay).
+- Outcome (2026-02-25):
+  - [x] Switched delivery receipts and identity sync from broadcast to targeted delivery (Multi-Path), ensuring they reach off-LAN peers via Relay or BLE.
+  - [x] Implemented platform-level BLE fallback in `attemptDirectSwarmDelivery` for both Android and iOS, prioritizing LAN → BLE → Relay.
+  - [x] Linked canonical identities to `ble_peer_id` and `libp2p_peer_id` in persisted contact notes to maintain routing across sessions.
+  - [x] Verified GCP relay (34.135.34.73:9001) is alive and accepting connections.
+
+18. Parity: Data Deletion (Contacts and Message Threads)
+
+- Requirement: Ensure complete parity across all instances (Android, iOS, Web) for deleting a contact and deleting a message thread.
+- Target: Allow users to securely remove contacts and clear entire message threads, ensuring changes are fully persisted and reflected in the UI.
+- Scope: Bind deletion operations in `ContactsManager` and `HistoryManager` to UI interactions on all platforms, including cleaning up associated metadata.
+
+19. [ ] Headless/Relay logic Refinement
+    - [x] Update `IronCoreBehaviour::new` to accept `headless` boolean flag and incorporate it into the `agent_version` string.
+    - [x] Update `start_swarm` and `start_swarm_with_config` in `core/src/transport/swarm.rs` to accept and pass down the `headless` flag.
+    - [x] Adjust calls to `start_swarm` in `cli/src/main.rs`: `cmd_start` passes `false`, and `cmd_relay` passes `true`.
+    - [x] Update `MeshService::start_swarm` in `core/src/mobile_bridge.rs` to pass `false`.
+    - [x] Update `CoreDelegate` trait and `api.udl` to include `agent_version` in `on_peer_identified`.
+    - [x] Update Android `MeshRepository.kt` to handle `agentVersion` and identify headless peers.
+    - [x] Update iOS `CoreDelegateImpl.swift` and `MeshRepository.swift` to handle `agentVersion` and identify headless peers.
+    - [ ] Confirm that direct P2P messaging works over cellular with fallback to relaying (mandatory for 0.1.2 Alpha).
 
 ## Priority 1: Tooling, CI, and Experimental Surface
 

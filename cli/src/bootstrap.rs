@@ -25,7 +25,7 @@ use crate::ledger;
 /// All nodes relay for the mesh. Connection attempts fail over automatically.
 pub const DEFAULT_BOOTSTRAP_NODES: &[&str] = &[
     // Node 1: Primary GCP bootstrap (North America) - High availability
-    "/ip4/34.168.102.7/tcp/9001/p2p/12D3KooWNfD7cdquDq26B7NmHmE49wcca6NgY7DJVksBdXYJs49h",
+    "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWMyngfNZajWRNRPdtc32uxn1sBYZE126NDD4b547BAMLj",
     // Node 2: Secondary relay (add when deployed)
     // "/ip4/<IP>/tcp/9001/p2p/<PEER_ID>",
 

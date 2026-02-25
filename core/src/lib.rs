@@ -133,7 +133,7 @@ pub trait CoreDelegate: Send + Sync {
     /// A peer disconnected
     fn on_peer_disconnected(&self, peer_id: String);
     /// A peer's libp2p identity was confirmed
-    fn on_peer_identified(&self, peer_id: String, listen_addrs: Vec<String>);
+    fn on_peer_identified(&self, peer_id: String, agent_version: String, listen_addrs: Vec<String>);
     /// An encrypted message was received and decrypted.
     /// `sender_public_key_hex` is the sender's Ed25519 public key (64 hex chars) —
     /// pass this to `prepare_receipt()` to send a delivery acknowledgement.

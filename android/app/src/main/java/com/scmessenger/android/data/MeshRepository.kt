@@ -38,7 +38,7 @@ class MeshRepository(private val context: Context) {
         /** Static fallback bootstrap nodes for NAT traversal and internet roaming.
          *  These are used if env override and remote fetch both fail/are absent. */
         private val STATIC_BOOTSTRAP_NODES: List<String> = listOf(
-            "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWL6KesqENjgojaLTxJiwXdvgmEkbvh1znyu8FdJQEizmV"
+            "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWMyngfNZajWRNRPdtc32uxn1sBYZE126NDD4b547BAMLj"
         )
 
         /** Resolve bootstrap nodes using the core BootstrapResolver.
@@ -349,8 +349,8 @@ class MeshRepository(private val context: Context) {
                     }
                 }
 
-                override fun onPeerIdentified(peerId: String, listenAddrs: List<String>) {
-                    Timber.d("Core notified identified: $peerId with ${listenAddrs.size} addresses")
+                override fun onPeerIdentified(peerId: String, agentVersion: String, listenAddrs: List<String>) {
+                    Timber.d("Core notified identified: $peerId (agent: $agentVersion) with ${listenAddrs.size} addresses")
                     repoScope.launch {
                         dialThrottleState.keys
                             .filter { it.endsWith("/p2p/$peerId") || it == peerId }
@@ -367,8 +367,9 @@ class MeshRepository(private val context: Context) {
                             includeRelayCircuits = true
                         )
 
-                        if (isBootstrapRelayPeer(peerId)) {
-                            Timber.i("Headless transport node identified: $peerId")
+                        val isHeadless = agentVersion.contains("/headless/")
+                        if (isBootstrapRelayPeer(peerId) || isHeadless) {
+                            Timber.i("Headless/Relay transport node identified: $peerId (agent: $agentVersion)")
                             val relayDiscovery = PeerDiscoveryInfo(
                                 peerId = peerId,
                                 publicKey = null,
@@ -714,7 +715,7 @@ class MeshRepository(private val context: Context) {
                         }
 
                         // Send delivery receipt ACK back to sender.
-                        sendDeliveryReceiptAsync(senderPublicKeyHex, messageId, senderId)
+                        sendDeliveryReceiptAsync(senderPublicKeyHex, messageId, canonicalPeerId)
                     } catch (e: Exception) {
                         Timber.e(e, "Failed to process received message")
                     }
@@ -768,13 +769,24 @@ class MeshRepository(private val context: Context) {
     }
 
     private fun sendDeliveryReceiptAsync(senderPublicKeyHex: String, messageId: String, senderId: String) {
-        repoScope.launch {
+        repoScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val receiptBytes = ironCore?.prepareReceipt(senderPublicKeyHex, messageId)
                 if (receiptBytes != null) {
-                    // The receipt is encrypted for the specific sender; safe to broadcast.
-                    swarmBridge?.sendToAllPeers(receiptBytes)
-                    Timber.d("Delivery receipt broadcast for $messageId to $senderId")
+                    val contact = try { contactManager?.get(senderId) } catch (_: Exception) { null }
+                    val hints = parseRoutingHints(contact?.notes)
+                    val routeCandidates = buildRoutePeerCandidates(
+                        peerId = senderId,
+                        cachedRoutePeerId = hints.libp2pPeerId,
+                        notes = contact?.notes
+                    )
+                    attemptDirectSwarmDelivery(
+                        routePeerCandidates = routeCandidates,
+                        listeners = hints.listeners,
+                        encryptedData = receiptBytes,
+                        blePeerId = hints.blePeerId
+                    )
+                    Timber.d("Targeted delivery receipt sent for $messageId to $senderId")
                 }
             } catch (e: Exception) {
                 Timber.d("Failed to send delivery receipt for $messageId: ${e.message}")
@@ -809,7 +821,24 @@ class MeshRepository(private val context: Context) {
                     identitySyncSentPeers.remove(normalizedRoute)
                     return@launch
                 }
-                swarmBridge?.sendMessage(normalizedRoute, prepared.envelopeData)
+                
+                // Use targeted delivery (swarm + BLE fallback) for identity sync
+                val contact = contactManager?.list()?.firstOrNull { 
+                    it.peerId == normalizedRoute || parseRoutingHints(it.notes).libp2pPeerId == normalizedRoute 
+                }
+                val hints = parseRoutingHints(contact?.notes)
+                val routeCandidates = buildRoutePeerCandidates(
+                    peerId = contact?.peerId ?: normalizedRoute,
+                    cachedRoutePeerId = normalizedRoute,
+                    notes = contact?.notes
+                )
+
+                attemptDirectSwarmDelivery(
+                    routePeerCandidates = routeCandidates,
+                    listeners = hints.listeners,
+                    encryptedData = prepared.envelopeData,
+                    blePeerId = hints.blePeerId
+                )
                 Timber.d("Identity sync sent to $normalizedRoute")
             } catch (e: Exception) {
                 identitySyncSentPeers.remove(normalizedRoute)
@@ -1056,6 +1085,7 @@ class MeshRepository(private val context: Context) {
                 nickname = rawNickname.takeIf { it.isNotBlank() },
                 libp2pPeerId = routePeerId,
                 listeners = listenersStrings,
+                blePeerId = blePeerId,
                 createIfMissing = false
             )
 
@@ -1525,7 +1555,8 @@ class MeshRepository(private val context: Context) {
                 val delivery = attemptDirectSwarmDelivery(
                     routePeerCandidates = routePeerCandidates,
                     listeners = routingHints.listeners,
-                    encryptedData = encryptedData
+                    encryptedData = encryptedData,
+                    blePeerId = routingHints.blePeerId
                 )
                 val selectedRoutePeerId = delivery.routePeerId ?: preferredRoutePeerId
 
@@ -2192,7 +2223,8 @@ class MeshRepository(private val context: Context) {
     private suspend fun attemptDirectSwarmDelivery(
         routePeerCandidates: List<String>,
         listeners: List<String>,
-        encryptedData: ByteArray
+        encryptedData: ByteArray,
+        blePeerId: String? = null
     ): DeliveryAttemptResult {
         val bridge = swarmBridge
             ?: return DeliveryAttemptResult(acked = false, routePeerId = routePeerCandidates.firstOrNull())
@@ -2223,7 +2255,23 @@ class MeshRepository(private val context: Context) {
                 Timber.i("✓ Direct delivery ACK from $routePeerId")
                 return DeliveryAttemptResult(acked = true, routePeerId = routePeerId)
             } catch (e: Exception) {
-                Timber.w("Core-routed delivery failed for $routePeerId: ${e.message}; retrying via relay-circuit")
+                Timber.w("Core-routed delivery failed for $routePeerId: ${e.message}; trying alternative transports")
+                
+                // Fallback to BLE before trying explicit relay retry loop if available
+                val bleAddr = blePeerId?.trim()?.takeIf { it.isNotEmpty() }
+                if (bleAddr != null) {
+                    val bleGatt = bleGattClient
+                    if (bleGatt != null) {
+                        try {
+                            if (bleGatt.sendData(bleAddr, encryptedData)) {
+                                Timber.i("✓ Delivery via BLE for $routePeerId (target=$bleAddr)")
+                                return DeliveryAttemptResult(acked = true, routePeerId = routePeerId)
+                            }
+                        } catch (bleEx: Exception) {
+                            Timber.d("BLE send failed: ${bleEx.message}")
+                        }
+                    }
+                }
             }
 
             val relayOnlyCandidates = relayCircuitAddressesForPeer(routePeerId)
@@ -2930,6 +2978,7 @@ class MeshRepository(private val context: Context) {
         nickname: String?,
         libp2pPeerId: String?,
         listeners: List<String>,
+        blePeerId: String? = null,
         createIfMissing: Boolean = true
     ) {
         val normalizedPeerId = canonicalPeerId.trim()
@@ -2974,6 +3023,10 @@ class MeshRepository(private val context: Context) {
         var notes = existing?.notes
         if (!routePeer.isNullOrBlank()) {
             notes = appendRoutingHint(notes = notes, key = "libp2p_peer_id", value = routePeer)
+        }
+        val normalizedBle = blePeerId?.trim()?.takeIf { it.isNotEmpty() }
+        if (!normalizedBle.isNullOrBlank()) {
+            notes = appendRoutingHint(notes = notes, key = "ble_peer_id", value = normalizedBle)
         }
         notes = upsertRoutingListeners(notes, normalizeOutboundListenerHints(listeners))
 
