@@ -93,6 +93,7 @@ final class MeshRepository {
     // Rust → Swift callback delegate (strong reference required; Rust holds weak)
     private var coreDelegateImpl: CoreDelegateImpl?
     private var pendingOutboxRetryTask: Task<Void, Never>?
+    private var coverTrafficTask: Task<Void, Never>?
     private var lastRelayBootstrapDialAt: Date = .distantPast
     private var dialThrottleState: [String: (attempts: Int, nextAllowedAt: Date)] = [:]
     private let receiptAwaitSeconds: UInt64 = 8
@@ -425,6 +426,7 @@ final class MeshRepository {
             bleCentralManager?.startScanning()
             applyPowerAdjustments(reason: "service_started")
             startPendingOutboxRetryLoop()
+            startCoverTrafficLoopIfEnabled()
             Task { await flushPendingOutbox(reason: "service_started") }
 
             logger.info("✓ Mesh service started successfully")
@@ -454,6 +456,8 @@ final class MeshRepository {
         meshService?.stop()
         pendingOutboxRetryTask?.cancel()
         pendingOutboxRetryTask = nil
+        coverTrafficTask?.cancel()
+        coverTrafficTask = nil
         identitySyncSentPeers.removeAll()
         identityEmissionCache.removeAll()
         connectedEmissionCache.removeAll()
@@ -1002,6 +1006,7 @@ final class MeshRepository {
         guard normalized == "delivered" || normalized == "read" else { return }
         appendDiagnostic("receipt_rx msg=\(messageId) status=\(normalized)")
         try? historyManager?.markDelivered(id: messageId)
+        _ = ironCore?.markMessageSent(messageId: messageId)
         removePendingOutbound(historyRecordId: messageId)
         MeshEventBus.shared.messageEvents.send(.delivered(messageId: messageId))
     }
@@ -2499,6 +2504,27 @@ final class MeshRepository {
             while !Task.isCancelled {
                 await self?.flushPendingOutbox(reason: "periodic")
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
+            }
+        }
+    }
+
+    /// Starts a background loop that periodically broadcasts cover traffic when
+    /// `coverTrafficEnabled` is true in settings. Broadcasts every 30 seconds.
+    private func startCoverTrafficLoopIfEnabled() {
+        guard coverTrafficTask == nil else { return }
+        coverTrafficTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                guard let self, !Task.isCancelled else { break }
+                let enabled = (try? self.settingsManager?.load())?.coverTrafficEnabled == true
+                guard enabled else { continue }
+                guard let core = self.ironCore, let bridge = self.swarmBridge else { continue }
+                do {
+                    let payload = try core.prepareCoverTraffic(sizeBytes: 256)
+                    try bridge.sendToAllPeers(data: payload)
+                } catch {
+                    self.logger.debug("Cover traffic send skipped: \(error.localizedDescription)")
+                }
             }
         }
     }

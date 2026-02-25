@@ -111,6 +111,7 @@ class MeshRepository(private val context: Context) {
 
     private val repoScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
     private var pendingOutboxRetryJob: kotlinx.coroutines.Job? = null
+    private var coverTrafficJob: kotlinx.coroutines.Job? = null
     private val pendingOutboxFile = File(storagePath, "pending_outbox.json")
     private val receiptAwaitSeconds: Long = 8L
     private val identitySyncSentPeers = java.util.Collections.synchronizedSet(mutableSetOf<String>())
@@ -726,6 +727,7 @@ class MeshRepository(private val context: Context) {
                         return
                     }
                     historyManager?.markDelivered(messageId)
+                    ironCore?.markMessageSent(messageId)
                     removePendingOutbound(messageId)
                     // Bridge to ChatViewModel: emit Delivered so UI delivery indicator updates
                     repoScope.launch {
@@ -746,6 +748,7 @@ class MeshRepository(private val context: Context) {
             kotlin.runCatching { initializeAndStartSwarm() }
                 .onFailure { Timber.w(it, "Swarm transport failed to initialize; core service remains active") }
             ensurePendingOutboxRetryLoop()
+            ensureCoverTrafficLoop()
             repoScope.launch { flushPendingOutbox("service_started") }
 
             // 5. Update State
@@ -1251,6 +1254,8 @@ class MeshRepository(private val context: Context) {
     fun stopMeshService() {
         pendingOutboxRetryJob?.cancel()
         pendingOutboxRetryJob = null
+        coverTrafficJob?.cancel()
+        coverTrafficJob = null
 
         kotlin.runCatching { bleScanner?.stopScanning() }
             .onFailure { Timber.w(it, "Failed to stop BLE scanner") }
@@ -2109,6 +2114,37 @@ class MeshRepository(private val context: Context) {
                 } catch (e: Exception) {
                     Timber.w(e, "Pending outbox retry loop error")
                     kotlinx.coroutines.delay(5000)
+                }
+            }
+        }
+    }
+
+    /** Periodically broadcasts cover traffic when `coverTrafficEnabled` is true in settings. */
+    private fun ensureCoverTrafficLoop() {
+        if (coverTrafficJob?.isActive == true) return
+
+        coverTrafficJob = repoScope.launch {
+            while (true) {
+                try {
+                    kotlinx.coroutines.delay(30_000)
+                    val enabled = try { settingsManager?.load()?.coverTrafficEnabled == true } catch (_: Exception) { false }
+                    if (enabled) {
+                        val core = ironCore
+                        val bridge = swarmBridge
+                        if (core != null && bridge != null) {
+                            try {
+                                val payload = core.prepareCoverTraffic(256u)
+                                bridge.sendToAllPeers(payload)
+                            } catch (e: Exception) {
+                                Timber.d("Cover traffic send skipped: ${e.message}")
+                            }
+                        }
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Timber.w(e, "Cover traffic loop error")
+                    kotlinx.coroutines.delay(30_000)
                 }
             }
         }
@@ -3340,6 +3376,8 @@ class MeshRepository(private val context: Context) {
             saveLedger()
             pendingOutboxRetryJob?.cancel()
             pendingOutboxRetryJob = null
+            coverTrafficJob?.cancel()
+            coverTrafficJob = null
 
             // Clear references
             meshService = null

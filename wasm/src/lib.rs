@@ -394,6 +394,98 @@ impl IronCore {
         }))
         .unwrap()
     }
+
+    // ── Identity Management ──────────────────────────────────────────────
+
+    /// Set the nickname for the local identity.
+    #[wasm_bindgen(js_name = setNickname)]
+    pub fn set_nickname(&self, nickname: String) -> Result<(), JsValue> {
+        self.inner
+            .set_nickname(nickname)
+            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+    }
+
+    /// Export the local identity as a backup string (for import on another device).
+    #[wasm_bindgen(js_name = exportIdentityBackup)]
+    pub fn export_identity_backup(&self) -> Result<String, JsValue> {
+        self.inner
+            .export_identity_backup()
+            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+    }
+
+    /// Import an identity from a backup string produced by `exportIdentityBackup`.
+    #[wasm_bindgen(js_name = importIdentityBackup)]
+    pub fn import_identity_backup(&self, backup: String) -> Result<(), JsValue> {
+        self.inner
+            .import_identity_backup(backup)
+            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+    }
+
+    /// Derive the Ed25519 public key hex from a libp2p PeerId string.
+    #[wasm_bindgen(js_name = extractPublicKeyFromPeerId)]
+    pub fn extract_public_key_from_peer_id(&self, peer_id: String) -> Result<String, JsValue> {
+        self.inner
+            .extract_public_key_from_peer_id(peer_id)
+            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+    }
+
+    // ── Messaging (extended) ─────────────────────────────────────────────
+
+    /// Prepare an encrypted message envelope and return both the message ID
+    /// and the raw envelope bytes. Use the ID to track delivery receipts.
+    #[wasm_bindgen(js_name = prepareMessageWithId)]
+    pub fn prepare_message_with_id(
+        &self,
+        recipient_public_key_hex: String,
+        text: String,
+    ) -> Result<JsValue, JsValue> {
+        if !self.settings.lock().relay_enabled {
+            return Err(JsValue::from_str(
+                "Messaging blocked: mesh participation is disabled (relay toggle OFF)",
+            ));
+        }
+        self.inner
+            .prepare_message_with_id(recipient_public_key_hex, text)
+            .map(|p| {
+                serde_wasm_bindgen::to_value(&WasmPreparedMessage {
+                    message_id: p.message_id,
+                    envelope_data: p.envelope_data,
+                })
+                .unwrap()
+            })
+            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+    }
+
+    /// Prepare a delivery receipt envelope to send back to the original sender.
+    /// Call this after successfully decoding a received message.
+    #[wasm_bindgen(js_name = prepareReceipt)]
+    pub fn prepare_receipt(
+        &self,
+        recipient_public_key_hex: String,
+        message_id: String,
+    ) -> Result<Vec<u8>, JsValue> {
+        self.inner
+            .prepare_receipt(recipient_public_key_hex, message_id)
+            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+    }
+
+    /// Generate a cover traffic payload — random bytes that look like an
+    /// encrypted message. Broadcast via `sendPreparedEnvelope` or the
+    /// swarm's send-to-all to obscure real traffic patterns.
+    /// `sizeBytes` is clamped to [16, 1024].
+    #[wasm_bindgen(js_name = prepareCoverTraffic)]
+    pub fn prepare_cover_traffic(&self, size_bytes: u32) -> Result<Vec<u8>, JsValue> {
+        self.inner
+            .prepare_cover_traffic(size_bytes)
+            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+    }
+
+    /// Remove a message from the Rust outbox after it has been delivered.
+    /// Returns `true` if the message was found and removed, `false` if not found.
+    #[wasm_bindgen(js_name = markMessageSent)]
+    pub fn mark_message_sent(&self, message_id: String) -> bool {
+        self.inner.mark_message_sent(message_id)
+    }
 }
 
 fn parse_bootstrap_addrs(value: JsValue) -> Result<Vec<String>, JsValue> {
@@ -597,6 +689,13 @@ impl From<SignatureResult> for WasmSignatureResult {
             public_key_hex: sig.public_key_hex,
         }
     }
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmPreparedMessage {
+    message_id: String,
+    envelope_data: Vec<u8>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
