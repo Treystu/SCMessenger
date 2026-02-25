@@ -1,6 +1,6 @@
 # SCMessenger Remaining Work Tracking
 
-This is the active implementation backlog based on repository state verified on **2026-02-23**.
+This is the active implementation backlog based on repository state verified on **2026-02-25**.
 
 Primary delivery target: **one unified Android + iOS + Web app**.
 
@@ -13,7 +13,7 @@ Owner policy constraints (2026-02-23):
 - Anti-abuse controls are required before beta release.
 - Critical UX controls must stay in Android+iOS+Web parity with no temporary lead platform.
 
-## Priority 0: Tri-Platform Semantics and Reliability
+## Chapter 1: v0.1.2-alpha Ready (Priority Action Items for Alpha Testing)
 
 1. [x] Privacy parity-first wiring (all toggles) on Android, iOS, and Web
    - Outcome: All four privacy toggles (onion routing, cover traffic, message padding, timing obfuscation) are now implemented with live UI bindings on Android (`SwitchSetting`), iOS (`Toggle`), and Web/WASM (`getSettings`/`updateSettings`). Dead placeholder components removed from both mobile platforms.
@@ -27,12 +27,12 @@ Owner policy constraints (2026-02-23):
 4. [x] Bootstrap configuration model implementation
    - Outcome: Added `BootstrapConfig` dictionary and `BootstrapResolver` interface to `api.udl` with full Rust implementation. Resolution chain: env override (`SC_BOOTSTRAP_NODES`) → remote URL fetch (via `ureq` HTTP client) → static fallback list. Android and iOS both wired to use resolver instead of hardcoded lists. WASM uses env → static path (no sync HTTP in browser).
 
-5. Android peer discovery parity hardening
+5. [x] Android peer discovery parity hardening
    - Source: `ANDROID_DISCOVERY_ISSUES.md` investigation notes.
    - Open items:
-     - protocol negotiation disconnect loops (`Failed to negotiate transport protocol(s)`)
-     - bootstrap relay visibility policy in nearby UI
-     - delayed identity-resolution retry path after initial peer connect
+     - [x] protocol negotiation disconnect loops (`Failed to negotiate transport protocol(s)`)
+     - [x] bootstrap relay visibility policy in nearby UI
+     - [x] delayed identity-resolution retry path after initial peer connect
 
 6. Real-network NAT traversal field matrix
    - Scope: CLI host nodes + Android + iOS + Web over mixed LAN/WAN/NAT.
@@ -65,9 +65,10 @@ Owner policy constraints (2026-02-23):
      - `core/src/wasm_support/*`
 
 10. Beta anti-abuse gate implementation and validation
-   - Requirement: abuse controls are non-blocking in alpha but mandatory before beta.
-   - Target: enable and validate anti-abuse protections with measurable pass criteria across Android, iOS, Web, and relay-critical paths.
-   - Scope: relay spam/flood controls, abuse detection thresholds, and regression coverage in CI/release checks.
+
+- Requirement: abuse controls are non-blocking in alpha but mandatory before beta.
+- Target: enable and validate anti-abuse protections with measurable pass criteria across Android, iOS, Web, and relay-critical paths.
+- Scope: relay spam/flood controls, abuse detection thresholds, and regression coverage in CI/release checks.
 
 11. Active-session reliability + durable eventual delivery guarantees
     - Requirement: while app is open/relaying, service should remain available and messages should not be dropped.
@@ -104,16 +105,266 @@ Owner policy constraints (2026-02-23):
 - Target: lock one governance mode and document it in canonical docs.
 - Scope: trust source, update cadence, and fallback behavior.
 
+17. Race-condition and async sequencing elimination program (cross-platform reliability hard gate)
+
+- Requirement: eliminate non-deterministic behavior caused by concurrent startup paths, async callbacks, transport handoffs, delayed persistence flushes, and UI/state race windows.
+- Target: deterministic execution contracts for all critical workflows so no operation advances before required prerequisites are truly complete.
+- Scope: core runtime, Android, iOS, WASM/Web, and relay/headless operation paths.
+- Must cover these failure classes explicitly:
+  - Startup-order races (identity load, nickname hydration, swarm start, listener registration, transport init).
+  - Persistence races (write acknowledged in memory but not durable before next read/restart/update).
+  - Transport races (direct/relay/path-state transitions, reconnect loops, duplicate in-flight sends, stale peer metadata).
+  - Event-order races (out-of-order callbacks, late arrivals overwriting newer state, UI rendering stale snapshots).
+  - Cross-thread actor/coroutine races (shared mutable state, non-atomic check-then-act logic).
+  - Timeout/backoff races (retry storms, overlapping retries, cancellation that leaves orphan work).
+  - Lifecycle races (foreground/background/suspend/resume/permission changes/network changes during send/receive).
+  - Identity mapping races (temporary duplicate IDs per same user/device before federation resolves).
+- Implementation requirements:
+  - Define critical-path sequencing contracts per flow with explicit preconditions/postconditions.
+  - Replace ad-hoc sleeps with condition-based waits (event/ack/state predicate) and bounded timeout semantics.
+  - Introduce operation-level idempotency keys and monotonic sequence/version checks where state can race.
+  - Enforce single-writer or serialized state transitions for shared connection/runtime state.
+  - Add explicit handoff barriers for path switching (direct probe -> relay settle -> direct promotion) to prevent message loss/duplication.
+  - Ensure persistence writes are confirmed (or fsync-equivalent durability contract documented) before emitting completion to higher layers.
+  - Add stale-event suppression (ignore events older than current state generation/revision).
+  - Add structured cancellation handling so aborted operations cannot mutate final state after replacement operations complete.
+- Verification/test matrix requirements:
+  - Deterministic stress tests with injected jitter/delay/reordering for core orchestration and message delivery paths.
+  - Mobile lifecycle chaos tests: app pause/resume, network toggle, permission flip, and transport restart mid-send.
+  - Upgrade continuity tests where writes and migrations overlap startup and reconnect.
+  - Soak tests with repeated connect/disconnect and concurrent sends to detect latent race leaks.
+  - Assertions for no duplicate identity rows, no duplicate message delivery, no dropped ACK transitions, and no stuck intermediate connection states.
+- Observability requirements:
+  - Correlation IDs per workflow (startup, send, retry, path switch, migration).
+  - Start/end/error timestamps for each async stage to expose slow or overlapping steps.
+  - State-transition audit log with previous->next state, cause, and guard condition result.
+  - Counter metrics for retries, cancellations, dropped stale events, dedupe hits, and timeout exits.
+- Exit criteria:
+  - No reproducible race-condition defects in stress/chaos suites across Android+iOS+WASM+headless relay.
+  - Deterministic startup and send/receive sequencing verified in repeated runs with jitter injection.
+  - All critical flows have documented sequencing contracts and corresponding automated tests.
+  - Bug reports can be root-caused from diagnostics without ambiguous event ordering gaps.
+
+18. Comprehensive TODO/incomplete/stub inventory sync (authoritative for alpha signoff)
+
+- Requirement: every unresolved TODO/incomplete/stub item that represents actionable engineering work must be represented in this file.
+- Target: this file remains the single canonical list of remaining work; other docs may provide evidence/context but not untracked action items.
+- Current unresolved inventory (code/runtime relevant):
+  - Android test execution gap: `android/app/src/test/README.md` documents `@Ignore`d tests that still do not run in CI/Docker due to UniFFI mock/JNA harness limitations.
+  - Deprecated shim lifecycle: `wasm/src/lib.rs` keeps `startReceiveLoop(relayUrl)` as compatibility shim and must stay tracked until full removal window closes.
+  - Alpha test references that are still open by evidence: live multi-version interop matrix, relay-only WAN validation, suspend/resume real-device evidence, and update-without-wipe continuity evidence.
+- Non-action marker inventory (tracked for clarity, not blockers by itself):
+  - UniFFI generated TODO comments under generated sources regenerate by design and are not manually editable.
+  - Placeholder UI text attributes (input placeholders) are UX text, not implementation stubs.
+  - Historical/mixed-status docs may contain legacy TODO/deprecated wording; only items explicitly promoted here are actionable backlog.
+- Enforcement:
+  - Any new actionable TODO/FIXME/stub found in code review, logs, partner tests, or docs triage must be added here in the same change set.
+  - Keep `docs/STUBS_AND_UNIMPLEMENTED.md` and this file synchronized; this file is canonical for open work.
+
+### Alpha Exit Checklist (must be complete before v0.1.2-alpha signoff)
+
+- [x] Identity/contact/history continuity proven through upgrade-in-place runs (no wipe) on Android+iOS+WASM.
+- [ ] Cross-version matrix evidence complete (`v0.1.0`, `v0.1.1`, current head) with bidirectional message delivery.
+- [ ] WAN/relay-only behavior validated with Android+iOS off-LAN scenarios and headless relays.
+- [ ] ACK/path-switch reliability validated under network transition stress.
+- [ ] Race-condition hardening item (above) reaches pass criteria and diagnostics clarity.
+- [ ] Outstanding `@Ignore` test strategy decided (enable with harness or explicitly accepted alpha risk with bounded plan).
+
+## Chapter 2: v1.0.0 Readiness (Global Rollout Prerequisites Beyond Alpha)
+
+### Global Rollout Master Checklist (LoC estimates only)
+
+This section is the sanity-checked global rollout checklist. It intentionally includes cross-functional engineering work beyond alpha validation so worldwide deployment does not rely on implicit assumptions.
+
+1. Release-grade reliability and correctness hardening
+   - Scope:
+     - Finalize deterministic connection state machine behavior under sustained churn.
+     - Close remaining path-switch delivery edge cases (direct<->relay<->reconnect).
+     - Guarantee exactly-once-apply semantics (idempotent receive path) at app-layer state.
+     - Validate suspend/resume and process-kill recovery behavior on real devices.
+   - LoC estimate: **800-1,600**
+
+2. Message durability and data integrity guarantees
+   - Scope:
+     - Define and enforce durable-write completion semantics for identity, contacts, inbox, outbox, and local nickname overrides.
+     - Add consistency checks/repair routines for partially-written stores.
+     - Add data corruption detection + safe fallback/rebuild flows.
+     - Finalize bounded-retention behavior with deterministic pruning and integrity-preserving compaction.
+   - LoC estimate: **700-1,400**
+
+3. Identity model hardening across all transports
+   - Scope:
+     - Enforce single canonical identity mapping for BLE/LAN/libp2p discovery surfaces.
+     - Eliminate duplicate peer/device representations before UI materialization.
+     - Add conflict-resolution precedence (federated nickname vs local override vs stale cache).
+     - Add identity update propagation rules with revision ordering.
+   - LoC estimate: **500-1,000**
+
+4. Anti-abuse and relay-protection implementation (beta gate prerequisite)
+   - Scope:
+     - Relay request rate limits, envelope-size controls, and abuse throttling.
+     - Connection and request budgeting at node and peer dimensions.
+     - Basic abuse telemetry and operator-side observability hooks.
+     - Regression tests for false-positive and false-negative envelope handling.
+   - LoC estimate: **900-1,800**
+
+5. Security hardening baseline for production exposure
+   - Scope:
+     - Secrets/key material lifecycle hardening at rest and in memory where feasible.
+     - Strict input validation for all external/network-decoded payloads.
+     - Dependency/security policy gate for CI (advisory scanning + lockfile hygiene).
+     - Structured security test pass for transport, storage, and import flows.
+   - LoC estimate: **700-1,300**
+
+6. Global relay/bootstrap infrastructure operability
+   - Scope:
+     - Define supported relay deployment topology patterns (single-node, small cluster, federated community).
+     - Provide operator runbooks for bootstrap health checks, key rotation, and rollback.
+     - Add automated health probes and failure alarms for critical routing paths.
+     - Add operator-visible diagnostics contract shared with app-side export format.
+   - LoC estimate: **600-1,200**
+
+7. CI/CD and release pipeline hard gates
+   - Scope:
+     - Enforce Android+iOS+WASM build/test gates on mainline and release branches.
+     - Add browser-executed wasm tests and mobile artifact verification gates.
+     - Add reproducible release packaging checks and signed artifact validation.
+     - Add regression gate for migration continuity and path-switch integrity tests.
+   - LoC estimate: **500-1,000**
+
+8. App-store and distribution readiness (engineering-owned pieces)
+   - Scope:
+     - Versioning/build-number automation across Android/iOS/Web artifacts.
+     - Release-channel configuration (internal, beta, production) with rollback-safe metadata.
+     - Crash/diagnostic symbol handling pipeline for release artifacts.
+     - Build-time feature-flag manifest validation for production safety.
+   - LoC estimate: **350-750**
+
+9. Observability and incident response tooling
+   - Scope:
+     - Complete end-to-end correlation IDs from UI action -> transport -> persistence -> ACK.
+     - Add structured log redaction policy and privacy-safe export controls.
+     - Add incident triage templates for connectivity, delivery, identity, and migration failures.
+     - Add health dashboards for delivery success rate, retry behavior, and relay usage mix.
+   - LoC estimate: **450-900**
+
+10. Compatibility and long-tail environment validation
+
+- Scope:
+  - Finalize minimum supported Android/iOS/browser versions with evidence-based acceptance suite.
+  - Validate behavior under common adverse environments (high packet loss, captive portals, intermittent WAN).
+  - Validate mixed-version interop guardrails and deprecation safety windows.
+  - Add formal compatibility matrix publication in canonical docs.
+- LoC estimate: **600-1,200**
+
+11. UX parity and fail-safe behavior for critical flows
+
+- Scope:
+  - Ensure parity for all critical settings and runtime states across Android+iOS+Web.
+  - Define non-ambiguous user-facing statuses for sending, queued, retrying, delivered, and failed.
+  - Ensure failure recovery affordances do not require app restart or reinstall.
+  - Finalize onboarding and recovery paths so existing identity/nickname never re-prompts incorrectly.
+- LoC estimate: **450-900**
+
+12. Documentation and operational governance completion
+
+- Scope:
+  - Keep canonical docs synchronized with verified runtime behavior and release gates.
+  - Publish deployer/operator guides for self-hosted and third-party infrastructure patterns.
+  - Finalize upgrade playbook and rollback decision trees for production incidents.
+  - Maintain actionable TODO/stub inventory with mandatory backlog sync rules.
+- LoC estimate: **300-700**
+
+### Locked global policy decisions (implementation required)
+
+1. Dynamic remote signed bootstrap ranking list (community-submitted)
+   - Locked direction:
+     - Bootstrap/relay/headless nodes are regular nodes running without user identity, optimized for resource efficiency.
+     - Anyone can submit candidate bootstrap nodes.
+     - Clients consume a remotely distributed, signed bootstrap list.
+     - All newly added nodes start at the bottom of rank order.
+     - Clients attempt top-ranked nodes first and only exhaust downward as needed.
+     - Nodes are demoted on observed unavailability/failures; sustained healthy performance increases effective rank over time.
+     - No “master relay” role exists; ranking is purely performance/reliability-based.
+   - Required implementation:
+     - Signed-list schema for node metadata + rank inputs.
+     - Rank update algorithm + demotion/promotion rules.
+     - Client resolver logic that respects ranked order and fallback semantics.
+     - Relay health telemetry inputs used for rank scoring.
+     - Operator submission/update workflow and abuse-resistant validation for list updates.
+   - LoC estimate: **450-1,100**
+
+2. Chain-of-trust block propagation with direct-P2P exception
+   - Locked direction:
+     - Any relay-mediated trust graph interaction implies trust-chain participation.
+     - If a peer is blocked by any member in the trust chain, relay-mediated communication is blocked across that chain.
+     - Direct P2P is still allowed but must be flagged as blocked-risk on inbound attempts.
+     - Identity reset exists as recovery but is rate-limited to at most once per 24 hours.
+   - Required implementation:
+     - Trust-chain representation and block-propagation protocol.
+     - Relay-side enforcement path that denies relay for chain-blocked peers.
+     - Direct-P2P warning/flag path for blocked identities.
+     - Identity-reset cooldown enforcement and anti-abuse safeguards.
+     - Test coverage for false propagation, unblock transitions, and cooldown bypass attempts.
+   - LoC estimate: **900-1,900**
+
+3. User-priority message retention with adaptive relay cache pruning
+   - Locked direction:
+     - User’s own sent/received conversations are high-priority retained data.
+     - Relay-cached transient data may be pruned according to device storage policy.
+     - If storage pressure is low, avoid forced pruning.
+     - On storage pressure, prompt user before pruning retained conversation data.
+     - Offer backup/compression cold-storage export before destructive pruning.
+     - Allow user-driven pruning by conversation/size.
+   - Required implementation:
+     - Storage-tier model (high-priority conversations vs relay cache tiers).
+     - Storage-pressure detector + user prompt gating.
+     - Backup/export + compression flow for cold storage.
+     - Conversation-level size accounting and selective prune actions.
+     - Integrity tests for restore/reimport after export and prune.
+   - LoC estimate: **700-1,600**
+
+4. Global language and icon-forward UX policy
+   - Locked direction:
+     - Worldwide rollout must be understandable for users across languages.
+     - Use iconography aggressively where it improves cross-lingual clarity.
+   - Required implementation:
+     - Internationalization scaffold across Android/iOS/Web UI strings.
+     - High-frequency workflow icon system (status/actions/settings) with accessibility labels.
+     - Locale formatting parity (dates, numbers, pluralization, script direction where applicable).
+     - Cross-lingual usability validation for critical actions (send, retry, block, backup, prune).
+   - LoC estimate: **900-2,100**
+
+5. Diagnostics export privacy policy: identifiers excluded
+   - Locked direction:
+     - Diagnostics exports must exclude user identifiers (safest/simplest policy).
+   - Required implementation:
+     - Export schema update to omit identity/user-specific identifiers.
+     - Redaction enforcement tests for all export producers (mobile/web/core).
+     - Operator/partner documentation updates for identifier-free debugging workflows.
+   - LoC estimate: **150-420**
+
+### Traceability rule (must hold continuously)
+
+- Any newly discovered actionable TODO/FIXME/stub/incomplete implementation from:
+  - runtime logs,
+  - partner/field testing,
+  - PR/code review,
+  - incident postmortem,
+  - or doc audits,
+    must be added to this file in the same change set that captures the finding.
+
 ## Priority 1: Tooling, CI, and Experimental Surface
 
-1. Align CI with tri-platform target status
-   - Current: `.github/workflows/ci.yml` validates Rust workspace on Linux/macOS only.
-   - Gap: no canonical Android+iOS+Web parity gates in the primary CI workflow.
+1. [x] Align CI with tri-platform target status
+   - Current: `.github/workflows/ci.yml` has Android, iOS, and WASM jobs.
    - Target: enforce Android+iOS+Web build-readiness checks in gating CI for mainline changes.
+   - Outcome: Completed. `ci.yml` now includes `check-android`, `check-ios`, and `check-wasm` jobs.
 
-2. Add browser-executed WASM test job (parity gate)
-   - Current: native/non-browser WASM tests only in workspace run.
+2. [x] Add browser-executed WASM test job (parity gate)
+   - Current: `wasm-pack` runtime test coverage is in CI.
    - Target: `wasm-pack` runtime test coverage in CI.
+   - Outcome: Completed. `ci.yml` includes a job that runs `wasm-pack test --headless --firefox`.
 
 3. [x] Resolve integration test warnings in core tests
    - Current: workspace tests pass with warning noise.

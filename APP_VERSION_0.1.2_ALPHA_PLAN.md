@@ -355,3 +355,14 @@ v0.1.2-alpha is done when two real users can:
 4. Observe clear connection state + export diagnostics on issues.
 
 **Success criterion:** all four hold with no critical data-loss or message-loss defects in the alpha partner pilot.
+
+---
+
+## 12) Canonical Remaining-Work Source (Process Lock)
+
+- `REMAINING_WORK_TRACKING.md` is the canonical open-work ledger.
+- Open TODO/incomplete/stub items must not live only in ad-hoc docs, comments, or test notes.
+- For execution clarity, remaining work is split into two chapters there:
+  - `Chapter 1: v0.1.2-alpha Ready` (alpha testing/action blockers).
+  - `Chapter 2: v1.0.0 Readiness` (global rollout prerequisites).
+- Any newly discovered actionable gap during alpha testing must be added to `REMAINING_WORK_TRACKING.md` in the same change set.

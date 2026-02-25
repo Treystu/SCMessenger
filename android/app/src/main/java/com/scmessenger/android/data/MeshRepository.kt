@@ -289,10 +289,7 @@ class MeshRepository(private val context: Context) {
                             nickname = discoveredNickname,
                             localNickname = transportIdentity?.localNickname,
                             transport = com.scmessenger.android.service.TransportType.INTERNET, // Default for swarm
-                            isFull = !isRelay && (
-                                transportIdentity != null ||
-                                    !extractedKey.isNullOrBlank()
-                                ),
+                            isFull = transportIdentity != null || !extractedKey.isNullOrBlank(),
                             lastSeen = System.currentTimeMillis().toULong() / 1000u
                         )
                         updateDiscoveredPeer(peerId, discoveryInfo)
@@ -324,17 +321,17 @@ class MeshRepository(private val context: Context) {
                                 listeners = relayHints,
                                 knownPublicKey = transportIdentity.publicKey
                             )
-                                upsertFederatedContact(
-                                    canonicalPeerId = transportIdentity.canonicalPeerId,
-                                    publicKey = transportIdentity.publicKey,
-                                    nickname = transportIdentity.nickname,
-                                    libp2pPeerId = peerId,
-                                    listeners = relayHints,
-                                    createIfMissing = false
-                                )
+                            upsertFederatedContact(
+                                canonicalPeerId = transportIdentity.canonicalPeerId,
+                                publicKey = transportIdentity.publicKey,
+                                nickname = transportIdentity.nickname,
+                                libp2pPeerId = peerId,
+                                listeners = relayHints,
+                                createIfMissing = false
+                            )
                             try { contactManager?.updateLastSeen(transportIdentity.canonicalPeerId) } catch (_: Exception) { }
                             try { contactManager?.updateLastSeen(peerId) } catch (_: Exception) { }
-                            if (!isRelay && relayHints.isNotEmpty()) {
+                            if (!isBootstrapRelayPeer(peerId) && relayHints.isNotEmpty()) {
                                 connectToPeer(peerId, relayHints)
                             }
                         } else {
@@ -366,95 +363,77 @@ class MeshRepository(private val context: Context) {
                             includeRelayCircuits = true
                         )
 
-                        if (isBootstrapRelayPeer(peerId)) {
-                            Timber.i("Headless transport node identified: $peerId")
-                            val relayDiscovery = PeerDiscoveryInfo(
-                                peerId = peerId,
-                                publicKey = null,
-                                nickname = null,
-                                localNickname = null,
-                                transport = com.scmessenger.android.service.TransportType.INTERNET,
-                                isFull = false,
-                                lastSeen = System.currentTimeMillis().toULong() / 1000u
+                        val transportIdentity = resolveTransportIdentity(peerId)
+
+                        val discoveredNickname = prepopulateDiscoveryNickname(
+                            nickname = transportIdentity?.nickname,
+                            peerId = transportIdentity?.canonicalPeerId ?: peerId,
+                            publicKey = transportIdentity?.publicKey
+                        )
+
+                        // Update discovery map
+                        val discoveryInfo = PeerDiscoveryInfo(
+                            peerId = transportIdentity?.canonicalPeerId ?: peerId,
+                            publicKey = transportIdentity?.publicKey,
+                            nickname = discoveredNickname,
+                            localNickname = transportIdentity?.localNickname,
+                            transport = com.scmessenger.android.service.TransportType.INTERNET,
+                            isFull = transportIdentity != null,
+                            lastSeen = System.currentTimeMillis().toULong() / 1000u
+                        )
+                        updateDiscoveredPeer(peerId, discoveryInfo)
+                        if (discoveryInfo.peerId != peerId) {
+                            updateDiscoveredPeer(discoveryInfo.peerId, discoveryInfo)
+                        }
+
+                        if (transportIdentity != null) {
+                            emitIdentityDiscoveredIfChanged(
+                                peerId = transportIdentity.canonicalPeerId,
+                                publicKey = transportIdentity.publicKey,
+                                nickname = discoveredNickname,
+                                libp2pPeerId = peerId,
+                                listeners = dialCandidates
                             )
-                            updateDiscoveredPeer(peerId, relayDiscovery)
+                            annotateIdentityInLedger(
+                                routePeerId = peerId,
+                                listeners = dialCandidates,
+                                publicKey = transportIdentity.publicKey,
+                                nickname = discoveredNickname
+                            )
+                            try { contactManager?.updateLastSeen(transportIdentity.canonicalPeerId) } catch (_: Exception) { }
+                            try { contactManager?.updateLastSeen(peerId) } catch (_: Exception) { }
+                        } else {
+                            Timber.d("Transport identity unavailable for $peerId")
                             com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
                                 com.scmessenger.android.service.PeerEvent.Discovered(
                                     peerId,
                                     com.scmessenger.android.service.TransportType.INTERNET
                                 )
                             )
-                            emitConnectedIfChanged(
-                                peerId = peerId,
-                                transport = com.scmessenger.android.service.TransportType.INTERNET
-                            )
-                        } else {
-                            val transportIdentity = resolveTransportIdentity(peerId)
-
-                            val discoveredNickname = prepopulateDiscoveryNickname(
-                                nickname = transportIdentity?.nickname,
-                                peerId = transportIdentity?.canonicalPeerId ?: peerId,
-                                publicKey = transportIdentity?.publicKey
-                            )
-
-                            // Update discovery map
-                            val discoveryInfo = PeerDiscoveryInfo(
-                                peerId = transportIdentity?.canonicalPeerId ?: peerId,
-                                publicKey = transportIdentity?.publicKey,
-                                nickname = discoveredNickname,
-                                localNickname = transportIdentity?.localNickname,
-                                transport = com.scmessenger.android.service.TransportType.INTERNET,
-                                isFull = transportIdentity != null,
-                                lastSeen = System.currentTimeMillis().toULong() / 1000u
-                            )
-                            updateDiscoveredPeer(peerId, discoveryInfo)
-                            if (discoveryInfo.peerId != peerId) {
-                                updateDiscoveredPeer(discoveryInfo.peerId, discoveryInfo)
-                            }
-
-                            if (transportIdentity != null) {
-                                emitIdentityDiscoveredIfChanged(
-                                    peerId = transportIdentity.canonicalPeerId,
-                                    publicKey = transportIdentity.publicKey,
-                                    nickname = discoveredNickname,
-                                    libp2pPeerId = peerId,
-                                    listeners = dialCandidates
-                                )
-                                annotateIdentityInLedger(
-                                    routePeerId = peerId,
-                                    listeners = dialCandidates,
-                                    publicKey = transportIdentity.publicKey,
-                                    nickname = discoveredNickname
-                                )
-                                try { contactManager?.updateLastSeen(transportIdentity.canonicalPeerId) } catch (_: Exception) { }
-                                try { contactManager?.updateLastSeen(peerId) } catch (_: Exception) { }
-                            } else {
-                                Timber.d("Transport identity unavailable for $peerId")
-                            }
-                            emitConnectedIfChanged(
-                                peerId = peerId,
-                                transport = com.scmessenger.android.service.TransportType.INTERNET
-                            )
-                            persistRouteHintsForTransportPeer(
+                        }
+                        emitConnectedIfChanged(
+                            peerId = peerId,
+                            transport = com.scmessenger.android.service.TransportType.INTERNET
+                        )
+                        persistRouteHintsForTransportPeer(
+                            libp2pPeerId = peerId,
+                            listeners = dialCandidates,
+                            knownPublicKey = transportIdentity?.publicKey
+                        )
+                        if (transportIdentity != null) {
+                            upsertFederatedContact(
+                                canonicalPeerId = transportIdentity.canonicalPeerId,
+                                publicKey = transportIdentity.publicKey,
+                                nickname = transportIdentity.nickname,
                                 libp2pPeerId = peerId,
                                 listeners = dialCandidates,
-                                knownPublicKey = transportIdentity?.publicKey
-                            )
-                            if (transportIdentity != null) {
-                                upsertFederatedContact(
-                                    canonicalPeerId = transportIdentity.canonicalPeerId,
-                                    publicKey = transportIdentity.publicKey,
-                                    nickname = transportIdentity.nickname,
-                                    libp2pPeerId = peerId,
-                                    listeners = dialCandidates,
-                                    createIfMissing = false
-                                )
-                            }
-                            sendIdentitySyncIfNeeded(
-                                routePeerId = peerId,
-                                knownPublicKey = transportIdentity?.publicKey
+                                createIfMissing = false
                             )
                         }
+                        sendIdentitySyncIfNeeded(
+                            routePeerId = peerId,
+                            knownPublicKey = transportIdentity?.publicKey
+                        )
 
                         // Identified implies an active session exists; avoid immediate re-dial loops.
                         flushPendingOutbox("peer_identified:$peerId")
