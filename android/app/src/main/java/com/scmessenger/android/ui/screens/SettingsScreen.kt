@@ -117,6 +117,76 @@ fun SettingsScreen(
             contactCount = settingsViewModel.getContactCount(),
             messageCount = settingsViewModel.getMessageCount()
         )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Data Management Section
+        DataManagementSection(
+            onResetAll = { settingsViewModel.resetAllData() }
+        )
+    }
+}
+
+@Composable
+fun DataManagementSection(
+    onResetAll: () -> Unit
+) {
+    var showConfirmDialog by remember { mutableStateOf(false) }
+
+    if (showConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showConfirmDialog = false },
+            title = { Text("Reset All Data?") },
+            text = { Text("This will permanently delete your identity, messages, contacts, and settings. This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showConfirmDialog = false
+                        onResetAll()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("RESET")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "Data Management",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            Text(
+                text = "DANGER ZONE: This permanently wipes your identity and all local history.",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            Button(
+                onClick = { showConfirmDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Delete All Data & Reset App")
+            }
+        }
     }
 }
 

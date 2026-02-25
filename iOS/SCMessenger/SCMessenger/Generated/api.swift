@@ -1209,6 +1209,8 @@ public protocol IronCoreProtocol : AnyObject {
     
     func isRunning()  -> Bool
     
+    func markMessageSent(messageId: String)  -> Bool
+    
     func outboxCount()  -> UInt32
     
     /**
@@ -1339,6 +1341,14 @@ open func initializeIdentity()throws  {try rustCallWithError(FfiConverterTypeIro
 open func isRunning() -> Bool {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_is_running(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func markMessageSent(messageId: String) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_ironcore_mark_message_sent(self.uniffiClonePointer(),
+        FfiConverterString.lower(messageId),$0
     )
 })
 }
@@ -4721,6 +4731,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_is_running() != 48214) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_mark_message_sent() != 1211) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_outbox_count() != 26099) {

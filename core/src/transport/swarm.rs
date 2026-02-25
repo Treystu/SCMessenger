@@ -1027,6 +1027,7 @@ pub async fn start_swarm_with_config(
                                 if is_relay {
                                     tracing::info!("🔄 Peer {} is a relay node", peer_id);
                                     bootstrap_capability.add_peer(peer_id);
+                                    multi_path_delivery.add_relay(peer_id);
                                 }
 
                                 // Emit event for application layer
@@ -1064,6 +1065,7 @@ pub async fn start_swarm_with_config(
                                 // Add to bootstrap capability (potential relay node)
                                 // ALL peers are mandatory relays
                                 bootstrap_capability.add_peer(peer_id);
+                                multi_path_delivery.add_relay(peer_id);
 
                                 let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
 

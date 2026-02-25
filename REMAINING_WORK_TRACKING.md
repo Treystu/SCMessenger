@@ -69,9 +69,10 @@ Owner policy constraints (2026-02-23):
      - History UX and deep parity for settings/contacts surfaces on Web.
 
 10. Beta anti-abuse gate implementation and validation
-   - Requirement: abuse controls are non-blocking in alpha but mandatory before beta.
-   - Target: enable and validate anti-abuse protections with measurable pass criteria across Android, iOS, Web, and relay-critical paths.
-   - Scope: relay spam/flood controls, abuse detection thresholds, and regression coverage in CI/release checks.
+
+- Requirement: abuse controls are non-blocking in alpha but mandatory before beta.
+- Target: enable and validate anti-abuse protections with measurable pass criteria across Android, iOS, Web, and relay-critical paths.
+- Scope: relay spam/flood controls, abuse detection thresholds, and regression coverage in CI/release checks.
 
 11. Active-session reliability + durable eventual delivery guarantees
     - Requirement: while app is open/relaying, service should remain available and messages should not be dropped.
@@ -271,8 +272,15 @@ Owner policy constraints (2026-02-23):
 - WASM swarm transport functional (`startSwarm`, `stopSwarm`, `sendPreparedEnvelope`, `getPeers`)
 - `mark_message_sent` exposed via UniFFI for bounded outbox management
 
-## Change Control Notes
+## Roadmap to 1.0.0 (Post v0.1.2-alpha)
 
-- Use `docs/CURRENT_STATE.md` as the verification snapshot.
-- Use `docs/GLOBAL_ROLLOUT_PLAN.md` for release-phase execution.
-- Treat older completion/audit reports as historical context unless reconfirmed.
+1. **Automatic Environment Detection and Unified Hydration**
+   - Requirement: The app must automatically detect if a previous identity, message history, contacts, or user preferences exist in local storage/backups and utilize them immediately on startup without user intervention.
+   - Target: Unified "detect-and-resume" logic that covers all persisted data types across Android, iOS, and Web.
+   - Scope: Identity (Keychain/SharedPreferences), Message History (history.db), Contacts (contacts.db), and Privacy Toggles.
+
+2. **Manual Data Management (Reset/Refresh/Delete)**
+   - Requirement: Provide a secure, user-facing way to clear or reset all application data.
+   - Target: A "Delete All Data" or "Reset Application" button in the Settings view.
+   - Action: Securely wipe identity, message history, contacts, and all local preferences from the device.
+   - Scope: Android (`SettingsScreen`), iOS (`SettingsView`), and Web.

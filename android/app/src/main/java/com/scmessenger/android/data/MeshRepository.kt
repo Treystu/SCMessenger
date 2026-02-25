@@ -1695,6 +1695,45 @@ class MeshRepository(private val context: Context) {
         return historyManager?.count() ?: 0u
     }
 
+    /**
+     * Resets all application data, including identity, contacts, history, and preferences.
+     * WARNING: This is destructive and permanent.
+     */
+    fun resetAllData() {
+        Timber.w("RESETTING ALL APPLICATION DATA")
+
+        // 1. Stop all active services and release UniFFI objects
+        swarmBridge?.shutdown()
+        swarmBridge = null
+
+        meshService?.stop()
+        meshService = null
+
+        ironCore?.stop()
+        ironCore = null
+
+        contactManager = null
+        historyManager = null
+        ledgerManager = null
+        settingsManager = null
+        autoAdjustEngine = null
+
+        // 2. Clear identity backup SharedPreferences
+        identityBackupPrefs.edit().clear().apply()
+
+        // 3. Delete all files in storage path (Rust DBs, keys, etc)
+        val files = context.filesDir.listFiles()
+        files?.forEach { file ->
+            if (file.isDirectory) {
+                file.deleteRecursively()
+            } else {
+                file.delete()
+            }
+        }
+
+        Timber.i("All application data reset successfully")
+    }
+
     // ========================================================================
     // LEDGER
     // ========================================================================

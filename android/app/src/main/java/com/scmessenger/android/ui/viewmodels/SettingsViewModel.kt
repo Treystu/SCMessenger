@@ -398,4 +398,28 @@ class SettingsViewModel @Inject constructor(
             preferencesRepository.setBleRotationIntervalSec(intervalSec)
         }
     }
+
+    /**
+     * Resets all application data and preferences.
+     */
+    fun resetAllData() {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                
+                // Clear app-level preferences
+                preferencesRepository.clearAll()
+                
+                // Reset mesh data (identity, history, etc)
+                meshRepository.resetAllData()
+                
+                Timber.i("Application reset complete")
+            } catch (e: Exception) {
+                _error.value = "Failed to reset application: ${e.message}"
+                Timber.e(e, "Reset failed")
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
 }

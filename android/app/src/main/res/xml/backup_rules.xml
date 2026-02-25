@@ -4,6 +4,4 @@
          identity_backup_prefs.xml is safe to back up and will be included
          by default (no <include> tag, so all non-excluded data is backed up). -->
     <exclude domain="file" path="identity/" />
-    <exclude domain="file" path="contacts.db/" />
-    <exclude domain="file" path="history.db/" />
 </full-backup-content>

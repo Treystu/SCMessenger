@@ -165,9 +165,21 @@ impl ReputationTracker {
             .collect()
     }
 
-    /// Get reputation for a specific peer
-    pub fn get_reputation(&self, peer_id: &PeerId) -> Option<&RelayReputation> {
-        self.reputations.get(peer_id)
+    /// Add a peer as a potential relay (neutral reputation)
+    pub fn add_relay(&mut self, peer_id: PeerId) {
+        self.reputations
+            .entry(peer_id)
+            .or_insert_with(|| RelayReputation {
+                peer_id,
+                stats: RelayStats::default(),
+                score: 50.0,
+                is_reliable: true,
+            });
+    }
+
+    /// Check if we have any known relays
+    pub fn is_empty(&self) -> bool {
+        self.reputations.is_empty()
     }
 
     /// Get all reputations
@@ -308,6 +320,11 @@ impl MultiPathDelivery {
     pub fn start_delivery(&mut self, message_id: String, target_peer: PeerId) {
         let attempt = DeliveryAttempt::new(message_id.clone(), target_peer);
         self.attempts.insert(message_id, attempt);
+    }
+
+    /// Register a potential relay node
+    pub fn add_relay(&mut self, peer_id: PeerId) {
+        self.reputation.add_relay(peer_id);
     }
 
     /// Get best paths to try (direct + relay options)
