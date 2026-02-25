@@ -24,6 +24,8 @@ These decisions are now canonical unless explicitly superseded:
 11. Storage: **policy-bounded retention** (no unbounded local growth).
 12. Alpha launch scope: abuse controls and regional compliance mapping are **not blocking gates**.
 13. Device strategy: **80/20 support matrix** (smallest support set covering most users).
+14. Critical UX parity policy: no temporary lead platform for critical UX controls across Android, iOS, and Web.
+15. Beta gate policy: anti-abuse controls must be implemented and validated before beta.
 
 ## 2) Scope of Documentation Pass
 
@@ -268,6 +270,10 @@ Each stage requires:
    - bounded retention policy implemented and verified
 8. Support policy:
    - 80/20 support matrix documented and enforced in release criteria
+9. Critical UX parity:
+   - critical UX controls and behavior are parity-verified across Android+iOS+Web with no temporary lead-platform exceptions
+10. Beta anti-abuse gate:
+   - abuse-control protections are enabled and validated before beta release
 
 ## 7) Risks and Mitigations
 

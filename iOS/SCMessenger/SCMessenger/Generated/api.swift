@@ -1195,9 +1195,13 @@ public func FfiConverterTypeHistoryManager_lower(_ value: HistoryManager) -> Uns
 
 public protocol IronCoreProtocol : AnyObject {
     
+    func exportIdentityBackup() throws  -> String
+    
     func extractPublicKeyFromPeerId(peerId: String) throws  -> String
     
     func getIdentityInfo()  -> IdentityInfo
+    
+    func importIdentityBackup(backup: String) throws 
     
     func inboxCount()  -> UInt32
     
@@ -1290,6 +1294,13 @@ public static func withStorage(storagePath: String) -> IronCore {
     
 
     
+open func exportIdentityBackup()throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_export_identity_backup(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func extractPublicKeyFromPeerId(peerId: String)throws  -> String {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_extract_public_key_from_peer_id(self.uniffiClonePointer(),
@@ -1303,6 +1314,13 @@ open func getIdentityInfo() -> IdentityInfo {
     uniffi_scmessenger_core_fn_method_ironcore_get_identity_info(self.uniffiClonePointer(),$0
     )
 })
+}
+    
+open func importIdentityBackup(backup: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_import_identity_backup(self.uniffiClonePointer(),
+        FfiConverterString.lower(backup),$0
+    )
+}
 }
     
 open func inboxCount() -> UInt32 {
@@ -1651,6 +1669,13 @@ public func FfiConverterTypeLedgerManager_lower(_ value: LedgerManager) -> Unsaf
 
 public protocol MeshServiceProtocol : AnyObject {
     
+    /**
+     * Export a structured diagnostics JSON payload for support and partner testing.
+     */
+    func exportDiagnostics()  -> String
+    
+    func getConnectionPathState()  -> ConnectionPathState
+    
     func getCore()  -> IronCore?
     
     /**
@@ -1754,6 +1779,23 @@ public static func withStorage(config: MeshServiceConfig, storagePath: String) -
 }
     
 
+    
+    /**
+     * Export a structured diagnostics JSON payload for support and partner testing.
+     */
+open func exportDiagnostics() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_meshservice_export_diagnostics(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func getConnectionPathState() -> ConnectionPathState {
+    return try!  FfiConverterTypeConnectionPathState.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_meshservice_get_connection_path_state(self.uniffiClonePointer(),$0
+    )
+})
+}
     
 open func getCore() -> IronCore? {
     return try!  FfiConverterOptionTypeIronCore.lift(try! rustCall() {
@@ -3447,6 +3489,85 @@ extension AdjustmentProfile: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Canonical connection-path state contract for all clients.
+ */
+
+public enum ConnectionPathState {
+    
+    case disconnected
+    case bootstrapping
+    case directPreferred
+    case relayFallback
+    case relayOnly
+}
+
+
+public struct FfiConverterTypeConnectionPathState: FfiConverterRustBuffer {
+    typealias SwiftType = ConnectionPathState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConnectionPathState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .disconnected
+        
+        case 2: return .bootstrapping
+        
+        case 3: return .directPreferred
+        
+        case 4: return .relayFallback
+        
+        case 5: return .relayOnly
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ConnectionPathState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .disconnected:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .bootstrapping:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .directPreferred:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .relayFallback:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .relayOnly:
+            writeInt(&buf, Int32(5))
+        
+        }
+    }
+}
+
+
+public func FfiConverterTypeConnectionPathState_lift(_ buf: RustBuffer) throws -> ConnectionPathState {
+    return try FfiConverterTypeConnectionPathState.lift(buf)
+}
+
+public func FfiConverterTypeConnectionPathState_lower(_ value: ConnectionPathState) -> RustBuffer {
+    return FfiConverterTypeConnectionPathState.lower(value)
+}
+
+
+
+extension ConnectionPathState: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum DiscoveryMode {
     
@@ -4581,10 +4702,16 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_historymanager_stats() != 45938) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_export_identity_backup() != 49536) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_extract_public_key_from_peer_id() != 39145) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_get_identity_info() != 10640) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_import_identity_backup() != 7432) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_inbox_count() != 64990) {
@@ -4654,6 +4781,12 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ledgermanager_summary() != 25042) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_meshservice_export_diagnostics() != 20773) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_meshservice_get_connection_path_state() != 43832) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_meshservice_get_core() != 47720) {

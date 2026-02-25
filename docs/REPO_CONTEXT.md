@@ -108,7 +108,15 @@ iOS directory authority:
 
 ### WASM (`wasm/src/lib.rs`)
 
-WASM exports core operations plus `startReceiveLoop` (WebSocket relay ingress) and `drainReceivedMessages` for JavaScript polling/drain semantics.
+WASM exports core operations plus browser swarm APIs:
+
+- `startSwarm(bootstrapAddrs)`
+- `stopSwarm()`
+- `sendPreparedEnvelope(peerId, envelopeBytes)`
+- `getPeers()`
+- `drainReceivedMessages()`
+
+`startReceiveLoop(relayUrl)` remains as a deprecated compatibility shim and now delegates to swarm bootstrap rather than maintaining a standalone relay receive loop.
 
 Current product status: **experimental**, but now on the GA-critical parity path for unified Android+iOS+Web delivery.
 

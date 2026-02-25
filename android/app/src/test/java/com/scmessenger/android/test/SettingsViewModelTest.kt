@@ -1,104 +1,130 @@
 package com.scmessenger.android.test
 
+import com.scmessenger.android.data.MeshRepository
+import com.scmessenger.android.data.PreferencesRepository
 import com.scmessenger.android.ui.viewmodels.SettingsViewModel
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
-import org.junit.Assert.assertTrue
 
-/**
- * Unit tests for SettingsViewModel.
- *
- * Tests:
- * - Settings load/save
- * - Validation enforcement (relay=messaging coupling)
- * - Manual override application
- * - Transport toggles
- */
+@OptIn(ExperimentalCoroutinesApi::class)
 class SettingsViewModelTest {
 
+    private lateinit var repository: MeshRepository
+    private lateinit var preferences: PreferencesRepository
     private lateinit var viewModel: SettingsViewModel
+    private val testDispatcher = StandardTestDispatcher()
+
+    private fun settings(relayEnabled: Boolean = true) = uniffi.api.MeshSettings(
+        relayEnabled = relayEnabled,
+        maxRelayBudget = 200u,
+        batteryFloor = 20u,
+        bleEnabled = true,
+        wifiAwareEnabled = true,
+        wifiDirectEnabled = true,
+        internetEnabled = true,
+        discoveryMode = uniffi.api.DiscoveryMode.NORMAL,
+        onionRouting = false,
+        coverTrafficEnabled = false,
+        messagePaddingEnabled = false,
+        timingObfuscationEnabled = false
+    )
 
     @Before
     fun setup() {
-        // viewModel = SettingsViewModel(mockRepository)
+        Dispatchers.setMain(testDispatcher)
+        repository = mockk(relaxed = true)
+        preferences = mockk(relaxed = true)
+
+        every { repository.loadSettings() } returns settings()
+        every { repository.validateSettings(any()) } returns true
+        every { repository.getIdentityInfo() } returns null
+
+        every { preferences.serviceAutoStart } returns MutableStateFlow(false)
+        every { preferences.vpnModeEnabled } returns MutableStateFlow(false)
+        every { preferences.themeMode } returns MutableStateFlow(PreferencesRepository.ThemeMode.SYSTEM)
+        every { preferences.notificationsEnabled } returns MutableStateFlow(true)
+        every { preferences.showPeerCount } returns MutableStateFlow(true)
+        every { preferences.autoAdjustEnabled } returns MutableStateFlow(true)
+        every { preferences.manualAdjustmentProfile } returns MutableStateFlow("STANDARD")
+        every { preferences.bleRotationEnabled } returns MutableStateFlow(true)
+        every { preferences.bleRotationIntervalSec } returns MutableStateFlow(900)
+
+        viewModel = SettingsViewModel(repository, preferences)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
     }
 
     @Test
-    fun `test loadSettings - populates UI state`() {
-        // Given
-        // mockRepository.loadSettings() returns defaultSettings
-
-        // When
-        // viewModel.loadSettings()
-
-        // Then
-        // assertNotNull(viewModel.settings.value)
-        assertTrue("Placeholder - requires settings loading", true)
+    fun `loadSettings populates UI state`() = runTest {
+        advanceUntilIdle()
+        assertEquals(true, viewModel.settings.value?.relayEnabled)
+        assertNull(viewModel.error.value)
     }
 
     @Test
-    fun `test saveSettings - persists changes`() {
-        // Given
-        // val updatedSettings = viewModel.settings.value.copy(bleEnabled = false)
+    fun `updateSettings saves when valid`() = runTest {
+        val updated = settings(relayEnabled = false)
+        viewModel.updateSettings(updated)
+        advanceUntilIdle()
 
-        // When
-        // viewModel.saveSettings(updatedSettings)
-
-        // Then
-        // verify { mockRepository.saveSettings(updatedSettings) }
-        assertTrue("Placeholder - requires save logic", true)
+        verify(exactly = 1) { repository.saveSettings(updated) }
+        assertEquals(false, viewModel.settings.value?.relayEnabled)
     }
 
     @Test
-    fun `test relay messaging coupling - enforced`() {
-        // Given
-        // val settings = viewModel.settings.value
+    fun `updateSettings rejects invalid configuration`() = runTest {
+        every { repository.validateSettings(any()) } returns false
 
-        // When
-        // viewModel.toggleRelay(false)
+        viewModel.updateSettings(settings(relayEnabled = false))
+        advanceUntilIdle()
 
-        // Then
-        // Relay and messaging should both be disabled
-        // assertFalse(viewModel.settings.value.relayEnabled)
-        assertTrue("Placeholder - requires coupling enforcement", true)
+        verify(exactly = 0) { repository.saveSettings(any()) }
+        assertEquals("Invalid settings configuration", viewModel.error.value)
     }
 
     @Test
-    fun `test transport toggle - at least one active`() {
-        // Given
-        // val settings with only BLE enabled
+    fun `setAutoAdjust true clears overrides`() = runTest {
+        coEvery { preferences.setAutoAdjustEnabled(true) } returns Unit
 
-        // When
-        // Try to disable BLE (last transport)
+        viewModel.setAutoAdjust(true)
+        advanceUntilIdle()
 
-        // Then
-        // Should prevent disabling or show error
-        assertTrue("Placeholder - requires validation", true)
+        coVerify(exactly = 1) { preferences.setAutoAdjustEnabled(true) }
+        verify(exactly = 1) { repository.clearAdjustmentOverrides() }
     }
 
     @Test
-    fun `test manual override - applies to AutoAdjust`() {
-        // Given
-        val scanInterval = 5000u
+    fun `setManualProfile persists preference`() = runTest {
+        coEvery { preferences.setManualAdjustmentProfile(any()) } returns Unit
 
-        // When
-        // viewModel.overrideBleInterval(scanInterval)
+        viewModel.setManualProfile(uniffi.api.AdjustmentProfile.MINIMAL)
+        advanceUntilIdle()
 
-        // Then
-        // verify { mockRepository.overrideBleInterval(scanInterval) }
-        assertTrue("Placeholder - requires override logic", true)
+        coVerify(atLeast = 1) { preferences.setManualAdjustmentProfile("MINIMAL") }
     }
 
     @Test
-    fun `test clear overrides - resets to defaults`() {
-        // Given
-        // Manual overrides are set
-
-        // When
-        // viewModel.clearOverrides()
-
-        // Then
-        // verify { mockRepository.clearAdjustmentOverrides() }
-        assertTrue("Placeholder - requires reset logic", true)
+    fun `clearAdjustmentOverrides delegates to repository`() {
+        viewModel.clearAdjustmentOverrides()
+        verify(exactly = 1) { repository.clearAdjustmentOverrides() }
     }
 }

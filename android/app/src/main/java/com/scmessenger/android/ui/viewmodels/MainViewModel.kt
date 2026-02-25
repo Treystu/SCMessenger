@@ -18,6 +18,12 @@ class MainViewModel @Inject constructor(
     private val _isReady = MutableStateFlow(false)
     val isReady = _isReady.asStateFlow()
 
+    private val _isCreatingIdentity = MutableStateFlow(false)
+    val isCreatingIdentity = _isCreatingIdentity.asStateFlow()
+
+    private val _identityError = MutableStateFlow<String?>(null)
+    val identityError = _identityError.asStateFlow()
+
     private val _importError = MutableStateFlow<String?>(null)
     val importError = _importError.asStateFlow()
 
@@ -33,9 +39,11 @@ class MainViewModel @Inject constructor(
 
     private fun checkIdentity() {
         viewModelScope.launch {
+            val initialized = meshRepository.isIdentityInitialized()
             val info = meshRepository.getIdentityInfo()
             val hasNickname = !info?.nickname.isNullOrBlank()
-            if (meshRepository.isIdentityInitialized() && hasNickname) {
+            _identityError.value = null
+            if (initialized && hasNickname) {
                 _isReady.value = true
             } else {
                 // Stay not ready, waiting for onboarding
@@ -46,10 +54,13 @@ class MainViewModel @Inject constructor(
 
     fun createIdentity(nickname: String) {
         viewModelScope.launch {
+            _isCreatingIdentity.value = true
+            _identityError.value = null
             try {
                 val trimmedNickname = nickname.trim()
                 if (trimmedNickname.isEmpty()) {
                     Timber.w("Refusing identity creation with blank nickname")
+                    _identityError.value = "Nickname is required"
                     _isReady.value = false
                     return@launch
                 }
@@ -58,8 +69,16 @@ class MainViewModel @Inject constructor(
                 _isReady.value = true
             } catch (e: Exception) {
                 Timber.e(e, "Failed to create identity")
+                _identityError.value = e.message ?: "Failed to create identity"
+                _isReady.value = false
+            } finally {
+                _isCreatingIdentity.value = false
             }
         }
+    }
+
+    fun clearIdentityError() {
+        _identityError.value = null
     }
 
     fun importContact(jsonString: String) {

@@ -10,6 +10,8 @@ Owner policy constraints (2026-02-23):
 - Community-operated infrastructure model (self-hosted and third-party nodes are both valid).
 - English-only alpha UI language (i18n expansion tracked as backlog).
 - No abuse-control or regional compliance hard gate for alpha.
+- Anti-abuse controls are required before beta release.
+- Critical UX controls must stay in Android+iOS+Web parity with no temporary lead platform.
 
 ## Priority 0: Tri-Platform Semantics and Reliability
 
@@ -38,11 +40,16 @@ Owner policy constraints (2026-02-23):
 
 7. Nearby Peer Discovery and Identity Federation (Android Focus)
    - [x] Prevent permission-race startup regression: Android mesh now permission-gates BLE/WiFi init and auto-retries transport init when runtime permissions are granted (no restart required).
-   - [ ] Ensure Bluetooth, LAN, and Relay discovery are accounted for and routed to Mesh tab.
-   - [ ] Display total node count (headless and full) in Mesh UI.
-   - [ ] Fix nickname federation (ensure nicknames are correctly passed to neighbors over BLE/Swarm).
-   - [ ] Fix iOS -> Android nearby identity nickname propagation (Android currently discovers peer identity/public key but often misses federated nickname).
-   - [ ] Implement local nickname overrides in contacts (show both official and private nicknames).
+   - [x] Ensure Bluetooth, LAN, and Relay discovery are accounted for and routed to Mesh tab.
+   - [x] Display total node count (headless and full) in Mesh UI.
+   - [x] Fix nickname federation (ensure nicknames are correctly passed to neighbors over BLE/Swarm).
+   - [x] Fix iOS -> Android nearby identity nickname propagation (Android currently discovers peer identity/public key but often misses federated nickname).
+   - [x] Implement local nickname overrides in contacts (show both official and private nicknames).
+   - Outcome (2026-02-24):
+     - Android and iOS repositories now emit deduplicated identity/connected discovery events for BLE + internet peers, including headless relay visibility.
+     - Dashboard surfaces aggregate full/headless totals from canonical discovery state.
+     - BLE identity reads now perform delayed refresh pulls after initial connect to capture nickname updates quickly.
+     - Contacts screens display local override nickname as primary with federated nickname retained as secondary (`@nickname`) on both mobile clients.
 
 8. Android WiFi Aware physical-device validation
    - File: `android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt`
@@ -57,36 +64,41 @@ Owner policy constraints (2026-02-23):
      - `ui/index.html`
      - `core/src/wasm_support/*`
 
-10. Active-session reliability + durable eventual delivery guarantees
+10. Beta anti-abuse gate implementation and validation
+   - Requirement: abuse controls are non-blocking in alpha but mandatory before beta.
+   - Target: enable and validate anti-abuse protections with measurable pass criteria across Android, iOS, Web, and relay-critical paths.
+   - Scope: relay spam/flood controls, abuse detection thresholds, and regression coverage in CI/release checks.
+
+11. Active-session reliability + durable eventual delivery guarantees
     - Requirement: while app is open/relaying, service should remain available and messages should not be dropped.
     - Target: explicit durability contract (persisted outbox/inbox semantics, resend/recovery behavior) plus failure-mode tests.
     - Scope: crash/restart recovery, relay outage handling, offline queue replay, duplicate-safe redelivery.
 
-11. Bounded retention policy implementation
+12. Bounded retention policy implementation
 
 - Requirement: local history/outbox storage must be policy-bound to avoid unbounded disk growth.
 - Target: configurable retention caps + deterministic pruning behavior + docs for user expectations.
 - Scope: Android, iOS, and Web local storage behavior and defaults.
 
-11. First-run consent gate (mandatory)
+13. First-run consent gate (mandatory)
 
 - Requirement: first app launch must present consent text explaining privacy/security boundaries.
 - Target: consent acknowledgment gate on Android/iOS/Web before first messaging actions.
 - Scope: UX copy parity, acceptance persistence, and re-display rules after major policy changes.
 
-12. 80/20 platform support matrix
+14. 80/20 platform support matrix
 
 - Requirement: prioritize the smallest support matrix that covers the majority of active users.
 - Target: explicit minimum OS/browser matrix and validation plan tied to release gates.
 - Scope: Android API levels, iOS versions/devices, and browser families/versions.
 
-13. Community-operated relay/bootstrap topology support
+15. Community-operated relay/bootstrap topology support
 
 - Requirement: both self-hosted and third-party-operated infra must be valid without protocol-level assumptions.
 - Target: operator docs + connectivity tests for cloud-hosted and home-hosted relays/bootstrap nodes.
 - Scope: examples for GCP-style deployments and low-resource/self-hosted setups.
 
-14. Bootstrap governance mode decision (product choice pending)
+16. Bootstrap governance mode decision (product choice pending)
 
 - Requirement: choose how clients trust and discover bootstrap updates.
 - Target: lock one governance mode and document it in canonical docs.
@@ -197,6 +209,19 @@ Owner policy constraints (2026-02-23):
 - Requirement: app upgrades must preserve identity, contacts, and message history without manual re-import.
 - Target: deterministic migration/verification path across Android and iOS app updates, including storage-path continuity checks and automatic import fallback for legacy stores.
 - Scope: core storage versioning, mobile app startup migration hooks, and update smoke tests that assert post-update continuity.
+- Current progress:
+  - Added core storage layout/schema guard (`SCHEMA_VERSION`) and explicit `identity/`, `outbox/`, `inbox/` sub-store initialization.
+  - `IronCore::with_storage()` now initializes persistent inbox/outbox backends (not memory-only fallback by default).
+  - Added core persistence restart tests for inbox/outbox continuity under storage-backed initialization.
+  - Added schema v2 legacy-root migration to copy old identity/outbox/inbox keys into split sub-stores on upgrade.
+  - Identity manager now hydrates persisted identity/nickname on startup without auto-generating fresh identities.
+  - Added restart continuity tests for identity hydration, legacy-root migration, contacts (including local nickname), and history delivery-state persistence.
+  - Android onboarding now waits for confirmed identity creation + nickname persistence before completing first-run flow.
+  - Android/iOS repository flows now explicitly resume deferred swarm startup after identity/nickname creation, closing a first-run internet transport stall path.
+  - CLI relay mode now uses persisted headless network identity (`storage/relay_network_key.pb`) so relay peer IDs remain stable across process restarts.
+- Remaining:
+  - Platform-level upgrade simulations on Android/iOS/WASM package installs with real prior-app data.
+  - End-to-end package upgrade evidence capture (device install/update logs + retained chat transcript checks).
 
 ## Priority 2: Documentation Completion and Governance
 

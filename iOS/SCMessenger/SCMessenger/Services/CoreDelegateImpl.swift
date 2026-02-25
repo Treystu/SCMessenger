@@ -46,7 +46,11 @@ final class CoreDelegateImpl: CoreDelegate {
 
     func onPeerDisconnected(peerId: String) {
         logger.info("Peer disconnected: \(peerId)")
-        eventBus.peerEvents.send(.disconnected(peerId: peerId))
+        let repo = meshRepository
+        DispatchQueue.main.async {
+            repo?.handleTransportPeerDisconnected(peerId: peerId)
+            self.eventBus.peerEvents.send(.disconnected(peerId: peerId))
+        }
     }
 
     func onPeerIdentified(peerId: String, listenAddrs: [String]) {

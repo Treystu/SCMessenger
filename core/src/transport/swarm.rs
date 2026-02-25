@@ -13,24 +13,36 @@
 // - Mandatory relay for all connections
 // - All behaviours from behaviour.rs
 
+#[cfg(not(target_arch = "wasm32"))]
+use super::behaviour::RelayRequest;
 use super::behaviour::{
     IronCoreBehaviour, LedgerExchangeRequest, LedgerExchangeResponse, MessageRequest,
-    MessageResponse, RelayRequest, RelayResponse, SharedPeerEntry,
+    MessageResponse, RelayResponse, SharedPeerEntry,
 };
+#[cfg(not(target_arch = "wasm32"))]
 use super::mesh_routing::{BootstrapCapability, MultiPathDelivery};
+#[cfg(target_arch = "wasm32")]
+use super::multiport::MultiPortConfig;
+#[cfg(not(target_arch = "wasm32"))]
 use super::multiport::{self, BindResult, MultiPortConfig};
 use super::observation::{AddressObserver, ConnectionTracker};
 use super::reflection::{AddressReflectionRequest, AddressReflectionService};
 use anyhow::Result;
+#[cfg(not(target_arch = "wasm32"))]
 use bincode;
+#[cfg(target_arch = "wasm32")]
+use libp2p::Transport;
 use libp2p::{identity::Keypair, kad, swarm::SwarmEvent, Multiaddr, PeerId};
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::{Duration, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
 /// Pending message delivery tracking
 #[derive(Debug)]
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 struct PendingMessage {
     target_peer: PeerId,
     envelope_data: Vec<u8>,
@@ -349,6 +361,9 @@ pub async fn start_swarm_with_config(
     multiport_config: Option<MultiPortConfig>,
     bootstrap_addrs: Vec<Multiaddr>,
 ) -> Result<SwarmHandle> {
+    #[cfg(target_arch = "wasm32")]
+    let _ = &multiport_config;
+
     #[cfg(not(target_arch = "wasm32"))]
     {
         let local_peer_id = keypair.public().to_peer_id();
@@ -1285,10 +1300,482 @@ pub async fn start_swarm_with_config(
 
     #[cfg(target_arch = "wasm32")]
     {
-        anyhow::bail!("WASM transport not yet implemented");
+        use futures::{FutureExt, StreamExt};
+        use libp2p::core::{muxing::StreamMuxerBox, upgrade::Version};
+
+        let local_peer_id = keypair.public().to_peer_id();
+
+        // Browser transport: websocket-websys + Noise + Yamux, then relay client support.
+        // This keeps protocol-level parity with native swarm behaviour.
+        let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
+            .with_wasm_bindgen()
+            .with_other_transport(
+                |id_keys| -> std::result::Result<_, Box<dyn std::error::Error + Send + Sync>> {
+                    let noise = libp2p::noise::Config::new(id_keys)?;
+                    Ok(libp2p::websocket_websys::Transport::default()
+                        .upgrade(Version::V1Lazy)
+                        .authenticate(noise)
+                        .multiplex(libp2p::yamux::Config::default())
+                        .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn))))
+                },
+            )?
+            .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)?
+            .with_behaviour(|key, relay_client| {
+                IronCoreBehaviour::new(key, relay_client)
+                    .expect("Failed to create network behaviour")
+            })?
+            .with_swarm_config(|cfg| {
+                cfg.with_idle_connection_timeout(std::time::Duration::from_secs(600))
+            })
+            .build();
+
+        // Browser nodes cannot open TCP listeners. We keep deterministic command semantics:
+        // Listen => unsupported, GetListeners => empty.
+        if let Some(addr) = listen_addr {
+            tracing::warn!(
+                "Ignoring listen addr on wasm32 (browser cannot listen): {}",
+                addr
+            );
+        }
+
+        // Keep default topic parity with native.
+        let lobby_topic = libp2p::gossipsub::IdentTopic::new("sc-lobby");
+        let mesh_topic = libp2p::gossipsub::IdentTopic::new("sc-mesh");
+        if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&lobby_topic) {
+            tracing::warn!("Failed to subscribe to lobby topic: {}", e);
+        }
+        if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&mesh_topic) {
+            tracing::warn!("Failed to subscribe to mesh topic: {}", e);
+        }
+
+        // Kademlia server mode parity with native.
+        swarm
+            .behaviour_mut()
+            .kademlia
+            .set_mode(Some(kad::Mode::Server));
+
+        // Auto-dial bootstrap nodes for internet connectivity.
+        if !bootstrap_addrs.is_empty() {
+            tracing::info!(
+                "🌐 Dialing {} bootstrap node(s) from wasm",
+                bootstrap_addrs.len()
+            );
+            for addr in &bootstrap_addrs {
+                match swarm.dial(addr.clone()) {
+                    Ok(_) => tracing::info!("  ✓ Dialing bootstrap: {}", addr),
+                    Err(e) => tracing::warn!("  ✗ Failed to dial bootstrap {}: {}", addr, e),
+                }
+            }
+        }
+
+        let (command_tx, mut command_rx) = mpsc::channel::<SwarmCommand>(256);
+        let handle = SwarmHandle {
+            command_tx: command_tx.clone(),
+        };
+
+        let mut pending_direct_replies: HashMap<
+            libp2p::request_response::OutboundRequestId,
+            mpsc::Sender<Result<(), String>>,
+        > = HashMap::new();
+
+        let mut pending_reflections: HashMap<
+            libp2p::request_response::OutboundRequestId,
+            mpsc::Sender<Result<String, String>>,
+        > = HashMap::new();
+
+        let mut pending_relay_requests: HashMap<
+            libp2p::request_response::OutboundRequestId,
+            String,
+        > = HashMap::new();
+
+        let mut pending_messages: HashMap<String, PendingMessage> = HashMap::new();
+
+        let mut subscribed_topics: HashSet<String> = HashSet::new();
+        subscribed_topics.insert("sc-lobby".to_string());
+        subscribed_topics.insert("sc-mesh".to_string());
+
+        let mut ledger_exchanged_peers: HashSet<PeerId> = HashSet::new();
+
+        // Keep observational parity where possible on wasm.
+        let reflection_service = AddressReflectionService::new();
+        let mut connection_tracker = ConnectionTracker::new();
+        let mut address_observer = AddressObserver::new();
+        let mut relay_budget: u32 = 200;
+        let mut relay_count_this_hour: u32 = 0;
+        let mut relay_hour_start = std::time::Instant::now();
+        let mut last_bootstrap_redial = std::time::Instant::now();
+        let bootstrap_addrs_clone = bootstrap_addrs;
+
+        wasm_bindgen_futures::spawn_local(async move {
+            loop {
+                let command_fut = command_rx.recv().fuse();
+                let swarm_fut = swarm.select_next_some().fuse();
+                futures::pin_mut!(command_fut, swarm_fut);
+
+                futures::select! {
+                    maybe_command = command_fut => {
+                        let Some(command) = maybe_command else {
+                            tracing::info!("WASM swarm command channel closed");
+                            break;
+                        };
+
+                        match command {
+                            SwarmCommand::SendMessage { peer_id, envelope_data, reply } => {
+                                let request_id = swarm.behaviour_mut().messaging.send_request(
+                                    &peer_id,
+                                    MessageRequest { envelope_data },
+                                );
+                                pending_direct_replies.insert(request_id, reply);
+                            }
+                            SwarmCommand::RequestAddressReflection { peer_id, reply } => {
+                                let mut request_id_bytes = [0u8; 16];
+                                use rand::RngCore;
+                                rand::thread_rng().fill_bytes(&mut request_id_bytes);
+
+                                let request = AddressReflectionRequest {
+                                    request_id: request_id_bytes,
+                                    version: 1,
+                                };
+
+                                let request_id = swarm.behaviour_mut().address_reflection.send_request(
+                                    &peer_id,
+                                    request,
+                                );
+                                pending_reflections.insert(request_id, reply);
+                            }
+                            SwarmCommand::GetExternalAddresses { reply } => {
+                                let addresses = address_observer.external_addresses().to_vec();
+                                let _ = reply.send(addresses).await;
+                            }
+                            SwarmCommand::Dial { addr, reply } => {
+                                match swarm.dial(addr) {
+                                    Ok(_) => { let _ = reply.send(Ok(())).await; }
+                                    Err(e) => { let _ = reply.send(Err(e.to_string())).await; }
+                                }
+                            }
+                            SwarmCommand::GetPeers { reply } => {
+                                let peers: Vec<PeerId> = swarm.connected_peers().cloned().collect();
+                                let _ = reply.send(peers).await;
+                            }
+                            SwarmCommand::Listen { reply, .. } => {
+                                let _ = reply
+                                    .send(Err("listen is unsupported on wasm32/browser transport".to_string()))
+                                    .await;
+                            }
+                            SwarmCommand::AddKadAddress { peer_id, addr } => {
+                                swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+                            }
+                            SwarmCommand::SubscribeTopic { topic } => {
+                                if !subscribed_topics.contains(&topic) {
+                                    let ident_topic = libp2p::gossipsub::IdentTopic::new(topic.clone());
+                                    if swarm.behaviour_mut().gossipsub.subscribe(&ident_topic).is_ok() {
+                                        subscribed_topics.insert(topic);
+                                    }
+                                }
+                            }
+                            SwarmCommand::UnsubscribeTopic { topic } => {
+                                if subscribed_topics.contains(&topic) {
+                                    let ident_topic = libp2p::gossipsub::IdentTopic::new(topic.clone());
+                                    if swarm.behaviour_mut().gossipsub.unsubscribe(&ident_topic).is_ok() {
+                                        subscribed_topics.remove(&topic);
+                                    }
+                                }
+                            }
+                            SwarmCommand::PublishTopic { topic, data } => {
+                                let ident_topic = libp2p::gossipsub::IdentTopic::new(topic);
+                                if let Err(e) = swarm.behaviour_mut().gossipsub.publish(ident_topic, data) {
+                                    tracing::warn!("Failed to publish topic payload: {}", e);
+                                }
+                            }
+                            SwarmCommand::GetTopics { reply } => {
+                                let topics: Vec<String> = subscribed_topics.iter().cloned().collect();
+                                let _ = reply.send(topics).await;
+                            }
+                            SwarmCommand::ShareLedger { peer_id, entries } => {
+                                if !ledger_exchanged_peers.contains(&peer_id) {
+                                    let request = LedgerExchangeRequest {
+                                        peers: entries,
+                                        sender_peer_id: local_peer_id.to_string(),
+                                        version: 1,
+                                    };
+                                    let _ = swarm.behaviour_mut().ledger_exchange.send_request(&peer_id, request);
+                                    ledger_exchanged_peers.insert(peer_id);
+                                }
+                            }
+                            SwarmCommand::GetListeners { reply } => {
+                                // Browser nodes do not expose listen addresses.
+                                let _ = reply.send(Vec::new()).await;
+                            }
+                            SwarmCommand::SetRelayBudget { budget } => {
+                                relay_budget = budget;
+                                tracing::info!("🔄 Relay budget updated: {} msgs/hour", budget);
+                            }
+                            SwarmCommand::Shutdown => {
+                                tracing::info!("WASM swarm shutting down");
+                                break;
+                            }
+                        }
+                    }
+                    event = swarm_fut => {
+                        match event {
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Messaging(ev)) => {
+                                match ev {
+                                    request_response::Event::Message { peer, message, .. } => match message {
+                                        request_response::Message::Request { request, channel, .. } => {
+                                            let _ = event_tx.send(SwarmEvent2::MessageReceived {
+                                                peer_id: peer,
+                                                envelope_data: request.envelope_data,
+                                            }).await;
+
+                                            let _ = swarm.behaviour_mut().messaging.send_response(
+                                                channel,
+                                                MessageResponse { accepted: true, error: None },
+                                            );
+                                        }
+                                        request_response::Message::Response { request_id, response } => {
+                                            if let Some(reply_tx) = pending_direct_replies.remove(&request_id) {
+                                                let result = if response.accepted {
+                                                    Ok(())
+                                                } else {
+                                                    Err(response.error.unwrap_or_else(|| "message rejected".to_string()))
+                                                };
+                                                let _ = reply_tx.send(result).await;
+                                            }
+                                        }
+                                    },
+                                    request_response::Event::OutboundFailure { request_id, error, .. } => {
+                                        if let Some(reply_tx) = pending_direct_replies.remove(&request_id) {
+                                            let _ = reply_tx.send(Err(error.to_string())).await;
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::AddressReflection(ev)) => {
+                                match ev {
+                                    request_response::Event::Message { peer, message, .. } => match message {
+                                        request_response::Message::Request { request, channel, .. } => {
+                                            let observed_addr = connection_tracker
+                                                .get_connection(&peer)
+                                                .and_then(|conn| ConnectionTracker::extract_socket_addr(&conn.remote_addr))
+                                                .unwrap_or_else(|| "0.0.0.0:0".parse().unwrap());
+
+                                            let response = reflection_service.handle_request(request, observed_addr);
+                                            let _ = swarm.behaviour_mut().address_reflection.send_response(channel, response);
+                                        }
+                                        request_response::Message::Response { request_id, response } => {
+                                            if let Ok(observed_addr) = response.observed_address.parse::<SocketAddr>() {
+                                                address_observer.record_observation(peer, observed_addr);
+                                            }
+                                            if let Some(reply_tx) = pending_reflections.remove(&request_id) {
+                                                let _ = reply_tx.send(Ok(response.observed_address.clone())).await;
+                                            }
+                                            let _ = event_tx.send(SwarmEvent2::AddressReflected {
+                                                peer_id: peer,
+                                                observed_address: response.observed_address,
+                                            }).await;
+                                        }
+                                    },
+                                    request_response::Event::OutboundFailure { request_id, error, .. } => {
+                                        if let Some(reply_tx) = pending_reflections.remove(&request_id) {
+                                            let _ = reply_tx.send(Err(error.to_string())).await;
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Relay(ev)) => {
+                                match ev {
+                                    request_response::Event::Message { peer: _, message, .. } => match message {
+                                        request_response::Message::Request { request, channel, .. } => {
+                                            if relay_hour_start.elapsed() >= std::time::Duration::from_secs(3600) {
+                                                relay_count_this_hour = 0;
+                                                relay_hour_start = std::time::Instant::now();
+                                            }
+
+                                            let relay_response = if relay_budget > 0 && relay_count_this_hour >= relay_budget {
+                                                RelayResponse {
+                                                    accepted: false,
+                                                    error: Some("relay_budget_exhausted".to_string()),
+                                                    message_id: request.message_id.clone(),
+                                                }
+                                            } else {
+                                                relay_count_this_hour += 1;
+                                                match PeerId::from_bytes(&request.destination_peer) {
+                                                    Ok(destination) => {
+                                                        if swarm.is_connected(&destination) {
+                                                            let _ = swarm.behaviour_mut().messaging.send_request(
+                                                                &destination,
+                                                                MessageRequest { envelope_data: request.envelope_data },
+                                                            );
+                                                            RelayResponse {
+                                                                accepted: true,
+                                                                error: None,
+                                                                message_id: request.message_id.clone(),
+                                                            }
+                                                        } else {
+                                                            RelayResponse {
+                                                                accepted: false,
+                                                                error: Some("Destination not connected".to_string()),
+                                                                message_id: request.message_id.clone(),
+                                                            }
+                                                        }
+                                                    }
+                                                    Err(_) => RelayResponse {
+                                                        accepted: false,
+                                                        error: Some("Invalid destination peer ID".to_string()),
+                                                        message_id: request.message_id.clone(),
+                                                    },
+                                                }
+                                            };
+                                            let _ = swarm.behaviour_mut().relay.send_response(channel, relay_response);
+                                        }
+                                        request_response::Message::Response { request_id, response } => {
+                                            if let Some(message_id) = pending_relay_requests.remove(&request_id) {
+                                                if let Some(pending) = pending_messages.remove(&message_id) {
+                                                    if response.accepted {
+                                                        let _ = pending.reply_tx.send(Ok(())).await;
+                                                    } else {
+                                                        let _ = pending.reply_tx.send(Err(
+                                                            response.error.unwrap_or_else(|| "relay rejected".to_string())
+                                                        )).await;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    _ => {}
+                                }
+                            }
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::LedgerExchange(ev)) => {
+                                if let request_response::Event::Message { peer, message, .. } = ev {
+                                    match message {
+                                        request_response::Message::Request { request, channel, .. } => {
+                                            let _ = event_tx.send(SwarmEvent2::LedgerReceived {
+                                                from_peer: peer,
+                                                entries: request.peers.clone(),
+                                            }).await;
+                                            let _ = swarm.behaviour_mut().ledger_exchange.send_response(
+                                                channel,
+                                                LedgerExchangeResponse {
+                                                    peers: Vec::new(),
+                                                    new_peers_learned: 0,
+                                                    version: 1,
+                                                },
+                                            );
+                                            ledger_exchanged_peers.insert(peer);
+                                        }
+                                        request_response::Message::Response { response, .. } => {
+                                            if !response.peers.is_empty() {
+                                                let _ = event_tx.send(SwarmEvent2::LedgerReceived {
+                                                    from_peer: peer,
+                                                    entries: response.peers,
+                                                }).await;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Gossipsub(
+                                gossipsub::Event::Subscribed { peer_id, topic }
+                            )) => {
+                                let topic_str = topic.to_string();
+                                if !subscribed_topics.contains(&topic_str) {
+                                    let ident_topic = libp2p::gossipsub::IdentTopic::new(topic_str.clone());
+                                    if swarm.behaviour_mut().gossipsub.subscribe(&ident_topic).is_ok() {
+                                        subscribed_topics.insert(topic_str.clone());
+                                    }
+                                }
+                                let _ = event_tx.send(SwarmEvent2::TopicDiscovered {
+                                    peer_id,
+                                    topic: topic_str,
+                                }).await;
+                            }
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Identify(
+                                identify::Event::Received { peer_id, info, .. }
+                            )) => {
+                                for addr in &info.listen_addrs {
+                                    swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
+                                }
+                                if let Some(observed_addr) =
+                                    ConnectionTracker::extract_socket_addr(&info.observed_addr)
+                                {
+                                    address_observer.record_observation(peer_id, observed_addr);
+                                }
+
+                                let _ = event_tx.send(SwarmEvent2::PeerIdentified {
+                                    peer_id,
+                                    agent_version: info.agent_version.clone(),
+                                    listen_addrs: info.listen_addrs.clone(),
+                                    protocols: info.protocols.iter().map(|p| p.to_string()).collect(),
+                                }).await;
+                            }
+                            SwarmEvent::ConnectionEstablished { peer_id, endpoint, connection_id, .. } => {
+                                connection_tracker.add_connection(
+                                    peer_id,
+                                    endpoint.get_remote_address().clone(),
+                                    match endpoint {
+                                        libp2p::core::ConnectedPoint::Listener { local_addr, .. } => local_addr.clone(),
+                                        libp2p::core::ConnectedPoint::Dialer { .. } => "/ip4/0.0.0.0/tcp/0".parse().unwrap(),
+                                    },
+                                    connection_id.to_string(),
+                                );
+                                let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
+                            }
+                            SwarmEvent::ConnectionClosed { peer_id, .. } => {
+                                connection_tracker.remove_connection(&peer_id);
+                                ledger_exchanged_peers.remove(&peer_id);
+                                let _ = event_tx.send(SwarmEvent2::PeerDisconnected(peer_id)).await;
+                            }
+                            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                                if let Some(pid) = peer_id {
+                                    tracing::warn!("⚠ Outgoing connection error to {}: {}", pid, error);
+                                } else {
+                                    tracing::warn!("⚠ Outgoing connection error: {}", error);
+                                }
+                            }
+                            SwarmEvent::IncomingConnectionError { local_addr, send_back_addr, error, .. } => {
+                                tracing::warn!(
+                                    "⚠ Incoming connection error from {} -> {}: {}",
+                                    send_back_addr,
+                                    local_addr,
+                                    error
+                                );
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
+                // Keep bootstrap links warm on browser clients.
+                if last_bootstrap_redial.elapsed() >= std::time::Duration::from_secs(60) {
+                    let connected_peers: HashSet<PeerId> =
+                        swarm.connected_peers().cloned().collect();
+                    for addr in &bootstrap_addrs_clone {
+                        let already_connected = addr.iter().any(|proto| {
+                            if let libp2p::multiaddr::Protocol::P2p(pid) = proto {
+                                connected_peers.contains(&pid)
+                            } else {
+                                false
+                            }
+                        });
+
+                        if !already_connected {
+                            if let Err(e) = swarm.dial(addr.clone()) {
+                                tracing::trace!("Bootstrap re-dial {} skipped: {}", addr, e);
+                            }
+                        }
+                    }
+                    last_bootstrap_redial = std::time::Instant::now();
+                }
+            }
+        });
+
+        Ok(handle)
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 use futures::StreamExt;
 use libp2p::identify;
 #[cfg(not(target_arch = "wasm32"))]

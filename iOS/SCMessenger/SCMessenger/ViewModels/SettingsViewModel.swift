@@ -231,6 +231,18 @@ final class SettingsViewModel {
         return (try? repository?.getMessageCount()) ?? 0
     }
 
+    func getConnectionPathState() -> ConnectionPathState {
+        return repository?.getConnectionPathState() ?? .disconnected
+    }
+
+    func getNatStatus() -> String {
+        return repository?.getNatStatus() ?? "unknown"
+    }
+
+    func exportDiagnostics() -> String {
+        return repository?.exportDiagnostics() ?? "{}"
+    }
+
     // MARK: - Auto-Adjust (mirrors Android PowerSettingsScreen)
 
     var isAutoAdjustEnabled: Bool {

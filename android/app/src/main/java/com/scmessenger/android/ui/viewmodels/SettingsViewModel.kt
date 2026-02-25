@@ -354,6 +354,18 @@ class SettingsViewModel @Inject constructor(
         return meshRepository.getLedgerSummary()
     }
 
+    fun getConnectionPathState(): uniffi.api.ConnectionPathState {
+        return meshRepository.getConnectionPathState()
+    }
+
+    fun getNatStatus(): String {
+        return meshRepository.getNatStatus()
+    }
+
+    fun exportDiagnostics(): String {
+        return meshRepository.exportDiagnostics()
+    }
+
 
 
     // MARK: - Identity Helpers

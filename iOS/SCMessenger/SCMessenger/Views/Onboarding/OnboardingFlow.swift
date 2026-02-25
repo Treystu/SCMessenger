@@ -115,12 +115,22 @@ struct IdentityView: View {
             Spacer()
             
             Button("Continue") {
-                viewModel.advance()
+                completeIdentityStep()
             }
             .buttonStyle(.borderedProminent)
             .disabled(identity == nil || nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .padding(Theme.spacingLarge)
+        .onAppear {
+            if identity == nil, let info = repository.getIdentityInfo(), info.initialized {
+                identity = info
+            }
+            if nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               let existing = repository.getIdentityInfo()?.nickname,
+               !existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                nickname = existing
+            }
+        }
     }
     
     private func generateIdentity() {
@@ -138,6 +148,29 @@ struct IdentityView: View {
             } catch {
                 logger.error("Failed to generate identity: \(error.localizedDescription)")
                 // Keep identity as nil to show error state
+            }
+        }
+    }
+
+    private func completeIdentityStep() {
+        Task {
+            isGenerating = true
+            defer { isGenerating = false }
+
+            do {
+                let trimmedNickname = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedNickname.isEmpty else { return }
+
+                if !(repository.getIdentityInfo()?.initialized ?? false) {
+                    try repository.createIdentity()
+                }
+                try repository.setNickname(trimmedNickname)
+                if let info = repository.getIdentityInfo(), info.initialized {
+                    identity = info
+                }
+                viewModel.advance()
+            } catch {
+                logger.error("Failed to complete identity step: \(error.localizedDescription)")
             }
         }
     }

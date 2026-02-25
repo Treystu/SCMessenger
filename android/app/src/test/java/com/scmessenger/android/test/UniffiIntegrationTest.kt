@@ -61,6 +61,7 @@ class UniffiIntegrationTest {
         val contact = uniffi.api.Contact(
             peerId = peerId,
             nickname = nickname,
+            localNickname = null,
             publicKey = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
             addedAt = (System.currentTimeMillis() / 1000).toULong(),
             lastSeen = null,

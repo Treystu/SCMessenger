@@ -22,6 +22,8 @@ import javax.inject.Inject
 class ChatViewModel @Inject constructor(
     private val meshRepository: MeshRepository
 ) : ViewModel() {
+    private val initialConversationLimit: UInt = 200u
+    private val paginationStep: UInt = 100u
 
     // Current peer ID
     private val _peerId = MutableStateFlow<String?>(null)
@@ -47,17 +49,19 @@ class ChatViewModel @Inject constructor(
     private val _contact = MutableStateFlow<uniffi.api.Contact?>(null)
     val contact: StateFlow<uniffi.api.Contact?> = _contact.asStateFlow()
 
-    // Typing indicator (placeholder for future)
+    // Typing indicator state for local compose box.
     private val _isTyping = MutableStateFlow(false)
     val isTyping: StateFlow<Boolean> = _isTyping.asStateFlow()
 
     // Online status
     private val _isOnline = MutableStateFlow(false)
     val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
+    private val _conversationLimit = MutableStateFlow(initialConversationLimit)
 
     init {
         observeMessageEvents()
         observeIncomingMessages()
+        observePeerEvents()
     }
 
     /**
@@ -65,6 +69,7 @@ class ChatViewModel @Inject constructor(
      */
     fun setPeer(peerId: String) {
         _peerId.value = peerId
+        _conversationLimit.value = initialConversationLimit
         loadMessages()
         loadContact()
     }
@@ -76,7 +81,7 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val currentPeer = _peerId.value ?: return@launch
-                val messageList = meshRepository.getConversation(currentPeer, limit = 200u)
+                val messageList = meshRepository.getConversation(currentPeer, limit = _conversationLimit.value)
                 _messages.value = messageList.sortedBy { it.timestamp }
 
                 Timber.d("Loaded ${messageList.size} messages for $currentPeer")
@@ -131,6 +136,7 @@ class ChatViewModel @Inject constructor(
 
                 // Clear input on success
                 _inputText.value = ""
+                _isTyping.value = false
 
                 // Reload messages to show the sent message
                 loadMessages()
@@ -158,6 +164,7 @@ class ChatViewModel @Inject constructor(
      */
     fun updateInputText(text: String) {
         _inputText.value = text
+        _isTyping.value = text.isNotBlank()
     }
 
     /**
@@ -165,6 +172,7 @@ class ChatViewModel @Inject constructor(
      */
     fun clearInput() {
         _inputText.value = ""
+        _isTyping.value = false
     }
 
     /**
@@ -215,6 +223,23 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    private fun observePeerEvents() {
+        viewModelScope.launch {
+            MeshEventBus.peerEvents.collect { event ->
+                val current = _peerId.value ?: return@collect
+                when (event) {
+                    is com.scmessenger.android.service.PeerEvent.Connected -> {
+                        if (event.peerId == current) _isOnline.value = true
+                    }
+                    is com.scmessenger.android.service.PeerEvent.Disconnected -> {
+                        if (event.peerId == current) _isOnline.value = false
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
+
     /**
      * Update message delivery status in the UI.
      */
@@ -234,6 +259,11 @@ class ChatViewModel @Inject constructor(
             }
         }
         _messages.value = updatedMessages
+    }
+
+    fun loadMoreMessages() {
+        _conversationLimit.value = _conversationLimit.value + paginationStep
+        loadMessages()
     }
 
     /**

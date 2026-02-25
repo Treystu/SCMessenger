@@ -1124,6 +1124,10 @@ name = "futures-timer"
 version = "3.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f288b0a4f20f9a56b5d1da57e2227c661b7b16168e2f72365f57b63326e29b24"
+dependencies = [
+ "gloo-timers",
+ "send_wrapper 0.4.0",
+]
 
 [[package]]
 name = "futures-util"
@@ -1217,6 +1221,18 @@ name = "glob"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
+
+[[package]]
+name = "gloo-timers"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b995a66bb87bebce9a0f4a95aed01daca4872c050bfcb21653361c03bc35e5c"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "js-sys",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "goblin"
@@ -1752,6 +1768,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0242819d153cba4b4b05a5a8f2a7e9bbf97b6055b2a002b395c96b5ff3c0222"
 dependencies = [
  "cfg-if",
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -1850,6 +1869,7 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-tcp",
  "libp2p-upnp",
+ "libp2p-websocket-websys",
  "libp2p-yamux",
  "multiaddr",
  "pin-project",
@@ -2237,6 +2257,7 @@ dependencies = [
  "fnv",
  "futures",
  "futures-timer",
+ "getrandom 0.2.17",
  "instant",
  "libp2p-core",
  "libp2p-identity",
@@ -2249,6 +2270,7 @@ dependencies = [
  "tokio",
  "tracing",
  "void",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -2313,6 +2335,24 @@ dependencies = [
  "tokio",
  "tracing",
  "void",
+]
+
+[[package]]
+name = "libp2p-websocket-websys"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f95cd8a32fcf94ad1e5c2de37c2a05a5a4188d8358b005859a0fc9e63b6953bc"
+dependencies = [
+ "bytes",
+ "futures",
+ "js-sys",
+ "libp2p-core",
+ "parking_lot 0.12.5",
+ "send_wrapper 0.6.0",
+ "thiserror 1.0.69",
+ "tracing",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -3488,6 +3528,7 @@ dependencies = [
  "uniffi_bindgen",
  "ureq",
  "uuid",
+ "wasm-bindgen-futures",
  "x25519-dalek",
  "zeroize",
 ]
@@ -3507,11 +3548,13 @@ dependencies = [
  "console_error_panic_hook",
  "futures",
  "js-sys",
+ "libp2p",
  "parking_lot 0.12.5",
  "scmessenger-core",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
+ "tokio",
  "tracing",
  "tracing-wasm",
  "wasm-bindgen",
@@ -3561,6 +3604,18 @@ dependencies = [
  "serde",
  "serde_core",
 ]
+
+[[package]]
+name = "send_wrapper"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f638d531eccd6e23b980caf34876660d38e265409d8e99b397ab71eb3612fad0"
+
+[[package]]
+name = "send_wrapper"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 
 [[package]]
 name = "serde"
