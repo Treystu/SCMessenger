@@ -72,6 +72,7 @@ interface IronCore {
     bytes prepare_cover_traffic(u32 size_bytes);
     u32 outbox_count();
     u32 inbox_count();
+    boolean mark_message_sent(string message_id);
 
     // Delegate
     void set_delegate(CoreDelegate? delegate);

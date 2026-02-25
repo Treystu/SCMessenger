@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.IntentCompat
 import com.scmessenger.android.R
 import com.scmessenger.android.data.MeshRepository
 import kotlinx.coroutines.CoroutineScope
@@ -76,7 +77,7 @@ class ShareReceiver : BroadcastReceiver() {
             ?.filter { it.isNotEmpty() }
             .orEmpty()
 
-        val streamItems = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        val streamItems = IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
             ?.map { it.toString() }
             ?.filter { it.isNotBlank() }
             .orEmpty()

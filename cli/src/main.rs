@@ -23,6 +23,7 @@ use std::sync::Arc;
 
 fn load_or_create_headless_network_keypair(
     storage_path: &std::path::Path,
+    core: &IronCore,
 ) -> Result<libp2p::identity::Keypair> {
     std::fs::create_dir_all(storage_path).context("Failed to create relay storage directory")?;
     let key_path = storage_path.join("relay_network_key.pb");
@@ -39,6 +40,27 @@ fn load_or_create_headless_network_keypair(
                 );
             }
         }
+    }
+
+    // Key file absent or corrupt — try migrating from IronCore identity to
+    // preserve the relay PeerId across upgrades (avoids breaking pinned bootstrap addrs).
+    if let Ok(keypair) = core.get_libp2p_keypair() {
+        tracing::info!("Migrating relay network key from existing IronCore identity");
+        if let Ok(encoded) = keypair.to_protobuf_encoding() {
+            if let Err(e) = std::fs::write(&key_path, &encoded) {
+                tracing::warn!("Failed to persist migrated relay key: {}", e);
+            } else {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let _ = std::fs::set_permissions(
+                        &key_path,
+                        std::fs::Permissions::from_mode(0o600),
+                    );
+                }
+            }
+        }
+        return Ok(keypair);
     }
 
     let keypair = libp2p::identity::Keypair::generate_ed25519();
@@ -1322,7 +1344,10 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
-    let network_keypair = load_or_create_headless_network_keypair(&storage_path)?;
+    // Load existing identity (if any) so the relay can migrate its network key
+    // from the IronCore identity, preserving the PeerId on first upgrade.
+    let _ = core.initialize_identity();
+    let network_keypair = load_or_create_headless_network_keypair(&storage_path, &core)?;
     let local_peer_id = network_keypair.public().to_peer_id();
     let display_name =
         node_name.unwrap_or_else(|| format!("relay-{}", &local_peer_id.to_string()[..8]));

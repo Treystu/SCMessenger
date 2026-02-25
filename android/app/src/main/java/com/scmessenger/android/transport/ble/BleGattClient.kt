@@ -346,10 +346,12 @@ class BleGattClient(
     }
 
     private fun scheduleIdentityRefreshReads(deviceAddress: String) {
+        val originalGatt = activeConnections[deviceAddress] ?: return
         IDENTITY_REFRESH_DELAYS_MS.forEach { delayMs ->
             scope.launch {
                 delay(delayMs)
                 val gatt = activeConnections[deviceAddress] ?: return@launch
+                if (gatt !== originalGatt) return@launch
                 if (connectionStates[deviceAddress] != ConnectionState.CONNECTED) return@launch
                 readIdentityBeacon(gatt)
             }

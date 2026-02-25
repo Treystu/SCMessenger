@@ -833,6 +833,14 @@ impl IronCore {
         Ok(msg)
     }
 
+    /// Remove a message from the outbox after confirmed delivery.
+    ///
+    /// Returns `true` if the message was found and removed, `false` if it was
+    /// not in the outbox (already removed or never queued).
+    pub fn mark_message_sent(&self, message_id: String) -> bool {
+        self.outbox.write().remove(&message_id)
+    }
+
     /// Get the number of queued outbound messages
     pub fn outbox_count(&self) -> u32 {
         self.outbox.read().total_count() as u32
