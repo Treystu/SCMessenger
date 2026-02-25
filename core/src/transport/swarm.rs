@@ -1402,8 +1402,10 @@ pub async fn start_swarm_with_config(
         let mut address_observer = AddressObserver::new();
         let mut relay_budget: u32 = 200;
         let mut relay_count_this_hour: u32 = 0;
-        let mut relay_hour_start = std::time::Instant::now();
-        let mut last_bootstrap_redial = std::time::Instant::now();
+        // `std::time::Instant` panics on wasm32-unknown-unknown; use
+        // `js_sys::Date::now()` (f64 ms since epoch) instead.
+        let mut relay_hour_start: f64 = js_sys::Date::now();
+        let mut last_bootstrap_redial: f64 = js_sys::Date::now();
         let bootstrap_addrs_clone = bootstrap_addrs;
 
         wasm_bindgen_futures::spawn_local(async move {
@@ -1588,9 +1590,9 @@ pub async fn start_swarm_with_config(
                                 match ev {
                                     request_response::Event::Message { peer: _, message, .. } => match message {
                                         request_response::Message::Request { request, channel, .. } => {
-                                            if relay_hour_start.elapsed() >= std::time::Duration::from_secs(3600) {
+                                            if js_sys::Date::now() - relay_hour_start >= 3_600_000.0 {
                                                 relay_count_this_hour = 0;
-                                                relay_hour_start = std::time::Instant::now();
+                                                relay_hour_start = js_sys::Date::now();
                                             }
 
                                             let relay_response = if relay_budget > 0 && relay_count_this_hour >= relay_budget {
@@ -1748,7 +1750,7 @@ pub async fn start_swarm_with_config(
                 }
 
                 // Keep bootstrap links warm on browser clients.
-                if last_bootstrap_redial.elapsed() >= std::time::Duration::from_secs(60) {
+                if js_sys::Date::now() - last_bootstrap_redial >= 60_000.0 {
                     let connected_peers: HashSet<PeerId> =
                         swarm.connected_peers().cloned().collect();
                     for addr in &bootstrap_addrs_clone {
@@ -1766,7 +1768,7 @@ pub async fn start_swarm_with_config(
                             }
                         }
                     }
-                    last_bootstrap_redial = std::time::Instant::now();
+                    last_bootstrap_redial = js_sys::Date::now();
                 }
             }
         });

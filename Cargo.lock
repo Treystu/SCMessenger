@@ -3510,6 +3510,7 @@ dependencies = [
  "getrandom 0.2.17",
  "getrandom 0.3.4",
  "hex",
+ "js-sys",
  "libp2p",
  "mockall",
  "parking_lot 0.12.5",
