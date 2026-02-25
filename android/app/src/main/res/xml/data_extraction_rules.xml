@@ -1,16 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
     <cloud-backup>
-        <!-- Include exported identity backup payload (restores across reinstall/update). -->
-        <include domain="sharedpref" path="identity_backup_prefs.xml" />
-        <!-- Exclude sensitive data from cloud backup -->
+        <!-- Exclude raw identity key files and sensitive databases from cloud backup.
+             All other data (SharedPreferences, settings, etc.) is backed up by default. -->
         <exclude domain="file" path="identity/" />
         <exclude domain="file" path="contacts.db/" />
         <exclude domain="file" path="history.db/" />
     </cloud-backup>
     <device-transfer>
-        <include domain="sharedpref" path="identity_backup_prefs.xml" />
-        <!-- Allow transfer of settings but not identity -->
+        <!-- Exclude raw identity key files from device-to-device transfer;
+             the encrypted identity_backup_prefs.xml will be transferred by default. -->
         <exclude domain="file" path="identity/" />
     </device-transfer>
 </data-extraction-rules>

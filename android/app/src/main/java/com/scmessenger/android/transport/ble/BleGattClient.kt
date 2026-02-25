@@ -82,9 +82,23 @@ class BleGattClient(
             }
         }
 
-    /** Enqueue a GATT operation for sequential execution on the given device. */
-    private fun enqueueGattOp(deviceAddress: String, op: () -> Unit) {
-        scope.launch { gattQueue(deviceAddress).send(op) }
+    /** Enqueue a GATT operation for sequential execution on the given device.
+     *
+     * Uses [Channel.trySend] to avoid launching a coroutine that could be
+     * scheduled after [disconnect] closes the channel, which would throw a
+     * [kotlinx.coroutines.channels.ClosedSendChannelException].  Because the
+     * consumer coroutine serialises execution, ops are always run in the order
+     * they were accepted.
+     *
+     * @return `true` if the op was accepted into the queue, `false` if the
+     *   channel is closed or full (caller should treat the send as failed).
+     */
+    private fun enqueueGattOp(deviceAddress: String, op: () -> Unit): Boolean {
+        val result = gattQueue(deviceAddress).trySend(op)
+        if (!result.isSuccess) {
+            Timber.w("GATT op dropped for %s: channel closed or full", deviceAddress)
+        }
+        return result.isSuccess
     }
 
     /**
@@ -169,6 +183,10 @@ class BleGattClient(
      * Handles fragmentation if data exceeds MTU.
      * The write is enqueued so it cannot interleave with concurrent reads or
      * other in-progress writes on the same device.
+     *
+     * Returns `true` if the write was accepted into the op queue, `false` if
+     * the device is not connected, the characteristic is unavailable, or the
+     * op queue has already been closed (e.g. after [disconnect]).
      */
     fun sendData(deviceAddress: String, data: ByteArray): Boolean {
         val gatt = activeConnections[deviceAddress] ?: run {
@@ -190,7 +208,7 @@ class BleGattClient(
         }
 
         val mtu = 512 // Assumed negotiated MTU
-        enqueueGattOp(deviceAddress) {
+        return enqueueGattOp(deviceAddress) {
             try {
                 if (data.size > mtu - 3) {
                     if (!sendFragmented(gatt, characteristic, data, mtu)) {
@@ -212,7 +230,6 @@ class BleGattClient(
                 releaseGattOp(deviceAddress)
             }
         }
-        return true
     }
 
     private fun sendFragmented(
@@ -269,9 +286,12 @@ class BleGattClient(
 
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Timber.d("Disconnected from $deviceAddress")
-                    activeConnections.remove(deviceAddress)
-                    connectionStates.remove(deviceAddress)
-                    gatt.close()
+                    // Route through disconnect() so the GATT op queue and semaphore
+                    // are cleaned up, not just the connection map entries.
+                    // Guard against double-close: disconnect() is a no-op when the
+                    // address is not in activeConnections.
+                    activeConnections[deviceAddress] = gatt   // re-register so disconnect() finds it
+                    disconnect(deviceAddress)
                 }
             }
         }

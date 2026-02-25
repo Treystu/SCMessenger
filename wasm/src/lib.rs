@@ -307,36 +307,28 @@ impl IronCore {
 
     /// DEPRECATED shim for pre-0.1.2 clients.
     ///
-    /// This now maps a relay URL to a libp2p websocket multiaddr and starts
-    /// the wasm swarm path, preserving drain-based JS consumption semantics.
+    /// This maps a relay URL to a libp2p websocket multiaddr and starts the
+    /// wasm swarm path.  Unlike the original fire-and-forget API, this version
+    /// is `async` and propagates start errors back to the JS caller so callers
+    /// can detect and handle failures rather than silently missing them.
+    ///
+    /// Prefer `startSwarm(bootstrapAddrs)` for new code.
     #[wasm_bindgen(js_name = startReceiveLoop)]
-    pub fn start_receive_loop(&self, relay_url: String) -> Result<(), JsValue> {
+    pub async fn start_receive_loop(&self, relay_url: String) -> Result<(), JsValue> {
         tracing::warn!(
             "startReceiveLoop(relayUrl) is deprecated; use startSwarm(bootstrapAddrs) instead"
         );
         let relay_multiaddr = relay_url_to_multiaddr(&relay_url)
             .map_err(|e| JsValue::from_str(&format!("Invalid relay URL: {}", e)))?;
 
-        let inner = Arc::clone(&self.inner);
-        let rx_messages = Arc::clone(&self.rx_messages);
-        let settings = Arc::clone(&self.settings);
-        let swarm_handle = Arc::clone(&self.swarm_handle);
-
-        wasm_bindgen_futures::spawn_local(async move {
-            if let Err(e) = start_swarm_runtime(
-                inner,
-                rx_messages,
-                settings,
-                swarm_handle,
-                vec![relay_multiaddr],
-            )
-            .await
-            {
-                tracing::error!("Deprecated startReceiveLoop shim failed: {:?}", e);
-            }
-        });
-
-        Ok(())
+        start_swarm_runtime(
+            Arc::clone(&self.inner),
+            Arc::clone(&self.rx_messages),
+            Arc::clone(&self.settings),
+            Arc::clone(&self.swarm_handle),
+            vec![relay_multiaddr],
+        )
+        .await
     }
 
     /// Drain and return all messages that have arrived since the last call.
@@ -456,6 +448,8 @@ fn relay_url_to_multiaddr(relay_url: &str) -> Result<String, String> {
 
     let host_segment = if host.parse::<std::net::Ipv4Addr>().is_ok() {
         format!("/ip4/{}", host)
+    } else if host.parse::<std::net::Ipv6Addr>().is_ok() {
+        format!("/ip6/{}", host)
     } else {
         format!("/dns4/{}", host)
     };

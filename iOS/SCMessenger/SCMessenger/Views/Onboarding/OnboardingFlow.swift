@@ -134,7 +134,7 @@ struct IdentityView: View {
     }
     
     private func generateIdentity() {
-        Task {
+        Task { @MainActor in
             isGenerating = true
             defer { isGenerating = false }
             
@@ -153,7 +153,7 @@ struct IdentityView: View {
     }
 
     private func completeIdentityStep() {
-        Task {
+        Task { @MainActor in
             isGenerating = true
             defer { isGenerating = false }
 

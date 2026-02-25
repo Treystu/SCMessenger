@@ -8,6 +8,7 @@ use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::{Mutex, RwLock};
+use tokio::time::timeout;
 
 /// Relay client configuration
 #[derive(Debug, Clone)]
@@ -18,6 +19,10 @@ pub struct RelayClientConfig {
     pub reconnect_interval: Duration,
     /// Interval for pulling stored envelopes from relays
     pub pull_interval: Duration,
+    /// Per-operation I/O timeout applied to connect, write, and read phases.
+    /// A stalled relay or half-open TCP connection will be detected within this
+    /// window rather than hanging indefinitely.
+    pub io_timeout: Duration,
 }
 
 impl Default for RelayClientConfig {
@@ -26,6 +31,7 @@ impl Default for RelayClientConfig {
             known_relays: Vec::new(),
             reconnect_interval: Duration::from_secs(5),
             pull_interval: Duration::from_secs(30),
+            io_timeout: Duration::from_secs(10),
         }
     }
 }
@@ -104,6 +110,8 @@ pub enum RelayClientError {
     MessageError(String),
     #[error("Serialization error: {0}")]
     SerializationError(String),
+    #[error("I/O timeout after {0:?}")]
+    IoTimeout(Duration),
 }
 
 /// Relay client for connecting to relay servers
@@ -158,8 +166,9 @@ impl RelayClient {
             .unwrap_or(&relay_address)
             .to_string();
 
-        let stream = TcpStream::connect(&dial_addr)
+        let stream = timeout(self.config.io_timeout, TcpStream::connect(&dial_addr))
             .await
+            .map_err(|_| RelayClientError::IoTimeout(self.config.io_timeout))?
             .map_err(|e| RelayClientError::ConnectionFailed(e.to_string()))?;
         let stream = Arc::new(Mutex::new(stream));
         connection.set_state(ConnectionState::Handshaking);
@@ -363,24 +372,25 @@ impl RelayClient {
             .to_bytes()
             .map_err(|e| RelayClientError::SerializationError(e.to_string()))?;
 
+        let t = self.config.io_timeout;
         let mut stream = socket.lock().await;
         let len = payload.len() as u32;
-        stream
-            .write_u32(len)
+        timeout(t, stream.write_u32(len))
             .await
+            .map_err(|_| RelayClientError::IoTimeout(t))?
             .map_err(|e| RelayClientError::ConnectionFailed(e.to_string()))?;
-        stream
-            .write_all(&payload)
+        timeout(t, stream.write_all(&payload))
             .await
+            .map_err(|_| RelayClientError::IoTimeout(t))?
             .map_err(|e| RelayClientError::ConnectionFailed(e.to_string()))?;
-        stream
-            .flush()
+        timeout(t, stream.flush())
             .await
+            .map_err(|_| RelayClientError::IoTimeout(t))?
             .map_err(|e| RelayClientError::ConnectionFailed(e.to_string()))?;
 
-        let response_len = stream
-            .read_u32()
+        let response_len = timeout(t, stream.read_u32())
             .await
+            .map_err(|_| RelayClientError::IoTimeout(t))?
             .map_err(|e| RelayClientError::ConnectionFailed(e.to_string()))? as usize;
         if response_len == 0 || response_len > (16 * 1024 * 1024) {
             return Err(RelayClientError::MessageError(
@@ -388,9 +398,9 @@ impl RelayClient {
             ));
         }
         let mut response_buf = vec![0u8; response_len];
-        stream
-            .read_exact(&mut response_buf)
+        timeout(t, stream.read_exact(&mut response_buf))
             .await
+            .map_err(|_| RelayClientError::IoTimeout(t))?
             .map_err(|e| RelayClientError::ConnectionFailed(e.to_string()))?;
         RelayMessage::from_bytes(&response_buf)
             .map_err(|e| RelayClientError::SerializationError(e.to_string()))
