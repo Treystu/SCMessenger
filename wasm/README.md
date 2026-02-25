@@ -5,15 +5,23 @@ WebAssembly bindings crate for SCMessenger.
 ## Purpose
 
 `scmessenger-wasm` wraps `scmessenger-core` with a browser-friendly `wasm-bindgen` API.
-It provides identity/crypto/message operations plus relay receive-loop helpers for JS clients.
+It provides identity/crypto/message operations and a browser-native libp2p swarm runtime.
 
 ## Key Exports
 
 - `IronCore` wrapper (`new`, `withStorage`, `start`, `stop`)
 - Identity and signature helpers
 - Message prepare/receive methods
-- `startReceiveLoop(relayUrl)` for async WebSocket ingress
+- `startSwarm(bootstrapAddrs)` to start libp2p swarm networking in browser
+- `stopSwarm()` to cleanly shut down the swarm runtime
+- `sendPreparedEnvelope(peerId, envelopeBytes)` for encrypted envelope delivery
+- `getPeers()` for connected-peer enumeration
+- `getConnectionPathState()` for canonical route-state diagnostics
+- `exportDiagnostics()` for partner-support JSON snapshots
 - `drainReceivedMessages()` for batched JS-side consumption
+
+`startReceiveLoop(relayUrl)` remains available as a deprecated compatibility shim.
+It now maps relay URLs to websocket multiaddrs and delegates to `startSwarm`.
 
 ## Source Map
 

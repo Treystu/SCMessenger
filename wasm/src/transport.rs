@@ -705,9 +705,8 @@ impl WebRtcTransport {
 
                 // Step 3 — build a typed RtcSessionDescriptionInit using the now-available
                 // RtcSdpType enum (added to workspace web-sys features in Cargo.toml).
-                let mut desc_init =
-                    web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Offer);
-                desc_init.sdp(&sdp_str);
+                let desc_init = web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Offer);
+                desc_init.set_sdp(&sdp_str);
 
                 // Step 4 — set_local_description → JS Promise.
                 if let Err(e) = JsFuture::from(pc.set_local_description(&desc_init)).await {
@@ -782,9 +781,9 @@ impl WebRtcTransport {
                     }
                 };
 
-                let mut desc_init =
+                let desc_init =
                     web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Answer);
-                desc_init.sdp(&sdp_str);
+                desc_init.set_sdp(&sdp_str);
 
                 match wasm_bindgen_futures::JsFuture::from(pc.set_remote_description(&desc_init))
                     .await
@@ -839,9 +838,8 @@ impl WebRtcTransport {
                     }
                 };
 
-                let mut desc_init =
-                    web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Offer);
-                desc_init.sdp(&sdp_str);
+                let desc_init = web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Offer);
+                desc_init.set_sdp(&sdp_str);
 
                 match wasm_bindgen_futures::JsFuture::from(pc.set_remote_description(&desc_init))
                     .await
@@ -908,9 +906,9 @@ impl WebRtcTransport {
                 };
 
                 // Step 3 — set_local_description with the answer SDP.
-                let mut desc_init =
+                let desc_init =
                     web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Answer);
-                desc_init.sdp(&sdp_str);
+                desc_init.set_sdp(&sdp_str);
 
                 if let Err(e) = JsFuture::from(pc.set_local_description(&desc_init)).await {
                     tracing::error!("set_local_description(answer) failed: {:?}", e);
@@ -1058,138 +1056,63 @@ impl WebRtcTransport {
     }
 }
 
-// ---------------------------------------------------------------------------
-// WebRtcPeer — legacy stub kept for WasmTransport compatibility
-// ---------------------------------------------------------------------------
-
 /// WebRTC peer-to-peer connection via data channels
 #[derive(Debug, Clone)]
 pub struct WebRtcPeer {
     peer_id: String,
+    transport: Option<Arc<WebRtcTransport>>,
     state: Arc<RwLock<TransportState>>,
-    data_channel_open: Arc<RwLock<bool>>,
 }
 
 impl WebRtcPeer {
     /// Create a new WebRTC peer connection
     pub fn new(peer_id: String) -> Self {
+        let transport = WebRtcTransport::new().ok().map(Arc::new);
         Self {
             peer_id,
+            transport,
             state: Arc::new(RwLock::new(TransportState::Disconnected)),
-            data_channel_open: Arc::new(RwLock::new(false)),
         }
     }
 
-    /// Create a WebRTC offer (SDP negotiation)
-    /// In WASM: uses RTCPeerConnection.createOffer()
-    pub fn create_offer(&self) -> Result<String, String> {
-        #[cfg(target_arch = "wasm32")]
-        {
-            // In production, this would use web-sys:
-            // use web_sys::{RtcPeerConnection, RtcConfiguration, RtcSdpType};
-            // use wasm_bindgen_futures::JsFuture;
-            //
-            // let mut config = RtcConfiguration::new();
-            // // Configure ICE servers from WasmTransportConfig
-            //
-            // let peer_connection = RtcPeerConnection::new_with_configuration(&config)
-            //     .map_err(|e| format!("Failed to create peer connection: {:?}", e))?;
-            //
-            // Create data channel:
-            // let data_channel = peer_connection.create_data_channel("scmessenger");
-            //
-            // Create offer:
-            // let offer_promise = peer_connection.create_offer();
-            // let offer_result = JsFuture::from(offer_promise).await
-            //     .map_err(|e| format!("Failed to create offer: {:?}", e))?;
-            // let offer = RtcSessionDescriptionInit::from(offer_result);
-            // let sdp = offer.get_sdp();
-            //
-            // Set local description:
-            // let set_local_promise = peer_connection.set_local_description(&offer);
-            // JsFuture::from(set_local_promise).await
-            //     .map_err(|e| format!("Failed to set local description: {:?}", e))?;
-
-            tracing::info!("Creating WebRTC offer for peer {}", self.peer_id);
-        }
-
-        // Simulated SDP offer structure for demonstration/testing
-        Ok(format!(
-            "v=0\no=- {} 2 IN IP4 127.0.0.1\ns=SCMessenger peer {}\n",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0),
-            self.peer_id
-        ))
+    pub fn create_offer(&self) -> Result<(), String> {
+        let transport = self
+            .transport
+            .as_ref()
+            .ok_or_else(|| "WebRTC not available outside WASM".to_string())?;
+        transport.create_offer()
     }
 
-    /// Create a WebRTC answer (SDP negotiation response)
-    /// In WASM: uses RTCPeerConnection.createAnswer()
-    pub fn create_answer(&self) -> Result<String, String> {
-        // Simulated SDP answer structure
-        Ok(format!(
-            "v=0\no=- {} 2 IN IP4 127.0.0.1\ns=SCMessenger peer answer {}\n",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0),
-            self.peer_id
-        ))
+    pub fn create_answer(&self) -> Result<(), String> {
+        let transport = self
+            .transport
+            .as_ref()
+            .ok_or_else(|| "WebRTC not available outside WASM".to_string())?;
+        transport.create_answer()
     }
 
-    /// Open a data channel (called when RTCDataChannel is received)
+    /// Compatibility hook kept for existing call sites.
     pub fn on_data_channel_open(&self) {
-        let mut open = self.data_channel_open.write();
-        *open = true;
-
-        let mut state = self.state.write();
-        *state = TransportState::Connected;
+        if let Some(transport) = &self.transport {
+            *self.state.write() = transport.state();
+        }
     }
 
-    /// Send data via the data channel
     pub fn send_data(&self, data: &[u8]) -> Result<(), String> {
-        let open = self.data_channel_open.read();
-        if !*open {
-            return Err("Data channel not open".to_string());
-        }
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            // In production, this would use web-sys:
-            // use web_sys::RtcDataChannel;
-            //
-            // Assuming we have a stored reference to the data channel:
-            // let data_channel: RtcDataChannel = /* retrieve from state */;
-            //
-            // Send data through the channel:
-            // data_channel.send_with_u8_array(data)
-            //     .map_err(|e| format!("Failed to send data: {:?}", e))?;
-            //
-            // The browser handles:
-            // - Chunking large messages (if needed)
-            // - Queuing data if send buffer is full
-            // - Notifying via bufferedamountlow event when buffer drains
-
-            tracing::debug!(
-                "Sending {} bytes via WebRTC data channel to {}",
-                data.len(),
-                self.peer_id
-            );
-        }
-
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            // Non-WASM fallback for testing
-            tracing::debug!("Simulated send: {} bytes to {}", data.len(), self.peer_id);
-        }
-
-        Ok(())
+        let transport = self
+            .transport
+            .as_ref()
+            .ok_or_else(|| "WebRTC not available outside WASM".to_string())?;
+        transport.send(data)
     }
 
     /// Get current connection state
     pub fn state(&self) -> TransportState {
-        *self.state.read()
+        if let Some(transport) = &self.transport {
+            transport.state()
+        } else {
+            *self.state.read()
+        }
     }
 
     /// Get peer ID
@@ -1199,11 +1122,10 @@ impl WebRtcPeer {
 
     /// Close the connection
     pub fn close(&self) {
-        let mut state = self.state.write();
-        *state = TransportState::Disconnected;
-
-        let mut open = self.data_channel_open.write();
-        *open = false;
+        if let Some(transport) = &self.transport {
+            transport.close();
+        }
+        *self.state.write() = TransportState::Disconnected;
     }
 }
 
@@ -1412,28 +1334,34 @@ mod tests {
     fn test_webrtc_peer_offer() {
         let peer = WebRtcPeer::new("peer-123".to_string());
         let offer = peer.create_offer();
+        #[cfg(target_arch = "wasm32")]
         assert!(offer.is_ok());
-        let offer_str = offer.unwrap();
-        assert!(offer_str.contains("SCMessenger peer"));
+        #[cfg(not(target_arch = "wasm32"))]
+        assert_eq!(offer.unwrap_err(), "WebRTC not available outside WASM");
     }
 
     #[test]
     fn test_webrtc_peer_answer() {
         let peer = WebRtcPeer::new("peer-456".to_string());
         let answer = peer.create_answer();
+        #[cfg(target_arch = "wasm32")]
         assert!(answer.is_ok());
-        let answer_str = answer.unwrap();
-        assert!(answer_str.contains("peer answer"));
+        #[cfg(not(target_arch = "wasm32"))]
+        assert_eq!(answer.unwrap_err(), "WebRTC not available outside WASM");
     }
 
     #[test]
     fn test_webrtc_peer_data_channel() {
         let peer = WebRtcPeer::new("peer-789".to_string());
-        assert!(peer.send_data(b"test").is_err()); // Not open yet
-
+        assert!(peer.send_data(b"test").is_err());
         peer.on_data_channel_open();
+        #[cfg(target_arch = "wasm32")]
         assert!(peer.send_data(b"test").is_ok());
-        assert_eq!(peer.state(), TransportState::Connected);
+        #[cfg(not(target_arch = "wasm32"))]
+        assert_eq!(
+            peer.send_data(b"test").unwrap_err(),
+            "WebRTC not available outside WASM"
+        );
     }
 
     #[test]
@@ -1462,7 +1390,10 @@ mod tests {
 
         if let Some(peer) = transport.get_peer("peer-1") {
             peer.on_data_channel_open();
+            #[cfg(target_arch = "wasm32")]
             assert_eq!(transport.peer_count(), 1);
+            #[cfg(not(target_arch = "wasm32"))]
+            assert_eq!(transport.peer_count(), 0);
         }
     }
 
@@ -1495,7 +1426,13 @@ mod tests {
         let peer = transport.get_peer("peer-1").unwrap();
         peer.on_data_channel_open();
 
+        #[cfg(target_arch = "wasm32")]
         assert!(transport.send_to_peer("peer-1", b"hello").is_ok());
+        #[cfg(not(target_arch = "wasm32"))]
+        assert_eq!(
+            transport.send_to_peer("peer-1", b"hello").unwrap_err(),
+            "WebRTC not available outside WASM"
+        );
         assert!(transport.send_to_peer("peer-2", b"hello").is_err());
     }
 

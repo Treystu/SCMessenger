@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_ID="${APP_ID:-com.scmessenger.android}"
-UNINSTALL_FIRST="${UNINSTALL_FIRST:-1}"
+UNINSTALL_FIRST="${UNINSTALL_FIRST:-0}"
 ANDROID_SERIAL="${ANDROID_SERIAL:-}"
 
 cd "$ROOT_DIR/android"

@@ -45,10 +45,18 @@ fun OnboardingScreen(
 
     val importError by viewModel.importError.collectAsState()
     val importSuccess by viewModel.importSuccess.collectAsState()
-    var isCreating by remember { mutableStateOf(false) }
+    val isReady by viewModel.isReady.collectAsState()
+    val isCreating by viewModel.isCreatingIdentity.collectAsState()
+    val identityError by viewModel.identityError.collectAsState()
     var showImportDialog by remember { mutableStateOf(false) }
     var importCode by remember { mutableStateOf("") }
     var nickname by remember { mutableStateOf("") }
+
+    LaunchedEffect(isReady) {
+        if (isReady) {
+            onOnboardingComplete()
+        }
+    }
 
     LaunchedEffect(importSuccess) {
         if (importSuccess) {
@@ -131,14 +139,22 @@ fun OnboardingScreen(
 
                     Button(
                         onClick = {
-                            isCreating = true
+                            viewModel.clearIdentityError()
                             viewModel.createIdentity(nickname)
-                            onOnboardingComplete()
                         },
                         enabled = nickname.trim().isNotEmpty(),
                         modifier = Modifier.fillMaxWidth().height(56.dp)
                     ) {
                         Text("Create New Identity")
+                    }
+                    identityError?.let { error ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = error,
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 } else {
                     Button(

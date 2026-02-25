@@ -31,6 +31,8 @@ This plan covers completion work from that baseline.
 8. Abuse controls: not an alpha blocker (post-alpha hardening track).
 9. UX policy: mandatory first-run consent gate explaining security/privacy boundaries.
 10. Bootstrap governance mode: pending final product choice (tracked as an explicit decision item).
+11. UX parity policy: critical UX controls must remain in parity across Android, iOS, and Web; no temporary lead platform for critical UX behavior.
+12. Beta security gate: anti-abuse controls are required before beta release.
 
 ## 3) Non-Negotiable Product Invariants
 
@@ -158,6 +160,7 @@ Exit gate:
 Exit gate:
 
 - alpha security acceptance checklist passed for all three clients and relay layer (without abuse-control hard gate).
+- beta readiness requires abuse-control gates enabled and passing on all three clients and relay-critical paths.
 
 ## H. Compliance and Data Governance
 
@@ -255,6 +258,8 @@ The app is considered fully unified and launch-ready only when all are true:
 6. CI enforces tri-platform gates by default.
 7. Retention bounds and consent gate behavior are verified on all clients.
 8. Canonical docs and backlog accurately match runtime behavior.
+9. Critical UX controls are parity-verified on Android, iOS, and Web with no lead-platform exceptions.
+10. Anti-abuse controls are implemented and validated as a beta gate.
 
 ## 8) Active Execution Source
 

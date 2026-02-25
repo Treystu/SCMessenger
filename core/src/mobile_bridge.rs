@@ -31,6 +31,15 @@ pub enum ServiceState {
     Stopping,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectionPathState {
+    Disconnected,
+    Bootstrapping,
+    DirectPreferred,
+    RelayFallback,
+    RelayOnly,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MotionState {
     Still,
@@ -41,7 +50,7 @@ pub enum MotionState {
 }
 
 /// Network connectivity type reported by the platform.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum NetworkType {
     /// No connectivity.
     None,
@@ -52,13 +61,8 @@ pub enum NetworkType {
     /// Both WiFi and cellular available.
     WifiAndCellular,
     /// Unknown / not yet reported.
+    #[default]
     Unknown,
-}
-
-impl Default for NetworkType {
-    fn default() -> Self {
-        NetworkType::Unknown
-    }
 }
 
 /// Snapshot of device state as reported by the platform layer.
@@ -276,6 +280,54 @@ impl MeshService {
         self.nat_status.lock().clone()
     }
 
+    pub fn get_connection_path_state(&self) -> ConnectionPathState {
+        let peers = self.swarm_bridge.get_peers();
+        let listeners = self.swarm_bridge.get_listeners();
+        let bootstrap = self.bootstrap_addrs.lock().clone();
+        let nat = self.nat_status.lock().clone();
+
+        if peers.is_empty() {
+            return if bootstrap.is_empty() {
+                ConnectionPathState::Disconnected
+            } else {
+                ConnectionPathState::Bootstrapping
+            };
+        }
+
+        if !listeners.is_empty() && nat != "symmetric" {
+            return ConnectionPathState::DirectPreferred;
+        }
+
+        if !bootstrap.is_empty() {
+            return ConnectionPathState::RelayFallback;
+        }
+
+        ConnectionPathState::RelayOnly
+    }
+
+    pub fn export_diagnostics(&self) -> String {
+        let stats = self.get_stats();
+        let payload = serde_json::json!({
+            "service_state": format!("{:?}", self.get_state()),
+            "connection_path_state": format!("{:?}", self.get_connection_path_state()),
+            "nat_status": self.get_nat_status(),
+            "bootstrap_addrs": self.bootstrap_addrs.lock().clone(),
+            "peers": self.swarm_bridge.get_peers(),
+            "listeners": self.swarm_bridge.get_listeners(),
+            "external_addrs": self.swarm_bridge.get_external_addresses(),
+            "relay_budget": *self.relay_budget.lock(),
+            "stats": {
+                "peers_discovered": stats.peers_discovered,
+                "messages_relayed": stats.messages_relayed,
+                "bytes_transferred": stats.bytes_transferred,
+                "uptime_secs": stats.uptime_secs
+            },
+            "timestamp_ms": current_timestamp(),
+        });
+
+        payload.to_string()
+    }
+
     pub fn start_swarm(&self, listen_addr: String) -> Result<(), crate::IronCoreError> {
         // Extract keys while holding the lock, then DROP the lock before any
         // runtime/thread work.  This is critical: if anything below panics
@@ -321,10 +373,16 @@ impl MeshService {
         std::thread::Builder::new()
             .name("scm-swarm".to_string())
             .spawn(move || {
+                #[cfg(not(target_arch = "wasm32"))]
                 let rt = tokio::runtime::Builder::new_multi_thread()
                     .worker_threads(2)
                     .enable_all()
                     .thread_name("scm-swarm-worker")
+                    .build();
+
+                #[cfg(target_arch = "wasm32")]
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
                     .build();
 
                 match rt {
@@ -1346,24 +1404,22 @@ impl LedgerManager {
         public_key: Option<String>,
         nickname: Option<String>,
     ) {
-        let normalized_public_key = public_key
-            .and_then(|value| {
-                let trimmed = value.trim().to_string();
-                if trimmed.is_empty() {
-                    None
-                } else {
-                    Some(trimmed)
-                }
-            });
-        let normalized_nickname = nickname
-            .and_then(|value| {
-                let trimmed = value.trim().to_string();
-                if trimmed.is_empty() {
-                    None
-                } else {
-                    Some(trimmed)
-                }
-            });
+        let normalized_public_key = public_key.and_then(|value| {
+            let trimmed = value.trim().to_string();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        });
+        let normalized_nickname = nickname.and_then(|value| {
+            let trimmed = value.trim().to_string();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        });
 
         let mut entries = self.entries.lock().unwrap();
         if let Some(entry) = entries.iter_mut().find(|e| e.multiaddr == multiaddr) {
@@ -1466,7 +1522,14 @@ fn get_global_runtime() -> tokio::runtime::Handle {
     }
 
     tracing::info!("Initializing global Tokio runtime for mobile mesh...");
+    #[cfg(not(target_arch = "wasm32"))]
     let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to create global Tokio runtime");
+
+    #[cfg(target_arch = "wasm32")]
+    let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .expect("Failed to create global Tokio runtime");
@@ -1841,6 +1904,63 @@ mod tests {
 
         let adj = svc.recommended_behavior().unwrap();
         assert!(adj.minimal_operation);
+    }
+
+    #[test]
+    fn test_connection_path_state_bootstrapping_without_peers() {
+        let svc = MeshService::new(MeshServiceConfig {
+            discovery_interval_ms: 5_000,
+            battery_floor_pct: 20,
+        });
+        svc.set_bootstrap_nodes(vec!["/dns4/bootstrap.example/tcp/443/wss".to_string()]);
+        assert_eq!(
+            svc.get_connection_path_state(),
+            ConnectionPathState::Bootstrapping
+        );
+    }
+
+    #[test]
+    fn test_export_diagnostics_contains_state_fields() {
+        let svc = MeshService::new(MeshServiceConfig {
+            discovery_interval_ms: 5_000,
+            battery_floor_pct: 20,
+        });
+        let json = svc.export_diagnostics();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(v.get("service_state").is_some());
+        assert!(v.get("connection_path_state").is_some());
+        assert!(v.get("nat_status").is_some());
+        assert!(v.get("timestamp_ms").is_some());
+    }
+
+    #[test]
+    fn test_history_manager_persists_across_restart() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_str().unwrap().to_string();
+
+        {
+            let history = HistoryManager::new(path.clone()).unwrap();
+            history
+                .add(MessageRecord {
+                    id: "msg-persist-1".to_string(),
+                    direction: MessageDirection::Sent,
+                    peer_id: "peer-one".to_string(),
+                    content: "hello".to_string(),
+                    timestamp: 1_777_000_000,
+                    delivered: false,
+                })
+                .unwrap();
+            history.mark_delivered("msg-persist-1".to_string()).unwrap();
+            assert_eq!(history.count(), 1);
+        }
+
+        let reloaded = HistoryManager::new(path).unwrap();
+        let record = reloaded
+            .get("msg-persist-1".to_string())
+            .unwrap()
+            .expect("message record should persist");
+        assert_eq!(record.peer_id, "peer-one");
+        assert!(record.delivered);
     }
 
     // -----------------------------------------------------------------------

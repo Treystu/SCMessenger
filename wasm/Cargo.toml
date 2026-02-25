@@ -21,6 +21,8 @@ tracing = { workspace = true }
 tracing-wasm = "0.2"
 parking_lot = "0.12"
 futures = { workspace = true }
+libp2p = { workspace = true }
+tokio = { workspace = true }
 
 # WASM-specific dependencies
 console_error_panic_hook = "0.1"

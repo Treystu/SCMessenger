@@ -27,24 +27,33 @@ impl IdentityManager {
 
     /// Create a new identity manager with persistent storage
     pub fn with_path(path: &str) -> Result<Self> {
-        Ok(Self {
+        let mut manager = Self {
             store: IdentityStore::persistent(path)?,
             keys: None,
             nickname: None,
-        })
+        };
+        // Load any previously-persisted identity material without generating
+        // a new identity. Fresh installs remain uninitialized.
+        manager.hydrate_from_store()?;
+        Ok(manager)
+    }
+
+    fn hydrate_from_store(&mut self) -> Result<()> {
+        if let Some(nickname) = self.store.load_nickname()? {
+            self.nickname = Some(nickname);
+        }
+        if let Some(keys) = self.store.load_keys()? {
+            self.keys = Some(keys);
+        }
+        Ok(())
     }
 
     /// Generate or load identity keys
     pub fn initialize(&mut self) -> Result<()> {
-        // Load nickname
-        if let Ok(Some(nickname)) = self.store.load_nickname() {
-            self.nickname = Some(nickname);
-        }
+        self.hydrate_from_store()?;
 
-        // Try to load existing keys
-        if let Some(keys) = self.store.load_keys()? {
+        if self.keys.is_some() {
             tracing::info!("🔑 Loaded existing identity");
-            self.keys = Some(keys);
         } else {
             // Generate new keys
             tracing::info!("🔑 Generating new identity");
@@ -94,6 +103,19 @@ impl IdentityManager {
     /// Get nickname
     pub fn nickname(&self) -> Option<String> {
         self.nickname.clone()
+    }
+
+    /// Export raw identity key bytes for secure platform backup.
+    pub fn export_key_bytes(&self) -> Option<Vec<u8>> {
+        self.keys.as_ref().map(|keys| keys.to_bytes())
+    }
+
+    /// Import raw identity key bytes and persist them in the configured store.
+    pub fn import_key_bytes(&mut self, bytes: &[u8]) -> Result<()> {
+        let keys = IdentityKeys::from_bytes(bytes)?;
+        self.store.save_keys(&keys)?;
+        self.keys = Some(keys);
+        Ok(())
     }
 }
 
@@ -183,5 +205,43 @@ mod tests {
 
         assert_eq!(id1, id2);
         assert_eq!(nick2, Some("Alice".to_string()));
+    }
+
+    #[test]
+    fn test_identity_import_export_roundtrip() {
+        let mut manager1 = IdentityManager::new();
+        manager1.initialize().unwrap();
+        let exported = manager1.export_key_bytes().unwrap();
+        let original_id = manager1.identity_id();
+        let original_pub = manager1.public_key_hex();
+
+        let mut manager2 = IdentityManager::new();
+        manager2.import_key_bytes(&exported).unwrap();
+
+        assert_eq!(manager2.identity_id(), original_id);
+        assert_eq!(manager2.public_key_hex(), original_pub);
+    }
+
+    #[test]
+    fn test_with_path_hydrates_existing_identity_without_initialize() {
+        use tempfile::tempdir;
+
+        let dir = tempdir().unwrap();
+        let path = dir
+            .path()
+            .join("existing_identity")
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        {
+            let mut manager = IdentityManager::with_path(&path).unwrap();
+            manager.initialize().unwrap();
+            manager.set_nickname("PersistedNick".to_string()).unwrap();
+        }
+
+        let manager = IdentityManager::with_path(&path).unwrap();
+        assert!(manager.keys().is_some());
+        assert_eq!(manager.nickname(), Some("PersistedNick".to_string()));
     }
 }

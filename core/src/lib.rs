@@ -18,8 +18,10 @@ pub mod contacts_bridge;
 pub mod mobile_bridge;
 
 use parking_lot::RwLock;
+use std::path::Path;
 use std::sync::Arc;
 use thiserror::Error;
+use zeroize::Zeroize;
 
 pub use crypto::{decrypt_message, encrypt_message};
 pub use identity::IdentityManager;
@@ -113,6 +115,13 @@ pub struct PreparedMessage {
     pub envelope_data: Vec<u8>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+struct IdentityBackupV1 {
+    version: u8,
+    secret_key_hex: String,
+    nickname: Option<String>,
+}
+
 // ============================================================================
 // CORE DELEGATE TRAIT
 // ============================================================================
@@ -159,6 +168,140 @@ pub struct IronCore {
     delegate: Arc<RwLock<Option<Arc<dyn CoreDelegate>>>>,
 }
 
+const STORAGE_SCHEMA_VERSION: u32 = 2;
+
+const LEGACY_IDENTITY_KEY: &[u8] = b"identity_keys";
+const LEGACY_NICKNAME_KEY: &[u8] = b"identity_nickname";
+const LEGACY_OUTBOX_PREFIX: &[u8] = b"outbox_";
+const LEGACY_INBOX_SEEN_KEY: &[u8] = b"inbox_seen_ids";
+const LEGACY_INBOX_MSG_PREFIX: &[u8] = b"inbox_msg_";
+const LEGACY_ROOT_MIGRATION_SENTINEL: &str = "LEGACY_ROOT_SLED_MIGRATED";
+
+fn read_schema_version(version_file: &Path) -> Result<u32, IronCoreError> {
+    if !version_file.exists() {
+        return Ok(0);
+    }
+    let current = std::fs::read_to_string(version_file).map_err(|_| IronCoreError::StorageError)?;
+    current
+        .trim()
+        .parse::<u32>()
+        .map_err(|_| IronCoreError::StorageError)
+}
+
+fn has_legacy_root_sled(base: &Path) -> bool {
+    // Sled stores these files at the DB root. If present, old single-db layout
+    // may still hold identity/outbox/inbox keys.
+    base.join("conf").exists() || base.join("db").exists()
+}
+
+fn copy_missing_key(
+    source: &sled::Db,
+    destination: &sled::Db,
+    key: &[u8],
+) -> Result<bool, IronCoreError> {
+    if destination
+        .get(key)
+        .map_err(|_| IronCoreError::StorageError)?
+        .is_some()
+    {
+        return Ok(false);
+    }
+    if let Some(value) = source.get(key).map_err(|_| IronCoreError::StorageError)? {
+        destination
+            .insert(key, value)
+            .map_err(|_| IronCoreError::StorageError)?;
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+fn copy_missing_prefix(
+    source: &sled::Db,
+    destination: &sled::Db,
+    prefix: &[u8],
+) -> Result<usize, IronCoreError> {
+    let mut copied = 0usize;
+    for item in source.scan_prefix(prefix) {
+        let (key, value) = item.map_err(|_| IronCoreError::StorageError)?;
+        if destination
+            .get(&key)
+            .map_err(|_| IronCoreError::StorageError)?
+            .is_none()
+        {
+            destination
+                .insert(key, value)
+                .map_err(|_| IronCoreError::StorageError)?;
+            copied += 1;
+        }
+    }
+    Ok(copied)
+}
+
+fn migrate_legacy_root_store(base: &Path) -> Result<(), IronCoreError> {
+    let sentinel = base.join(LEGACY_ROOT_MIGRATION_SENTINEL);
+    if sentinel.exists() || !has_legacy_root_sled(base) {
+        return Ok(());
+    }
+
+    let legacy = sled::open(base).map_err(|_| IronCoreError::StorageError)?;
+    let identity_db = sled::open(base.join("identity")).map_err(|_| IronCoreError::StorageError)?;
+    let outbox_db = sled::open(base.join("outbox")).map_err(|_| IronCoreError::StorageError)?;
+    let inbox_db = sled::open(base.join("inbox")).map_err(|_| IronCoreError::StorageError)?;
+
+    let mut copied_keys = 0usize;
+    copied_keys += usize::from(copy_missing_key(
+        &legacy,
+        &identity_db,
+        LEGACY_IDENTITY_KEY,
+    )?);
+    copied_keys += usize::from(copy_missing_key(
+        &legacy,
+        &identity_db,
+        LEGACY_NICKNAME_KEY,
+    )?);
+    copied_keys += copy_missing_prefix(&legacy, &outbox_db, LEGACY_OUTBOX_PREFIX)?;
+    copied_keys += usize::from(copy_missing_key(&legacy, &inbox_db, LEGACY_INBOX_SEEN_KEY)?);
+    copied_keys += copy_missing_prefix(&legacy, &inbox_db, LEGACY_INBOX_MSG_PREFIX)?;
+
+    identity_db
+        .flush()
+        .map_err(|_| IronCoreError::StorageError)?;
+    outbox_db.flush().map_err(|_| IronCoreError::StorageError)?;
+    inbox_db.flush().map_err(|_| IronCoreError::StorageError)?;
+
+    std::fs::write(&sentinel, format!("migrated_keys={copied_keys}\n"))
+        .map_err(|_| IronCoreError::StorageError)?;
+    tracing::info!(
+        "Legacy root sled migration completed (copied {} key(s))",
+        copied_keys
+    );
+    Ok(())
+}
+
+fn ensure_storage_layout(storage_path: &str) -> Result<(), IronCoreError> {
+    let base = Path::new(storage_path);
+    std::fs::create_dir_all(base).map_err(|_| IronCoreError::StorageError)?;
+    std::fs::create_dir_all(base.join("identity")).map_err(|_| IronCoreError::StorageError)?;
+    std::fs::create_dir_all(base.join("outbox")).map_err(|_| IronCoreError::StorageError)?;
+    std::fs::create_dir_all(base.join("inbox")).map_err(|_| IronCoreError::StorageError)?;
+
+    let version_file = base.join("SCHEMA_VERSION");
+    let current = read_schema_version(&version_file)?;
+    if current > STORAGE_SCHEMA_VERSION {
+        return Err(IronCoreError::StorageError);
+    }
+
+    if current < 2 {
+        migrate_legacy_root_store(base)?;
+    }
+
+    if current != STORAGE_SCHEMA_VERSION {
+        std::fs::write(&version_file, STORAGE_SCHEMA_VERSION.to_string())
+            .map_err(|_| IronCoreError::StorageError)?;
+    }
+    Ok(())
+}
+
 impl IronCore {
     /// Create a new Iron Core instance with in-memory storage
     pub fn new() -> Self {
@@ -179,18 +322,60 @@ impl IronCore {
             )
             .try_init();
 
-        let identity = if let Some(path) = storage_path {
-            Arc::new(RwLock::new(
-                IdentityManager::with_path(&path).unwrap_or_else(|_| IdentityManager::new()),
-            ))
+        let storage_ready = if let Some(path) = &storage_path {
+            match ensure_storage_layout(path) {
+                Ok(()) => true,
+                Err(e) => {
+                    tracing::error!("Storage layout check failed at {}: {:?}", path, e);
+                    false
+                }
+            }
+        } else {
+            false
+        };
+
+        let identity = if let Some(path) = &storage_path {
+            if !storage_ready {
+                Arc::new(RwLock::new(IdentityManager::new()))
+            } else {
+                let identity_path = Path::new(path).join("identity");
+                Arc::new(RwLock::new(
+                    IdentityManager::with_path(identity_path.to_string_lossy().as_ref())
+                        .unwrap_or_else(|_| IdentityManager::new()),
+                ))
+            }
         } else {
             Arc::new(RwLock::new(IdentityManager::new()))
         };
 
+        let outbox = if let Some(path) = &storage_path {
+            if !storage_ready {
+                store::Outbox::new()
+            } else {
+                let outbox_path = Path::new(path).join("outbox");
+                store::Outbox::persistent(outbox_path.to_string_lossy().as_ref())
+                    .unwrap_or_else(|_| store::Outbox::new())
+            }
+        } else {
+            store::Outbox::new()
+        };
+
+        let inbox = if let Some(path) = &storage_path {
+            if !storage_ready {
+                store::Inbox::new()
+            } else {
+                let inbox_path = Path::new(path).join("inbox");
+                store::Inbox::persistent(inbox_path.to_string_lossy().as_ref())
+                    .unwrap_or_else(|_| store::Inbox::new())
+            }
+        } else {
+            store::Inbox::new()
+        };
+
         Self {
             identity,
-            outbox: Arc::new(RwLock::new(store::Outbox::new())),
-            inbox: Arc::new(RwLock::new(store::Inbox::new())),
+            outbox: Arc::new(RwLock::new(outbox)),
+            inbox: Arc::new(RwLock::new(inbox)),
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
         }
@@ -208,13 +393,8 @@ impl IronCore {
 
         tracing::info!("Iron Core V2 starting...");
 
-        // Initialize identity if not already done
-        if self.identity.read().keys().is_none() {
-            self.identity
-                .write()
-                .initialize()
-                .map_err(|_| IronCoreError::StorageError)?;
-        }
+        // Identity lifecycle is explicit. Do not auto-generate keys on service start.
+        // This preserves clean-wipe onboarding semantics and avoids silent identity drift.
 
         *running = true;
         tracing::info!("Iron Core V2 started");
@@ -279,6 +459,44 @@ impl IronCore {
             .write()
             .set_nickname(nickname)
             .map_err(|_| IronCoreError::StorageError)
+    }
+
+    /// Export identity key material for platform-secure backup.
+    pub fn export_identity_backup(&self) -> Result<String, IronCoreError> {
+        let identity = self.identity.read();
+        let mut key_bytes = identity
+            .export_key_bytes()
+            .ok_or(IronCoreError::NotInitialized)?;
+        let payload = IdentityBackupV1 {
+            version: 1,
+            secret_key_hex: hex::encode(&key_bytes),
+            nickname: identity.nickname(),
+        };
+        key_bytes.zeroize();
+        serde_json::to_string(&payload).map_err(|_| IronCoreError::Internal)
+    }
+
+    /// Import identity key material from a platform-secure backup payload.
+    pub fn import_identity_backup(&self, backup: String) -> Result<(), IronCoreError> {
+        let payload: IdentityBackupV1 =
+            serde_json::from_str(&backup).map_err(|_| IronCoreError::InvalidInput)?;
+        if payload.version != 1 {
+            return Err(IronCoreError::InvalidInput);
+        }
+        let mut key_bytes =
+            hex::decode(payload.secret_key_hex).map_err(|_| IronCoreError::InvalidInput)?;
+        let mut identity = self.identity.write();
+        let result = identity
+            .import_key_bytes(&key_bytes)
+            .map_err(|_| IronCoreError::StorageError);
+        key_bytes.zeroize();
+        result?;
+        if let Some(nickname) = payload.nickname {
+            identity
+                .set_nickname(nickname)
+                .map_err(|_| IronCoreError::StorageError)?;
+        }
+        Ok(())
     }
 
     /// Sign data with this node's identity key
@@ -433,6 +651,21 @@ impl IronCore {
         // Serialize envelope for wire
         let envelope_bytes =
             message::encode_envelope(&envelope).map_err(|_| IronCoreError::Internal)?;
+
+        // Persist outbound envelope for retry/reconciliation.
+        self.outbox
+            .write()
+            .enqueue(store::QueuedMessage {
+                message_id: message_id.clone(),
+                recipient_id: recipient_key_trimmed.clone(),
+                envelope_data: envelope_bytes.clone(),
+                queued_at: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+                attempts: 0,
+            })
+            .map_err(|_| IronCoreError::StorageError)?;
 
         Ok(PreparedMessage {
             message_id,
@@ -604,6 +837,14 @@ impl IronCore {
         Ok(msg)
     }
 
+    /// Remove a message from the outbox after confirmed delivery.
+    ///
+    /// Returns `true` if the message was found and removed, `false` if it was
+    /// not in the outbox (already removed or never queued).
+    pub fn mark_message_sent(&self, message_id: String) -> bool {
+        self.outbox.write().remove(&message_id)
+    }
+
     /// Get the number of queued outbound messages
     pub fn outbox_count(&self) -> u32 {
         self.outbox.read().total_count() as u32
@@ -650,6 +891,7 @@ impl Default for IronCore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn test_iron_core_creation() {
@@ -804,14 +1046,61 @@ mod tests {
     }
 
     #[test]
-    fn test_auto_initialize_on_start() {
+    fn test_start_does_not_auto_initialize_identity() {
         let core = IronCore::new();
         core.start().unwrap();
 
         let info = core.get_identity_info();
-        assert!(info.initialized);
+        assert!(!info.initialized);
 
         core.stop();
+    }
+
+    #[test]
+    fn test_with_storage_hydrates_existing_identity_without_initialize_call() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_string_lossy().to_string();
+
+        let first = IronCore::with_storage(path.clone());
+        first.initialize_identity().unwrap();
+        first.set_nickname("persisted-hydrate".to_string()).unwrap();
+        let original_identity = first.get_identity_info().identity_id;
+        drop(first);
+
+        let second = IronCore::with_storage(path);
+        let reloaded = second.get_identity_info();
+        assert!(reloaded.initialized);
+        assert_eq!(reloaded.nickname.as_deref(), Some("persisted-hydrate"));
+        assert_eq!(reloaded.identity_id, original_identity);
+    }
+
+    #[test]
+    fn test_with_storage_migrates_legacy_root_identity_layout() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_string_lossy().to_string();
+
+        // Simulate pre-schema-split storage where identity keys lived in root sled.
+        let legacy_store = identity::IdentityStore::persistent(&path).unwrap();
+        let legacy_keys = identity::IdentityKeys::generate();
+        legacy_store.save_keys(&legacy_keys).unwrap();
+        legacy_store.save_nickname("legacy-nick").unwrap();
+        drop(legacy_store);
+
+        let core = IronCore::with_storage(path.clone());
+        let info = core.get_identity_info();
+        assert!(info.initialized);
+        assert_eq!(
+            info.public_key_hex.as_deref(),
+            Some(legacy_keys.public_key_hex().as_str())
+        );
+        assert_eq!(info.nickname.as_deref(), Some("legacy-nick"));
+
+        let schema =
+            std::fs::read_to_string(std::path::Path::new(&path).join("SCHEMA_VERSION")).unwrap();
+        assert_eq!(schema.trim(), STORAGE_SCHEMA_VERSION.to_string());
+        assert!(std::path::Path::new(&path)
+            .join(LEGACY_ROOT_MIGRATION_SENTINEL)
+            .exists());
     }
 
     #[test]
@@ -828,5 +1117,114 @@ mod tests {
             extracted_hex, original_hex,
             "Extracted public key must match the identity's own public key"
         );
+    }
+
+    #[test]
+    fn test_outbox_persists_across_restart_with_storage() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_string_lossy().to_string();
+
+        let alice = IronCore::with_storage(path.clone());
+        let bob = IronCore::new();
+        alice.initialize_identity().unwrap();
+        bob.initialize_identity().unwrap();
+
+        let bob_pk = bob.get_identity_info().public_key_hex.unwrap();
+        let _ = alice
+            .prepare_message(bob_pk, "persist me".to_string())
+            .unwrap();
+        assert_eq!(alice.outbox_count(), 1);
+        drop(alice);
+
+        let reloaded = IronCore::with_storage(path);
+        assert_eq!(reloaded.outbox_count(), 1);
+    }
+
+    #[test]
+    fn test_inbox_persists_across_restart_with_storage() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_string_lossy().to_string();
+
+        let alice = IronCore::with_storage(path.clone());
+        let bob = IronCore::new();
+        alice.initialize_identity().unwrap();
+        bob.initialize_identity().unwrap();
+
+        let alice_pk = alice.get_identity_info().public_key_hex.unwrap();
+        let envelope = bob
+            .prepare_message(alice_pk, "hi from bob".to_string())
+            .unwrap();
+        alice.receive_message(envelope).unwrap();
+        assert_eq!(alice.inbox_count(), 1);
+        drop(alice);
+
+        let reloaded = IronCore::with_storage(path);
+        assert_eq!(reloaded.inbox_count(), 1);
+    }
+
+    #[test]
+    fn test_identity_backup_roundtrip() {
+        let core = IronCore::new();
+        core.initialize_identity().unwrap();
+
+        let backup = core.export_identity_backup().unwrap();
+        assert!(!backup.is_empty());
+
+        // Backup payload is valid JSON
+        let parsed: serde_json::Value = serde_json::from_str(&backup).unwrap();
+        assert_eq!(parsed["version"], 1);
+        assert!(parsed["secret_key_hex"].is_string());
+
+        // Import into a fresh core and verify identity is restored
+        let core2 = IronCore::new();
+        core2.import_identity_backup(backup).unwrap();
+
+        let orig = core.get_identity_info();
+        let restored = core2.get_identity_info();
+        assert_eq!(
+            orig.public_key_hex, restored.public_key_hex,
+            "public key must be identical after import"
+        );
+    }
+
+    #[test]
+    fn test_import_identity_backup_invalid_version() {
+        let core = IronCore::new();
+        let bad = r#"{"version":99,"secret_key_hex":"aabb","nickname":null}"#.to_string();
+        assert!(core.import_identity_backup(bad).is_err());
+    }
+
+    #[test]
+    fn test_import_identity_backup_invalid_hex() {
+        let core = IronCore::new();
+        let bad = r#"{"version":1,"secret_key_hex":"not-hex!!","nickname":null}"#.to_string();
+        assert!(core.import_identity_backup(bad).is_err());
+    }
+
+    #[test]
+    fn test_mark_message_sent_removes_from_outbox() {
+        let core = IronCore::new();
+        let recipient = IronCore::new();
+        core.initialize_identity().unwrap();
+        recipient.initialize_identity().unwrap();
+
+        let recipient_pk = recipient.get_identity_info().public_key_hex.unwrap();
+        let prepared = core
+            .prepare_message_with_id(recipient_pk, "hello".to_string())
+            .unwrap();
+        assert_eq!(core.outbox_count(), 1);
+
+        // Mark the message as sent — it should be removed from the outbox.
+        let removed = core.mark_message_sent(prepared.message_id);
+        assert!(removed);
+        assert_eq!(core.outbox_count(), 0);
+    }
+
+    #[test]
+    fn test_mark_message_sent_unknown_id_returns_false() {
+        let core = IronCore::new();
+        core.initialize_identity().unwrap();
+        let removed = core.mark_message_sent("nonexistent-id".to_string());
+        assert!(!removed);
     }
 }

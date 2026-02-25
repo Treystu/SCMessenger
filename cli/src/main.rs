@@ -21,6 +21,61 @@ use scmessenger_core::IronCore;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+fn load_or_create_headless_network_keypair(
+    storage_path: &std::path::Path,
+    core: &IronCore,
+) -> Result<libp2p::identity::Keypair> {
+    std::fs::create_dir_all(storage_path).context("Failed to create relay storage directory")?;
+    let key_path = storage_path.join("relay_network_key.pb");
+
+    if key_path.exists() {
+        let bytes = std::fs::read(&key_path).context("Failed to read relay network key file")?;
+        match libp2p::identity::Keypair::from_protobuf_encoding(&bytes) {
+            Ok(keypair) => return Ok(keypair),
+            Err(err) => {
+                tracing::warn!(
+                    "Relay network key decode failed ({}); rotating key file: {}",
+                    err,
+                    key_path.display()
+                );
+            }
+        }
+    }
+
+    // Key file absent or corrupt — try migrating from IronCore identity to
+    // preserve the relay PeerId across upgrades (avoids breaking pinned bootstrap addrs).
+    if let Ok(keypair) = core.get_libp2p_keypair() {
+        tracing::info!("Migrating relay network key from existing IronCore identity");
+        if let Ok(encoded) = keypair.to_protobuf_encoding() {
+            if let Err(e) = std::fs::write(&key_path, &encoded) {
+                tracing::warn!("Failed to persist migrated relay key: {}", e);
+            } else {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let _ =
+                        std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
+                }
+            }
+        }
+        return Ok(keypair);
+    }
+
+    let keypair = libp2p::identity::Keypair::generate_ed25519();
+    let encoded = keypair
+        .to_protobuf_encoding()
+        .context("Failed to encode relay network key")?;
+    std::fs::write(&key_path, &encoded).context("Failed to persist relay network key")?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
+    }
+
+    Ok(keypair)
+}
+
 #[derive(Parser)]
 #[command(name = "scm")]
 #[command(about = "SCMessenger — Sovereign Encrypted Messaging", long_about = None)]
@@ -1276,7 +1331,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 /// interactive console. Designed for server, Docker, and GCP deployment.
 ///
 /// Capabilities:
-/// - Auto-initializes identity if absent
+/// - Uses persisted headless network identity (no persisted user profile init)
 /// - Starts libp2p swarm listening on configurable multiaddr
 /// - Operates as a relay node: forwards all mesh traffic
 /// - Subscribes to lobby + mesh gossipsub topics
@@ -1287,32 +1342,13 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
-
-    // Auto-init identity if this is a fresh node
-    if core.get_identity_info().public_key_hex.is_none() {
-        println!("{}", "Auto-initializing relay identity...".yellow());
-        core.initialize_identity()
-            .context("Failed to initialize identity for relay")?;
-    } else {
-        core.initialize_identity()
-            .context("Failed to load identity")?;
-    }
-
-    let info = core.get_identity_info();
-    let network_keypair = core
-        .get_libp2p_keypair()
-        .context("Failed to get network keypair from identity")?;
+    // Load existing identity (if any) so the relay can migrate its network key
+    // from the IronCore identity, preserving the PeerId on first upgrade.
+    let _ = core.initialize_identity();
+    let network_keypair = load_or_create_headless_network_keypair(&storage_path, &core)?;
     let local_peer_id = network_keypair.public().to_peer_id();
     let display_name =
         node_name.unwrap_or_else(|| format!("relay-{}", &local_peer_id.to_string()[..8]));
-
-    if let Some(name) = info.nickname.as_ref() {
-        if name.is_empty() {
-            let _ = core.set_nickname(display_name.clone());
-        }
-    } else {
-        let _ = core.set_nickname(display_name.clone());
-    }
 
     println!();
     println!(
@@ -1335,10 +1371,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     );
     println!(
         "  Public Key:   {}",
-        info.public_key_hex
-            .as_deref()
-            .unwrap_or("(none)")
-            .bright_yellow()
+        "(headless/identity-agnostic)".bright_yellow()
     );
     println!("  P2P Listen:   {}", listen_addr.green());
     println!("  HTTP Status:  http://0.0.0.0:{}", http_port);
@@ -1371,7 +1404,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     // Web context for landing page + API
     let web_ctx = Arc::new(server::WebContext {
         node_peer_id: local_peer_id.to_string(),
-        node_public_key: info.public_key_hex.clone().unwrap_or_default(),
+        node_public_key: String::new(),
         bootstrap_nodes: all_bootstrap.clone(),
         ledger: ledger.clone(),
         peers: peers.clone(),
@@ -1521,9 +1554,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     println!();
 
     // ── Main event loop (headless — no stdin) ───────────────────────────
-    let core_rx = core.clone();
     let contacts_rx = contacts.clone();
-    let history_rx = history.clone();
     let ledger_rx = ledger.clone();
     let outbox_rx = outbox.clone();
 
@@ -1620,43 +1651,16 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
                         }
                     }
                     SwarmEvent::MessageReceived { peer_id, envelope_data } => {
-                        // Relay node: log and relay messages, also decrypt if addressed to us
-                        let sender_public_key_hex = decode_envelope(&envelope_data)
-                            .ok()
-                            .map(|env| hex::encode(&env.sender_public_key));
-
-                        if let Ok(msg) = core_rx.receive_message(envelope_data) {
-                            match msg.message_type {
-                                MessageType::Text => {
-                                    let text = msg.text_content().unwrap_or_else(|| "<binary>".into());
-                                    tracing::info!("Message from {}: {}", peer_id, &text[..text.len().min(80)]);
-
-                                    let record = history::MessageRecord::new_received(
-                                        peer_id.to_string(),
-                                        text.clone(),
-                                    );
-                                    let _ = history_rx.add(record);
-                                    let _ = ui_broadcast.send(server::UiEvent::MessageReceived {
-                                        from: peer_id.to_string(),
-                                        content: text,
-                                        timestamp: std::time::SystemTime::now()
-                                            .duration_since(std::time::UNIX_EPOCH)
-                                            .unwrap_or_default()
-                                            .as_secs(),
-                                        message_id: msg.id.clone(),
-                                    });
-
-                                    // Send delivery receipt
-                                    if let Some(ref spk) = sender_public_key_hex {
-                                        if let Ok(receipt_data) = core_rx.prepare_receipt(spk.clone(), msg.id.clone()) {
-                                            let _ = swarm_handle.send_message(peer_id, receipt_data).await;
-                                        }
-                                    }
-                                }
-                                MessageType::Receipt => {
-                                    tracing::debug!("Receipt from {}: {}", peer_id, msg.id);
-                                }
-                            }
+                        // Headless relay mode intentionally does not decrypt app payloads.
+                        // Swarm-level forwarding remains active regardless of local identity state.
+                        if let Ok(env) = decode_envelope(&envelope_data) {
+                            let sender_key = hex::encode(&env.sender_public_key);
+                            tracing::debug!(
+                                "Relayed envelope from {} sender={} bytes={}",
+                                peer_id,
+                                &sender_key[..sender_key.len().min(12)],
+                                envelope_data.len()
+                            );
                         }
                     }
                     SwarmEvent::ListeningOn(addr) => {

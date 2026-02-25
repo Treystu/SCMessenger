@@ -12,11 +12,13 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - Result: **pass**
   - Totals from suite output:
     - CLI: 17 passed
-    - Core unit: 227 passed, 7 ignored
+    - Core unit: 242 passed, 7 ignored
     - Core integration: 52 passed
     - Mobile crate: 4 passed
     - WASM crate (native/non-browser tests): 24 passed
-  - Aggregate: **324 passed, 0 failed, 7 ignored**
+  - Aggregate: **343 passed, 0 failed, 7 ignored**
+- `cargo clippy --workspace` — **clean (0 warnings)**
+- `cargo fmt --all -- --check` — **clean**
 
 ### CLI Surface
 
@@ -78,7 +80,11 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - Mobile UniFFI surface (MeshService, SwarmBridge, managers, settings)
 - iOS and Android app codebases with active integration to Rust core
 - iOS background lifecycle repository hooks are wired (`pause/resume`, ledger save, sync/discovery triggers)
-- WASM crate with WebSocket/WebRTC abstractions and native stub-path tests
+- WASM crate with full libp2p swarm transport (`startSwarm`, `stopSwarm`, `sendPreparedEnvelope`, `getPeers`) using browser-native websocket-websys; legacy `startReceiveLoop` deprecated as shim
+- Identity backup/restore wired end-to-end: iOS Keychain and Android SharedPreferences (`identity_backup_prefs.xml`); survives full app reinstall
+- `mark_message_sent(message_id)` exposed via UniFFI; prevents outbox exhaustion on long-lived accounts
+- CLI relay PeerId stable across upgrades: network key migrated from IronCore identity on first run, then persisted in `relay_network_key.pb`
+- BLE GATT sequential operation queue: all GATT reads, writes, and CCCD writes serialised per-device via `Channel` + `Semaphore(1)` to comply with Android GATT API requirements
 
 ## Known Gaps and Partial Areas
 
@@ -112,8 +118,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 
 - Browser-executed WASM tests are not currently verified in this environment (`wasm-pack` missing)
 - Android build verification requires `ANDROID_HOME` to be set in-shell
-- App-update continuity hardening is still pending:
-  - upgrade-path guarantees for identity/contact/history persistence and automatic legacy-store import are tracked as a Priority 1 backlog item in `REMAINING_WORK_TRACKING.md`.
+- App-update continuity code is complete (backup/restore, schema migration, relay key migration); pending: real-device package upgrade validation runs on Android/iOS/WASM
 
 ### Non-Markdown Extraction Highlights (2026-02-23)
 

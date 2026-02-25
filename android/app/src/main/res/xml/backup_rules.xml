@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!-- Exclude sensitive identity files from backup -->
+    <!-- Exclude raw identity key files — the encrypted backup payload in
+         identity_backup_prefs.xml is safe to back up and will be included
+         by default (no <include> tag, so all non-excluded data is backed up). -->
     <exclude domain="file" path="identity/" />
     <exclude domain="file" path="contacts.db/" />
     <exclude domain="file" path="history.db/" />

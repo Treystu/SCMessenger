@@ -260,4 +260,27 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_contact_persistence_across_manager_restart() -> Result<(), crate::IronCoreError> {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let storage_path = temp_dir.path().to_str().unwrap().to_string();
+
+        {
+            let manager = ContactManager::new(storage_path.clone())?;
+            let contact = Contact::new("peer-alpha".to_string(), "pubkey-alpha".to_string())
+                .with_nickname("FederatedName".to_string());
+            manager.add(contact)?;
+            manager.set_local_nickname("peer-alpha".to_string(), Some("LocalAlias".to_string()))?;
+        }
+
+        let reloaded = ContactManager::new(storage_path)?;
+        let contact = reloaded
+            .get("peer-alpha".to_string())?
+            .expect("contact should persist");
+        assert_eq!(contact.nickname.as_deref(), Some("FederatedName"));
+        assert_eq!(contact.local_nickname.as_deref(), Some("LocalAlias"));
+        assert_eq!(reloaded.count(), 1);
+        Ok(())
+    }
 }
