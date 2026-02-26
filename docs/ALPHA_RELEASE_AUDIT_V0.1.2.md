@@ -1,14 +1,16 @@
 # SCMessenger v0.1.2 Alpha Release Audit
 
-**Audited:** 2026-02-26
-**Branch audited:** `claude/audit-alpha-release-plan-bq4sA` (merged from `origin/main` de2188b)
+**Audited:** 2026-02-26 | **Updated:** 2026-02-26
+**Branch:** `claude/audit-alpha-release-plan-bq4sA` (merged from `origin/main` ce2a1ad)
 **Method:** Full codebase audit — documentation review, code inspection, runtime log analysis (android_log.txt)
 
 ---
 
 ## Executive Summary
 
-The codebase is in strong shape for alpha. The core Rust library is feature-complete with 343 passing tests, zero clippy warnings, and all four documented hardening issues resolved. Both Android and iOS apps build and install. WASM swarm transport is implemented. The remaining work before alpha is **small and well-scoped**: two specific code fixes, a version bump, one repo hygiene item, and live-network validation runs.
+The codebase is in strong shape for alpha. The core Rust library is feature-complete with 343 passing tests, zero clippy warnings, and all four documented hardening issues resolved. Both Android and iOS apps build and install. WASM swarm transport is implemented.
+
+**Update (post-audit):** Items 1 and 4 from the original audit were resolved by main branch commits merged on 2026-02-26. Item 6 (message persistence through reinstall) was fixed in this branch. Version stays at `0.1.1` pending testing.
 
 ---
 
@@ -40,32 +42,21 @@ The codebase is in strong shape for alpha. The core Rust library is feature-comp
 
 ---
 
+## Resolved Since Initial Audit
+
+| # | Item | Resolution |
+|---|---|---|
+| 1 | `onPeerIdentified` identify storm (Android + iOS) | **Fixed in main** (ce2a1ad): 30s dedup cache on both platforms; 1s dedup on disconnect; 5-min dedup on dial-throttle log |
+| 4 | `android_log.txt` in version control | **Fixed in this branch** (925f6e3): removed from tracking, added `*_log.txt` + `*_logs.txt` to `.gitignore` |
+| 6 | Message history wiped on reinstall | **Fixed in this branch** (this commit): iOS backup exclusion moved from whole `mesh/` dir to `identity/` subdir only; Android backup rules already correct; reinstall detection + post-start beacon added to both platforms |
+
+---
+
 ## Open Items
 
 ### P0 — Must Fix Before Alpha Release
 
-#### 1. `onPeerIdentified` identify storm causes excessive background work (ANDROID)
-
-**Source:** `android_log.txt` (live device, 2026-02-25 19:21 session)
-**Observed:** The GCP relay node (`12D3KooWET...`) triggers **20+ `onPeerIdentified` callbacks within 1 second** on connect. Each callback fires:
-- `flushPendingOutbox(...)` → loads `pending_outbox.json` from disk (file I/O)
-- `updateBleIdentityBeacon()` → queues a GATT write (GATT op)
-- `primeRelayBootstrapConnections()` → coroutine launch
-
-With 20+ identify events per second, this results in ~20 redundant file I/O cycles, ~20 queued GATT operations, and excessive coroutine activity on every relay connection.
-
-**Root cause:** The libp2p `identify` protocol fires once per open stream to the relay. Multiple transport connections (TCP, QUIC, relay circuit) all fire independently, and the relay's 60s interval does not prevent burst-on-connect.
-
-**Fix:** Add per-peer deduplication for post-identify side effects in `onPeerIdentified`. Track `lastOutboxFlushByPeer` and `lastBeaconUpdateByPeer` sets; only fire once per peerId per minimum window (e.g., 5 seconds).
-
-**File:** `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
-**LOC estimate:** ~30–50 LOC
-
-**Verify iOS too:** iOS has the same `onPeerIdentified` handler in `MeshRepository.swift`. Check if the same storm occurs and apply equivalent deduplication if needed.
-
----
-
-#### 2. iOS missing delayed BLE identity retry reads
+#### 1. iOS missing delayed BLE identity retry reads
 
 **Source:** Code inspection of `iOS/SCMessenger/SCMessenger/Transport/BLECentralManager.swift` vs Android `BleGattClient.kt`
 
@@ -73,20 +64,20 @@ With 20+ identify events per second, this results in ~20 redundant file I/O cycl
 
 **Impact:** BLE-connected iOS peers may be discovered without a public key if the peripheral's GATT server is not yet ready at characteristic discovery time. The missing identity causes the peer to appear in the mesh dashboard without nickname or identity, and prevents messaging.
 
-**Fix:** In `BLECentralManager.swift`, after the first `peripheral.readValue(for: identityCharacteristic)` in `didDiscoverCharacteristicsFor`, schedule two delayed re-reads at T+900ms and T+2200ms using `Task { try? await Task.sleep(nanoseconds: ...); peripheral.readValue(for: char) }`, guarded by `connectedPeripherals[peripheral.identifier] != nil`.
+**Fix:** In `BLECentralManager.swift` `didDiscoverCharacteristicsFor`, after the initial `peripheral.readValue(for: identityChar)`, schedule two delayed re-reads at T+900ms and T+2200ms using `Task { try? await Task.sleep(nanoseconds: ...); if connectedPeripherals[peripheral.identifier] != nil { peripheral.readValue(for: char) } }`.
 
 **File:** `iOS/SCMessenger/SCMessenger/Transport/BLECentralManager.swift`
 **LOC estimate:** ~30–50 LOC
 
 ---
 
-#### 3. Version numbers need bumping
+#### 2. Version numbers need bumping (defer until after testing)
 
 **Current:** `Cargo.toml` workspace has `version = "0.1.1"`. `core/src/transport/behaviour.rs` has agent version `"scmessenger/0.1.1/..."`.
 
-**Required:** Both must be `0.1.2` for the alpha release.
+**Required:** Both must be `0.1.2` for the alpha release — do this AFTER testing passes so the version number is correct at ship time.
 
-**Note:** The live GCP relay still reports `scmessenger/0.1.0/headless/relay/...` in the android log — the relay server needs to be rebuilt and redeployed after the version bump lands.
+**Note:** The live GCP relay still reports `scmessenger/0.1.0/headless/relay/...` — rebuild and redeploy relay after the version bump lands.
 
 **Files:**
 - `Cargo.toml` (workspace `[workspace.package].version`)
@@ -96,22 +87,11 @@ With 20+ identify events per second, this results in ~20 redundant file I/O cycl
 
 ---
 
-#### 4. `android_log.txt` should not be in version control
-
-**Source:** File committed in latest merge from main (26,448 lines, raw Android `adb logcat` output).
-
-**Fix:** Add `android_log.txt` to `.gitignore` and remove from tracking. These device logs belong in `logs/` (which is already gitignored) or handed off as external artifacts.
-
-**Files:** `.gitignore`, remove `android_log.txt` from git index
-**LOC estimate:** 1 line in `.gitignore`
-
----
-
 ### P0 — Validation Required (No Code Changes)
 
 These items have complete code implementations. They require live-device or live-network verification to close the alpha gate.
 
-#### 5. Live network matrix validation
+#### 3. Live network matrix validation
 
 **Status:** Code complete. Validation evidence pending.
 
@@ -126,7 +106,7 @@ These items have complete code implementations. They require live-device or live
 
 ---
 
-#### 6. ACK-safe path switching validation
+#### 4. ACK-safe path switching validation
 
 **Status:** Code complete (stable UUIDs, idempotent receive apply, ACK reconciliation implemented).
 
@@ -137,14 +117,15 @@ These items have complete code implementations. They require live-device or live
 
 ---
 
-#### 7. App-update continuity validation on real devices
+#### 5. App-update + reinstall continuity validation on real devices
 
-**Status:** Code complete (backup/restore, schema migration, relay key migration all implemented and unit-tested).
+**Status:** Code complete. iOS backup fix landed in this commit. Android backup rules already correct.
 
 **Required:** On a real Android device and iPhone:
-1. Install the `v0.1.1` build with existing identity, contacts, and chat history.
-2. Update to `v0.1.2-alpha` build.
-3. Verify: identity preserved, contacts intact, chat history readable, no startup crash.
+1. Install the current build with existing identity, contacts, and chat history.
+2. Fully uninstall and reinstall.
+3. Verify: identity restored from Keychain/SharedPreferences, contacts + history restored via iCloud/Android Auto Backup.
+4. Also test in-place update (install new build over existing): verify no data loss.
 
 ---
 
@@ -221,24 +202,51 @@ SHOULD DO SHORTLY AFTER ALPHA:
 
 ---
 
-## LOC Estimate for Open Code Items
+## LOC Estimate for Remaining Code Items
 
-| Item | Est. LOC |
-|---|---|
-| onPeerIdentified identify storm fix (Android) | 30–50 |
-| iOS BLE delayed identity refresh reads | 30–50 |
-| Version bump | 2 |
-| .gitignore + remove android_log.txt | 1 |
-| **Total code** | **~63–103 LOC** |
+| Item | Est. LOC | Status |
+|---|---|---|
+| onPeerIdentified identify storm fix (Android + iOS) | 30–50 | ✅ Done (main ce2a1ad) |
+| iOS backup exclusion fix (contacts + history) | 50–70 | ✅ Done (this branch) |
+| Reinstall detection + post-start beacon (iOS + Android) | 40–60 | ✅ Done (this branch) |
+| .gitignore + remove android_log.txt | 1 | ✅ Done (this branch) |
+| iOS BLE delayed identity refresh reads | 30–50 | ❌ Remaining |
+| Version bump (after testing) | 2 | ❌ Remaining (deferred) |
+| **Total remaining** | **~32–52 LOC** | |
+
+---
+
+## Alpha Release Checklist
+
+```
+RESOLVED:
+[x] Fix onPeerIdentified identify storm (Android + iOS) — main ce2a1ad
+[x] Remove android_log.txt from repo — this branch
+[x] Fix iOS message/contact persistence: remove isExcludedFromBackup from mesh/ — this branch
+[x] Add reinstall detection + post-start recovery beacon (Android + iOS) — this branch
+
+MUST COMPLETE BEFORE SHIPPING:
+[ ] iOS BLE delayed identity refresh reads (T+900ms, T+2200ms) in BLECentralManager.swift
+[ ] Live network validation: GCP + direct P2P + relay fallback (Android + iOS)
+[ ] ACK-safe path switching validation (both platforms)
+[ ] App-update + reinstall continuity validation on real devices
+[ ] Version bump: Cargo.toml + behaviour.rs → 0.1.2  ← do LAST after testing passes
+[ ] Rebuild and redeploy GCP relay after version bump
+
+SHOULD DO SHORTLY AFTER ALPHA:
+[ ] Add Android+iOS+WASM CI gates to primary workflow
+[ ] Capture iOS power settings runtime evidence for beta gate
+```
 
 ---
 
 ## Definition of Done
 
 v0.1.2-alpha ships when:
-1. All four P0 code items above are merged and passing CI.
-2. Live-device validation matrix (items 5–7) is complete with no P0 failures.
-3. Two real users can exchange messages across different networks with relay fallback, keeping identity/contacts/history through an app upgrade.
+1. Remaining P0 code item (iOS BLE delayed identity retry) is merged.
+2. Live-device validation matrix (items 3–5) is complete with no P0 failures.
+3. Version bump to 0.1.2 applied as the final commit before tagging.
+4. Two real users can exchange messages across different networks with relay fallback, keeping identity/contacts/history through an app upgrade.
 
 ---
 
