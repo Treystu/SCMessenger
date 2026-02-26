@@ -18,6 +18,8 @@ history.db
 identity.json
 config.json
 logs/*
+*_log.txt
+*_logs.txt
 
 # Temporary migration/debug inventories
 docs/_ios_*

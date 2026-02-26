@@ -21,6 +21,11 @@ final class CoreDelegateImpl: CoreDelegate {
     private let eventBus = MeshEventBus.shared
     private weak var meshRepository: MeshRepository?
 
+    // P1: Dedup disconnect events — Rust fires one per substream (254+ in 1s).
+    // Only emit one disconnect per peer per 1-second window.
+    private var disconnectDedupCache: [String: Date] = [:]
+    private let disconnectDedupInterval: TimeInterval = 1.0
+
     init(meshRepository: MeshRepository?) {
         self.meshRepository = meshRepository
     }
@@ -47,6 +52,15 @@ final class CoreDelegateImpl: CoreDelegate {
     }
 
     func onPeerDisconnected(peerId: String) {
+        // P1: Deduplicate disconnect events at callback layer
+        let trimmed = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let now = Date()
+        if let lastDisconnect = disconnectDedupCache[trimmed],
+           now.timeIntervalSince(lastDisconnect) < disconnectDedupInterval {
+            return // Already processed this disconnect within the window
+        }
+        disconnectDedupCache[trimmed] = now
+
         logger.info("Peer disconnected: \(peerId)")
         let repo = meshRepository
         DispatchQueue.main.async {
