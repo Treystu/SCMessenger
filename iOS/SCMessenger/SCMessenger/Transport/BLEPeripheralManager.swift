@@ -35,6 +35,9 @@ final class BLEPeripheralManager: NSObject {
     private var rotationTimer: Timer?
     private var identityData: Data?
     
+    // Notification Buffer (Performance Optimization)
+    private var pendingNotifications: [(central: CBCentral, data: Data)] = []
+    
     // Advertising state
     private var isAdvertising = false
     private var isRotationEnabled = true
@@ -117,7 +120,8 @@ final class BLEPeripheralManager: NSObject {
         if success {
             logger.debug("Sent notification to \(central.identifier): \(data.count) bytes")
         } else {
-            logger.warning("Failed to send notification, queue full")
+            logger.warning("Failed to send notification, queue full — buffering")
+            pendingNotifications.append((central: central, data: data))
         }
     }
 
@@ -282,6 +286,28 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
         if let services = dict[CBPeripheralManagerRestoredStateServicesKey] as? [CBMutableService] {
             logger.info("Restoring \(services.count) services")
             meshService = services.first
+        }
+    }
+    
+    func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
+        logger.debug("Peripheral manager ready to resume notifications")
+        processPendingNotifications()
+    }
+    
+    private func processPendingNotifications() {
+        guard let syncChar = syncCharacteristic else { return }
+        
+        while !self.pendingNotifications.isEmpty {
+            let next = self.pendingNotifications[0]
+            let success = self.peripheralManager.updateValue(next.data, for: syncChar, onSubscribedCentrals: [next.central])
+            if success {
+                self.pendingNotifications.removeFirst()
+                self.logger.debug("Processed buffered notification for \(next.central.identifier)")
+            } else {
+                // Queue still full, wait for next 'ready' callback
+                self.logger.debug("Queue still full, remaining buffered: \(self.pendingNotifications.count)")
+                break
+            }
         }
     }
 }

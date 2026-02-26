@@ -106,10 +106,21 @@ struct MeshDashboardView: View {
         let contacts = (try? repository.getContacts()) ?? []
         let contactsByPeerId = Dictionary(uniqueKeysWithValues: contacts.map { ($0.peerId, $0) })
         var contactsByRoutePeerId: [String: Contact] = [:]
+        var contactsByPublicKey: [String: Contact] = [:]
+        var contactsByNickname: [String: Contact] = [:]
+        
         contacts.forEach { contact in
-            guard let routePeerId = parseRoutingLibp2pPeerId(from: contact.notes) else { return }
-            if contactsByRoutePeerId[routePeerId] == nil {
-                contactsByRoutePeerId[routePeerId] = contact
+            if let routePeerId = parseRoutingLibp2pPeerId(from: contact.notes) {
+                if contactsByRoutePeerId[routePeerId] == nil {
+                    contactsByRoutePeerId[routePeerId] = contact
+                }
+            }
+            let pk = contact.publicKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !pk.isEmpty {
+                contactsByPublicKey[pk] = contact
+            }
+            if let nn = contact.nickname?.trimmingCharacters(in: .whitespacesAndNewlines), !nn.isEmpty {
+                contactsByNickname[nn] = contact
             }
         }
 
@@ -118,15 +129,34 @@ struct MeshDashboardView: View {
 
         for contact in contacts {
             let isRelay = repository.isKnownRelay(contact.peerId)
-            let existing = merged[contact.peerId]
+            let routePeerId = parseRoutingLibp2pPeerId(from: contact.notes)
+            
+            var existing = merged[contact.peerId]
+            if existing == nil {
+                let pk = contact.publicKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !pk.isEmpty {
+                    existing = merged.values.first(where: { $0.publicKey == pk })
+                }
+            }
+            if existing == nil, let rid = routePeerId {
+                existing = merged.values.first(where: { $0.libp2pPeerId == rid || $0.peerId == rid })
+            }
+            if existing == nil, let nn = contact.nickname?.trimmingCharacters(in: .whitespacesAndNewlines), !nn.isEmpty {
+                existing = merged.values.first(where: { $0.nickname == nn })
+            }
+            
+            if let oldId = existing?.id, oldId != contact.peerId {
+                merged.removeValue(forKey: oldId)
+            }
+
             merged[contact.peerId] = DashboardPeer(
                 id: contact.peerId,
                 peerId: contact.peerId,
                 publicKey: contact.publicKey,
                 nickname: contact.nickname,
                 localNickname: contact.localNickname,
-                libp2pPeerId: parseRoutingLibp2pPeerId(from: contact.notes),
-                blePeerId: nil,
+                libp2pPeerId: routePeerId ?? existing?.libp2pPeerId,
+                blePeerId: existing?.blePeerId,
                 transport: existing?.transport ?? .unknown,
                 isOnline: existing?.isOnline ?? isRecent(contact.lastSeen),
                 isRelay: isRelay,
@@ -145,12 +175,32 @@ struct MeshDashboardView: View {
             for entry in entries {
                 guard let routePeerId = entry.peerId?.trimmingCharacters(in: .whitespacesAndNewlines),
                       !routePeerId.isEmpty else { continue }
+                
                 let entryPublicKey = entry.publicKey?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let entryNickname = entry.nickname?.trimmingCharacters(in: .whitespacesAndNewlines)
-                let matchedContact = contactsByPeerId[routePeerId] ?? contactsByRoutePeerId[routePeerId]
+                
+                let matchedContact = contactsByPeerId[routePeerId] ?? 
+                                     contactsByRoutePeerId[routePeerId] ?? 
+                                     (entryPublicKey.flatMap { pk in pk.isEmpty ? nil : contactsByPublicKey[pk] }) ??
+                                     (entryNickname.flatMap { nn in nn.isEmpty ? nil : contactsByNickname[nn] })
+                
                 let canonicalPeerId = matchedContact?.peerId ?? routePeerId
                 let relay = repository.isKnownRelay(routePeerId) || repository.isKnownRelay(canonicalPeerId)
-                let existing = merged[canonicalPeerId]
+                
+                var existing = merged[canonicalPeerId]
+                if existing == nil, let pk = matchedContact?.publicKey ?? entryPublicKey, !pk.isEmpty {
+                    existing = merged.values.first(where: { $0.publicKey == pk })
+                    if let oldId = existing?.id, oldId != canonicalPeerId {
+                        merged.removeValue(forKey: oldId)
+                    }
+                }
+                if existing == nil, let nn = matchedContact?.nickname ?? entryNickname, !nn.isEmpty {
+                    existing = merged.values.first(where: { $0.nickname == nn })
+                    if let oldId = existing?.id, oldId != canonicalPeerId {
+                        merged.removeValue(forKey: oldId)
+                    }
+                }
+                
                 let lastSeenDate = dateFromEpoch(entry.lastSeen) ?? existing?.lastSeen ?? now
 
                 merged[canonicalPeerId] = DashboardPeer(
@@ -176,7 +226,29 @@ struct MeshDashboardView: View {
             }
         }
 
-        peersByKey = merged
+        // Final deduplication pass to merge any hanging libp2p nodes with identity nodes
+        var finalMerged: [String: DashboardPeer] = [:]
+        for (_, peer) in merged {
+            var shouldKeep = true
+            if let pk = peer.publicKey, !pk.isEmpty {
+                if let identityPeer = merged.values.first(where: { $0.publicKey == pk && isIdentityId($0.id) }) {
+                   if peer.id != identityPeer.id {
+                       shouldKeep = false
+                   }
+                }
+            } else if let nn = peer.nickname, !nn.isEmpty {
+                 if let identityPeer = merged.values.first(where: { $0.nickname == nn && isIdentityId($0.id) }) {
+                   if peer.id != identityPeer.id {
+                       shouldKeep = false
+                   }
+                }
+            }
+            if shouldKeep && !peer.id.isEmpty {
+                finalMerged[peer.id] = peer
+            }
+        }
+
+        peersByKey = finalMerged
     }
 
     private func handlePeerEvent(_ event: MeshEventBus.PeerEvent) {
@@ -226,6 +298,8 @@ struct MeshDashboardView: View {
         if normalizedCanonical.isEmpty { return }
         let normalizedLibp2p = libp2pPeerId?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         let normalizedBlePeer = blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedPublicKey = publicKey?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedNickname = nickname?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
 
         var merged = peersByKey
 
@@ -240,48 +314,53 @@ struct MeshDashboardView: View {
                     peer.libp2pPeerId == normalizedCanonical ||
                     peer.blePeerId == normalizedCanonical ||
                     (normalizedLibp2p != nil && peer.libp2pPeerId == normalizedLibp2p) ||
-                    (normalizedBlePeer != nil && peer.blePeerId == normalizedBlePeer)
+                    (normalizedBlePeer != nil && peer.blePeerId == normalizedBlePeer) ||
+                    (resolvedPublicKey != nil && peer.publicKey == resolvedPublicKey) ||
+                    (resolvedNickname != nil && peer.nickname == resolvedNickname)
             })
         }
 
         let relay = repository.isKnownRelay(normalizedCanonical)
             || (normalizedLibp2p.map(repository.isKnownRelay) ?? false)
 
-        let resolvedPublicKey = publicKey?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? existing?.publicKey
-        let resolvedNickname = nickname?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? existing?.nickname
-        let resolvedLocalNickname = localNickname?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? existing?.localNickname
+        let resolvedLocNick = localNickname?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? existing?.localNickname
 
         let peer = DashboardPeer(
-            id: normalizedCanonical,
-            peerId: normalizedCanonical,
-            publicKey: resolvedPublicKey,
-            nickname: resolvedNickname,
-            localNickname: resolvedLocalNickname,
+            id: existing?.id ?? normalizedCanonical, // Maintain identity primary key if possible
+            peerId: existing?.peerId ?? normalizedCanonical,
+            publicKey: resolvedPublicKey ?? existing?.publicKey,
+            nickname: resolvedNickname ?? existing?.nickname,
+            localNickname: resolvedLocNick,
             libp2pPeerId: normalizedLibp2p ?? existing?.libp2pPeerId,
             blePeerId: normalizedBlePeer ?? existing?.blePeerId,
             transport: transport,
             isOnline: isOnline,
             isRelay: relay,
             isFull: classifyPeerAsFull(
-                peerId: normalizedCanonical,
-                publicKey: resolvedPublicKey,
-                nickname: resolvedNickname,
-                localNickname: resolvedLocalNickname,
+                peerId: existing?.peerId ?? normalizedCanonical,
+                publicKey: resolvedPublicKey ?? existing?.publicKey,
+                nickname: resolvedNickname ?? existing?.nickname,
+                localNickname: resolvedLocNick,
                 isRelay: relay
             ),
             lastSeen: Date()
         )
 
-        if let oldLibp2p = normalizedLibp2p, oldLibp2p != normalizedCanonical {
+        if let oldId = existing?.id, oldId != peer.id {
+            merged.removeValue(forKey: oldId)
+        }
+        if let oldLibp2p = normalizedLibp2p, oldLibp2p != peer.id {
             merged.removeValue(forKey: oldLibp2p)
         }
-        if let oldBlePeer = normalizedBlePeer, oldBlePeer != normalizedCanonical {
+        if let oldBlePeer = normalizedBlePeer, oldBlePeer != peer.id {
             merged.removeValue(forKey: oldBlePeer)
         }
-        merged[normalizedCanonical] = peer
+        
+        merged[peer.id] = peer
         peersByKey = merged
 
         if localNickname == nil {
+            // Trigger a re-sync with contacts to ensure canonical identity merges happen correctly
             refreshPeersFromRepository()
         }
     }

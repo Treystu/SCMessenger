@@ -207,21 +207,15 @@ class BleGattClient(
             return false
         }
 
-        val mtu = 512 // Assumed negotiated MTU
+        val mtu = 512 // Request was made during connection
         return enqueueGattOp(deviceAddress) {
             try {
-                if (data.size > mtu - 3) {
-                    if (!sendFragmented(gatt, characteristic, data, mtu)) {
-                        releaseGattOp(deviceAddress)
-                    }
-                    // else: semaphore released by onCharacteristicWrite when last fragment ack'd
-                } else {
-                    characteristic.value = data
-                    if (!gatt.writeCharacteristic(characteristic)) {
-                        releaseGattOp(deviceAddress)
-                    }
-                    // else: semaphore released in onCharacteristicWrite
+                characteristic.value = data
+                characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                if (!gatt.writeCharacteristic(characteristic)) {
+                    releaseGattOp(deviceAddress)
                 }
+                // else: semaphore released in onCharacteristicWrite
             } catch (e: SecurityException) {
                 Timber.e(e, "Security exception sending data to $deviceAddress")
                 releaseGattOp(deviceAddress)
@@ -230,30 +224,6 @@ class BleGattClient(
                 releaseGattOp(deviceAddress)
             }
         }
-    }
-
-    private fun sendFragmented(
-        gatt: BluetoothGatt,
-        characteristic: BluetoothGattCharacteristic,
-        data: ByteArray,
-        mtu: Int
-    ): Boolean {
-        val chunkSize = mtu - 3
-        val deviceAddress = gatt.device.address
-        val chunks = mutableListOf<ByteArray>()
-        var offset = 0
-
-        while (offset < data.size) {
-            val end = minOf(offset + chunkSize, data.size)
-            chunks.add(data.copyOfRange(offset, end))
-            offset = end
-        }
-
-        if (chunks.isEmpty()) return true
-
-        pendingWrites[deviceAddress] = chunks.drop(1).toMutableList()
-        characteristic.value = chunks[0]
-        return gatt.writeCharacteristic(characteristic)
     }
 
     /**
@@ -366,26 +336,11 @@ class BleGattClient(
 
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Timber.d("Characteristic write successful to $deviceAddress")
-                val queue = pendingWrites[deviceAddress]
-                if (queue != null && queue.isNotEmpty()) {
-                    // More fragments remain — write the next one and keep the
-                    // semaphore held until the last fragment is acknowledged.
-                    val nextChunk = queue.removeAt(0)
-                    characteristic.value = nextChunk
-                    if (!gatt.writeCharacteristic(characteristic)) {
-                        pendingWrites.remove(deviceAddress)
-                        releaseGattOp(deviceAddress)
-                    }
-                } else {
-                    // Last (or only) fragment acknowledged — op complete.
-                    pendingWrites.remove(deviceAddress)
-                    releaseGattOp(deviceAddress)
-                }
             } else {
                 Timber.e("Characteristic write failed to $deviceAddress: $status")
-                pendingWrites.remove(deviceAddress)
-                releaseGattOp(deviceAddress)
             }
+            pendingWrites.remove(deviceAddress)
+            releaseGattOp(deviceAddress)
         }
 
         override fun onDescriptorWrite(

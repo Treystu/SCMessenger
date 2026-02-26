@@ -84,23 +84,24 @@ final class BLECentralManager: NSObject {
         logger.debug("Scan interval updated: \(self.scanInterval)s")
     }
 
-    func sendData(to peripheralId: UUID, data: Data) {
+    func sendData(to peripheralId: UUID, data: Data) -> Bool {
         guard let peripheral = connectedPeripherals[peripheralId],
               let characteristic = messageCharacteristics[peripheralId] else {
             logger.error("Cannot send: peripheral \(peripheralId) not connected or Message char not found")
-            return
+            return false
         }
 
         // Write queue management (mirrors Android)
         if writeInProgress[peripheralId] == true {
             logger.debug("Write in progress, queueing data")
             pendingWrites[peripheralId, default: []].append(data)
-            return
+            return true
         }
 
         writeInProgress[peripheralId] = true
         peripheral.writeValue(data, for: characteristic, type: .withResponse)
         logger.debug("Writing \(data.count) bytes to \(peripheralId)")
+        return true
     }
 
     /// Broadcast data to all connected peripherals.

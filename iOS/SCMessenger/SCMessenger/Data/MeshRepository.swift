@@ -285,7 +285,7 @@ final class MeshRepository {
     private func startHeartbeat() {
         heartbeatTimer?.invalidate()
         heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 self?.appendDiagnostic("pulse uptime=\(Int(Date().timeIntervalSinceReferenceDate) % 100000)")
             }
         }
@@ -777,7 +777,8 @@ final class MeshRepository {
         let delivery = await attemptDirectSwarmDelivery(
             routePeerCandidates: routePeerCandidates,
             addresses: routing.listeners,
-            envelopeData: envelopeData
+            envelopeData: envelopeData,
+            blePeerId: routing.blePeerId
         )
         let selectedRoutePeerId = delivery.routePeerId ?? preferredRoutePeerId
 
@@ -1115,16 +1116,16 @@ final class MeshRepository {
                     notes: contact?.notes
                 )
 
-                _ = await attemptDirectSwarmDelivery(
+                _ = await self.attemptDirectSwarmDelivery(
                     routePeerCandidates: routeCandidates,
                     addresses: hints.listeners,
                     envelopeData: Data(prepared.envelopeData),
                     blePeerId: hints.blePeerId
                 )
-                logger.debug("Identity sync sent to \(normalizedRoute)")
+                self.logger.debug("Identity sync sent to \(normalizedRoute)")
             } catch {
-                identitySyncSentPeers.remove(normalizedRoute)
-                logger.debug("Failed to send identity sync to \(normalizedRoute): \(error.localizedDescription)")
+                self.identitySyncSentPeers.remove(normalizedRoute)
+                self.logger.debug("Failed to send identity sync to \(normalizedRoute): \(error.localizedDescription)")
             }
         }
     }
@@ -1967,6 +1968,7 @@ final class MeshRepository {
         )
         meshService?.updateDeviceState(profile: profile)
         applyPowerAdjustments(reason: "network_changed")
+        broadcastIdentityBeacon()
     }
 
     func reportMotion(state: MotionState) {
@@ -2665,17 +2667,37 @@ final class MeshRepository {
         envelopeData: Data,
         blePeerId: String? = nil
     ) async -> DeliveryAttemptResult {
-        guard let swarmBridge else {
-            return DeliveryAttemptResult(acked: false, routePeerId: routePeerCandidates.first)
+        var bleAcked = false
+        func tryBleDelivery() -> Bool {
+            if let bleAddr = blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines), !bleAddr.isEmpty, let uuid = UUID(uuidString: bleAddr) {
+                if let central = bleCentralManager {
+                    if central.sendData(to: uuid, data: envelopeData) {
+                        logger.info("✓ Delivery via BLE (target=\(bleAddr))")
+                        return true
+                    } else {
+                        return false
+                    }
+                }
+            }
+            return false
         }
+
+        bleAcked = tryBleDelivery()
+
+        let routePeerFallback = routePeerCandidates.first ?? "unknown_route_\(Date().timeIntervalSince1970)"
+        guard let swarmBridge else {
+            return DeliveryAttemptResult(acked: bleAcked, routePeerId: routePeerFallback)
+        }
+        
         let sanitizedCandidates = routePeerCandidates
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty && isLibp2pPeerId($0) && !isBootstrapRelayPeer($0) }
             .reduce(into: [String]()) { acc, peer in
                 if !acc.contains(peer) { acc.append(peer) }
             }
+        
         guard !sanitizedCandidates.isEmpty else {
-            return DeliveryAttemptResult(acked: false, routePeerId: routePeerCandidates.first)
+            return DeliveryAttemptResult(acked: bleAcked, routePeerId: routePeerFallback)
         }
 
         primeRelayBootstrapConnections()
@@ -2697,15 +2719,6 @@ final class MeshRepository {
                 return DeliveryAttemptResult(acked: true, routePeerId: routePeerId)
             } catch {
                 logger.warning("Core-routed delivery failed for \(routePeerId): \(error.localizedDescription); trying alternative transports")
-                
-                // Fallback to BLE before relay retry loop
-                if let bleAddr = blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines), !bleAddr.isEmpty, let uuid = UUID(uuidString: bleAddr) {
-                    if let central = bleCentralManager {
-                        central.sendData(to: uuid, data: envelopeData)
-                        logger.info("✓ Delivery via BLE for \(routePeerId) (target=\(bleAddr))")
-                        return DeliveryAttemptResult(acked: true, routePeerId: routePeerId)
-                    }
-                }
             }
 
             let relayOnly = relayCircuitAddresses(for: routePeerId)
@@ -2722,7 +2735,8 @@ final class MeshRepository {
                 }
             }
         }
-        return DeliveryAttemptResult(acked: false, routePeerId: sanitizedCandidates.first)
+        
+        return DeliveryAttemptResult(acked: bleAcked, routePeerId: sanitizedCandidates.first)
     }
 
     private func awaitPeerConnection(peerId: String, timeoutMs: UInt64 = 1200) async -> Bool {
@@ -3194,9 +3208,29 @@ final class MeshRepository {
         guard let info = ironCore?.getIdentityInfo(),
               let publicKeyHex = info.publicKeyHex else { return }
 
+        // 1. Immediate update with just identity (no listeners yet)
+        // This allows peers to "see" us in the UI immediately while we wait for swarm listeners to bind.
+        setIdentityBeaconInternal(info: info, listeners: [])
+
+        // 2. Delayed update with full connection hints
+        Task {
+            var listeners = getListeningAddresses()
+            var attempts = 0
+            while listeners.isEmpty && attempts < 10 {
+                try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
+                listeners = getListeningAddresses()
+                attempts += 1
+            }
+            setIdentityBeaconInternal(info: info, listeners: listeners)
+        }
+    }
+
+    private func setIdentityBeaconInternal(info: IdentityInfo, listeners rawListeners: [String]) {
+        guard let publicKeyHex = info.publicKeyHex else { return }
+
         // Keep BLE identity beacons compact to avoid platform read failures.
         // Android/iOS both have observed issues when payload exceeds ~512 bytes.
-        var listeners = Array(normalizeOutboundListenerHints(getListeningAddresses()).prefix(2))
+        var listeners = Array(normalizeOutboundListenerHints(rawListeners).prefix(2))
         var externalAddresses = Array(normalizeExternalAddressHints(getExternalAddresses()).prefix(2))
         let nickname = String((info.nickname ?? "").prefix(32))
 
@@ -3244,7 +3278,7 @@ final class MeshRepository {
             return
         }
         blePeripheralManager?.setIdentityData(data)
-        logger.info("BLE identity beacon set: \(publicKeyHex.prefix(8))... (\(data.count) bytes)")
+        logger.info("BLE identity beacon set: \(publicKeyHex.prefix(8))... (\(data.count) bytes, listeners=\(listeners.count))")
     }
 
     // MARK: - Auto-Adjustment Engine
@@ -3501,14 +3535,22 @@ final class MeshRepository {
                 let addrFamily = interface?.ifa_addr.pointee.sa_family
 
                 if addrFamily == UInt8(AF_INET) { // IPv4 only for now
-                    if let namePtr = interface?.ifa_name,
-                       let name = String(validatingUTF8: namePtr),
-                       name == "en0" { // Default WiFi interface on iOS
+                    let flags = Int32(interface?.ifa_flags ?? 0)
+                    if (flags & IFF_UP) != 0 && (flags & IFF_LOOPBACK) == 0 {
                         var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
                         getnameinfo(interface?.ifa_addr, socklen_t(interface?.ifa_addr.pointee.sa_len ?? 0),
                                    &hostname, socklen_t(hostname.count),
                                    nil, socklen_t(0), NI_NUMERICHOST)
-                        address = String(cString: hostname)
+                        let ip = String(cString: hostname)
+                        
+                        // Prioritize en0 (WiFi) but accept others if en0 not found
+                        if let namePtr = interface?.ifa_name,
+                           let name = String(validatingUTF8: namePtr),
+                           name == "en0" {
+                            freeifaddrs(ifaddr)
+                            return ip
+                        }
+                        address = ip
                     }
                 }
             }

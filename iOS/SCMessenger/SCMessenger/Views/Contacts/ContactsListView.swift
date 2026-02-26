@@ -21,7 +21,7 @@ struct ContactsListView: View {
     var body: some View {
         List {
             // MARK: Nearby Peers — discovered on the mesh, not yet added
-            let nearby = viewModel?.nearbyPeers ?? []
+            let nearby = (viewModel?.nearbyPeers ?? []).filter { $0.hasFullIdentity }
             if !nearby.isEmpty {
                 Section {
                     ForEach(nearby) { peer in

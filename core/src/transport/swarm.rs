@@ -1163,9 +1163,6 @@ pub async fn start_swarm_with_config(
                                             relay_peer_id
                                         );
                                     }
-                                    e => {
-                                        tracing::debug!("Relay client event: {:?}", e);
-                                    }
                                 }
                             }
 

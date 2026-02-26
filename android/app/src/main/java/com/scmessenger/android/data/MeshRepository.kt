@@ -2244,15 +2244,32 @@ class MeshRepository(private val context: Context) {
         encryptedData: ByteArray,
         blePeerId: String? = null
     ): DeliveryAttemptResult {
-        val bridge = swarmBridge
-            ?: return DeliveryAttemptResult(acked = false, routePeerId = routePeerCandidates.firstOrNull())
+        var bleAcked = false
+        fun tryBleDelivery(): Boolean {
+            val bleAddr = blePeerId?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+            val bleGatt = bleGattClient ?: return false
+            return try {
+                if (bleGatt.sendData(bleAddr, encryptedData)) {
+                    Timber.i("✓ Delivery via BLE (target=$bleAddr)")
+                    true
+                } else false
+            } catch (bleEx: Exception) {
+                Timber.d("BLE send failed: ${bleEx.message}")
+                false
+            }
+        }
+
+        bleAcked = tryBleDelivery()
+
+        val routePeerFallback = routePeerCandidates.firstOrNull() ?: "unknown_route_${System.currentTimeMillis()}"
+        val bridge = swarmBridge ?: return DeliveryAttemptResult(acked = bleAcked, routePeerId = routePeerFallback)
         val sanitizedCandidates = routePeerCandidates
             .map { it.trim() }
             .filter { it.isNotEmpty() && isLibp2pPeerId(it) && !isBootstrapRelayPeer(it) }
             .distinct()
 
         if (sanitizedCandidates.isEmpty()) {
-            return DeliveryAttemptResult(acked = false, routePeerId = routePeerCandidates.firstOrNull())
+            return DeliveryAttemptResult(acked = bleAcked, routePeerId = routePeerFallback)
         }
 
         primeRelayBootstrapConnections()
@@ -2274,22 +2291,6 @@ class MeshRepository(private val context: Context) {
                 return DeliveryAttemptResult(acked = true, routePeerId = routePeerId)
             } catch (e: Exception) {
                 Timber.w("Core-routed delivery failed for $routePeerId: ${e.message}; trying alternative transports")
-                
-                // Fallback to BLE before trying explicit relay retry loop if available
-                val bleAddr = blePeerId?.trim()?.takeIf { it.isNotEmpty() }
-                if (bleAddr != null) {
-                    val bleGatt = bleGattClient
-                    if (bleGatt != null) {
-                        try {
-                            if (bleGatt.sendData(bleAddr, encryptedData)) {
-                                Timber.i("✓ Delivery via BLE for $routePeerId (target=$bleAddr)")
-                                return DeliveryAttemptResult(acked = true, routePeerId = routePeerId)
-                            }
-                        } catch (bleEx: Exception) {
-                            Timber.d("BLE send failed: ${bleEx.message}")
-                        }
-                    }
-                }
             }
 
             val relayOnlyCandidates = relayCircuitAddressesForPeer(routePeerId)
@@ -2306,7 +2307,7 @@ class MeshRepository(private val context: Context) {
                 }
             }
         }
-        return DeliveryAttemptResult(acked = false, routePeerId = sanitizedCandidates.firstOrNull())
+        return DeliveryAttemptResult(acked = bleAcked, routePeerId = sanitizedCandidates.firstOrNull())
     }
 
     private suspend fun awaitPeerConnection(peerId: String, timeoutMs: Long = 1200L): Boolean {
