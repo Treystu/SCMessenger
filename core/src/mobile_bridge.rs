@@ -512,10 +512,7 @@ impl MeshService {
                                             crate::transport::SwarmEvent::NatStatusChanged(
                                                 status,
                                             ) => {
-                                                tracing::info!(
-                                                    "🔭 NAT status updated: {}",
-                                                    status
-                                                );
+                                                tracing::info!("🔭 NAT status updated: {}", status);
                                                 *nat_status.lock() = status;
                                             }
                                             other => {

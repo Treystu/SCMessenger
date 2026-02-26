@@ -223,17 +223,13 @@ impl IronCoreBehaviour {
         // Kademlia DHT for peer discovery
         // Apply DHT Hyper-Optimization (Alpha 8, Replication 5)
         let mut kad_config = kad::Config::default();
-        kad_config.set_parallelism(
-            std::num::NonZeroUsize::new(8).expect("parallelism must be non-zero")
-        );
+        kad_config
+            .set_parallelism(std::num::NonZeroUsize::new(8).expect("parallelism must be non-zero"));
         kad_config.set_replication_factor(
-            std::num::NonZeroUsize::new(5).expect("replication factor must be non-zero")
+            std::num::NonZeroUsize::new(5).expect("replication factor must be non-zero"),
         );
-        let mut kademlia = kad::Behaviour::with_config(
-            peer_id,
-            kad::store::MemoryStore::new(peer_id),
-            kad_config,
-        );
+        let mut kademlia =
+            kad::Behaviour::with_config(peer_id, kad::store::MemoryStore::new(peer_id), kad_config);
         // Set server mode immediately — we want to be discoverable
         kademlia.set_mode(Some(kad::Mode::Server));
 
