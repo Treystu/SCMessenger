@@ -195,6 +195,10 @@ final class MeshRepository {
     private var connectedEmissionCache: [String: Date] = [:]
     private let connectedReemitInterval: TimeInterval = 15
 
+    // Reinstall detection: set true when Keychain has identity but disk has no contacts/history.
+    // Triggers aggressive post-start identity beacon to recover contacts from mesh peers.
+    private var isReinstallWithMissingData = false
+
     // P0: Dedup cache — suppress redundant peer-identified callbacks for the same peer
     // within a 30-second window. The Rust core fires identify per-substream, producing
     // 34K+ duplicate events in a typical session.
@@ -287,11 +291,10 @@ final class MeshRepository {
         // Create storage directory if needed
         try? FileManager.default.createDirectory(at: meshPath, withIntermediateDirectories: true)
 
-        // Avoid restoring mesh state on reinstall from iCloud backup.
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        var mutableMeshPath = meshPath
-        try? mutableMeshPath.setResourceValues(values)
+        // Do NOT exclude the entire mesh directory from backup.
+        // history.db and contacts.db must survive app reinstalls via iCloud/device backup.
+        // The raw identity key directory (identity/) is excluded individually after start()
+        // since private keys are already protected in iOS Keychain.
 
         reconcileInstallScopedIdentityState()
         
@@ -470,6 +473,10 @@ final class MeshRepository {
             serviceState = .running
             statusEvents.send(.serviceStateChanged(.running))
 
+            // Protect raw identity sled store from backup — keys are already in Keychain.
+            // history.db and contacts.db remain in backup scope so reinstalls preserve them.
+            excludeIdentitySubdirFromBackup()
+
             // Start BLE advertising and scanning
             blePeripheralManager?.startAdvertising()
             bleCentralManager?.startScanning()
@@ -477,6 +484,18 @@ final class MeshRepository {
             startPendingOutboxRetryLoop()
             startCoverTrafficLoopIfEnabled()
             Task { await flushPendingOutbox(reason: "service_started") }
+
+            // On reinstall with existing Keychain identity: broadcast aggressively so
+            // known peers can re-send their identity info and we can rebuild contacts.
+            if isReinstallWithMissingData {
+                isReinstallWithMissingData = false
+                appendDiagnostic("reinstall_recovery_beacon_scheduled")
+                Task {
+                    try? await Task.sleep(nanoseconds: 4_000_000_000) // wait for swarm connect
+                    broadcastIdentityBeacon()
+                    appendDiagnostic("reinstall_recovery_beacon_sent")
+                }
+            }
 
             logger.info("✓ Mesh service started successfully")
             appendDiagnostic("service_start success")
@@ -707,7 +726,46 @@ final class MeshRepository {
         }
 
         defaults.set(true, forKey: InstallMarker.key)
-        appendDiagnostic("install_marker_initialized")
+
+        // Detect reinstall with existing Keychain identity but missing local data.
+        // When the identity exists in Keychain but contacts/history are not on disk,
+        // this is a fresh reinstall (not a first install). Flag it so the post-start
+        // sequence can broadcast an aggressive identity beacon to recover from peers.
+        let keychainHasIdentity = readIdentityBackupFromKeychain() != nil
+        let contactsOnDisk = FileManager.default.fileExists(
+            atPath: URL(fileURLWithPath: storagePath).appendingPathComponent("contacts.db").path)
+        let historyOnDisk = FileManager.default.fileExists(
+            atPath: URL(fileURLWithPath: storagePath).appendingPathComponent("history.db").path)
+
+        if keychainHasIdentity && (!contactsOnDisk || !historyOnDisk) {
+            isReinstallWithMissingData = true
+            appendDiagnostic("install_type=reinstall_identity_found contacts=\(contactsOnDisk) history=\(historyOnDisk)")
+        } else {
+            appendDiagnostic("install_type=first_install")
+        }
+    }
+
+    /// Exclude raw identity storage from iCloud/local backup after the identity
+    /// subdirectory has been created by ensure_storage_layout (called during start()).
+    /// history.db and contacts.db are intentionally left in backup scope.
+    private func excludeIdentitySubdirFromBackup() {
+        let base = URL(fileURLWithPath: storagePath)
+        // Exclude the Rust identity sled directory (keys already live in Keychain).
+        for subpath in ["identity", "inbox", "outbox"] {
+            var url = base.appendingPathComponent(subpath)
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            var v = URLResourceValues()
+            v.isExcludedFromBackup = true
+            try? url.setResourceValues(v)
+        }
+        // Exclude volatile transport state files.
+        for filename in ["pending_outbox.json", "diagnostics.log"] {
+            var url = base.appendingPathComponent(filename)
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            var v = URLResourceValues()
+            v.isExcludedFromBackup = true
+            try? url.setResourceValues(v)
+        }
     }
 
     // MARK: - Messaging (with Relay Enforcement)

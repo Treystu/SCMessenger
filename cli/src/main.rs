@@ -206,13 +206,18 @@ async fn main() -> Result<()> {
 
     // 3. Initialize tracing with both stdout (fmt) and file (appender)
     use tracing_subscriber::prelude::*;
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,scmessenger_cli=debug,scmessenger_core=debug"));
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        tracing_subscriber::EnvFilter::new("info,scmessenger_cli=debug,scmessenger_core=debug")
+    });
 
     tracing_subscriber::registry()
         .with(filter)
         .with(tracing_subscriber::fmt::layer().with_writer(std::io::stdout))
-        .with(tracing_subscriber::fmt::layer().with_ansi(false).with_writer(non_blocking))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_ansi(false)
+                .with_writer(non_blocking),
+        )
         .init();
 
     tracing::info!("SCMessenger CLI starting up...");

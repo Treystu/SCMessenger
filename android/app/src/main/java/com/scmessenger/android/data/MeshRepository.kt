@@ -123,6 +123,10 @@ class MeshRepository(private val context: Context) {
     private var lastRelayBootstrapDialMs: Long = 0L
     private val dialThrottleState = java.util.concurrent.ConcurrentHashMap<String, Pair<Int, Long>>()
 
+    // Reinstall detection: true when SharedPreferences has identity backup but contacts.db
+    // is missing from filesDir. Triggers post-start aggressive identity beacon.
+    @Volatile private var isReinstallWithMissingData = false
+
     // P0: Dedup cache — suppress redundant peer-identified callbacks for the same peer
     // within a 30-second window. The Rust core fires identify per-substream.
     private val peerIdentifiedDedupCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
@@ -227,7 +231,20 @@ class MeshRepository(private val context: Context) {
 
     init {
         Timber.d("MeshRepository initialized with storage: $storagePath")
+        checkReinstallState()
         initializeManagers()
+    }
+
+    private fun checkReinstallState() {
+        // Detect reinstall: SharedPreferences identity backup exists but contacts.db is gone.
+        // Triggers post-start aggressive identity beacon to recover contact info from peers.
+        val hasIdentityBackup = identityBackupPrefs.contains(IDENTITY_BACKUP_KEY)
+        val contactsOnDisk = java.io.File(storagePath, "contacts.db").exists()
+        val historyOnDisk = java.io.File(storagePath, "history.db").exists()
+        if (hasIdentityBackup && (!contactsOnDisk || !historyOnDisk)) {
+            isReinstallWithMissingData = true
+            Timber.i("Reinstall detected: identity backup present but contacts=$contactsOnDisk history=$historyOnDisk")
+        }
     }
 
     private fun initializeManagers() {
@@ -789,6 +806,18 @@ class MeshRepository(private val context: Context) {
             }
             updateStats()
             startPeriodicStatsUpdate()
+
+            // On reinstall with missing data: broadcast identity beacon after swarm connects
+            // so nearby and relay-connected peers can re-send identity info.
+            if (isReinstallWithMissingData) {
+                isReinstallWithMissingData = false
+                Timber.i("Reinstall recovery: scheduling post-start identity beacon")
+                repoScope.launch {
+                    kotlinx.coroutines.delay(4_000L)
+                    updateBleIdentityBeacon()
+                    Timber.i("Reinstall recovery beacon sent")
+                }
+            }
 
             Timber.i("Mesh service started successfully")
         } catch (e: Exception) {

@@ -57,15 +57,25 @@ fn is_discoverable_multiaddr(addr: &Multiaddr) -> bool {
     for proto in addr.iter() {
         match proto {
             Protocol::Ip4(ip) => {
-                if ip.is_loopback()                            { return false; } // 127.x
-                if ip.is_unspecified()                         { return false; } // 0.0.0.0
-                // We intentionally allow RFC1918 and CGNAT for local discovery
+                if ip.is_loopback() {
+                    return false;
+                } // 127.x
+                if ip.is_unspecified() {
+                    return false;
+                } // 0.0.0.0
+                  // We intentionally allow RFC1918 and CGNAT for local discovery
             }
             Protocol::Ip6(ip) => {
-                if ip.is_loopback()     { return false; } // ::1
-                if ip.is_unspecified()  { return false; } // ::
+                if ip.is_loopback() {
+                    return false;
+                } // ::1
+                if ip.is_unspecified() {
+                    return false;
+                } // ::
             }
-            Protocol::P2pCircuit => { return false; } // relay circuits go through relay, not kad
+            Protocol::P2pCircuit => {
+                return false;
+            } // relay circuits go through relay, not kad
             _ => {}
         }
     }
@@ -550,10 +560,15 @@ pub async fn start_swarm_with_config(
                 bootstrap_addrs.len()
             );
             for addr in &bootstrap_addrs {
-                let stripped_addr: Multiaddr = addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
+                let stripped_addr: Multiaddr = addr
+                    .iter()
+                    .filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_)))
+                    .collect();
                 match swarm.dial(stripped_addr.clone()) {
                     Ok(_) => tracing::info!("  ✓ Dialing bootstrap: {}", stripped_addr),
-                    Err(e) => tracing::warn!("  ✗ Failed to dial bootstrap {}: {}", stripped_addr, e),
+                    Err(e) => {
+                        tracing::warn!("  ✗ Failed to dial bootstrap {}: {}", stripped_addr, e)
+                    }
                 }
             }
         }
@@ -1648,10 +1663,15 @@ pub async fn start_swarm_with_config(
                 bootstrap_addrs.len()
             );
             for addr in &bootstrap_addrs {
-                let stripped_addr: Multiaddr = addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
+                let stripped_addr: Multiaddr = addr
+                    .iter()
+                    .filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_)))
+                    .collect();
                 match swarm.dial(stripped_addr.clone()) {
                     Ok(_) => tracing::info!("  ✓ Dialing bootstrap: {}", stripped_addr),
-                    Err(e) => tracing::warn!("  ✗ Failed to dial bootstrap {}: {}", stripped_addr, e),
+                    Err(e) => {
+                        tracing::warn!("  ✗ Failed to dial bootstrap {}: {}", stripped_addr, e)
+                    }
                 }
             }
         }
@@ -2056,9 +2076,16 @@ pub async fn start_swarm_with_config(
                         });
 
                         if !already_connected {
-                            let stripped_addr: Multiaddr = addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
+                            let stripped_addr: Multiaddr = addr
+                                .iter()
+                                .filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_)))
+                                .collect();
                             if let Err(e) = swarm.dial(stripped_addr.clone()) {
-                                tracing::trace!("Bootstrap re-dial {} skipped: {}", stripped_addr, e);
+                                tracing::trace!(
+                                    "Bootstrap re-dial {} skipped: {}",
+                                    stripped_addr,
+                                    e
+                                );
                             }
                         }
                     }

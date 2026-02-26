@@ -275,8 +275,23 @@ extension BLECentralManager: CBPeripheralDelegate {
                 peripheral.setNotifyValue(true, for: characteristic)
             case MeshBLEConstants.identityCharUUID:
                 peripheral.readValue(for: characteristic)
+                // Schedule retry reads at T+900ms and T+2200ms (mirrors Android
+                // IDENTITY_REFRESH_DELAYS_MS) for peripherals whose GATT server
+                // may not be fully populated at characteristic discovery time.
+                scheduleIdentityRefreshReads(peripheral: peripheral, characteristic: characteristic)
             default:
                 break
+            }
+        }
+    }
+
+    private func scheduleIdentityRefreshReads(peripheral: CBPeripheral, characteristic: CBCharacteristic) {
+        let peripheralId = peripheral.identifier
+        for delayNs: UInt64 in [900_000_000, 2_200_000_000] {
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: delayNs)
+                guard let self, self.connectedPeripherals[peripheralId] != nil else { return }
+                peripheral.readValue(for: characteristic)
             }
         }
     }

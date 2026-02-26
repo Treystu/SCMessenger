@@ -270,7 +270,8 @@ async fn test_multiport_swarm_integration() {
 
     let (event_tx, _event_rx) = tokio::sync::mpsc::channel(256);
 
-    let swarm = start_swarm_with_config(keypair, None, event_tx, Some(config), Vec::new(), false).await;
+    let swarm =
+        start_swarm_with_config(keypair, None, event_tx, Some(config), Vec::new(), false).await;
 
     assert!(swarm.is_ok(), "Should start swarm with multi-port config");
 
