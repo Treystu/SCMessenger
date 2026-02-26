@@ -43,6 +43,8 @@ iOS/SCMessenger/SCMessenger/Generated/
 core/iOS/
 core/log.txt
 core/out.txt
+android_log.txt
+*_log.txt
 *.xcuserstate
 **/xcuserdata/
 **/*.xcuserstate
