@@ -19,6 +19,12 @@ import os
 /// - State restoration for background operation
 final class BLECentralManager: NSObject {
     private let logger = Logger(subsystem: "com.scmessenger", category: "BLE-Central")
+    /// Serial queue that owns all BLE state. All mutations and reads of
+    /// connectedPeripherals, discoveredPeripherals, peerCache, writeInProgress,
+    /// pendingWrites, messageCharacteristics, and syncCharacteristics must run
+    /// on this queue. CBCentralManager is also initialised with this queue as
+    /// its delegate queue, so delegate callbacks arrive here automatically.
+    private let bleQueue = DispatchQueue(label: "com.scmessenger.ble-central", qos: .utility)
     private var centralManager: CBCentralManager!
     private weak var meshRepository: MeshRepository?
 
@@ -48,7 +54,7 @@ final class BLECentralManager: NSObject {
         super.init()
         centralManager = CBCentralManager(
             delegate: self,
-            queue: .global(qos: .utility),
+            queue: bleQueue,
             options: [CBCentralManagerOptionRestoreIdentifierKey: MeshBLEConstants.centralRestoreId]
         )
     }
@@ -287,9 +293,10 @@ extension BLECentralManager: CBPeripheralDelegate {
 
     private func scheduleIdentityRefreshReads(peripheral: CBPeripheral, characteristic: CBCharacteristic) {
         let peripheralId = peripheral.identifier
-        for delayNs: UInt64 in [900_000_000, 2_200_000_000] {
-            Task { [weak self] in
-                try? await Task.sleep(nanoseconds: delayNs)
+        // Dispatch retries onto bleQueue — the same executor that mutates
+        // connectedPeripherals — so the guard check is always synchronised.
+        for delay: TimeInterval in [0.9, 2.2] {
+            bleQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
                 guard let self, self.connectedPeripherals[peripheralId] != nil else { return }
                 peripheral.readValue(for: characteristic)
             }
