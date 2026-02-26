@@ -82,12 +82,21 @@ fun MeshNavHost(
             SettingsScreen(
                 onNavigateToIdentity = {
                     navController.navigate(Screen.Identity.route)
+                },
+                onNavigateToDiagnostics = {
+                    navController.navigate(Screen.Diagnostics.route)
                 }
             )
         }
 
         composable(Screen.Identity.route) {
             IdentityScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.Diagnostics.route) {
+            DiagnosticsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -145,6 +154,7 @@ sealed class Screen(val route: String, val label: String, val icon: androidx.com
     object Dashboard: Screen("dashboard", "Mesh", androidx.compose.material.icons.Icons.Filled.Router)
     object Settings : Screen("settings", "Settings", androidx.compose.material.icons.Icons.Default.Settings)
     object Identity : Screen("identity", "Identity", androidx.compose.material.icons.Icons.Default.Settings)
+    object Diagnostics : Screen("diagnostics", "Diagnostics", androidx.compose.material.icons.Icons.Default.Settings)
 
     companion object {
         val bottomNavItems = listOf(Conversations, Contacts, Dashboard, Settings)

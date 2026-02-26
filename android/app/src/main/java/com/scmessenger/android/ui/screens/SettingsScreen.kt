@@ -25,7 +25,7 @@ fun SettingsScreen(
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     serviceViewModel: MeshServiceViewModel = hiltViewModel(),
     onNavigateToIdentity: () -> Unit = {},
-    onNavigateToPrivacy: () -> Unit = {}
+    onNavigateToDiagnostics: () -> Unit = {}
 ) {
     val meshSettings by settingsViewModel.settings.collectAsState()
     val identityInfo by settingsViewModel.identityInfo.collectAsState()
@@ -95,8 +95,7 @@ fun SettingsScreen(
             PrivacySettingsSection(
                 settings = settings,
                 onUpdateSetting = { updater -> updater(settingsViewModel) },
-                isLoading = isLoading,
-                onNavigateToPrivacy = onNavigateToPrivacy
+                isLoading = isLoading
             )
         }
 
@@ -116,6 +115,13 @@ fun SettingsScreen(
         InfoSection(
             contactCount = settingsViewModel.getContactCount(),
             messageCount = settingsViewModel.getMessageCount()
+        )
+        
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Advanced / Diagnostics Section
+        AdvancedSettingsSection(
+            onNavigateToDiagnostics = onNavigateToDiagnostics
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -335,8 +341,7 @@ fun MeshSettingsSection(
 fun PrivacySettingsSection(
     settings: uniffi.api.MeshSettings,
     onUpdateSetting: ((SettingsViewModel) -> Unit) -> Unit,
-    isLoading: Boolean,
-    onNavigateToPrivacy: () -> Unit = {}
+    isLoading: Boolean
 ) {
     Card(
         modifier = Modifier.fillMaxWidth()
@@ -616,6 +621,31 @@ fun IdentitySection(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Show Identity QR")
+            }
+        }
+    }
+}
+@Composable
+fun AdvancedSettingsSection(
+    onNavigateToDiagnostics: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "Advanced",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            Button(
+                onClick = onNavigateToDiagnostics,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Diagnostics & Logs")
             }
         }
     }

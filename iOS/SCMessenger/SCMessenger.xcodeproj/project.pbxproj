@@ -35,6 +35,7 @@
 		DDEB56DE2F3FE0BD00387CC8 /* MeshBLEConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56A72F3FE0BD00387CC8 /* MeshBLEConstants.swift */; };
 		DDEB56DF2F3FE0BD00387CC8 /* IosPlatformBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB569F2F3FE0BD00387CC8 /* IosPlatformBridge.swift */; };
 		DDEB56E02F3FE0BD00387CC8 /* ContactsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56B12F3FE0BD00387CC8 /* ContactsListView.swift */; };
+		DDEB56E12F3FE0BD00387CC8 /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56E22F3FE0BD00387CC8 /* DiagnosticsView.swift */; };
 		DDEB56E42F3FE20E00387CC8 /* libscmessenger_mobile.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DDEB56E32F3FE20E00387CC8 /* libscmessenger_mobile.a */; };
 /* End PBXBuildFile section */
 
@@ -71,6 +72,7 @@
 		DDEB56BF2F3FE0BD00387CC8 /* Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Bridging-Header.h"; sourceTree = "<group>"; };
 		DDEB56C02F3FE0BD00387CC8 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		DDEB56C22F3FE0BD00387CC8 /* SCMessengerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SCMessengerApp.swift; sourceTree = "<group>"; };
+		DDEB56E22F3FE0BD00387CC8 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
 		DDEB56E32F3FE20E00387CC8 /* libscmessenger_mobile.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libscmessenger_mobile.a; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -209,6 +211,7 @@
 			isa = PBXGroup;
 			children = (
 				DDEB56B92F3FE0BD00387CC8 /* SettingsView.swift */,
+				DDEB56E22F3FE0BD00387CC8 /* DiagnosticsView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -383,6 +386,7 @@
 				DDEB56DE2F3FE0BD00387CC8 /* MeshBLEConstants.swift in Sources */,
 				DDEB56DF2F3FE0BD00387CC8 /* IosPlatformBridge.swift in Sources */,
 				DDEB56E02F3FE0BD00387CC8 /* ContactsListView.swift in Sources */,
+				DDEB56E12F3FE0BD00387CC8 /* DiagnosticsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -196,6 +196,7 @@ extension MultipeerTransport: MCSessionDelegate {
         switch state {
         case .connected:
             connectedPeers.insert(peerID)
+            meshRepository?.appendDiagnostic("multipeer_connected id=\(peerID.displayName)")
             // Clear any pending reconnect counter — peer is healthy again
             reconnectAttempts.removeValue(forKey: peerID.displayName)
             DispatchQueue.main.async {
@@ -207,6 +208,7 @@ extension MultipeerTransport: MCSessionDelegate {
 
         case .notConnected:
             connectedPeers.remove(peerID)
+            meshRepository?.appendDiagnostic("multipeer_disconnected id=\(peerID.displayName)")
             DispatchQueue.main.async {
                 MeshEventBus.shared.peerEvents.send(.disconnected(peerId: peerID.displayName))
             }
@@ -265,6 +267,7 @@ extension MultipeerTransport: MCNearbyServiceBrowserDelegate {
         
         // Auto-invite found peers (mesh network)
         browser.invitePeer(peerID, to: session, withContext: nil, timeout: 10)
+        meshRepository?.appendDiagnostic("multipeer_discovered id=\(peerID.displayName)")
         
         DispatchQueue.main.async {
             MeshEventBus.shared.peerEvents.send(.discovered(peerId: peerID.displayName))

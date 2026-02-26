@@ -227,6 +227,7 @@ class MeshRepository(private val context: Context) {
             // Pre-load data where applicable
             ledgerManager?.load()
 
+            Timber.i("all_managers_init_success")
             Timber.i("All managers initialized successfully")
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize managers")
@@ -243,6 +244,7 @@ class MeshRepository(private val context: Context) {
      */
     @Synchronized
     fun startMeshService(config: uniffi.api.MeshServiceConfig) {
+        Timber.i("service_start_requested")
         if (meshService?.getState() == uniffi.api.ServiceState.RUNNING) {
             _serviceState.value = uniffi.api.ServiceState.RUNNING
             Timber.d("MeshService is already running")
@@ -900,72 +902,93 @@ class MeshRepository(private val context: Context) {
         }
         bleGattServer?.start()
 
+        // Identity beacon data served to BLE scanners via IDENTITY_CHAR_UUID reads.
+        // Initialize with a valid empty JSON to avoid platform parsing errors during startup.
+        bleGattServer?.setIdentityData(identityData)
+
         // Set identity beacon on BLE GATT server so nearby peers can read our Ed25519 public key
         updateBleIdentityBeacon()
     }
+
+    // Identity beacon data served to BLE scanners via IDENTITY_CHAR_UUID reads.
+    // Initialize with a valid empty JSON to avoid platform parsing errors during startup.
+    private var identityData: ByteArray = "{}".toByteArray()
 
     private fun updateBleIdentityBeacon() {
         val identity = ironCore?.getIdentityInfo()
         val publicKeyHex = identity?.publicKeyHex
         if (!publicKeyHex.isNullOrEmpty()) {
+            // 1. Immediate update with just identity (no listeners yet)
+            // This allows peers to "see" us in the UI immediately while we wait for swarm listeners to bind.
+            setIdentityBeaconInternal(identity, emptyList())
+
+            // 2. Delayed update with full connection hints
             repoScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 var listeners = getListeningAddresses()
                 var attempts = 0
-                while (listeners.isEmpty() && attempts < 10) {
+                while (listeners.isEmpty() && attempts < 10 && isActive) {
                     kotlinx.coroutines.delay(500)
                     listeners = getListeningAddresses()
                     attempts++
                 }
-                try {
-                    // Keep BLE identity beacons compact; oversized values can fail GATT reads
-                    // on peer platforms and drop nickname propagation.
-                    var resolvedListeners = normalizeOutboundListenerHints(listeners).take(2)
-                    var resolvedExternal = normalizeExternalAddressHints(getExternalAddresses()).take(2)
-                    val nickname = (identity.nickname ?: "").take(32)
-                    fun buildBeacon(): org.json.JSONObject {
-                        val connectionHints = (resolvedListeners + resolvedExternal).distinct()
-                        return org.json.JSONObject()
-                            .put("identity_id", identity.identityId ?: "")
-                            .put("public_key", publicKeyHex)
-                            .put("nickname", nickname)
-                            .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
-                            .put("listeners", org.json.JSONArray(resolvedListeners))
-                            .put("external_addresses", org.json.JSONArray(resolvedExternal))
-                            .put("connection_hints", org.json.JSONArray(connectionHints))
-                    }
-
-                    var beaconJsonObject = buildBeacon()
-                    var beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
-
-                    if (beaconJson.size > 480) {
-                        resolvedListeners = resolvedListeners.take(1)
-                        resolvedExternal = resolvedExternal.take(1)
-                        beaconJsonObject = buildBeacon()
-                        beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
-                    }
-                    if (beaconJson.size > 480) {
-                        resolvedListeners = emptyList()
-                        resolvedExternal = emptyList()
-                        beaconJsonObject = buildBeacon()
-                        beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
-                    }
-                    if (beaconJson.size > 480) {
-                        beaconJsonObject = org.json.JSONObject()
-                            .put("identity_id", identity.identityId ?: "")
-                            .put("public_key", publicKeyHex)
-                            .put("nickname", nickname)
-                            .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
-                            .put("listeners", org.json.JSONArray())
-                            .put("external_addresses", org.json.JSONArray())
-                            .put("connection_hints", org.json.JSONArray())
-                        beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
-                    }
-                    bleGattServer?.setIdentityData(beaconJson)
-                    Timber.i("BLE GATT identity beacon set: ${publicKeyHex.take(8)}... (${beaconJson.size} bytes)")
-                } catch (e: Exception) {
-                    Timber.w("Failed to set BLE GATT identity beacon: ${e.message}")
+                if (isActive) {
+                    setIdentityBeaconInternal(identity, listeners)
                 }
             }
+        }
+    }
+
+    private fun setIdentityBeaconInternal(identity: uniffi.api.IdentityInfo, listeners: List<String>) {
+        val publicKeyHex = identity.publicKeyHex ?: return
+        try {
+            // Keep BLE identity beacons compact
+            var resolvedListeners = normalizeOutboundListenerHints(listeners).take(2)
+            var resolvedExternal = normalizeExternalAddressHints(getExternalAddresses()).take(2)
+            val nickname = (identity.nickname ?: "").take(32)
+            
+            fun buildBeacon(): org.json.JSONObject {
+                val connectionHints = (resolvedListeners + resolvedExternal).distinct()
+                return org.json.JSONObject()
+                    .put("identity_id", identity.identityId ?: "")
+                    .put("public_key", publicKeyHex)
+                    .put("nickname", nickname)
+                    .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
+                    .put("listeners", org.json.JSONArray(resolvedListeners))
+                    .put("external_addresses", org.json.JSONArray(resolvedExternal))
+                    .put("connection_hints", org.json.JSONArray(connectionHints))
+            }
+
+            var beaconJsonObject = buildBeacon()
+            var beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
+
+            if (beaconJson.size > 480) {
+                resolvedListeners = resolvedListeners.take(1)
+                resolvedExternal = resolvedExternal.take(1)
+                beaconJsonObject = buildBeacon()
+                beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
+            }
+            if (beaconJson.size > 480) {
+                resolvedListeners = emptyList()
+                resolvedExternal = emptyList()
+                beaconJsonObject = buildBeacon()
+                beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
+            }
+            if (beaconJson.size > 480) {
+                beaconJsonObject = org.json.JSONObject()
+                    .put("identity_id", identity.identityId ?: "")
+                    .put("public_key", publicKeyHex)
+                    .put("nickname", nickname)
+                    .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
+                    .put("listeners", org.json.JSONArray())
+                    .put("external_addresses", org.json.JSONArray())
+                    .put("connection_hints", org.json.JSONArray())
+                beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
+            }
+            bleGattServer?.setIdentityData(beaconJson)
+            identityData = beaconJson // Store for immediate use by GATT server
+            Timber.i("BLE GATT identity beacon updated: ${publicKeyHex.take(8)}... (${beaconJson.size} bytes, listeners=${listeners.size})")
+        } catch (e: Exception) {
+            Timber.w("Failed to set BLE GATT identity beacon: ${e.message}")
         }
     }
 
@@ -1822,7 +1845,7 @@ class MeshRepository(private val context: Context) {
                         nickname = discoveredNickname,
                         localNickname = info.localNickname,
                         routePeerId = routeCandidate,
-                        transport = info.transport
+                        transport = com.scmessenger.android.service.TransportType.INTERNET
                     )
                 } else {
                     if (existing.publicKey.isNullOrBlank() && !normalizedKey.isNullOrBlank()) {
@@ -2052,8 +2075,8 @@ class MeshRepository(private val context: Context) {
     fun computeBleAdjustment(profile: uniffi.api.AdjustmentProfile): uniffi.api.BleAdjustment {
         return autoAdjustEngine?.computeBleAdjustment(profile)
             ?: uniffi.api.BleAdjustment(
-                scanIntervalMs = 2000u,
-                advertiseIntervalMs = 500u,
+                scanIntervalMs = 30000u,
+                advertiseIntervalMs = 30000u,
                 txPowerDbm = -4
             )
     }
@@ -3519,6 +3542,49 @@ class MeshRepository(private val context: Context) {
             Timber.i("MeshRepository cleaned up")
         } catch (e: Exception) {
             Timber.e(e, "Error during cleanup")
+        }
+    }
+
+    // ========================================================================
+    // DIAGNOSTICS
+    // ========================================================================
+
+    /**
+     * Get path to the diagnostics log file.
+     */
+    fun getDiagnosticsLogPath(): String {
+        return File(context.filesDir, "mesh_diagnostics.log").absolutePath
+    }
+
+    /**
+     * Get recent diagnostics logs.
+     */
+    fun getDiagnosticsLogs(limit: Int = 500): String {
+        return try {
+            val logFile = File(getDiagnosticsLogPath())
+            if (!logFile.exists()) return "No diagnostics recorded yet."
+            
+            val lines = logFile.readLines()
+            if (lines.isEmpty()) return "No diagnostics recorded yet."
+            
+            lines.takeLast(limit).joinToString("\n")
+        } catch (e: Exception) {
+            "Error reading diagnostics: ${e.message}"
+        }
+    }
+
+    /**
+     * Clear all diagnostics logs.
+     */
+    fun clearDiagnosticsLogs() {
+        try {
+            val logFile = File(getDiagnosticsLogPath())
+            if (logFile.exists()) {
+                logFile.writeText("")
+                Timber.i("Diagnostics logs cleared")
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Error clearing diagnostics")
         }
     }
 }

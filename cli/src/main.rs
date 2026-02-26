@@ -195,12 +195,28 @@ enum BootstrapAction {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
-        )
+    // 1. Determine data directory early for logging
+    let data_dir = config::Config::data_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let log_dir = data_dir.join("logs");
+    std::fs::create_dir_all(&log_dir).ok();
+
+    // 2. Setup file logging (rolling hourly, keeping last 24h)
+    let file_appender = tracing_appender::rolling::hourly(&log_dir, "scm.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    // 3. Initialize tracing with both stdout (fmt) and file (appender)
+    use tracing_subscriber::prelude::*;
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,scmessenger_cli=debug,scmessenger_core=debug"));
+
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stdout))
+        .with(tracing_subscriber::fmt::layer().with_ansi(false).with_writer(non_blocking))
         .init();
+
+    tracing::info!("SCMessenger CLI starting up...");
+    tracing::info!("Log directory: {}", log_dir.display());
 
     let cli = Cli::parse();
 

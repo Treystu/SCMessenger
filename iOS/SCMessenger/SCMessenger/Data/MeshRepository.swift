@@ -46,7 +46,8 @@ final class MeshRepository {
     private let storagePath: String
     private let diagnosticsLogFileName = "mesh_diagnostics.log"
     private var diagnosticsBuffer: [String] = []
-    private let diagnosticsMaxLines = 800
+    private let diagnosticsMaxLines = 1000
+    private var heartbeatTimer: Timer?
 
     // MARK: - Bootstrap Nodes for NAT Traversal
 
@@ -108,7 +109,8 @@ final class MeshRepository {
     }
 
     private var diagnosticsLogURL: URL {
-        URL(fileURLWithPath: storagePath).appendingPathComponent(diagnosticsLogFileName)
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return docs.appendingPathComponent(diagnosticsLogFileName)
     }
 
     private struct RoutingHints {
@@ -257,6 +259,12 @@ final class MeshRepository {
         let meshPath = appSupportPath.appendingPathComponent("mesh", isDirectory: true)
         self.storagePath = meshPath.path
 
+        // Load existing logs into memory buffer if they exist
+        if let existingLogs = try? String(contentsOf: diagnosticsLogURL, encoding: .utf8) {
+            let lines = existingLogs.components(separatedBy: .newlines).filter { !$0.isEmpty }
+            self.diagnosticsBuffer = Array(lines.suffix(diagnosticsMaxLines))
+        }
+
         logger.info("MeshRepository initialized with storage: \(self.storagePath)")
 
         // Create storage directory if needed
@@ -269,12 +277,25 @@ final class MeshRepository {
         try? mutableMeshPath.setResourceValues(values)
 
         reconcileInstallScopedIdentityState()
+        
         appendDiagnostic("repo_init storage=\(self.storagePath)")
+        startHeartbeat()
+    }
+
+    private func startHeartbeat() {
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.appendDiagnostic("pulse uptime=\(Int(Date().timeIntervalSinceReferenceDate) % 100000)")
+            }
+        }
     }
 
     /// Initialize all managers
+    @MainActor
     func initialize() throws {
         logger.info("Initializing managers")
+        appendDiagnostic("repo_managers_init_start")
 
         do {
             // Initialize data managers
@@ -299,6 +320,7 @@ final class MeshRepository {
             // Pre-load data where applicable
             try? ledgerManager?.load()
 
+            appendDiagnostic("repo_managers_init_success")
             logger.info("✓ All managers initialized successfully")
         } catch {
             logger.error("Failed to initialize managers: \(error.localizedDescription)")
@@ -308,6 +330,7 @@ final class MeshRepository {
 
     /// Public start method called from App entry point
     func start() {
+        appendDiagnostic("repo_start_requested")
         logger.info("Application requested repository start")
         do {
             try ensureServiceInitialized()
@@ -326,6 +349,7 @@ final class MeshRepository {
         // Initialize when service is not running (mirrors Android: state != RUNNING)
         // This properly handles all non-running states including .stopped, .starting, .stopping, .paused
         if meshService == nil || serviceState != .running {
+            appendDiagnostic("lazy_service_start_init")
             logger.info("Lazy starting MeshService for Identity access")
 
             // Clean up existing service if stopped but not nil
@@ -3389,19 +3413,47 @@ final class MeshRepository {
         diagnosticsBuffer.suffix(max(1, limit)).joined(separator: "\n")
     }
 
-    private func appendDiagnostic(_ message: String) {
+    @MainActor
+    func appendDiagnostic(_ message: String) {
         let ts = ISO8601DateFormatter().string(from: Date())
         let line = "\(ts) \(message)"
+        
+        // 1. Update memory buffer
         diagnosticsBuffer.append(line)
         if diagnosticsBuffer.count > diagnosticsMaxLines {
             diagnosticsBuffer.removeFirst(diagnosticsBuffer.count - diagnosticsMaxLines)
         }
-        let payload = diagnosticsBuffer.joined(separator: "\n") + "\n"
-        do {
-            try payload.write(to: diagnosticsLogURL, atomically: true, encoding: .utf8)
-        } catch {
-            logger.debug("Failed to write diagnostics log: \(error.localizedDescription)")
+        
+        // 2. Write to System Console (os_log / Logger)
+        logger.info("DIAG: \(message)")
+        
+        // 3. Persist to Disk (Append only)
+        persistDiagnosticLine(line)
+    }
+
+    private func persistDiagnosticLine(_ line: String) {
+        let url = diagnosticsLogURL
+        let data = (line + "\n").data(using: .utf8) ?? Data()
+        
+        if !FileManager.default.fileExists(atPath: url.path) {
+            try? data.write(to: url)
+            return
         }
+        
+        do {
+            let fileHandle = try FileHandle(forWritingTo: url)
+            defer { try? fileHandle.close() }
+            try fileHandle.seekToEnd()
+            try fileHandle.write(contentsOf: data)
+        } catch {
+            // Fallback to full write if append fails
+            let payload = diagnosticsBuffer.joined(separator: "\n") + "\n"
+            try? payload.write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
+    func clearDiagnostics() {
+        diagnosticsBuffer = []
+        try? FileManager.default.removeItem(at: diagnosticsLogURL)
     }
 
     func getListeningAddresses() -> [String] {

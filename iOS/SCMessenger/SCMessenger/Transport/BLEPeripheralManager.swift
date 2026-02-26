@@ -233,18 +233,22 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     func peripheralManager(_ peripheral: CBPeripheralManager, didAdd service: CBService, error: Error?) {
         if let error = error {
             logger.error("Failed to add service: \(error.localizedDescription)")
+            meshRepository?.appendDiagnostic("ble_peripheral_add_service_fail err=\(error.localizedDescription)")
             return
         }
         logger.info("Service added successfully")
+        meshRepository?.appendDiagnostic("ble_peripheral_service_added")
         beginAdvertising()
     }
     
     func peripheralManagerDidStartAdvertising(_ peripheral: CBPeripheralManager, error: Error?) {
         if let error = error {
             logger.error("Failed to start advertising: \(error.localizedDescription)")
+            meshRepository?.appendDiagnostic("ble_peripheral_adv_fail err=\(error.localizedDescription)")
             return
         }
         logger.info("Advertising started successfully")
+        meshRepository?.appendDiagnostic("ble_peripheral_adv_start")
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
@@ -262,6 +266,7 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
         logger.info("Central \(central.identifier) subscribed to \(characteristic.uuid.shortUUID)")
+        meshRepository?.appendDiagnostic("ble_peripheral_subscribed central=\(central.identifier)")
         if !subscribedCentrals.contains(where: { $0.identifier == central.identifier }) {
             subscribedCentrals.append(central)
         }

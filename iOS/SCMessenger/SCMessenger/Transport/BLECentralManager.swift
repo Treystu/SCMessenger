@@ -58,8 +58,10 @@ final class BLECentralManager: NSObject {
         logger.info("Starting BLE scanning")
         guard centralManager.state == .poweredOn else {
             logger.warning("Cannot start scanning: BLE not powered on")
+            meshRepository?.appendDiagnostic("ble_central_start_fail state=\(centralManager.state.rawValue)")
             return
         }
+        meshRepository?.appendDiagnostic("ble_central_scan_start")
         scheduleDutyCycle()
     }
 
@@ -201,16 +203,19 @@ extension BLECentralManager: CBCentralManagerDelegate {
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         logger.info("Connected to \(peripheral.identifier)")
+        meshRepository?.appendDiagnostic("ble_central_connected id=\(peripheral.identifier)")
         connectedPeripherals[peripheral.identifier] = peripheral
         peripheral.discoverServices([MeshBLEConstants.serviceUUID])
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         logger.error("Failed to connect to \(peripheral.identifier): \(error?.localizedDescription ?? "unknown")")
+        meshRepository?.appendDiagnostic("ble_central_connect_fail id=\(peripheral.identifier) err=\(error?.localizedDescription ?? "none")")
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         logger.info("Disconnected from \(peripheral.identifier)")
+        meshRepository?.appendDiagnostic("ble_central_disconnected id=\(peripheral.identifier) err=\(error?.localizedDescription ?? "none")")
         connectedPeripherals.removeValue(forKey: peripheral.identifier)
         messageCharacteristics.removeValue(forKey: peripheral.identifier)
         syncCharacteristics.removeValue(forKey: peripheral.identifier)

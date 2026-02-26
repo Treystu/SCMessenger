@@ -40,41 +40,30 @@ use std::time::SystemTime;
 use std::time::{Duration, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
-/// Returns true if a Multiaddr is globally routable and safe to add to Kademlia.
+/// Returns true if a Multiaddr is suitable for discovery (local or global).
 ///
 /// We exclude:
-/// - Loopback (127.x.x.x, ::1, 127.0.2.x Android special loopback)
-/// - RFC1918 private ranges (10.x, 172.16-31.x, 192.168.x)
-/// - Link-local (169.254.x.x, fe80::)
-/// - Relay circuit addresses (/p2p-circuit) — handled separately by relay reservations
+/// - Loopback (127.x.x.x, ::1)
 /// - Unspecified (0.0.0.0, ::)
+/// - Relay circuit addresses (/p2p-circuit) — handled separately
 ///
-/// Only WAN IPs and /dns* addresses are admitted to the routing table.
-/// This prevents relay nodes from trying to dial mobile peers at their
-/// internal/loopback addresses (e.g. Android 127.0.2.3) and causing
-/// rapid connect/disconnect loops.
-fn is_globally_routable_multiaddr(addr: &Multiaddr) -> bool {
+/// We now ALLOW (previously blocked):
+/// - RFC1918 private ranges (10.x, 172.16-31.x, 192.168.x)
+/// - CGNAT (100.64.0.0/10)
+///
+/// Allowing private IPs is essential for local WiFi mesh discovery via DHT.
+fn is_discoverable_multiaddr(addr: &Multiaddr) -> bool {
     use libp2p::multiaddr::Protocol;
     for proto in addr.iter() {
         match proto {
             Protocol::Ip4(ip) => {
-                let o = ip.octets();
                 if ip.is_loopback()                            { return false; } // 127.x
                 if ip.is_unspecified()                         { return false; } // 0.0.0.0
-                if ip.is_link_local()                          { return false; } // 169.254.x
-                if o[0] == 10                                  { return false; } // RFC1918
-                if o[0] == 172 && (16..=31).contains(&o[1])   { return false; } // RFC1918
-                if o[0] == 192 && o[1] == 168                  { return false; } // RFC1918
-                if o[0] == 127 && o[1] == 0 && o[2] == 2      { return false; } // Android VPN loopback
-                if o[0] == 100 && (64..=127).contains(&o[1])  { return false; } // CGNAT (RFC6598)
+                // We intentionally allow RFC1918 and CGNAT for local discovery
             }
             Protocol::Ip6(ip) => {
                 if ip.is_loopback()     { return false; } // ::1
                 if ip.is_unspecified()  { return false; } // ::
-                // fe80:: link-local
-                if (ip.segments()[0] & 0xffc0) == 0xfe80 { return false; }
-                // fc00::/7 ULA
-                if (ip.segments()[0] & 0xfe00) == 0xfc00 { return false; }
             }
             Protocol::P2pCircuit => { return false; } // relay circuits go through relay, not kad
             _ => {}
@@ -966,7 +955,7 @@ pub async fn start_swarm_with_config(
                                             if let Some(ref pid_str) = entry.last_peer_id {
                                                 if let Ok(pid) = pid_str.parse::<PeerId>() {
                                                     if let Ok(addr) = entry.multiaddr.parse::<Multiaddr>() {
-                                                        if is_globally_routable_multiaddr(&addr) {
+                                                        if is_discoverable_multiaddr(&addr) {
                                                             swarm.behaviour_mut().kademlia.add_address(&pid, addr);
                                                             new_count += 1;
                                                         }
@@ -1020,7 +1009,7 @@ pub async fn start_swarm_with_config(
                                                 if let Some(ref pid_str) = entry.last_peer_id {
                                                     if let Ok(pid) = pid_str.parse::<PeerId>() {
                                                         if let Ok(addr) = entry.multiaddr.parse::<Multiaddr>() {
-                                                            if is_globally_routable_multiaddr(&addr) {
+                                                            if is_discoverable_multiaddr(&addr) {
                                                                 swarm.behaviour_mut().kademlia.add_address(&pid, addr);
                                                             }
                                                         }
@@ -1189,7 +1178,7 @@ pub async fn start_swarm_with_config(
                             )) => {
                                 for (peer_id, addr) in peers {
                                     tracing::info!("mDNS discovered peer: {} at {}", peer_id, addr);
-                                    if is_globally_routable_multiaddr(&addr) {
+                                    if is_discoverable_multiaddr(&addr) {
                                         swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
                                     }
 
@@ -1240,15 +1229,14 @@ pub async fn start_swarm_with_config(
                                     );
                                 }
 
-                                // Add only globally-routable addresses to Kademlia.
-                                // Private/loopback/RFC1918/Android-loopback addresses are
-                                // excluded to prevent relay nodes from attempting direct
-                                // connections to mobile peers' internal interfaces.
+                                // Add only discoverable addresses to Kademlia.
+                                // Loopback/unspecified addresses are excluded.
+                                // Private/RFC1918/CGNAT are NOW allowed for local mesh.
                                 for addr in &info.listen_addrs {
-                                    if is_globally_routable_multiaddr(addr) {
+                                    if is_discoverable_multiaddr(addr) {
                                         swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
                                     } else {
-                                        tracing::debug!("🚫 Skipping non-routable Kademlia addr for {}: {}", peer_id, addr);
+                                        tracing::debug!("🚫 Skipping non-discoverable Kademlia addr for {}: {}", peer_id, addr);
                                     }
                                 }
 
@@ -1268,7 +1256,7 @@ pub async fn start_swarm_with_config(
                                     if !already_reserved {
                                         let routable_relay_addrs: Vec<Multiaddr> = info.listen_addrs
                                             .iter()
-                                            .filter(|a| is_globally_routable_multiaddr(a))
+                                            .filter(|a| is_discoverable_multiaddr(a))
                                             .cloned()
                                             .collect();
 
@@ -1509,7 +1497,7 @@ pub async fn start_swarm_with_config(
                             }
 
                             SwarmCommand::AddKadAddress { peer_id, addr } => {
-                                if is_globally_routable_multiaddr(&addr) {
+                                if is_discoverable_multiaddr(&addr) {
                                     swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
                                 }
                             }
@@ -1768,7 +1756,7 @@ pub async fn start_swarm_with_config(
                                     .await;
                             }
                             SwarmCommand::AddKadAddress { peer_id, addr } => {
-                                if is_globally_routable_multiaddr(&addr) {
+                                if is_discoverable_multiaddr(&addr) {
                                     swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
                                 }
                             }
@@ -2002,7 +1990,7 @@ pub async fn start_swarm_with_config(
                                 identify::Event::Received { peer_id, info, .. }
                             )) => {
                                 for addr in &info.listen_addrs {
-                                    if is_globally_routable_multiaddr(addr) {
+                                    if is_discoverable_multiaddr(addr) {
                                         swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
                                     }
                                 }

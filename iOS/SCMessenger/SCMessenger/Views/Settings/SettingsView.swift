@@ -72,6 +72,10 @@ struct SettingsView: View {
                 NavigationLink("Power Settings") {
                     PowerSettingsView()
                 }
+
+                NavigationLink("Diagnostics") {
+                    DiagnosticsView()
+                }
             } header: {
                 Text("Advanced")
             }
