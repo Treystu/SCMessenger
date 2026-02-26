@@ -142,7 +142,9 @@ extension BLEL2CAPManager: StreamDelegate {
             // Find peer ID for this stream
             if let channel = openChannels.first(where: { $0.value.inputStream === inputStream }),
                let peerId = channel.key.uuidString as String? {
-                meshRepository?.onBleDataReceived(peerId: peerId, data: data)
+                DispatchQueue.main.async { [weak self] in
+                    self?.meshRepository?.onBleDataReceived(peerId: peerId, data: data)
+                }
             }
         } else if bytesRead < 0 {
             logger.error("Read error: \(inputStream.streamError?.localizedDescription ?? "unknown")")

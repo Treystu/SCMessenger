@@ -41,7 +41,9 @@ final class CoreDelegateImpl: CoreDelegate {
 
     func onPeerConnected(peerId: String) {
         logger.info("Peer connected: \(peerId)")
-        eventBus.peerEvents.send(.connected(peerId: peerId))
+        DispatchQueue.main.async {
+            self.eventBus.peerEvents.send(.connected(peerId: peerId))
+        }
     }
 
     func onPeerDisconnected(peerId: String) {
@@ -84,26 +86,34 @@ final class CoreDelegateImpl: CoreDelegate {
         }
 
         // Publish event (PassthroughSubject is thread-safe for send())
-        eventBus.messageEvents.send(.received(
-            senderId: senderId,
-            messageId: messageId,
-            data: data
-        ))
+        DispatchQueue.main.async {
+            self.eventBus.messageEvents.send(.received(
+                senderId: senderId,
+                messageId: messageId,
+                data: data
+            ))
+        }
     }
 
     func onMessageSent(messageId: String) {
         logger.info("Message sent: \(messageId)")
-        eventBus.messageEvents.send(.sent(messageId: messageId))
+        DispatchQueue.main.async {
+            self.eventBus.messageEvents.send(.sent(messageId: messageId))
+        }
     }
 
     func onMessageDelivered(messageId: String) {
         logger.info("Message delivered: \(messageId)")
-        eventBus.messageEvents.send(.delivered(messageId: messageId))
+        DispatchQueue.main.async {
+            self.eventBus.messageEvents.send(.delivered(messageId: messageId))
+        }
     }
 
     func onMessageFailed(messageId: String, error: String) {
         logger.error("Message failed: \(messageId) - \(error)")
-        eventBus.messageEvents.send(.failed(messageId: messageId, error: error))
+        DispatchQueue.main.async {
+            self.eventBus.messageEvents.send(.failed(messageId: messageId, error: error))
+        }
     }
 
     func onReceiptReceived(messageId: String, status: String) {
@@ -116,24 +126,30 @@ final class CoreDelegateImpl: CoreDelegate {
         }
 
         // Map receipt status to message events
-        switch status.lowercased() {
-        case "delivered":
-            eventBus.messageEvents.send(.delivered(messageId: messageId))
-        case "failed":
-            eventBus.messageEvents.send(.failed(messageId: messageId, error: "Receipt indicated failure"))
-        default:
-            logger.debug("Unknown receipt status: \(status)")
+        DispatchQueue.main.async {
+            switch status.lowercased() {
+            case "delivered":
+                self.eventBus.messageEvents.send(.delivered(messageId: messageId))
+            case "failed":
+                self.eventBus.messageEvents.send(.failed(messageId: messageId, error: "Receipt indicated failure"))
+            default:
+                self.logger.debug("Unknown receipt status: \(status)")
+            }
         }
     }
 
     func onServiceStateChanged(state: ServiceState) {
         logger.info("Service state changed: \(String(describing: state))")
-        eventBus.statusEvents.send(.serviceStateChanged(state))
+        DispatchQueue.main.async {
+            self.eventBus.statusEvents.send(.serviceStateChanged(state))
+        }
     }
 
     func onStatsUpdated(stats: ServiceStats) {
         logger.debug("Stats updated: \(stats.peersDiscovered) peers, \(stats.messagesRelayed) messages")
-        eventBus.statusEvents.send(.statsUpdated(stats))
+        DispatchQueue.main.async {
+            self.eventBus.statusEvents.send(.statsUpdated(stats))
+        }
     }
 }
 

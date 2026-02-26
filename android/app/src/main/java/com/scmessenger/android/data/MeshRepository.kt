@@ -1789,22 +1789,6 @@ class MeshRepository(private val context: Context) {
         return ledgerManager?.dialableAddresses() ?: emptyList()
     }
 
-    fun getDialHintsForRoutePeer(routePeerId: String): List<String> {
-        val normalizedRoute = routePeerId.trim()
-        if (!isLibp2pPeerId(normalizedRoute)) return emptyList()
-        val fromLedger = ledgerManager
-            ?.dialableAddresses()
-            ?.asSequence()
-            ?.filter { it.peerId == normalizedRoute }
-            ?.map { it.multiaddr }
-            ?.toList()
-            .orEmpty()
-        return buildDialCandidatesForPeer(
-            routePeerId = normalizedRoute,
-            rawAddresses = fromLedger,
-            includeRelayCircuits = true
-        )
-    }
 
     fun replayDiscoveredPeerEvents() {
         repoScope.launch {
@@ -3275,6 +3259,12 @@ class MeshRepository(private val context: Context) {
             (octets[0] == 192 && octets[1] == 168)
     }
 
+    fun isKnownRelay(peerId: String): Boolean {
+        val normalized = peerId.trim()
+        if (isBootstrapRelayPeer(normalized)) return true
+        return _discoveredPeers.value[normalized]?.isRelay == true
+    }
+
     private fun relayCircuitAddressesForPeer(targetPeerId: String): List<String> {
         if (!isLibp2pPeerId(targetPeerId)) return emptyList()
         val circuits = mutableListOf<String>()
@@ -3289,7 +3279,10 @@ class MeshRepository(private val context: Context) {
         }
 
         // 2. Dynamic Discovered Relays
-        _discoveredPeers.value.filter { it.value.isRelay && !it.value.isFull && it.key != targetPeerId }.forEach { (relayPeerId, _) ->
+        _discoveredPeers.value.entries.filter { 
+            it.value.isRelay && !it.value.isFull && it.key != targetPeerId 
+        }.forEach { entry ->
+            val relayPeerId = entry.key
             if (isLibp2pPeerId(relayPeerId)) {
                 val directAddrs = getDialHintsForRoutePeer(relayPeerId)
                 directAddrs.forEach { addr ->

@@ -941,6 +941,7 @@ final class MeshRepository {
                 nickname: discoveredNickname,
                 transport: .internet,
                 isFull: true,
+                isRelay: false,
                 lastSeen: UInt64(Date().timeIntervalSince1970)
             )
             updateDiscoveredPeer(canonicalPeerId, info: discoveryInfo)
@@ -2348,6 +2349,7 @@ final class MeshRepository {
             nickname: discoveredNickname,
             transport: .ble,
             isFull: true,
+            isRelay: false,
             lastSeen: UInt64(Date().timeIntervalSince1970)
         )
         updateDiscoveredPeer(identityId, info: discoveryInfo)

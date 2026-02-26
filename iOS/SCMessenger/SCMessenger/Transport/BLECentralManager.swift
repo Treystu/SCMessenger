@@ -272,17 +272,21 @@ extension BLECentralManager: CBPeripheralDelegate {
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let publicKeyHex = json["public_key"] as? String,
                publicKeyHex.count == 64 {
-                meshRepository?.onPeerIdentityRead(
-                    blePeerId: peripheral.identifier.uuidString,
-                    info: json
-                )
+                DispatchQueue.main.async { [weak self] in
+                    self?.meshRepository?.onPeerIdentityRead(
+                        blePeerId: peripheral.identifier.uuidString,
+                        info: json
+                    )
+                }
             } else {
                 logger.warning("Could not parse identity beacon from \(peripheral.identifier)")
             }
         } else {
             // Message or sync data — route to mesh service
             logger.debug("Data from \(peripheral.identifier): \(data.count) bytes on \(characteristic.uuid.shortUUID)")
-            meshRepository?.onBleDataReceived(peerId: peripheral.identifier.uuidString, data: data)
+            DispatchQueue.main.async { [weak self] in
+                self?.meshRepository?.onBleDataReceived(peerId: peripheral.identifier.uuidString, data: data)
+            }
         }
     }
 

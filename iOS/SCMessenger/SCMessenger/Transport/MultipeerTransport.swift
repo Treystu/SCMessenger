@@ -198,14 +198,18 @@ extension MultipeerTransport: MCSessionDelegate {
             connectedPeers.insert(peerID)
             // Clear any pending reconnect counter — peer is healthy again
             reconnectAttempts.removeValue(forKey: peerID.displayName)
-            MeshEventBus.shared.peerEvents.send(.connected(peerId: peerID.displayName))
+            DispatchQueue.main.async {
+                MeshEventBus.shared.peerEvents.send(.connected(peerId: peerID.displayName))
+            }
 
         case .connecting:
             logger.debug("Connecting to \(peerID.displayName)")
 
         case .notConnected:
             connectedPeers.remove(peerID)
-            MeshEventBus.shared.peerEvents.send(.disconnected(peerId: peerID.displayName))
+            DispatchQueue.main.async {
+                MeshEventBus.shared.peerEvents.send(.disconnected(peerId: peerID.displayName))
+            }
             // Attempt to re-establish the connection with exponential backoff
             scheduleReconnect(for: peerID)
 
@@ -216,7 +220,9 @@ extension MultipeerTransport: MCSessionDelegate {
     
     func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {
         logger.debug("Received \(data.count) bytes from \(peerID.displayName)")
-        meshRepository?.onBleDataReceived(peerId: peerID.displayName, data: data)
+        DispatchQueue.main.async { [weak self] in
+            self?.meshRepository?.onBleDataReceived(peerId: peerID.displayName, data: data)
+        }
     }
     
     func session(_ session: MCSession, didReceive stream: InputStream, withName streamName: String, fromPeer peerID: MCPeerID) {
@@ -260,7 +266,9 @@ extension MultipeerTransport: MCNearbyServiceBrowserDelegate {
         // Auto-invite found peers (mesh network)
         browser.invitePeer(peerID, to: session, withContext: nil, timeout: 10)
         
-        MeshEventBus.shared.peerEvents.send(.discovered(peerId: peerID.displayName))
+        DispatchQueue.main.async {
+            MeshEventBus.shared.peerEvents.send(.discovered(peerId: peerID.displayName))
+        }
     }
     
     func browser(_ browser: MCNearbyServiceBrowser, lostPeer peerID: MCPeerID) {

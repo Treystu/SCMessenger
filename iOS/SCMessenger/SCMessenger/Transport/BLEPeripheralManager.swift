@@ -252,7 +252,9 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
             if request.characteristic.uuid == MeshBLEConstants.messageCharUUID,
                let data = request.value {
                 logger.debug("Received write: \(data.count) bytes from \(request.central.identifier)")
-                meshRepository?.onBleDataReceived(peerId: request.central.identifier.uuidString, data: data)
+                DispatchQueue.main.async { [weak self] in
+                    self?.meshRepository?.onBleDataReceived(peerId: request.central.identifier.uuidString, data: data)
+                }
             }
             peripheral.respond(to: request, withResult: .success)
         }
