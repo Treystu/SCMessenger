@@ -123,6 +123,21 @@ class MeshRepository(private val context: Context) {
     private var lastRelayBootstrapDialMs: Long = 0L
     private val dialThrottleState = java.util.concurrent.ConcurrentHashMap<String, Pair<Int, Long>>()
 
+    // P0: Dedup cache — suppress redundant peer-identified callbacks for the same peer
+    // within a 30-second window. The Rust core fires identify per-substream.
+    private val peerIdentifiedDedupCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val peerIdentifiedDedupIntervalMs = 30_000L
+
+    // P1: Dedup cache — suppress duplicate disconnect callbacks for the same peer
+    // within a 1-second window. The Rust core fires one disconnect per-substream.
+    private val peerDisconnectDedupCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val peerDisconnectDedupIntervalMs = 1_000L
+
+    // P4: Dedup cache — suppress redundant dial-throttle log lines
+    // for the same address within a 5-minute window.
+    private val dialThrottleLogCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val dialThrottleLogIntervalMs = 300_000L
+
     // Core Delegate reference to prevent GC
     private var coreDelegate: uniffi.api.CoreDelegate? = null
 
@@ -351,6 +366,15 @@ class MeshRepository(private val context: Context) {
                 }
 
                 override fun onPeerIdentified(peerId: String, agentVersion: String, listenAddrs: List<String>) {
+                    // P0: Deduplicate peer-identified events — Rust core fires one per substream
+                    val trimmedPeerId = peerId.trim()
+                    val now = System.currentTimeMillis()
+                    val lastIdentified = peerIdentifiedDedupCache[trimmedPeerId]
+                    if (lastIdentified != null && (now - lastIdentified) < peerIdentifiedDedupIntervalMs) {
+                        return
+                    }
+                    peerIdentifiedDedupCache[trimmedPeerId] = now
+
                     Timber.d("Core notified identified: $peerId (agent: $agentVersion) with ${listenAddrs.size} addresses")
                     repoScope.launch {
                         dialThrottleState.keys
@@ -462,9 +486,18 @@ class MeshRepository(private val context: Context) {
                 }
 
                 override fun onPeerDisconnected(peerId: String) {
+                    // P1: Deduplicate disconnect events — Rust core fires one per substream
+                    val trimmedPeerId = peerId.trim()
+                    val now = System.currentTimeMillis()
+                    val lastDisconnect = peerDisconnectDedupCache[trimmedPeerId]
+                    if (lastDisconnect != null && (now - lastDisconnect) < peerDisconnectDedupIntervalMs) {
+                        return
+                    }
+                    peerDisconnectDedupCache[trimmedPeerId] = now
+
                     Timber.d("Core notified disconnect: $peerId")
                     repoScope.launch {
-                        connectedEmissionCache.remove(peerId.trim())
+                        connectedEmissionCache.remove(trimmedPeerId)
                         pruneDisconnectedPeer(peerId)
                         com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
                             com.scmessenger.android.service.PeerEvent.Disconnected(peerId)
@@ -3388,6 +3421,11 @@ class MeshRepository(private val context: Context) {
         val now = System.currentTimeMillis()
         val (attempts, nextAllowedMs) = dialThrottleState[key] ?: (0 to 0L)
         if (now < nextAllowedMs) {
+            // P4: Only log dial throttle once per address per 5-minute window
+            val lastLogged = dialThrottleLogCache[key]
+            if (lastLogged == null || (now - lastLogged) >= dialThrottleLogIntervalMs) {
+                dialThrottleLogCache[key] = now
+            }
             return false
         }
 

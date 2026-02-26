@@ -33,6 +33,7 @@ final class BLECentralManager: NSObject {
     private var isBackgroundMode = false
     private var scanTimer: Timer?
     private var isScanning = false
+    private var pendingScanOnReady = false  // P3: Defer scan until BLE is poweredOn
 
     // Write queue (mirrors Android BleGattClient pattern - CRITICAL)
     private var writeInProgress: [UUID: Bool] = [:]
@@ -57,10 +58,18 @@ final class BLECentralManager: NSObject {
     func startScanning() {
         logger.info("Starting BLE scanning")
         guard centralManager.state == .poweredOn else {
-            logger.warning("Cannot start scanning: BLE not powered on")
-            meshRepository?.appendDiagnostic("ble_central_start_fail state=\(centralManager.state.rawValue)")
+            logger.warning("Cannot start scanning: BLE not powered on (state=\(self.centralManager.state.rawValue)), will auto-start when ready")
+            // P3: Don't log as failure — just defer until BLE is ready
+            pendingScanOnReady = true
+            if self.centralManager.state == .unknown {
+                // State .unknown means CBCentralManager hasn't reported yet — this is normal at launch.
+                // Scanning will begin automatically when centralManagerDidUpdateState fires with .poweredOn.
+                return
+            }
+            meshRepository?.appendDiagnostic("ble_central_start_deferred state=\(self.centralManager.state.rawValue)")
             return
         }
+        pendingScanOnReady = false
         meshRepository?.appendDiagnostic("ble_central_scan_start")
         scheduleDutyCycle()
     }
@@ -84,6 +93,7 @@ final class BLECentralManager: NSObject {
         logger.debug("Scan interval updated: \(self.scanInterval)s")
     }
 
+    @discardableResult
     func sendData(to peripheralId: UUID, data: Data) -> Bool {
         guard let peripheral = connectedPeripherals[peripheralId],
               let characteristic = messageCharacteristics[peripheralId] else {
@@ -182,7 +192,13 @@ extension BLECentralManager: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         logger.info("Central manager state: \(central.state.rawValue)")
         if central.state == .poweredOn {
-            // Can start scanning if needed
+            // P3: If startScanning() was called before BLE was ready, start now
+            if pendingScanOnReady {
+                logger.info("BLE now powered on — starting deferred scan")
+                pendingScanOnReady = false
+                meshRepository?.appendDiagnostic("ble_central_scan_start_deferred")
+                scheduleDutyCycle()
+            }
         }
     }
 

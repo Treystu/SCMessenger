@@ -18,6 +18,8 @@ history.db
 identity.json
 config.json
 logs/*
+*_log.txt
+*_logs.txt
 
 # Temporary migration/debug inventories
 docs/_ios_*
@@ -43,8 +45,6 @@ iOS/SCMessenger/SCMessenger/Generated/
 core/iOS/
 core/log.txt
 core/out.txt
-android_log.txt
-*_log.txt
 *.xcuserstate
 **/xcuserdata/
 **/*.xcuserstate

@@ -195,6 +195,23 @@ final class MeshRepository {
     private var connectedEmissionCache: [String: Date] = [:]
     private let connectedReemitInterval: TimeInterval = 15
 
+    // P0: Dedup cache — suppress redundant peer-identified callbacks for the same peer
+    // within a 30-second window. The Rust core fires identify per-substream, producing
+    // 34K+ duplicate events in a typical session.
+    private var peerIdentifiedDedupCache: [String: Date] = [:]
+    private let peerIdentifiedDedupInterval: TimeInterval = 30
+
+    // P1: Dedup cache — suppress duplicate disconnect callbacks for the same peer
+    // within a 1-second window. The Rust core fires one disconnect per-substream,
+    // producing 254+ events in under 1 second.
+    private var peerDisconnectDedupCache: [String: Date] = [:]
+    private let peerDisconnectDedupInterval: TimeInterval = 1.0
+
+    // P4: Dedup cache — suppress redundant dial_throttled diagnostic log lines
+    // for the same address within a 5-minute window (9.6K+ events in a session).
+    private var dialThrottleLogCache: [String: Date] = [:]
+    private let dialThrottleLogInterval: TimeInterval = 300
+
     // MARK: - Published State
 
     var serviceState: ServiceState = .stopped
@@ -2180,11 +2197,30 @@ final class MeshRepository {
     }
 
     func handleTransportPeerDisconnected(peerId: String) {
-        connectedEmissionCache.removeValue(forKey: peerId.trimmingCharacters(in: .whitespacesAndNewlines))
+        // P1: Deduplicate disconnect events — Rust core fires one per substream
+        let trimmedId = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let now = Date()
+        if let lastDisconnect = peerDisconnectDedupCache[trimmedId],
+           now.timeIntervalSince(lastDisconnect) < peerDisconnectDedupInterval {
+            return // Already processed this disconnect within the window
+        }
+        peerDisconnectDedupCache[trimmedId] = now
+
+        connectedEmissionCache.removeValue(forKey: trimmedId)
         pruneDisconnectedPeer(peerId)
     }
 
     func handleTransportPeerIdentified(peerId: String, agentVersion: String, listenAddrs: [String]) {
+        // P0: Deduplicate peer-identified events — Rust core fires one per substream,
+        // producing 34K+ duplicate events. Skip if same peer identified within 30s.
+        let trimmedPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let now = Date()
+        if let lastIdentified = peerIdentifiedDedupCache[trimmedPeerId],
+           now.timeIntervalSince(lastIdentified) < peerIdentifiedDedupInterval {
+            return
+        }
+        peerIdentifiedDedupCache[trimmedPeerId] = now
+
         appendDiagnostic("peer_identified transport=\(peerId) agent=\(agentVersion) addrs=\(listenAddrs.count)")
         let resetSuffix = "/p2p/\(peerId)"
         for key in dialThrottleState.keys where key.hasSuffix(resetSuffix) || key == peerId {
@@ -3421,7 +3457,11 @@ final class MeshRepository {
 
         let now = Date()
         if let state = dialThrottleState[key], now < state.nextAllowedAt {
-            appendDiagnostic("dial_throttled addr=\(key)")
+            // P4: Only log dial_throttled once per address per 5-minute window
+            if dialThrottleLogCache[key] == nil || now.timeIntervalSince(dialThrottleLogCache[key]!) >= dialThrottleLogInterval {
+                appendDiagnostic("dial_throttled addr=\(key)")
+                dialThrottleLogCache[key] = now
+            }
             return false
         }
 

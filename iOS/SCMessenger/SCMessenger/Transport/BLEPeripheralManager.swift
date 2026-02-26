@@ -149,6 +149,15 @@ final class BLEPeripheralManager: NSObject {
     // MARK: - Private Methods
     
     private func setupService() {
+        // P3: Guard against re-adding service when already set up
+        guard meshService == nil else {
+            // Service already configured — just ensure advertising is running
+            if !isAdvertising {
+                beginAdvertising()
+            }
+            return
+        }
+
         // Create characteristics (names match Android BleGattServer)
         messageCharacteristic = CBMutableCharacteristic(
             type: MeshBLEConstants.messageCharUUID,
@@ -180,6 +189,9 @@ final class BLEPeripheralManager: NSObject {
     }
     
     private func beginAdvertising() {
+        // P3: Guard against re-starting advertising when already active
+        guard !isAdvertising else { return }
+
         let advertisementData: [String: Any] = [
             CBAdvertisementDataServiceUUIDsKey: [MeshBLEConstants.serviceUUID],
             CBAdvertisementDataLocalNameKey: MeshBLEConstants.advertisedName
