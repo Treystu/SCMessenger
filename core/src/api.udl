@@ -412,6 +412,9 @@ interface HistoryManager {
     void clear_conversation(string peer_id);
 
     [Throws=IronCoreError]
+    void delete(string id);
+
+    [Throws=IronCoreError]
     HistoryStats stats();
 
     u32 count();

@@ -208,8 +208,8 @@ struct NearbyPeerRow: View {
             Button {
                 onAdd()
             } label: {
-                Label(peer.hasFullIdentity ? "Connect" : "Add", systemImage: peer.hasFullIdentity ? "bolt.horizontal.circle.fill" : "person.badge.plus")
-                    .font(.system(size: peer.hasFullIdentity ? 15 : 20))
+                Label("Add", systemImage: "person.badge.plus")
+                    .font(.system(size: 20))
                     .foregroundStyle(Color.accentColor)
             }
             .buttonStyle(.plain)

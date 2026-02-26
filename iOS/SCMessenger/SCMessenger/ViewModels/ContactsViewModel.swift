@@ -229,8 +229,17 @@ final class ContactsViewModel {
             .store(in: &cancellables)
     }
 
+    private func isBootstrapRelayPeer(_ peerId: String) -> Bool {
+        guard let repo = repository else { return false }
+        return repo.isBootstrapRelayPeer(peerId)
+    }
+
     private func handleIdentityDiscovered(peerId: String, publicKey: String, nickname: String?,
                                            libp2pPeerId: String?, listeners: [String], blePeerId: String?) {
+        // Never surface bootstrap relay/headless nodes in the Contacts nearby list.
+        let checkIds = [peerId, libp2pPeerId].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        if checkIds.contains(where: { isBootstrapRelayPeer($0) }) { return }
+
         cancelPendingNearbyRemoval(peerId: peerId)
         cancelPendingNearbyRemoval(peerId: libp2pPeerId)
         cancelPendingNearbyRemoval(peerId: blePeerId)
@@ -291,6 +300,8 @@ final class ContactsViewModel {
 
     private func handleDiscovered(peerId: String) {
         cancelPendingNearbyRemoval(peerId: peerId)
+        // Don't surface bootstrap relay nodes in the nearby list.
+        guard !isBootstrapRelayPeer(peerId) else { return }
         let alreadySaved = contacts.contains { $0.peerId == peerId }
         guard !alreadySaved else { return }
 

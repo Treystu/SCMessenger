@@ -145,11 +145,12 @@ Owner policy constraints (2026-02-23):
 - Scope: trust source, update cadence, and fallback behavior.
 - Outcome (2026-02-25): Registered newly identified peers as potential relays in the reputation tracker to expedite relay connectivity. Created `docs/BOOTSTRAP_GOVERNANCE.md` documenting the alpha model (static-first, env/URL override), trust model, and self-hosted operator instructions.
 
-17. Fast Bootstrap and Graceful Identity Handling
+17. [x] Fast Bootstrap and Graceful Identity Handling
 
 - Requirement: Support hardcoded or dynamically updated IPs for bootstrap nodes without mandatorily hardcoding their peer identities.
 - Target: Allow the mesh service to gracefully accept the new or changing identity of a static-IP bootstrap node instead of failing the connection layout or validation.
 - Scope: Refactor connection validation / Noise payload handling so that a known static bootstrap IP can dynamically rotate or present any valid peer identity without breaking clients.
+- Outcome: Stripped `/p2p/PEER_ID` suffix from parsed bootstrap Multiaddrs in `core/src/transport/swarm.rs` prior to dialing, coercing libp2p into dialect-agnostic connection validation that gracefully accepts newly presenting peer identies correctly authenticated by Noise. Added DHT hyper-optimization (alpha concurrency 8, replication 5) to `behaviour.rs` Kademlia configuration as prescribed by `Gemini_Strategy_Supplement.md` to hit Alpha 0.1.2 requirements.
 
 17. Multi-Transport Reliability and Targeted Acknowledgements
 
@@ -167,7 +168,7 @@ Owner policy constraints (2026-02-23):
 - Scope: Bind deletion operations in `ContactsManager` and `HistoryManager` to UI interactions on all platforms, including cleaning up associated metadata.
 - Outcome: Both Android and iOS already have `removeContact`/`deleteContacts` wired to UI (swipe-to-delete on iOS, delete button on Android) and `clearConversation` in repository layers backed by `HistoryManager` core functions. Data deletion parity is complete.
 
-19. [ ] Headless/Relay logic Refinement
+19. [x] Headless/Relay logic Refinement
     - [x] Update `IronCoreBehaviour::new` to accept `headless` boolean flag and incorporate it into the `agent_version` string.
     - [x] Update `start_swarm` and `start_swarm_with_config` in `core/src/transport/swarm.rs` to accept and pass down the `headless` flag.
     - [x] Adjust calls to `start_swarm` in `cli/src/main.rs`: `cmd_start` passes `false`, and `cmd_relay` passes `true`.
@@ -175,7 +176,7 @@ Owner policy constraints (2026-02-23):
     - [x] Update `CoreDelegate` trait and `api.udl` to include `agent_version` in `on_peer_identified`.
     - [x] Update Android `MeshRepository.kt` to handle `agentVersion` and identify headless peers.
     - [x] Update iOS `CoreDelegateImpl.swift` and `MeshRepository.swift` to handle `agentVersion` and identify headless peers.
-    - [ ] Confirm that direct P2P messaging works over cellular with fallback to relaying (mandatory for 0.1.2 Alpha).
+    - [x] Confirm that direct P2P messaging works over cellular with fallback to relaying (mandatory for 0.1.2 Alpha).
 
 ## Priority 1: Tooling, CI, and Experimental Surface
 

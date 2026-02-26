@@ -52,8 +52,12 @@ final class MeshRepository {
 
     /// Static fallback bootstrap node multiaddrs for NAT traversal and internet roaming.
     /// These are used only if env override and remote fetch both fail/are absent.
+    /// Priority order: GCP relay (cloud) → OSX relay (home/local backup).
     private static let staticBootstrapNodes: [String] = [
-        "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWMyngfNZajWRNRPdtc32uxn1sBYZE126NDD4b547BAMLj",
+        // GCP relay — primary cloud node
+        "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw",
+        // OSX home relay — secondary backup (this machine, port 9010)
+        "/ip4/104.28.216.43/tcp/9010/p2p/12D3KooWHpmuhytgzLcM4nj1hZvN5b4crB1wka3LCNfKRCd7yHj9",
     ]
 
     /// Resolved bootstrap nodes using the core BootstrapResolver.
@@ -158,6 +162,7 @@ final class MeshRepository {
         let nickname: String?
         let transport: MeshEventBus.TransportType
         let isFull: Bool
+        let isRelay: Bool
         let lastSeen: UInt64
     }
 
@@ -167,6 +172,7 @@ final class MeshRepository {
         var nickname: String?
         var routePeerId: String?
         var transport: MeshEventBus.TransportType
+        var isRelay: Bool
     }
 
     private struct IdentityEmissionSignature: Equatable {
@@ -1433,6 +1439,7 @@ final class MeshRepository {
                 nickname: selectAuthoritativeNickname(incoming: info.nickname, existing: existing.nickname),
                 transport: (info.transport == .internet || existing.transport == .internet) ? .internet : info.transport,
                 isFull: info.isFull || existing.isFull,
+                isRelay: info.isRelay || existing.isRelay,
                 lastSeen: max(info.lastSeen, existing.lastSeen)
             )
         } else {
@@ -1554,6 +1561,7 @@ final class MeshRepository {
                 if existing.transport != .internet, info.transport == .internet {
                     existing.transport = info.transport
                 }
+                if info.isRelay { existing.isRelay = true }
                 aggregates[aggregateKey] = existing
             } else {
                 aggregates[aggregateKey] = ReplayDiscoveredIdentity(
@@ -1561,7 +1569,8 @@ final class MeshRepository {
                     publicKey: normalizedKey,
                     nickname: discoveredNickname,
                     routePeerId: routeCandidate,
-                    transport: info.transport
+                    transport: info.transport,
+                    isRelay: info.isRelay
                 )
             }
         }
@@ -2069,11 +2078,8 @@ final class MeshRepository {
             return
         }
 
-        if isBootstrapRelayPeer(peerId) {
-            logger.debug("Ignoring bootstrap relay peer discovery event: \(peerId)")
-            return
-        }
-
+        let isRelay = isBootstrapRelayPeer(peerId)
+        
         if let transportIdentity = resolveTransportIdentity(libp2pPeerId: peerId) {
             let discoveredNickname = prepopulateDiscoveryNickname(
                 nickname: transportIdentity.nickname,
@@ -2091,6 +2097,7 @@ final class MeshRepository {
                 nickname: discoveredNickname,
                 transport: .internet,
                 isFull: true,
+                isRelay: isRelay,
                 lastSeen: UInt64(Date().timeIntervalSince1970)
             )
             updateDiscoveredPeer(peerId, info: discoveryInfo)
@@ -2135,11 +2142,14 @@ final class MeshRepository {
                 nickname: nil,
                 transport: .internet,
                 isFull: false,
+                isRelay: isRelay,
                 lastSeen: UInt64(Date().timeIntervalSince1970)
             )
             updateDiscoveredPeer(peerId, info: discoveryInfo)
-            MeshEventBus.shared.peerEvents.send(.discovered(peerId: peerId))
         }
+        
+        // Ensure UI (and dashboard) sees the discovery immediately
+        MeshEventBus.shared.peerEvents.send(.discovered(peerId: peerId))
     }
 
     func handleTransportPeerDisconnected(peerId: String) {
@@ -2175,10 +2185,10 @@ final class MeshRepository {
                 nickname: nil,
                 transport: .internet,
                 isFull: false,
+                isRelay: true,
                 lastSeen: UInt64(Date().timeIntervalSince1970)
             )
             updateDiscoveredPeer(peerId, info: relayDiscovery)
-            MeshEventBus.shared.peerEvents.send(.discovered(peerId: peerId))
             emitConnectedIfChanged(peerId: peerId)
         } else {
             let transportIdentity = resolveTransportIdentity(libp2pPeerId: peerId)
@@ -2194,6 +2204,7 @@ final class MeshRepository {
                     nickname: discoveredNickname,
                     transport: .internet,
                     isFull: true,
+                    isRelay: isBootstrapRelayPeer(peerId),
                     lastSeen: UInt64(Date().timeIntervalSince1970)
                 )
                 updateDiscoveredPeer(peerId, info: discoveryInfo)
@@ -2222,6 +2233,7 @@ final class MeshRepository {
                     nickname: nil,
                     transport: .internet,
                     isFull: false,
+                    isRelay: isBootstrapRelayPeer(peerId),
                     lastSeen: UInt64(Date().timeIntervalSince1970)
                 )
                 updateDiscoveredPeer(peerId, info: discoveryInfo)
@@ -2341,6 +2353,14 @@ final class MeshRepository {
         updateDiscoveredPeer(identityId, info: discoveryInfo)
         if let nonEmptyLibp2p, nonEmptyLibp2p != identityId {
             updateDiscoveredPeer(nonEmptyLibp2p, info: discoveryInfo)
+        }
+        // Remove the preliminary BLE-UUID entry (isFull=false) created at connection time.
+        // Now that identity is confirmed, the blePeerId key is a stale duplicate.
+        if blePeerId != identityId && blePeerId != normalizedLibp2p {
+            discoveredPeerMap = discoveredPeerMap.filter { key, value in
+                key != blePeerId && value.canonicalPeerId != blePeerId
+            }
+            logger.debug("Removed preliminary BLE entry \(blePeerId.prefix(8)) → promoted to \(identityId.prefix(12))")
         }
         emitIdentityDiscoveredIfChanged(
             peerId: identityId,
@@ -2583,8 +2603,11 @@ final class MeshRepository {
             }
 
             while !Task.isCancelled {
+                // Proactively ensure we stay connected to relays
+                self?.primeRelayBootstrapConnections()
+                
                 await self?.flushPendingOutbox(reason: "periodic")
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                try? await Task.sleep(nanoseconds: 8_000_000_000) // 8s loop
             }
         }
     }
@@ -2662,8 +2685,8 @@ final class MeshRepository {
             let relayOnly = relayCircuitAddresses(for: routePeerId)
             if !relayOnly.isEmpty {
                 connectToPeer(routePeerId, addresses: relayOnly)
-                _ = await awaitPeerConnection(peerId: routePeerId)
-                try? await Task.sleep(nanoseconds: 250_000_000)
+                _ = await awaitPeerConnection(peerId: routePeerId, timeoutMs: 3000)
+                try? await Task.sleep(nanoseconds: 500_000_000)
                 do {
                     try swarmBridge.sendMessage(peerId: routePeerId, data: envelopeData)
                     logger.info("✓ Delivery ACK from \(routePeerId) after relay-circuit retry")
@@ -2717,6 +2740,9 @@ final class MeshRepository {
     }
 
     private func flushPendingOutbox(reason: String) async {
+        // Ensure relay backbone is reachable whenever we check outbox
+        primeRelayBootstrapConnections()
+        
         let now = UInt64(Date().timeIntervalSince1970)
         let queue = loadPendingOutbox()
         if queue.isEmpty { return }
@@ -2871,6 +2897,12 @@ final class MeshRepository {
         return Self.bootstrapRelayPeerIds.contains(peerId)
     }
 
+    /// Check if a peer is a known relay (either bootstrap or dynamically discovered headless)
+    func isKnownRelay(_ peerId: String) -> Bool {
+        if isBootstrapRelayPeer(peerId) { return true }
+        return discoveredPeerMap[peerId]?.isRelay == true
+    }
+
     private func buildDialCandidatesForPeer(
         routePeerId: String?,
         rawAddresses: [String],
@@ -2969,10 +3001,27 @@ final class MeshRepository {
 
     private func relayCircuitAddresses(for targetPeerId: String) -> [String] {
         guard isLibp2pPeerId(targetPeerId) else { return [] }
-        return Self.defaultBootstrapNodes.compactMap { bootstrap in
+        
+        // 1. System default bootstrap nodes
+        var relays: [String] = Self.defaultBootstrapNodes.compactMap { bootstrap in
             guard let relay = Self.parseBootstrapRelay(from: bootstrap) else { return nil }
             return "\(relay.transportAddr)/p2p/\(relay.relayPeerId)/p2p-circuit/p2p/\(targetPeerId)"
         }
+        
+        // 2. Dynamically discovered headless/relay nodes
+        let dynamicRelays = discoveredPeerMap.filter { $0.value.isRelay && !$0.value.isFull && $0.key != targetPeerId }
+        for (relayPeerId, _) in dynamicRelays {
+            if isLibp2pPeerId(relayPeerId) {
+                // If we have direct addresses for this relay, try using it
+                let directAddrs = getDialHintsForRoutePeer(relayPeerId)
+                for addr in directAddrs {
+                    let circuit = "\(addr)/p2p/\(relayPeerId)/p2p-circuit/p2p/\(targetPeerId)"
+                    if !relays.contains(circuit) { relays.append(circuit) }
+                }
+            }
+        }
+        
+        return relays
     }
 
     private func primeRelayBootstrapConnections() {

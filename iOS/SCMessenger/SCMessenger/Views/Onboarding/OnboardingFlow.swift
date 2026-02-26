@@ -25,14 +25,8 @@ struct OnboardingFlow: View {
             IdentityView()
                 .tag(2)
             
-            PermissionsView()
-                .tag(3)
-            
-            RelayExplanationView()
-                .tag(4)
-            
             CompletionView(viewModel: viewModel)
-                .tag(5)
+                .tag(3)
         }
         .tabViewStyle(.page)
         .indexViewStyle(.page(backgroundDisplayMode: .always))

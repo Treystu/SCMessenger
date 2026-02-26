@@ -12,7 +12,7 @@ final class OnboardingViewModel {
     var currentStep = 0
     var hasCompletedOnboarding = false
     
-    let totalSteps = 5
+    let totalSteps = 4
     
     func advance() {
         if currentStep < totalSteps - 1 {

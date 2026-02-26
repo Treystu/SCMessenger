@@ -180,6 +180,9 @@ pub enum SwarmEvent2 {
         from_peer: PeerId,
         entries: Vec<SharedPeerEntry>,
     },
+    /// NAT status changed (from AutoNAT probe)
+    /// Value is one of: "public:<addr>", "private", "unknown"
+    NatStatusChanged(String),
 }
 
 /// Handle to communicate with the running swarm task
@@ -558,9 +561,10 @@ pub async fn start_swarm_with_config(
                 bootstrap_addrs.len()
             );
             for addr in &bootstrap_addrs {
-                match swarm.dial(addr.clone()) {
-                    Ok(_) => tracing::info!("  ✓ Dialing bootstrap: {}", addr),
-                    Err(e) => tracing::warn!("  ✗ Failed to dial bootstrap {}: {}", addr, e),
+                let stripped_addr: Multiaddr = addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
+                match swarm.dial(stripped_addr.clone()) {
+                    Ok(_) => tracing::info!("  ✓ Dialing bootstrap: {}", stripped_addr),
+                    Err(e) => tracing::warn!("  ✗ Failed to dial bootstrap {}: {}", stripped_addr, e),
                 }
             }
         }
@@ -726,9 +730,10 @@ pub async fn start_swarm_with_config(
                                 });
 
                                 if !already_connected {
-                                    match swarm.dial(addr.clone()) {
-                                        Ok(_) => tracing::debug!("🔄 Re-dialing bootstrap: {}", addr),
-                                        Err(e) => tracing::trace!("Bootstrap re-dial {} skipped: {}", addr, e),
+                                    let stripped_addr: Multiaddr = addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
+                                    match swarm.dial(stripped_addr.clone()) {
+                                        Ok(_) => tracing::debug!("🔄 Re-dialing bootstrap: {}", stripped_addr),
+                                        Err(e) => tracing::trace!("Bootstrap re-dial {} skipped: {}", stripped_addr, e),
                                     }
                                 }
                             }
@@ -1065,15 +1070,114 @@ pub async fn start_swarm_with_config(
                             }
 
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Autonat(event)) => {
-                                tracing::debug!("AutoNAT event: {:?}", event);
+                                use libp2p::autonat;
+                                match event {
+                                    autonat::Event::StatusChanged { old, new } => {
+                                        tracing::info!(
+                                            "🔭 AutoNAT status: {:?} → {:?}",
+                                            old, new
+                                        );
+                                        // Update NAT status for the application layer.
+                                        // This determines whether relay fallback is required.
+                                        let status_str = match new {
+                                            autonat::NatStatus::Public(addr) => {
+                                                tracing::info!("✅ AutoNAT: public reachability confirmed at {}", addr);
+                                                format!("public:{}", addr)
+                                            }
+                                            autonat::NatStatus::Private => {
+                                                tracing::info!("🔒 AutoNAT: behind NAT — relay required for inbound");
+                                                "private".to_string()
+                                            }
+                                            autonat::NatStatus::Unknown => {
+                                                "unknown".to_string()
+                                            }
+                                        };
+                                        let _ = event_tx.send(SwarmEvent2::NatStatusChanged(status_str)).await;
+                                    }
+                                    autonat::Event::InboundProbe(result) => {
+                                        tracing::debug!("AutoNAT inbound probe: {:?}", result);
+                                    }
+                                    autonat::Event::OutboundProbe(result) => {
+                                        tracing::debug!("AutoNAT outbound probe: {:?}", result);
+                                    }
+                                }
                             }
 
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Dcutr(event)) => {
-                                tracing::debug!("DCUtR event: {:?}", event);
+                                use libp2p::dcutr;
+                                match event {
+                                    dcutr::Event { remote_peer_id, result: Ok(num_attempts) } => {
+                                        tracing::info!(
+                                            "🕳️ DCUtR hole-punch SUCCESS with {} (attempts: {})",
+                                            remote_peer_id, num_attempts
+                                        );
+                                        // Hole-punch succeeded — direct connection established.
+                                        // Add this peer's direct addresses to Kademlia so the
+                                        // DHT knows how to reach them without the relay.
+                                        // Collect first to avoid simultaneous immutable + mutable borrow of swarm.
+                                        let ext_addrs: Vec<libp2p::Multiaddr> =
+                                            swarm.external_addresses().cloned().collect();
+                                        for addr in ext_addrs {
+                                            swarm.behaviour_mut().kademlia.add_address(
+                                                &remote_peer_id,
+                                                addr
+                                            );
+                                        }
+                                        let _ = event_tx.send(SwarmEvent2::PeerDiscovered(remote_peer_id)).await;
+                                    }
+                                    dcutr::Event { remote_peer_id, result: Err(e) } => {
+                                        tracing::warn!(
+                                            "🕳️ DCUtR hole-punch FAILED with {} — will relay messages instead: {}",
+                                            remote_peer_id, e
+                                        );
+                                        // Hole-punch failed — this is OK; our application-layer
+                                        // relay (/sc/relay/1.0.0) handles the fallback.
+                                    }
+                                }
                             }
 
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::RelayClient(event)) => {
-                                tracing::debug!("Relay client event: {:?}", event);
+                                use libp2p::relay::client::Event as RelayClientEvent;
+                                match event {
+                                    RelayClientEvent::ReservationReqAccepted {
+                                        relay_peer_id,
+                                        renewal,
+                                        ..
+                                    } => {
+                                        if renewal {
+                                            tracing::debug!(
+                                                "🔄 Relay circuit reservation RENEWED via {}",
+                                                relay_peer_id
+                                            );
+                                        } else {
+                                            tracing::info!(
+                                                "✅ Relay circuit reservation ACCEPTED via {} — inbound-relayed connections now possible",
+                                                relay_peer_id
+                                            );
+                                        }
+                                    }
+                                    RelayClientEvent::InboundCircuitEstablished {
+                                        src_peer_id,
+                                        ..
+                                    } => {
+                                        tracing::info!(
+                                            "🔌 Inbound relay circuit established from {} — peer connected through relay",
+                                            src_peer_id
+                                        );
+                                    }
+                                    RelayClientEvent::OutboundCircuitEstablished {
+                                        relay_peer_id,
+                                        ..
+                                    } => {
+                                        tracing::info!(
+                                            "🔌 Outbound relay circuit established via {} — connected to remote through relay",
+                                            relay_peer_id
+                                        );
+                                    }
+                                    e => {
+                                        tracing::debug!("Relay client event: {:?}", e);
+                                    }
+                                }
                             }
 
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Ping(event)) => {
@@ -1156,44 +1260,53 @@ pub async fn start_swarm_with_config(
                                     multi_path_delivery.add_relay(peer_id);
 
                                     // P0.5B: Register a circuit relay reservation with this relay.
-                                    // This allows the relay to accept inbound connections on our behalf
-                                    // and dial us back via /p2p/<relay_id>/p2p-circuit.
-                                    // We use the relay's WAN listen addresses from the identify info.
-                                    let routable_relay_addrs: Vec<Multiaddr> = info.listen_addrs
-                                        .iter()
-                                        .filter(|a| is_globally_routable_multiaddr(a))
-                                        .cloned()
-                                        .collect();
+                                    // Guard: only register ONCE per relay peer — identify fires every 60s
+                                    // and without this guard we accumulate unbounded ListenerIds, which
+                                    // floods the relay and crowds out real message delivery.
+                                    let already_reserved = relay_peer_addrs.contains_key(&peer_id);
 
-                                    if !routable_relay_addrs.is_empty() {
-                                        relay_peer_addrs.insert(peer_id, routable_relay_addrs.clone());
+                                    if !already_reserved {
+                                        let routable_relay_addrs: Vec<Multiaddr> = info.listen_addrs
+                                            .iter()
+                                            .filter(|a| is_globally_routable_multiaddr(a))
+                                            .cloned()
+                                            .collect();
 
-                                        // Pick the first routable relay address and register a circuit reservation.
-                                        // Format: /ip4/<relay-ip>/tcp/<port>/p2p/<relay-peer-id>/p2p-circuit
-                                        use libp2p::multiaddr::Protocol;
-                                        let relay_circuit_addr = routable_relay_addrs[0]
-                                            .clone()
-                                            .with(Protocol::P2p(peer_id))
-                                            .with(Protocol::P2pCircuit);
+                                        if !routable_relay_addrs.is_empty() {
+                                            relay_peer_addrs.insert(peer_id, routable_relay_addrs.clone());
 
-                                        tracing::info!(
-                                            "📡 Attempting relay circuit reservation via {}: {}",
-                                            peer_id, relay_circuit_addr
-                                        );
-                                        match swarm.listen_on(relay_circuit_addr.clone()) {
-                                            Ok(listener_id) => tracing::info!(
-                                                "✅ Relay circuit reservation registered: {:?} via {}",
-                                                listener_id, peer_id
-                                            ),
-                                            Err(e) => tracing::warn!(
-                                                "⚠️ Could not register relay circuit reservation via {}: {}",
-                                                peer_id, e
-                                            ),
+                                            // Pick the first routable relay address and register a circuit reservation.
+                                            // Format: /ip4/<relay-ip>/tcp/<port>/p2p/<relay-peer-id>/p2p-circuit
+                                            use libp2p::multiaddr::Protocol;
+                                            let relay_circuit_addr = routable_relay_addrs[0]
+                                                .clone()
+                                                .with(Protocol::P2p(peer_id))
+                                                .with(Protocol::P2pCircuit);
+
+                                            tracing::info!(
+                                                "📡 Attempting relay circuit reservation via {}: {}",
+                                                peer_id, relay_circuit_addr
+                                            );
+                                            match swarm.listen_on(relay_circuit_addr.clone()) {
+                                                Ok(listener_id) => tracing::info!(
+                                                    "✅ Relay circuit reservation registered: {:?} via {}",
+                                                    listener_id, peer_id
+                                                ),
+                                                Err(e) => tracing::warn!(
+                                                    "⚠️ Could not register relay circuit reservation via {}: {}",
+                                                    peer_id, e
+                                                ),
+                                            }
+                                        } else {
+                                            tracing::debug!(
+                                                "🔄 Relay {} has no WAN-routable addresses yet; \
+                                                 will retry reservation after reconnect",
+                                                peer_id
+                                            );
                                         }
                                     } else {
                                         tracing::debug!(
-                                            "🔄 Relay {} has no WAN-routable addresses yet; \
-                                             will retry reservation after reconnect",
+                                            "📡 Relay circuit already reserved for {} — skipping duplicate",
                                             peer_id
                                         );
                                     }
@@ -1252,10 +1365,12 @@ pub async fn start_swarm_with_config(
                                 ledger_exchanged_peers.remove(&peer_id);
 
                                 // P0.11: If this was a known relay, schedule a reconnect with backoff.
+                                // Also clear from relay_peer_addrs so that when reconnection succeeds,
+                                // we re-register a fresh circuit reservation (old listener is now dead).
                                 // Backoff: 10s → 30s → 60s → 60s (capped).
-                                if relay_peer_addrs.contains_key(&peer_id) {
+                                if relay_peer_addrs.remove(&peer_id).is_some() {
                                     tracing::info!(
-                                        "🔄 Lost relay peer {}; scheduling reconnect with backoff",
+                                        "🔄 Lost relay peer {}; cleared circuit reservation, scheduling reconnect",
                                         peer_id
                                     );
                                     relay_reconnect_pending.push((peer_id, 0, std::time::Instant::now()));
@@ -1548,9 +1663,10 @@ pub async fn start_swarm_with_config(
                 bootstrap_addrs.len()
             );
             for addr in &bootstrap_addrs {
-                match swarm.dial(addr.clone()) {
-                    Ok(_) => tracing::info!("  ✓ Dialing bootstrap: {}", addr),
-                    Err(e) => tracing::warn!("  ✗ Failed to dial bootstrap {}: {}", addr, e),
+                let stripped_addr: Multiaddr = addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
+                match swarm.dial(stripped_addr.clone()) {
+                    Ok(_) => tracing::info!("  ✓ Dialing bootstrap: {}", stripped_addr),
+                    Err(e) => tracing::warn!("  ✗ Failed to dial bootstrap {}: {}", stripped_addr, e),
                 }
             }
         }
@@ -1955,8 +2071,9 @@ pub async fn start_swarm_with_config(
                         });
 
                         if !already_connected {
-                            if let Err(e) = swarm.dial(addr.clone()) {
-                                tracing::trace!("Bootstrap re-dial {} skipped: {}", addr, e);
+                            let stripped_addr: Multiaddr = addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
+                            if let Err(e) = swarm.dial(stripped_addr.clone()) {
+                                tracing::trace!("Bootstrap re-dial {} skipped: {}", stripped_addr, e);
                             }
                         }
                     }

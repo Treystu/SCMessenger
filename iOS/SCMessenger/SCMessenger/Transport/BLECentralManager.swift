@@ -111,17 +111,33 @@ final class BLECentralManager: NSObject {
     // MARK: - Private Methods
 
     private func scheduleDutyCycle() {
-        scanTimer = Timer.scheduledTimer(withTimeInterval: scanInterval, repeats: true) { [weak self] _ in
-            self?.performScanCycle()
+        // Timer MUST run on the main RunLoop — background dispatch queues don't
+        // have a running RunLoop, so Timer.scheduledTimer would silently never fire.
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.scanTimer?.invalidate()
+            self.scanTimer = Timer.scheduledTimer(withTimeInterval: self.scanInterval, repeats: true) { [weak self] _ in
+                self?.performScanCycle()
+            }
+            RunLoop.main.add(self.scanTimer!, forMode: .common)
+            self.performScanCycle() // Start immediately
         }
-        performScanCycle() // Start immediately
     }
 
     private func performScanCycle() {
-        if !isScanning {
-            startScan()
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + scanWindow) { [weak self] in
-                self?.stopScan()
+        if isBackgroundMode {
+            // Background: duty-cycle to preserve battery
+            if !isScanning {
+                startScan()
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + scanWindow) { [weak self] in
+                    self?.stopScan()
+                }
+            }
+        } else {
+            // Foreground: scan continuously — never stop between cycles so we
+            // don't miss advertisement windows during active use/testing.
+            if !isScanning {
+                startScan()
             }
         }
     }

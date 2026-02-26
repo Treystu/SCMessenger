@@ -40,6 +40,7 @@ fun DashboardScreen(
     
     val fullPeers by dashboardViewModel.fullPeersCount.collectAsState()
     val headlessPeers by dashboardViewModel.headlessPeersCount.collectAsState()
+    val nearbyPending by dashboardViewModel.nearbyPendingCount.collectAsState()
     val totalPeers by dashboardViewModel.totalPeersCount.collectAsState()
 
     Scaffold(
@@ -70,7 +71,11 @@ fun DashboardScreen(
             ) {
                 StatCard(
                     modifier = Modifier.weight(1.5f),
-                    title = "Nodes ($fullPeers Full / $headlessPeers Headless)",
+                    title = buildString {
+                        append("$fullPeers Full")
+                        if (headlessPeers > 0) append(" / $headlessPeers Relay")
+                        if (nearbyPending > 0) append(" / $nearbyPending Nearby")
+                    },
                     value = totalPeers.toString(),
                     icon = Icons.Filled.People,
                     color = MaterialTheme.colorScheme.primary
@@ -164,7 +169,12 @@ fun PeerItem(peer: com.scmessenger.android.ui.viewmodels.PeerInfo) {
             Text(
                 text = peer.localNickname
                     ?: peer.nickname
-                    ?: if (peer.isRelay) "Headless Relay" else if (peer.isFull) "Full Node" else "Headless Node",
+                    ?: when {
+                        peer.isRelay -> "Relay Node"
+                        peer.isFull -> "Full Node"
+                        peer.transport == "BLE" -> "Nearby (pending identity)"
+                        else -> "Unknown Node"
+                    },
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -186,7 +196,8 @@ fun PeerItem(peer: com.scmessenger.android.ui.viewmodels.PeerInfo) {
                         when {
                             peer.isRelay -> "Relay"
                             peer.isFull -> "Full"
-                            else -> "Headless"
+                            peer.transport == "BLE" -> "Nearby"
+                            else -> "Pending"
                         }
                     )
                 },

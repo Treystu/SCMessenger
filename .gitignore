@@ -59,3 +59,4 @@ iOS/SCMessenger/Build/
 iOS/SCMessenger/DerivedData/
 *.sdkstatcache
 **/*.pcm
+build_ios/

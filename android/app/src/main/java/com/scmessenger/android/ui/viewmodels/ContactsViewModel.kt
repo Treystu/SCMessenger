@@ -187,6 +187,11 @@ class ContactsViewModel @Inject constructor(
             MeshEventBus.peerEvents.collect { event ->
                 when (event) {
                     is PeerEvent.IdentityDiscovered -> {
+                        // Never surface bootstrap relay/headless nodes in the Contacts nearby list.
+                        val isRelay = meshRepository.isBootstrapRelayPeer(event.peerId) ||
+                            (event.libp2pPeerId?.let { meshRepository.isBootstrapRelayPeer(it) } ?: false)
+                        if (isRelay) return@collect
+
                         cancelPendingNearbyRemoval(event.peerId)
                         cancelPendingNearbyRemoval(event.libp2pPeerId)
                         cancelPendingNearbyRemoval(event.blePeerId)
@@ -235,6 +240,9 @@ class ContactsViewModel @Inject constructor(
                         }
                     }
                     is PeerEvent.Discovered -> {
+                        // Don't surface bootstrap relay nodes in the nearby list.
+                        if (meshRepository.isBootstrapRelayPeer(event.peerId)) return@collect
+                        
                         val alreadyContact = _contacts.value.any { it.peerId == event.peerId }
                         cancelPendingNearbyRemoval(event.peerId)
                         val current = _nearbyPeers.value.toMutableList()

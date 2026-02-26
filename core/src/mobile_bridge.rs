@@ -138,7 +138,7 @@ pub struct MeshService {
     storage_path: Option<String>,
     swarm_bridge: std::sync::Arc<SwarmBridge>,
     bootstrap_addrs: Mutex<Vec<String>>,
-    nat_status: Mutex<String>,
+    nat_status: std::sync::Arc<Mutex<String>>,
     relay_budget: std::sync::Arc<Mutex<u32>>,
     current_device_profile: Mutex<Option<DeviceProfile>>,
     /// Current device state snapshot — drives threshold-based behavior.
@@ -158,7 +158,7 @@ impl MeshService {
             storage_path: None,
             swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
             bootstrap_addrs: Mutex::new(Vec::new()),
-            nat_status: Mutex::new("unknown".to_string()),
+            nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             current_device_profile: Mutex::new(None),
             device_state: RwLock::new(None),
@@ -176,7 +176,7 @@ impl MeshService {
             storage_path: Some(storage_path),
             swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
             bootstrap_addrs: Mutex::new(Vec::new()),
-            nat_status: Mutex::new("unknown".to_string()),
+            nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             current_device_profile: Mutex::new(None),
             device_state: RwLock::new(None),
@@ -365,6 +365,7 @@ impl MeshService {
         let core = self.core.clone();
         let relay_budget_init = self.relay_budget.clone();
         let bootstrap_addrs = self.bootstrap_addrs.lock().clone();
+        let nat_status = self.nat_status.clone();
 
         // Spawn a dedicated OS thread that owns its own Tokio runtime.
         // This is the safest approach for mobile: we cannot rely on being
@@ -507,6 +508,15 @@ impl MeshService {
                                                         );
                                                     }
                                                 }
+                                            }
+                                            crate::transport::SwarmEvent::NatStatusChanged(
+                                                status,
+                                            ) => {
+                                                tracing::info!(
+                                                    "🔭 NAT status updated: {}",
+                                                    status
+                                                );
+                                                *nat_status.lock() = status;
                                             }
                                             other => {
                                                 tracing::debug!("Swarm event: {:?}", other);
@@ -1376,6 +1386,13 @@ impl HistoryManager {
         }
 
         Ok(pruned)
+    }
+
+    pub fn delete(&self, id: String) -> Result<(), crate::IronCoreError> {
+        let db = self.db.lock().unwrap();
+        db.remove(id.as_bytes())
+            .map_err(|_| crate::IronCoreError::StorageError)?;
+        Ok(())
     }
 }
 

@@ -32,7 +32,11 @@ struct DashboardPeer: Identifiable, Equatable {
         if !local.isEmpty { return local }
         let federated = nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !federated.isEmpty { return federated }
-        if isRelay { return "Headless Relay" }
+        
+        if isRelay {
+            // Check if it's a known bootstrap node via libp2pPeerId or canonicalId
+            return "Relay Node"
+        }
         return isFull ? "Full Node" : "Headless Node"
     }
 
@@ -113,7 +117,7 @@ struct MeshDashboardView: View {
         let now = Date()
 
         for contact in contacts {
-            let isRelay = repository.isBootstrapRelayPeer(contact.peerId)
+            let isRelay = repository.isKnownRelay(contact.peerId)
             let existing = merged[contact.peerId]
             merged[contact.peerId] = DashboardPeer(
                 id: contact.peerId,
@@ -145,7 +149,7 @@ struct MeshDashboardView: View {
                 let entryNickname = entry.nickname?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let matchedContact = contactsByPeerId[routePeerId] ?? contactsByRoutePeerId[routePeerId]
                 let canonicalPeerId = matchedContact?.peerId ?? routePeerId
-                let relay = repository.isBootstrapRelayPeer(routePeerId) || repository.isBootstrapRelayPeer(canonicalPeerId)
+                let relay = repository.isKnownRelay(routePeerId) || repository.isKnownRelay(canonicalPeerId)
                 let existing = merged[canonicalPeerId]
                 let lastSeenDate = dateFromEpoch(entry.lastSeen) ?? existing?.lastSeen ?? now
 
@@ -240,8 +244,8 @@ struct MeshDashboardView: View {
             })
         }
 
-        let relay = repository.isBootstrapRelayPeer(normalizedCanonical)
-            || (normalizedLibp2p.map(repository.isBootstrapRelayPeer) ?? false)
+        let relay = repository.isKnownRelay(normalizedCanonical)
+            || (normalizedLibp2p.map(repository.isKnownRelay) ?? false)
 
         let resolvedPublicKey = publicKey?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? existing?.publicKey
         let resolvedNickname = nickname?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? existing?.nickname
@@ -435,7 +439,7 @@ struct DiscoveredNodesSection: View {
                 .font(Theme.titleLarge)
 
             if peers.isEmpty {
-                Text("No nodes discovered yet")
+                Text("No nodes discovered yet. Check Relay status in Transport section.")
                     .font(Theme.bodyMedium)
                     .foregroundStyle(Theme.onSurfaceVariant)
             } else {

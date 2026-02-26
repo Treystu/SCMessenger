@@ -392,12 +392,12 @@ fun NearbyPeerItem(
             }
             FilledTonalButton(onClick = if (peer.hasFullIdentity) onConnect else onAdd) {
                 Icon(
-                    imageVector = if (peer.hasFullIdentity) Icons.Default.Sensors else Icons.Default.PersonAdd,
+                    imageVector = Icons.Default.PersonAdd,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text(if (peer.hasFullIdentity) "Connect" else "Add")
+                Text("Add")
             }
         }
     }

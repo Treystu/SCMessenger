@@ -221,8 +221,7 @@ struct ConversationRow: View {
             
             VStack(alignment: .trailing, spacing: 4) {
                 if let lastTime = conversation.lastMessageTime {
-                    let isToday = Calendar.current.isDateInToday(lastTime)
-                    Text(lastTime.formatted(date: isToday ? .omitted : .abbreviated, time: .shortened))
+                    Text(formatMessageDate(lastTime))
                         .font(Theme.labelSmall)
                         .foregroundStyle(Theme.onSurfaceVariant)
                 }
@@ -239,6 +238,13 @@ struct ConversationRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+    
+    private func formatMessageDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = Calendar.current.isDateInToday(date) ? .none : .short
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 }
 
@@ -308,8 +314,7 @@ struct MessageBubble: View {
                     .font(Theme.bodyMedium)
                 
                 let msgDate = Date(timeIntervalSince1970: Double(message.timestamp))
-                let isToday = Calendar.current.isDateInToday(msgDate)
-                Text(msgDate.formatted(date: isToday ? .omitted : .abbreviated, time: .shortened))
+                Text(formatMessageDate(msgDate))
                     .font(Theme.labelSmall)
                     .foregroundStyle(isSent ? Theme.onPrimaryContainer.opacity(0.8) : Theme.onSurface.opacity(0.8))
             }
@@ -322,6 +327,13 @@ struct MessageBubble: View {
         }
         .padding(.horizontal, Theme.spacingMedium)
         .padding(.vertical, Theme.spacingSmall)
+    }
+    
+    private func formatMessageDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = Calendar.current.isDateInToday(date) ? .none : .short
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 }
 

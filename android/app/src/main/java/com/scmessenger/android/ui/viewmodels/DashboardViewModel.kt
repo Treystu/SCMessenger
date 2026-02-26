@@ -45,8 +45,19 @@ class DashboardViewModel @Inject constructor(
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
+    // Headless = infrastructure relay nodes (bootstrap peers only, not BLE neighbors pending identity)
     val headlessPeersCount = meshRepository.discoveredPeers.map { discovered ->
-        deduplicateDiscoveredPeers(discovered).values.count { peer -> !peer.isFull }
+        deduplicateDiscoveredPeers(discovered).values.count { peer ->
+            !peer.isFull && isBootstrapRelayPeer(peer.peerId)
+        }
+    }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    // Nearby = BLE/WiFi peers discovered but identity not yet confirmed
+    val nearbyPendingCount = meshRepository.discoveredPeers.map { discovered ->
+        deduplicateDiscoveredPeers(discovered).values.count { peer ->
+            !peer.isFull && !isBootstrapRelayPeer(peer.peerId)
+        }
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
@@ -138,7 +149,7 @@ class DashboardViewModel @Inject constructor(
                     },
                     isOnline = isRecent(info.lastSeen),
                     isFull = info.isFull,
-                    isRelay = isBootstrapRelayPeer(info.peerId)
+                    isRelay = meshRepository.isKnownRelay(info.peerId)
                 )
             }.toMutableMap()
            
@@ -161,7 +172,7 @@ class DashboardViewModel @Inject constructor(
                             else -> existingLastSeen
                         },
                         isOnline = isRecent(entry.lastSeen) || existing.isOnline,
-                        isRelay = existing.isRelay || isBootstrapRelayPeer(peerId)
+                        isRelay = existing.isRelay || meshRepository.isKnownRelay(peerId)
                     )
                 } else {
                     peerMap[peerId] = PeerInfo(
@@ -172,7 +183,7 @@ class DashboardViewModel @Inject constructor(
                         transport = determineTransport(entry.multiaddr),
                         isOnline = isRecent(entry.lastSeen),
                         isFull = false,
-                        isRelay = isBootstrapRelayPeer(peerId)
+                        isRelay = meshRepository.isKnownRelay(peerId)
                     )
                 }
             }

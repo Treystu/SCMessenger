@@ -999,6 +999,8 @@ public protocol HistoryManagerProtocol : AnyObject {
     
     func count()  -> UInt32
     
+    func delete(id: String) throws 
+    
     /**
      * Enforce a maximum message cap — keeps ``max_messages`` newest, prunes the rest.
      * Returns the number of pruned records.
@@ -1108,6 +1110,13 @@ open func count() -> UInt32 {
     uniffi_scmessenger_core_fn_method_historymanager_count(self.uniffiClonePointer(),$0
     )
 })
+}
+    
+open func delete(id: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_historymanager_delete(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+}
 }
     
     /**
@@ -4730,6 +4739,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_historymanager_count() != 35021) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_historymanager_delete() != 37935) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_historymanager_enforce_retention() != 40579) {

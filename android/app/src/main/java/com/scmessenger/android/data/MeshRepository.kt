@@ -36,9 +36,13 @@ class MeshRepository(private val context: Context) {
         private const val IDENTITY_BACKUP_PREFS = "identity_backup_prefs"
         private const val IDENTITY_BACKUP_KEY = "identity_backup_v1"
         /** Static fallback bootstrap nodes for NAT traversal and internet roaming.
-         *  These are used if env override and remote fetch both fail/are absent. */
+         *  These are used if env override and remote fetch both fail/are absent.
+         *  Priority order: GCP relay (cloud) → OSX relay (home/local backup). */
         private val STATIC_BOOTSTRAP_NODES: List<String> = listOf(
-            "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWMyngfNZajWRNRPdtc32uxn1sBYZE126NDD4b547BAMLj"
+            // GCP relay — primary cloud node
+            "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw",
+            // OSX home relay — secondary backup (this machine, port 9010)
+            "/ip4/104.28.216.43/tcp/9010/p2p/12D3KooWHpmuhytgzLcM4nj1hZvN5b4crB1wka3LCNfKRCd7yHj9"
         )
 
         /** Resolve bootstrap nodes using the core BootstrapResolver.
@@ -180,6 +184,7 @@ class MeshRepository(private val context: Context) {
         val localNickname: String? = null,
         val transport: com.scmessenger.android.service.TransportType,
         val isFull: Boolean,         // True if peer identity is authenticated (non-relay)
+        val isRelay: Boolean = false,
         val lastSeen: ULong = System.currentTimeMillis().toULong() / 1000u
     )
 
@@ -294,6 +299,7 @@ class MeshRepository(private val context: Context) {
                                 transportIdentity != null ||
                                     !extractedKey.isNullOrBlank()
                                 ),
+                            isRelay = isRelay,
                             lastSeen = System.currentTimeMillis().toULong() / 1000u
                         )
                         updateDiscoveredPeer(peerId, discoveryInfo)
@@ -338,13 +344,6 @@ class MeshRepository(private val context: Context) {
                             if (!isRelay && relayHints.isNotEmpty()) {
                                 connectToPeer(peerId, relayHints)
                             }
-                        } else {
-                            com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
-                                com.scmessenger.android.service.PeerEvent.Discovered(
-                                    peerId,
-                                    com.scmessenger.android.service.TransportType.INTERNET
-                                )
-                            )
                         }
                     }
                 }
@@ -377,15 +376,10 @@ class MeshRepository(private val context: Context) {
                                 localNickname = null,
                                 transport = com.scmessenger.android.service.TransportType.INTERNET,
                                 isFull = false,
+                                isRelay = true,
                                 lastSeen = System.currentTimeMillis().toULong() / 1000u
                             )
                             updateDiscoveredPeer(peerId, relayDiscovery)
-                            com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
-                                com.scmessenger.android.service.PeerEvent.Discovered(
-                                    peerId,
-                                    com.scmessenger.android.service.TransportType.INTERNET
-                                )
-                            )
                             emitConnectedIfChanged(
                                 peerId = peerId,
                                 transport = com.scmessenger.android.service.TransportType.INTERNET
@@ -407,6 +401,7 @@ class MeshRepository(private val context: Context) {
                                 localNickname = transportIdentity?.localNickname,
                                 transport = com.scmessenger.android.service.TransportType.INTERNET,
                                 isFull = transportIdentity != null,
+                                isRelay = isBootstrapRelayPeer(peerId),
                                 lastSeen = System.currentTimeMillis().toULong() / 1000u
                             )
                             updateDiscoveredPeer(peerId, discoveryInfo)
@@ -1036,6 +1031,19 @@ class MeshRepository(private val context: Context) {
             updateDiscoveredPeer(identityId, discoveryInfo)
             if (!normalizedLibp2p.isNullOrBlank()) {
                 updateDiscoveredPeer(normalizedLibp2p, discoveryInfo)
+            }
+            // Remove the preliminary BLE-UUID entry (isFull=false) that was created when
+            // the connection was first established before identity was read. Now that we
+            // have the real identityId, the BLE UUID key is an duplicate we no longer need.
+            if (blePeerId != identityId && blePeerId != normalizedLibp2p) {
+                _discoveredPeers.update { current ->
+                    current.filterKeys { key ->
+                        key != blePeerId &&
+                            // Also remove any entry whose peerId field matches the BLE UUID
+                            current[key]?.peerId != blePeerId
+                    }
+                }
+                Timber.d("Removed preliminary BLE entry $blePeerId → promoted to identity $identityId")
             }
 
             // Emit identity to nearby peers bus — UI will show peer in Nearby section for user to add
@@ -2177,8 +2185,11 @@ class MeshRepository(private val context: Context) {
         pendingOutboxRetryJob = repoScope.launch {
             while (true) {
                 try {
+                    // Proactively ensure we stay connected to relays
+                    primeRelayBootstrapConnections()
+                    
                     flushPendingOutbox("periodic")
-                    kotlinx.coroutines.delay(5000)
+                    kotlinx.coroutines.delay(8000)
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -2247,7 +2258,7 @@ class MeshRepository(private val context: Context) {
             )
             if (dialCandidates.isNotEmpty()) {
                 connectToPeer(routePeerId, dialCandidates)
-                awaitPeerConnection(routePeerId)
+                awaitPeerConnection(routePeerId, timeoutMs = 2000L)
             }
 
             try {
@@ -2277,8 +2288,8 @@ class MeshRepository(private val context: Context) {
             val relayOnlyCandidates = relayCircuitAddressesForPeer(routePeerId)
             if (relayOnlyCandidates.isNotEmpty()) {
                 connectToPeer(routePeerId, relayOnlyCandidates)
-                awaitPeerConnection(routePeerId)
-                kotlinx.coroutines.delay(250)
+                awaitPeerConnection(routePeerId, timeoutMs = 3500L)
+                kotlinx.coroutines.delay(500)
                 try {
                     bridge.sendMessage(routePeerId, encryptedData)
                     Timber.i("✓ Delivery ACK from $routePeerId after relay-circuit retry")
@@ -2307,6 +2318,9 @@ class MeshRepository(private val context: Context) {
     }
 
     private suspend fun flushPendingOutbox(reason: String) {
+        // Ensure relay backbone is reachable whenever we check outbox
+        primeRelayBootstrapConnections()
+        
         val now = System.currentTimeMillis() / 1000
         val queue = loadPendingOutbox().toMutableList()
         if (queue.isEmpty()) return
@@ -3173,6 +3187,18 @@ class MeshRepository(private val context: Context) {
         return (prioritized + relayCircuits).distinct()
     }
 
+    fun getDialHintsForRoutePeer(routePeerId: String): List<String> {
+        if (!isLibp2pPeerId(routePeerId)) return emptyList()
+        val fromLedger = (ledgerManager?.dialableAddresses() ?: emptyList())
+            .filter { it.peerId == routePeerId }
+            .map { it.multiaddr }
+        return buildDialCandidatesForPeer(
+            routePeerId = routePeerId,
+            rawAddresses = fromLedger,
+            includeRelayCircuits = false // Avoid infinite recursion
+        )
+    }
+
     private fun normalizeOutboundListenerHints(rawAddresses: List<String>): List<String> {
         return rawAddresses
             .mapNotNull { normalizeAddressHint(it) }
@@ -3251,11 +3277,29 @@ class MeshRepository(private val context: Context) {
 
     private fun relayCircuitAddressesForPeer(targetPeerId: String): List<String> {
         if (!isLibp2pPeerId(targetPeerId)) return emptyList()
-        return DEFAULT_BOOTSTRAP_NODES.mapNotNull { bootstrap ->
-            val relayInfo = parseBootstrapRelay(bootstrap) ?: return@mapNotNull null
-            val (relayTransportAddr, relayPeerId) = relayInfo
-            "$relayTransportAddr/p2p/$relayPeerId/p2p-circuit/p2p/$targetPeerId"
+        val circuits = mutableListOf<String>()
+
+        // 1. Static Bootstrap Relays
+        DEFAULT_BOOTSTRAP_NODES.forEach { bootstrap ->
+            val relayInfo = parseBootstrapRelay(bootstrap)
+            if (relayInfo != null) {
+                val (relayTransportAddr, relayPeerId) = relayInfo
+                circuits.add("$relayTransportAddr/p2p/$relayPeerId/p2p-circuit/p2p/$targetPeerId")
+            }
         }
+
+        // 2. Dynamic Discovered Relays
+        _discoveredPeers.value.filter { it.value.isRelay && !it.value.isFull && it.key != targetPeerId }.forEach { (relayPeerId, _) ->
+            if (isLibp2pPeerId(relayPeerId)) {
+                val directAddrs = getDialHintsForRoutePeer(relayPeerId)
+                directAddrs.forEach { addr ->
+                    val circuit = "$addr/p2p/$relayPeerId/p2p-circuit/p2p/$targetPeerId"
+                    if (!circuits.contains(circuit)) circuits.add(circuit)
+                }
+            }
+        }
+
+        return circuits
     }
 
     private fun parseBootstrapRelay(multiaddr: String): Pair<String, String>? {
@@ -3268,7 +3312,7 @@ class MeshRepository(private val context: Context) {
         return transportAddr to relayPeerId
     }
 
-    private fun isBootstrapRelayPeer(peerId: String): Boolean {
+    fun isBootstrapRelayPeer(peerId: String): Boolean {
         if (peerId.isBlank()) return false
         return DEFAULT_BOOTSTRAP_NODES.any { addr ->
             parseBootstrapRelay(addr)?.second == peerId

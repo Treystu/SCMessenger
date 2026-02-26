@@ -189,8 +189,13 @@ final class BLEPeripheralManager: NSObject {
     private func startPrivacyRotation() {
         guard isRotationEnabled else { return }
         rotationTimer?.invalidate()
-        rotationTimer = Timer.scheduledTimer(withTimeInterval: rotationInterval, repeats: true) { [weak self] _ in
-            self?.rotateIdentity()
+        // Timer must be added to main RunLoop — background queues have no active RunLoop
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.rotationTimer = Timer.scheduledTimer(withTimeInterval: self.rotationInterval, repeats: true) { [weak self] _ in
+                self?.rotateIdentity()
+            }
+            RunLoop.main.add(self.rotationTimer!, forMode: .common)
         }
     }
     
