@@ -1,7 +1,9 @@
 // Identity storage using sled
 
 use super::IdentityKeys;
+use crate::store::backend::StorageBackend;
 use anyhow::Result;
+use std::sync::Arc;
 
 const IDENTITY_KEY: &[u8] = b"identity_keys";
 const NICKNAME_KEY: &[u8] = b"identity_nickname";
@@ -9,7 +11,7 @@ const NICKNAME_KEY: &[u8] = b"identity_nickname";
 /// Storage backend for identity keys
 pub enum IdentityStore {
     Memory,
-    Persistent(sled::Db),
+    Persistent(Arc<dyn StorageBackend>),
 }
 
 impl IdentityStore {
@@ -19,9 +21,8 @@ impl IdentityStore {
     }
 
     /// Create persistent storage
-    pub fn persistent(path: &str) -> Result<Self> {
-        let db = sled::open(path)?;
-        Ok(Self::Persistent(db))
+    pub fn persistent(backend: Arc<dyn StorageBackend>) -> Self {
+        Self::Persistent(backend)
     }
 
     /// Save keys to storage
@@ -33,8 +34,9 @@ impl IdentityStore {
             }
             Self::Persistent(db) => {
                 let bytes = keys.to_bytes();
-                db.insert(IDENTITY_KEY, bytes)?;
-                db.flush()?;
+                db.put(IDENTITY_KEY, &bytes)
+                    .map_err(|e| anyhow::anyhow!(e))?;
+                db.flush().map_err(|e| anyhow::anyhow!(e))?;
                 Ok(())
             }
         }
@@ -45,8 +47,9 @@ impl IdentityStore {
         match self {
             Self::Memory => Ok(()), // Memory store doesn't persist
             Self::Persistent(db) => {
-                db.insert(NICKNAME_KEY, nickname.as_bytes())?;
-                db.flush()?;
+                db.put(NICKNAME_KEY, nickname.as_bytes())
+                    .map_err(|e| anyhow::anyhow!(e))?;
+                db.flush().map_err(|e| anyhow::anyhow!(e))?;
                 Ok(())
             }
         }
@@ -60,7 +63,7 @@ impl IdentityStore {
                 Ok(None)
             }
             Self::Persistent(db) => {
-                if let Some(bytes) = db.get(IDENTITY_KEY)? {
+                if let Some(bytes) = db.get(IDENTITY_KEY).map_err(|e| anyhow::anyhow!(e))? {
                     let keys = IdentityKeys::from_bytes(&bytes)?;
                     Ok(Some(keys))
                 } else {
@@ -75,8 +78,8 @@ impl IdentityStore {
         match self {
             Self::Memory => Ok(None),
             Self::Persistent(db) => {
-                if let Some(bytes) = db.get(NICKNAME_KEY)? {
-                    Ok(Some(String::from_utf8(bytes.to_vec())?))
+                if let Some(bytes) = db.get(NICKNAME_KEY).map_err(|e| anyhow::anyhow!(e))? {
+                    Ok(Some(String::from_utf8(bytes)?))
                 } else {
                     Ok(None)
                 }
@@ -89,9 +92,9 @@ impl IdentityStore {
         match self {
             Self::Memory => Ok(()),
             Self::Persistent(db) => {
-                db.remove(IDENTITY_KEY)?;
-                db.remove(NICKNAME_KEY)?;
-                db.flush()?;
+                db.remove(IDENTITY_KEY).map_err(|e| anyhow::anyhow!(e))?;
+                db.remove(NICKNAME_KEY).map_err(|e| anyhow::anyhow!(e))?;
+                db.flush().map_err(|e| anyhow::anyhow!(e))?;
                 Ok(())
             }
         }
@@ -120,7 +123,8 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("test_store").to_str().unwrap().to_string();
 
-        let store = IdentityStore::persistent(&path).unwrap();
+        let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+        let store = IdentityStore::persistent(backend);
         let keys = IdentityKeys::generate();
 
         // Save
@@ -139,7 +143,8 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("test_store").to_str().unwrap().to_string();
 
-        let store = IdentityStore::persistent(&path).unwrap();
+        let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+        let store = IdentityStore::persistent(backend);
         let keys = IdentityKeys::generate();
 
         store.save_keys(&keys).unwrap();
@@ -159,13 +164,15 @@ mod tests {
 
         // Save in first instance
         {
-            let store = IdentityStore::persistent(&path).unwrap();
+            let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+            let store = IdentityStore::persistent(backend);
             store.save_keys(&keys).unwrap();
         }
 
         // Load in second instance
         {
-            let store = IdentityStore::persistent(&path).unwrap();
+            let backend2 = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+            let store = IdentityStore::persistent(backend2);
             let loaded = store.load_keys().unwrap().unwrap();
             assert_eq!(id, loaded.identity_id());
         }

@@ -6,6 +6,8 @@
 # Keep JNA classes (used by UniFFI)
 -keep class com.sun.jna.** { *; }
 -keep class * implements com.sun.jna.** { *; }
+-dontwarn java.awt.**
+-dontwarn com.sun.jna.**
 
 # Keep native methods
 -keepclasseswithmembernames class * {

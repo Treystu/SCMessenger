@@ -719,8 +719,10 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     // when those peers come online (see PeerDiscovered handler below).
     let outbox_path = data_dir.join("outbox");
     let outbox_path_str = outbox_path.to_str().unwrap_or("outbox").to_string();
-    let outbox = match Outbox::persistent(&outbox_path_str) {
-        Ok(ob) => Arc::new(tokio::sync::Mutex::new(ob)),
+    let outbox = match scmessenger_core::store::backend::SledStorage::new(&outbox_path_str) {
+        Ok(backend) => Arc::new(tokio::sync::Mutex::new(Outbox::persistent(Arc::new(
+            backend,
+        )))),
         Err(e) => {
             tracing::warn!(
                 "Failed to open persistent outbox, falling back to in-memory: {}",
@@ -1463,8 +1465,10 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     // Outbox
     let outbox_path = data_dir.join("outbox");
     let outbox_path_str = outbox_path.to_str().unwrap_or("outbox").to_string();
-    let outbox = match Outbox::persistent(&outbox_path_str) {
-        Ok(ob) => Arc::new(tokio::sync::Mutex::new(ob)),
+    let outbox = match scmessenger_core::store::backend::SledStorage::new(&outbox_path_str) {
+        Ok(backend) => Arc::new(tokio::sync::Mutex::new(Outbox::persistent(Arc::new(
+            backend,
+        )))),
         Err(e) => {
             tracing::warn!(
                 "Failed to open persistent outbox, falling back to in-memory: {}",
@@ -1755,8 +1759,9 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
     // peer comes online.
     let outbox_path = data_dir.join("outbox");
     let outbox_path_str = outbox_path.to_str().unwrap_or("outbox").to_string();
-    match Outbox::persistent(&outbox_path_str) {
-        Ok(mut outbox) => {
+    match scmessenger_core::store::backend::SledStorage::new(&outbox_path_str) {
+        Ok(backend) => {
+            let mut outbox = Outbox::persistent(Arc::new(backend));
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()

@@ -76,6 +76,28 @@ impl IronCore {
         }
     }
 
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen(js_name = withStorageAsync)]
+    pub async fn with_storage_async(storage_path: String) -> Self {
+        init_logging();
+        let manager = MeshSettingsManager::new(storage_path.clone());
+        let loaded = manager.load().unwrap_or_else(|_| MeshSettings {
+            battery_floor: 0,
+            ble_enabled: false,
+            wifi_aware_enabled: false,
+            wifi_direct_enabled: false,
+            internet_enabled: true,
+            ..MeshSettings::default()
+        });
+        Self {
+            inner: Arc::new(RustIronCore::with_storage_async(storage_path).await),
+            rx_messages: Arc::new(Mutex::new(Vec::new())),
+            swarm_handle: Arc::new(Mutex::new(None)),
+            settings_manager: Some(manager),
+            settings: Arc::new(Mutex::new(loaded)),
+        }
+    }
+
     pub fn start(&self) -> Result<(), JsValue> {
         self.inner
             .start()

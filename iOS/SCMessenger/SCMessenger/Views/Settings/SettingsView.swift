@@ -486,56 +486,6 @@ struct PowerSettingsView: View {
                     .foregroundStyle(Theme.onSurfaceVariant)
             }
 
-            // Manual Overrides
-            Section("Manual Overrides") {
-                Button {
-                    viewModel?.overrideBleInterval(5000) // 5 seconds
-                } label: {
-                    Label("BLE Scan: 5s (Power Saver)", systemImage: "bolt.slash")
-                }
-
-                Button {
-                    viewModel?.overrideBleInterval(2000) // 2 seconds
-                } label: {
-                    Label("BLE Scan: 2s (Balanced)", systemImage: "bolt")
-                }
-
-                Button {
-                    viewModel?.overrideBleInterval(1000) // 1 second
-                } label: {
-                    Label("BLE Scan: 1s (Performance)", systemImage: "bolt.fill")
-                }
-
-                Divider()
-
-                Button {
-                    viewModel?.overrideRelayMax(500)
-                } label: {
-                    Label("Relay Max: 500/hr (Low)", systemImage: "arrow.triangle.branch")
-                }
-
-                Button {
-                    viewModel?.overrideRelayMax(1000)
-                } label: {
-                    Label("Relay Max: 1000/hr (Standard)", systemImage: "arrow.triangle.branch")
-                }
-
-                Button {
-                    viewModel?.overrideRelayMax(5000)
-                } label: {
-                    Label("Relay Max: 5000/hr (High)", systemImage: "arrow.triangle.branch")
-                }
-            }
-
-            // Clear Overrides
-            Section {
-                Button(role: .destructive) {
-                    viewModel?.clearAdjustmentOverrides()
-                } label: {
-                    Label("Clear All Overrides", systemImage: "xmark.circle")
-                }
-            }
-
             // Power Saving Tips (mirrors Android)
             Section("Power Saving Tips") {
                 VStack(alignment: .leading, spacing: Theme.spacingXSmall) {

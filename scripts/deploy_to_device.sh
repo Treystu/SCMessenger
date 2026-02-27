@@ -35,7 +35,7 @@ deploy_android() {
     fi
 
     # Check for connected device
-    if ! adb devices | grep -q "device$"; then
+    if ! adb devices | grep -qw "device"; then
         log_error "No Android device connected. Enable USB/Wireless debugging."
         return 1
     fi
@@ -46,11 +46,11 @@ deploy_android() {
     log_info "Cleaning build artifacts (prevents Hilt NoClassDefFoundError)..."
     ./gradlew clean 2>&1 | tail -n 3
 
-    log_info "Building debug APK..."
-    ./gradlew assembleDebug 2>&1 | tail -n 5
+    log_info "Building release APK..."
+    ./gradlew assembleRelease 2>&1 | tail -n 5
 
     local apk_path
-    apk_path=$(find app/build/outputs/apk/debug -name "*.apk" -type f | head -n 1)
+    apk_path=$(find app/build/outputs/apk/release -name "*.apk" -type f | head -n 1)
 
     if [ -z "$apk_path" ]; then
         log_error "APK not found after build"
@@ -77,9 +77,9 @@ deploy_ios() {
 
     cd "$ios_dir"
 
-    # Get connected device ID
+    # Get connected device ID using xcodebuild showdestinations
     local device_id
-    device_id=$(xcrun devicectl list devices 2>/dev/null | grep -E "iPhone|iPad" | head -n 1 | awk '{print $NF}')
+    device_id=$(xcodebuild -showdestinations -scheme SCMessenger 2>/dev/null | grep "platform:iOS" | grep -v "Simulator" | grep -v "placeholder" | head -n 1 | sed -E 's/.*id:([^,]+).*/\1/')
 
     if [ -z "$device_id" ]; then
         log_warn "No iOS device detected via devicectl. Attempting xcodebuild anyway..."
@@ -91,13 +91,30 @@ deploy_ios() {
     log_info "Cleaning build artifacts..."
     xcodebuild clean -scheme SCMessenger -quiet 2>/dev/null || true
 
-    log_info "Building for device..."
+    log_info "Building Release for device..."
     xcodebuild build \
         -scheme SCMessenger \
+        -configuration Release \
         -destination "platform=iOS,id=$device_id" \
         -quiet 2>&1 | tail -n 5
 
-    log_info "✓ iOS build complete — install via Xcode or Finder"
+    if [ -n "$device_id" ]; then
+        local app_path
+        app_path=$(xcodebuild -scheme SCMessenger -configuration Release -destination "platform=iOS,id=$device_id" -showBuildSettings 2>/dev/null | grep -A 1 "TARGET_BUILD_DIR" | head -n 1 | awk '{print $NF}')/SCMessenger.app
+
+        if [ -d "$app_path" ]; then
+            log_info "Installing app without debugger..."
+            xcrun devicectl device install app --device "$device_id" "$app_path"
+
+            log_info "Launching app..."
+            xcrun devicectl device process launch --device "$device_id" "SovereignCommunications.SCMessenger"
+            log_info "✓ iOS deploy complete"
+        else
+            log_info "✓ iOS deploy build complete — install via Xcode or Finder (app path not found)"
+        fi
+    else
+        log_info "✓ iOS deploy build complete — install via Xcode or Finder"
+    fi
 }
 
 # Parse arguments

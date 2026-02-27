@@ -27,7 +27,6 @@ blake3 = { workspace = true }
 hex = { workspace = true }
 rand = { workspace = true }
 zeroize = { workspace = true }
-sled = { workspace = true }
 bs58 = "0.5"
 uniffi = { workspace = true }
 anyhow = { workspace = true }
@@ -46,6 +45,7 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
 wasm-bindgen-futures = { workspace = true }
 js-sys = { workspace = true }
+rexie = "0.6"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true, features = ["full"] }
@@ -57,6 +57,7 @@ libp2p = { workspace = true, features = [
   "tokio",
 ] }
 ureq = "2"
+sled = { workspace = true }
 
 [dev-dependencies]
 mockall = { workspace = true }

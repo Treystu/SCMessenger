@@ -52,10 +52,14 @@ class BootReceiver : BroadcastReceiver() {
             action = MeshForegroundService.ACTION_START
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to start mesh service from BootReceiver (likely Android 12+ background restriction)")
         }
     }
 }

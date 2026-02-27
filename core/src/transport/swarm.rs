@@ -410,6 +410,8 @@ pub async fn start_swarm_with_config(
 ) -> Result<SwarmHandle> {
     #[cfg(target_arch = "wasm32")]
     let _ = &multiport_config;
+    #[cfg(target_arch = "wasm32")]
+    let _ = headless;
 
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -1623,7 +1625,7 @@ pub async fn start_swarm_with_config(
             )?
             .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)?
             .with_behaviour(|key, relay_client| {
-                IronCoreBehaviour::new(key, relay_client)
+                IronCoreBehaviour::new(key, relay_client, false)
                     .expect("Failed to create network behaviour")
             })?
             .with_swarm_config(|cfg| {

@@ -14,7 +14,9 @@ use scmessenger_core::crypto::encrypt::{
 };
 use scmessenger_core::identity::{IdentityKeys, IdentityStore};
 use scmessenger_core::message::{Envelope, Message, MessageType};
+use scmessenger_core::store::backend::SledStorage;
 use scmessenger_core::store::{Inbox, Outbox, QueuedMessage};
+use std::sync::Arc;
 use tempfile::tempdir;
 
 #[test]
@@ -151,15 +153,15 @@ fn test_e2e_persistent_message_flow() {
         let bob_keys = IdentityKeys::generate();
 
         // Persist Alice's identity
-        let alice_identity_store = IdentityStore::persistent(alice_store_path.to_str().unwrap())
-            .expect("Failed to create Alice's identity store");
+        let alice_backend = Arc::new(SledStorage::new(alice_store_path.to_str().unwrap()).unwrap());
+        let alice_identity_store = IdentityStore::persistent(alice_backend);
         alice_identity_store
             .save_keys(&alice_keys)
             .expect("Failed to save Alice's keys");
 
         // Persist Bob's identity
-        let bob_identity_store = IdentityStore::persistent(bob_store_path.to_str().unwrap())
-            .expect("Failed to create Bob's identity store");
+        let bob_backend = Arc::new(SledStorage::new(bob_store_path.to_str().unwrap()).unwrap());
+        let bob_identity_store = IdentityStore::persistent(bob_backend);
         bob_identity_store
             .save_keys(&bob_keys)
             .expect("Failed to save Bob's keys");
@@ -180,8 +182,8 @@ fn test_e2e_persistent_message_flow() {
         let envelope_data = bincode::serialize(&signed_envelope).unwrap();
 
         // Store in persistent outbox
-        let mut outbox = Outbox::persistent(outbox_path.to_str().unwrap())
-            .expect("Failed to create persistent outbox");
+        let outbox_backend = Arc::new(SledStorage::new(outbox_path.to_str().unwrap()).unwrap());
+        let mut outbox = Outbox::persistent(outbox_backend);
 
         let queued_msg = QueuedMessage {
             message_id: message_id.clone(),
@@ -200,24 +202,24 @@ fn test_e2e_persistent_message_flow() {
     // Step 2: Simulate restart - All variables dropped, new session begins
     {
         // Load Alice's identity
-        let alice_identity_store = IdentityStore::persistent(alice_store_path.to_str().unwrap())
-            .expect("Failed to open Alice's identity store");
+        let alice_backend = Arc::new(SledStorage::new(alice_store_path.to_str().unwrap()).unwrap());
+        let alice_identity_store = IdentityStore::persistent(alice_backend);
         let _alice_keys = alice_identity_store
             .load_keys()
             .expect("Failed to load keys")
             .expect("Alice's keys not found");
 
         // Load Bob's identity
-        let bob_identity_store = IdentityStore::persistent(bob_store_path.to_str().unwrap())
-            .expect("Failed to open Bob's identity store");
+        let bob_backend = Arc::new(SledStorage::new(bob_store_path.to_str().unwrap()).unwrap());
+        let bob_identity_store = IdentityStore::persistent(bob_backend);
         let bob_keys = bob_identity_store
             .load_keys()
             .expect("Failed to load keys")
             .expect("Bob's keys not found");
 
         // Reopen persistent outbox
-        let outbox =
-            Outbox::persistent(outbox_path.to_str().unwrap()).expect("Failed to reopen outbox");
+        let outbox_backend = Arc::new(SledStorage::new(outbox_path.to_str().unwrap()).unwrap());
+        let outbox = Outbox::persistent(outbox_backend);
 
         // Verify message still in outbox
         assert_eq!(outbox.total_count(), 1);
@@ -237,8 +239,8 @@ fn test_e2e_persistent_message_flow() {
         let received_message: Message = bincode::deserialize(&decrypted_bytes).unwrap();
 
         // Store in persistent inbox
-        let mut inbox = Inbox::persistent(inbox_path.to_str().unwrap())
-            .expect("Failed to create persistent inbox");
+        let inbox_backend = Arc::new(SledStorage::new(inbox_path.to_str().unwrap()).unwrap());
+        let mut inbox = Inbox::persistent(inbox_backend);
 
         let received_msg = scmessenger_core::store::ReceivedMessage {
             message_id: received_message.id.clone(),
@@ -253,8 +255,8 @@ fn test_e2e_persistent_message_flow() {
 
     // Step 3: Simulate another restart - Verify inbox persistence
     {
-        let inbox =
-            Inbox::persistent(inbox_path.to_str().unwrap()).expect("Failed to reopen inbox");
+        let inbox_backend = Arc::new(SledStorage::new(inbox_path.to_str().unwrap()).unwrap());
+        let inbox = Inbox::persistent(inbox_backend);
 
         // Message should still be there
         assert_eq!(inbox.total_count(), 1);

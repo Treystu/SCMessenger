@@ -6,8 +6,9 @@ mod store;
 pub use keys::{IdentityKeys, KeyPair};
 pub use store::IdentityStore;
 
+use crate::store::backend::StorageBackend;
 use anyhow::Result;
-
+use std::sync::Arc;
 /// Manages node identity and cryptographic keys
 pub struct IdentityManager {
     store: IdentityStore,
@@ -26,9 +27,9 @@ impl IdentityManager {
     }
 
     /// Create a new identity manager with persistent storage
-    pub fn with_path(path: &str) -> Result<Self> {
+    pub fn with_backend(backend: Arc<dyn StorageBackend>) -> Result<Self> {
         let mut manager = Self {
-            store: IdentityStore::persistent(path)?,
+            store: IdentityStore::persistent(backend),
             keys: None,
             nickname: None,
         };
@@ -189,16 +190,16 @@ mod tests {
             .unwrap()
             .to_string();
 
-        // Create and initialize
-        let mut manager1 = IdentityManager::with_path(&path).unwrap();
+        let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+        let mut manager1 = IdentityManager::with_backend(backend).unwrap();
         manager1.initialize().unwrap();
         manager1.set_nickname("Alice".to_string()).unwrap();
         let id1 = manager1.identity_id().unwrap();
 
         drop(manager1);
 
-        // Load existing
-        let mut manager2 = IdentityManager::with_path(&path).unwrap();
+        let backend2 = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+        let mut manager2 = IdentityManager::with_backend(backend2).unwrap();
         manager2.initialize().unwrap();
         let id2 = manager2.identity_id().unwrap();
         let nick2 = manager2.nickname();
@@ -235,12 +236,14 @@ mod tests {
             .to_string();
 
         {
-            let mut manager = IdentityManager::with_path(&path).unwrap();
+            let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+            let mut manager = IdentityManager::with_backend(backend).unwrap();
             manager.initialize().unwrap();
             manager.set_nickname("PersistedNick".to_string()).unwrap();
         }
 
-        let manager = IdentityManager::with_path(&path).unwrap();
+        let backend2 = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+        let manager = IdentityManager::with_backend(backend2).unwrap();
         assert!(manager.keys().is_some());
         assert_eq!(manager.nickname(), Some("PersistedNick".to_string()));
     }

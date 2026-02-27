@@ -250,15 +250,5 @@ final class SettingsViewModel {
         set { repository?.setAutoAdjustEnabled(newValue) }
     }
 
-    func overrideBleInterval(_ intervalMs: UInt32) {
-        try? repository?.overrideBleInterval(scanMs: intervalMs, advertiseMs: intervalMs)
-    }
 
-    func overrideRelayMax(_ max: UInt32) {
-        try? repository?.overrideRelayMax(maxRelayPerHour: max)
-    }
-
-    func clearAdjustmentOverrides() {
-        try? repository?.clearAdjustmentOverrides()
-    }
 }

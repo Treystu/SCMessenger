@@ -14,7 +14,9 @@ pub mod store;
 pub mod transport;
 
 // Mobile bridge modules
+#[cfg(not(target_arch = "wasm32"))]
 pub mod contacts_bridge;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod mobile_bridge;
 
 use parking_lot::RwLock;
@@ -28,10 +30,13 @@ pub use identity::IdentityManager;
 pub use message::{DeliveryStatus, Envelope, Message, MessageType, Receipt};
 
 // Mobile bridge exports for UniFFI
+#[cfg(not(target_arch = "wasm32"))]
 pub use contacts_bridge::{Contact, ContactManager};
+#[cfg(not(target_arch = "wasm32"))]
 pub use mobile_bridge::*;
 
 // UniFFI scaffolding - clippy warnings in generated code
+#[cfg(not(target_arch = "wasm32"))]
 uniffi::include_scaffolding!("api");
 
 // ============================================================================
@@ -188,12 +193,14 @@ fn read_schema_version(version_file: &Path) -> Result<u32, IronCoreError> {
         .map_err(|_| IronCoreError::StorageError)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn has_legacy_root_sled(base: &Path) -> bool {
     // Sled stores these files at the DB root. If present, old single-db layout
     // may still hold identity/outbox/inbox keys.
     base.join("conf").exists() || base.join("db").exists()
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn copy_missing_key(
     source: &sled::Db,
     destination: &sled::Db,
@@ -215,6 +222,7 @@ fn copy_missing_key(
     Ok(false)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn copy_missing_prefix(
     source: &sled::Db,
     destination: &sled::Db,
@@ -237,6 +245,7 @@ fn copy_missing_prefix(
     Ok(copied)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn migrate_legacy_root_store(base: &Path) -> Result<(), IronCoreError> {
     let sentinel = base.join(LEGACY_ROOT_MIGRATION_SENTINEL);
     if sentinel.exists() || !has_legacy_root_sled(base) {
@@ -278,6 +287,7 @@ fn migrate_legacy_root_store(base: &Path) -> Result<(), IronCoreError> {
     Ok(())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn ensure_storage_layout(storage_path: &str) -> Result<(), IronCoreError> {
     let base = Path::new(storage_path);
     std::fs::create_dir_all(base).map_err(|_| IronCoreError::StorageError)?;
@@ -322,7 +332,9 @@ impl IronCore {
             )
             .try_init();
 
+        #[allow(unused_variables)]
         let storage_ready = if let Some(path) = &storage_path {
+            #[cfg(not(target_arch = "wasm32"))]
             match ensure_storage_layout(path) {
                 Ok(()) => true,
                 Err(e) => {
@@ -330,17 +342,29 @@ impl IronCore {
                     false
                 }
             }
+            #[cfg(target_arch = "wasm32")]
+            true
         } else {
             false
         };
 
+        #[allow(unused_variables)]
         let identity = if let Some(path) = &storage_path {
             if !storage_ready {
                 Arc::new(RwLock::new(IdentityManager::new()))
             } else {
-                let identity_path = Path::new(path).join("identity");
+                #[cfg(not(target_arch = "wasm32"))]
+                let backend = Arc::new(
+                    crate::store::backend::SledStorage::new(
+                        Path::new(path).join("identity").to_string_lossy().as_ref(),
+                    )
+                    .unwrap(),
+                );
+                #[cfg(target_arch = "wasm32")]
+                let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+
                 Arc::new(RwLock::new(
-                    IdentityManager::with_path(identity_path.to_string_lossy().as_ref())
+                    IdentityManager::with_backend(backend.clone())
                         .unwrap_or_else(|_| IdentityManager::new()),
                 ))
             }
@@ -348,26 +372,115 @@ impl IronCore {
             Arc::new(RwLock::new(IdentityManager::new()))
         };
 
+        #[allow(unused_variables)]
         let outbox = if let Some(path) = &storage_path {
             if !storage_ready {
                 store::Outbox::new()
             } else {
-                let outbox_path = Path::new(path).join("outbox");
-                store::Outbox::persistent(outbox_path.to_string_lossy().as_ref())
-                    .unwrap_or_else(|_| store::Outbox::new())
+                #[cfg(not(target_arch = "wasm32"))]
+                let backend = Arc::new(
+                    crate::store::backend::SledStorage::new(
+                        Path::new(path).join("outbox").to_string_lossy().as_ref(),
+                    )
+                    .unwrap(),
+                );
+                #[cfg(target_arch = "wasm32")]
+                let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+
+                store::Outbox::persistent(backend)
             }
         } else {
             store::Outbox::new()
         };
 
+        #[allow(unused_variables)]
         let inbox = if let Some(path) = &storage_path {
             if !storage_ready {
                 store::Inbox::new()
             } else {
-                let inbox_path = Path::new(path).join("inbox");
-                store::Inbox::persistent(inbox_path.to_string_lossy().as_ref())
-                    .unwrap_or_else(|_| store::Inbox::new())
+                #[cfg(not(target_arch = "wasm32"))]
+                let backend = Arc::new(
+                    crate::store::backend::SledStorage::new(
+                        Path::new(path).join("inbox").to_string_lossy().as_ref(),
+                    )
+                    .unwrap(),
+                );
+                #[cfg(target_arch = "wasm32")]
+                let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+
+                store::Inbox::persistent(backend)
             }
+        } else {
+            store::Inbox::new()
+        };
+
+        Self {
+            identity,
+            outbox: Arc::new(RwLock::new(outbox)),
+            inbox: Arc::new(RwLock::new(inbox)),
+            running: Arc::new(RwLock::new(false)),
+            delegate: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // ASYNC INIT (WASM ONLY)
+    // ------------------------------------------------------------------------
+
+    #[cfg(target_arch = "wasm32")]
+    pub async fn with_storage_async(storage_path: String) -> Self {
+        Self::init_async(Some(storage_path)).await
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    async fn init_async(storage_path: Option<String>) -> Self {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+            )
+            .try_init();
+
+        let identity = if let Some(path) = &storage_path {
+            let identity_path = Path::new(path).join("identity");
+            let backend = Arc::new(
+                crate::store::backend::IndexedDbStorage::new(
+                    identity_path.to_string_lossy().as_ref(),
+                )
+                .await
+                .expect("Failed to open IndexedDB for identity"),
+            );
+
+            Arc::new(RwLock::new(
+                IdentityManager::with_backend(backend.clone())
+                    .unwrap_or_else(|_| IdentityManager::new()),
+            ))
+        } else {
+            Arc::new(RwLock::new(IdentityManager::new()))
+        };
+
+        let outbox = if let Some(path) = &storage_path {
+            let outbox_path = Path::new(path).join("outbox");
+            let backend = Arc::new(
+                crate::store::backend::IndexedDbStorage::new(
+                    outbox_path.to_string_lossy().as_ref(),
+                )
+                .await
+                .expect("Failed to open IndexedDB for outbox"),
+            );
+            store::Outbox::persistent(backend)
+        } else {
+            store::Outbox::new()
+        };
+
+        let inbox = if let Some(path) = &storage_path {
+            let inbox_path = Path::new(path).join("inbox");
+            let backend = Arc::new(
+                crate::store::backend::IndexedDbStorage::new(inbox_path.to_string_lossy().as_ref())
+                    .await
+                    .expect("Failed to open IndexedDB for inbox"),
+            );
+            store::Inbox::persistent(backend)
         } else {
             store::Inbox::new()
         };
@@ -1080,10 +1193,15 @@ mod tests {
         let path = dir.path().to_string_lossy().to_string();
 
         // Simulate pre-schema-split storage where identity keys lived in root sled.
-        let legacy_store = identity::IdentityStore::persistent(&path).unwrap();
+        let legacy_store = sled::open(&path).unwrap();
         let legacy_keys = identity::IdentityKeys::generate();
-        legacy_store.save_keys(&legacy_keys).unwrap();
-        legacy_store.save_nickname("legacy-nick").unwrap();
+        legacy_store
+            .insert(LEGACY_IDENTITY_KEY, legacy_keys.to_bytes())
+            .unwrap();
+        legacy_store
+            .insert(LEGACY_NICKNAME_KEY, b"legacy-nick")
+            .unwrap();
+        legacy_store.flush().unwrap();
         drop(legacy_store);
 
         let core = IronCore::with_storage(path.clone());

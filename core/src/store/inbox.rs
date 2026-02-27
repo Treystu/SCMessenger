@@ -2,9 +2,11 @@
 //
 // Tracks seen message IDs to prevent replay attacks and duplicate delivery.
 
-use anyhow::Result;
+use crate::store::backend::StorageBackend;
+
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 /// Maximum tracked message IDs (for deduplication)
 const MAX_SEEN_IDS: usize = 50_000;
@@ -33,7 +35,7 @@ enum InboxBackend {
         messages: HashMap<String, Vec<ReceivedMessage>>,
         total: usize,
     },
-    Persistent(sled::Db),
+    Persistent(Arc<dyn StorageBackend>),
 }
 
 /// Inbound message deduplication and storage
@@ -54,12 +56,11 @@ impl Inbox {
         }
     }
 
-    /// Create a persistent inbox with sled backend
-    pub fn persistent(path: &str) -> Result<Self> {
-        let db = sled::open(path)?;
-        Ok(Self {
-            backend: InboxBackend::Persistent(db),
-        })
+    /// Create a persistent inbox with an arbitrary backend
+    pub fn persistent(backend: Arc<dyn StorageBackend>) -> Self {
+        Self {
+            backend: InboxBackend::Persistent(backend),
+        }
     }
 
     /// Check if a message ID has already been seen (duplicate)
@@ -133,20 +134,19 @@ impl Inbox {
                     }
                 }
 
-                // Save seen IDs
                 if let Ok(bytes) = bincode::serialize(&seen_ids) {
-                    let _ = db.insert(SEEN_IDS_KEY, bytes);
+                    let _ = db.put(SEEN_IDS_KEY, &bytes);
                 }
 
                 // Store message
-                let key = format!(
+                let key_str = format!(
                     "{}{}_{}",
                     String::from_utf8_lossy(MESSAGES_PREFIX),
                     msg.sender_id,
                     msg.message_id
                 );
                 if let Ok(bytes) = bincode::serialize(&msg) {
-                    let _ = db.insert(key.as_bytes(), bytes);
+                    let _ = db.put(key_str.as_bytes(), &bytes);
                     let _ = db.flush();
                 }
 
@@ -162,11 +162,16 @@ impl Inbox {
                 messages.get(sender_id).cloned().unwrap_or_default()
             }
             InboxBackend::Persistent(db) => {
-                let prefix = format!("{}{}_", String::from_utf8_lossy(MESSAGES_PREFIX), sender_id);
-                db.scan_prefix(prefix.as_bytes())
-                    .filter_map(|result| result.ok())
-                    .filter_map(|(_, value)| bincode::deserialize(&value).ok())
-                    .collect()
+                let prefix_str =
+                    format!("{}{}_", String::from_utf8_lossy(MESSAGES_PREFIX), sender_id);
+                if let Ok(results) = db.scan_prefix(prefix_str.as_bytes()) {
+                    results
+                        .into_iter()
+                        .filter_map(|(_, value)| bincode::deserialize(&value).ok())
+                        .collect()
+                } else {
+                    Vec::new()
+                }
             }
         }
     }
@@ -177,11 +182,16 @@ impl Inbox {
             InboxBackend::Memory { messages, .. } => {
                 messages.values().flat_map(|msgs| msgs.clone()).collect()
             }
-            InboxBackend::Persistent(db) => db
-                .scan_prefix(MESSAGES_PREFIX)
-                .filter_map(|result| result.ok())
-                .filter_map(|(_, value)| bincode::deserialize(&value).ok())
-                .collect(),
+            InboxBackend::Persistent(db) => {
+                if let Ok(results) = db.scan_prefix(MESSAGES_PREFIX) {
+                    results
+                        .into_iter()
+                        .filter_map(|(_, value)| bincode::deserialize(&value).ok())
+                        .collect()
+                } else {
+                    Vec::new()
+                }
+            }
         }
     }
 
@@ -189,7 +199,7 @@ impl Inbox {
     pub fn total_count(&self) -> usize {
         match &self.backend {
             InboxBackend::Memory { total, .. } => *total,
-            InboxBackend::Persistent(db) => db.scan_prefix(MESSAGES_PREFIX).count(),
+            InboxBackend::Persistent(db) => db.count_prefix(MESSAGES_PREFIX).unwrap_or(0),
         }
     }
 
@@ -199,9 +209,11 @@ impl Inbox {
             InboxBackend::Memory { messages, .. } => messages.len(),
             InboxBackend::Persistent(db) => {
                 let mut senders: HashSet<String> = HashSet::new();
-                for (_, value) in db.scan_prefix(MESSAGES_PREFIX).flatten() {
-                    if let Ok(msg) = bincode::deserialize::<ReceivedMessage>(&value) {
-                        senders.insert(msg.sender_id);
+                if let Ok(results) = db.scan_prefix(MESSAGES_PREFIX) {
+                    for (_, value) in results {
+                        if let Ok(msg) = bincode::deserialize::<ReceivedMessage>(&value) {
+                            senders.insert(msg.sender_id);
+                        }
                     }
                 }
                 senders.len()
@@ -220,16 +232,12 @@ impl Inbox {
             }
             InboxBackend::Persistent(db) => {
                 // Remove all message keys (but keep seen IDs)
-                let keys_to_remove: Vec<_> = db
-                    .scan_prefix(MESSAGES_PREFIX)
-                    .filter_map(|r| r.ok())
-                    .map(|(k, _)| k)
-                    .collect();
-
-                for key in keys_to_remove {
-                    let _ = db.remove(key);
+                if let Ok(results) = db.scan_prefix(MESSAGES_PREFIX) {
+                    for (key, _) in results {
+                        let _ = db.remove(&key);
+                    }
+                    let _ = db.flush();
                 }
-                let _ = db.flush();
             }
         }
     }
@@ -320,7 +328,8 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("inbox_store").to_str().unwrap().to_string();
 
-        let mut inbox = Inbox::persistent(&path).unwrap();
+        let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+        let mut inbox = Inbox::persistent(backend);
 
         // Receive messages
         assert!(inbox.receive(make_received("msg1", "alice", "hello")));
@@ -347,14 +356,16 @@ mod tests {
 
         // First instance: receive messages
         {
-            let mut inbox = Inbox::persistent(&path).unwrap();
+            let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+            let mut inbox = Inbox::persistent(backend);
             inbox.receive(make_received("msg1", "alice", "hello"));
             inbox.receive(make_received("msg2", "bob", "world"));
         }
 
         // Second instance: messages should still be there
         {
-            let inbox = Inbox::persistent(&path).unwrap();
+            let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+            let inbox = Inbox::persistent(backend);
             assert_eq!(inbox.total_count(), 2);
             assert!(inbox.is_duplicate("msg1"));
             assert!(inbox.is_duplicate("msg2"));

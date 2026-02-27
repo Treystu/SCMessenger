@@ -3,9 +3,11 @@
 // Messages are stored locally and retried when the peer comes online.
 // This is the foundation for store-and-forward delivery.
 
-use anyhow::Result;
+use crate::store::backend::StorageBackend;
+
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
 
 /// Maximum messages queued per peer
 const MAX_QUEUE_PER_PEER: usize = 1000;
@@ -36,7 +38,7 @@ enum OutboxBackend {
         queues: HashMap<String, VecDeque<QueuedMessage>>,
         total: usize,
     },
-    Persistent(sled::Db),
+    Persistent(Arc<dyn StorageBackend>),
 }
 
 /// Outbound message queue
@@ -55,12 +57,11 @@ impl Outbox {
         }
     }
 
-    /// Create a persistent outbox with sled backend
-    pub fn persistent(path: &str) -> Result<Self> {
-        let db = sled::open(path)?;
-        Ok(Self {
-            backend: OutboxBackend::Persistent(db),
-        })
+    /// Create a persistent outbox with an arbitrary backend
+    pub fn persistent(backend: Arc<dyn StorageBackend>) -> Self {
+        Self {
+            backend: OutboxBackend::Persistent(backend),
+        }
     }
 
     /// Queue a message for delivery
@@ -86,7 +87,7 @@ impl Outbox {
             }
             OutboxBackend::Persistent(db) => {
                 // Check total limit
-                let current_total = db.scan_prefix(QUEUE_PREFIX).count();
+                let current_total = db.count_prefix(QUEUE_PREFIX).unwrap_or(0);
                 if current_total >= MAX_TOTAL_QUEUED {
                     return Err(format!("Outbox full ({} messages)", MAX_TOTAL_QUEUED));
                 }
@@ -97,7 +98,7 @@ impl Outbox {
                     String::from_utf8_lossy(QUEUE_PREFIX),
                     msg.recipient_id
                 );
-                let peer_count = db.scan_prefix(peer_prefix.as_bytes()).count();
+                let peer_count = db.count_prefix(peer_prefix.as_bytes()).unwrap_or(0);
                 if peer_count >= MAX_QUEUE_PER_PEER {
                     return Err(format!(
                         "Queue full for peer {} ({} messages)",
@@ -106,16 +107,15 @@ impl Outbox {
                 }
 
                 // Store message
-                let key = format!(
+                let key_str = format!(
                     "{}{}_{}",
                     String::from_utf8_lossy(QUEUE_PREFIX),
                     msg.recipient_id,
                     msg.message_id
                 );
                 if let Ok(bytes) = bincode::serialize(&msg) {
-                    db.insert(key.as_bytes(), bytes)
-                        .map_err(|e| e.to_string())?;
-                    db.flush().map_err(|e| e.to_string())?;
+                    db.put(key_str.as_bytes(), &bytes)?;
+                    db.flush()?;
                 }
                 Ok(())
             }
@@ -130,11 +130,16 @@ impl Outbox {
                 .map(|q| q.iter().cloned().collect())
                 .unwrap_or_default(),
             OutboxBackend::Persistent(db) => {
-                let prefix = format!("{}{}_", String::from_utf8_lossy(QUEUE_PREFIX), recipient_id);
-                db.scan_prefix(prefix.as_bytes())
-                    .filter_map(|result| result.ok())
-                    .filter_map(|(_, value)| bincode::deserialize(&value).ok())
-                    .collect()
+                let prefix_str =
+                    format!("{}{}_", String::from_utf8_lossy(QUEUE_PREFIX), recipient_id);
+                if let Ok(results) = db.scan_prefix(prefix_str.as_bytes()) {
+                    results
+                        .into_iter()
+                        .filter_map(|(_, value)| bincode::deserialize(&value).ok())
+                        .collect()
+                } else {
+                    Vec::new()
+                }
             }
         }
     }
@@ -154,12 +159,14 @@ impl Outbox {
             }
             OutboxBackend::Persistent(db) => {
                 // Find and remove the message
-                for (key, value) in db.scan_prefix(QUEUE_PREFIX).flatten() {
-                    if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
-                        if msg.message_id == message_id {
-                            let _ = db.remove(key);
-                            let _ = db.flush();
-                            return true;
+                if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
+                    for (key, value) in results {
+                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                            if msg.message_id == message_id {
+                                let _ = db.remove(&key);
+                                let _ = db.flush();
+                                return true;
+                            }
                         }
                     }
                 }
@@ -181,19 +188,22 @@ impl Outbox {
                 }
             }
             OutboxBackend::Persistent(db) => {
-                let prefix = format!("{}{}_", String::from_utf8_lossy(QUEUE_PREFIX), recipient_id);
+                let prefix_str =
+                    format!("{}{}_", String::from_utf8_lossy(QUEUE_PREFIX), recipient_id);
                 let mut messages = Vec::new();
                 let mut keys_to_remove = Vec::new();
 
-                for (key, value) in db.scan_prefix(prefix.as_bytes()).flatten() {
-                    if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
-                        messages.push(msg);
-                        keys_to_remove.push(key);
+                if let Ok(results) = db.scan_prefix(prefix_str.as_bytes()) {
+                    for (key, value) in results {
+                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                            messages.push(msg);
+                            keys_to_remove.push(key);
+                        }
                     }
                 }
 
                 for key in keys_to_remove {
-                    let _ = db.remove(key);
+                    let _ = db.remove(&key);
                 }
                 let _ = db.flush();
 
@@ -215,15 +225,17 @@ impl Outbox {
             }
             OutboxBackend::Persistent(db) => {
                 // Find, update, and save the message
-                for (key, value) in db.scan_prefix(QUEUE_PREFIX).flatten() {
-                    if let Ok(mut msg) = bincode::deserialize::<QueuedMessage>(&value) {
-                        if msg.message_id == message_id {
-                            msg.attempts += 1;
-                            if let Ok(bytes) = bincode::serialize(&msg) {
-                                let _ = db.insert(key, bytes);
-                                let _ = db.flush();
+                if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
+                    for (key, value) in results {
+                        if let Ok(mut msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                            if msg.message_id == message_id {
+                                msg.attempts += 1;
+                                if let Ok(bytes) = bincode::serialize(&msg) {
+                                    let _ = db.put(&key, &bytes);
+                                    let _ = db.flush();
+                                }
+                                return;
                             }
-                            return;
                         }
                     }
                 }
@@ -235,7 +247,7 @@ impl Outbox {
     pub fn total_count(&self) -> usize {
         match &self.backend {
             OutboxBackend::Memory { total, .. } => *total,
-            OutboxBackend::Persistent(db) => db.scan_prefix(QUEUE_PREFIX).count(),
+            OutboxBackend::Persistent(db) => db.count_prefix(QUEUE_PREFIX).unwrap_or(0),
         }
     }
 
@@ -246,9 +258,11 @@ impl Outbox {
             OutboxBackend::Persistent(db) => {
                 use std::collections::HashSet;
                 let mut peers: HashSet<String> = HashSet::new();
-                for (_, value) in db.scan_prefix(QUEUE_PREFIX).flatten() {
-                    if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
-                        peers.insert(msg.recipient_id);
+                if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
+                    for (_, value) in results {
+                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                            peers.insert(msg.recipient_id);
+                        }
                     }
                 }
                 peers.len()
@@ -283,17 +297,19 @@ impl Outbox {
             OutboxBackend::Persistent(db) => {
                 let mut keys_to_remove = Vec::new();
 
-                for (key, value) in db.scan_prefix(QUEUE_PREFIX).flatten() {
-                    if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
-                        if now.saturating_sub(msg.queued_at) >= max_age_secs {
-                            keys_to_remove.push(key);
+                if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
+                    for (key, value) in results {
+                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                            if now.saturating_sub(msg.queued_at) >= max_age_secs {
+                                keys_to_remove.push(key);
+                            }
                         }
                     }
                 }
 
                 let removed = keys_to_remove.len();
                 for key in keys_to_remove {
-                    let _ = db.remove(key);
+                    let _ = db.remove(&key);
                 }
                 let _ = db.flush();
 
@@ -404,7 +420,8 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let mut outbox = Outbox::persistent(&path).unwrap();
+        let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+        let mut outbox = Outbox::persistent(backend);
 
         // Enqueue messages
         outbox.enqueue(make_msg("msg1", "peer_a")).unwrap();
@@ -437,14 +454,16 @@ mod tests {
 
         // First instance: enqueue messages
         {
-            let mut outbox = Outbox::persistent(&path).unwrap();
+            let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+            let mut outbox = Outbox::persistent(backend);
             outbox.enqueue(make_msg("msg1", "peer_a")).unwrap();
             outbox.enqueue(make_msg("msg2", "peer_b")).unwrap();
         }
 
         // Second instance: messages should still be there
         {
-            let outbox = Outbox::persistent(&path).unwrap();
+            let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+            let outbox = Outbox::persistent(backend);
             assert_eq!(outbox.total_count(), 2);
             assert_eq!(outbox.peer_count(), 2);
 
@@ -466,7 +485,8 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let mut outbox = Outbox::persistent(&path).unwrap();
+        let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+        let mut outbox = Outbox::persistent(backend);
 
         outbox.enqueue(make_msg("msg1", "peer_a")).unwrap();
         outbox.enqueue(make_msg("msg2", "peer_a")).unwrap();

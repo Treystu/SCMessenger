@@ -2708,22 +2708,6 @@ final class MeshRepository {
     private func startPendingOutboxRetryLoop() {
         guard pendingOutboxRetryTask == nil else { return }
         pendingOutboxRetryTask = Task { [weak self] in
-            // Hydrate stuck history on first boot
-            if let self {
-                let recent = (try? self.historyManager?.recent(peerFilter: nil, limit: 100)) ?? []
-                for msg in recent where msg.direction == .sent && msg.delivered == false {
-                    // Avoid duplicating currently queued
-                    let queue = self.loadPendingOutbox()
-                    if queue.contains(where: { $0.historyRecordId == msg.id }) { continue }
-
-                    // We resend the content as a brand new message, dropping the old stuck ID.
-                    // This ensures robust delivery using the newest identity routing hints.
-                    try? self.historyManager?.delete(id: msg.id)
-                    try? await self.sendMessage(peerId: msg.peerId, content: msg.content)
-                    self.logger.info("Resurrected stuck outbox message: \(msg.id)")
-                }
-            }
-
             while !Task.isCancelled {
                 // Proactively ensure we stay connected to relays
                 self?.primeRelayBootstrapConnections()
