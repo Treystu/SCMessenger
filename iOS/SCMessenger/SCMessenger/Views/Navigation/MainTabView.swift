@@ -96,11 +96,23 @@ struct MainTabView: View {
 struct ConversationListView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var conversations: [Conversation] = []
-    
+    @State private var conversationToDelete: Conversation?
+    @State private var showingDeleteConfirmation = false
+
     var body: some View {
-        List(conversations) { conversation in
-            NavigationLink(value: conversation) {
-                ConversationRow(conversation: conversation)
+        List {
+            ForEach(conversations) { conversation in
+                NavigationLink(value: conversation) {
+                    ConversationRow(conversation: conversation)
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        conversationToDelete = conversation
+                        showingDeleteConfirmation = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
             }
         }
         .navigationTitle("Messages")
@@ -129,6 +141,27 @@ struct ConversationListView: View {
                 break
             }
         }
+        .confirmationDialog(
+            "Delete Conversation?",
+            isPresented: $showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let conv = conversationToDelete {
+                    deleteConversation(conv)
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            if let conv = conversationToDelete {
+                Text("Delete all messages with \(conv.peerNickname)? This cannot be undone.")
+            }
+        }
+    }
+
+    private func deleteConversation(_ conversation: Conversation) {
+        try? repository.clearConversation(peerId: conversation.peerId)
+        conversations.removeAll { $0.id == conversation.id }
     }
     
     private func loadConversations() {
@@ -252,17 +285,38 @@ struct ChatView: View {
     @Environment(MeshRepository.self) private var repository
     let conversation: Conversation
     @State private var viewModel: ChatViewModel?
-    
+    @State private var scrollProxy: ScrollViewProxy?
+
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                LazyVStack {
-                    ForEach(viewModel?.messages ?? [], id: \.id) { message in
-                        MessageBubble(message: message)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(viewModel?.messages ?? [], id: \.id) { message in
+                            MessageBubble(message: message)
+                                .id(message.id)
+                        }
+                        // Invisible anchor at the bottom for auto-scroll
+                        Color.clear
+                            .frame(height: 1)
+                            .id("bottom")
+                    }
+                }
+                .onAppear {
+                    scrollProxy = proxy
+                    // Scroll to bottom when first opened
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        proxy.scrollTo("bottom", anchor: .bottom)
+                    }
+                }
+                .onChange(of: viewModel?.messages.count ?? 0) { _ in
+                    // Auto-scroll when new messages arrive
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo("bottom", anchor: .bottom)
                     }
                 }
             }
-            
+
             MessageInputBar(
                 text: Binding(
                     get: { viewModel?.messageText ?? "" },
@@ -272,6 +326,10 @@ struct ChatView: View {
                 onSend: {
                     Task {
                         await viewModel?.sendMessage()
+                        // Scroll to bottom after sending
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            scrollProxy?.scrollTo("bottom", anchor: .bottom)
+                        }
                     }
                 }
             )

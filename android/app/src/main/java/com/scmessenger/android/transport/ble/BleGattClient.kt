@@ -68,6 +68,14 @@ class BleGattClient(
     private val gattOpQueues = ConcurrentHashMap<String, Channel<() -> Unit>>()
     private val gattOpSemaphores = ConcurrentHashMap<String, Semaphore>()
 
+    // Tracks whether the current in-flight GATT op for a device was a
+    // WRITE_TYPE_NO_RESPONSE write. For those writes the Android GATT stack
+    // does NOT reliably deliver onCharacteristicWrite (behaviour varies by API
+    // level and peripheral).  The semaphore must be released immediately after
+    // writeCharacteristic() returns; this flag tells onCharacteristicWrite to
+    // skip the release so we never double-release.
+    private val noResponseWriteInFlight = ConcurrentHashMap<String, Boolean>()
+
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // ---------- GATT op queue helpers ----------
@@ -178,6 +186,11 @@ class BleGattClient(
             negotiatedMtus.remove(deviceAddress)
             gattOpQueues.remove(deviceAddress)?.close()
             gattOpSemaphores.remove(deviceAddress)
+            noResponseWriteInFlight.remove(deviceAddress)
+            // Clear any in-progress reassembly for this device to prevent stale
+            // fragments from a prior connection contaminating a new connection.
+            reassemblyBuffers.remove(deviceAddress)
+            expectedFragments.remove(deviceAddress)
             Timber.d("Disconnected from $deviceAddress")
         } catch (e: SecurityException) {
             Timber.e(e, "Security exception disconnecting from $deviceAddress")
@@ -224,11 +237,17 @@ class BleGattClient(
                 try {
                     characteristic.value = fragment
                     characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-                    if (!gatt.writeCharacteristic(characteristic)) {
+                    val initiated = gatt.writeCharacteristic(characteristic)
+                    // WRITE_TYPE_NO_RESPONSE: onCharacteristicWrite is not reliably
+                    // called on all Android versions.  Release the semaphore here so
+                    // the next fragment is not blocked waiting for a callback that may
+                    // never arrive.  noResponseWriteInFlight tells onCharacteristicWrite
+                    // to skip its own release to prevent a double-release.
+                    noResponseWriteInFlight[deviceAddress] = true
+                    releaseGattOp(deviceAddress)
+                    if (!initiated) {
                         Timber.e("Failed to initiate characteristic write to $deviceAddress")
-                        releaseGattOp(deviceAddress)
                     }
-                    // else: semaphore released in onCharacteristicWrite
                 } catch (e: SecurityException) {
                     Timber.e(e, "Security exception sending data to $deviceAddress")
                     releaseGattOp(deviceAddress)
@@ -392,6 +411,13 @@ class BleGattClient(
                 Timber.e("Characteristic write failed to $deviceAddress: $status")
             }
             pendingWrites.remove(deviceAddress)
+
+            // For WRITE_TYPE_NO_RESPONSE, the semaphore was already released
+            // immediately after writeCharacteristic() — do not release again.
+            if (noResponseWriteInFlight.remove(deviceAddress) == true) {
+                Timber.v("Skipping semaphore release for NO_RESPONSE write on $deviceAddress")
+                return
+            }
             releaseGattOp(deviceAddress)
         }
 

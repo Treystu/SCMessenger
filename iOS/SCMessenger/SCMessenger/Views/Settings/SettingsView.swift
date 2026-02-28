@@ -13,6 +13,8 @@ struct SettingsView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var viewModel: SettingsViewModel?
     @State private var showingIdentityQr = false
+    @State private var showingResetConfirmation = false
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
 
     var body: some View {
         Form {
@@ -170,6 +172,20 @@ struct SettingsView: View {
             } header: {
                 Text("Information")
             }
+
+            // MARK: - Danger Zone (mirrors Android Delete All Data section)
+            Section {
+                Button(role: .destructive) {
+                    showingResetConfirmation = true
+                } label: {
+                    Label("Delete All Data & Reset App", systemImage: "trash.fill")
+                }
+            } header: {
+                Text("Danger Zone")
+            } footer: {
+                Text("Permanently deletes your identity, contacts, messages, and all app settings. This cannot be undone.")
+                    .foregroundStyle(.secondary)
+            }
         }
         .navigationTitle("Settings")
         .onAppear {
@@ -180,6 +196,19 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showingIdentityQr) {
             IdentityQrSheet(payload: viewModel?.getIdentityExportString() ?? "{}")
+        }
+        .confirmationDialog(
+            "Delete All Data & Reset App?",
+            isPresented: $showingResetConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete All Data", role: .destructive) {
+                viewModel?.resetAllData()
+                hasCompletedOnboarding = false
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This will permanently delete your identity, all contacts, messages, and settings. You will need to set up the app again.")
         }
     }
 }

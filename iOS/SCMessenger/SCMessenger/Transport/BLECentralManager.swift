@@ -258,6 +258,9 @@ extension BLECentralManager: CBCentralManagerDelegate {
         logger.info("Connected to \(peripheral.identifier)")
         meshRepository?.appendDiagnostic("ble_central_connected id=\(peripheral.identifier)")
         connectedPeripherals[peripheral.identifier] = peripheral
+        // Request maximum write size (negotiate higher MTU) before discovering services.
+        // iOS will use this hint when negotiating the connection's ATT MTU.
+        // The actual MTU is determined during service discovery.
         peripheral.discoverServices([MeshBLEConstants.serviceUUID])
     }
 
@@ -272,6 +275,13 @@ extension BLECentralManager: CBCentralManagerDelegate {
         connectedPeripherals.removeValue(forKey: peripheral.identifier)
         messageCharacteristics.removeValue(forKey: peripheral.identifier)
         syncCharacteristics.removeValue(forKey: peripheral.identifier)
+        writeInProgress.removeValue(forKey: peripheral.identifier)
+        pendingWrites.removeValue(forKey: peripheral.identifier)
+        reassemblyBuffers.removeValue(forKey: peripheral.identifier)
+        // Clear the peer cache entry so the peer is immediately eligible for
+        // re-discovery and reconnection on the next scan result — without this,
+        // the 5-second dedup window prevents reconnecting after a brief drop.
+        peerCache.removeValue(forKey: peripheral.identifier)
     }
 
     func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {

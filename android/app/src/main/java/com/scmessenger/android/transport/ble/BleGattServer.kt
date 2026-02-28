@@ -89,10 +89,13 @@ class BleGattServer(
             )
             service.addCharacteristic(identityChar)
 
-            // Message exchange characteristic (write + notify)
+            // Message exchange characteristic (write + write-without-response + notify)
+            // PROPERTY_WRITE_NO_RESPONSE allows iOS centrals to use withoutResponse writes
+            // for lower-latency bulk fragment delivery (no per-fragment ACK round-trip).
             val messageChar = BluetoothGattCharacteristic(
                 MESSAGE_CHAR_UUID,
                 BluetoothGattCharacteristic.PROPERTY_WRITE or
+                        BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE or
                         BluetoothGattCharacteristic.PROPERTY_NOTIFY,
                 BluetoothGattCharacteristic.PERMISSION_WRITE
             )

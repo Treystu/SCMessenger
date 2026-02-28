@@ -3624,6 +3624,74 @@ final class MeshRepository {
         try? FileManager.default.removeItem(at: diagnosticsLogURL)
     }
 
+    // MARK: - Factory Reset
+
+    /// Delete all app data and reset to factory defaults.
+    /// Mirrors: android/.../data/MeshRepository.kt resetAllData()
+    @MainActor
+    func resetAllData() {
+        logger.warning("RESETTING ALL APPLICATION DATA")
+        appendDiagnostic("factory_reset requested")
+
+        // 1. Stop all active services
+        if serviceState == .running {
+            stopMeshService()
+        }
+        pendingOutboxRetryTask?.cancel()
+        pendingOutboxRetryTask = nil
+        coverTrafficTask?.cancel()
+        coverTrafficTask = nil
+        bleCentralManager?.stopScanning()
+        blePeripheralManager?.stopAdvertising()
+
+        // 2. Release UniFFI objects
+        swarmBridge?.shutdown()
+        swarmBridge = nil
+        meshService?.stop()
+        meshService = nil
+        ironCore?.stop()
+        try? contactManager?.flush()
+        try? historyManager?.flush()
+        ironCore = nil
+        contactManager = nil
+        historyManager = nil
+        ledgerManager = nil
+        settingsManager = nil
+
+        // 3. Clear in-memory state
+        diagnosticsBuffer = []
+        identityEmissionCache.removeAll()
+        connectedEmissionCache.removeAll()
+        identitySyncSentPeers.removeAll()
+        discoveredPeers.removeAll()
+
+        // 4. Delete Keychain backup (persisted identity)
+        let keychainQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "com.scmessenger.identity"
+        ]
+        SecItemDelete(keychainQuery as CFDictionary)
+
+        // 5. Clear UserDefaults app state
+        let keysToRemove = ["hasCompletedOnboarding", "identity_backup", "consent_accepted"]
+        keysToRemove.forEach { UserDefaults.standard.removeObject(forKey: $0) }
+
+        // 6. Delete all files in the mesh storage directory
+        let meshDir = URL(fileURLWithPath: storagePath)
+        if let contents = try? FileManager.default.contentsOfDirectory(
+            at: meshDir, includingPropertiesForKeys: nil
+        ) {
+            for item in contents {
+                try? FileManager.default.removeItem(at: item)
+            }
+        }
+
+        // 7. Delete diagnostics log
+        try? FileManager.default.removeItem(at: diagnosticsLogURL)
+
+        logger.info("✓ All application data reset")
+    }
+
     func getListeningAddresses() -> [String] {
         return swarmBridge?.getListeners() ?? []
     }

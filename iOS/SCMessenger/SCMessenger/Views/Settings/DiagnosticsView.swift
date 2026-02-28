@@ -4,47 +4,71 @@ struct DiagnosticsView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var logText: String = ""
     @State private var showingExportSheet = false
-    @State private var exportText: String?
+    @State private var exportItems: [Any] = []
+    @State private var autoRefreshTimer: Timer?
+    @State private var isAutoRefreshing = false
 
     var body: some View {
         VStack(spacing: 0) {
             // Technical info header
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Log File: \(repository.diagnosticsLogPath())")
-                Text("File Size: \(logFileSize)")
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("File: \(URL(fileURLWithPath: repository.diagnosticsLogPath()).lastPathComponent)")
+                    Text("Size: \(logFileSize)  •  Lines: \(logLineCount)")
+                }
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.secondary)
+                Spacer()
+                Toggle("Live", isOn: $isAutoRefreshing)
+                    .font(.caption)
+                    .fixedSize()
+                    .onChange(of: isAutoRefreshing) { _, enabled in
+                        if enabled {
+                            startAutoRefresh()
+                        } else {
+                            stopAutoRefresh()
+                        }
+                    }
             }
-            .font(.system(size: 10, design: .monospaced))
-            .foregroundStyle(.secondary)
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
             .background(Color(uiColor: .systemGroupedBackground))
 
-            ScrollView {
-                if logText.isEmpty {
-                    VStack(spacing: 20) {
-                        Image(systemName: "doc.text.magnifyingglass")
-                            .font(.largeTitle)
-                            .foregroundStyle(.secondary)
-                        Text("No Diagnostic Logs Found")
-                            .font(.headline)
-                        Text("Click 'Manual Trace' or start the Mesh Service to generate logs.")
-                            .font(.subheadline)
-                            .multilineTextAlignment(.center)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    if logText.isEmpty {
+                        VStack(spacing: 20) {
+                            Image(systemName: "doc.text.magnifyingglass")
+                                .font(.largeTitle)
+                                .foregroundStyle(.secondary)
+                            Text("No Diagnostic Logs")
+                                .font(.headline)
+                            Text("Start the Mesh Service or tap Trace to generate logs.")
+                                .font(.subheadline)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.top, 100)
+                        .foregroundStyle(.secondary)
+                    } else {
+                        Text(logText)
+                            .font(.system(.caption, design: .monospaced))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                            .id("logContent")
                     }
-                    .padding(.top, 100)
-                    .foregroundStyle(.secondary)
-                } else {
-                    Text(logText)
-                        .font(.system(.caption, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
+                    Color.clear.frame(height: 1).id("bottom")
+                }
+                .background(Color(uiColor: .secondarySystemBackground))
+                .onChange(of: logText) { _ in
+                    if isAutoRefreshing {
+                        withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                    }
                 }
             }
-            .background(Color(uiColor: .secondarySystemBackground))
-            
+
             Divider()
-            
-            VStack(spacing: 12) {
+
+            VStack(spacing: 10) {
                 HStack(spacing: 12) {
                     Button {
                         refreshLogs()
@@ -71,7 +95,7 @@ struct DiagnosticsView: View {
                 Button {
                     prepareExport()
                 } label: {
-                    Label("Export Logistics Bundle", systemImage: "square.and.arrow.up")
+                    Label("Export Diagnostics Bundle", systemImage: "square.and.arrow.up")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -83,54 +107,71 @@ struct DiagnosticsView: View {
         .onAppear {
             refreshLogs()
         }
+        .onDisappear {
+            stopAutoRefresh()
+        }
         .sheet(isPresented: $showingExportSheet) {
-            if let text = exportText {
-                ShareSheet(items: [text])
-            }
+            ShareSheet(items: exportItems)
         }
     }
 
     private func refreshLogs() {
-        logText = repository.diagnosticsSnapshot(limit: 500)
+        let snapshot = repository.diagnosticsSnapshot(limit: 500)
+        logText = snapshot.isEmpty ? "" : snapshot
     }
 
     private func addManualTrace() {
-        repository.appendDiagnostic("manual_trace_requested")
+        repository.appendDiagnostic("manual_trace t=\(Int(Date().timeIntervalSince1970))")
         refreshLogs()
     }
 
     private func clearLogs() {
         repository.clearDiagnostics()
-        refreshLogs()
+        logText = ""
     }
 
     private func prepareExport() {
         let jsonMetrics = repository.exportDiagnostics()
         let recentLogs = repository.diagnosticsSnapshot(limit: 5000)
-
         let bundleText = """
         === SCMessenger Diagnostics Bundle ===
         Generated: \(Date())
+        Version: 0.1.2
 
-        --- Node State Metrics (JSON) ---
+        --- Node State Metrics ---
         \(jsonMetrics)
 
         --- Recent Application Logs ---
-        \(recentLogs)
+        \(recentLogs.isEmpty ? "(no logs)" : recentLogs)
         """
-        exportText = bundleText
+        exportItems = [bundleText]
         showingExportSheet = true
+    }
+
+    private func startAutoRefresh() {
+        autoRefreshTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+            Task { @MainActor in
+                refreshLogs()
+            }
+        }
+    }
+
+    private func stopAutoRefresh() {
+        autoRefreshTimer?.invalidate()
+        autoRefreshTimer = nil
     }
 
     private var logFileSize: String {
         let path = repository.diagnosticsLogPath()
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
-              let size = attrs[.size] as? Int64 else {
-            return "0 B"
-        }
+              let size = attrs[.size] as? Int64 else { return "0 B" }
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
         return formatter.string(fromByteCount: size)
+    }
+
+    private var logLineCount: Int {
+        logText.isEmpty ? 0 : logText.components(separatedBy: .newlines).count
     }
 }
 

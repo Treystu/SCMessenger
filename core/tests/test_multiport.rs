@@ -253,6 +253,7 @@ fn test_default_multiport_config() {
 }
 
 #[tokio::test]
+#[ignore = "requires real networking (TCP bind); run with --include-ignored"]
 async fn test_multiport_swarm_integration() {
     // This test verifies that the swarm can be started with multi-port config
     use scmessenger_core::transport::{start_swarm_with_config, MultiPortConfig};
