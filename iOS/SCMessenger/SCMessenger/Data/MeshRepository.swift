@@ -3502,9 +3502,9 @@ final class MeshRepository {
         ].joined(separator: "|")
 
         if lastAppliedPowerSnapshot != snapshot {
-            logger.info(
-                "Power profile applied (\(reason)): profile=\(String(describing: adjustmentProfile)) relay=\(relayAdjustment.maxPerHour)/h scan=\(bleAdjustment.scanIntervalMs)ms adv=\(bleAdjustment.advertiseIntervalMs)ms tx=\(bleAdjustment.txPowerDbm)dBm battery=\(profile.batteryPct)% charging=\(profile.isCharging) wifi=\(profile.hasWifi) motion=\(String(describing: profile.motionState))"
-            )
+            let message = "Power profile applied (\(reason)): profile=\(String(describing: adjustmentProfile)) relay=\(relayAdjustment.maxPerHour)/h scan=\(bleAdjustment.scanIntervalMs)ms adv=\(bleAdjustment.advertiseIntervalMs)ms tx=\(bleAdjustment.txPowerDbm)dBm battery=\(profile.batteryPct)% charging=\(profile.isCharging) wifi=\(profile.hasWifi) motion=\(String(describing: profile.motionState))"
+            logger.info("\(message)")
+            appendDiagnostic("power_profile_applied: \(message)")
             lastAppliedPowerSnapshot = snapshot
         } else {
             logger.debug("Power profile unchanged (\(reason)): \(snapshot)")
