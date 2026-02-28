@@ -14,7 +14,7 @@ struct SettingsView: View {
     @State private var viewModel: SettingsViewModel?
     @State private var showingIdentityQr = false
     @State private var showingResetConfirmation = false
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
         Form {

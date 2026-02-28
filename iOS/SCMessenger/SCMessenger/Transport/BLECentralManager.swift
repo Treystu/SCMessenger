@@ -258,9 +258,9 @@ extension BLECentralManager: CBCentralManagerDelegate {
         logger.info("Connected to \(peripheral.identifier)")
         meshRepository?.appendDiagnostic("ble_central_connected id=\(peripheral.identifier)")
         connectedPeripherals[peripheral.identifier] = peripheral
-        // Request maximum write size (negotiate higher MTU) before discovering services.
-        // iOS will use this hint when negotiating the connection's ATT MTU.
-        // The actual MTU is determined during service discovery.
+        // After connection, iOS automatically negotiates the ATT MTU.
+        // We now begin service discovery for the mesh service; the effective
+        // payload size for writes must be obtained via maximumWriteValueLength(for:).
         peripheral.discoverServices([MeshBLEConstants.serviceUUID])
     }
 

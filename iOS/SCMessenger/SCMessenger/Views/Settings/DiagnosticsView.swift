@@ -149,11 +149,16 @@ struct DiagnosticsView: View {
     }
 
     private func startAutoRefresh() {
-        autoRefreshTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+        autoRefreshTimer?.invalidate()
+
+        let timer = Timer(timeInterval: 2.0, repeats: true) { _ in
             Task { @MainActor in
                 refreshLogs()
             }
         }
+
+        RunLoop.main.add(timer, forMode: .common)
+        autoRefreshTimer = timer
     }
 
     private func stopAutoRefresh() {
