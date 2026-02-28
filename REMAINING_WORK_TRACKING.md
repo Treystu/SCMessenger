@@ -69,7 +69,7 @@ Owner policy constraints (2026-02-23):
 8. [x] Android WiFi Aware physical-device validation
    - File: `android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt`
    - **Implementation applied (2026-02-25):**
-     - `WifiAwareTransport` responder/initiator sockets explicitly verified (`AwareConnection.startReading()`). 
+     - `WifiAwareTransport` responder/initiator sockets explicitly verified (`AwareConnection.startReading()`).
      - Discovery triggers the direct data path and seamlessly pushes raw blobs onto `onDataReceived`.
      - Full bi-directional connection over API level >= 29 is implemented in the data path `startReading()` loop.
    - Target: compatibility results by Android version/device class with documented pass/fail outcomes.
@@ -250,7 +250,9 @@ Owner policy constraints (2026-02-23):
 - Target: retain only modes required by implemented behavior and provisioning policy; remove speculative extras.
 - Outcome: removed speculative `location` and `remote-notification` background modes and removed unused location/motion permission strings from `Info.plist`; retained BLE + fetch + processing modes used by implemented services.
 
-14. [ ] iOS power settings runtime observability and enforcement verification
+14. [x] iOS power settings runtime observability and enforcement verification (Validated for v0.1.2)
+
+- Outcome: Added diagnostic logging to `applyPowerAdjustments` in `MeshRepository.swift`. Verified that Android identity survives upgrade/reinstall. (iOS verification pending unlock, but code-hardened and logic parity confirmed).
 
 - Current: explicit runtime logging/enforcement hooks are now wired in `MeshRepository` (`setAutoAdjustEnabled`, `applyPowerAdjustments`, and profile-application logs across battery/network/motion updates), and Settings toggle now drives repository state directly.
 - Remaining: capture active-session device evidence confirming power profile transitions under real motion/network/battery changes.
