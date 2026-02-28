@@ -30,11 +30,15 @@ class BleGattServer(
     // Track connected devices
     private val connectedDevices = ConcurrentHashMap<String, BluetoothDevice>()
 
-    // Pending write operations (for fragmented writes)
-    private val pendingWrites = ConcurrentHashMap<String, ByteArray>()
+    // Pending reassembly buffers per device
+    private val reassemblyBuffers = ConcurrentHashMap<String, MutableMap<Int, ByteArray>>()
+    private val expectedFragments = ConcurrentHashMap<String, Int>()
 
     // Negotiated MTU per device
     private val deviceMtu = ConcurrentHashMap<String, Int>()
+
+    // Pending writes (used for reliable write if applicable)
+    private val pendingWrites = ConcurrentHashMap<String, ByteArray>()
 
     private var isRunning = false
 
@@ -136,7 +140,8 @@ class BleGattServer(
                 }
             }
             connectedDevices.clear()
-            pendingWrites.clear()
+            reassemblyBuffers.clear()
+            expectedFragments.clear()
 
             gattServer?.close()
             gattServer = null
@@ -193,18 +198,30 @@ class BleGattServer(
         data: ByteArray,
         mtu: Int
     ): Boolean {
-        val chunkSize = mtu - 3 // Account for ATT overhead
+        val maxChunk = minOf(512, mtu - 3)
+        val maxPayload = maxChunk - 4
+        if (maxPayload <= 0) return false
+
+        val totalFragments = (data.size + maxPayload - 1).let { if (it < 0) 0 else it / maxPayload }.coerceAtLeast(1)
         var offset = 0
 
-        while (offset < data.size) {
-            val end = minOf(offset + chunkSize, data.size)
+        for (i in 0 until totalFragments) {
+            val end = minOf(offset + maxPayload, data.size)
             val chunk = data.copyOfRange(offset, end)
 
-            characteristic.value = chunk
+            val header = ByteArray(4)
+            header[0] = (totalFragments and 0xFF).toByte()
+            header[1] = ((totalFragments shr 8) and 0xFF).toByte()
+            header[2] = (i and 0xFF).toByte()
+            header[3] = ((i shr 8) and 0xFF).toByte()
+
+            characteristic.value = header + chunk
             gattServer?.notifyCharacteristicChanged(device, characteristic, false)
 
             offset = end
-            Thread.sleep(10) // Small delay between chunks
+            if (i < totalFragments - 1) {
+                Thread.sleep(15) // Slightly increased delay for stability
+            }
         }
 
         return true
@@ -226,7 +243,8 @@ class BleGattServer(
 
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     connectedDevices.remove(device.address)
-                    pendingWrites.remove(device.address)
+                    reassemblyBuffers.remove(device.address)
+                    expectedFragments.remove(device.address)
                     Timber.d("GATT client disconnected: ${device.address}")
                 }
             }
@@ -303,30 +321,20 @@ class BleGattServer(
 
             when (characteristic.uuid) {
                 MESSAGE_CHAR_UUID -> {
-                    // Receive message data (possibly fragmented)
-                    if (preparedWrite) {
-                        // Accumulate chunks
-                        val existing = pendingWrites[device.address] ?: ByteArray(0)
-                        pendingWrites[device.address] = existing + value
-                    } else {
-                        // Complete write
-                        val completeData = (pendingWrites.remove(device.address) ?: ByteArray(0)) + value
-
-                        // Forward to Rust
+                    handleReassembly(device.address, value) { completeData ->
                         onDataReceived(device.address, completeData)
-
-                        Timber.d("Received ${completeData.size} bytes from ${device.address}")
+                        Timber.d("Reassembled complete message (${completeData.size} bytes) from ${device.address}")
                     }
-
                     if (responseNeeded) {
                         gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
                     }
                 }
 
                 SYNC_CHAR_UUID -> {
-                    // Process sync handshake
-                    Timber.d("Sync handshake from ${device.address}: ${value.size} bytes")
-
+                    handleReassembly(device.address, value) { completeData ->
+                        Timber.d("Reassembled complete sync handshake (${completeData.size} bytes) from ${device.address}")
+                        // Note: SYNC handler is currently mostly logging as Drift handles it via SwarmBridge
+                    }
                     if (responseNeeded) {
                         gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
                     }
@@ -337,6 +345,40 @@ class BleGattServer(
                         gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, offset, null)
                     }
                 }
+            }
+        }
+
+        private fun handleReassembly(
+            deviceAddress: String,
+            value: ByteArray,
+            onComplete: (ByteArray) -> Unit
+        ) {
+            if (value.size < 4) {
+                Timber.w("Received tiny BLE packet (<4 bytes) from $deviceAddress")
+                return
+            }
+
+            val totalFrags = (value[0].toInt() and 0xFF) or ((value[1].toInt() and 0xFF) shl 8)
+            val fragIndex = (value[2].toInt() and 0xFF) or ((value[3].toInt() and 0xFF) shl 8)
+            val payload = value.copyOfRange(4, value.size)
+
+            val buffer = reassemblyBuffers.getOrPut(deviceAddress) { mutableMapOf() }
+            buffer[fragIndex] = payload
+            expectedFragments[deviceAddress] = totalFrags
+
+            if (buffer.size == totalFrags) {
+                // All fragments arrived
+                val sortedData = (0 until totalFrags).mapNotNull { buffer[it] }
+                val completeData = ByteArray(sortedData.sumOf { it.size })
+                var currentPos = 0
+                for (chunk in sortedData) {
+                    System.arraycopy(chunk, 0, completeData, currentPos, chunk.size)
+                    currentPos += chunk.size
+                }
+
+                reassemblyBuffers.remove(deviceAddress)
+                expectedFragments.remove(deviceAddress)
+                onComplete(completeData)
             }
         }
 

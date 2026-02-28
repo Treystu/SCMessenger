@@ -39,6 +39,9 @@ final class BLECentralManager: NSObject {
     private var writeInProgress: [UUID: Bool] = [:]
     private var pendingWrites: [UUID: [Data]] = [:]
 
+    // Reassembly buffers per peripheral
+    private var reassemblyBuffers: [UUID: [Int: Data]] = [:]
+
     // Characteristics cache (names match Android BleGattServer)
     private var messageCharacteristics: [UUID: CBCharacteristic] = [:] // Write: central → peripheral
     private var syncCharacteristics: [UUID: CBCharacteristic] = [:]    // Notify: peripheral → central
@@ -101,17 +104,42 @@ final class BLECentralManager: NSObject {
             return false
         }
 
-        // Write queue management (mirrors Android)
-        if writeInProgress[peripheralId] == true {
-            logger.debug("Write in progress, queueing data")
-            pendingWrites[peripheralId, default: []].append(data)
-            return true
+        let mtu = peripheral.maximumWriteValueLength(for: .withResponse)
+        let fragments = fragmentData(data, mtu: mtu)
+        
+        for fragment in fragments {
+            if writeInProgress[peripheralId] == true {
+                pendingWrites[peripheralId, default: []].append(fragment)
+            } else {
+                writeInProgress[peripheralId] = true
+                peripheral.writeValue(fragment, for: characteristic, type: .withResponse)
+            }
         }
-
-        writeInProgress[peripheralId] = true
-        peripheral.writeValue(data, for: characteristic, type: .withResponse)
-        logger.debug("Writing \(data.count) bytes to \(peripheralId)")
         return true
+    }
+
+    private func fragmentData(_ data: Data, mtu: Int) -> [Data] {
+        let maxChunk = min(512, mtu)
+        let maxPayload = maxChunk - 4
+        if maxPayload <= 0 { return [data] }
+
+        let totalFragments = Int(ceil(Double(data.count) / Double(maxPayload)))
+        var fragments: [Data] = []
+
+        for i in 0..<totalFragments {
+            let start = i * maxPayload
+            let end = min(start + maxPayload, data.count)
+            let chunk = data.subdata(in: start..<end)
+
+            var header = Data(count: 4)
+            header[0] = UInt8(totalFragments & 0xFF)
+            header[1] = UInt8((totalFragments >> 8) & 0xFF)
+            header[2] = UInt8(i & 0xFF)
+            header[3] = UInt8((i >> 8) & 0xFF)
+
+            fragments.append(header + chunk)
+        }
+        return fragments
     }
 
     /// Broadcast data to all connected peripherals.
@@ -254,7 +282,20 @@ extension BLECentralManager: CBCentralManagerDelegate {
 
 extension BLECentralManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        guard let services = peripheral.services else { return }
+        if let error = error {
+            logger.error("Failed to discover services for \(peripheral.identifier): \(error.localizedDescription)")
+            meshRepository?.appendDiagnostic("ble_central_discover_services_fail id=\(peripheral.identifier) err=\(error.localizedDescription)")
+            return
+        }
+
+        guard let services = peripheral.services, !services.isEmpty else {
+            logger.warning("No services found for \(peripheral.identifier)")
+            meshRepository?.appendDiagnostic("ble_central_no_services id=\(peripheral.identifier)")
+            return
+        }
+
+        meshRepository?.appendDiagnostic("ble_central_services_discovered id=\(peripheral.identifier) count=\(services.count)")
+
         for service in services where service.uuid == MeshBLEConstants.serviceUUID {
             peripheral.discoverCharacteristics([
                 MeshBLEConstants.messageCharUUID,
@@ -265,15 +306,30 @@ extension BLECentralManager: CBPeripheralDelegate {
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-        guard let characteristics = service.characteristics else { return }
+        if let error = error {
+            logger.error("Failed to discover characteristics for \(peripheral.identifier): \(error.localizedDescription)")
+            meshRepository?.appendDiagnostic("ble_central_discover_chars_fail id=\(peripheral.identifier) err=\(error.localizedDescription)")
+            return
+        }
+
+        guard let characteristics = service.characteristics else {
+            meshRepository?.appendDiagnostic("ble_central_no_chars id=\(peripheral.identifier)")
+            return
+        }
+
+        meshRepository?.appendDiagnostic("ble_central_chars_discovered id=\(peripheral.identifier) count=\(characteristics.count)")
+
         for characteristic in characteristics {
             switch characteristic.uuid {
             case MeshBLEConstants.messageCharUUID:
                 messageCharacteristics[peripheral.identifier] = characteristic
+                peripheral.setNotifyValue(true, for: characteristic)
+                meshRepository?.appendDiagnostic("ble_central_subscribed_message id=\(peripheral.identifier)")
             case MeshBLEConstants.syncCharUUID:
                 syncCharacteristics[peripheral.identifier] = characteristic
-                peripheral.setNotifyValue(true, for: characteristic)
+                meshRepository?.appendDiagnostic("ble_central_found_sync id=\(peripheral.identifier)")
             case MeshBLEConstants.identityCharUUID:
+                meshRepository?.appendDiagnostic("ble_central_reading_identity id=\(peripheral.identifier)")
                 peripheral.readValue(for: characteristic)
                 // Schedule retry reads at T+900ms and T+2200ms (mirrors Android
                 // IDENTITY_REFRESH_DELAYS_MS) for peripherals whose GATT server
@@ -319,10 +375,34 @@ extension BLECentralManager: CBPeripheralDelegate {
                 logger.warning("Could not parse identity beacon from \(peripheral.identifier)")
             }
         } else {
-            // Message or sync data — route to mesh service
-            logger.debug("Data from \(peripheral.identifier): \(data.count) bytes on \(characteristic.uuid.shortUUID)")
-            DispatchQueue.main.async { [weak self] in
-                self?.meshRepository?.onBleDataReceived(peerId: peripheral.identifier.uuidString, data: data)
+            // Message or sync data — handle reassembly
+            if data.count < 4 {
+                logger.warning("Received tiny BLE packet (<4 bytes) from \(peripheral.identifier)")
+                return
+            }
+
+            let totalFrags = Int(data[0]) | (Int(data[1]) << 8)
+            let fragIndex = Int(data[2]) | (Int(data[3]) << 8)
+            let payload = data.subdata(in: 4..<data.count)
+
+            let peripheralID = peripheral.identifier
+            var buffer = reassemblyBuffers[peripheralID] ?? [:]
+            buffer[fragIndex] = payload
+            reassemblyBuffers[peripheralID] = buffer
+
+            if buffer.count == totalFrags {
+                var completeData = Data()
+                for i in 0..<totalFrags {
+                    if let chunk = buffer[i] {
+                        completeData.append(chunk)
+                    }
+                }
+                reassemblyBuffers.removeValue(forKey: peripheralID)
+
+                logger.debug("Reassembled complete message (\(completeData.count) bytes) from \(peripheralID)")
+                DispatchQueue.main.async { [weak self] in
+                    self?.meshRepository?.onBleDataReceived(peerId: peripheralID.uuidString, data: completeData)
+                }
             }
         }
     }

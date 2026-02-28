@@ -807,6 +807,8 @@ public protocol ContactManagerProtocol : AnyObject {
     
     func count()  -> UInt32
     
+    func flush() 
+    
     func get(peerId: String) throws  -> Contact?
     
     func list() throws  -> [Contact]
@@ -884,6 +886,12 @@ open func count() -> UInt32 {
     uniffi_scmessenger_core_fn_method_contactmanager_count(self.uniffiClonePointer(),$0
     )
 })
+}
+    
+open func flush() {try! rustCall() {
+    uniffi_scmessenger_core_fn_method_contactmanager_flush(self.uniffiClonePointer(),$0
+    )
+}
 }
     
 open func get(peerId: String)throws  -> Contact? {
@@ -1007,6 +1015,8 @@ public protocol HistoryManagerProtocol : AnyObject {
      */
     func enforceRetention(maxMessages: UInt32) throws  -> UInt32
     
+    func flush() 
+    
     func get(id: String) throws  -> MessageRecord?
     
     func markDelivered(id: String) throws 
@@ -1129,6 +1139,12 @@ open func enforceRetention(maxMessages: UInt32)throws  -> UInt32 {
         FfiConverterUInt32.lower(maxMessages),$0
     )
 })
+}
+    
+open func flush() {try! rustCall() {
+    uniffi_scmessenger_core_fn_method_historymanager_flush(self.uniffiClonePointer(),$0
+    )
+}
 }
     
 open func get(id: String)throws  -> MessageRecord? {
@@ -4705,6 +4721,9 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_contactmanager_count() != 6258) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_contactmanager_flush() != 12743) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_contactmanager_get() != 7325) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4745,6 +4764,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_historymanager_enforce_retention() != 40579) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_historymanager_flush() != 50033) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_historymanager_get() != 40713) {

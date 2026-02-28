@@ -457,6 +457,11 @@ void uniffi_scmessenger_core_fn_method_contactmanager_add(void*_Nonnull ptr, Rus
 uint32_t uniffi_scmessenger_core_fn_method_contactmanager_count(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_FLUSH
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_FLUSH
+void uniffi_scmessenger_core_fn_method_contactmanager_flush(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_GET
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_GET
 RustBuffer uniffi_scmessenger_core_fn_method_contactmanager_get(void*_Nonnull ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
@@ -540,6 +545,11 @@ void uniffi_scmessenger_core_fn_method_historymanager_delete(void*_Nonnull ptr, 
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_ENFORCE_RETENTION
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_ENFORCE_RETENTION
 uint32_t uniffi_scmessenger_core_fn_method_historymanager_enforce_retention(void*_Nonnull ptr, uint32_t max_messages, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_FLUSH
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_FLUSH
+void uniffi_scmessenger_core_fn_method_historymanager_flush(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_GET
@@ -1329,6 +1339,12 @@ uint16_t uniffi_scmessenger_core_checksum_method_contactmanager_count(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_CONTACTMANAGER_FLUSH
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_CONTACTMANAGER_FLUSH
+uint16_t uniffi_scmessenger_core_checksum_method_contactmanager_flush(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_CONTACTMANAGER_GET
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_CONTACTMANAGER_GET
 uint16_t uniffi_scmessenger_core_checksum_method_contactmanager_get(void
@@ -1410,6 +1426,12 @@ uint16_t uniffi_scmessenger_core_checksum_method_historymanager_delete(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_HISTORYMANAGER_ENFORCE_RETENTION
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_HISTORYMANAGER_ENFORCE_RETENTION
 uint16_t uniffi_scmessenger_core_checksum_method_historymanager_enforce_retention(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_HISTORYMANAGER_FLUSH
+#define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_CHECKSUM_METHOD_HISTORYMANAGER_FLUSH
+uint16_t uniffi_scmessenger_core_checksum_method_historymanager_flush(void
     
 );
 #endif

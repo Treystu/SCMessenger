@@ -207,6 +207,12 @@ impl ContactManager {
         let db = self.db.lock().unwrap();
         db.len() as u32
     }
+
+    pub fn flush(&self) {
+        if let Ok(db) = self.db.lock() {
+            let _ = db.flush();
+        }
+    }
 }
 
 fn current_timestamp() -> u64 {

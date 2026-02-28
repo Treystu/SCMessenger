@@ -4,7 +4,7 @@ struct DiagnosticsView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var logText: String = ""
     @State private var showingExportSheet = false
-    @State private var exportURL: URL?
+    @State private var exportText: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -84,8 +84,8 @@ struct DiagnosticsView: View {
             refreshLogs()
         }
         .sheet(isPresented: $showingExportSheet) {
-            if let url = exportURL {
-                ShareSheet(items: [url])
+            if let text = exportText {
+                ShareSheet(items: [text])
             }
         }
     }
@@ -105,9 +105,20 @@ struct DiagnosticsView: View {
     }
 
     private func prepareExport() {
-        let path = repository.diagnosticsLogPath()
-        let url = URL(fileURLWithPath: path)
-        exportURL = url
+        let jsonMetrics = repository.exportDiagnostics()
+        let recentLogs = repository.diagnosticsSnapshot(limit: 5000)
+
+        let bundleText = """
+        === SCMessenger Diagnostics Bundle ===
+        Generated: \(Date())
+
+        --- Node State Metrics (JSON) ---
+        \(jsonMetrics)
+
+        --- Recent Application Logs ---
+        \(recentLogs)
+        """
+        exportText = bundleText
         showingExportSheet = true
     }
 

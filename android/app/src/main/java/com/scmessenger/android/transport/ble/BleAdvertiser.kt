@@ -65,6 +65,13 @@ class BleAdvertiser(private val context: Context) {
     }
 
     /**
+     * Alias for setIdentityData to match naming conventions.
+     */
+    fun updateIdentityBeacon(data: ByteArray) {
+        setIdentityData(data)
+    }
+
+    /**
      * Set rotation interval for identity beacon rotation.
      */
     fun setRotationInterval(intervalMs: Long) {

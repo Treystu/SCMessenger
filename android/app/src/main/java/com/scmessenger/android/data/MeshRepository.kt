@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 import timber.log.Timber
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
@@ -127,6 +128,9 @@ class MeshRepository(private val context: Context) {
     // is missing from filesDir. Triggers post-start aggressive identity beacon.
     @Volatile private var isReinstallWithMissingData = false
 
+    // P0: Peer tracking to prevent ghost connections (700+ peers bug)
+    private val transportToCanonicalMap = ConcurrentHashMap<String, String>() // libp2pPeerId -> canonicalPeerId
+    private val activeSessions = ConcurrentHashMap<String, Long>() // libp2pPeerId -> lastActive
     // P0: Dedup cache — suppress redundant peer-identified callbacks for the same peer
     // within a 30-second window. The Rust core fires identify per-substream.
     private val peerIdentifiedDedupCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
@@ -422,13 +426,17 @@ class MeshRepository(private val context: Context) {
                                 isRelay = true,
                                 lastSeen = System.currentTimeMillis().toULong() / 1000u
                             )
-                            updateDiscoveredPeer(peerId, relayDiscovery)
                             emitConnectedIfChanged(
                                 peerId = peerId,
                                 transport = com.scmessenger.android.service.TransportType.INTERNET
                             )
+                            transportToCanonicalMap[peerId] = peerId // Relay counts as its own canonical
+                            activeSessions[peerId] = System.currentTimeMillis()
                         } else {
                             val transportIdentity = resolveTransportIdentity(peerId)
+                            val canonicalId = transportIdentity?.canonicalPeerId ?: peerId
+                            transportToCanonicalMap[peerId] = canonicalId
+                            activeSessions[peerId] = System.currentTimeMillis()
 
                             val discoveredNickname = prepopulateDiscoveryNickname(
                                 nickname = transportIdentity?.nickname,
@@ -503,22 +511,36 @@ class MeshRepository(private val context: Context) {
                 }
 
                 override fun onPeerDisconnected(peerId: String) {
-                    // P1: Deduplicate disconnect events — Rust core fires one per substream
+                    // P0: Deduplicate disconnect events — libp2p may fire multiple per session
                     val trimmedPeerId = peerId.trim()
                     val now = System.currentTimeMillis()
-                    val lastDisconnect = peerDisconnectDedupCache[trimmedPeerId]
-                    if (lastDisconnect != null && (now - lastDisconnect) < peerDisconnectDedupIntervalMs) {
+                    val lastDisconnected = peerDisconnectDedupCache[trimmedPeerId]
+                    if (lastDisconnected != null && (now - lastDisconnected) < peerDisconnectDedupIntervalMs) {
                         return
                     }
                     peerDisconnectDedupCache[trimmedPeerId] = now
 
-                    Timber.d("Core notified disconnect: $peerId")
+                    Timber.d("Core notified disconnected: $peerId")
                     repoScope.launch {
-                        connectedEmissionCache.remove(trimmedPeerId)
-                        pruneDisconnectedPeer(peerId)
-                        com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
-                            com.scmessenger.android.service.PeerEvent.Disconnected(peerId)
+                        val canonicalId = transportToCanonicalMap.remove(peerId) ?: peerId
+                        activeSessions.remove(peerId)
+
+                        // Clear from discovery if no other connections exist for this peer
+                        if (!transportToCanonicalMap.values.contains(canonicalId)) {
+                             _discoveredPeers.update { it - canonicalId }
+                        }
+                        _discoveredPeers.update { it - peerId }
+
+                        emitDisconnectedIfChanged(
+                            peerId = peerId,
+                            transport = com.scmessenger.android.service.TransportType.INTERNET
                         )
+                        if (canonicalId != peerId) {
+                            emitDisconnectedIfChanged(
+                                peerId = canonicalId,
+                                transport = com.scmessenger.android.service.TransportType.INTERNET
+                            )
+                        }
                     }
                 }
 
@@ -1035,17 +1057,14 @@ class MeshRepository(private val context: Context) {
                 beaconJsonObject = buildBeacon()
                 beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
             }
-            if (beaconJson.size > 480) {
                 beaconJsonObject = org.json.JSONObject()
                     .put("identity_id", identity.identityId ?: "")
                     .put("public_key", publicKeyHex)
                     .put("nickname", nickname)
                     .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
                     .put("listeners", org.json.JSONArray())
-                    .put("external_addresses", org.json.JSONArray())
-                    .put("connection_hints", org.json.JSONArray())
                 beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
-            }
+            bleAdvertiser?.updateIdentityBeacon(beaconJson)
             bleGattServer?.setIdentityData(beaconJson)
             identityData = beaconJson // Store for immediate use by GATT server
             Timber.i("BLE GATT identity beacon updated: ${publicKeyHex.take(8)}... (${beaconJson.size} bytes, listeners=${listeners.size})")
@@ -1091,6 +1110,30 @@ class MeshRepository(private val context: Context) {
                 "Peer identity read from $blePeerId: ${publicKeyHex.take(8)}... " +
                     "identity=${identityId.take(12)} nickname='${discoveredNickname?.take(24) ?: ""}'"
             )
+
+            // Persist BLE -> Identity mapping in contact notes so it survives restarts
+            // and helps routing even when BLE is the only transport initially.
+            repoScope.launch {
+                try {
+                    val contact = contactManager?.get(identityId)
+                    if (contact != null) {
+                        val updatedNotes = appendRoutingHint(contact.notes, "ble_peer_id", blePeerId)
+                        if (updatedNotes != contact.notes) {
+                            contactManager?.add(contact.copy(notes = updatedNotes))
+                            Timber.d("Updated persistent BLE routing for $identityId: $blePeerId")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "Failed to persist BLE routing for $identityId")
+                }
+            }
+
+            // TRIGGER IMMEDIATE SYNC: Now that we have identified a peer over BLE,
+            // don't wait for the 8s loop.
+            repoScope.launch {
+                flushPendingOutbox("peer_discovered")
+            }
+
             val selfIdentity = ironCore?.getIdentityInfo()
             val selfKey = normalizePublicKey(selfIdentity?.publicKeyHex)
             val selfIdentityId = selfIdentity?.identityId?.trim().orEmpty()
@@ -1627,16 +1670,17 @@ class MeshRepository(private val context: Context) {
                 }
                 val encryptedData = prepared.envelopeData
 
-                // 3. Save to history first so content survives transient route failures.
+                // 3. Save to history first so content survives transient
                 val record = uniffi.api.MessageRecord(
                     id = messageId,
                     peerId = peerId,
                     direction = uniffi.api.MessageDirection.SENT,
                     content = content,
                     timestamp = (System.currentTimeMillis() / 1000).toULong(),
-                    delivered = false // Will be updated on direct delivery ACK or receipt
+                    delivered = false
                 )
                 historyManager?.add(record)
+                historyManager?.flush()
 
                 // Emit for UI updates (e.g., chat list)
                 repoScope.launch {
@@ -1778,6 +1822,7 @@ class MeshRepository(private val context: Context) {
     // Keep legacy addMessage for receiving side or manual adds
     fun addMessage(record: uniffi.api.MessageRecord) {
         historyManager?.add(record)
+        historyManager?.flush()
     }
 
     fun getMessage(id: String): uniffi.api.MessageRecord? {
@@ -1834,6 +1879,12 @@ class MeshRepository(private val context: Context) {
         meshService = null
 
         ironCore?.stop()
+        try {
+            contactManager?.flush()
+            historyManager?.flush()
+        } catch (e: Exception) {
+            Timber.w("Failed to flush managers during shutdown: ${e.message}")
+        }
         ironCore = null
 
         contactManager = null
@@ -2008,6 +2059,7 @@ class MeshRepository(private val context: Context) {
     private val identityReemitIntervalMs = 15_000L
     private val connectedEmissionCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val connectedReemitIntervalMs = 15_000L
+    private val disconnectEmissionCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     private suspend fun emitIdentityDiscoveredIfChanged(
         peerId: String,
@@ -2077,6 +2129,25 @@ class MeshRepository(private val context: Context) {
             com.scmessenger.android.service.PeerEvent.Connected(
                 normalizedPeerId,
                 transport
+            )
+        )
+    }
+    private suspend fun emitDisconnectedIfChanged(
+        peerId: String,
+        transport: com.scmessenger.android.service.TransportType
+    ) {
+        val normalizedPeerId = peerId.trim()
+        if (normalizedPeerId.isEmpty()) return
+
+        val now = System.currentTimeMillis()
+        val lastEmitted = disconnectEmissionCache[normalizedPeerId]
+        if (lastEmitted != null && (now - lastEmitted) < peerDisconnectDedupIntervalMs) {
+            return
+        }
+        disconnectEmissionCache[normalizedPeerId] = now
+        com.scmessenger.android.service.MeshEventBus.emitPeerEvent(
+            com.scmessenger.android.service.PeerEvent.Disconnected(
+                normalizedPeerId
             )
         )
     }
@@ -2308,15 +2379,25 @@ class MeshRepository(private val context: Context) {
     ): DeliveryAttemptResult {
         var bleAcked = false
         fun tryBleDelivery(): Boolean {
-            val bleAddr = blePeerId?.trim()?.takeIf { it.isNotEmpty() } ?: return false
-            val bleGatt = bleGattClient ?: return false
+            Timber.d("tryBleDelivery: given blePeerId=$blePeerId, bleGattClient=${bleGattClient != null}")
+            val bleAddr = blePeerId?.trim()?.takeIf { it.isNotEmpty() } ?: run {
+                Timber.d("tryBleDelivery: blePeerId is null or empty, returning false")
+                return false
+            }
+            val bleGatt = bleGattClient ?: run {
+                Timber.d("tryBleDelivery: bleGattClient is null, returning false")
+                return false
+            }
             return try {
                 if (bleGatt.sendData(bleAddr, encryptedData)) {
                     Timber.i("✓ Delivery via BLE (target=$bleAddr)")
                     true
-                } else false
+                } else {
+                    Timber.d("tryBleDelivery: bleGatt.sendData returned false for $bleAddr")
+                    false
+                }
             } catch (bleEx: Exception) {
-                Timber.d("BLE send failed: ${bleEx.message}")
+                Timber.w(bleEx, "BLE send failed for $bleAddr")
                 false
             }
         }
@@ -2344,7 +2425,7 @@ class MeshRepository(private val context: Context) {
             )
             if (dialCandidates.isNotEmpty()) {
                 connectToPeer(routePeerId, dialCandidates)
-                awaitPeerConnection(routePeerId, timeoutMs = 2000L)
+                awaitPeerConnection(routePeerId, timeoutMs = 5000L) // Increased from 2s for mesh/relay paths
             }
 
             try {
@@ -2434,7 +2515,8 @@ class MeshRepository(private val context: Context) {
             val delivery = attemptDirectSwarmDelivery(
                 routePeerCandidates = routePeerCandidates,
                 listeners = resolvedListeners,
-                encryptedData = envelope
+                encryptedData = envelope,
+                blePeerId = latestRouting.blePeerId
             )
             val selectedRoutePeerId = delivery.routePeerId ?: resolvedRoutePeerId
 

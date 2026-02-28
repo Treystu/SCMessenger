@@ -42,6 +42,10 @@ final class BLEPeripheralManager: NSObject {
     private var isAdvertising = false
     private var isRotationEnabled = true
     
+    // Reassembly buffers per central
+    private var reassemblyBuffers: [UUID: [Int: Data]] = [:]
+    private var expectedFragments: [UUID: Int] = [:]
+    
     init(meshRepository: MeshRepository) {
         self.meshRepository = meshRepository
         super.init()
@@ -78,8 +82,7 @@ final class BLEPeripheralManager: NSObject {
         // This payload is served over GATT identity characteristic reads, not
         // advertisement service data. Full JSON identity is expected here.
         identityData = data
-        identityCharacteristic?.value = data
-        logger.debug("Identity data set: \(data.count) bytes")
+        logger.debug("Identity data updated for dynamic read: \(data.count) bytes")
     }
     
     func setRotationInterval(_ interval: TimeInterval) {
@@ -110,18 +113,9 @@ final class BLEPeripheralManager: NSObject {
         // Settings are advisory only
     }
     
-    func sendNotification(to central: CBCentral, data: Data) {
-        guard let syncCharacteristic = syncCharacteristic else {
-            logger.error("Sync characteristic not available")
-            return
-        }
-
-        let success = peripheralManager.updateValue(data, for: syncCharacteristic, onSubscribedCentrals: [central])
-        if success {
-            logger.debug("Sent notification to \(central.identifier): \(data.count) bytes")
-        } else {
-            logger.warning("Failed to send notification, queue full — buffering")
-            pendingNotifications.append((central: central, data: data))
+    func broadcastDataToCentrals(_ data: Data) {
+        for central in subscribedCentrals {
+            sendDataToCentral(central, data: data)
         }
     }
 
@@ -136,14 +130,44 @@ final class BLEPeripheralManager: NSObject {
             logger.warning("sendDataToConnectedCentral: no subscribed central for \(peerId)")
             return
         }
-        sendNotification(to: central, data: data)
+        sendDataToCentral(central, data: data)
     }
 
-    /// Broadcast data to all subscribed centrals.
-    func broadcastDataToCentrals(_ data: Data) {
-        for central in subscribedCentrals {
-            sendNotification(to: central, data: data)
+    private func sendDataToCentral(_ central: CBCentral, data: Data) {
+        let mtu = central.maximumUpdateValueLength
+        let fragments = fragmentData(data, mtu: mtu)
+        
+        for fragment in fragments {
+            let success = peripheralManager.updateValue(fragment, for: messageCharacteristic!, onSubscribedCentrals: [central])
+            if !success {
+                logger.warning("Failed to send fragment, buffering")
+                pendingNotifications.append((central: central, data: fragment))
+            }
         }
+    }
+
+    private func fragmentData(_ data: Data, mtu: Int) -> [Data] {
+        let maxChunk = min(512, mtu)
+        let maxPayload = maxChunk - 4
+        if maxPayload <= 0 { return [data] }
+
+        let totalFragments = Int(ceil(Double(data.count) / Double(maxPayload)))
+        var fragments: [Data] = []
+
+        for i in 0..<totalFragments {
+            let start = i * maxPayload
+            let end = min(start + maxPayload, data.count)
+            let chunk = data.subdata(in: start..<end)
+
+            var header = Data(count: 4)
+            header[0] = UInt8(totalFragments & 0xFF)
+            header[1] = UInt8((totalFragments >> 8) & 0xFF)
+            header[2] = UInt8(i & 0xFF)
+            header[3] = UInt8((i >> 8) & 0xFF)
+
+            fragments.append(header + chunk)
+        }
+        return fragments
     }
     
     // MARK: - Private Methods
@@ -161,22 +185,22 @@ final class BLEPeripheralManager: NSObject {
         // Create characteristics (names match Android BleGattServer)
         messageCharacteristic = CBMutableCharacteristic(
             type: MeshBLEConstants.messageCharUUID,
-            properties: [.write, .writeWithoutResponse],
+            properties: [.write, .writeWithoutResponse, .notify],
             value: nil,
             permissions: .writeable
         )
 
         syncCharacteristic = CBMutableCharacteristic(
             type: MeshBLEConstants.syncCharUUID,
-            properties: [.notify],
+            properties: [.read, .write],
             value: nil,
-            permissions: .readable
+            permissions: [.readable, .writeable]
         )
 
         identityCharacteristic = CBMutableCharacteristic(
             type: MeshBLEConstants.identityCharUUID,
             properties: .read,
-            value: identityData,
+            value: nil,
             permissions: .readable
         )
 
@@ -216,15 +240,14 @@ final class BLEPeripheralManager: NSObject {
     }
     
     private func rotateIdentity() {
-        logger.info("Rotating identity for privacy")
-        // Stop advertising
-        peripheralManager.stopAdvertising()
+        logger.info("Rotating identity...")
+        stopAdvertising()
+        isAdvertising = false // Ensure we clear state so beginAdvertising succeeds
         
-        // Update identity data (would be regenerated by repository)
-        // For now, just restart advertising
-        
-        // Restart advertising
-        beginAdvertising()
+        // Short delay to let hardware settle
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.beginAdvertising()
+        }
     }
 }
 
@@ -259,24 +282,93 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     
     func peripheralManagerDidStartAdvertising(_ peripheral: CBPeripheralManager, error: Error?) {
         if let error = error {
+            let nsError = error as NSError
+            if nsError.domain == CBErrorDomain && nsError.code == 12 /* CBError.alreadyAdvertising */ {
+                logger.warning("Advertising already active, syncing state")
+                meshRepository?.appendDiagnostic("ble_peripheral_adv_already_active")
+                isAdvertising = true
+                return
+            }
             logger.error("Failed to start advertising: \(error.localizedDescription)")
             meshRepository?.appendDiagnostic("ble_peripheral_adv_fail err=\(error.localizedDescription)")
+            isAdvertising = false
             return
         }
         logger.info("Advertising started successfully")
+        isAdvertising = true
         meshRepository?.appendDiagnostic("ble_peripheral_adv_start")
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
         for request in requests {
-            if request.characteristic.uuid == MeshBLEConstants.messageCharUUID,
-               let data = request.value {
-                logger.debug("Received write: \(data.count) bytes from \(request.central.identifier)")
-                DispatchQueue.main.async { [weak self] in
-                    self?.meshRepository?.onBleDataReceived(peerId: request.central.identifier.uuidString, data: data)
+            guard let data = request.value, !data.isEmpty else {
+                peripheral.respond(to: request, withResult: .success)
+                continue
+            }
+            
+            if request.characteristic.uuid == MeshBLEConstants.syncCharUUID {
+                // Fragmented sync data
+                handleFragmentedWrite(data: data, centralId: request.central.identifier, isSync: true)
+                peripheral.respond(to: request, withResult: .success)
+            } else if request.characteristic.uuid == MeshBLEConstants.messageCharUUID {
+                // Fragmented message data
+                handleFragmentedWrite(data: data, centralId: request.central.identifier, isSync: false)
+                peripheral.respond(to: request, withResult: .success)
+            } else {
+                peripheral.respond(to: request, withResult: .requestNotSupported)
+            }
+        }
+    }
+
+    private func handleFragmentedWrite(data: Data, centralId: UUID, isSync: Bool) {
+        if data.count < 4 {
+            logger.warning("Received tiny BLE packet (<4 bytes) from \(centralId)")
+            return
+        }
+
+        let totalFrags = Int(data[0]) | (Int(data[1]) << 8)
+        let fragIndex = Int(data[2]) | (Int(data[3]) << 8)
+        let payload = data.subdata(in: 4..<data.count)
+
+        var buffer = reassemblyBuffers[centralId] ?? [:]
+        buffer[fragIndex] = payload
+        reassemblyBuffers[centralId] = buffer
+
+        if buffer.count == totalFrags {
+            var completeData = Data()
+            for i in 0..<totalFrags {
+                if let chunk = buffer[i] {
+                    completeData.append(chunk)
                 }
             }
+            reassemblyBuffers.removeValue(forKey: centralId)
+
+            logger.info("Reassembled complete \(isSync ? "sync" : "message") (\(completeData.count) bytes) from \(centralId)")
+            DispatchQueue.main.async { [weak self] in
+                self?.meshRepository?.onBleDataReceived(peerId: centralId.uuidString, data: completeData)
+            }
+        }
+    }
+    
+    func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveRead request: CBATTRequest) {
+        if request.characteristic.uuid == MeshBLEConstants.identityCharUUID {
+            guard let data = identityData else {
+                peripheral.respond(to: request, withResult: .unlikelyError)
+                return
+            }
+            
+            let offset = request.offset
+            
+            if offset > data.count {
+                peripheral.respond(to: request, withResult: .invalidOffset)
+                return
+            }
+            
+            request.value = data.subdata(in: offset..<data.count)
             peripheral.respond(to: request, withResult: .success)
+            logger.debug("Responded to read for identity beacon, offset: \(offset), returning \(request.value?.count ?? 0) bytes")
+        } else {
+            peripheral.respond(to: request, withResult: .requestNotSupported)
         }
     }
     
@@ -307,11 +399,11 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     }
     
     private func processPendingNotifications() {
-        guard let syncChar = syncCharacteristic else { return }
+        guard let messageChar = messageCharacteristic else { return }
         
         while !self.pendingNotifications.isEmpty {
             let next = self.pendingNotifications[0]
-            let success = self.peripheralManager.updateValue(next.data, for: syncChar, onSubscribedCentrals: [next.central])
+            let success = self.peripheralManager.updateValue(next.data, for: messageChar, onSubscribedCentrals: [next.central])
             if success {
                 self.pendingNotifications.removeFirst()
                 self.logger.debug("Processed buffered notification for \(next.central.identifier)")

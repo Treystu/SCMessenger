@@ -184,7 +184,7 @@ final class MeshRepository {
         let libp2pPeerId: String?
         let blePeerId: String?
     }
-
+    
     // Device state for auto-adjustment
     private var currentBatteryPct: UInt8 = 100
     private var currentIsCharging: Bool = true
@@ -843,6 +843,7 @@ final class MeshRepository {
             delivered: false
         )
         try? historyManager?.add(record: messageRecord)
+        historyManager?.flush()
 
         // Notify UI (Unified flow for sent messages)
         messageUpdates.send(messageRecord)
@@ -978,6 +979,7 @@ final class MeshRepository {
                 )
                 do {
                     try contactManager?.add(contact: autoContact)
+                    contactManager?.flush()
                     logger.info("Auto-created contact from received message: \(canonicalPeerId.prefix(8)) key: \(normalizedSenderKey.prefix(8))...")
                 } catch {
                     logger.warning("Auto-create contact failed for \(canonicalPeerId.prefix(8)): \(error.localizedDescription)")
@@ -997,6 +999,7 @@ final class MeshRepository {
                     notes: existingContact.notes
                 )
                 try? contactManager?.add(contact: updatedContact)
+                contactManager?.flush()
             }
 
             if let routePeerId, !routePeerId.isEmpty,
@@ -1018,6 +1021,7 @@ final class MeshRepository {
                     notes: updatedNotesWithListeners
                 )
                 try? contactManager?.add(contact: updatedContact)
+                contactManager?.flush()
             }
         }
 
@@ -1116,6 +1120,7 @@ final class MeshRepository {
         guard normalized == "delivered" || normalized == "read" else { return }
         appendDiagnostic("receipt_rx msg=\(messageId) status=\(normalized)")
         try? historyManager?.markDelivered(id: messageId)
+        historyManager?.flush()
         _ = ironCore?.markMessageSent(messageId: messageId)
         removePendingOutbound(historyRecordId: messageId)
         MeshEventBus.shared.messageEvents.send(.delivered(messageId: messageId))
@@ -2454,6 +2459,31 @@ final class MeshRepository {
             return
         }
 
+        // Persist BLE -> Identity mapping in contact notes
+        if let contact = try? contactManager?.get(peerId: identityId) {
+            let updatedNotes = appendRoutingHint(notes: contact.notes, key: "ble_peer_id", value: blePeerId)
+            if updatedNotes != contact.notes {
+                let updatedContact = Contact(
+                    peerId: contact.peerId,
+                    nickname: contact.nickname,
+                    localNickname: contact.localNickname,
+                    publicKey: contact.publicKey,
+                    addedAt: contact.addedAt,
+                    lastSeen: UInt64(Date().timeIntervalSince1970),
+                    notes: updatedNotes
+                )
+                try? contactManager?.add(contact: updatedContact)
+                contactManager?.flush()
+                logger.debug("Updated persistent BLE routing for \(identityId.prefix(8)): \(blePeerId.prefix(8))")
+            }
+        }
+
+        // TRIGGER IMMEDIATE SYNC: Now that we have identified a peer over BLE,
+        // don't wait for the periodic loop.
+        Task {
+            await flushPendingOutbox(reason: "peer_discovered")
+        }
+
         // Emit to nearby peers bus — UI will show peer in Nearby section for user to manually add
         let nonEmptyNickname = rawNickname.isEmpty ? nil : rawNickname
         let nonEmptyLibp2p = normalizedLibp2p
@@ -2747,17 +2777,36 @@ final class MeshRepository {
     ) async -> DeliveryAttemptResult {
         var bleAcked = false
         func tryBleDelivery() -> Bool {
-            if let bleAddr = blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines), !bleAddr.isEmpty, let uuid = UUID(uuidString: bleAddr) {
-                if let central = bleCentralManager {
-                    if central.sendData(to: uuid, data: envelopeData) {
-                        logger.info("✓ Delivery via BLE (target=\(bleAddr))")
-                        return true
-                    } else {
-                        return false
-                    }
-                }
+            logger.debug("tryBleDelivery: given blePeerId=\(blePeerId ?? "nil")")
+            guard let bleAddr = blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines), !bleAddr.isEmpty, let uuid = UUID(uuidString: bleAddr) else {
+                logger.debug("tryBleDelivery: blePeerId is null, empty, or not a valid UUID, returning false")
+                return false
             }
-            return false
+
+            var sent = false
+            // Try Central role first (we are client, sending to peripheral)
+            if let central = bleCentralManager {
+                if central.sendData(to: uuid, data: envelopeData) {
+                    logger.info("✓ Delivery via BLE Central (target=\(bleAddr))")
+                    sent = true
+                } else {
+                    logger.warning("tryBleDelivery: bleCentralManager.sendData returned false for \(bleAddr)")
+                }
+            } else {
+                logger.debug("tryBleDelivery: bleCentralManager is null")
+            }
+
+            // Also try Peripheral role (we are server, pushing notification to central)
+            if let peripheral = blePeripheralManager {
+                logger.debug("tryBleDelivery: delegating to blePeripheralManager for \(bleAddr)")
+                peripheral.sendDataToConnectedCentral(peerId: bleAddr, data: envelopeData)
+                // We return true if EITHER transport succeeded. Even if Peripheral just buffers,
+                // it counts as a delivery attempt that high-level shouldn't immediately re-queue.
+                sent = true
+            } else {
+                logger.debug("tryBleDelivery: blePeripheralManager is null")
+            }
+            return sent
         }
 
         bleAcked = tryBleDelivery()
@@ -2817,7 +2866,7 @@ final class MeshRepository {
         return DeliveryAttemptResult(acked: bleAcked, routePeerId: sanitizedCandidates.first)
     }
 
-    private func awaitPeerConnection(peerId: String, timeoutMs: UInt64 = 1200) async -> Bool {
+    private func awaitPeerConnection(peerId: String, timeoutMs: UInt64 = 5000) async -> Bool {
         guard let swarmBridge else { return false }
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
         while Date() < deadline {
@@ -2900,7 +2949,8 @@ final class MeshRepository {
             let delivery = await attemptDirectSwarmDelivery(
                 routePeerCandidates: routePeerCandidates,
                 addresses: resolvedAddresses,
-                envelopeData: envelopeData
+                envelopeData: envelopeData,
+                blePeerId: latestRouting.blePeerId
             )
             let selectedRoutePeerId = delivery.routePeerId ?? resolvedRoutePeerId
 
@@ -3197,6 +3247,7 @@ final class MeshRepository {
                 notes: withListeners
             )
             try? contactManager?.add(contact: updated)
+            contactManager?.flush()
         }
     }
 
@@ -3264,6 +3315,7 @@ final class MeshRepository {
             notes: notes
         )
         try? contactManager?.add(contact: updated)
+        contactManager?.flush()
         annotateIdentityInLedger(
             routePeerId: normalizedLibp2p,
             listeners: listeners,

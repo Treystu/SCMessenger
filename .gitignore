@@ -20,6 +20,7 @@ config.json
 logs/*
 *_log.txt
 *_logs.txt
+*.txt
 
 # Temporary migration/debug inventories
 docs/_ios_*

@@ -45,11 +45,18 @@ class BleGattClient(
     private val activeConnections = ConcurrentHashMap<String, BluetoothGatt>()
     private val maxConnections = 5
 
-    // Connection state tracking
+    // Negotiated MTU per device
+    private val negotiatedMtus = ConcurrentHashMap<String, Int>()
+
+    // Current connection states
     private val connectionStates = ConcurrentHashMap<String, ConnectionState>()
 
-    // Write queue for handling async writeCharacteristic fragmentation
+    // Pending write operations (for fragmented writes)
     private val pendingWrites = ConcurrentHashMap<String, MutableList<ByteArray>>()
+
+    // Reassembly buffers per device
+    private val reassemblyBuffers = ConcurrentHashMap<String, MutableMap<Int, ByteArray>>()
+    private val expectedFragments = ConcurrentHashMap<String, Int>()
 
     // Per-device GATT operation queue.
     // Android GATT is strictly sequential per connection: initiating a new op
@@ -168,6 +175,7 @@ class BleGattClient(
             gatt.disconnect()
             gatt.close()
             connectionStates.remove(deviceAddress)
+            negotiatedMtus.remove(deviceAddress)
             gattOpQueues.remove(deviceAddress)?.close()
             gattOpSemaphores.remove(deviceAddress)
             Timber.d("Disconnected from $deviceAddress")
@@ -207,23 +215,57 @@ class BleGattClient(
             return false
         }
 
-        val mtu = 512 // Request was made during connection
-        return enqueueGattOp(deviceAddress) {
-            try {
-                characteristic.value = data
-                characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                if (!gatt.writeCharacteristic(characteristic)) {
+        val mtu = negotiatedMtus[deviceAddress] ?: 23
+        val fragments = fragmentData(data, mtu)
+
+        var allEnqueued = true
+        for (fragment in fragments) {
+            val enqueued = enqueueGattOp(deviceAddress) {
+                try {
+                    characteristic.value = fragment
+                    characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                    if (!gatt.writeCharacteristic(characteristic)) {
+                        Timber.e("Failed to initiate characteristic write to $deviceAddress")
+                        releaseGattOp(deviceAddress)
+                    }
+                    // else: semaphore released in onCharacteristicWrite
+                } catch (e: SecurityException) {
+                    Timber.e(e, "Security exception sending data to $deviceAddress")
+                    releaseGattOp(deviceAddress)
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to send data to $deviceAddress")
                     releaseGattOp(deviceAddress)
                 }
-                // else: semaphore released in onCharacteristicWrite
-            } catch (e: SecurityException) {
-                Timber.e(e, "Security exception sending data to $deviceAddress")
-                releaseGattOp(deviceAddress)
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to send data to $deviceAddress")
-                releaseGattOp(deviceAddress)
             }
+            if (!enqueued) allEnqueued = false
         }
+        return allEnqueued
+    }
+
+    private fun fragmentData(data: ByteArray, mtu: Int): List<ByteArray> {
+        val maxChunk = minOf(512, mtu - 3)
+        val maxPayload = maxChunk - 4
+        if (maxPayload <= 0) return listOf(data) // Fallback for tiny MTU
+
+        val totalFragments = (data.size + maxPayload - 1).let { if (it < 0) 0 else it / maxPayload }.coerceAtLeast(1)
+        val fragments = mutableListOf<ByteArray>()
+
+        for (i in 0 until totalFragments) {
+            val start = i * maxPayload
+            val end = minOf(start + maxPayload, data.size)
+            val chunk = data.copyOfRange(start, end)
+
+            val header = ByteArray(4)
+            // total_fragments (u16 le)
+            header[0] = (totalFragments and 0xFF).toByte()
+            header[1] = ((totalFragments shr 8) and 0xFF).toByte()
+            // fragment_index (u16 le)
+            header[2] = (i and 0xFF).toByte()
+            header[3] = ((i shr 8) and 0xFF).toByte()
+
+            fragments.add(header + chunk)
+        }
+        return fragments
     }
 
     /**
@@ -320,6 +362,16 @@ class BleGattClient(
                 }
             } else {
                 Timber.e("Characteristic read failed on $deviceAddress: $status")
+                if (characteristic.uuid == BleGattServer.IDENTITY_CHAR_UUID && (status == 6 || status == 133)) {
+                    // Status 6: Request Not Supported (often transient on iOS while GATT database settles)
+                    // Status 133: Generic communication error (common Android transient failure)
+                    scope.launch {
+                        delay(1000)
+                        val gattRef = activeConnections[deviceAddress] ?: return@launch
+                        Timber.d("Retrying identity read for $deviceAddress")
+                        readIdentityBeacon(gattRef)
+                    }
+                }
             }
             // Read op complete — unblock the next queued operation.
             releaseGattOp(deviceAddress)
@@ -369,9 +421,36 @@ class BleGattClient(
 
             when (characteristic.uuid) {
                 BleGattServer.MESSAGE_CHAR_UUID -> {
-                    val data = characteristic.value
-                    Timber.d("Message notification from $deviceAddress: ${data.size} bytes")
-                    onDataReceived(deviceAddress, data)
+                    val value = characteristic.value ?: return
+                    if (value.size < 4) {
+                        Timber.w("Received tiny BLE packet (<4 bytes) from $deviceAddress")
+                        return
+                    }
+
+                    val totalFrags = (value[0].toInt() and 0xFF) or ((value[1].toInt() and 0xFF) shl 8)
+                    val fragIndex = (value[2].toInt() and 0xFF) or ((value[3].toInt() and 0xFF) shl 8)
+                    val payload = value.copyOfRange(4, value.size)
+
+                    val buffer = reassemblyBuffers.getOrPut(deviceAddress) { ConcurrentHashMap<Int, ByteArray>() }
+                    buffer[fragIndex] = payload
+                    expectedFragments[deviceAddress] = totalFrags
+
+                    if (buffer.size == totalFrags) {
+                        // All fragments arrived
+                        val sortedData = (0 until totalFrags).mapNotNull { buffer[it] }
+                        val completeData = ByteArray(sortedData.sumOf { it.size })
+                        var currentPos = 0
+                        for (chunk in sortedData) {
+                            System.arraycopy(chunk, 0, completeData, currentPos, chunk.size)
+                            currentPos += chunk.size
+                        }
+
+                        reassemblyBuffers.remove(deviceAddress)
+                        expectedFragments.remove(deviceAddress)
+
+                        Timber.d("Reassembled complete message from $deviceAddress: ${completeData.size} bytes")
+                        onDataReceived(deviceAddress, completeData)
+                    }
                 }
             }
         }
@@ -383,6 +462,7 @@ class BleGattClient(
 
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Timber.d("MTU changed to $mtu for $deviceAddress")
+                negotiatedMtus[deviceAddress] = mtu
                 try {
                     gatt.discoverServices()
                 } catch (e: SecurityException) {

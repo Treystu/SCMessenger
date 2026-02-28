@@ -353,6 +353,7 @@ interface ContactManager {
     void update_last_seen(string peer_id);
 
     u32 count();
+    void flush();
 };
 
 // ============================================================================
@@ -428,6 +429,7 @@ interface HistoryManager {
     /// Returns the number of pruned records.
     [Throws=IronCoreError]
     u32 prune_before(u64 before_timestamp);
+    void flush();
 };
 
 // ============================================================================

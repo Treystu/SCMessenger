@@ -1326,6 +1326,12 @@ impl HistoryManager {
         db.len() as u32
     }
 
+    pub fn flush(&self) {
+        if let Ok(db) = self.db.lock() {
+            let _ = db.flush();
+        }
+    }
+
     /// Enforce a maximum message retention cap.
     ///
     /// Keeps the `max_messages` most recent messages (by timestamp) and

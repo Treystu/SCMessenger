@@ -13,6 +13,7 @@ import java.util.*
  * Useful for diagnosing issues on devices without a debugger connected.
  */
 class FileLoggingTree(context: Context) : Timber.Tree() {
+    private val MAX_LOG_LINES = 10000
     private val logFile: File = File(context.filesDir, "mesh_diagnostics.log")
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
 
@@ -52,8 +53,9 @@ class FileLoggingTree(context: Context) : Timber.Tree() {
     private fun truncateLogFile() {
         try {
             val lines = logFile.readLines()
-            if (lines.size > 500) {
-                val keptLines = lines.takeLast(500)
+            val maxLines = 10000
+            if (lines.size > maxLines) {
+                val keptLines = lines.takeLast(maxLines)
                 logFile.writeText(keptLines.joinToString("\n") + "\n")
             }
         } catch (e: Exception) {
