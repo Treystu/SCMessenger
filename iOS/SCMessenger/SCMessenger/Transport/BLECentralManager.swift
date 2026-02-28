@@ -107,15 +107,23 @@ final class BLECentralManager: NSObject {
         let mtu = peripheral.maximumWriteValueLength(for: .withResponse)
         let fragments = fragmentData(data, mtu: mtu)
         
+        meshRepository?.appendDiagnostic("ble_central_tx_start fragments=\(fragments.count) to=\(peripheralId.uuidString.prefix(8))")
         for fragment in fragments {
-            if writeInProgress[peripheralId] == true {
-                pendingWrites[peripheralId, default: []].append(fragment)
-            } else {
-                writeInProgress[peripheralId] = true
-                peripheral.writeValue(fragment, for: characteristic, type: .withResponse)
-            }
+            enqueueFragment(fragment, for: peripheralId)
         }
         return true
+    }
+
+    private func enqueueFragment(_ fragment: Data, for peripheralId: UUID) {
+        guard let peripheral = connectedPeripherals[peripheralId],
+              let characteristic = messageCharacteristics[peripheralId] else { return }
+
+        if writeInProgress[peripheralId] == true {
+            pendingWrites[peripheralId, default: []].append(fragment)
+        } else {
+            writeInProgress[peripheralId] = true
+            peripheral.writeValue(fragment, for: characteristic, type: .withResponse)
+        }
     }
 
     private func fragmentData(_ data: Data, mtu: Int) -> [Data] {
@@ -386,20 +394,33 @@ extension BLECentralManager: CBPeripheralDelegate {
             let payload = data.subdata(in: 4..<data.count)
 
             let peripheralID = peripheral.identifier
-            var buffer = reassemblyBuffers[peripheralID] ?? [:]
-            buffer[fragIndex] = payload
-            reassemblyBuffers[peripheralID] = buffer
+            if fragIndex == 0 {
+                reassemblyBuffers[peripheralID] = [0: payload]
+                if totalFrags > 1 {
+                    meshRepository?.appendDiagnostic("ble_central_rx_start total=\(totalFrags) from=\(peripheralID.uuidString.prefix(8))")
+                }
+            } else {
+                var buffer = reassemblyBuffers[peripheralID] ?? [:]
+                buffer[fragIndex] = payload
+                reassemblyBuffers[peripheralID] = buffer
+            }
 
-            if buffer.count == totalFrags {
+            let currentCount = reassemblyBuffers[peripheralID]?.count ?? 0
+            if currentCount == totalFrags {
                 var completeData = Data()
+                let buffer = reassemblyBuffers[peripheralID] ?? [:]
                 for i in 0..<totalFrags {
                     if let chunk = buffer[i] {
                         completeData.append(chunk)
+                    } else {
+                        logger.error("Missing fragment \(i) in complete buffer for \(peripheralID)")
+                        return
                     }
                 }
                 reassemblyBuffers.removeValue(forKey: peripheralID)
 
-                logger.debug("Reassembled complete message (\(completeData.count) bytes) from \(peripheralID)")
+                logger.info("Reassembled complete message (\(completeData.count) bytes) from \(peripheralID)")
+                meshRepository?.appendDiagnostic("ble_central_rx_complete size=\(completeData.count)")
                 DispatchQueue.main.async { [weak self] in
                     self?.meshRepository?.onBleDataReceived(peerId: peripheralID.uuidString, data: completeData)
                 }
@@ -408,11 +429,20 @@ extension BLECentralManager: CBPeripheralDelegate {
     }
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
-        // Dequeue next write (mirrors Android pattern)
-        writeInProgress[peripheral.identifier] = false
-        if let next = pendingWrites[peripheral.identifier]?.first {
-            pendingWrites[peripheral.identifier]?.removeFirst()
-            sendData(to: peripheral.identifier, data: next)
+        if let error = error {
+            logger.error("Write error for \(peripheral.identifier): \(error.localizedDescription)")
+            meshRepository?.appendDiagnostic("ble_central_write_fail id=\(peripheral.identifier) err=\(error.localizedDescription)")
+            // Clear current write state to allow retry/next
+            writeInProgress[peripheral.identifier] = false
+            return
+        }
+
+        // Dequeue next write
+        let peripheralId = peripheral.identifier
+        writeInProgress[peripheralId] = false
+        if let next = pendingWrites[peripheralId]?.first {
+            pendingWrites[peripheralId]?.removeFirst()
+            enqueueFragment(next, for: peripheralId)
         }
     }
 }

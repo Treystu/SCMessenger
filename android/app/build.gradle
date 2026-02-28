@@ -157,8 +157,10 @@ task buildRustAndroid(type: Exec) {
     inputs.file('../../core/Cargo.toml')
     outputs.dir('../../core/target/android-libs')
     
-    commandLine 'sh', '-c', '''
+    commandLine 'sh', '-c', """
         set -e
+        # Pass Gradle task names for profile detection
+        export GRADLE_TASK_NAMES="${project.gradle.startParameter.taskNames}"
         echo "Starting buildRustAndroid task..."
         
         # Ensure 16KB page alignment for Android 15+ compatibility
@@ -174,21 +176,33 @@ task buildRustAndroid(type: Exec) {
         mkdir -p core/target/android-libs/{arm64-v8a,armeabi-v7a,x86_64,x86}
         
         # Build for arm64 (devices) and x86_64 (simulators)
+        # We determine the profile based on the task name to speed up debug builds
         targets="aarch64-linux-android x86_64-linux-android"
         
-        for target in $targets; do
-            echo "Building for $target..."
-            cargo ndk -t $target build --release -p scmessenger-core
+        # Profile mapping: only use release for release tasks
+        RUST_PROFILE=""
+        RUST_DIR="debug"
+        if echo "\${GRADLE_TASK_NAMES}" | grep -qi "Release"; then
+            echo "Using Release profile for Rust build..."
+            RUST_PROFILE="--release"
+            RUST_DIR="release"
+        else
+            echo "Using Debug profile for Rust build (faster)..."
+        fi
+        
+        for target in \$targets; do
+            echo "Building for \$target..."
+            cargo ndk -t \$target build \$RUST_PROFILE -p scmessenger-core
         done
         
         # Copy libraries to expected locations
         echo "Copying libraries..."
         mkdir -p core/target/android-libs/arm64-v8a core/target/android-libs/x86_64
-        cp target/aarch64-linux-android/release/libscmessenger_core.so core/target/android-libs/arm64-v8a/libuniffi_api.so
-        cp target/x86_64-linux-android/release/libscmessenger_core.so core/target/android-libs/x86_64/libuniffi_api.so
+        cp target/aarch64-linux-android/\${RUST_DIR}/libscmessenger_core.so core/target/android-libs/arm64-v8a/libuniffi_api.so
+        cp target/x86_64-linux-android/\${RUST_DIR}/libscmessenger_core.so core/target/android-libs/x86_64/libuniffi_api.so
         
         echo "Rust libraries built and copied successfully!"
-    '''
+    """
 }
 
 // Task to generate UniFFI Kotlin bindings

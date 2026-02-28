@@ -3336,7 +3336,7 @@ final class MeshRepository {
 
     private func broadcastIdentityBeacon() {
         guard let info = ironCore?.getIdentityInfo(),
-              let publicKeyHex = info.publicKeyHex else { return }
+              info.publicKeyHex != nil else { return }
 
         // 1. Immediate update with just identity (no listeners yet)
         // This allows peers to "see" us in the UI immediately while we wait for swarm listeners to bind.

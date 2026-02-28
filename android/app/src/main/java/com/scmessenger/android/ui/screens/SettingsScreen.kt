@@ -482,7 +482,7 @@ fun InfoSection(
 
             InfoRow("Contacts", contactCount.toString())
             InfoRow("Messages", messageCount.toString())
-            InfoRow("Version", "0.1.1")
+            InfoRow("Version", "0.1.2")
         }
     }
 }

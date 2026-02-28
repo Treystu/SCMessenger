@@ -141,8 +141,12 @@ final class BLEPeripheralManager: NSObject {
             let success = peripheralManager.updateValue(fragment, for: messageCharacteristic!, onSubscribedCentrals: [central])
             if !success {
                 logger.warning("Failed to send fragment, buffering")
+                meshRepository?.appendDiagnostic("ble_tx_buffer fragment to=\(central.identifier.uuidString.prefix(8))")
                 pendingNotifications.append((central: central, data: fragment))
             }
+        }
+        if fragments.count > 1 {
+            meshRepository?.appendDiagnostic("ble_tx_start fragments=\(fragments.count) to=\(central.identifier.uuidString.prefix(8))")
         }
     }
 
@@ -330,20 +334,34 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
         let fragIndex = Int(data[2]) | (Int(data[3]) << 8)
         let payload = data.subdata(in: 4..<data.count)
 
-        var buffer = reassemblyBuffers[centralId] ?? [:]
-        buffer[fragIndex] = payload
-        reassemblyBuffers[centralId] = buffer
+        if fragIndex == 0 {
+            // New message starting - clear any stale fragments from previous failed attempts
+            reassemblyBuffers[centralId] = [0: payload]
+            if totalFrags > 1 {
+                meshRepository?.appendDiagnostic("ble_rx_start total=\(totalFrags) from=\(centralId.uuidString.prefix(8))")
+            }
+        } else {
+            var buffer = reassemblyBuffers[centralId] ?? [:]
+            buffer[fragIndex] = payload
+            reassemblyBuffers[centralId] = buffer
+        }
 
-        if buffer.count == totalFrags {
+        let currentCount = reassemblyBuffers[centralId]?.count ?? 0
+        if currentCount == totalFrags {
             var completeData = Data()
+            let buffer = reassemblyBuffers[centralId] ?? [:]
             for i in 0..<totalFrags {
                 if let chunk = buffer[i] {
                     completeData.append(chunk)
+                } else {
+                    logger.error("Missing fragment \(i) in complete buffer for \(centralId)")
+                    return
                 }
             }
             reassemblyBuffers.removeValue(forKey: centralId)
 
             logger.info("Reassembled complete \(isSync ? "sync" : "message") (\(completeData.count) bytes) from \(centralId)")
+            meshRepository?.appendDiagnostic("ble_rx_complete size=\(completeData.count) type=\(isSync ? "sync" : "msg")")
             DispatchQueue.main.async { [weak self] in
                 self?.meshRepository?.onBleDataReceived(peerId: centralId.uuidString, data: completeData)
             }

@@ -220,7 +220,7 @@ class BleGattServer(
 
             offset = end
             if (i < totalFragments - 1) {
-                Thread.sleep(15) // Slightly increased delay for stability
+                Thread.sleep(2) // Reduced delay for higher throughput if MTU allows
             }
         }
 
@@ -362,9 +362,14 @@ class BleGattServer(
             val fragIndex = (value[2].toInt() and 0xFF) or ((value[3].toInt() and 0xFF) shl 8)
             val payload = value.copyOfRange(4, value.size)
 
+            if (fragIndex == 0) {
+                reassemblyBuffers[deviceAddress]?.clear()
+                Timber.v("BLE-RX: Message start ($totalFrags frags) from $deviceAddress")
+            }
             val buffer = reassemblyBuffers.getOrPut(deviceAddress) { mutableMapOf() }
             buffer[fragIndex] = payload
             expectedFragments[deviceAddress] = totalFrags
+            Timber.v("BLE-RX: Frag $fragIndex/$totalFrags (${payload.size} bytes) from $deviceAddress (current buffer: ${buffer.size})")
 
             if (buffer.size == totalFrags) {
                 // All fragments arrived

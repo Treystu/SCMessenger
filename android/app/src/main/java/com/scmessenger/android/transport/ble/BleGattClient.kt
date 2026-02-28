@@ -223,7 +223,7 @@ class BleGattClient(
             val enqueued = enqueueGattOp(deviceAddress) {
                 try {
                     characteristic.value = fragment
-                    characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                    characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
                     if (!gatt.writeCharacteristic(characteristic)) {
                         Timber.e("Failed to initiate characteristic write to $deviceAddress")
                         releaseGattOp(deviceAddress)
@@ -431,9 +431,14 @@ class BleGattClient(
                     val fragIndex = (value[2].toInt() and 0xFF) or ((value[3].toInt() and 0xFF) shl 8)
                     val payload = value.copyOfRange(4, value.size)
 
+                    if (fragIndex == 0) {
+                        reassemblyBuffers[deviceAddress]?.clear()
+                        Timber.v("BLE-RX (Central): Message start ($totalFrags frags) from $deviceAddress")
+                    }
                     val buffer = reassemblyBuffers.getOrPut(deviceAddress) { ConcurrentHashMap<Int, ByteArray>() }
                     buffer[fragIndex] = payload
                     expectedFragments[deviceAddress] = totalFrags
+                    Timber.v("BLE-RX (Central): Frag $fragIndex/$totalFrags (${payload.size} bytes) from $deviceAddress (current buffer: ${buffer.size})")
 
                     if (buffer.size == totalFrags) {
                         // All fragments arrived
@@ -463,6 +468,14 @@ class BleGattClient(
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Timber.d("MTU changed to $mtu for $deviceAddress")
                 negotiatedMtus[deviceAddress] = mtu
+                
+                // P5: Request high priority for faster GATT writes/handshakes
+                try {
+                    gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
+                } catch (e: SecurityException) {
+                    Timber.w("Security exception requesting connection priority")
+                }
+
                 try {
                     gatt.discoverServices()
                 } catch (e: SecurityException) {
