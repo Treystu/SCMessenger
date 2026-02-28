@@ -250,5 +250,12 @@ final class SettingsViewModel {
         set { repository?.setAutoAdjustEnabled(newValue) }
     }
 
+    // MARK: - Factory Reset (mirrors Android resetAllData)
 
+    /// Wipe all local data and return the app to first-run state.
+    func resetAllData() {
+        Task { @MainActor in
+            repository?.resetAllData()
+        }
+    }
 }

@@ -18,7 +18,7 @@ use libp2p::mdns;
 use libp2p::{
     autonat, dcutr, gossipsub, identify, kad, ping, relay,
     request_response::{self, ProtocolSupport},
-    swarm::NetworkBehaviour,
+    swarm::{behaviour::toggle::Toggle, NetworkBehaviour},
     StreamProtocol,
 };
 use std::time::Duration;
@@ -48,9 +48,10 @@ pub struct IronCoreBehaviour {
     pub gossipsub: gossipsub::Behaviour,
     /// DHT for WAN peer discovery
     pub kademlia: kad::Behaviour<kad::store::MemoryStore>,
-    /// LAN peer discovery
+    /// LAN peer discovery — wrapped in Toggle so it can be disabled in
+    /// environments without multicast support (containers, CI, cloud VMs).
     #[cfg(not(target_arch = "wasm32"))]
-    pub mdns: mdns::tokio::Behaviour,
+    pub mdns: Toggle<mdns::tokio::Behaviour>,
     /// Peer identification — advertises relay capability
     pub identify: identify::Behaviour,
 }
@@ -233,9 +234,22 @@ impl IronCoreBehaviour {
         // Set server mode immediately — we want to be discoverable
         kademlia.set_mode(Some(kad::Mode::Server));
 
-        // mDNS for LAN discovery
+        // mDNS for LAN discovery — gracefully disabled in environments without
+        // multicast support (Docker containers, cloud VMs, CI runners).
         #[cfg(not(target_arch = "wasm32"))]
-        let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id)?;
+        let mdns = match mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id) {
+            Ok(m) => {
+                tracing::info!("mDNS LAN discovery: enabled");
+                Toggle::from(Some(m))
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "mDNS LAN discovery disabled ({}): container/VM without multicast support",
+                    e
+                );
+                Toggle::from(None)
+            }
+        };
 
         // Identify protocol — advertise this node as a relay
         //

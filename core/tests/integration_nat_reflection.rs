@@ -16,6 +16,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 #[tokio::test]
+#[ignore = "requires real networking; run with --include-ignored"]
 async fn test_two_node_address_reflection() {
     // Setup: Create two libp2p swarms
     let keypair1 = Keypair::generate_ed25519();
@@ -83,6 +84,7 @@ async fn test_two_node_address_reflection() {
 }
 
 #[tokio::test]
+#[ignore = "requires real networking; run with --include-ignored"]
 async fn test_peer_address_discovery_with_live_swarm() {
     // Setup: Create reflector node and discovery node
     let keypair_reflector = Keypair::generate_ed25519();
@@ -152,6 +154,7 @@ async fn test_peer_address_discovery_with_live_swarm() {
 }
 
 #[tokio::test]
+#[ignore = "requires real networking; run with --include-ignored"]
 async fn test_nat_traversal_with_live_swarms() {
     // Setup: Create 3 nodes for multi-peer NAT detection
     let keypair1 = Keypair::generate_ed25519();
@@ -257,6 +260,7 @@ async fn test_nat_traversal_with_live_swarms() {
 }
 
 #[tokio::test]
+#[ignore = "requires real networking; run with --include-ignored"]
 async fn test_multiple_address_reflections() {
     // Test that a single node can handle multiple reflection requests
     let keypair1 = Keypair::generate_ed25519();
@@ -312,6 +316,7 @@ async fn test_multiple_address_reflections() {
 }
 
 #[tokio::test]
+#[ignore = "requires real networking; run with --include-ignored"]
 async fn test_address_reflection_timeout() {
     // Test that address reflection handles disconnected peers gracefully
     let keypair1 = Keypair::generate_ed25519();

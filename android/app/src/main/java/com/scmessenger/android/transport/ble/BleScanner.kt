@@ -55,10 +55,13 @@ class BleScanner(
         val PARCEL_UUID = ParcelUuid(SERVICE_UUID)
 
         // Scan modes
+        // Foreground: continuous scan (window == interval) — no off-window dead time.
+        // Android 7+ enforces a scan-restart quota (5 starts in 30s); keeping the
+        // scanner running continuously avoids the quota and maximises discovery speed.
         const val DEFAULT_SCAN_WINDOW_MS = 10000L
         const val DEFAULT_SCAN_INTERVAL_MS = 30000L
-        const val FOREGROUND_SCAN_WINDOW_MS = 20000L
-        const val FOREGROUND_SCAN_INTERVAL_MS = 30000L
+        const val FOREGROUND_SCAN_WINDOW_MS = 30000L    // continuous: window == interval
+        const val FOREGROUND_SCAN_INTERVAL_MS = 30000L  // no pause in foreground
         const val BACKGROUND_SCAN_WINDOW_MS = 5000L
         const val BACKGROUND_SCAN_INTERVAL_MS = 60000L
     }
@@ -174,6 +177,13 @@ class BleScanner(
 
         val settings = ScanSettings.Builder()
             .setScanMode(scanMode)
+            // MATCH_MODE_AGGRESSIVE: trigger reports for even weak signals.
+            // CALLBACK_TYPE_ALL_MATCHES: report all matching adverts, not just first.
+            // numOfMatches(1): trigger callback on first match per scan cycle for
+            // lowest latency peer detection when any peer is nearby.
+            .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+            .setNumOfMatches(ScanSettings.MATCH_NUM_ONE_ADVERTISEMENT)
             .build()
 
         try {
@@ -244,6 +254,9 @@ class BleScanner(
 
             val settings = ScanSettings.Builder()
                 .setScanMode(scanMode)
+                .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+                .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+                .setNumOfMatches(ScanSettings.MATCH_NUM_ONE_ADVERTISEMENT)
                 .build()
 
             scanner.startScan(filters, settings, scanCallback)
