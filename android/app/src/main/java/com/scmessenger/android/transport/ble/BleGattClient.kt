@@ -246,7 +246,7 @@ class BleGattClient(
                     // never arrive.  noResponseWriteInFlight tracks how many such
                     // writes are pending so onCharacteristicWrite can skip its own
                     // release and avoid a double-release.
-                    noResponseWriteInFlight.getOrPut(deviceAddress) { AtomicInteger(0) }.incrementAndGet()
+                    noResponseWriteInFlight.computeIfAbsent(deviceAddress) { AtomicInteger(0) }.incrementAndGet()
                     releaseGattOp(deviceAddress)
                     if (!initiated) {
                         Timber.e("Failed to initiate characteristic write to $deviceAddress")
