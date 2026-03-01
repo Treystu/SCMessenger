@@ -98,6 +98,7 @@ struct ConversationListView: View {
     @State private var conversations: [Conversation] = []
     @State private var conversationToDelete: Conversation?
     @State private var showingDeleteConfirmation = false
+    @State private var deleteConversationError: String?
 
     var body: some View {
         List {
@@ -157,11 +158,25 @@ struct ConversationListView: View {
                 Text("Delete all messages with \(conv.peerNickname)? This cannot be undone.")
             }
         }
+        .alert("Delete Failed", isPresented: Binding(
+            get: { deleteConversationError != nil },
+            set: { if !$0 { deleteConversationError = nil } }
+        )) {
+            Button("OK", role: .cancel) { deleteConversationError = nil }
+        } message: {
+            if let err = deleteConversationError {
+                Text(err)
+            }
+        }
     }
 
     private func deleteConversation(_ conversation: Conversation) {
-        try? repository.clearConversation(peerId: conversation.peerId)
-        conversations.removeAll { $0.id == conversation.id }
+        do {
+            try repository.clearConversation(peerId: conversation.peerId)
+            conversations.removeAll { $0.id == conversation.id }
+        } catch {
+            deleteConversationError = error.localizedDescription
+        }
     }
     
     private func loadConversations() {

@@ -5,6 +5,7 @@ import android.content.Context
 import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Semaphore
@@ -68,13 +69,14 @@ class BleGattClient(
     private val gattOpQueues = ConcurrentHashMap<String, Channel<() -> Unit>>()
     private val gattOpSemaphores = ConcurrentHashMap<String, Semaphore>()
 
-    // Tracks whether the current in-flight GATT op for a device was a
-    // WRITE_TYPE_NO_RESPONSE write. For those writes the Android GATT stack
-    // does NOT reliably deliver onCharacteristicWrite (behaviour varies by API
-    // level and peripheral).  The semaphore must be released immediately after
-    // writeCharacteristic() returns; this flag tells onCharacteristicWrite to
-    // skip the release so we never double-release.
-    private val noResponseWriteInFlight = ConcurrentHashMap<String, Boolean>()
+    // Counts in-flight WRITE_TYPE_NO_RESPONSE writes per device. For those
+    // writes the Android GATT stack does NOT reliably deliver
+    // onCharacteristicWrite (behaviour varies by API level and peripheral).
+    // The semaphore is released immediately after writeCharacteristic();
+    // onCharacteristicWrite decrements this counter and skips its own
+    // release when the pre-decrement count was > 0, preventing double-release
+    // even when multiple no-response writes are pipelined back-to-back.
+    private val noResponseWriteInFlight = ConcurrentHashMap<String, AtomicInteger>()
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -241,9 +243,10 @@ class BleGattClient(
                     // WRITE_TYPE_NO_RESPONSE: onCharacteristicWrite is not reliably
                     // called on all Android versions.  Release the semaphore here so
                     // the next fragment is not blocked waiting for a callback that may
-                    // never arrive.  noResponseWriteInFlight tells onCharacteristicWrite
-                    // to skip its own release to prevent a double-release.
-                    noResponseWriteInFlight[deviceAddress] = true
+                    // never arrive.  noResponseWriteInFlight tracks how many such
+                    // writes are pending so onCharacteristicWrite can skip its own
+                    // release and avoid a double-release.
+                    noResponseWriteInFlight.computeIfAbsent(deviceAddress) { AtomicInteger(0) }.incrementAndGet()
                     releaseGattOp(deviceAddress)
                     if (!initiated) {
                         Timber.e("Failed to initiate characteristic write to $deviceAddress")
@@ -413,8 +416,13 @@ class BleGattClient(
             pendingWrites.remove(deviceAddress)
 
             // For WRITE_TYPE_NO_RESPONSE, the semaphore was already released
-            // immediately after writeCharacteristic() — do not release again.
-            if (noResponseWriteInFlight.remove(deviceAddress) == true) {
+            // immediately after writeCharacteristic(). Decrement the in-flight
+            // counter (clamped at 0); if it was > 0 we consumed a pending
+            // write — skip the release to avoid double-releasing the semaphore.
+            val inFlight = noResponseWriteInFlight[deviceAddress]?.getAndUpdate { count ->
+                if (count > 0) count - 1 else 0
+            } ?: 0
+            if (inFlight > 0) {
                 Timber.v("Skipping semaphore release for NO_RESPONSE write on $deviceAddress")
                 return
             }

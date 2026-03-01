@@ -3672,24 +3672,43 @@ final class MeshRepository {
         ]
         SecItemDelete(keychainQuery as CFDictionary)
 
-        // 5. Clear UserDefaults app state
-        let keysToRemove = ["hasCompletedOnboarding", "identity_backup", "consent_accepted"]
-        keysToRemove.forEach { UserDefaults.standard.removeObject(forKey: $0) }
-
-        // 6. Delete all files in the mesh storage directory
-        let meshDir = URL(fileURLWithPath: storagePath)
-        if let contents = try? FileManager.default.contentsOfDirectory(
-            at: meshDir, includingPropertiesForKeys: nil
-        ) {
-            for item in contents {
-                try? FileManager.default.removeItem(at: item)
-            }
+        // 5. Clear all UserDefaults for this app
+        if let bundleId = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(forName: bundleId)
         }
 
-        // 7. Delete diagnostics log
-        try? FileManager.default.removeItem(at: diagnosticsLogURL)
+        // 6. Delete all files in the mesh storage directory (off main actor)
+        let meshDir = URL(fileURLWithPath: storagePath)
+        let diagnosticsURL = diagnosticsLogURL
+        let log = logger
 
-        logger.info("✓ All application data reset")
+        Task.detached {
+            let fileManager = FileManager.default
+
+            do {
+                let contents = try fileManager.contentsOfDirectory(
+                    at: meshDir, includingPropertiesForKeys: nil
+                )
+                for item in contents {
+                    do {
+                        try fileManager.removeItem(at: item)
+                    } catch {
+                        log.warning("reset: failed to remove \(item.lastPathComponent): \(error)")
+                    }
+                }
+            } catch {
+                log.warning("reset: failed to enumerate storage directory: \(error)")
+            }
+
+            // 7. Delete diagnostics log
+            do {
+                try fileManager.removeItem(at: diagnosticsURL)
+            } catch {
+                log.warning("reset: failed to remove diagnostics log: \(error)")
+            }
+
+            log.info("✓ All application data reset")
+        }
     }
 
     func getListeningAddresses() -> [String] {
