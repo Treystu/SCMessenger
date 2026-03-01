@@ -3706,9 +3706,9 @@ final class MeshRepository {
             } catch {
                 log.warning("reset: failed to remove diagnostics log: \(error)")
             }
-        }
 
-        logger.info("✓ All application data reset")
+            logger.info("✓ All application data reset")
+        }
     }
 
     func getListeningAddresses() -> [String] {
