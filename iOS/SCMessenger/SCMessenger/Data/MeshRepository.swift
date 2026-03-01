@@ -3707,7 +3707,7 @@ final class MeshRepository {
                 log.warning("reset: failed to remove diagnostics log: \(error)")
             }
 
-            logger.info("✓ All application data reset")
+            log.info("✓ All application data reset")
         }
     }
 
