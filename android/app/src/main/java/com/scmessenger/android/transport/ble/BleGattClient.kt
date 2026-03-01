@@ -417,9 +417,11 @@ class BleGattClient(
 
             // For WRITE_TYPE_NO_RESPONSE, the semaphore was already released
             // immediately after writeCharacteristic(). Decrement the in-flight
-            // counter; if it was > 0 we consumed a pending write — skip the
-            // release to avoid double-releasing the semaphore.
-            val inFlight = noResponseWriteInFlight[deviceAddress]?.getAndDecrement() ?: 0
+            // counter (clamped at 0); if it was > 0 we consumed a pending
+            // write — skip the release to avoid double-releasing the semaphore.
+            val inFlight = noResponseWriteInFlight[deviceAddress]?.getAndUpdate { count ->
+                if (count > 0) count - 1 else 0
+            } ?: 0
             if (inFlight > 0) {
                 Timber.v("Skipping semaphore release for NO_RESPONSE write on $deviceAddress")
                 return
