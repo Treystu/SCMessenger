@@ -140,6 +140,7 @@ pub struct MeshService {
     bootstrap_addrs: Mutex<Vec<String>>,
     nat_status: std::sync::Arc<Mutex<String>>,
     relay_budget: std::sync::Arc<Mutex<u32>>,
+    swarm_headless_mode: std::sync::Arc<Mutex<Option<bool>>>,
     current_device_profile: Mutex<Option<DeviceProfile>>,
     /// Current device state snapshot — drives threshold-based behavior.
     /// Stored behind a `parking_lot::RwLock` so reads (very frequent) never
@@ -160,6 +161,7 @@ impl MeshService {
             bootstrap_addrs: Mutex::new(Vec::new()),
             nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
+            swarm_headless_mode: std::sync::Arc::new(Mutex::new(None)),
             current_device_profile: Mutex::new(None),
             device_state: RwLock::new(None),
         }
@@ -178,6 +180,7 @@ impl MeshService {
             bootstrap_addrs: Mutex::new(Vec::new()),
             nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
+            swarm_headless_mode: std::sync::Arc::new(Mutex::new(None)),
             current_device_profile: Mutex::new(None),
             device_state: RwLock::new(None),
         }
@@ -230,6 +233,7 @@ impl MeshService {
 
         // Clear the core instance
         *self.core.lock() = None;
+        *self.swarm_headless_mode.lock() = None;
 
         // Update state
         *self.state.lock() = ServiceState::Stopped;
@@ -328,23 +332,100 @@ impl MeshService {
         payload.to_string()
     }
 
+    fn resolve_swarm_keypair_and_mode(
+        &self,
+    ) -> Result<(libp2p::identity::Keypair, bool), crate::IronCoreError> {
+        let identity_keypair = {
+            let core_guard = self.core.lock();
+            let core = core_guard
+                .as_ref()
+                .ok_or(crate::IronCoreError::NotInitialized)?;
+            core.get_libp2p_keypair().ok()
+        };
+
+        if let Some(keypair) = identity_keypair {
+            return Ok((keypair, false));
+        }
+
+        tracing::info!("No identity keypair available; using persisted headless network key");
+        let keypair = self.load_or_create_headless_network_keypair()?;
+        Ok((keypair, true))
+    }
+
+    fn load_or_create_headless_network_keypair(
+        &self,
+    ) -> Result<libp2p::identity::Keypair, crate::IronCoreError> {
+        const HEADLESS_KEY_FILE: &str = "relay_network_key.pb";
+
+        let Some(storage_path) = self.storage_path.as_ref() else {
+            tracing::warn!("MeshService has no storage path; using ephemeral headless keypair");
+            return Ok(libp2p::identity::Keypair::generate_ed25519());
+        };
+
+        let storage_dir = std::path::PathBuf::from(storage_path);
+        std::fs::create_dir_all(&storage_dir).map_err(|_| crate::IronCoreError::StorageError)?;
+        let key_path = storage_dir.join(HEADLESS_KEY_FILE);
+
+        if key_path.exists() {
+            let bytes = std::fs::read(&key_path).map_err(|_| crate::IronCoreError::StorageError)?;
+            match libp2p::identity::Keypair::from_protobuf_encoding(&bytes) {
+                Ok(keypair) => return Ok(keypair),
+                Err(err) => {
+                    tracing::warn!(
+                        "Failed to decode headless network key at {} ({}); rotating key",
+                        key_path.display(),
+                        err
+                    );
+                }
+            }
+        }
+
+        let keypair = libp2p::identity::Keypair::generate_ed25519();
+        let encoded = keypair
+            .to_protobuf_encoding()
+            .map_err(|_| crate::IronCoreError::Internal)?;
+        std::fs::write(&key_path, encoded).map_err(|_| crate::IronCoreError::StorageError)?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
+        }
+
+        Ok(keypair)
+    }
+
     pub fn start_swarm(&self, listen_addr: String) -> Result<(), crate::IronCoreError> {
         // Extract keys while holding the lock, then DROP the lock before any
         // runtime/thread work.  This is critical: if anything below panics
         // while the lock is held, parking_lot will NOT poison it (unlike
         // std::sync::Mutex), but releasing early is still the safest pattern.
-        let libp2p_keys = {
-            let core_guard = self.core.lock();
-            let core = core_guard
-                .as_ref()
-                .ok_or(crate::IronCoreError::NotInitialized)?;
-            let identity_keys = core
-                .get_identity_keys()
-                .ok_or(crate::IronCoreError::NotInitialized)?;
-            identity_keys
-                .to_libp2p_keypair()
-                .map_err(|_| crate::IronCoreError::CryptoError)?
-        }; // ← core lock released here, before any runtime code
+        let (libp2p_keys, headless_mode) = self.resolve_swarm_keypair_and_mode()?;
+
+        let has_existing_handle = self.swarm_bridge.handle.lock().is_some();
+        let existing_mode = *self.swarm_headless_mode.lock();
+        if has_existing_handle {
+            if existing_mode == Some(headless_mode) {
+                tracing::info!(
+                    "Swarm already running in {} mode; skipping restart",
+                    if headless_mode { "headless" } else { "full" }
+                );
+                return Ok(());
+            }
+
+            tracing::info!(
+                "Swarm mode change requested ({} -> {}); restarting swarm",
+                if existing_mode == Some(true) {
+                    "headless"
+                } else {
+                    "full"
+                },
+                if headless_mode { "headless" } else { "full" }
+            );
+            self.swarm_bridge.shutdown();
+            *self.swarm_bridge.handle.lock() = None;
+            *self.swarm_headless_mode.lock() = None;
+        }
 
         tracing::info!(
             "Starting Swarm with PeerID: {}",
@@ -366,6 +447,7 @@ impl MeshService {
         let relay_budget_init = self.relay_budget.clone();
         let bootstrap_addrs = self.bootstrap_addrs.lock().clone();
         let nat_status = self.nat_status.clone();
+        let swarm_mode_state = self.swarm_headless_mode.clone();
 
         // Spawn a dedicated OS thread that owns its own Tokio runtime.
         // This is the safest approach for mobile: we cannot rely on being
@@ -416,13 +498,14 @@ impl MeshService {
                                 event_tx,
                                 None,
                                 bootstrap_multiaddrs,
-                                false, // Mobile nodes are NOT headless (they have identities)
+                                headless_mode,
                             )
                             .await
                             {
                                 Ok(handle) => {
                                     tracing::info!("Swarm started, wiring bridge");
                                     swarm_bridge.set_handle(handle.clone());
+                                    *swarm_mode_state.lock() = Some(headless_mode);
                                     // Apply stored relay budget
                                     let budget = *relay_budget_init.lock();
                                     if let Err(e) = handle.set_relay_budget(budget).await {
@@ -522,6 +605,7 @@ impl MeshService {
                                     }
                                 }
                                 Err(e) => {
+                                    *swarm_mode_state.lock() = None;
                                     tracing::error!("Failed to start swarm: {:?}", e);
                                 }
                             }
@@ -1852,6 +1936,96 @@ mod tests {
             network_type: NetworkType::Wifi,
             motion_state: motion,
         }
+    }
+
+    #[test]
+    fn test_fresh_install_without_identity_resolves_headless_mode_with_persisted_key() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_str().unwrap().to_string();
+
+        let service = MeshService::with_storage(
+            MeshServiceConfig {
+                discovery_interval_ms: 5_000,
+                battery_floor_pct: 20,
+            },
+            path.clone(),
+        );
+        service.start().unwrap();
+
+        let (first_keypair, first_headless) = service.resolve_swarm_keypair_and_mode().unwrap();
+        assert!(first_headless, "fresh install should default to headless mode");
+
+        let key_path = std::path::Path::new(&path).join("relay_network_key.pb");
+        assert!(key_path.exists(), "headless key should persist on first resolve");
+        service.stop();
+
+        let reloaded = MeshService::with_storage(
+            MeshServiceConfig {
+                discovery_interval_ms: 5_000,
+                battery_floor_pct: 20,
+            },
+            path,
+        );
+        reloaded.start().unwrap();
+        let (second_keypair, second_headless) = reloaded.resolve_swarm_keypair_and_mode().unwrap();
+        assert!(second_headless);
+        assert_eq!(
+            first_keypair.public().to_peer_id(),
+            second_keypair.public().to_peer_id(),
+            "headless key should be stable across restarts"
+        );
+    }
+
+    #[test]
+    fn test_identity_creation_upgrades_resolved_mode_from_headless_to_full() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_str().unwrap().to_string();
+
+        let service = MeshService::with_storage(
+            MeshServiceConfig {
+                discovery_interval_ms: 5_000,
+                battery_floor_pct: 20,
+            },
+            path,
+        );
+        service.start().unwrap();
+
+        let (_, headless_before) = service.resolve_swarm_keypair_and_mode().unwrap();
+        assert!(headless_before);
+
+        let core = service.get_core().expect("core should be available after start");
+        core.initialize_identity().unwrap();
+
+        let (full_keypair, headless_after) = service.resolve_swarm_keypair_and_mode().unwrap();
+        assert!(!headless_after, "identity initialization should upgrade to full mode");
+
+        let identity_keypair = core.get_libp2p_keypair().unwrap();
+        assert_eq!(
+            full_keypair.public().to_peer_id(),
+            identity_keypair.public().to_peer_id(),
+            "full mode should use identity-derived libp2p keypair"
+        );
+    }
+
+    #[test]
+    fn test_connection_path_state_parity_independent_of_role_mode() {
+        let service = MeshService::new(MeshServiceConfig {
+            discovery_interval_ms: 5_000,
+            battery_floor_pct: 20,
+        });
+        service.set_bootstrap_nodes(vec!["/dns4/bootstrap.example/tcp/443/wss".to_string()]);
+
+        *service.swarm_headless_mode.lock() = Some(true);
+        let headless_state = service.get_connection_path_state();
+
+        *service.swarm_headless_mode.lock() = Some(false);
+        let full_state = service.get_connection_path_state();
+
+        assert_eq!(
+            headless_state, full_state,
+            "connection-path semantics should not differ by role mode"
+        );
+        assert_eq!(headless_state, ConnectionPathState::Bootstrapping);
     }
 
     #[test]

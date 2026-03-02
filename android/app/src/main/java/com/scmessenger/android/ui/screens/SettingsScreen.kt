@@ -63,9 +63,10 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         // Identity Section
-        identityInfo?.let { info ->
+        val resolvedIdentityInfo = identityInfo
+        if (resolvedIdentityInfo?.initialized == true) {
             IdentitySection(
-                identityInfo = info,
+                identityInfo = resolvedIdentityInfo,
                 onNicknameChange = { settingsViewModel.updateNickname(it) },
                 onCopyExport = {
                     val export = settingsViewModel.getIdentityExportString()
@@ -74,6 +75,10 @@ fun SettingsScreen(
                     clipboard.setPrimaryClip(clip)
                 },
                 onShowIdentityQr = onNavigateToIdentity
+            )
+        } else {
+            IdentityUnavailableSection(
+                onCreateIdentity = onNavigateToIdentity
             )
         }
 
@@ -621,6 +626,36 @@ fun IdentitySection(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Show Identity QR")
+            }
+        }
+    }
+}
+
+@Composable
+fun IdentityUnavailableSection(
+    onCreateIdentity: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Identity",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = "This node is currently relay-only. Create an identity to enable chats and contacts.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(
+                onClick = onCreateIdentity,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Create Identity")
             }
         }
     }

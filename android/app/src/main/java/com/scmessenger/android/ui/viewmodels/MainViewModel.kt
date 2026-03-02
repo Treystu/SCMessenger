@@ -17,6 +17,7 @@ class MainViewModel @Inject constructor(
 
     private val _isReady = MutableStateFlow(false)
     val isReady = _isReady.asStateFlow()
+    val hasIdentity = isReady
 
     private val _isCreatingIdentity = MutableStateFlow(false)
     val isCreatingIdentity = _isCreatingIdentity.asStateFlow()
@@ -34,21 +35,14 @@ class MainViewModel @Inject constructor(
         get() = meshRepository.getIdentityInfo()
 
     init {
-        checkIdentity()
+        refreshIdentityState()
     }
 
-    private fun checkIdentity() {
+    fun refreshIdentityState() {
         viewModelScope.launch {
             val initialized = meshRepository.isIdentityInitialized()
-            val info = meshRepository.getIdentityInfo()
-            val hasNickname = !info?.nickname.isNullOrBlank()
             _identityError.value = null
-            if (initialized && hasNickname) {
-                _isReady.value = true
-            } else {
-                // Stay not ready, waiting for onboarding
-                _isReady.value = false
-            }
+            _isReady.value = initialized
         }
     }
 
@@ -66,7 +60,7 @@ class MainViewModel @Inject constructor(
                 }
                 meshRepository.createIdentity()
                 meshRepository.setNickname(trimmedNickname)
-                _isReady.value = true
+                _isReady.value = meshRepository.isIdentityInitialized()
             } catch (e: Exception) {
                 Timber.e(e, "Failed to create identity")
                 _identityError.value = e.message ?: "Failed to create identity"

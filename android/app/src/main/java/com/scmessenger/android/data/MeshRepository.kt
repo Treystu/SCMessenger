@@ -1421,21 +1421,17 @@ class MeshRepository(private val context: Context) {
 
         try {
             ensureLocalIdentityFederation()
+            // Configure bootstrap nodes for NAT traversal
+            meshService?.setBootstrapNodes(DEFAULT_BOOTSTRAP_NODES)
+            // Initiate swarm in Rust core.
+            // Core auto-selects headless mode when identity is absent and upgrades when identity appears.
+            meshService?.startSwarm("/ip4/0.0.0.0/tcp/0")
 
-            if (isIdentityInitialized() == true) {
-                // Configure bootstrap nodes for NAT traversal
-                meshService?.setBootstrapNodes(DEFAULT_BOOTSTRAP_NODES)
-                // Initiate swarm in Rust core
-                meshService?.startSwarm("/ip4/0.0.0.0/tcp/0")
+            // Obtain the SwarmBridge managed by Rust MeshService
+            swarmBridge = meshService?.getSwarmBridge()
+            updateBleIdentityBeacon()
 
-                // Obtain the SwarmBridge managed by Rust MeshService
-                swarmBridge = meshService?.getSwarmBridge()
-                updateBleIdentityBeacon()
-
-                Timber.i("✓ Internet transport (Swarm) initiated and bridge wired")
-            } else {
-                Timber.w("Postponing Swarm start: Identity not ready")
-            }
+            Timber.i("✓ Internet transport (Swarm) initiated and bridge wired")
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize Swarm transport")
         }

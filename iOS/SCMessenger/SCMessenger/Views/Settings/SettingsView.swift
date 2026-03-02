@@ -14,7 +14,12 @@ struct SettingsView: View {
     @State private var viewModel: SettingsViewModel?
     @State private var showingIdentityQr = false
     @State private var showingResetConfirmation = false
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
+    @State private var identitySetupError: String?
+    let onIdentityChanged: () -> Void
+
+    init(onIdentityChanged: @escaping () -> Void = {}) {
+        self.onIdentityChanged = onIdentityChanged
+    }
 
     var body: some View {
         Form {
@@ -94,54 +99,84 @@ struct SettingsView: View {
 
             // MARK: - Identity
             Section {
-                HStack {
-                    Text("Nickname")
-                    Spacer()
-                    TextField("Enter nickname", text: Binding(
-                        get: { viewModel?.nickname ?? "" },
-                        set: { viewModel?.updateNickname($0) }
-                    ))
-                    .multilineTextAlignment(.trailing)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.words)
-                }
+                if repository.isIdentityInitialized() {
+                    HStack {
+                        Text("Nickname")
+                        Spacer()
+                        TextField("Enter nickname", text: Binding(
+                            get: { viewModel?.nickname ?? "" },
+                            set: { viewModel?.updateNickname($0) }
+                        ))
+                        .multilineTextAlignment(.trailing)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.words)
+                    }
 
-                HStack {
-                    Text("Identity ID")
-                    Spacer()
-                    Text(repository.getIdentitySnippet())
-                        .font(.system(.body, design: .monospaced))
+                    HStack {
+                        Text("Identity ID")
+                        Spacer()
+                        Text(repository.getIdentitySnippet())
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(Theme.onSurfaceVariant)
+                    }
+
+                    Button {
+                        if let id = repository.getFullIdentityInfo()?.identityId {
+                            UIPasteboard.general.string = id
+                        }
+                    } label: {
+                        Label("Copy Identity ID", systemImage: "doc.on.doc")
+                    }
+
+                    Button {
+                        if let key = repository.getFullIdentityInfo()?.publicKeyHex {
+                            UIPasteboard.general.string = key
+                        }
+                    } label: {
+                        Label("Copy Public Key", systemImage: "key")
+                    }
+
+                    Button {
+                        if let export = viewModel?.getIdentityExportString() {
+                            UIPasteboard.general.string = export
+                        }
+                    } label: {
+                        Label("Copy Full Identity Export", systemImage: "square.and.arrow.up")
+                    }
+
+                    Button {
+                        showingIdentityQr = true
+                    } label: {
+                        Label("Show Identity QR", systemImage: "qrcode")
+                    }
+                } else {
+                    Text("Relay-only mode is active. Create an identity to enable Messages and Contacts.")
+                        .font(Theme.bodySmall)
                         .foregroundStyle(Theme.onSurfaceVariant)
-                }
 
-                Button {
-                    if let id = repository.getFullIdentityInfo()?.identityId {
-                        UIPasteboard.general.string = id
+                    HStack {
+                        Text("Nickname")
+                        Spacer()
+                        TextField("Enter nickname", text: Binding(
+                            get: { viewModel?.nickname ?? "" },
+                            set: { viewModel?.nickname = $0 }
+                        ))
+                        .multilineTextAlignment(.trailing)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.words)
                     }
-                } label: {
-                    Label("Copy Identity ID", systemImage: "doc.on.doc")
-                }
 
-                Button {
-                    if let key = repository.getFullIdentityInfo()?.publicKeyHex {
-                        UIPasteboard.general.string = key
+                    Button {
+                        createIdentityFromSettings()
+                    } label: {
+                        Label("Create Identity", systemImage: "person.crop.circle.badge.plus")
                     }
-                } label: {
-                    Label("Copy Public Key", systemImage: "key")
-                }
 
-                Button {
-                    if let export = viewModel?.getIdentityExportString() {
-                        UIPasteboard.general.string = export
+                    if let identitySetupError {
+                        Text(identitySetupError)
+                            .font(Theme.bodySmall)
+                            .foregroundStyle(.red)
                     }
-                } label: {
-                    Label("Copy Full Identity Export", systemImage: "square.and.arrow.up")
-                }
-
-                Button {
-                    showingIdentityQr = true
-                } label: {
-                    Label("Show Identity QR", systemImage: "qrcode")
                 }
             } header: {
                 Text("Identity")
@@ -204,11 +239,30 @@ struct SettingsView: View {
         ) {
             Button("Delete All Data", role: .destructive) {
                 viewModel?.resetAllData()
-                hasCompletedOnboarding = false
+                onIdentityChanged()
             }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("This will permanently delete your identity, all contacts, messages, and settings. You will need to set up the app again.")
+        }
+    }
+
+    private func createIdentityFromSettings() {
+        guard let viewModel else { return }
+        let trimmedNickname = viewModel.nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedNickname.isEmpty else {
+            identitySetupError = "Nickname is required"
+            return
+        }
+
+        do {
+            try repository.createIdentity()
+            try repository.setNickname(trimmedNickname)
+            viewModel.loadNickname()
+            identitySetupError = nil
+            onIdentityChanged()
+        } catch {
+            identitySetupError = "Failed to create identity: \(error.localizedDescription)"
         }
     }
 }

@@ -459,17 +459,16 @@ final class MeshRepository {
             // Obtain the SwarmBridge from MeshService (managed by Rust)
             swarmBridge = meshService?.getSwarmBridge()
 
-            // Initialize internet transport if enabled (only if identity is ready)
+            // Initialize internet transport if enabled.
+            // Core auto-selects headless mode when identity is absent and upgrades when identity appears.
             let settings = try? settingsManager?.load()
-            if settings?.internetEnabled == true && isIdentityInitialized() {
+            if settings?.internetEnabled == true {
                 // Configure bootstrap nodes for NAT traversal
                 meshService?.setBootstrapNodes(addrs: Self.defaultBootstrapNodes)
                 // Listen on random port
                 try? meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/0")
                 broadcastIdentityBeacon()
                 logger.info("Internet transport (Swarm) initiated")
-            } else if settings?.internetEnabled == true {
-                logger.warning("Postponing Swarm start: Identity not ready")
             }
 
             serviceState = .running
@@ -577,13 +576,8 @@ final class MeshRepository {
         return serviceState
     }
 
-    /// Initialize internet transport (Swarm) if enabled and identity is ready
+    /// Initialize internet transport (Swarm) if enabled.
     func initializeAndStartSwarm() {
-        guard isIdentityInitialized() else {
-            logger.warning("Postponing Swarm start: Identity not ready")
-            return
-        }
-
         try? ensureLocalIdentityFederation()
 
         let settings = try? settingsManager?.load()

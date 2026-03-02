@@ -15,9 +15,6 @@ struct SCMessengerApp: App {
     // Background service
     @State private var backgroundService: MeshBackgroundService?
     
-    // Onboarding state
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-    
     init() {
         // Initialize background service after repository
         // Will be set in onAppear
@@ -25,13 +22,7 @@ struct SCMessengerApp: App {
     
     var body: some Scene {
         WindowGroup {
-            Group {
-                if hasCompletedOnboarding {
-                    MainTabView()
-                } else {
-                    OnboardingFlow()
-                }
-            }
+            MainTabView()
             .environment(meshRepository)
             .onAppear {
                 setupApp()
@@ -54,15 +45,8 @@ struct SCMessengerApp: App {
         do {
             try meshRepository.initialize()
             meshRepository.start()
-            if let info = meshRepository.getIdentityInfo() {
-                let hasNickname = !(info.nickname?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-                hasCompletedOnboarding = info.initialized && hasNickname
-            } else {
-                hasCompletedOnboarding = false
-            }
         } catch {
             print("❌ Failed to initialize repository: \(error)")
-            hasCompletedOnboarding = false
         }
     }
     

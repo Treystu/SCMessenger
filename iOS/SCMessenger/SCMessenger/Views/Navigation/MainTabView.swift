@@ -6,29 +6,38 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct MainTabView: View {
     @Environment(MeshRepository.self) private var repository
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @State private var identityInitialized = false
+    @State private var selectedTab: MainTab = .mesh
 
-    // Identity fail-safe alert state
-    @State private var showIdentityAlert = false
-    @State private var identityRecoveryError: String?
+    private enum MainTab: Hashable {
+        case messages
+        case contacts
+        case mesh
+        case settings
+    }
 
     var body: some View {
-        TabView {
-            NavigationStack {
-                ConversationListView()
-            }
-            .tabItem {
-                Label("Messages", systemImage: "message")
-            }
+        TabView(selection: $selectedTab) {
+            if identityInitialized {
+                NavigationStack {
+                    ConversationListView()
+                }
+                .tabItem {
+                    Label("Messages", systemImage: "message")
+                }
+                .tag(MainTab.messages)
 
-            NavigationStack {
-                ContactsListView()
-            }
-            .tabItem {
-                Label("Contacts", systemImage: "person.2")
+                NavigationStack {
+                    ContactsListView()
+                }
+                .tabItem {
+                    Label("Contacts", systemImage: "person.2")
+                }
+                .tag(MainTab.contacts)
             }
 
             NavigationStack {
@@ -37,58 +46,31 @@ struct MainTabView: View {
             .tabItem {
                 Label("Mesh", systemImage: "network")
             }
+            .tag(MainTab.mesh)
 
             NavigationStack {
-                SettingsView()
+                SettingsView(
+                    onIdentityChanged: refreshIdentityRole
+                )
             }
             .tabItem {
                 Label("Settings", systemImage: "gear")
             }
-        }
-        .alert("Identity Missing", isPresented: $showIdentityAlert) {
-            Button("Re-create Identity") {
-                do {
-                    try repository.createIdentity()
-                } catch {
-                    identityRecoveryError = error.localizedDescription
-                }
-            }
-            Button("Return to Setup", role: .destructive) {
-                hasCompletedOnboarding = false
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Your cryptographic identity could not be loaded. You can re-create it now (this will generate a new identity) or return to the setup screen.")
-        }
-        .alert("Recovery Failed", isPresented: Binding(
-            get: { identityRecoveryError != nil },
-            set: { if !$0 { identityRecoveryError = nil } }
-        )) {
-            Button("Return to Setup", role: .destructive) {
-                hasCompletedOnboarding = false
-            }
-            Button("Cancel", role: .cancel) {
-                identityRecoveryError = nil
-            }
-        } message: {
-            if let err = identityRecoveryError {
-                Text("Could not re-create identity: \(err)\n\nReturn to setup to start fresh.")
-            }
+            .tag(MainTab.settings)
         }
         .onAppear {
-            let nickname = repository.getIdentityInfo()?.nickname?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if nickname.isEmpty {
-                hasCompletedOnboarding = false
-                return
-            }
-
             repository.start()
+            refreshIdentityRole()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            refreshIdentityRole()
+        }
+    }
 
-            // Check if identity is truly available after service start
-            if !repository.isIdentityInitialized() {
-                showIdentityAlert = true
-            }
+    private func refreshIdentityRole() {
+        identityInitialized = repository.isIdentityInitialized()
+        if !identityInitialized && (selectedTab == .messages || selectedTab == .contacts) {
+            selectedTab = .mesh
         }
     }
 }

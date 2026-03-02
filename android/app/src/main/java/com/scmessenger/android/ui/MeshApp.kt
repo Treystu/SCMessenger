@@ -6,10 +6,11 @@ import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -28,50 +29,63 @@ import com.scmessenger.android.ui.viewmodels.MainViewModel
 @Composable
 fun MeshApp() {
     val mainViewModel: MainViewModel = hiltViewModel()
-    val isReady by mainViewModel.isReady.collectAsState()
+    val hasIdentity by mainViewModel.hasIdentity.collectAsState()
+    val navController = rememberNavController()
 
-    if (!isReady) {
-        OnboardingScreen(
-            onOnboardingComplete = { /* MainViewModel will drive isReady=true after identity + nickname */ }
-        )
-    } else {
-        val navController = rememberNavController()
+    LaunchedEffect(Unit) {
+        mainViewModel.refreshIdentityState()
+    }
 
-        Scaffold(
-            bottomBar = { MeshBottomBar(navController = navController) }
-        ) { paddingValues ->
-            MeshNavHost(
-                navController = navController,
-                modifier = Modifier.padding(paddingValues)
-            )
+    LaunchedEffect(hasIdentity) {
+        val currentRoute = navController.currentBackStackEntry?.destination?.route
+        val allowedRoutes = roleBasedBottomNavItems(hasIdentity).map { it.route }.toSet()
+        if (currentRoute != null && currentRoute !in allowedRoutes && !currentRoute.startsWith("chat/")) {
+            navController.navigate(startDestinationForRole(hasIdentity)) {
+                launchSingleTop = true
+            }
         }
+    }
+
+    Scaffold(
+        bottomBar = { MeshBottomBar(navController = navController, hasIdentity = hasIdentity) }
+    ) { paddingValues ->
+        MeshNavHost(
+            navController = navController,
+            hasIdentity = hasIdentity,
+            onIdentityChanged = { mainViewModel.refreshIdentityState() },
+            modifier = Modifier.padding(paddingValues)
+        )
     }
 }
 
 @Composable
 fun MeshNavHost(
     navController: NavHostController,
+    hasIdentity: Boolean,
+    onIdentityChanged: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Conversations.route,
+        startDestination = startDestinationForRole(hasIdentity),
         modifier = modifier
     ) {
-        composable(Screen.Conversations.route) {
-            ConversationsScreen(
-                onNavigateToChat = { peerId ->
-                    navController.navigate("chat/$peerId")
-                }
-            )
-        }
+        if (hasIdentity) {
+            composable(Screen.Conversations.route) {
+                ConversationsScreen(
+                    onNavigateToChat = { peerId ->
+                        navController.navigate("chat/$peerId")
+                    }
+                )
+            }
 
-        composable(Screen.Contacts.route) {
-            ContactsScreen(
-                onNavigateToChat = { peerId ->
-                    navController.navigate("chat/$peerId")
-                }
-            )
+            composable(Screen.Contacts.route) {
+                ContactsScreen(
+                    onNavigateToChat = { peerId ->
+                        navController.navigate("chat/$peerId")
+                    }
+                )
+            }
         }
 
         composable(Screen.Dashboard.route) {
@@ -91,7 +105,10 @@ fun MeshNavHost(
 
         composable(Screen.Identity.route) {
             IdentityScreen(
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = {
+                    onIdentityChanged()
+                    navController.popBackStack()
+                }
             )
         }
 
@@ -101,15 +118,17 @@ fun MeshNavHost(
             )
         }
 
-        composable(
-            route = "chat/{peerId}",
-            arguments = listOf(androidx.navigation.navArgument("peerId") { type = androidx.navigation.NavType.StringType })
-        ) { backStackEntry ->
-            val peerId = backStackEntry.arguments?.getString("peerId") ?: return@composable
-            ChatScreen(
-                conversationId = peerId,
-                onNavigateBack = { navController.popBackStack() }
-            )
+        if (hasIdentity) {
+            composable(
+                route = "chat/{peerId}",
+                arguments = listOf(androidx.navigation.navArgument("peerId") { type = androidx.navigation.NavType.StringType })
+            ) { backStackEntry ->
+                val peerId = backStackEntry.arguments?.getString("peerId") ?: return@composable
+                ChatScreen(
+                    conversationId = peerId,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
         }
     }
 }
@@ -118,7 +137,7 @@ fun MeshNavHost(
  * Bottom navigation bar.
  */
 @Composable
-fun MeshBottomBar(navController: NavHostController) {
+fun MeshBottomBar(navController: NavHostController, hasIdentity: Boolean) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
@@ -126,7 +145,7 @@ fun MeshBottomBar(navController: NavHostController) {
     if (currentRoute?.startsWith("chat/") == true) return
 
     NavigationBar {
-        Screen.bottomNavItems.forEach { screen ->
+        roleBasedBottomNavItems(hasIdentity).forEach { screen ->
             NavigationBarItem(
                 icon = { Icon(screen.icon, contentDescription = screen.label) },
                 label = { Text(screen.label) },
@@ -157,6 +176,13 @@ sealed class Screen(val route: String, val label: String, val icon: androidx.com
     object Diagnostics : Screen("diagnostics", "Diagnostics", androidx.compose.material.icons.Icons.Default.Settings)
 
     companion object {
-        val bottomNavItems = listOf(Conversations, Contacts, Dashboard, Settings)
+        val fullRoleBottomNavItems = listOf(Conversations, Contacts, Dashboard, Settings)
+        val relayOnlyBottomNavItems = listOf(Dashboard, Settings)
     }
 }
+
+internal fun roleBasedBottomNavItems(hasIdentity: Boolean): List<Screen> =
+    if (hasIdentity) Screen.fullRoleBottomNavItems else Screen.relayOnlyBottomNavItems
+
+internal fun startDestinationForRole(hasIdentity: Boolean): String =
+    if (hasIdentity) Screen.Conversations.route else Screen.Dashboard.route
