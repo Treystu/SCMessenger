@@ -171,6 +171,12 @@ pub struct IronCore {
     contacts: Arc<RwLock<store::ContactManager>>,
     /// Unified message history
     history: Arc<RwLock<store::HistoryManager>>,
+    /// UniFFI-facing contacts manager (non-wasm builds only)
+    #[cfg(not(target_arch = "wasm32"))]
+    contacts_bridge_manager: Arc<crate::contacts_bridge::ContactManager>,
+    /// UniFFI-facing history manager (non-wasm builds only)
+    #[cfg(not(target_arch = "wasm32"))]
+    history_bridge_manager: Arc<crate::mobile_bridge::HistoryManager>,
     /// Running state
     running: Arc<RwLock<bool>>,
     /// Platform delegate for callbacks
@@ -350,6 +356,41 @@ fn ensure_storage_layout(storage_path: &str) -> Result<(), IronCoreError> {
     Ok(())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+fn fresh_uniffi_storage_root() -> String {
+    let root = std::env::temp_dir().join(format!("scmessenger-uniffi-{}", uuid::Uuid::new_v4()));
+    let _ = std::fs::create_dir_all(&root);
+    root.to_string_lossy().to_string()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn init_uniffi_contacts_manager(
+    preferred_root: Option<&str>,
+) -> Arc<crate::contacts_bridge::ContactManager> {
+    let primary_root = preferred_root
+        .map(|p| p.to_string())
+        .unwrap_or_else(fresh_uniffi_storage_root);
+    let manager = crate::contacts_bridge::ContactManager::new(primary_root).unwrap_or_else(|_| {
+        crate::contacts_bridge::ContactManager::new(fresh_uniffi_storage_root())
+            .expect("failed to initialize UniFFI ContactManager")
+    });
+    Arc::new(manager)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn init_uniffi_history_manager(
+    preferred_root: Option<&str>,
+) -> Arc<crate::mobile_bridge::HistoryManager> {
+    let primary_root = preferred_root
+        .map(|p| p.to_string())
+        .unwrap_or_else(fresh_uniffi_storage_root);
+    let manager = crate::mobile_bridge::HistoryManager::new(primary_root).unwrap_or_else(|_| {
+        crate::mobile_bridge::HistoryManager::new(fresh_uniffi_storage_root())
+            .expect("failed to initialize UniFFI HistoryManager")
+    });
+    Arc::new(manager)
+}
+
 impl IronCore {
     /// Create a new Iron Core instance with in-memory storage
     pub fn new() -> Self {
@@ -493,12 +534,21 @@ impl IronCore {
             store::HistoryManager::new(Arc::new(store::backend::MemoryStorage::new()))
         };
 
+        #[cfg(not(target_arch = "wasm32"))]
+        let contacts_bridge_manager = init_uniffi_contacts_manager(storage_path.as_deref());
+        #[cfg(not(target_arch = "wasm32"))]
+        let history_bridge_manager = init_uniffi_history_manager(storage_path.as_deref());
+
         Self {
             identity,
             outbox: Arc::new(RwLock::new(outbox)),
             inbox: Arc::new(RwLock::new(inbox)),
             contacts: Arc::new(RwLock::new(contacts)),
             history: Arc::new(RwLock::new(history)),
+            #[cfg(not(target_arch = "wasm32"))]
+            contacts_bridge_manager,
+            #[cfg(not(target_arch = "wasm32"))]
+            history_bridge_manager,
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
         }
@@ -866,16 +916,15 @@ impl IronCore {
         let message_id = msg.id.clone();
 
         // Auto-save to history (Outgoing)
-        if let Ok(mut history) = self.history.write() {
-            let _ = history.add(store::MessageRecord {
-                id: message_id.clone(),
-                direction: store::MessageDirection::Sent,
-                peer_id: recipient_key_trimmed.clone(),
-                content: text.clone(),
-                timestamp: msg.timestamp,
-                delivered: false,
-            });
-        }
+        let history = self.history.write();
+        let _ = history.add(store::MessageRecord {
+            id: message_id.clone(),
+            direction: store::MessageDirection::Sent,
+            peer_id: recipient_key_trimmed.clone(),
+            content: text.clone(),
+            timestamp: msg.timestamp,
+            delivered: false,
+        });
 
         // Serialize the message
         let plaintext = message::encode_message(&msg).map_err(|_| IronCoreError::Internal)?;
@@ -1082,11 +1131,31 @@ impl IronCore {
         *self.delegate.write() = delegate.map(|d| Arc::from(d) as Arc<dyn CoreDelegate>);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn contacts_manager(&self) -> Arc<crate::contacts_bridge::ContactManager> {
+        self.contacts_bridge_manager.clone()
+    }
+
+    #[cfg(target_arch = "wasm32")]
     pub fn contacts_manager(&self) -> store::ContactManager {
         self.contacts.read().clone()
     }
 
+    pub fn contacts_store_manager(&self) -> store::ContactManager {
+        self.contacts.read().clone()
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn history_manager(&self) -> Arc<crate::mobile_bridge::HistoryManager> {
+        self.history_bridge_manager.clone()
+    }
+
+    #[cfg(target_arch = "wasm32")]
     pub fn history_manager(&self) -> store::HistoryManager {
+        self.history.read().clone()
+    }
+
+    pub fn history_store_manager(&self) -> store::HistoryManager {
         self.history.read().clone()
     }
 

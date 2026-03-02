@@ -50,7 +50,7 @@ pub struct GetHistoryRequest {
     pub limit: Option<usize>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HistoryMessage {
     pub peer_id: String,
     pub content: String,
@@ -262,7 +262,7 @@ async fn handle_send_message(req: Request<Body>, ctx: Arc<ApiContext>) -> Result
 
     // Core handle
     let core = &ctx.core;
-    let contacts = core.contacts_manager();
+    let contacts = core.contacts_store_manager();
 
     // Find contact
     // Note: find_contact needs the contact list, but it's a CLI-specific helper.
@@ -300,7 +300,7 @@ async fn handle_add_contact(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<
     let body_bytes = hyper::body::to_bytes(req.into_body()).await?;
     let request: AddContactRequest = serde_json::from_slice(&body_bytes)?;
 
-    let contacts = ctx.core.contacts_manager();
+    let contacts = ctx.core.contacts_store_manager();
 
     let mut contact =
         scmessenger_core::store::Contact::new(request.peer_id.clone(), request.public_key);
@@ -339,7 +339,7 @@ async fn handle_get_history(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<
     let body_bytes = hyper::body::to_bytes(req.into_body()).await?;
     let request: GetHistoryRequest = serde_json::from_slice(&body_bytes)?;
 
-    let history = ctx.core.history_manager();
+    let history = ctx.core.history_store_manager();
 
     let messages = if let Some(peer_id) = request.peer_id {
         history

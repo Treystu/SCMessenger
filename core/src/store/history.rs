@@ -140,6 +140,30 @@ impl HistoryManager {
         self.recent(Some(peer_id), limit)
     }
 
+    pub fn search(&self, query: String, limit: u32) -> Result<Vec<MessageRecord>, IronCoreError> {
+        let query_lower = query.to_lowercase();
+        let mut records = Vec::new();
+        let all = self
+            .backend
+            .scan_prefix(b"msg_")
+            .map_err(|_| IronCoreError::StorageError)?;
+
+        for (_, value) in all {
+            let record: MessageRecord =
+                serde_json::from_slice(&value).map_err(|_| IronCoreError::Internal)?;
+            if record.content.to_lowercase().contains(&query_lower) {
+                records.push(record);
+            }
+        }
+
+        // Return newest matches first and cap at the requested limit.
+        records.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        if records.len() > limit as usize {
+            records.truncate(limit as usize);
+        }
+        Ok(records)
+    }
+
     pub fn remove_conversation(&self, peer_id: String) -> Result<(), IronCoreError> {
         let all = self
             .backend
@@ -219,7 +243,7 @@ impl HistoryManager {
     }
 
     pub fn enforce_retention(&self, max_messages: u32) -> Result<u32, IronCoreError> {
-        let mut all = self
+        let all = self
             .backend
             .scan_prefix(b"msg_")
             .map_err(|_| IronCoreError::StorageError)?;

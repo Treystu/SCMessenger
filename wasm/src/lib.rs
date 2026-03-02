@@ -512,14 +512,14 @@ impl IronCore {
     #[wasm_bindgen(js_name = getContactManager)]
     pub fn get_contact_manager(&self) -> WasmContactManager {
         WasmContactManager {
-            inner: self.inner.contacts_manager(),
+            inner: self.inner.contacts_store_manager(),
         }
     }
 
     #[wasm_bindgen(js_name = getHistoryManager)]
     pub fn get_history_manager(&self) -> WasmHistoryManager {
         WasmHistoryManager {
-            inner: self.inner.history_manager(),
+            inner: self.inner.history_store_manager(),
         }
     }
 }
@@ -580,6 +580,14 @@ pub struct WasmHistoryManager {
     inner: scmessenger_core::store::HistoryManager,
 }
 
+#[derive(serde::Serialize)]
+struct WasmHistoryStats {
+    total_messages: u32,
+    sent_count: u32,
+    received_count: u32,
+    undelivered_count: u32,
+}
+
 #[wasm_bindgen]
 impl WasmHistoryManager {
     #[wasm_bindgen(js_name = add)]
@@ -635,7 +643,13 @@ impl WasmHistoryManager {
             .inner
             .stats()
             .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
-        Ok(serde_wasm_bindgen::to_value(&stats).unwrap())
+        let payload = WasmHistoryStats {
+            total_messages: stats.total_messages,
+            sent_count: stats.sent_count,
+            received_count: stats.received_count,
+            undelivered_count: stats.undelivered_count,
+        };
+        Ok(serde_wasm_bindgen::to_value(&payload).unwrap())
     }
 
     #[wasm_bindgen(js_name = count)]

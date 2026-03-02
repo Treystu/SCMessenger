@@ -14,7 +14,7 @@ use colored::*;
 use libp2p::Multiaddr;
 use scmessenger_core::message::{decode_envelope, MessageType};
 use scmessenger_core::store::{
-    Contact, ContactManager, HistoryManager, MessageDirection, MessageRecord, Outbox, QueuedMessage,
+    Contact, ContactManager, MessageDirection, Outbox, QueuedMessage,
 };
 use scmessenger_core::transport::{self, SwarmEvent};
 use scmessenger_core::IronCore;
@@ -460,7 +460,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             let data_dir = config::Config::data_dir()?;
             let storage_path = data_dir.join("storage");
             let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
-            let contacts = core.contacts_manager();
+            let contacts = core.contacts_store_manager();
 
             let mut contact = Contact::new(peer_id.clone(), public_key);
             if let Some(nickname) = name.clone() {
@@ -483,7 +483,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             let data_dir = config::Config::data_dir()?;
             let storage_path = data_dir.join("storage");
             let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
-            let contacts = core.contacts_manager();
+            let contacts = core.contacts_store_manager();
 
             match action {
                 ContactAction::List => {
@@ -528,13 +528,13 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                         .unwrap_or_else(|| contact.peer_id.clone());
 
                     contacts
-                        .remove(&contact.peer_id)
+                        .remove(contact.peer_id)
                         .map_err(|e| anyhow::anyhow!("{:?}", e))?;
                     println!("{} Removed contact: {}", "✓".green(), name.bright_cyan());
                 }
 
                 ContactAction::Search { query } => {
-                    let results = contacts.search(&query).unwrap_or_default();
+                    let results = contacts.search(query).unwrap_or_default();
 
                     if results.is_empty() {
                         println!("{}", "No matching contacts.".dimmed());
@@ -632,14 +632,14 @@ async fn cmd_history(
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
-    let history = core.history_manager();
+    let history = core.history_store_manager();
 
     let messages = if let Some(query) = search_query {
         history
-            .search(&query, limit as u32)
+            .search(query, limit as u32)
             .map_err(|e| anyhow::anyhow!("{:?}", e))?
     } else if let Some(peer) = peer_filter {
-        let contacts = core.contacts_manager();
+        let contacts = core.contacts_store_manager();
         let peer_id = if let Ok(contact) = find_contact(&contacts, &peer) {
             contact.peer_id
         } else {
@@ -728,8 +728,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
     let info = core.get_identity_info();
 
-    let contacts = core.contacts_manager();
-    let history = core.history_manager();
+    let contacts = core.contacts_store_manager();
+    let history = core.history_store_manager();
 
     // ── Outbox — persistent store-and-forward queue ──────────────────────
     // Messages sent to offline peers are queued here and flushed automatically
@@ -961,10 +961,10 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                              println!("\n{} Peer: {}", "✓".green(), peer_id);
                              print!("> ");
                              let _ = std::io::Write::flush(&mut std::io::stdout());
-                             let _ = contacts_rx.update_last_seen(&peer_id.to_string());
+                             let _ = contacts_rx.update_last_seen(peer_id.to_string());
 
                              // Try to get public key from existing contact, if available
-                             let (public_key, identity) = contacts_rx.get(&peer_id.to_string())
+                             let (public_key, identity) = contacts_rx.get(peer_id.to_string())
                                  .ok().flatten()
                                  .map(|c| (Some(c.public_key), Some(c.peer_id.clone())))
                                  .unwrap_or((None, None));
@@ -1122,7 +1122,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                             match msg.message_type {
                                 MessageType::Text => {
                                     let text = msg.text_content().unwrap_or_else(|| "<binary>".into());
-                                    let sender_name = contacts_rx.get(&peer_id.to_string())
+                                    let sender_name = contacts_rx.get(peer_id.to_string())
                                         .ok().flatten()
                                         .map(|c| c.display_name().to_string())
                                         .unwrap_or_else(|| peer_id.to_string());
@@ -1288,7 +1288,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                     server::UiCommand::ContactRemove { contact } => {
                          // remove by peer_id (assuming contact arg is peer_id for now, or resolving nickname)
                          // contacts.remove takes peer_id string
-                         if contacts_rx.remove(&contact).is_ok() {
+                         if contacts_rx.remove(contact).is_ok() {
                              if let Ok(list) = contacts_rx.list() {
                                  let _ = ui_broadcast.send(server::UiEvent::ContactList { contacts: list });
                              }
@@ -1489,8 +1489,8 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     println!("{} Subscribed to mesh topics", "✓".green());
 
     // Contacts + History (for relay message handling)
-    let contacts = core.contacts_manager();
-    let history = core.history_manager();
+    let contacts = core.contacts_store_manager();
+    let _history = core.history_store_manager();
 
     // Outbox
     let outbox_path = data_dir.join("outbox");
@@ -1512,7 +1512,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     let core_arc = Arc::new(core);
     let api_ctx = api::ApiContext {
         core: core_arc.clone(),
-        swarm_handle: swarm_handle.clone(),
+        swarm_handle: Arc::new(swarm_handle.clone()),
         peers: peers.clone(),
     };
     tokio::spawn(async move {
@@ -1621,9 +1621,9 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
                         if let std::collections::hash_map::Entry::Vacant(e) = p.entry(peer_id) {
                             e.insert(None);
                             tracing::info!("Peer discovered: {}", peer_id);
-                            let _ = contacts_rx.update_last_seen(&peer_id.to_string());
+                            let _ = contacts_rx.update_last_seen(peer_id.to_string());
 
-                            let (public_key, identity) = contacts_rx.get(&peer_id.to_string())
+                            let (public_key, identity) = contacts_rx.get(peer_id.to_string())
                                 .ok().flatten()
                                 .map(|c| (Some(c.public_key), Some(c.peer_id.clone())))
                                 .unwrap_or((None, None));
@@ -1768,7 +1768,7 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
     core.initialize_identity()
         .context("Failed to load identity")?;
 
-    let contacts = core.contacts_manager();
+    let contacts = core.contacts_store_manager();
 
     let contact = find_contact(&contacts, &recipient).context("Contact not found")?;
 
@@ -1832,8 +1832,8 @@ async fn cmd_status() -> Result<()> {
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
 
-    let contacts = core.contacts_manager();
-    let history = core.history_manager();
+    let contacts = core.contacts_store_manager();
+    let history = core.history_store_manager();
     let stats = history.stats().map_err(|e| anyhow::anyhow!("{:?}", e))?;
 
     println!("{}", "SCMessenger Status".bold());
@@ -1842,7 +1842,7 @@ async fn cmd_status() -> Result<()> {
     println!("Contacts: {}", contacts.list().unwrap_or_default().len());
     println!(
         "Messages: {} (sent: {}, received: {})",
-        stats.total_messages, stats.sent_messages, stats.received_messages
+        stats.total_messages, stats.sent_count, stats.received_count
     );
 
     Ok(())

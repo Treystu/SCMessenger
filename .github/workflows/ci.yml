@@ -81,6 +81,9 @@ jobs:
       - name: Build
         run: cargo build --workspace
 
+      - name: Compile Gate (workspace no-run)
+        run: cargo test --workspace --no-run
+
       - name: Test
         run: cargo test --workspace
 

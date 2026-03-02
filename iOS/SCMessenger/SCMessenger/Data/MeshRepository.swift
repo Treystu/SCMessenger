@@ -3663,7 +3663,7 @@ final class MeshRepository {
         identityEmissionCache.removeAll()
         connectedEmissionCache.removeAll()
         identitySyncSentPeers.removeAll()
-        discoveredPeers.removeAll()
+        discoveredPeerMap.removeAll()
 
         // 4. Delete Keychain backup (persisted identity)
         let keychainQuery: [String: Any] = [
