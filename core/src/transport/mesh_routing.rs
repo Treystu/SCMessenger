@@ -11,6 +11,64 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+/// Route reason: direct-first policy candidate.
+pub const ROUTE_REASON_DIRECT_FIRST: &str = "DIRECT_FIRST";
+/// Route reason: relay chosen by recipient-recency and success score policy.
+pub const ROUTE_REASON_RELAY_RECENCY_SUCCESS: &str = "RELAY_RECENCY_SUCCESS";
+/// Route reason: relay chosen by success score when no recipient-recency signal exists.
+pub const ROUTE_REASON_RELAY_SUCCESS_SCORE: &str = "RELAY_SUCCESS_SCORE";
+/// Route reason: relay ordering required latest-success tie-break.
+pub const ROUTE_REASON_RELAY_TIEBREAK_LAST_SUCCESS: &str = "RELAY_TIEBREAK_LAST_SUCCESS";
+/// Route reason: relay ordering fell back to deterministic peer-id tie-break.
+pub const ROUTE_REASON_RELAY_TIEBREAK_PEER_ID: &str = "RELAY_TIEBREAK_PEER_ID";
+
+/// Ranked route candidate with deterministic metadata for trace logging.
+#[derive(Debug, Clone)]
+pub struct RankedRoute {
+    pub path: Vec<PeerId>,
+    pub reason_code: &'static str,
+    pub recipient_recency: u64,
+    pub relay_success_score: f64,
+    pub latest_success_order: u64,
+}
+
+/// Output of advancing to the next route candidate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RouteCursorAdvance {
+    pub next_index: usize,
+    pub wrapped_pass: bool,
+}
+
+/// Advance to the next route in a pass; wraps to index 0 when exhausted.
+pub fn advance_route_cursor(current_index: usize, candidate_count: usize) -> RouteCursorAdvance {
+    if candidate_count == 0 {
+        return RouteCursorAdvance {
+            next_index: 0,
+            wrapped_pass: false,
+        };
+    }
+
+    let next_index = current_index.saturating_add(1);
+    if next_index >= candidate_count {
+        RouteCursorAdvance {
+            next_index: 0,
+            wrapped_pass: true,
+        }
+    } else {
+        RouteCursorAdvance {
+            next_index,
+            wrapped_pass: false,
+        }
+    }
+}
+
+fn unix_now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
 // ============================================================================
 // PHASE 3: RELAY CAPABILITY
 // ============================================================================
@@ -155,7 +213,11 @@ impl ReputationTracker {
     /// Get best relay peers (sorted by reputation)
     pub fn best_relays(&self, count: usize) -> Vec<PeerId> {
         let mut peers: Vec<_> = self.reputations.values().collect();
-        peers.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        peers.sort_by(|a, b| {
+            b.score
+                .total_cmp(&a.score)
+                .then_with(|| a.peer_id.to_string().cmp(&b.peer_id.to_string()))
+        });
 
         peers
             .into_iter()
@@ -237,9 +299,7 @@ impl RetryStrategy {
 
     /// Should we retry after this many attempts?
     pub fn should_retry(&self, attempt: u32) -> bool {
-        self.max_attempts
-            .map(|max| attempt < max)
-            .unwrap_or(true)
+        self.max_attempts.map(|max| attempt < max).unwrap_or(true)
     }
 }
 
@@ -303,6 +363,12 @@ pub struct MultiPathDelivery {
     attempts: HashMap<String, DeliveryAttempt>,
     /// Reputation tracker for selecting best paths
     reputation: ReputationTracker,
+    /// Recipient-recency signals keyed by (relay, recipient)
+    recipient_recency_by_route: HashMap<(PeerId, PeerId), u64>,
+    /// Latest successful relay path order keyed by (relay, recipient)
+    latest_success_by_route: HashMap<(PeerId, PeerId), u64>,
+    /// Monotonic sequence for deterministic "latest successful path" tie-breaks
+    success_sequence: u64,
 }
 
 impl Default for MultiPathDelivery {
@@ -316,6 +382,9 @@ impl MultiPathDelivery {
         Self {
             attempts: HashMap::new(),
             reputation: ReputationTracker::new(),
+            recipient_recency_by_route: HashMap::new(),
+            latest_success_by_route: HashMap::new(),
+            success_sequence: 0,
         }
     }
 
@@ -330,21 +399,111 @@ impl MultiPathDelivery {
         self.reputation.add_relay(peer_id);
     }
 
-    /// Get best paths to try (direct + relay options)
-    pub fn get_best_paths(&self, target: &PeerId, count: usize) -> Vec<Vec<PeerId>> {
-        let mut paths = Vec::new();
+    /// Record a recipient-recency signal for a relay candidate.
+    ///
+    /// `seen_at` must be a unix timestamp (seconds). Newer timestamps overwrite older values.
+    pub fn record_recipient_seen_via_relay(
+        &mut self,
+        relay_peer: PeerId,
+        recipient_peer: PeerId,
+        seen_at: u64,
+    ) {
+        let key = (relay_peer, recipient_peer);
+        let entry = self.recipient_recency_by_route.entry(key).or_insert(0);
+        *entry = (*entry).max(seen_at);
+    }
 
-        // Path 1: Direct connection
-        paths.push(vec![*target]);
+    /// Record a "seen now" recipient-recency signal.
+    pub fn record_recipient_seen_now(&mut self, relay_peer: PeerId, recipient_peer: PeerId) {
+        self.record_recipient_seen_via_relay(relay_peer, recipient_peer, unix_now_secs());
+    }
 
-        // Path 2-N: Via best relays
-        for relay in self.reputation.best_relays(count.saturating_sub(1)) {
-            if relay != *target {
-                paths.push(vec![relay, *target]);
-            }
+    /// Deterministic ranked routes: direct-first, then relay ranking policy.
+    pub fn ranked_routes(&self, target: &PeerId, count: usize) -> Vec<RankedRoute> {
+        if count == 0 {
+            return Vec::new();
         }
 
-        paths
+        let mut routes = Vec::with_capacity(count);
+        routes.push(RankedRoute {
+            path: vec![*target],
+            reason_code: ROUTE_REASON_DIRECT_FIRST,
+            recipient_recency: 0,
+            relay_success_score: 0.0,
+            latest_success_order: 0,
+        });
+
+        #[derive(Debug)]
+        struct RelayCandidate {
+            relay_peer: PeerId,
+            relay_key: String,
+            recipient_recency: u64,
+            relay_success_score: f64,
+            latest_success_order: u64,
+        }
+
+        let mut relays: Vec<RelayCandidate> = self
+            .reputation
+            .reputations
+            .values()
+            .filter(|rep| rep.is_reliable && rep.peer_id != *target)
+            .map(|rep| {
+                let relay_peer = rep.peer_id;
+                RelayCandidate {
+                    relay_peer,
+                    relay_key: relay_peer.to_string(),
+                    recipient_recency: self
+                        .recipient_recency_by_route
+                        .get(&(relay_peer, *target))
+                        .copied()
+                        .unwrap_or(0),
+                    relay_success_score: rep.score,
+                    latest_success_order: self
+                        .latest_success_by_route
+                        .get(&(relay_peer, *target))
+                        .copied()
+                        .unwrap_or(0),
+                }
+            })
+            .collect();
+
+        relays.sort_by(|a, b| {
+            b.recipient_recency
+                .cmp(&a.recipient_recency)
+                .then_with(|| b.relay_success_score.total_cmp(&a.relay_success_score))
+                .then_with(|| b.latest_success_order.cmp(&a.latest_success_order))
+                .then_with(|| a.relay_key.cmp(&b.relay_key))
+        });
+
+        for relay in relays.into_iter().take(count.saturating_sub(1)) {
+            let reason_code = if relay.recipient_recency > 0 {
+                ROUTE_REASON_RELAY_RECENCY_SUCCESS
+            } else if relay.latest_success_order > 0 {
+                ROUTE_REASON_RELAY_TIEBREAK_LAST_SUCCESS
+            } else if relay.relay_success_score > 0.0 {
+                ROUTE_REASON_RELAY_SUCCESS_SCORE
+            } else {
+                ROUTE_REASON_RELAY_TIEBREAK_PEER_ID
+            };
+
+            routes.push(RankedRoute {
+                path: vec![relay.relay_peer, *target],
+                reason_code,
+                recipient_recency: relay.recipient_recency,
+                relay_success_score: relay.relay_success_score,
+                latest_success_order: relay.latest_success_order,
+            });
+        }
+
+        routes
+    }
+
+    /// Get best paths to try (direct + relay options)
+    pub fn get_best_paths(&self, target: &PeerId, count: usize) -> Vec<Vec<PeerId>> {
+        self.ranked_routes(target, count)
+            .into_iter()
+            .map(|route| route.path)
+            .collect()
     }
 
     /// Record delivery success
@@ -354,9 +513,14 @@ impl MultiPathDelivery {
 
         // Update reputation for relays in the path
         if path.len() > 1 {
+            self.success_sequence = self.success_sequence.saturating_add(1);
+            let latest_success_order = self.success_sequence;
+            let target_peer = *path.last().unwrap_or(&path[0]);
             for relay in &path[..path.len() - 1] {
                 self.reputation
                     .record_relay_attempt(*relay, true, latency_ms, 1024);
+                self.latest_success_by_route
+                    .insert((*relay, target_peer), latest_success_order);
             }
         }
     }
@@ -374,6 +538,11 @@ impl MultiPathDelivery {
                 }
             }
         }
+    }
+
+    /// Get a specific pending delivery attempt by message id.
+    pub fn delivery_attempt(&self, message_id: &str) -> Option<&DeliveryAttempt> {
+        self.attempts.get(message_id)
     }
 
     /// Get pending delivery attempts

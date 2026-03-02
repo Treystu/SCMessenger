@@ -13,6 +13,14 @@ Owner policy constraints (2026-02-23):
 - Anti-abuse controls are required before beta release.
 - Critical UX controls must stay in Android+iOS+Web parity with no temporary lead platform.
 
+## v0.2.0 Execution Residual Register
+
+Residual risks from completed v0.2.0 phases (currently WS0-WS2) are tracked in:
+
+- `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+
+Do not start the next v0.2.0 phase without checking the corresponding entry gate in that register.
+
 ## Priority 0: Tri-Platform Semantics and Reliability
 
 1. [x] Privacy parity-first wiring (all toggles) on Android, iOS, and Web

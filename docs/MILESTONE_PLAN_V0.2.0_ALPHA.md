@@ -449,3 +449,12 @@ To reduce risk and unblock integration quickly:
 
 This ordering is for dependency flow only. Execution planning remains LoC-scoped, not time-scoped.
 
+---
+
+## 13) Residual Risk Tracking (WS0-WS2)
+
+The active residuals discovered during WS0-WS2 execution are tracked in:
+
+- `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+
+WS3 should start only after the WS3 entry gate in that register is checked.

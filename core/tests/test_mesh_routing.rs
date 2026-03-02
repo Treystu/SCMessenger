@@ -216,6 +216,81 @@ fn test_multi_path_best_paths_include_relays() {
 }
 
 #[test]
+fn test_route_ordering_determinism_with_direct_first_policy() {
+    let mut delivery = MultiPathDelivery::new();
+    let target = PeerId::random();
+    let relay_a = PeerId::random();
+    let relay_b = PeerId::random();
+    let relay_c = PeerId::random();
+
+    delivery.add_relay(relay_a);
+    delivery.add_relay(relay_b);
+    delivery.add_relay(relay_c);
+
+    // Recipient-recency should dominate relay ordering.
+    delivery.record_recipient_seen_via_relay(relay_c, target, 300);
+    delivery.record_recipient_seen_via_relay(relay_a, target, 200);
+    delivery.record_recipient_seen_via_relay(relay_b, target, 200);
+
+    let first = delivery.ranked_routes(&target, 4);
+    let second = delivery.ranked_routes(&target, 4);
+
+    assert_eq!(first.len(), 4);
+    assert_eq!(second.len(), 4);
+    assert_eq!(first[0].path, vec![target], "Direct route must stay first");
+    assert_eq!(second[0].path, vec![target], "Direct route must stay first");
+    assert_eq!(first[1].path[0], relay_c);
+    assert_eq!(second[1].path[0], relay_c);
+
+    let mut tied = [relay_a, relay_b];
+    tied.sort_by_key(|peer| peer.to_string());
+    assert_eq!(first[2].path[0], tied[0]);
+    assert_eq!(first[3].path[0], tied[1]);
+    assert_eq!(second[2].path[0], tied[0]);
+    assert_eq!(second[3].path[0], tied[1]);
+
+    assert_eq!(first[0].reason_code, ROUTE_REASON_DIRECT_FIRST);
+    assert_eq!(first[1].reason_code, ROUTE_REASON_RELAY_RECENCY_SUCCESS);
+}
+
+#[test]
+fn test_relay_tie_break_prefers_latest_successful_path() {
+    let mut delivery = MultiPathDelivery::new();
+    let target = PeerId::random();
+    let relay_older = PeerId::random();
+    let relay_newer = PeerId::random();
+
+    delivery.record_success("older-success", vec![relay_older, target], 80);
+    delivery.record_success("newer-success", vec![relay_newer, target], 80);
+
+    // Equalize recipient-recency so latest-success tie-break decides rank.
+    delivery.record_recipient_seen_via_relay(relay_older, target, 500);
+    delivery.record_recipient_seen_via_relay(relay_newer, target, 500);
+
+    let routes = delivery.ranked_routes(&target, 3);
+    assert_eq!(routes.len(), 3);
+    assert_eq!(routes[1].path[0], relay_newer);
+    assert_eq!(routes[2].path[0], relay_older);
+}
+
+#[test]
+fn test_retry_cursor_wraps_for_cyclical_retry_continuation() {
+    let step1 = advance_route_cursor(0, 3);
+    let step2 = advance_route_cursor(step1.next_index, 3);
+    let step3 = advance_route_cursor(step2.next_index, 3);
+    let step4 = advance_route_cursor(step3.next_index, 3);
+
+    assert_eq!(step1.next_index, 1);
+    assert!(!step1.wrapped_pass);
+    assert_eq!(step2.next_index, 2);
+    assert!(!step2.wrapped_pass);
+    assert_eq!(step3.next_index, 0);
+    assert!(step3.wrapped_pass);
+    assert_eq!(step4.next_index, 1);
+    assert!(!step4.wrapped_pass);
+}
+
+#[test]
 fn test_bootstrap_capability() {
     let mut bootstrap = BootstrapCapability::new();
 

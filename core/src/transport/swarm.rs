@@ -20,7 +20,9 @@ use super::behaviour::{
     MessageResponse, RelayResponse, SharedPeerEntry,
 };
 #[cfg(not(target_arch = "wasm32"))]
-use super::mesh_routing::{BootstrapCapability, MultiPathDelivery};
+use super::mesh_routing::{
+    advance_route_cursor, BootstrapCapability, MultiPathDelivery, RankedRoute,
+};
 #[cfg(target_arch = "wasm32")]
 use super::multiport::MultiPortConfig;
 #[cfg(not(target_arch = "wasm32"))]
@@ -82,6 +84,91 @@ fn is_discoverable_multiaddr(addr: &Multiaddr) -> bool {
     true
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+const ROUTE_ATTEMPT_REASON_INITIAL_SEND: &str = "INITIAL_SEND";
+#[cfg(not(target_arch = "wasm32"))]
+const ROUTE_ATTEMPT_REASON_RETRY_NEXT: &str = "RETRY_NEXT_CANDIDATE";
+#[cfg(not(target_arch = "wasm32"))]
+const ROUTE_ATTEMPT_REASON_RETRY_CYCLE: &str = "RETRY_CYCLE_RESTART";
+
+#[cfg(not(target_arch = "wasm32"))]
+fn log_route_decision(
+    message_id: &str,
+    route: &RankedRoute,
+    dispatch_attempt: u32,
+    pass_count: u32,
+    candidate_index: usize,
+    total_candidates: usize,
+    attempt_reason: &str,
+) {
+    let route_label = if route.path.len() == 1 {
+        "direct"
+    } else {
+        "relay"
+    };
+    let relay_peer = route
+        .path
+        .first()
+        .filter(|_| route.path.len() > 1)
+        .map(|p| p.to_string())
+        .unwrap_or_else(|| "-".to_string());
+    let destination = route
+        .path
+        .last()
+        .map(|p| p.to_string())
+        .unwrap_or_else(|| "-".to_string());
+
+    tracing::info!(
+        "ROUTE_DECISION message_id={} attempt={} pass={} candidate={}/{} route={} relay={} destination={} reason={} policy_reason={} recipient_recency={} relay_score={:.3} latest_success_order={}",
+        message_id,
+        dispatch_attempt,
+        pass_count,
+        candidate_index + 1,
+        total_candidates,
+        route_label,
+        relay_peer,
+        destination,
+        attempt_reason,
+        route.reason_code,
+        route.recipient_recency,
+        route.relay_success_score,
+        route.latest_success_order
+    );
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn dispatch_ranked_route(
+    swarm: &mut libp2p::Swarm<IronCoreBehaviour>,
+    route: &RankedRoute,
+    message_id: &str,
+    target_peer: PeerId,
+    envelope_data: &[u8],
+    request_to_message: &mut HashMap<libp2p::request_response::OutboundRequestId, String>,
+    pending_relay_requests: &mut HashMap<libp2p::request_response::OutboundRequestId, String>,
+) {
+    if route.path.len() == 1 {
+        let request_id = swarm.behaviour_mut().messaging.send_request(
+            &target_peer,
+            MessageRequest {
+                envelope_data: envelope_data.to_vec(),
+            },
+        );
+        request_to_message.insert(request_id, message_id.to_string());
+    } else {
+        let relay_peer = route.path[0];
+        let relay_request = RelayRequest {
+            destination_peer: target_peer.to_bytes(),
+            envelope_data: envelope_data.to_vec(),
+            message_id: message_id.to_string(),
+        };
+        let request_id = swarm
+            .behaviour_mut()
+            .relay
+            .send_request(&relay_peer, relay_request);
+        pending_relay_requests.insert(request_id, message_id.to_string());
+    }
+}
+
 /// Pending message delivery tracking
 #[derive(Debug)]
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
@@ -91,6 +178,9 @@ struct PendingMessage {
     reply_tx: mpsc::Sender<Result<(), String>>,
     current_path_index: usize,
     attempt_start: SystemTime,
+    dispatch_attempts: u32,
+    pass_count: u32,
+    retry_notified: bool,
 }
 
 /// Commands that can be sent to the swarm task
@@ -604,7 +694,7 @@ pub async fn start_swarm_with_config(
                         let mut to_retry = Vec::new();
 
                         for (msg_id, pending) in pending_messages.iter() {
-                            if let Some(attempt) = multi_path_delivery.pending_attempts().iter().find(|a| &a.message_id == msg_id) {
+                            if let Some(attempt) = multi_path_delivery.delivery_attempt(msg_id) {
                                 if attempt.should_retry() {
                                     let elapsed = pending.attempt_start.elapsed().unwrap_or_default();
                                     let retry_delay = attempt.next_retry_delay();
@@ -619,51 +709,61 @@ pub async fn start_swarm_with_config(
                         // Process retries
                         for msg_id in to_retry {
                             if let Some(mut pending) = pending_messages.remove(&msg_id) {
-                                pending.current_path_index += 1;
-                                let paths = multi_path_delivery.get_best_paths(&pending.target_peer, 3);
-
-                                if pending.current_path_index < paths.len() {
-                                    let path = &paths[pending.current_path_index];
-                                    tracing::info!("RETRY: Attempting delivery via path {:?}", path);
-
-                                    pending.attempt_start = SystemTime::now();
-
-                                    if path.len() == 1 {
-                                        // Direct retry
-                                        let request_id = swarm.behaviour_mut().messaging.send_request(
-                                            &pending.target_peer,
-                                            MessageRequest { envelope_data: pending.envelope_data.clone() },
-                                        );
-                                        request_to_message.insert(request_id, msg_id.clone());
-                                    } else {
-                                        // Relay retry
-                                        let relay_peer = path[0];
-                                        let destination_peer_bytes = pending.target_peer.to_bytes();
-
-                                        let relay_request = RelayRequest {
-                                            destination_peer: destination_peer_bytes,
-                                            envelope_data: pending.envelope_data.clone(),
-                                            message_id: msg_id.clone(),
-                                        };
-
-                                        let request_id = swarm.behaviour_mut().relay.send_request(
-                                            &relay_peer,
-                                            relay_request,
-                                        );
-                                        pending_relay_requests.insert(request_id, msg_id.clone());
-                                    }
-
-                                    pending_messages.insert(msg_id, pending);
-                                } else {
+                                let routes = multi_path_delivery.ranked_routes(&pending.target_peer, 3);
+                                if routes.is_empty() {
                                     tracing::warn!(
-                                        "Delivery pass failed for message {}; deferring to persistent retry queue",
+                                        "No route candidates available for message {}; keeping in retry cycle",
                                         msg_id
                                     );
-                                    let _ = pending
-                                        .reply_tx
-                                        .send(Err("Delivery pending retry".to_string()))
-                                        .await;
+                                    pending_messages.insert(msg_id, pending);
+                                    continue;
                                 }
+
+                                let cursor = advance_route_cursor(pending.current_path_index, routes.len());
+                                pending.current_path_index = cursor.next_index;
+                                if cursor.wrapped_pass {
+                                    pending.pass_count = pending.pass_count.saturating_add(1);
+                                    if !pending.retry_notified {
+                                        tracing::warn!(
+                                            "Delivery pass failed for message {}; continuing cyclic retries",
+                                            msg_id
+                                        );
+                                        let _ = pending
+                                            .reply_tx
+                                            .send(Err("Delivery pending retry".to_string()))
+                                            .await;
+                                        pending.retry_notified = true;
+                                    }
+                                }
+
+                                let route = &routes[pending.current_path_index];
+                                pending.attempt_start = SystemTime::now();
+                                pending.dispatch_attempts = pending.dispatch_attempts.saturating_add(1);
+                                let attempt_reason = if cursor.wrapped_pass {
+                                    ROUTE_ATTEMPT_REASON_RETRY_CYCLE
+                                } else {
+                                    ROUTE_ATTEMPT_REASON_RETRY_NEXT
+                                };
+                                log_route_decision(
+                                    &msg_id,
+                                    route,
+                                    pending.dispatch_attempts,
+                                    pending.pass_count,
+                                    pending.current_path_index,
+                                    routes.len(),
+                                    attempt_reason,
+                                );
+                                dispatch_ranked_route(
+                                    &mut swarm,
+                                    route,
+                                    &msg_id,
+                                    pending.target_peer,
+                                    &pending.envelope_data,
+                                    &mut request_to_message,
+                                    &mut pending_relay_requests,
+                                );
+
+                                pending_messages.insert(msg_id, pending);
                             }
                         }
                     }
@@ -802,21 +902,26 @@ pub async fn start_swarm_with_config(
                                                     // Message rejected, trigger retry
                                                     tracing::warn!("✗ Message rejected by {}: {:?}", pending.target_peer, response.error);
                                                     multi_path_delivery.record_failure(&message_id, vec![pending.target_peer]);
-
-                                                    // Try next path
-                                                    let paths = multi_path_delivery.get_best_paths(&pending.target_peer, 3);
-                                                    if pending.current_path_index + 1 < paths.len() {
-                                                        // Retry with next path will be handled by retry task
-                                                        pending_messages.insert(message_id, pending);
-                                                    } else {
-                                                        let _ = pending
-                                                            .reply_tx
-                                                            .send(Err("Delivery pending retry".to_string()))
-                                                            .await;
-                                                    }
+                                                    pending_messages.insert(message_id, pending);
                                                 }
                                             }
                                         }
+                                    }
+                                }
+                            }
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Messaging(
+                                request_response::Event::OutboundFailure { request_id, error, .. }
+                            )) => {
+                                if let Some(message_id) = request_to_message.remove(&request_id) {
+                                    if let Some(pending) = pending_messages.remove(&message_id) {
+                                        tracing::warn!(
+                                            "✗ Direct send outbound failure to {}: {}",
+                                            pending.target_peer,
+                                            error
+                                        );
+                                        multi_path_delivery
+                                            .record_failure(&message_id, vec![pending.target_peer]);
+                                        pending_messages.insert(message_id, pending);
                                     }
                                 }
                             }
@@ -935,19 +1040,29 @@ pub async fn start_swarm_with_config(
                                                 } else {
                                                     tracing::warn!("✗ Relay via {} failed: {:?}", peer, response.error);
                                                     multi_path_delivery.record_failure(&message_id, vec![peer, pending.target_peer]);
-
-                                                    let paths = multi_path_delivery.get_best_paths(&pending.target_peer, 3);
-                                                    if pending.current_path_index + 1 < paths.len() {
-                                                        pending_messages.insert(message_id, pending);
-                                                    } else {
-                                                        let _ = pending
-                                                            .reply_tx
-                                                            .send(Err("Delivery pending retry".to_string()))
-                                                            .await;
-                                                    }
+                                                    pending_messages.insert(message_id, pending);
                                                 }
                                             }
                                         }
+                                    }
+                                }
+                            }
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Relay(
+                                request_response::Event::OutboundFailure { peer, request_id, error, .. }
+                            )) => {
+                                if let Some(message_id) = pending_relay_requests.remove(&request_id) {
+                                    if let Some(pending) = pending_messages.remove(&message_id) {
+                                        tracing::warn!(
+                                            "✗ Relay outbound failure via {} to {}: {}",
+                                            peer,
+                                            pending.target_peer,
+                                            error
+                                        );
+                                        multi_path_delivery.record_failure(
+                                            &message_id,
+                                            vec![peer, pending.target_peer],
+                                        );
+                                        pending_messages.insert(message_id, pending);
                                     }
                                 }
                             }
@@ -982,6 +1097,11 @@ pub async fn start_swarm_with_config(
                                         for entry in &request.peers {
                                             if let Some(ref pid_str) = entry.last_peer_id {
                                                 if let Ok(pid) = pid_str.parse::<PeerId>() {
+                                                    multi_path_delivery.record_recipient_seen_via_relay(
+                                                        peer,
+                                                        pid,
+                                                        entry.last_seen,
+                                                    );
                                                     if let Ok(addr) = entry.multiaddr.parse::<Multiaddr>() {
                                                         if is_discoverable_multiaddr(&addr) {
                                                             swarm.behaviour_mut().kademlia.add_address(&pid, addr);
@@ -1036,6 +1156,11 @@ pub async fn start_swarm_with_config(
                                             for entry in &response.peers {
                                                 if let Some(ref pid_str) = entry.last_peer_id {
                                                     if let Ok(pid) = pid_str.parse::<PeerId>() {
+                                                        multi_path_delivery.record_recipient_seen_via_relay(
+                                                            peer,
+                                                            pid,
+                                                            entry.last_seen,
+                                                        );
                                                         if let Ok(addr) = entry.multiaddr.parse::<Multiaddr>() {
                                                             if is_discoverable_multiaddr(&addr) {
                                                                 swarm.behaviour_mut().kademlia.add_address(&pid, addr);
@@ -1234,6 +1359,8 @@ pub async fn start_swarm_with_config(
                                     info.protocols.len(),
                                     info.listen_addrs.len()
                                 );
+                                // Identity protocol confirms this peer is presently reachable.
+                                multi_path_delivery.record_recipient_seen_now(peer_id, peer_id);
 
                                 // Relay-confirmed observation of our externally visible endpoint
                                 // as seen by this peer. This gives mobile layers a stable
@@ -1345,6 +1472,7 @@ pub async fn start_swarm_with_config(
                                     peer_id,
                                     endpoint.get_remote_address()
                                 );
+                                multi_path_delivery.record_recipient_seen_now(peer_id, peer_id);
 
                                 // Track this connection for address observation
                                 connection_tracker.add_connection(
@@ -1427,42 +1555,32 @@ pub async fn start_swarm_with_config(
                                 // Start delivery tracking
                                 multi_path_delivery.start_delivery(message_id.clone(), peer_id);
 
-                                // Get best paths (direct + relay options)
-                                let paths = multi_path_delivery.get_best_paths(&peer_id, 3);
-
-                                if paths.is_empty() {
+                                let routes = multi_path_delivery.ranked_routes(&peer_id, 3);
+                                if routes.is_empty() {
                                     let _ = reply.send(Err("No paths available".to_string())).await;
                                     continue;
                                 }
 
-                                // Try first path (direct or via relay)
-                                let path = &paths[0];
-                                tracing::info!("Attempting delivery via path: {:?}", path);
-
-                                if path.len() == 1 {
-                                    // Direct send
-                                    let request_id = swarm.behaviour_mut().messaging.send_request(
-                                        &peer_id,
-                                        MessageRequest { envelope_data: envelope_data.clone() },
-                                    );
-                                    request_to_message.insert(request_id, message_id.clone());
-                                } else {
-                                    // Relay via intermediate peer
-                                    let relay_peer = path[0];
-                                    let destination_peer_bytes = peer_id.to_bytes();
-
-                                    let relay_request = RelayRequest {
-                                        destination_peer: destination_peer_bytes,
-                                        envelope_data: envelope_data.clone(),
-                                        message_id: message_id.clone(),
-                                    };
-
-                                    let request_id = swarm.behaviour_mut().relay.send_request(
-                                        &relay_peer,
-                                        relay_request,
-                                    );
-                                    pending_relay_requests.insert(request_id, message_id.clone());
-                                }
+                                let initial_route = &routes[0];
+                                let attempt_start = SystemTime::now();
+                                log_route_decision(
+                                    &message_id,
+                                    initial_route,
+                                    1,
+                                    0,
+                                    0,
+                                    routes.len(),
+                                    ROUTE_ATTEMPT_REASON_INITIAL_SEND,
+                                );
+                                dispatch_ranked_route(
+                                    &mut swarm,
+                                    initial_route,
+                                    &message_id,
+                                    peer_id,
+                                    &envelope_data,
+                                    &mut request_to_message,
+                                    &mut pending_relay_requests,
+                                );
 
                                 // Store pending message for retry handling
                                 pending_messages.insert(message_id.clone(), PendingMessage {
@@ -1470,7 +1588,10 @@ pub async fn start_swarm_with_config(
                                     envelope_data,
                                     reply_tx: reply,
                                     current_path_index: 0,
-                                    attempt_start: SystemTime::now(),
+                                    attempt_start,
+                                    dispatch_attempts: 1,
+                                    pass_count: 0,
+                                    retry_notified: false,
                                 });
                             }
 
