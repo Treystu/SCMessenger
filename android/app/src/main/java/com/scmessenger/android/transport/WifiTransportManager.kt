@@ -25,6 +25,7 @@ class WifiTransportManager(
     private var channel: WifiP2pManager.Channel? = null
     private var isDiscovering = false
     private var receiverRegistered = false
+    private var wifiDirectTransport: WifiDirectTransport? = null
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -42,6 +43,15 @@ class WifiTransportManager(
         } else {
             Timber.d("WifiTransportManager initialized")
         }
+        if (wifiDirectTransport == null) {
+            wifiDirectTransport = WifiDirectTransport(
+                context = context,
+                onPeerDiscovered = onPeerDiscovered,
+                onDataReceived = { peerId, data ->
+                    onDataReceived?.invoke(peerId, data)
+                }
+            )
+        }
     }
 
     fun startDiscovery() {
@@ -49,6 +59,7 @@ class WifiTransportManager(
             Timber.d("WiFi P2P discovery already active; skipping duplicate start")
             return
         }
+        wifiDirectTransport?.start()
         val c = channel ?: return
 
         manager?.discoverPeers(c, object : WifiP2pManager.ActionListener {
@@ -66,17 +77,20 @@ class WifiTransportManager(
     }
 
     fun stopDiscovery() {
-        val c = channel ?: return
+        val c = channel
         if (isDiscovering) {
-            manager?.stopPeerDiscovery(c, object : WifiP2pManager.ActionListener {
-                override fun onSuccess() {
-                    isDiscovering = false
-                    Timber.i("WiFi P2P Discovery stopped")
-                }
-                override fun onFailure(reason: Int) {
-                    Timber.w("Failed to stop WiFi P2P discovery: $reason")
-                }
-            })
+            if (c != null) {
+                manager?.stopPeerDiscovery(c, object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() {
+                        isDiscovering = false
+                        Timber.i("WiFi P2P Discovery stopped")
+                    }
+                    override fun onFailure(reason: Int) {
+                        Timber.w("Failed to stop WiFi P2P discovery: $reason")
+                    }
+                })
+            }
+            isDiscovering = false
             try {
                 if (receiverRegistered) {
                     context.unregisterReceiver(receiver)
@@ -86,6 +100,7 @@ class WifiTransportManager(
                 // Ignore if not registered
             }
         }
+        wifiDirectTransport?.stop()
     }
 
     private fun registerReceiver() {
@@ -108,9 +123,21 @@ class WifiTransportManager(
             }
         }
     }
-    fun sendData(peerId: String, data: ByteArray) {
-        // Requires Socket connection to peer.
-        // For now, log.
-        Timber.i("Sending ${data.size} bytes via WiFi to $peerId (Not fully implemented)")
+    fun sendData(peerId: String, data: ByteArray): Boolean {
+        val normalizedPeerId = peerId.trim()
+        if (normalizedPeerId.isEmpty()) {
+            Timber.w("WiFi send skipped: empty peer ID")
+            return false
+        }
+        val direct = wifiDirectTransport
+        if (direct == null) {
+            Timber.d("WiFi send skipped for $normalizedPeerId: transport not initialized")
+            return false
+        }
+        val sent = direct.sendData(normalizedPeerId, data)
+        if (!sent) {
+            Timber.d("WiFi send failed for $normalizedPeerId; fallback required")
+        }
+        return sent
     }
 }

@@ -74,6 +74,53 @@ class MeshRepository(private val context: Context) {
                 )
             }
         }
+
+        internal data class LocalTransportFallbackResult(
+            val wifiAttempted: Boolean,
+            val wifiAcked: Boolean,
+            val bleAttempted: Boolean,
+            val bleAcked: Boolean
+        ) {
+            val acked: Boolean
+                get() = wifiAcked || bleAcked
+        }
+
+        internal fun attemptWifiThenBleFallback(
+            wifiPeerId: String?,
+            blePeerId: String?,
+            tryWifi: (String) -> Boolean,
+            tryBle: (String) -> Boolean
+        ): LocalTransportFallbackResult {
+            val normalizedWifi = wifiPeerId?.trim()?.takeIf { it.isNotEmpty() }
+            if (normalizedWifi != null) {
+                if (tryWifi(normalizedWifi)) {
+                    return LocalTransportFallbackResult(
+                        wifiAttempted = true,
+                        wifiAcked = true,
+                        bleAttempted = false,
+                        bleAcked = false
+                    )
+                }
+            }
+
+            val normalizedBle = blePeerId?.trim()?.takeIf { it.isNotEmpty() }
+            if (normalizedBle != null) {
+                val bleAcked = tryBle(normalizedBle)
+                return LocalTransportFallbackResult(
+                    wifiAttempted = normalizedWifi != null,
+                    wifiAcked = false,
+                    bleAttempted = true,
+                    bleAcked = bleAcked
+                )
+            }
+
+            return LocalTransportFallbackResult(
+                wifiAttempted = normalizedWifi != null,
+                wifiAcked = false,
+                bleAttempted = false,
+                bleAcked = false
+            )
+        }
     }
 
     private val storagePath: String = context.filesDir.absolutePath
@@ -156,6 +203,7 @@ class MeshRepository(private val context: Context) {
     private var bleGattClient: com.scmessenger.android.transport.ble.BleGattClient? = null
 
     private data class RoutingHints(
+        val wifiPeerId: String?,
         val blePeerId: String?,
         val libp2pPeerId: String?,
         val listeners: List<String>
@@ -592,6 +640,7 @@ class MeshRepository(private val context: Context) {
                         val hintedRoutePeerId = verifiedHints?.libp2pPeerId
                             ?.trim()
                             ?.takeIf { isLibp2pPeerId(it) }
+                        val routeWifiPeerId = senderId.takeIf { isWifiPeerId(it) }
                         val routePeerId = senderId.takeIf { isLibp2pPeerId(it) } ?: hintedRoutePeerId
                         val hintedAddresses = (
                             verifiedHints?.listeners.orEmpty() +
@@ -629,6 +678,11 @@ class MeshRepository(private val context: Context) {
                             } else {
                                 null
                             }
+                            routeNotes = appendRoutingHint(
+                                notes = routeNotes,
+                                key = "wifi_peer_id",
+                                value = routeWifiPeerId
+                            )
                             routeNotes = upsertRoutingListeners(
                                 routeNotes,
                                 normalizeOutboundListenerHints(hintedDialCandidates)
@@ -697,6 +751,32 @@ class MeshRepository(private val context: Context) {
                                     Timber.d("Failed to persist libp2p alias hint for ${existingContact.peerId}: ${e.message}")
                                 }
                             }
+
+                            if (!routeWifiPeerId.isNullOrBlank() &&
+                                normalizedSenderKey != null &&
+                                normalizePublicKey(existingContact.publicKey) == normalizedSenderKey &&
+                                parseRoutingHints(existingContact.notes).wifiPeerId.isNullOrBlank()
+                            ) {
+                                val updatedNotes = appendRoutingHint(existingContact.notes, "wifi_peer_id", routeWifiPeerId)
+                                val updatedNotesWithListeners = upsertRoutingListeners(
+                                    updatedNotes,
+                                    normalizeOutboundListenerHints(hintedDialCandidates)
+                                )
+                                val updatedContact = uniffi.api.Contact(
+                                    peerId = existingContact.peerId,
+                                    nickname = existingContact.nickname,
+                                    localNickname = existingContact.localNickname,
+                                    publicKey = existingContact.publicKey,
+                                    addedAt = existingContact.addedAt,
+                                    lastSeen = existingContact.lastSeen,
+                                    notes = updatedNotesWithListeners
+                                )
+                                try {
+                                    contactManager?.add(updatedContact)
+                                } catch (e: Exception) {
+                                    Timber.d("Failed to persist WiFi alias hint for ${existingContact.peerId}: ${e.message}")
+                                }
+                            }
                         }
 
                         if (normalizedSenderKey != null) {
@@ -705,6 +785,7 @@ class MeshRepository(private val context: Context) {
                                 publicKey = normalizedSenderKey,
                                 nickname = knownNickname,
                                 libp2pPeerId = routePeerId,
+                                wifiPeerId = routeWifiPeerId,
                                 listeners = hintedDialCandidates,
                                 createIfMissing = false
                             )
@@ -1693,6 +1774,7 @@ class MeshRepository(private val context: Context) {
                     routePeerCandidates = routePeerCandidates,
                     listeners = routingHints.listeners,
                     encryptedData = encryptedData,
+                    wifiPeerId = routingHints.wifiPeerId,
                     blePeerId = routingHints.blePeerId
                 )
                 val selectedRoutePeerId = delivery.routePeerId ?: preferredRoutePeerId
@@ -2375,44 +2457,60 @@ class MeshRepository(private val context: Context) {
         routePeerCandidates: List<String>,
         listeners: List<String>,
         encryptedData: ByteArray,
+        wifiPeerId: String? = null,
         blePeerId: String? = null
     ): DeliveryAttemptResult {
-        var bleAcked = false
-        fun tryBleDelivery(): Boolean {
-            Timber.d("tryBleDelivery: given blePeerId=$blePeerId, bleGattClient=${bleGattClient != null}")
-            val bleAddr = blePeerId?.trim()?.takeIf { it.isNotEmpty() } ?: run {
-                Timber.d("tryBleDelivery: blePeerId is null or empty, returning false")
-                return false
-            }
-            val bleGatt = bleGattClient ?: run {
-                Timber.d("tryBleDelivery: bleGattClient is null, returning false")
-                return false
-            }
-            return try {
-                if (bleGatt.sendData(bleAddr, encryptedData)) {
-                    Timber.i("✓ Delivery via BLE (target=$bleAddr)")
-                    true
-                } else {
-                    Timber.d("tryBleDelivery: bleGatt.sendData returned false for $bleAddr")
+        val localFallback = Companion.attemptWifiThenBleFallback(
+            wifiPeerId = wifiPeerId,
+            blePeerId = blePeerId,
+            tryWifi = { wifiId ->
+                val wifi = wifiTransportManager ?: run {
+                    Timber.d("tryWifiDelivery: wifiTransportManager is null, returning false")
+                    return@attemptWifiThenBleFallback false
+                }
+                try {
+                    if (wifi.sendData(wifiId, encryptedData)) {
+                        Timber.i("✓ Delivery via WiFi Direct (target=$wifiId)")
+                        true
+                    } else {
+                        Timber.d("tryWifiDelivery: wifiTransportManager.sendData returned false for $wifiId")
+                        false
+                    }
+                } catch (wifiEx: Exception) {
+                    Timber.w(wifiEx, "WiFi send failed for $wifiId")
                     false
                 }
-            } catch (bleEx: Exception) {
-                Timber.w(bleEx, "BLE send failed for $bleAddr")
-                false
+            },
+            tryBle = { bleAddr ->
+                val bleGatt = bleGattClient ?: run {
+                    Timber.d("tryBleDelivery: bleGattClient is null, returning false")
+                    return@attemptWifiThenBleFallback false
+                }
+                try {
+                    if (bleGatt.sendData(bleAddr, encryptedData)) {
+                        Timber.i("✓ Delivery via BLE (target=$bleAddr)")
+                        true
+                    } else {
+                        Timber.d("tryBleDelivery: bleGatt.sendData returned false for $bleAddr")
+                        false
+                    }
+                } catch (bleEx: Exception) {
+                    Timber.w(bleEx, "BLE send failed for $bleAddr")
+                    false
+                }
             }
-        }
-
-        bleAcked = tryBleDelivery()
+        )
+        val localAcked = localFallback.acked
 
         val routePeerFallback = routePeerCandidates.firstOrNull() ?: "unknown_route_${System.currentTimeMillis()}"
-        val bridge = swarmBridge ?: return DeliveryAttemptResult(acked = bleAcked, routePeerId = routePeerFallback)
+        val bridge = swarmBridge ?: return DeliveryAttemptResult(acked = localAcked, routePeerId = routePeerFallback)
         val sanitizedCandidates = routePeerCandidates
             .map { it.trim() }
             .filter { it.isNotEmpty() && isLibp2pPeerId(it) && !isBootstrapRelayPeer(it) }
             .distinct()
 
         if (sanitizedCandidates.isEmpty()) {
-            return DeliveryAttemptResult(acked = bleAcked, routePeerId = routePeerFallback)
+            return DeliveryAttemptResult(acked = localAcked, routePeerId = routePeerFallback)
         }
 
         primeRelayBootstrapConnections()
@@ -2450,7 +2548,7 @@ class MeshRepository(private val context: Context) {
                 }
             }
         }
-        return DeliveryAttemptResult(acked = bleAcked, routePeerId = sanitizedCandidates.firstOrNull())
+        return DeliveryAttemptResult(acked = localAcked, routePeerId = sanitizedCandidates.firstOrNull())
     }
 
     private suspend fun awaitPeerConnection(peerId: String, timeoutMs: Long = 1200L): Boolean {
@@ -2516,6 +2614,7 @@ class MeshRepository(private val context: Context) {
                 routePeerCandidates = routePeerCandidates,
                 listeners = resolvedListeners,
                 encryptedData = envelope,
+                wifiPeerId = latestRouting.wifiPeerId,
                 blePeerId = latestRouting.blePeerId
             )
             val selectedRoutePeerId = delivery.routePeerId ?: resolvedRoutePeerId
@@ -2889,6 +2988,14 @@ class MeshRepository(private val context: Context) {
         return kotlin.runCatching { java.util.UUID.fromString(value.trim()) }.isSuccess
     }
 
+    private fun isWifiPeerId(value: String): Boolean {
+        val normalized = value.trim()
+        if (normalized.isEmpty()) return false
+        val macRegex = Regex("(?i)^([0-9a-f]{2}:){5}[0-9a-f]{2}$")
+        val ipv4Regex = Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")
+        return macRegex.matches(normalized) || ipv4Regex.matches(normalized)
+    }
+
     private fun selectCanonicalPeerId(incomingPeerId: String, existingPeerId: String): String {
         val incoming = incomingPeerId.trim()
         val existing = existingPeerId.trim()
@@ -3143,6 +3250,7 @@ class MeshRepository(private val context: Context) {
         publicKey: String,
         nickname: String?,
         libp2pPeerId: String?,
+        wifiPeerId: String? = null,
         listeners: List<String>,
         blePeerId: String? = null,
         createIfMissing: Boolean = true
@@ -3193,6 +3301,10 @@ class MeshRepository(private val context: Context) {
         val normalizedBle = blePeerId?.trim()?.takeIf { it.isNotEmpty() }
         if (!normalizedBle.isNullOrBlank()) {
             notes = appendRoutingHint(notes = notes, key = "ble_peer_id", value = normalizedBle)
+        }
+        val normalizedWifi = wifiPeerId?.trim()?.takeIf { it.isNotEmpty() }
+        if (!normalizedWifi.isNullOrBlank()) {
+            notes = appendRoutingHint(notes = notes, key = "wifi_peer_id", value = normalizedWifi)
         }
         notes = upsertRoutingListeners(notes, normalizeOutboundListenerHints(listeners))
 
@@ -3247,16 +3359,25 @@ class MeshRepository(private val context: Context) {
 
     private fun parseRoutingHints(notes: String?): RoutingHints {
         if (notes.isNullOrEmpty()) {
-            return RoutingHints(blePeerId = null, libp2pPeerId = null, listeners = emptyList())
+            return RoutingHints(
+                wifiPeerId = null,
+                blePeerId = null,
+                libp2pPeerId = null,
+                listeners = emptyList()
+            )
         }
 
+        var wifiPeerId: String? = null
         var blePeerId: String? = null
         var peerId: String? = null
         var listeners: List<String> = emptyList()
 
         for (component in notes.split(';', '\n')) {
             val kv = component.trim()
-            if (kv.startsWith("ble_peer_id:")) {
+            if (kv.startsWith("wifi_peer_id:")) {
+                val value = kv.removePrefix("wifi_peer_id:").trim()
+                wifiPeerId = value.ifEmpty { null }
+            } else if (kv.startsWith("ble_peer_id:")) {
                 val value = kv.removePrefix("ble_peer_id:").trim()
                 blePeerId = value.ifEmpty { null }
             } else if (kv.startsWith("libp2p_peer_id:")) {
@@ -3274,6 +3395,7 @@ class MeshRepository(private val context: Context) {
         }
 
         return RoutingHints(
+            wifiPeerId = wifiPeerId,
             blePeerId = blePeerId,
             libp2pPeerId = peerId,
             listeners = listeners

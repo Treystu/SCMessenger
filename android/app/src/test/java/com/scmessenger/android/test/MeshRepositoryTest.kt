@@ -1,5 +1,6 @@
 package com.scmessenger.android.data
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -109,5 +110,96 @@ class MeshRepositoryTest {
             assertTrue(MeshRepository.isMeshParticipationEnabled(enabled))
             assertFalse(MeshRepository.isMeshParticipationEnabled(disabled))
         }
+    }
+
+    @Test
+    fun `wifi local path succeeds without BLE fallback`() {
+        val attempted = mutableListOf<String>()
+
+        val result = MeshRepository.attemptWifiThenBleFallback(
+            wifiPeerId = "192.168.49.23",
+            blePeerId = "6d1564ca-10f5-4af9-8a2f-9a50bbf024f5",
+            tryWifi = {
+                attempted.add("wifi")
+                true
+            },
+            tryBle = {
+                attempted.add("ble")
+                true
+            }
+        )
+
+        assertTrue(result.wifiAttempted)
+        assertTrue(result.wifiAcked)
+        assertFalse(result.bleAttempted)
+        assertFalse(result.bleAcked)
+        assertTrue(result.acked)
+        assertEquals(listOf("wifi"), attempted)
+    }
+
+    @Test
+    fun `wifi unavailable falls back deterministically to BLE`() {
+        val attempted = mutableListOf<String>()
+
+        val result = MeshRepository.attemptWifiThenBleFallback(
+            wifiPeerId = "192.168.49.42",
+            blePeerId = "1fd24e84-4927-4a18-bf4b-0619d706d8a1",
+            tryWifi = {
+                attempted.add("wifi")
+                false
+            },
+            tryBle = {
+                attempted.add("ble")
+                true
+            }
+        )
+
+        assertTrue(result.wifiAttempted)
+        assertFalse(result.wifiAcked)
+        assertTrue(result.bleAttempted)
+        assertTrue(result.bleAcked)
+        assertTrue(result.acked)
+        assertEquals(listOf("wifi", "ble"), attempted)
+    }
+
+    @Test
+    fun `high volume local sync fallback remains stable`() {
+        var wifiCalls = 0
+        var bleCalls = 0
+        var wifiSuccesses = 0
+        var bleFallbackSuccesses = 0
+
+        repeat(1_500) { index ->
+            val wifiShouldSucceed = index % 3 != 0
+            val result = MeshRepository.attemptWifiThenBleFallback(
+                wifiPeerId = "192.168.49.5",
+                blePeerId = "e05d1580-fdc0-4c9a-9991-f2f5f67b6d10",
+                tryWifi = {
+                    wifiCalls += 1
+                    wifiShouldSucceed
+                },
+                tryBle = {
+                    bleCalls += 1
+                    true
+                }
+            )
+
+            if (wifiShouldSucceed) {
+                wifiSuccesses += 1
+                assertTrue(result.wifiAcked)
+                assertFalse(result.bleAttempted)
+            } else {
+                bleFallbackSuccesses += 1
+                assertFalse(result.wifiAcked)
+                assertTrue(result.bleAttempted)
+                assertTrue(result.bleAcked)
+            }
+            assertTrue(result.acked)
+        }
+
+        assertEquals(1_500, wifiCalls)
+        assertEquals(500, bleCalls)
+        assertEquals(1_000, wifiSuccesses)
+        assertEquals(500, bleFallbackSuccesses)
     }
 }
