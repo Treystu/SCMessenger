@@ -218,7 +218,7 @@ impl Outbox {
             OutboxBackend::Memory { queues, .. } => {
                 for queue in queues.values_mut() {
                     if let Some(msg) = queue.iter_mut().find(|m| m.message_id == message_id) {
-                        msg.attempts += 1;
+                        msg.attempts = msg.attempts.saturating_add(1);
                         return;
                     }
                 }
@@ -229,7 +229,7 @@ impl Outbox {
                     for (key, value) in results {
                         if let Ok(mut msg) = bincode::deserialize::<QueuedMessage>(&value) {
                             if msg.message_id == message_id {
-                                msg.attempts += 1;
+                                msg.attempts = msg.attempts.saturating_add(1);
                                 if let Ok(bytes) = bincode::serialize(&msg) {
                                     let _ = db.put(&key, &bytes);
                                     let _ = db.flush();
@@ -496,5 +496,51 @@ mod tests {
         assert_eq!(drained.len(), 2);
         assert_eq!(outbox.total_count(), 1);
         assert_eq!(outbox.peek_for_peer("peer_a").len(), 0);
+    }
+
+    #[test]
+    fn test_persistent_attempts_survive_restart() {
+        use tempfile::tempdir;
+
+        let dir = tempdir().unwrap();
+        let path = dir
+            .path()
+            .join("outbox_store")
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        {
+            let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+            let mut outbox = Outbox::persistent(backend);
+            outbox.enqueue(make_msg("msg1", "peer_a")).unwrap();
+            outbox.record_attempt("msg1");
+            outbox.record_attempt("msg1");
+        }
+
+        {
+            let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+            let outbox = Outbox::persistent(backend);
+            let msgs = outbox.peek_for_peer("peer_a");
+            assert_eq!(msgs.len(), 1);
+            assert_eq!(msgs[0].attempts, 2);
+        }
+    }
+
+    #[test]
+    fn test_record_attempt_never_drops_message() {
+        let mut outbox = Outbox::new();
+        let mut msg = make_msg("msg1", "peer_a");
+        msg.attempts = u32::MAX - 1;
+        outbox.enqueue(msg).unwrap();
+
+        outbox.record_attempt("msg1");
+        outbox.record_attempt("msg1");
+        outbox.record_attempt("msg1");
+
+        let msgs = outbox.peek_for_peer("peer_a");
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].attempts, u32::MAX);
+        assert_eq!(outbox.total_count(), 1);
     }
 }

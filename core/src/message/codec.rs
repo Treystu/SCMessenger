@@ -7,18 +7,24 @@ use anyhow::{bail, Result};
 /// This prevents memory exhaustion from malicious oversized messages.
 pub const MAX_MESSAGE_SIZE: usize = 256 * 1024;
 
-/// Maximum text payload: 64 KB
-pub const MAX_PAYLOAD_SIZE: usize = 64 * 1024;
+/// Maximum text payload: 8 KB (8192 bytes)
+pub const MAX_PAYLOAD_SIZE: usize = 8 * 1024;
 
-/// Serialize a Message to bytes (bincode)
-pub fn encode_message(msg: &Message) -> Result<Vec<u8>> {
-    if msg.payload.len() > MAX_PAYLOAD_SIZE {
+/// Validate plaintext payload size against the messaging contract.
+pub fn validate_payload_size(payload: &[u8]) -> Result<()> {
+    if payload.len() > MAX_PAYLOAD_SIZE {
         bail!(
             "Payload too large: {} bytes (max {})",
-            msg.payload.len(),
+            payload.len(),
             MAX_PAYLOAD_SIZE
         );
     }
+    Ok(())
+}
+
+/// Serialize a Message to bytes (bincode)
+pub fn encode_message(msg: &Message) -> Result<Vec<u8>> {
+    validate_payload_size(&msg.payload)?;
 
     let bytes = bincode::serialize(msg)?;
 
@@ -99,6 +105,24 @@ mod tests {
 
         let result = encode_message(&msg);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_payload_boundary_accepts_8191_and_8192() {
+        let mut msg_8191 = Message::text("a".into(), "b".into(), "");
+        msg_8191.payload = vec![0u8; 8191];
+        assert!(encode_message(&msg_8191).is_ok());
+
+        let mut msg_8192 = Message::text("a".into(), "b".into(), "");
+        msg_8192.payload = vec![0u8; 8192];
+        assert!(encode_message(&msg_8192).is_ok());
+    }
+
+    #[test]
+    fn test_payload_boundary_rejects_8193() {
+        let mut msg_8193 = Message::text("a".into(), "b".into(), "");
+        msg_8193.payload = vec![0u8; 8193];
+        assert!(encode_message(&msg_8193).is_err());
     }
 
     #[test]

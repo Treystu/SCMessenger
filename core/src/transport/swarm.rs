@@ -655,9 +655,14 @@ pub async fn start_swarm_with_config(
 
                                     pending_messages.insert(msg_id, pending);
                                 } else {
-                                    // All paths exhausted
-                                    tracing::error!("All delivery paths exhausted for message {}", msg_id);
-                                    let _ = pending.reply_tx.send(Err("All delivery paths exhausted".to_string())).await;
+                                    tracing::warn!(
+                                        "Delivery pass failed for message {}; deferring to persistent retry queue",
+                                        msg_id
+                                    );
+                                    let _ = pending
+                                        .reply_tx
+                                        .send(Err("Delivery pending retry".to_string()))
+                                        .await;
                                 }
                             }
                         }
@@ -804,7 +809,10 @@ pub async fn start_swarm_with_config(
                                                         // Retry with next path will be handled by retry task
                                                         pending_messages.insert(message_id, pending);
                                                     } else {
-                                                        let _ = pending.reply_tx.send(Err(response.error.unwrap_or("Rejected".to_string()))).await;
+                                                        let _ = pending
+                                                            .reply_tx
+                                                            .send(Err("Delivery pending retry".to_string()))
+                                                            .await;
                                                     }
                                                 }
                                             }
@@ -932,7 +940,10 @@ pub async fn start_swarm_with_config(
                                                     if pending.current_path_index + 1 < paths.len() {
                                                         pending_messages.insert(message_id, pending);
                                                     } else {
-                                                        let _ = pending.reply_tx.send(Err(response.error.unwrap_or("All paths failed".to_string()))).await;
+                                                        let _ = pending
+                                                            .reply_tx
+                                                            .send(Err("Delivery pending retry".to_string()))
+                                                            .await;
                                                     }
                                                 }
                                             }

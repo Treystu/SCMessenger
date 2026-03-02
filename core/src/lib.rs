@@ -911,6 +911,11 @@ impl IronCore {
         let mut recipient_bytes = [0u8; 32];
         recipient_bytes.copy_from_slice(&recipient_public_key);
 
+        // Enforce strict payload cap at the core boundary so callers get
+        // a stable InvalidInput error for oversize messages.
+        message::codec::validate_payload_size(text.as_bytes())
+            .map_err(|_| IronCoreError::InvalidInput)?;
+
         // Create plaintext message
         let msg = Message::text(sender_id, recipient_key_trimmed.clone(), &text);
         let message_id = msg.id.clone();
@@ -1527,5 +1532,29 @@ mod tests {
         core.initialize_identity().unwrap();
         let removed = core.mark_message_sent("nonexistent-id".to_string());
         assert!(!removed);
+    }
+
+    #[test]
+    fn test_prepare_message_payload_boundaries() {
+        let sender = IronCore::new();
+        let recipient = IronCore::new();
+        sender.initialize_identity().unwrap();
+        recipient.initialize_identity().unwrap();
+        let recipient_pk = recipient.get_identity_info().public_key_hex.unwrap();
+
+        let within_8191 = "a".repeat(8191);
+        let at_8192 = "a".repeat(8192);
+        let over_8193 = "a".repeat(8193);
+
+        assert!(sender
+            .prepare_message(recipient_pk.clone(), within_8191)
+            .is_ok());
+        assert!(sender
+            .prepare_message(recipient_pk.clone(), at_8192)
+            .is_ok());
+        assert!(matches!(
+            sender.prepare_message(recipient_pk, over_8193),
+            Err(IronCoreError::InvalidInput)
+        ));
     }
 }

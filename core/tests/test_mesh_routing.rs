@@ -126,7 +126,7 @@ fn test_retry_strategy_exponential_backoff() {
 #[test]
 fn test_retry_strategy_attempt_limits() {
     let strategy = RetryStrategy {
-        max_attempts: 5,
+        max_attempts: Some(5),
         ..Default::default()
     };
 
@@ -256,7 +256,7 @@ fn test_bootstrap_no_duplicates() {
 #[test]
 fn test_continuous_retry_never_gives_up() {
     let strategy = RetryStrategy {
-        max_attempts: 100, // Very high
+        max_attempts: None, // Unbounded retries
         initial_delay: Duration::from_millis(100),
         max_delay: Duration::from_secs(30),
         backoff_multiplier: 1.5,

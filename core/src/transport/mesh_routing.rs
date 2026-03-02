@@ -195,8 +195,9 @@ impl ReputationTracker {
 /// Retry strategy for message delivery
 #[derive(Debug, Clone)]
 pub struct RetryStrategy {
-    /// Maximum number of retry attempts
-    pub max_attempts: u32,
+    /// Optional maximum number of retry attempts.
+    /// `None` means unbounded retries (default).
+    pub max_attempts: Option<u32>,
     /// Initial retry delay
     pub initial_delay: Duration,
     /// Maximum retry delay
@@ -210,7 +211,7 @@ pub struct RetryStrategy {
 impl Default for RetryStrategy {
     fn default() -> Self {
         Self {
-            max_attempts: 10, // Never give up easily
+            max_attempts: None, // WS1: no terminal retry cap
             initial_delay: Duration::from_millis(100),
             max_delay: Duration::from_secs(30),
             backoff_multiplier: 1.5,
@@ -236,7 +237,9 @@ impl RetryStrategy {
 
     /// Should we retry after this many attempts?
     pub fn should_retry(&self, attempt: u32) -> bool {
-        attempt < self.max_attempts
+        self.max_attempts
+            .map(|max| attempt < max)
+            .unwrap_or(true)
     }
 }
 
@@ -470,7 +473,14 @@ mod tests {
         assert!(strategy.calculate_delay(5) < strategy.max_delay);
 
         assert!(strategy.should_retry(5));
-        assert!(!strategy.should_retry(100));
+        assert!(strategy.should_retry(100));
+
+        let bounded = RetryStrategy {
+            max_attempts: Some(3),
+            ..RetryStrategy::default()
+        };
+        assert!(bounded.should_retry(2));
+        assert!(!bounded.should_retry(3));
     }
 
     #[test]
