@@ -25,7 +25,7 @@ pub enum UiEvent {
         identity: Option<String>,
     },
     ContactList {
-        contacts: Vec<crate::contacts::Contact>,
+        contacts: Vec<scmessenger_core::store::Contact>,
     },
     MessageReceived {
         from: String,
@@ -58,6 +58,10 @@ pub enum UiEvent {
     },
     ConfigData {
         config: Vec<(String, String)>,
+    },
+    HistoryList {
+        peer_id: String,
+        messages: Vec<crate::api::HistoryMessage>,
     },
     Error {
         message: String,
@@ -99,6 +103,10 @@ pub enum UiCommand {
         multiaddr: String,
     },
     FactoryReset,
+    HistoryList {
+        peer_id: String,
+        limit: Option<usize>,
+    },
     Restart,
 }
 

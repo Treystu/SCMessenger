@@ -76,6 +76,10 @@ interface IronCore {
 
     // Delegate
     void set_delegate(CoreDelegate? delegate);
+
+    // Metadata Accessors
+    ContactManager contacts_manager();
+    HistoryManager history_manager();
 };
 
 // ============================================================================

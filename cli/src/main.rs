@@ -5,8 +5,6 @@
 mod api;
 mod bootstrap;
 mod config;
-mod contacts;
-mod history;
 mod ledger;
 mod server;
 
@@ -15,7 +13,9 @@ use clap::{Parser, Subcommand};
 use colored::*;
 use libp2p::Multiaddr;
 use scmessenger_core::message::{decode_envelope, MessageType};
-use scmessenger_core::store::{Outbox, QueuedMessage};
+use scmessenger_core::store::{
+    Contact, ContactManager, HistoryManager, MessageDirection, MessageRecord, Outbox, QueuedMessage,
+};
 use scmessenger_core::transport::{self, SwarmEvent};
 use scmessenger_core::IronCore;
 use std::collections::HashMap;
@@ -458,13 +458,18 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
 
             // Fallback to direct database access
             let data_dir = config::Config::data_dir()?;
-            let contacts_db = data_dir.join("contacts");
-            let contacts = contacts::ContactList::open(contacts_db)?;
+            let storage_path = data_dir.join("storage");
+            let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+            let contacts = core.contacts_manager();
 
-            let contact = contacts::Contact::new(peer_id.clone(), public_key)
-                .with_nickname(name.clone().unwrap_or_else(|| peer_id.clone()));
+            let mut contact = Contact::new(peer_id.clone(), public_key);
+            if let Some(nickname) = name.clone() {
+                contact.nickname = Some(nickname);
+            }
 
-            contacts.add(contact)?;
+            contacts
+                .add(contact)
+                .map_err(|e| anyhow::anyhow!("{:?}", e))?;
 
             println!("{} Contact added:", "✓".green());
             if let Some(nickname) = name {
@@ -476,12 +481,13 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
         _ => {
             // For other contact operations, use direct database access
             let data_dir = config::Config::data_dir()?;
-            let contacts_db = data_dir.join("contacts");
-            let contacts = contacts::ContactList::open(contacts_db)?;
+            let storage_path = data_dir.join("storage");
+            let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+            let contacts = core.contacts_manager();
 
             match action {
                 ContactAction::List => {
-                    let list = contacts.list()?;
+                    let list = contacts.list().unwrap_or_default();
 
                     if list.is_empty() {
                         println!("{}", "No contacts yet.".dimmed());
@@ -490,11 +496,11 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                         println!();
 
                         for contact in list {
-                            println!(
-                                "  {} {}",
-                                "•".bright_green(),
-                                contact.display_name().bright_cyan()
-                            );
+                            let display = contact
+                                .nickname
+                                .clone()
+                                .unwrap_or_else(|| contact.peer_id.clone());
+                            println!("  {} {}", "•".bright_green(), display.bright_cyan());
                             println!("    Peer ID: {}", contact.peer_id.dimmed());
                         }
                     }
@@ -503,8 +509,12 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                 ContactAction::Show { contact: query } => {
                     let contact = find_contact(&contacts, &query)?;
 
+                    let display = contact
+                        .nickname
+                        .clone()
+                        .unwrap_or_else(|| contact.peer_id.clone());
                     println!("{}", "Contact Details".bold());
-                    println!("  Name:       {}", contact.display_name().bright_cyan());
+                    println!("  Name:       {}", display.bright_cyan());
                     println!("  Peer ID:    {}", contact.peer_id);
                     println!("  Public Key: {}", contact.public_key.bright_yellow());
                     println!("  Added:      {}", format_timestamp(contact.added_at));
@@ -512,14 +522,19 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
 
                 ContactAction::Remove { contact: query } => {
                     let contact = find_contact(&contacts, &query)?;
-                    let name = contact.display_name().to_string();
+                    let name = contact
+                        .nickname
+                        .clone()
+                        .unwrap_or_else(|| contact.peer_id.clone());
 
-                    contacts.remove(&contact.peer_id)?;
+                    contacts
+                        .remove(&contact.peer_id)
+                        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
                     println!("{} Removed contact: {}", "✓".green(), name.bright_cyan());
                 }
 
                 ContactAction::Search { query } => {
-                    let results = contacts.search(&query)?;
+                    let results = contacts.search(&query).unwrap_or_default();
 
                     if results.is_empty() {
                         println!("{}", "No matching contacts.".dimmed());
@@ -528,11 +543,11 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                         println!();
 
                         for contact in results {
-                            println!(
-                                "  {} {}",
-                                "•".bright_green(),
-                                contact.display_name().bright_cyan()
-                            );
+                            let display = contact
+                                .nickname
+                                .clone()
+                                .unwrap_or_else(|| contact.peer_id.clone());
+                            println!("  {} {}", "•".bright_green(), display.bright_cyan());
                             println!("    {}", contact.peer_id.dimmed());
                         }
                     }
@@ -615,24 +630,29 @@ async fn cmd_history(
     limit: usize,
 ) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
-    let history_db = data_dir.join("history");
-    let history = history::MessageHistory::open(history_db)?;
+    let storage_path = data_dir.join("storage");
+    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let history = core.history_manager();
 
     let messages = if let Some(query) = search_query {
-        history.search(&query, limit)?
+        history
+            .search(&query, limit as u32)
+            .map_err(|e| anyhow::anyhow!("{:?}", e))?
     } else if let Some(peer) = peer_filter {
-        let contacts_db = data_dir.join("contacts");
-        let contacts = contacts::ContactList::open(contacts_db)?;
-
+        let contacts = core.contacts_manager();
         let peer_id = if let Ok(contact) = find_contact(&contacts, &peer) {
             contact.peer_id
         } else {
             peer
         };
 
-        history.conversation(&peer_id, limit)?
+        history
+            .conversation(peer_id, limit as u32)
+            .map_err(|e| anyhow::anyhow!("{:?}", e))?
     } else {
-        history.recent(None, limit)?
+        history
+            .recent(None, limit as u32)
+            .map_err(|e| anyhow::anyhow!("{:?}", e))?
     };
 
     if messages.is_empty() {
@@ -645,12 +665,12 @@ async fn cmd_history(
 
     for msg in messages {
         let direction = match msg.direction {
-            history::Direction::Sent => "→".bright_green(),
-            history::Direction::Received => "←".bright_blue(),
+            MessageDirection::Sent => "→".bright_green(),
+            MessageDirection::Received => "←".bright_blue(),
         };
 
-        let time = msg.formatted_time().dimmed();
-        let peer = msg.peer();
+        let time = format_timestamp(msg.timestamp).dimmed();
+        let peer = msg.peer_id;
 
         println!("{} {} [{}]", direction, peer.bright_cyan(), time);
         println!("   {}", msg.content);
@@ -708,11 +728,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
     let info = core.get_identity_info();
 
-    let contacts_db = data_dir.join("contacts");
-    let contacts = Arc::new(contacts::ContactList::open(contacts_db)?);
-
-    let history_db = data_dir.join("history");
-    let history = Arc::new(history::MessageHistory::open(history_db)?);
+    let contacts = core.contacts_manager();
+    let history = core.history_manager();
 
     // ── Outbox — persistent store-and-forward queue ──────────────────────
     // Messages sent to offline peers are queued here and flushed automatically
@@ -905,8 +922,6 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     // Start control API server
     let api_ctx = api::ApiContext {
         core: core.clone(),
-        contacts: contacts.clone(),
-        history: history.clone(),
         swarm_handle: Arc::new(swarm_handle.clone()),
         peers: peers.clone(),
     };
@@ -1116,8 +1131,6 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                     print!("> ");
                                     let _ = std::io::Write::flush(&mut std::io::stdout());
 
-                                    let record = history::MessageRecord::new_received(peer_id.to_string(), text.clone());
-                                    let _ = history_rx.add(record);
 
                                     let _ = ui_broadcast.send(server::UiEvent::MessageReceived {
                                         from: peer_id.to_string(),
@@ -1193,6 +1206,26 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                             let _ = ui_broadcast.send(server::UiEvent::ContactList { contacts: list });
                         }
                     }
+                    server::UiCommand::HistoryList { peer_id, limit } => {
+                        let l = limit.unwrap_or(50) as u32;
+                        if let Ok(messages) = history_rx.conversation(peer_id.clone(), l) {
+                            let history_messages = messages.into_iter().map(|m| {
+                                crate::api::HistoryMessage {
+                                    peer_id: m.peer_id,
+                                    content: m.content,
+                                    direction: match m.direction {
+                                        MessageDirection::Sent => "sent".to_string(),
+                                        MessageDirection::Received => "received".to_string(),
+                                    },
+                                    timestamp: m.timestamp,
+                                }
+                            }).collect();
+                            let _ = ui_broadcast.send(server::UiEvent::HistoryList {
+                                peer_id,
+                                messages: history_messages
+                            });
+                        }
+                    }
                     server::UiCommand::Status => {
                         let count = peers_rx.lock().await.len();
                         let _ = ui_broadcast.send(server::UiEvent::NetworkStatus {
@@ -1203,7 +1236,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                     server::UiCommand::Send { recipient, message, id } => {
                         // Resolve recipient to PeerID and PublicKey
                         let peer_id_res = recipient.parse::<libp2p::PeerId>();
-                        let contact_res = contacts_rx.get(&recipient);
+                        let contact_res = contacts_rx.get(recipient.clone());
 
                         let target_peer = if let Ok(pid) = peer_id_res {
                             Some(pid)
@@ -1215,19 +1248,18 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
                         if let Some(target) = target_peer {
                              // Try to find public key
-                             let pk_opt = if let Ok(Some(c)) = contacts_rx.get(&target.to_string()) {
+                             let pk_opt = if let Ok(Some(c)) = contacts_rx.get(target.to_string()) {
                                  Some(c.public_key)
                              } else { None };
 
                              if let Some(pk) = pk_opt {
-                                 if let Ok(env) = core_rx.prepare_message(pk, message.clone()) {
-                                     if swarm_handle.send_message(target, env).await.is_ok() {
+                                 // prepare_message_with_id automatically saves outgoing history
+                                 if let Ok(prep) = core_rx.prepare_message_with_id(pk, message) {
+                                     if swarm_handle.send_message(target, prep.envelope_data).await.is_ok() {
                                          let _ = ui_broadcast.send(server::UiEvent::MessageStatus {
                                              message_id: id.unwrap_or_default(),
                                              status: "sent".to_string()
                                          });
-                                         let record = history::MessageRecord::new_sent(target.to_string(), message);
-                                         let _ = history_rx.add(record);
                                      }
                                  }
                              }
@@ -1245,7 +1277,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                 continue;
                             }
 
-                            let contact = contacts::Contact::new(peer_id.clone(), pk)
+                            let contact = Contact::new(peer_id.clone(), pk)
                                 .with_nickname(name.unwrap_or(peer_id));
                             let _ = contacts_rx.add(contact);
                             if let Ok(list) = contacts_rx.list() {
@@ -1457,10 +1489,8 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     println!("{} Subscribed to mesh topics", "✓".green());
 
     // Contacts + History (for relay message handling)
-    let contacts_db = data_dir.join("contacts");
-    let contacts = Arc::new(contacts::ContactList::open(contacts_db)?);
-    let history_db = data_dir.join("history");
-    let history = Arc::new(history::MessageHistory::open(history_db)?);
+    let contacts = core.contacts_manager();
+    let history = core.history_manager();
 
     // Outbox
     let outbox_path = data_dir.join("outbox");
@@ -1479,12 +1509,10 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     };
 
     // Control API
-    let core = Arc::new(core);
+    let core_arc = Arc::new(core);
     let api_ctx = api::ApiContext {
-        core: core.clone(),
-        contacts: contacts.clone(),
-        history: history.clone(),
-        swarm_handle: Arc::new(swarm_handle.clone()),
+        core: core_arc.clone(),
+        swarm_handle: swarm_handle.clone(),
         peers: peers.clone(),
     };
     tokio::spawn(async move {
@@ -1740,8 +1768,7 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
     core.initialize_identity()
         .context("Failed to load identity")?;
 
-    let contacts_db = data_dir.join("contacts");
-    let contacts = contacts::ContactList::open(contacts_db)?;
+    let contacts = core.contacts_manager();
 
     let contact = find_contact(&contacts, &recipient).context("Contact not found")?;
 
@@ -1802,17 +1829,17 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
 
 async fn cmd_status() -> Result<()> {
     let data_dir = config::Config::data_dir()?;
-    let contacts_db = data_dir.join("contacts");
-    let history_db = data_dir.join("history");
+    let storage_path = data_dir.join("storage");
+    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
 
-    let contacts = contacts::ContactList::open(contacts_db)?;
-    let history = history::MessageHistory::open(history_db)?;
-    let stats = history.stats()?;
+    let contacts = core.contacts_manager();
+    let history = core.history_manager();
+    let stats = history.stats().map_err(|e| anyhow::anyhow!("{:?}", e))?;
 
     println!("{}", "SCMessenger Status".bold());
     println!();
 
-    println!("Contacts: {}", contacts.count());
+    println!("Contacts: {}", contacts.list().unwrap_or_default().len());
     println!(
         "Messages: {} (sent: {}, received: {})",
         stats.total_messages, stats.sent_messages, stats.received_messages
@@ -1879,20 +1906,17 @@ fn looks_like_libp2p_peer_id(s: &str) -> bool {
     s.parse::<libp2p::PeerId>().is_ok()
 }
 
-fn find_contact(contacts: &contacts::ContactList, query: &str) -> Result<contacts::Contact> {
-    if let Ok(Some(contact)) = contacts.get(query) {
-        return Ok(contact);
-    }
+fn find_contact(manager: &ContactManager, query: &str) -> Result<Contact> {
+    let list = manager.list().unwrap_or_default();
+    let query_lower = query.to_lowercase();
 
-    if let Ok(Some(contact)) = contacts.find_by_nickname(query) {
-        return Ok(contact);
-    }
-
-    if let Ok(Some(contact)) = contacts.find_by_public_key(query) {
-        return Ok(contact);
-    }
-
-    anyhow::bail!("Contact not found: {}", query)
+    list.into_iter()
+        .find(|c| {
+            c.peer_id == query
+                || c.nickname.as_ref().map(|n| n.to_lowercase()).as_deref() == Some(&query_lower)
+                || c.public_key == query
+        })
+        .ok_or_else(|| anyhow::anyhow!("Contact not found: {}", query))
 }
 
 fn format_timestamp(timestamp: u64) -> String {

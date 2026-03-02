@@ -167,13 +167,17 @@ pub struct IronCore {
     outbox: Arc<RwLock<store::Outbox>>,
     /// Inbound message deduplication
     inbox: Arc<RwLock<store::Inbox>>,
+    /// Global contact manager
+    contacts: Arc<RwLock<store::ContactManager>>,
+    /// Unified message history
+    history: Arc<RwLock<store::HistoryManager>>,
     /// Running state
     running: Arc<RwLock<bool>>,
     /// Platform delegate for callbacks
     delegate: Arc<RwLock<Option<Arc<dyn CoreDelegate>>>>,
 }
 
-const STORAGE_SCHEMA_VERSION: u32 = 2;
+const STORAGE_SCHEMA_VERSION: u32 = 3;
 
 const LEGACY_IDENTITY_KEY: &[u8] = b"identity_keys";
 const LEGACY_NICKNAME_KEY: &[u8] = b"identity_nickname";
@@ -280,10 +284,40 @@ fn migrate_legacy_root_store(base: &Path) -> Result<(), IronCoreError> {
 
     std::fs::write(&sentinel, format!("migrated_keys={copied_keys}\n"))
         .map_err(|_| IronCoreError::StorageError)?;
-    tracing::info!(
+    println!(
         "Legacy root sled migration completed (copied {} key(s))",
         copied_keys
     );
+    Ok(())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn migrate_legacy_cli_storage(base: &Path) -> Result<(), IronCoreError> {
+    if let Some(parent) = base.parent() {
+        // Move contacts folder from parent to base if it exists
+        let old_contacts = parent.join("contacts");
+        let new_contacts = base.join("contacts");
+        if old_contacts.exists() && !new_contacts.exists() {
+            tracing::info!(
+                "Migrating legacy CLI contacts from {} to {}",
+                old_contacts.display(),
+                new_contacts.display()
+            );
+            let _ = std::fs::rename(old_contacts, new_contacts);
+        }
+
+        // Move history folder from parent to base if it exists
+        let old_history = parent.join("history");
+        let new_history = base.join("history");
+        if old_history.exists() && !new_history.exists() {
+            tracing::info!(
+                "Migrating legacy CLI history from {} to {}",
+                old_history.display(),
+                new_history.display()
+            );
+            let _ = std::fs::rename(old_history, new_history);
+        }
+    }
     Ok(())
 }
 
@@ -303,6 +337,10 @@ fn ensure_storage_layout(storage_path: &str) -> Result<(), IronCoreError> {
 
     if current < 2 {
         migrate_legacy_root_store(base)?;
+    }
+
+    if current < 3 {
+        migrate_legacy_cli_storage(base)?;
     }
 
     if current != STORAGE_SCHEMA_VERSION {
@@ -414,10 +452,53 @@ impl IronCore {
             store::Inbox::new()
         };
 
+        let contacts = if let Some(path) = &storage_path {
+            if !storage_ready {
+                store::ContactManager::new(Arc::new(store::backend::MemoryStorage::new()))
+            } else {
+                #[cfg(not(target_arch = "wasm32"))]
+                let backend = Arc::new(
+                    crate::store::backend::SledStorage::new(
+                        Path::new(path).join("contacts").to_string_lossy().as_ref(),
+                    )
+                    .unwrap(),
+                );
+                #[cfg(target_arch = "wasm32")]
+                let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+
+                store::ContactManager::new(backend)
+            }
+        } else {
+            store::ContactManager::new(Arc::new(store::backend::MemoryStorage::new()))
+        };
+
+        #[allow(unused_variables)]
+        let history = if let Some(path) = &storage_path {
+            if !storage_ready {
+                store::HistoryManager::new(Arc::new(store::backend::MemoryStorage::new()))
+            } else {
+                #[cfg(not(target_arch = "wasm32"))]
+                let backend = Arc::new(
+                    crate::store::backend::SledStorage::new(
+                        Path::new(path).join("history").to_string_lossy().as_ref(),
+                    )
+                    .unwrap(),
+                );
+                #[cfg(target_arch = "wasm32")]
+                let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+
+                store::HistoryManager::new(backend)
+            }
+        } else {
+            store::HistoryManager::new(Arc::new(store::backend::MemoryStorage::new()))
+        };
+
         Self {
             identity,
             outbox: Arc::new(RwLock::new(outbox)),
             inbox: Arc::new(RwLock::new(inbox)),
+            contacts: Arc::new(RwLock::new(contacts)),
+            history: Arc::new(RwLock::new(history)),
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
         }
@@ -485,10 +566,40 @@ impl IronCore {
             store::Inbox::new()
         };
 
+        let contacts = if let Some(path) = &storage_path {
+            let contacts_path = Path::new(path).join("contacts");
+            let backend = Arc::new(
+                crate::store::backend::IndexedDbStorage::new(
+                    contacts_path.to_string_lossy().as_ref(),
+                )
+                .await
+                .expect("Failed to open IndexedDB for contacts"),
+            );
+            store::ContactManager::new(backend)
+        } else {
+            store::ContactManager::new(Arc::new(store::backend::MemoryStorage::new()))
+        };
+
+        let history = if let Some(path) = &storage_path {
+            let history_path = Path::new(path).join("history");
+            let backend = Arc::new(
+                crate::store::backend::IndexedDbStorage::new(
+                    history_path.to_string_lossy().as_ref(),
+                )
+                .await
+                .expect("Failed to open IndexedDB for history"),
+            );
+            store::HistoryManager::new(backend)
+        } else {
+            store::HistoryManager::new(Arc::new(store::backend::MemoryStorage::new()))
+        };
+
         Self {
             identity,
             outbox: Arc::new(RwLock::new(outbox)),
             inbox: Arc::new(RwLock::new(inbox)),
+            contacts: Arc::new(RwLock::new(contacts)),
+            history: Arc::new(RwLock::new(history)),
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
         }
@@ -754,6 +865,18 @@ impl IronCore {
         let msg = Message::text(sender_id, recipient_key_trimmed.clone(), &text);
         let message_id = msg.id.clone();
 
+        // Auto-save to history (Outgoing)
+        if let Ok(mut history) = self.history.write() {
+            let _ = history.add(store::MessageRecord {
+                id: message_id.clone(),
+                direction: store::MessageDirection::Sent,
+                peer_id: recipient_key_trimmed.clone(),
+                content: text.clone(),
+                timestamp: msg.timestamp,
+                delivered: false,
+            });
+        }
+
         // Serialize the message
         let plaintext = message::encode_message(&msg).map_err(|_| IronCoreError::Internal)?;
 
@@ -891,39 +1014,25 @@ impl IronCore {
                 .as_secs(),
         });
 
-        if !is_new {
-            // Duplicate message IDs are expected under at-least-once delivery.
-            // Re-dispatch callbacks so receivers can re-send receipts if needed.
-            if let Some(delegate) = self.delegate.read().as_ref() {
-                if msg.message_type == message::MessageType::Receipt {
-                    if let Ok(receipt) = bincode::deserialize::<message::Receipt>(&msg.payload) {
-                        let status_str = match receipt.status {
-                            message::DeliveryStatus::Sent => "sent",
-                            message::DeliveryStatus::Delivered => "delivered",
-                            message::DeliveryStatus::Read => "read",
-                            message::DeliveryStatus::Failed(_) => "failed",
-                        };
-                        delegate.on_receipt_received(receipt.message_id, status_str.to_string());
-                    }
-                } else {
-                    let sender_pub_key_hex = hex::encode(&envelope.sender_public_key);
-                    delegate.on_message_received(
-                        msg.sender_id.clone(),
-                        sender_pub_key_hex,
-                        msg.id.clone(),
-                        msg.timestamp,
-                        msg.payload.clone(),
-                    );
-                }
+        let sender_pub_key_hex = hex::encode(&envelope.sender_public_key);
+
+        // Auto-save to history (Incoming)
+        if is_new && msg.message_type == message::MessageType::Text {
+            if let Some(text) = msg.text_content() {
+                let _ = self.history.read().add(store::MessageRecord {
+                    id: msg.id.clone(),
+                    direction: store::MessageDirection::Received,
+                    peer_id: msg.sender_id.clone(),
+                    content: text,
+                    timestamp: msg.timestamp,
+                    delivered: true,
+                });
             }
-            return Ok(msg);
         }
 
-        // Notify delegate — include sender's Ed25519 public key hex so mobile
-        // platforms can send a receipt ACK without a contact-DB lookup.
+        // Notify delegate
         if let Some(delegate) = self.delegate.read().as_ref() {
             if msg.message_type == message::MessageType::Receipt {
-                // If it's a receipt, deserialize the payload to get the true message ID it acknowledges
                 if let Ok(receipt) = bincode::deserialize::<message::Receipt>(&msg.payload) {
                     let status_str = match receipt.status {
                         message::DeliveryStatus::Sent => "sent",
@@ -932,11 +1041,8 @@ impl IronCore {
                         message::DeliveryStatus::Failed(_) => "failed",
                     };
                     delegate.on_receipt_received(receipt.message_id, status_str.to_string());
-                } else {
-                    tracing::warn!("Failed to deserialize receipt payload");
                 }
             } else {
-                let sender_pub_key_hex = hex::encode(&envelope.sender_public_key);
                 delegate.on_message_received(
                     msg.sender_id.clone(),
                     sender_pub_key_hex,
@@ -974,6 +1080,14 @@ impl IronCore {
 
     pub fn set_delegate(&self, delegate: Option<Box<dyn CoreDelegate>>) {
         *self.delegate.write() = delegate.map(|d| Arc::from(d) as Arc<dyn CoreDelegate>);
+    }
+
+    pub fn contacts_manager(&self) -> store::ContactManager {
+        self.contacts.read().clone()
+    }
+
+    pub fn history_manager(&self) -> store::HistoryManager {
+        self.history.read().clone()
     }
 
     /// Notify the delegate that a peer was discovered on the network.

@@ -206,8 +206,6 @@ pub async fn get_external_address_via_api() -> Result<Vec<String>> {
 
 pub struct ApiContext {
     pub core: Arc<scmessenger_core::IronCore>,
-    pub contacts: Arc<crate::contacts::ContactList>,
-    pub history: Arc<crate::history::MessageHistory>,
     pub swarm_handle: Arc<scmessenger_core::transport::SwarmHandle>,
     pub peers: Arc<tokio::sync::Mutex<std::collections::HashMap<libp2p::PeerId, Option<String>>>>,
 }
@@ -262,23 +260,30 @@ async fn handle_send_message(req: Request<Body>, ctx: Arc<ApiContext>) -> Result
     let body_bytes = hyper::body::to_bytes(req.into_body()).await?;
     let request: SendMessageRequest = serde_json::from_slice(&body_bytes)?;
 
+    // Core handle
+    let core = &ctx.core;
+    let contacts = core.contacts_manager();
+
     // Find contact
-    let contact = crate::find_contact(&ctx.contacts, &request.recipient)?;
+    // Note: find_contact needs the contact list, but it's a CLI-specific helper.
+    // We'll update it or do a manual lookup.
+    let list = contacts.list().unwrap_or_default();
+    let contact = list
+        .into_iter()
+        .find(|c| c.peer_id == request.recipient || c.nickname.as_ref() == Some(&request.recipient))
+        .ok_or_else(|| anyhow::anyhow!("Contact not found"))?;
 
     // Parse peer ID
     let peer_id = contact.peer_id.parse::<libp2p::PeerId>()?;
 
-    // Prepare and send message
-    let envelope_bytes = ctx
-        .core
-        .prepare_message(contact.public_key.clone(), request.message.clone())?;
-    ctx.swarm_handle
-        .send_message(peer_id, envelope_bytes)
-        .await?;
+    // Prepare and send message.
+    // Uses prepare_message_with_id to trigger Core's auto-save to history.
+    let prepared =
+        core.prepare_message_with_id(contact.public_key.clone(), request.message.clone())?;
 
-    // Record in history
-    let record = crate::history::MessageRecord::new_sent(contact.peer_id.clone(), request.message);
-    ctx.history.add(record)?;
+    ctx.swarm_handle
+        .send_message(peer_id, prepared.envelope_data)
+        .await?;
 
     let response = SendMessageResponse {
         success: true,
@@ -295,22 +300,17 @@ async fn handle_add_contact(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<
     let body_bytes = hyper::body::to_bytes(req.into_body()).await?;
     let request: AddContactRequest = serde_json::from_slice(&body_bytes)?;
 
-    // Validate public key format
-    if let Err(e) = scmessenger_core::crypto::validate_ed25519_public_key(&request.public_key) {
-        let response = AddContactResponse {
-            success: false,
-            error: Some(format!("Invalid public key: {}", e)),
-        };
-        return Ok(Response::builder()
-            .status(StatusCode::BAD_REQUEST)
-            .header("content-type", "application/json")
-            .body(Body::from(serde_json::to_string(&response)?))?);
+    let contacts = ctx.core.contacts_manager();
+
+    let mut contact =
+        scmessenger_core::store::Contact::new(request.peer_id.clone(), request.public_key);
+    if let Some(name) = request.name {
+        contact.nickname = Some(name);
     }
 
-    let contact = crate::contacts::Contact::new(request.peer_id.clone(), request.public_key)
-        .with_nickname(request.name.unwrap_or_else(|| request.peer_id.clone()));
-
-    ctx.contacts.add(contact)?;
+    contacts
+        .add(contact)
+        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
 
     let response = AddContactResponse {
         success: true,
@@ -339,21 +339,26 @@ async fn handle_get_history(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<
     let body_bytes = hyper::body::to_bytes(req.into_body()).await?;
     let request: GetHistoryRequest = serde_json::from_slice(&body_bytes)?;
 
+    let history = ctx.core.history_manager();
+
     let messages = if let Some(peer_id) = request.peer_id {
-        ctx.history
-            .conversation(&peer_id, request.limit.unwrap_or(20))?
+        history
+            .conversation(peer_id, request.limit.unwrap_or(20) as u32)
+            .map_err(|e| anyhow::anyhow!("{:?}", e))?
     } else {
-        ctx.history.recent(None, request.limit.unwrap_or(20))?
+        history
+            .recent(None, request.limit.unwrap_or(20) as u32)
+            .map_err(|e| anyhow::anyhow!("{:?}", e))?
     };
 
     let history_messages: Vec<HistoryMessage> = messages
         .into_iter()
         .map(|m| HistoryMessage {
-            peer_id: m.peer().to_string(),
+            peer_id: m.peer_id,
             content: m.content,
             direction: match m.direction {
-                crate::history::Direction::Sent => "sent".to_string(),
-                crate::history::Direction::Received => "received".to_string(),
+                scmessenger_core::store::MessageDirection::Sent => "sent".to_string(),
+                scmessenger_core::store::MessageDirection::Received => "received".to_string(),
             },
             timestamp: m.timestamp,
         })

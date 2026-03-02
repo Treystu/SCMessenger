@@ -1303,6 +1303,22 @@ Loading...</textarea
               }
               break;
 
+            case "history_list":
+              if (data.messages) {
+                const peerId = data.peer_id;
+                this.state.messages[peerId] = data.messages.map((m) => ({
+                  id: m.id || `msg-${Date.now()}-${Math.random()}`,
+                  direction: m.direction,
+                  content: m.content,
+                  timestamp: m.timestamp * 1000,
+                  status: "read",
+                }));
+                if (this.state.activeChat === peerId) {
+                  this.ui.renderMessages(peerId);
+                }
+              }
+              break;
+
             case "message_received":
               // { from: "...", content: "...", timestamp: ... }
               this.storeMessage(data.from, {
@@ -1480,6 +1496,9 @@ Loading...</textarea
 
           selectContact(peerId) {
             SCM.state.activeChat = peerId;
+
+            // Request history from backend
+            this.sendCommand("history_list", { peer_id: peerId, limit: 50 });
 
             // UI Updates
             const contact = SCM.state.contacts[peerId];

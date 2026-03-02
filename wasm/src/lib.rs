@@ -508,6 +508,140 @@ impl IronCore {
     pub fn mark_message_sent(&self, message_id: String) -> bool {
         self.inner.mark_message_sent(message_id)
     }
+
+    #[wasm_bindgen(js_name = getContactManager)]
+    pub fn get_contact_manager(&self) -> WasmContactManager {
+        WasmContactManager {
+            inner: self.inner.contacts_manager(),
+        }
+    }
+
+    #[wasm_bindgen(js_name = getHistoryManager)]
+    pub fn get_history_manager(&self) -> WasmHistoryManager {
+        WasmHistoryManager {
+            inner: self.inner.history_manager(),
+        }
+    }
+}
+
+#[wasm_bindgen]
+pub struct WasmContactManager {
+    inner: scmessenger_core::store::ContactManager,
+}
+
+#[wasm_bindgen]
+impl WasmContactManager {
+    #[wasm_bindgen(js_name = add)]
+    pub fn add(&self, js_contact: JsValue) -> Result<(), JsValue> {
+        let contact: scmessenger_core::store::Contact = serde_wasm_bindgen::from_value(js_contact)
+            .map_err(|e| JsValue::from_str(&format!("Invalid contact: {}", e)))?;
+        self.inner
+            .add(contact)
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+    }
+
+    #[wasm_bindgen(js_name = get)]
+    pub fn get(&self, peer_id: String) -> Result<JsValue, JsValue> {
+        let contact = self
+            .inner
+            .get(peer_id)
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+        Ok(serde_wasm_bindgen::to_value(&contact).unwrap())
+    }
+
+    #[wasm_bindgen(js_name = remove)]
+    pub fn remove(&self, peer_id: String) -> Result<(), JsValue> {
+        self.inner
+            .remove(peer_id)
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+    }
+
+    #[wasm_bindgen(js_name = list)]
+    pub fn list(&self) -> Result<js_sys::Array, JsValue> {
+        let list = self
+            .inner
+            .list()
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+        let array = js_sys::Array::new();
+        for item in list {
+            array.push(&serde_wasm_bindgen::to_value(&item).unwrap());
+        }
+        Ok(array)
+    }
+
+    #[wasm_bindgen(js_name = count)]
+    pub fn count(&self) -> u32 {
+        self.inner.count()
+    }
+}
+
+#[wasm_bindgen]
+pub struct WasmHistoryManager {
+    inner: scmessenger_core::store::HistoryManager,
+}
+
+#[wasm_bindgen]
+impl WasmHistoryManager {
+    #[wasm_bindgen(js_name = add)]
+    pub fn add(&self, js_record: JsValue) -> Result<(), JsValue> {
+        let record: scmessenger_core::store::MessageRecord =
+            serde_wasm_bindgen::from_value(js_record)
+                .map_err(|e| JsValue::from_str(&format!("Invalid record: {}", e)))?;
+        self.inner
+            .add(record)
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+    }
+
+    #[wasm_bindgen(js_name = recent)]
+    pub fn recent(
+        &self,
+        peer_filter: Option<String>,
+        limit: u32,
+    ) -> Result<js_sys::Array, JsValue> {
+        let records = self
+            .inner
+            .recent(peer_filter, limit)
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+        let array = js_sys::Array::new();
+        for rec in records {
+            array.push(&serde_wasm_bindgen::to_value(&rec).unwrap());
+        }
+        Ok(array)
+    }
+
+    #[wasm_bindgen(js_name = conversation)]
+    pub fn conversation(&self, peer_id: String, limit: u32) -> Result<js_sys::Array, JsValue> {
+        let records = self
+            .inner
+            .conversation(peer_id, limit)
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+        let array = js_sys::Array::new();
+        for rec in records {
+            array.push(&serde_wasm_bindgen::to_value(&rec).unwrap());
+        }
+        Ok(array)
+    }
+
+    #[wasm_bindgen(js_name = clear)]
+    pub fn clear(&self) -> Result<(), JsValue> {
+        self.inner
+            .clear()
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+    }
+
+    #[wasm_bindgen(js_name = stats)]
+    pub fn stats(&self) -> Result<JsValue, JsValue> {
+        let stats = self
+            .inner
+            .stats()
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+        Ok(serde_wasm_bindgen::to_value(&stats).unwrap())
+    }
+
+    #[wasm_bindgen(js_name = count)]
+    pub fn count(&self) -> u32 {
+        self.inner.count()
+    }
 }
 
 fn parse_bootstrap_addrs(value: JsValue) -> Result<Vec<String>, JsValue> {
