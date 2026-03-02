@@ -29,6 +29,7 @@ use super::multiport::MultiPortConfig;
 use super::multiport::{self, BindResult, MultiPortConfig};
 use super::observation::{AddressObserver, ConnectionTracker};
 use super::reflection::{AddressReflectionRequest, AddressReflectionService};
+use crate::store::relay_custody::RelayCustodyStore;
 use anyhow::Result;
 #[cfg(not(target_arch = "wasm32"))]
 use bincode;
@@ -166,6 +167,70 @@ fn dispatch_ranked_route(
             .relay
             .send_request(&relay_peer, relay_request);
         pending_relay_requests.insert(request_id, message_id.to_string());
+    }
+}
+
+#[derive(Debug, Clone)]
+struct PendingCustodyDispatch {
+    destination_peer: PeerId,
+    custody_id: String,
+    relay_message_id: String,
+}
+
+fn dispatch_pending_custody_for_peer(
+    swarm: &mut libp2p::Swarm<IronCoreBehaviour>,
+    custody_store: &RelayCustodyStore,
+    destination_peer: PeerId,
+    pending_custody_dispatches: &mut HashMap<
+        libp2p::request_response::OutboundRequestId,
+        PendingCustodyDispatch,
+    >,
+    trigger_reason: &str,
+) {
+    if !swarm.is_connected(&destination_peer) {
+        return;
+    }
+
+    let destination_id = destination_peer.to_string();
+    let pending = custody_store.pending_for_destination(&destination_id, 64);
+    if pending.is_empty() {
+        return;
+    }
+
+    for custody in pending {
+        if let Err(e) =
+            custody_store.mark_dispatching(&destination_id, &custody.custody_id, trigger_reason)
+        {
+            tracing::warn!(
+                "Failed to mark custody {} dispatching for {}: {}",
+                custody.custody_id,
+                destination_peer,
+                e
+            );
+            continue;
+        }
+
+        let request_id = swarm.behaviour_mut().messaging.send_request(
+            &destination_peer,
+            MessageRequest {
+                envelope_data: custody.envelope_data.clone(),
+            },
+        );
+        tracing::info!(
+            "📦 Dispatching custody {} for relay message {} to {} via {}",
+            custody.custody_id,
+            custody.relay_message_id,
+            destination_peer,
+            trigger_reason
+        );
+        pending_custody_dispatches.insert(
+            request_id,
+            PendingCustodyDispatch {
+                destination_peer,
+                custody_id: custody.custody_id,
+                relay_message_id: custody.relay_message_id,
+            },
+        );
     }
 }
 
@@ -627,6 +692,11 @@ pub async fn start_swarm_with_config(
             libp2p::request_response::OutboundRequestId,
             String,
         > = HashMap::new();
+        let relay_custody_store = RelayCustodyStore::for_local_peer(&local_peer_id.to_string());
+        let mut pending_custody_dispatches: HashMap<
+            libp2p::request_response::OutboundRequestId,
+            PendingCustodyDispatch,
+        > = HashMap::new();
 
         // Track subscribed topics for dynamic negotiation
         let mut subscribed_topics: HashSet<String> = HashSet::new();
@@ -685,6 +755,7 @@ pub async fn start_swarm_with_config(
 
             // Check for pending relay reconnects frequently
             let mut relay_reconnect_interval = tokio::time::interval(Duration::from_secs(5));
+            let mut custody_pull_interval = tokio::time::interval(Duration::from_secs(5));
 
             loop {
                 tokio::select! {
@@ -765,6 +836,20 @@ pub async fn start_swarm_with_config(
 
                                 pending_messages.insert(msg_id, pending);
                             }
+                        }
+                    }
+
+                    // Periodic relay-side pull of pending custody for connected peers.
+                    _ = custody_pull_interval.tick() => {
+                        let connected: Vec<PeerId> = swarm.connected_peers().cloned().collect();
+                        for destination in connected {
+                            dispatch_pending_custody_for_peer(
+                                &mut swarm,
+                                &relay_custody_store,
+                                destination,
+                                &mut pending_custody_dispatches,
+                                "periodic_pull",
+                            );
                         }
                     }
 
@@ -889,8 +974,51 @@ pub async fn start_swarm_with_config(
                                         );
                                     }
                                     request_response::Message::Response { request_id, response } => {
-                                        // Response to our outbound message request
-                                        if let Some(message_id) = request_to_message.remove(&request_id) {
+                                        if let Some(dispatch) =
+                                            pending_custody_dispatches.remove(&request_id)
+                                        {
+                                            if response.accepted {
+                                                if let Err(e) = relay_custody_store.mark_delivered(
+                                                    &dispatch.destination_peer.to_string(),
+                                                    &dispatch.custody_id,
+                                                    "recipient_ack",
+                                                ) {
+                                                    tracing::warn!(
+                                                        "Failed to mark custody {} delivered (relay message {}): {}",
+                                                        dispatch.custody_id,
+                                                        dispatch.relay_message_id,
+                                                        e
+                                                    );
+                                                } else {
+                                                    tracing::info!(
+                                                        "✅ Custody {} delivered to {} (relay message {})",
+                                                        dispatch.custody_id,
+                                                        dispatch.destination_peer,
+                                                        dispatch.relay_message_id
+                                                    );
+                                                }
+                                            } else {
+                                                let reason = response
+                                                    .error
+                                                    .unwrap_or_else(|| "recipient_rejected".to_string());
+                                                let reason = format!("recipient_rejected:{}", reason);
+                                                if let Err(e) = relay_custody_store.mark_dispatch_failed(
+                                                    &dispatch.destination_peer.to_string(),
+                                                    &dispatch.custody_id,
+                                                    &reason,
+                                                ) {
+                                                    tracing::warn!(
+                                                        "Failed to return custody {} to accepted after rejection (relay message {}): {}",
+                                                        dispatch.custody_id,
+                                                        dispatch.relay_message_id,
+                                                        e
+                                                    );
+                                                }
+                                            }
+                                        } else if let Some(message_id) =
+                                            request_to_message.remove(&request_id)
+                                        {
+                                            // Response to our outbound message request
                                             if let Some(pending) = pending_messages.remove(&message_id) {
                                                 if response.accepted {
                                                     // PHASE 5: Track successful delivery
@@ -912,7 +1040,21 @@ pub async fn start_swarm_with_config(
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Messaging(
                                 request_response::Event::OutboundFailure { request_id, error, .. }
                             )) => {
-                                if let Some(message_id) = request_to_message.remove(&request_id) {
+                                if let Some(dispatch) = pending_custody_dispatches.remove(&request_id) {
+                                    let reason = format!("dispatch_outbound_failure:{}", error);
+                                    if let Err(e) = relay_custody_store.mark_dispatch_failed(
+                                        &dispatch.destination_peer.to_string(),
+                                        &dispatch.custody_id,
+                                        &reason,
+                                    ) {
+                                        tracing::warn!(
+                                            "Failed to return custody {} to accepted after outbound failure (relay message {}): {}",
+                                            dispatch.custody_id,
+                                            dispatch.relay_message_id,
+                                            e
+                                        );
+                                    }
+                                } else if let Some(message_id) = request_to_message.remove(&request_id) {
                                     if let Some(pending) = pending_messages.remove(&message_id) {
                                         tracing::warn!(
                                             "✗ Direct send outbound failure to {}: {}",
@@ -997,24 +1139,44 @@ pub async fn start_swarm_with_config(
                                             relay_count_this_hour += 1;
                                             match PeerId::from_bytes(&request.destination_peer) {
                                                 Ok(destination) => {
-                                                    if swarm.is_connected(&destination) {
-                                                        let _forward_id = swarm.behaviour_mut().messaging.send_request(
-                                                            &destination,
-                                                            MessageRequest { envelope_data: request.envelope_data },
-                                                        );
-                                                        tracing::info!("✓ Relaying message {} to {}", request.message_id, destination);
-                                                        RelayResponse {
-                                                            accepted: true,
-                                                            error: None,
-                                                            message_id: request.message_id.clone(),
+                                                    let relay_message_id = request.message_id.clone();
+                                                    match relay_custody_store.accept_custody(
+                                                        peer.to_string(),
+                                                        destination.to_string(),
+                                                        relay_message_id.clone(),
+                                                        request.envelope_data.clone(),
+                                                    ) {
+                                                        Ok(custody) => {
+                                                            if swarm.is_connected(&destination) {
+                                                                dispatch_pending_custody_for_peer(
+                                                                    &mut swarm,
+                                                                    &relay_custody_store,
+                                                                    destination,
+                                                                    &mut pending_custody_dispatches,
+                                                                    "accept_immediate_pull",
+                                                                );
+                                                            } else {
+                                                                tracing::info!(
+                                                                    "📦 Accepted custody {} for offline destination {} (relay message {})",
+                                                                    custody.custody_id,
+                                                                    destination,
+                                                                    relay_message_id
+                                                                );
+                                                            }
+                                                            RelayResponse {
+                                                                accepted: true,
+                                                                error: None,
+                                                                message_id: relay_message_id,
+                                                            }
                                                         }
-                                                    } else {
-                                                        tracing::warn!("⚠ Destination {} not connected, relay cannot proceed", destination);
-                                                        RelayResponse {
+                                                        Err(e) => RelayResponse {
                                                             accepted: false,
-                                                            error: Some("Destination not connected".to_string()),
-                                                            message_id: request.message_id.clone(),
-                                                        }
+                                                            error: Some(format!(
+                                                                "custody_store_failed: {}",
+                                                                e
+                                                            )),
+                                                            message_id: relay_message_id,
+                                                        },
                                                     }
                                                 }
                                                 Err(e) => {
@@ -1489,6 +1651,13 @@ pub async fn start_swarm_with_config(
                                 // ALL peers are mandatory relays
                                 bootstrap_capability.add_peer(peer_id);
                                 multi_path_delivery.add_relay(peer_id);
+                                dispatch_pending_custody_for_peer(
+                                    &mut swarm,
+                                    &relay_custody_store,
+                                    peer_id,
+                                    &mut pending_custody_dispatches,
+                                    "peer_reconnect",
+                                );
 
                                 let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
 
@@ -1504,6 +1673,26 @@ pub async fn start_swarm_with_config(
                                 connection_tracker.remove_connection(&peer_id);
                                 // Allow re-exchange if they reconnect
                                 ledger_exchanged_peers.remove(&peer_id);
+
+                                let stale_dispatches: Vec<libp2p::request_response::OutboundRequestId> =
+                                    pending_custody_dispatches
+                                        .iter()
+                                        .filter_map(|(request_id, dispatch)| {
+                                            (dispatch.destination_peer == peer_id)
+                                                .then_some(*request_id)
+                                        })
+                                        .collect();
+                                for request_id in stale_dispatches {
+                                    if let Some(dispatch) =
+                                        pending_custody_dispatches.remove(&request_id)
+                                    {
+                                        let _ = relay_custody_store.mark_dispatch_failed(
+                                            &dispatch.destination_peer.to_string(),
+                                            &dispatch.custody_id,
+                                            "peer_disconnected",
+                                        );
+                                    }
+                                }
 
                                 // P0.11: If this was a known relay, schedule a reconnect with backoff.
                                 // Also clear from relay_peer_addrs so that when reconnection succeeds,
@@ -1829,6 +2018,11 @@ pub async fn start_swarm_with_config(
             libp2p::request_response::OutboundRequestId,
             String,
         > = HashMap::new();
+        let relay_custody_store = RelayCustodyStore::in_memory();
+        let mut pending_custody_dispatches: HashMap<
+            libp2p::request_response::OutboundRequestId,
+            PendingCustodyDispatch,
+        > = HashMap::new();
 
         let mut pending_messages: HashMap<String, PendingMessage> = HashMap::new();
 
@@ -1848,6 +2042,7 @@ pub async fn start_swarm_with_config(
         // `js_sys::Date::now()` (f64 ms since epoch) instead.
         let mut relay_hour_start: f64 = js_sys::Date::now();
         let mut last_bootstrap_redial: f64 = js_sys::Date::now();
+        let mut last_custody_pull: f64 = js_sys::Date::now();
         let bootstrap_addrs_clone = bootstrap_addrs;
 
         wasm_bindgen_futures::spawn_local(async move {
@@ -1979,7 +2174,29 @@ pub async fn start_swarm_with_config(
                                             );
                                         }
                                         request_response::Message::Response { request_id, response } => {
-                                            if let Some(reply_tx) = pending_direct_replies.remove(&request_id) {
+                                            if let Some(dispatch) =
+                                                pending_custody_dispatches.remove(&request_id)
+                                            {
+                                                if response.accepted {
+                                                    let _ = relay_custody_store.mark_delivered(
+                                                        &dispatch.destination_peer.to_string(),
+                                                        &dispatch.custody_id,
+                                                        "recipient_ack",
+                                                    );
+                                                } else {
+                                                    let reason = response
+                                                        .error
+                                                        .unwrap_or_else(|| "recipient_rejected".to_string());
+                                                    let reason = format!("recipient_rejected:{}", reason);
+                                                    let _ = relay_custody_store.mark_dispatch_failed(
+                                                        &dispatch.destination_peer.to_string(),
+                                                        &dispatch.custody_id,
+                                                        &reason,
+                                                    );
+                                                }
+                                            } else if let Some(reply_tx) =
+                                                pending_direct_replies.remove(&request_id)
+                                            {
                                                 let result = if response.accepted {
                                                     Ok(())
                                                 } else {
@@ -1990,7 +2207,18 @@ pub async fn start_swarm_with_config(
                                         }
                                     },
                                     request_response::Event::OutboundFailure { request_id, error, .. } => {
-                                        if let Some(reply_tx) = pending_direct_replies.remove(&request_id) {
+                                        if let Some(dispatch) =
+                                            pending_custody_dispatches.remove(&request_id)
+                                        {
+                                            let reason = format!("dispatch_outbound_failure:{}", error);
+                                            let _ = relay_custody_store.mark_dispatch_failed(
+                                                &dispatch.destination_peer.to_string(),
+                                                &dispatch.custody_id,
+                                                &reason,
+                                            );
+                                        } else if let Some(reply_tx) =
+                                            pending_direct_replies.remove(&request_id)
+                                        {
                                             let _ = reply_tx.send(Err(error.to_string())).await;
                                         }
                                     }
@@ -2032,7 +2260,7 @@ pub async fn start_swarm_with_config(
                             }
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Relay(ev)) => {
                                 match ev {
-                                    request_response::Event::Message { peer: _, message, .. } => match message {
+                                    request_response::Event::Message { peer, message, .. } => match message {
                                         request_response::Message::Request { request, channel, .. } => {
                                             if js_sys::Date::now() - relay_hour_start >= 3_600_000.0 {
                                                 relay_count_this_hour = 0;
@@ -2049,22 +2277,37 @@ pub async fn start_swarm_with_config(
                                                 relay_count_this_hour += 1;
                                                 match PeerId::from_bytes(&request.destination_peer) {
                                                     Ok(destination) => {
-                                                        if swarm.is_connected(&destination) {
-                                                            let _ = swarm.behaviour_mut().messaging.send_request(
-                                                                &destination,
-                                                                MessageRequest { envelope_data: request.envelope_data },
-                                                            );
-                                                            RelayResponse {
-                                                                accepted: true,
-                                                                error: None,
-                                                                message_id: request.message_id.clone(),
+                                                        let relay_message_id = request.message_id.clone();
+                                                        match relay_custody_store.accept_custody(
+                                                            peer.to_string(),
+                                                            destination.to_string(),
+                                                            relay_message_id.clone(),
+                                                            request.envelope_data.clone(),
+                                                        ) {
+                                                            Ok(_) => {
+                                                                if swarm.is_connected(&destination) {
+                                                                    dispatch_pending_custody_for_peer(
+                                                                        &mut swarm,
+                                                                        &relay_custody_store,
+                                                                        destination,
+                                                                        &mut pending_custody_dispatches,
+                                                                        "accept_immediate_pull",
+                                                                    );
+                                                                }
+                                                                RelayResponse {
+                                                                    accepted: true,
+                                                                    error: None,
+                                                                    message_id: relay_message_id,
+                                                                }
                                                             }
-                                                        } else {
-                                                            RelayResponse {
+                                                            Err(e) => RelayResponse {
                                                                 accepted: false,
-                                                                error: Some("Destination not connected".to_string()),
-                                                                message_id: request.message_id.clone(),
-                                                            }
+                                                                error: Some(format!(
+                                                                    "custody_store_failed: {}",
+                                                                    e
+                                                                )),
+                                                                message_id: relay_message_id,
+                                                            },
                                                         }
                                                     }
                                                     Err(_) => RelayResponse {
@@ -2168,11 +2411,37 @@ pub async fn start_swarm_with_config(
                                     },
                                     connection_id.to_string(),
                                 );
+                                dispatch_pending_custody_for_peer(
+                                    &mut swarm,
+                                    &relay_custody_store,
+                                    peer_id,
+                                    &mut pending_custody_dispatches,
+                                    "peer_reconnect",
+                                );
                                 let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
                             }
                             SwarmEvent::ConnectionClosed { peer_id, .. } => {
                                 connection_tracker.remove_connection(&peer_id);
                                 ledger_exchanged_peers.remove(&peer_id);
+                                let stale_dispatches: Vec<libp2p::request_response::OutboundRequestId> =
+                                    pending_custody_dispatches
+                                        .iter()
+                                        .filter_map(|(request_id, dispatch)| {
+                                            (dispatch.destination_peer == peer_id)
+                                                .then_some(*request_id)
+                                        })
+                                        .collect();
+                                for request_id in stale_dispatches {
+                                    if let Some(dispatch) =
+                                        pending_custody_dispatches.remove(&request_id)
+                                    {
+                                        let _ = relay_custody_store.mark_dispatch_failed(
+                                            &dispatch.destination_peer.to_string(),
+                                            &dispatch.custody_id,
+                                            "peer_disconnected",
+                                        );
+                                    }
+                                }
                                 let _ = event_tx.send(SwarmEvent2::PeerDisconnected(peer_id)).await;
                             }
                             SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
@@ -2194,6 +2463,20 @@ pub async fn start_swarm_with_config(
                             _ => {}
                         }
                     }
+                }
+
+                if js_sys::Date::now() - last_custody_pull >= 5_000.0 {
+                    let connected: Vec<PeerId> = swarm.connected_peers().cloned().collect();
+                    for destination in connected {
+                        dispatch_pending_custody_for_peer(
+                            &mut swarm,
+                            &relay_custody_store,
+                            destination,
+                            &mut pending_custody_dispatches,
+                            "periodic_pull",
+                        );
+                    }
+                    last_custody_pull = js_sys::Date::now();
                 }
 
                 // Keep bootstrap links warm on browser clients.
