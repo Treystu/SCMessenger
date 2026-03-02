@@ -616,6 +616,13 @@ impl RelayCustodyStore {
             if required_bytes == 0 {
                 break;
             }
+            let purge_reason = format!("{}_purged", reason);
+            self.record_transition(
+                &candidate.record,
+                Some(candidate.record.state),
+                candidate.record.state,
+                &purge_reason,
+            )?;
             self.remove_message(
                 &candidate.record.destination_peer_id,
                 &candidate.record.custody_id,
@@ -1118,6 +1125,35 @@ mod tests {
         let remaining2 = store2.load_stored_records().unwrap();
         assert_eq!(remaining2.len(), 1);
         assert_eq!(remaining2[0].record.relay_message_id, "msg-id-new");
+    }
+
+    #[test]
+    fn storage_pressure_purge_records_audit_transition_before_delete() {
+        let store = RelayCustodyStore::in_memory_with_probe(
+            Some("local-peer".to_string()),
+            Arc::new(NoopStoragePressureProbe),
+        );
+        let accepted = store
+            .accept_custody(
+                "peer-src".to_string(),
+                "peer-dst".to_string(),
+                "relay-msg-audit-purge".to_string(),
+                vec![9u8; 64],
+            )
+            .unwrap();
+
+        let (purged_records, purged_bytes) = store
+            .purge_oldest_by_policy(1, "test_pressure")
+            .unwrap();
+        assert_eq!(purged_records, 1);
+        assert!(purged_bytes > 0);
+
+        let transitions = store.transitions_for_custody(&accepted.custody_id);
+        assert_eq!(transitions.len(), 2);
+        assert_eq!(transitions[0].to_state, CustodyState::Accepted);
+        assert_eq!(transitions[1].from_state, Some(CustodyState::Accepted));
+        assert_eq!(transitions[1].to_state, CustodyState::Accepted);
+        assert_eq!(transitions[1].reason, "test_pressure_purged");
     }
 
     #[test]
