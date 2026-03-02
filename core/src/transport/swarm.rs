@@ -32,10 +32,10 @@ use super::reflection::{AddressReflectionRequest, AddressReflectionService};
 use crate::store::relay_custody::RelayCustodyStore;
 use anyhow::Result;
 use bincode;
-use serde::{Deserialize, Serialize};
 #[cfg(target_arch = "wasm32")]
 use libp2p::Transport;
 use libp2p::{identity::Keypair, kad, swarm::SwarmEvent, Multiaddr, PeerId};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::net::SocketAddr;
@@ -105,10 +105,7 @@ struct DeliveryConvergenceMarker {
 
 impl DeliveryConvergenceMarker {
     fn key(&self) -> String {
-        format!(
-            "{}::{}",
-            self.destination_peer_id, self.relay_message_id
-        )
+        format!("{}::{}", self.destination_peer_id, self.relay_message_id)
     }
 }
 
@@ -897,10 +894,7 @@ pub async fn start_swarm_with_config(
             .gossipsub
             .subscribe(&delivery_convergence_topic)
         {
-            tracing::warn!(
-                "Failed to subscribe to delivery convergence topic: {}",
-                e
-            );
+            tracing::warn!("Failed to subscribe to delivery convergence topic: {}", e);
         } else {
             tracing::info!(
                 "📡 Subscribed to delivery convergence topic: {}",
@@ -2290,10 +2284,7 @@ pub async fn start_swarm_with_config(
             .gossipsub
             .subscribe(&delivery_convergence_topic)
         {
-            tracing::warn!(
-                "Failed to subscribe to delivery convergence topic: {}",
-                e
-            );
+            tracing::warn!("Failed to subscribe to delivery convergence topic: {}", e);
         }
 
         // Kademlia server mode parity with native.

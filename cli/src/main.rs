@@ -13,9 +13,7 @@ use clap::{Parser, Subcommand};
 use colored::*;
 use libp2p::Multiaddr;
 use scmessenger_core::message::{decode_envelope, MessageType};
-use scmessenger_core::store::{
-    Contact, ContactManager, MessageDirection, Outbox, QueuedMessage,
-};
+use scmessenger_core::store::{Contact, ContactManager, MessageDirection, Outbox, QueuedMessage};
 use scmessenger_core::transport::{self, SwarmEvent};
 use scmessenger_core::IronCore;
 use std::collections::HashMap;

@@ -1091,7 +1091,10 @@ impl IronCore {
             if let Ok(receipt) = bincode::deserialize::<message::Receipt>(&msg.payload) {
                 if matches!(receipt.status, message::DeliveryStatus::Delivered) {
                     let _ = self.mark_message_sent(receipt.message_id.clone());
-                    let _ = self.history.read().mark_delivered(receipt.message_id.clone());
+                    let _ = self
+                        .history
+                        .read()
+                        .mark_delivered(receipt.message_id.clone());
                 }
                 let status_str = match receipt.status {
                     message::DeliveryStatus::Sent => "sent",

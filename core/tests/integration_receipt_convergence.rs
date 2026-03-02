@@ -66,7 +66,9 @@ fn multi_forwarder_convergence_stops_duplicate_retry_and_purges_pending() {
         "forwarder B should have no pending duplicate attempts after convergence"
     );
     assert!(
-        forwarder_b_delivery.delivery_attempt(&relay_message_id).is_none(),
+        forwarder_b_delivery
+            .delivery_attempt(&relay_message_id)
+            .is_none(),
         "forwarder B retry state should be cleared after convergence"
     );
 }
