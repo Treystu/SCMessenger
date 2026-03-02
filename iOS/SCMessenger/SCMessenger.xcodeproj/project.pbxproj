@@ -37,6 +37,7 @@
 		DDEB56E02F3FE0BD00387CC8 /* ContactsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56B12F3FE0BD00387CC8 /* ContactsListView.swift */; };
 		DDEB56E12F3FE0BD00387CC8 /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56E22F3FE0BD00387CC8 /* DiagnosticsView.swift */; };
 		DDEB56E42F3FE20E00387CC8 /* libscmessenger_mobile.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DDEB56E32F3FE20E00387CC8 /* libscmessenger_mobile.a */; };
+		DDAA70022F77700100387CC8 /* LocalTransportFallback.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDAA70012F77700100387CC8 /* LocalTransportFallback.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -74,6 +75,7 @@
 		DDEB56C22F3FE0BD00387CC8 /* SCMessengerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SCMessengerApp.swift; sourceTree = "<group>"; };
 		DDEB56E22F3FE0BD00387CC8 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
 		DDEB56E32F3FE20E00387CC8 /* libscmessenger_mobile.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libscmessenger_mobile.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		DDAA70012F77700100387CC8 /* LocalTransportFallback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTransportFallback.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -151,6 +153,7 @@
 				DDEB56A52F3FE0BD00387CC8 /* BLEL2CAPManager.swift */,
 				DDEB56A62F3FE0BD00387CC8 /* BLEPeripheralManager.swift */,
 				DDEB56A72F3FE0BD00387CC8 /* MeshBLEConstants.swift */,
+				DDAA70012F77700100387CC8 /* LocalTransportFallback.swift */,
 				DDEB56A82F3FE0BD00387CC8 /* MultipeerTransport.swift */,
 			);
 			path = Transport;
@@ -375,6 +378,7 @@
 				DDEB56D32F3FE0BD00387CC8 /* MeshEventBus.swift in Sources */,
 				DDEB56D42F3FE0BD00387CC8 /* Theme.swift in Sources */,
 				DDEB56D52F3FE0BD00387CC8 /* MultipeerTransport.swift in Sources */,
+				DDAA70022F77700100387CC8 /* LocalTransportFallback.swift in Sources */,
 				DDEB56D62F3FE0BD00387CC8 /* MainTabView.swift in Sources */,
 				DDEB56D72F3FE0BD00387CC8 /* CoreDelegateImpl.swift in Sources */,
 				DDEB56D82F3FE0BD00387CC8 /* OnboardingViewModel.swift in Sources */,

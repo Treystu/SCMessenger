@@ -35,4 +35,7 @@ else
   echo "iOS build verification completed with 0 warnings."
 fi
 
+echo "Running iOS local transport fallback checks..."
+bash "./verify-local-transport.sh"
+
 echo "iOS build verification passed!"

@@ -156,6 +156,14 @@ final class MultipeerTransport: NSObject {
         try session.send(data, toPeers: [peer], with: .reliable)
         logger.debug("Sent \(data.count) bytes to \(peer.displayName)")
     }
+
+    func sendData(toPeerId peerId: String, data: Data) throws {
+        guard let connectedPeer = connectedPeers.first(where: { $0.displayName == peerId }) else {
+            logger.debug("Peer \(peerId) is not connected on Multipeer")
+            throw MultipeerError.notConnected
+        }
+        try sendData(to: connectedPeer, data: data)
+    }
     
     func sendDataToAll(_ data: Data) {
         let peers = Array(connectedPeers)
@@ -223,7 +231,7 @@ extension MultipeerTransport: MCSessionDelegate {
     func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {
         logger.debug("Received \(data.count) bytes from \(peerID.displayName)")
         DispatchQueue.main.async { [weak self] in
-            self?.meshRepository?.onBleDataReceived(peerId: peerID.displayName, data: data)
+            self?.meshRepository?.onMultipeerDataReceived(peerId: peerID.displayName, data: data)
         }
     }
     

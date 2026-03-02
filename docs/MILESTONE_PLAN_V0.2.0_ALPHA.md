@@ -448,6 +448,7 @@ To reduce risk and unblock integration quickly:
 11. WS11
 12. WS12
 13. Post-WS12 residual risk closure sweep (release gate)
+14. WS13 kickoff (v0.2.1) - Single Active Device/Tight Pairing
 
 This ordering is for dependency flow only. Execution planning remains LoC-scoped, not time-scoped.
 
@@ -474,3 +475,32 @@ Run this sweep immediately after WS12 and before calling v0.2.0 complete:
 5. Record a final go/no-go decision for external alpha distribution based on residual-risk posture.
 
 This sweep is mandatory and is part of v0.2.0 Definition of Done.
+
+---
+
+## 15) Deferred Net-New Feature (Tracked for v0.2.1)
+
+Feature:
+
+- Single Active Device per Identity ("Tight Pairing Architecture")
+
+Decision:
+
+- Deferred from `v0.2.0` to `v0.2.1`.
+- Execution anchor in next release: `WS13` (decomposed as `WS13.1`-`WS13.6`).
+
+Why deferred:
+
+1. It is cross-cutting net-new scope (identity schema, contacts metadata, transport protocol, relay registry state machine, custody enforcement, UX error semantics).
+2. It conflicts with the `v0.2.0` policy to complete started functionality first.
+3. Introducing it during WS6-WS12 would materially increase regression risk for alpha app-store readiness.
+
+Tracking document:
+
+- `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md`
+- WS13 kickoff prompt template: `docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md` (section "WS13 Kickoff (v0.2.1) - Tight Pairing start")
+
+`v0.2.0` rule:
+
+1. Planning/docs and backlog tracking are allowed.
+2. Enforcement/protocol implementation is out-of-scope unless milestone is explicitly re-scoped.

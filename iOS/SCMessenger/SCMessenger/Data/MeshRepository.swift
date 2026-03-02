@@ -91,6 +91,7 @@ final class MeshRepository {
     // Transport Managers
     private var bleCentralManager: BLECentralManager?
     private var blePeripheralManager: BLEPeripheralManager?
+    private var multipeerTransport: MultipeerTransport?
 
     // Platform bridge
     private var platformBridge: IosPlatformBridge?
@@ -116,6 +117,7 @@ final class MeshRepository {
     private struct RoutingHints {
         let libp2pPeerId: String?
         let listeners: [String]
+        let multipeerPeerId: String?
         let blePeerId: String?
     }
 
@@ -478,6 +480,10 @@ final class MeshRepository {
             excludeIdentitySubdirFromBackup()
 
             // Start BLE advertising and scanning
+            multipeerTransport?.disconnect()
+            multipeerTransport = MultipeerTransport(meshRepository: self)
+            multipeerTransport?.startAdvertising()
+            multipeerTransport?.startBrowsing()
             blePeripheralManager?.startAdvertising()
             bleCentralManager?.startScanning()
             applyPowerAdjustments(reason: "service_started")
@@ -535,6 +541,8 @@ final class MeshRepository {
 
         bleCentralManager?.stopScanning()
         blePeripheralManager?.stopAdvertising()
+        multipeerTransport?.disconnect()
+        multipeerTransport = nil
 
         logger.info("✓ Mesh service stopped")
         appendDiagnostic("service_stop success")
@@ -817,6 +825,7 @@ final class MeshRepository {
 
         logger.debug("Preparing message for \(peerId) with key: \(trimmedKey.prefix(8))...")
         let routing = parseRoutingHintsFromNotes(contact?.notes)
+        let multipeerPeerId = routing.multipeerPeerId ?? defaultMultipeerPeerId(fromPublicKey: trimmedKey)
         let routePeerCandidates = buildRoutePeerCandidates(
             peerId: peerId,
             cachedRoutePeerId: routing.libp2pPeerId,
@@ -848,12 +857,14 @@ final class MeshRepository {
         // Notify UI (Unified flow for sent messages)
         messageUpdates.send(messageRecord)
 
-        // 3. Send over core-selected swarm route only.
-        // Mobile app passes identity/routing hints; Rust core owns path selection.
+        // 3. Attempt deterministic local fallback first (Multipeer -> BLE),
+        // then send over core-selected swarm route.
+        // Mobile app passes identity/routing hints; Rust core owns internet path selection.
         let delivery = await attemptDirectSwarmDelivery(
             routePeerCandidates: routePeerCandidates,
             addresses: routing.listeners,
             envelopeData: envelopeData,
+            multipeerPeerId: multipeerPeerId,
             blePeerId: routing.blePeerId
         )
         let selectedRoutePeerId = delivery.routePeerId ?? preferredRoutePeerId
@@ -2136,6 +2147,8 @@ final class MeshRepository {
 
         bleCentralManager?.startScanning()
         blePeripheralManager?.startAdvertising()
+        multipeerTransport?.startAdvertising()
+        multipeerTransport?.startBrowsing()
         updateStats()
     }
 
@@ -2390,6 +2403,12 @@ final class MeshRepository {
     }
 
     // MARK: - BLE Transport Integration
+
+    func onMultipeerDataReceived(peerId: String, data: Data) {
+        logger.debug("Multipeer data from \(peerId): \(data.count) bytes")
+        // Forward to MeshService using the same ingress path as BLE.
+        meshService?.onDataReceived(peerId: peerId, data: data)
+    }
 
     func onBleDataReceived(peerId: String, data: Data) {
         logger.debug("BLE data from \(peerId): \(data.count) bytes")
@@ -2653,12 +2672,13 @@ final class MeshRepository {
     }
 
     private func parseRoutingHintsFromNotes(_ notes: String?) -> RoutingHints {
-        guard let notes else { return RoutingHints(libp2pPeerId: nil, listeners: [], blePeerId: nil) }
+        guard let notes else { return RoutingHints(libp2pPeerId: nil, listeners: [], multipeerPeerId: nil, blePeerId: nil) }
         let segments = notes
             .split(whereSeparator: { $0 == ";" || $0 == "\n" })
             .map { String($0) }
         var libp2pPeerId: String?
         var listeners: [String] = []
+        var multipeerPeerId: String?
         var blePeerId: String?
 
         for segment in segments {
@@ -2667,6 +2687,10 @@ final class MeshRepository {
                 let value = trimmed.replacingOccurrences(of: "libp2p_peer_id:", with: "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 if !value.isEmpty { libp2pPeerId = value }
+            } else if trimmed.hasPrefix("multipeer_peer_id:") {
+                let value = trimmed.replacingOccurrences(of: "multipeer_peer_id:", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !value.isEmpty { multipeerPeerId = value }
             } else if trimmed.hasPrefix("ble_peer_id:") {
                 let value = trimmed.replacingOccurrences(of: "ble_peer_id:", with: "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2682,7 +2706,19 @@ final class MeshRepository {
                 }
             }
         }
-        return RoutingHints(libp2pPeerId: libp2pPeerId, listeners: listeners, blePeerId: blePeerId)
+        return RoutingHints(
+            libp2pPeerId: libp2pPeerId,
+            listeners: listeners,
+            multipeerPeerId: multipeerPeerId,
+            blePeerId: blePeerId
+        )
+    }
+
+    private func defaultMultipeerPeerId(fromPublicKey publicKey: String?) -> String? {
+        guard let normalizedKey = normalizePublicKey(publicKey), normalizedKey.count >= 8 else {
+            return nil
+        }
+        return String(normalizedKey.prefix(8))
     }
 
     private func parseAllRoutingPeerIds(from notes: String?) -> [String] {
@@ -2773,47 +2809,64 @@ final class MeshRepository {
         routePeerCandidates: [String],
         addresses: [String],
         envelopeData: Data,
+        multipeerPeerId: String? = nil,
         blePeerId: String? = nil
     ) async -> DeliveryAttemptResult {
-        var bleAcked = false
-        func tryBleDelivery() -> Bool {
-            logger.debug("tryBleDelivery: given blePeerId=\(blePeerId ?? "nil")")
-            guard let bleAddr = blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines), !bleAddr.isEmpty, let uuid = UUID(uuidString: bleAddr) else {
-                logger.debug("tryBleDelivery: blePeerId is null, empty, or not a valid UUID, returning false")
-                return false
-            }
+        let localFallback = LocalTransportFallback.attemptMultipeerThenBle(
+            multipeerPeerId: multipeerPeerId,
+            blePeerId: blePeerId,
+            tryMultipeer: { multipeerAddr in
+                guard let transport = multipeerTransport else {
+                    logger.debug("tryMultipeerDelivery: multipeerTransport is null")
+                    return false
+                }
+                do {
+                    try transport.sendData(toPeerId: multipeerAddr, data: envelopeData)
+                    logger.info("✓ Delivery via Multipeer (target=\(multipeerAddr))")
+                    return true
+                } catch {
+                    logger.debug("tryMultipeerDelivery failed for \(multipeerAddr): \(error.localizedDescription)")
+                    return false
+                }
+            },
+            tryBle: { bleAddr in
+                logger.debug("tryBleDelivery: given blePeerId=\(bleAddr)")
+                guard let uuid = UUID(uuidString: bleAddr) else {
+                    logger.debug("tryBleDelivery: blePeerId is not a valid UUID, returning false")
+                    return false
+                }
 
-            var sent = false
-            // Try Central role first (we are client, sending to peripheral)
-            if let central = bleCentralManager {
-                if central.sendData(to: uuid, data: envelopeData) {
-                    logger.info("✓ Delivery via BLE Central (target=\(bleAddr))")
+                var sent = false
+                // Try Central role first (we are client, sending to peripheral)
+                if let central = bleCentralManager {
+                    if central.sendData(to: uuid, data: envelopeData) {
+                        logger.info("✓ Delivery via BLE Central (target=\(bleAddr))")
+                        sent = true
+                    } else {
+                        logger.warning("tryBleDelivery: bleCentralManager.sendData returned false for \(bleAddr)")
+                    }
+                } else {
+                    logger.debug("tryBleDelivery: bleCentralManager is null")
+                }
+
+                // Also try Peripheral role (we are server, pushing notification to central)
+                if let peripheral = blePeripheralManager {
+                    logger.debug("tryBleDelivery: delegating to blePeripheralManager for \(bleAddr)")
+                    peripheral.sendDataToConnectedCentral(peerId: bleAddr, data: envelopeData)
+                    // We return true if EITHER transport succeeded. Even if Peripheral just buffers,
+                    // it counts as a delivery attempt that high-level shouldn't immediately re-queue.
                     sent = true
                 } else {
-                    logger.warning("tryBleDelivery: bleCentralManager.sendData returned false for \(bleAddr)")
+                    logger.debug("tryBleDelivery: blePeripheralManager is null")
                 }
-            } else {
-                logger.debug("tryBleDelivery: bleCentralManager is null")
+                return sent
             }
-
-            // Also try Peripheral role (we are server, pushing notification to central)
-            if let peripheral = blePeripheralManager {
-                logger.debug("tryBleDelivery: delegating to blePeripheralManager for \(bleAddr)")
-                peripheral.sendDataToConnectedCentral(peerId: bleAddr, data: envelopeData)
-                // We return true if EITHER transport succeeded. Even if Peripheral just buffers,
-                // it counts as a delivery attempt that high-level shouldn't immediately re-queue.
-                sent = true
-            } else {
-                logger.debug("tryBleDelivery: blePeripheralManager is null")
-            }
-            return sent
-        }
-
-        bleAcked = tryBleDelivery()
+        )
+        let localAcked = localFallback.acked
 
         let routePeerFallback = routePeerCandidates.first ?? "unknown_route_\(Date().timeIntervalSince1970)"
         guard let swarmBridge else {
-            return DeliveryAttemptResult(acked: bleAcked, routePeerId: routePeerFallback)
+            return DeliveryAttemptResult(acked: localAcked, routePeerId: routePeerFallback)
         }
         
         let sanitizedCandidates = routePeerCandidates
@@ -2824,7 +2877,7 @@ final class MeshRepository {
             }
         
         guard !sanitizedCandidates.isEmpty else {
-            return DeliveryAttemptResult(acked: bleAcked, routePeerId: routePeerFallback)
+            return DeliveryAttemptResult(acked: localAcked, routePeerId: routePeerFallback)
         }
 
         primeRelayBootstrapConnections()
@@ -2863,7 +2916,7 @@ final class MeshRepository {
             }
         }
         
-        return DeliveryAttemptResult(acked: bleAcked, routePeerId: sanitizedCandidates.first)
+        return DeliveryAttemptResult(acked: localAcked, routePeerId: sanitizedCandidates.first)
     }
 
     private func awaitPeerConnection(peerId: String, timeoutMs: UInt64 = 5000) async -> Bool {
@@ -2934,6 +2987,7 @@ final class MeshRepository {
 
             let contact = (try? contactManager?.get(peerId: item.peerId)) ?? nil
             let latestRouting = parseRoutingHintsFromNotes(contact?.notes)
+            let fallbackMultipeerPeerId = defaultMultipeerPeerId(fromPublicKey: contact?.publicKey)
             let routePeerCandidates = buildRoutePeerCandidates(
                 peerId: item.peerId,
                 cachedRoutePeerId: item.routePeerId,
@@ -2950,6 +3004,7 @@ final class MeshRepository {
                 routePeerCandidates: routePeerCandidates,
                 addresses: resolvedAddresses,
                 envelopeData: envelopeData,
+                multipeerPeerId: latestRouting.multipeerPeerId ?? fallbackMultipeerPeerId,
                 blePeerId: latestRouting.blePeerId
             )
             let selectedRoutePeerId = delivery.routePeerId ?? resolvedRoutePeerId

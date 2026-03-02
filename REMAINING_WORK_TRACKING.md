@@ -367,3 +367,17 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
    - Target: A "Delete All Data" or "Reset Application" button in the Settings view.
    - Action: Securely wipe identity, message history, contacts, and all local preferences from the device.
    - Scope: Android (`SettingsScreen`), iOS (`SettingsView`), and Web.
+
+3. **WS13 (v0.2.1): Single Active Device per Identity (Tight Pairing)**
+   - Requirement: enforce one active `(identity_public_key, device_id)` destination binding to prevent stale/recycled identity misrouting and multi-device active collisions.
+   - Target: cryptographically signed registration/deregistration protocol + relay-side registration state machine + custody enforcement.
+   - Scope:
+     - identity persistence (`device_id`, `seniority_timestamp`),
+     - contacts metadata (`last_known_device_id`),
+     - transport protocol (`/sc/registration/1.0.0`),
+     - relay custody registry states (`Active`, `Handover`, `Abandoned`),
+     - sender-facing recycled/abandoned error semantics.
+   - LoC planning envelope: `3,950-6,950 LoC`.
+   - Execution decomposition: `WS13.1` through `WS13.6`.
+   - Canonical plan: `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md`.
+   - Kickoff prompt: `docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md` section `WS13 Kickoff (v0.2.1) - Tight Pairing start`.
