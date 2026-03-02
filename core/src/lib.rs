@@ -1084,18 +1084,29 @@ impl IronCore {
             }
         }
 
+        // Final receipt transitions delivery state in-core so all platform
+        // adapters observe coherent outbox/history state.
+        let mut receipt_event: Option<(String, &'static str)> = None;
+        if msg.message_type == message::MessageType::Receipt {
+            if let Ok(receipt) = bincode::deserialize::<message::Receipt>(&msg.payload) {
+                if matches!(receipt.status, message::DeliveryStatus::Delivered) {
+                    let _ = self.mark_message_sent(receipt.message_id.clone());
+                    let _ = self.history.read().mark_delivered(receipt.message_id.clone());
+                }
+                let status_str = match receipt.status {
+                    message::DeliveryStatus::Sent => "sent",
+                    message::DeliveryStatus::Delivered => "delivered",
+                    message::DeliveryStatus::Read => "read",
+                    message::DeliveryStatus::Failed(_) => "failed",
+                };
+                receipt_event = Some((receipt.message_id, status_str));
+            }
+        }
+
         // Notify delegate
         if let Some(delegate) = self.delegate.read().as_ref() {
-            if msg.message_type == message::MessageType::Receipt {
-                if let Ok(receipt) = bincode::deserialize::<message::Receipt>(&msg.payload) {
-                    let status_str = match receipt.status {
-                        message::DeliveryStatus::Sent => "sent",
-                        message::DeliveryStatus::Delivered => "delivered",
-                        message::DeliveryStatus::Read => "read",
-                        message::DeliveryStatus::Failed(_) => "failed",
-                    };
-                    delegate.on_receipt_received(receipt.message_id, status_str.to_string());
-                }
+            if let Some((message_id, status)) = receipt_event {
+                delegate.on_receipt_received(message_id, status.to_string());
             } else {
                 delegate.on_message_received(
                     msg.sender_id.clone(),
@@ -1556,5 +1567,41 @@ mod tests {
             sender.prepare_message(recipient_pk, over_8193),
             Err(IronCoreError::InvalidInput)
         ));
+    }
+
+    #[test]
+    fn test_delivery_receipt_marks_history_and_outbox_delivered() {
+        let sender = IronCore::new();
+        let recipient = IronCore::new();
+        sender.initialize_identity().unwrap();
+        recipient.initialize_identity().unwrap();
+
+        let recipient_pk = recipient.get_identity_info().public_key_hex.unwrap();
+        let sender_pk = sender.get_identity_info().public_key_hex.unwrap();
+
+        let prepared = sender
+            .prepare_message_with_id(recipient_pk, "ws4 receipt convergence".to_string())
+            .unwrap();
+        assert_eq!(sender.outbox_count(), 1);
+
+        recipient
+            .receive_message(prepared.envelope_data.clone())
+            .expect("recipient should decrypt original message");
+
+        let receipt_envelope = recipient
+            .prepare_receipt(sender_pk, prepared.message_id.clone())
+            .expect("recipient should prepare delivery receipt");
+
+        sender
+            .receive_message(receipt_envelope)
+            .expect("sender should decrypt receipt");
+
+        assert_eq!(sender.outbox_count(), 0);
+        let history = sender.history_store_manager();
+        let record = history
+            .get(prepared.message_id)
+            .expect("history lookup should succeed")
+            .expect("history record should exist");
+        assert!(record.delivered);
     }
 }

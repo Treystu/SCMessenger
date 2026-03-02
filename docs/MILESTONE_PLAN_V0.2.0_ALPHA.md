@@ -427,6 +427,7 @@ v0.2.0 is done when all are true:
 8. Desktop GUI parity is available across Windows/macOS/Linux targets.
 9. Dynamic storage policy protects device usage ceiling and purges by locked ordering.
 10. Public beta readiness criteria are satisfied for external testers.
+11. Residual risk closure sweep is complete: each risk in `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md` is either `Closed` or explicitly `Accepted/Deferred` with rationale and verification evidence.
 
 ---
 
@@ -446,15 +447,30 @@ To reduce risk and unblock integration quickly:
 10. WS10
 11. WS11
 12. WS12
+13. Post-WS12 residual risk closure sweep (release gate)
 
 This ordering is for dependency flow only. Execution planning remains LoC-scoped, not time-scoped.
 
 ---
 
-## 13) Residual Risk Tracking (WS0-WS2)
+## 13) Residual Risk Tracking (Active)
 
-The active residuals discovered during WS0-WS2 execution are tracked in:
+Residual risks discovered during v0.2.0 execution are tracked in:
 
 - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 
-WS3 should start only after the WS3 entry gate in that register is checked.
+Each phase must update the register before phase signoff, and the release gate must run a final closure sweep after WS12.
+
+---
+
+## 14) Post-WS12 Residual Risk Closure Sweep (Release Gate)
+
+Run this sweep immediately after WS12 and before calling v0.2.0 complete:
+
+1. Enumerate all open residual risks from `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`.
+2. Attempt closure of release-critical risks that can be fixed without net-new feature scope.
+3. Re-run verification for any risk addressed during the sweep.
+4. For remaining open risks, classify as `Accepted` or `Deferred` with explicit rationale.
+5. Record a final go/no-go decision for external alpha distribution based on residual-risk posture.
+
+This sweep is mandatory and is part of v0.2.0 Definition of Done.

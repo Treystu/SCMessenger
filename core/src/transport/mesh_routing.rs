@@ -540,6 +540,13 @@ impl MultiPathDelivery {
         }
     }
 
+    /// Converge delivery state for a message once a final delivery marker is observed.
+    ///
+    /// Returns `true` when an active retry attempt was cleared.
+    pub fn converge_delivery(&mut self, message_id: &str) -> bool {
+        self.attempts.remove(message_id).is_some()
+    }
+
     /// Get a specific pending delivery attempt by message id.
     pub fn delivery_attempt(&self, message_id: &str) -> Option<&DeliveryAttempt> {
         self.attempts.get(message_id)
@@ -668,5 +675,20 @@ mod tests {
 
         let pending = delivery.pending_attempts();
         assert_eq!(pending.len(), 1, "Should have one pending attempt");
+    }
+
+    #[test]
+    fn test_converge_delivery_clears_pending_retry_attempt() {
+        let mut delivery = MultiPathDelivery::new();
+        let target = PeerId::random();
+        let message_id = "converge-message-123".to_string();
+
+        delivery.start_delivery(message_id.clone(), target);
+        assert_eq!(delivery.pending_attempts().len(), 1);
+
+        let cleared = delivery.converge_delivery(&message_id);
+        assert!(cleared);
+        assert!(delivery.delivery_attempt(&message_id).is_none());
+        assert_eq!(delivery.pending_attempts().len(), 0);
     }
 }

@@ -212,6 +212,43 @@ impl RelayCustodyStore {
         Ok(())
     }
 
+    /// Mark all duplicate custody records for a relay message as delivered and
+    /// remove them from the pending queue.
+    pub fn converge_delivered_for_message(
+        &self,
+        destination_peer_id: &str,
+        relay_message_id: &str,
+        reason: &str,
+    ) -> Result<usize, String> {
+        let prefix = destination_prefix(destination_peer_id);
+        let records: Vec<CustodyMessage> = self
+            .backend
+            .scan_prefix(prefix.as_bytes())?
+            .into_iter()
+            .filter_map(|(_, value)| bincode::deserialize::<CustodyMessage>(&value).ok())
+            .filter(|record| record.relay_message_id == relay_message_id)
+            .collect();
+
+        if records.is_empty() {
+            return Ok(0);
+        }
+
+        let mut converged = 0usize;
+        for mut record in records {
+            if record.state == CustodyState::Delivered {
+                continue;
+            }
+            let from_state = record.state;
+            record.state = CustodyState::Delivered;
+            record.updated_at_ms = now_ms();
+            self.record_transition(&record, Some(from_state), CustodyState::Delivered, reason)?;
+            self.remove_message(destination_peer_id, &record.custody_id)?;
+            converged += 1;
+        }
+
+        Ok(converged)
+    }
+
     pub fn transitions_for_custody(&self, custody_id: &str) -> Vec<CustodyTransition> {
         let mut transitions: Vec<CustodyTransition> = self
             .backend
@@ -413,6 +450,44 @@ mod tests {
             store.pending_for_destination("destination-peer", 100).len(),
             1
         );
+    }
+
+    #[test]
+    fn converge_delivered_for_message_removes_matching_pending_records() {
+        let store = RelayCustodyStore::in_memory();
+        let _ = store
+            .accept_custody(
+                "source-peer-a".to_string(),
+                "destination-peer".to_string(),
+                "relay-msg-converge".to_string(),
+                vec![1, 2, 3],
+            )
+            .unwrap();
+        let other = store
+            .accept_custody(
+                "source-peer-b".to_string(),
+                "destination-peer".to_string(),
+                "relay-msg-other".to_string(),
+                vec![4, 5, 6],
+            )
+            .unwrap();
+
+        let converged = store
+            .converge_delivered_for_message(
+                "destination-peer",
+                "relay-msg-converge",
+                "delivery_converged",
+            )
+            .unwrap();
+        assert_eq!(converged, 1);
+
+        let pending = store.pending_for_destination("destination-peer", 100);
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].relay_message_id, "relay-msg-other");
+
+        let transitions = store.transitions_for_custody(&other.custody_id);
+        assert_eq!(transitions.len(), 1);
+        assert_eq!(transitions[0].to_state, CustodyState::Accepted);
     }
 
     #[cfg(not(target_arch = "wasm32"))]

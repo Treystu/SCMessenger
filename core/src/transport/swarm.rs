@@ -31,12 +31,13 @@ use super::observation::{AddressObserver, ConnectionTracker};
 use super::reflection::{AddressReflectionRequest, AddressReflectionService};
 use crate::store::relay_custody::RelayCustodyStore;
 use anyhow::Result;
-#[cfg(not(target_arch = "wasm32"))]
 use bincode;
+use serde::{Deserialize, Serialize};
 #[cfg(target_arch = "wasm32")]
 use libp2p::Transport;
 use libp2p::{identity::Keypair, kad, swarm::SwarmEvent, Multiaddr, PeerId};
 use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::net::SocketAddr;
 use std::time::SystemTime;
 #[cfg(not(target_arch = "wasm32"))]
@@ -91,6 +92,102 @@ const ROUTE_ATTEMPT_REASON_INITIAL_SEND: &str = "INITIAL_SEND";
 const ROUTE_ATTEMPT_REASON_RETRY_NEXT: &str = "RETRY_NEXT_CANDIDATE";
 #[cfg(not(target_arch = "wasm32"))]
 const ROUTE_ATTEMPT_REASON_RETRY_CYCLE: &str = "RETRY_CYCLE_RESTART";
+const DELIVERY_CONVERGENCE_TOPIC: &str = "sc-receipt-convergence";
+const DELIVERY_CONVERGENCE_PREFIX: &[u8] = b"scm.delivery.convergence.v1:";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DeliveryConvergenceMarker {
+    relay_message_id: String,
+    destination_peer_id: String,
+    observed_by_peer_id: String,
+    observed_at_ms: u64,
+}
+
+impl DeliveryConvergenceMarker {
+    fn key(&self) -> String {
+        format!(
+            "{}::{}",
+            self.destination_peer_id, self.relay_message_id
+        )
+    }
+}
+
+fn encode_delivery_convergence_marker(marker: &DeliveryConvergenceMarker) -> Option<Vec<u8>> {
+    let mut payload = DELIVERY_CONVERGENCE_PREFIX.to_vec();
+    let mut encoded = bincode::serialize(marker).ok()?;
+    payload.append(&mut encoded);
+    Some(payload)
+}
+
+fn decode_delivery_convergence_marker(data: &[u8]) -> Option<DeliveryConvergenceMarker> {
+    if !data.starts_with(DELIVERY_CONVERGENCE_PREFIX) {
+        return None;
+    }
+    bincode::deserialize::<DeliveryConvergenceMarker>(&data[DELIVERY_CONVERGENCE_PREFIX.len()..])
+        .ok()
+}
+
+fn publish_delivery_convergence_marker(
+    swarm: &mut libp2p::Swarm<IronCoreBehaviour>,
+    marker: &DeliveryConvergenceMarker,
+) {
+    let topic = libp2p::gossipsub::IdentTopic::new(DELIVERY_CONVERGENCE_TOPIC);
+    if let Some(payload) = encode_delivery_convergence_marker(marker) {
+        if let Err(e) = swarm.behaviour_mut().gossipsub.publish(topic, payload) {
+            tracing::warn!(
+                "Failed to publish delivery convergence marker for message {}: {}",
+                marker.relay_message_id,
+                e
+            );
+        }
+    } else {
+        tracing::warn!(
+            "Failed to encode delivery convergence marker for message {}",
+            marker.relay_message_id
+        );
+    }
+}
+
+fn purge_request_map_for_message<K>(map: &mut HashMap<K, String>, message_id: &str) -> usize
+where
+    K: Eq + Hash + Copy,
+{
+    let stale: Vec<K> = map
+        .iter()
+        .filter_map(|(request_id, tracked_message_id)| {
+            (tracked_message_id == message_id).then_some(*request_id)
+        })
+        .collect();
+    let removed = stale.len();
+    for request_id in stale {
+        map.remove(&request_id);
+    }
+    removed
+}
+
+fn purge_custody_dispatches_for_message<K>(
+    pending_custody_dispatches: &mut HashMap<K, PendingCustodyDispatch>,
+    marker: &DeliveryConvergenceMarker,
+) -> Vec<PendingCustodyDispatch>
+where
+    K: Eq + Hash + Copy,
+{
+    let stale: Vec<K> = pending_custody_dispatches
+        .iter()
+        .filter_map(|(request_id, dispatch)| {
+            (dispatch.relay_message_id == marker.relay_message_id
+                && dispatch.destination_peer.to_string() == marker.destination_peer_id)
+                .then_some(*request_id)
+        })
+        .collect();
+    let mut removed = Vec::with_capacity(stale.len());
+    for request_id in stale {
+        if let Some(dispatch) = pending_custody_dispatches.remove(&request_id) {
+            removed.push(dispatch);
+        }
+    }
+    removed
+}
 
 #[cfg(not(target_arch = "wasm32"))]
 fn log_route_decision(
@@ -175,6 +272,141 @@ struct PendingCustodyDispatch {
     destination_peer: PeerId,
     custody_id: String,
     relay_message_id: String,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn apply_delivery_convergence_marker(
+    marker: &DeliveryConvergenceMarker,
+    pending_messages: &mut HashMap<String, PendingMessage>,
+    request_to_message: &mut HashMap<libp2p::request_response::OutboundRequestId, String>,
+    pending_relay_requests: &mut HashMap<libp2p::request_response::OutboundRequestId, String>,
+    pending_custody_dispatches: &mut HashMap<
+        libp2p::request_response::OutboundRequestId,
+        PendingCustodyDispatch,
+    >,
+    multi_path_delivery: &mut MultiPathDelivery,
+    relay_custody_store: &RelayCustodyStore,
+) {
+    let removed_direct_requests =
+        purge_request_map_for_message(request_to_message, &marker.relay_message_id);
+    let removed_relay_requests =
+        purge_request_map_for_message(pending_relay_requests, &marker.relay_message_id);
+
+    let removed_dispatches =
+        purge_custody_dispatches_for_message(pending_custody_dispatches, marker);
+    for dispatch in &removed_dispatches {
+        if let Err(e) = relay_custody_store.mark_delivered(
+            &dispatch.destination_peer.to_string(),
+            &dispatch.custody_id,
+            "delivery_convergence_marker_inflight",
+        ) {
+            tracing::debug!(
+                "Convergence marker could not finalize in-flight custody {}: {}",
+                dispatch.custody_id,
+                e
+            );
+        }
+    }
+
+    let converged_custody = match relay_custody_store.converge_delivered_for_message(
+        &marker.destination_peer_id,
+        &marker.relay_message_id,
+        "delivery_convergence_marker",
+    ) {
+        Ok(count) => count,
+        Err(e) => {
+            tracing::warn!(
+                "Failed to converge custody for marker {} -> {}: {}",
+                marker.relay_message_id,
+                marker.destination_peer_id,
+                e
+            );
+            0
+        }
+    };
+
+    let retry_cleared = multi_path_delivery.converge_delivery(&marker.relay_message_id);
+    let pending_cleared = if let Some(pending) = pending_messages.remove(&marker.relay_message_id) {
+        let _ = pending.reply_tx.send(Ok(())).await;
+        true
+    } else {
+        false
+    };
+
+    if removed_direct_requests > 0
+        || removed_relay_requests > 0
+        || !removed_dispatches.is_empty()
+        || converged_custody > 0
+        || retry_cleared
+        || pending_cleared
+    {
+        tracing::info!(
+            "✅ Delivery convergence applied: message={} destination={} direct_requests={} relay_requests={} dispatches={} custody={} retries_cleared={} pending_cleared={}",
+            marker.relay_message_id,
+            marker.destination_peer_id,
+            removed_direct_requests,
+            removed_relay_requests,
+            removed_dispatches.len(),
+            converged_custody,
+            retry_cleared,
+            pending_cleared
+        );
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn apply_delivery_convergence_marker(
+    marker: &DeliveryConvergenceMarker,
+    pending_messages: &mut HashMap<String, PendingMessage>,
+    pending_relay_requests: &mut HashMap<libp2p::request_response::OutboundRequestId, String>,
+    pending_custody_dispatches: &mut HashMap<
+        libp2p::request_response::OutboundRequestId,
+        PendingCustodyDispatch,
+    >,
+    relay_custody_store: &RelayCustodyStore,
+) {
+    let removed_relay_requests =
+        purge_request_map_for_message(pending_relay_requests, &marker.relay_message_id);
+    let removed_dispatches =
+        purge_custody_dispatches_for_message(pending_custody_dispatches, marker);
+    for dispatch in &removed_dispatches {
+        let _ = relay_custody_store.mark_delivered(
+            &dispatch.destination_peer.to_string(),
+            &dispatch.custody_id,
+            "delivery_convergence_marker_inflight",
+        );
+    }
+
+    let converged_custody = relay_custody_store
+        .converge_delivered_for_message(
+            &marker.destination_peer_id,
+            &marker.relay_message_id,
+            "delivery_convergence_marker",
+        )
+        .unwrap_or(0);
+
+    let pending_cleared = if let Some(pending) = pending_messages.remove(&marker.relay_message_id) {
+        let _ = pending.reply_tx.send(Ok(())).await;
+        true
+    } else {
+        false
+    };
+
+    if removed_relay_requests > 0
+        || !removed_dispatches.is_empty()
+        || converged_custody > 0
+        || pending_cleared
+    {
+        tracing::info!(
+            "✅ (wasm) delivery convergence applied: message={} destination={} relay_requests={} dispatches={} custody={} pending_cleared={}",
+            marker.relay_message_id,
+            marker.destination_peer_id,
+            removed_relay_requests,
+            removed_dispatches.len(),
+            converged_custody,
+            pending_cleared
+        );
+    }
 }
 
 fn dispatch_pending_custody_for_peer(
@@ -645,6 +877,8 @@ pub async fn start_swarm_with_config(
         // The lobby topic is the wildcard discovery channel
         let lobby_topic = libp2p::gossipsub::IdentTopic::new("sc-lobby");
         let mesh_topic = libp2p::gossipsub::IdentTopic::new("sc-mesh");
+        let delivery_convergence_topic =
+            libp2p::gossipsub::IdentTopic::new(DELIVERY_CONVERGENCE_TOPIC);
 
         if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&lobby_topic) {
             tracing::warn!("Failed to subscribe to lobby topic: {}", e);
@@ -656,6 +890,22 @@ pub async fn start_swarm_with_config(
             tracing::warn!("Failed to subscribe to mesh topic: {}", e);
         } else {
             tracing::info!("📡 Subscribed to mesh topic: sc-mesh");
+        }
+
+        if let Err(e) = swarm
+            .behaviour_mut()
+            .gossipsub
+            .subscribe(&delivery_convergence_topic)
+        {
+            tracing::warn!(
+                "Failed to subscribe to delivery convergence topic: {}",
+                e
+            );
+        } else {
+            tracing::info!(
+                "📡 Subscribed to delivery convergence topic: {}",
+                DELIVERY_CONVERGENCE_TOPIC
+            );
         }
 
         let (command_tx, mut command_rx) = mpsc::channel::<SwarmCommand>(256);
@@ -702,6 +952,7 @@ pub async fn start_swarm_with_config(
         let mut subscribed_topics: HashSet<String> = HashSet::new();
         subscribed_topics.insert("sc-lobby".to_string());
         subscribed_topics.insert("sc-mesh".to_string());
+        subscribed_topics.insert(DELIVERY_CONVERGENCE_TOPIC.to_string());
 
         // Track peers we've already exchanged ledgers with (avoid spamming)
         let mut ledger_exchanged_peers: HashSet<PeerId> = HashSet::new();
@@ -714,6 +965,7 @@ pub async fn start_swarm_with_config(
 
         // Track relay reconnect backoff state: (peer_id, attempt_count, next_dial_at)
         let mut relay_reconnect_pending: Vec<(PeerId, u32, std::time::Instant)> = Vec::new();
+        let mut seen_delivery_convergence_markers: HashSet<String> = HashSet::new();
 
         // Auto-dial bootstrap nodes for cross-network discovery
         if !bootstrap_addrs.is_empty() {
@@ -995,6 +1247,38 @@ pub async fn start_swarm_with_config(
                                                         dispatch.custody_id,
                                                         dispatch.destination_peer,
                                                         dispatch.relay_message_id
+                                                    );
+                                                }
+
+                                                let marker = DeliveryConvergenceMarker {
+                                                    relay_message_id: dispatch.relay_message_id.clone(),
+                                                    destination_peer_id: dispatch
+                                                        .destination_peer
+                                                        .to_string(),
+                                                    observed_by_peer_id: local_peer_id
+                                                        .to_string(),
+                                                    observed_at_ms: SystemTime::now()
+                                                        .duration_since(UNIX_EPOCH)
+                                                        .unwrap_or_default()
+                                                        .as_millis()
+                                                        as u64,
+                                                };
+                                                if seen_delivery_convergence_markers
+                                                    .insert(marker.key())
+                                                {
+                                                    apply_delivery_convergence_marker(
+                                                        &marker,
+                                                        &mut pending_messages,
+                                                        &mut request_to_message,
+                                                        &mut pending_relay_requests,
+                                                        &mut pending_custody_dispatches,
+                                                        &mut multi_path_delivery,
+                                                        &relay_custody_store,
+                                                    )
+                                                    .await;
+                                                    publish_delivery_convergence_marker(
+                                                        &mut swarm,
+                                                        &marker,
                                                     );
                                                 }
                                             } else {
@@ -1371,6 +1655,33 @@ pub async fn start_swarm_with_config(
                                     message.topic,
                                     message.data.len()
                                 );
+                                if message.topic.as_str() == DELIVERY_CONVERGENCE_TOPIC {
+                                    if let Some(marker) =
+                                        decode_delivery_convergence_marker(&message.data)
+                                    {
+                                        if seen_delivery_convergence_markers.insert(marker.key()) {
+                                            apply_delivery_convergence_marker(
+                                                &marker,
+                                                &mut pending_messages,
+                                                &mut request_to_message,
+                                                &mut pending_relay_requests,
+                                                &mut pending_custody_dispatches,
+                                                &mut multi_path_delivery,
+                                                &relay_custody_store,
+                                            )
+                                            .await;
+
+                                            // Re-broadcast once from each node to fanout convergence
+                                            // markers beyond direct neighborhoods.
+                                            if propagation_source != local_peer_id {
+                                                publish_delivery_convergence_marker(
+                                                    &mut swarm,
+                                                    &marker,
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
                             }
 
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Autonat(event)) => {
@@ -1966,11 +2277,23 @@ pub async fn start_swarm_with_config(
         // Keep default topic parity with native.
         let lobby_topic = libp2p::gossipsub::IdentTopic::new("sc-lobby");
         let mesh_topic = libp2p::gossipsub::IdentTopic::new("sc-mesh");
+        let delivery_convergence_topic =
+            libp2p::gossipsub::IdentTopic::new(DELIVERY_CONVERGENCE_TOPIC);
         if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&lobby_topic) {
             tracing::warn!("Failed to subscribe to lobby topic: {}", e);
         }
         if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&mesh_topic) {
             tracing::warn!("Failed to subscribe to mesh topic: {}", e);
+        }
+        if let Err(e) = swarm
+            .behaviour_mut()
+            .gossipsub
+            .subscribe(&delivery_convergence_topic)
+        {
+            tracing::warn!(
+                "Failed to subscribe to delivery convergence topic: {}",
+                e
+            );
         }
 
         // Kademlia server mode parity with native.
@@ -2029,6 +2352,7 @@ pub async fn start_swarm_with_config(
         let mut subscribed_topics: HashSet<String> = HashSet::new();
         subscribed_topics.insert("sc-lobby".to_string());
         subscribed_topics.insert("sc-mesh".to_string());
+        subscribed_topics.insert(DELIVERY_CONVERGENCE_TOPIC.to_string());
 
         let mut ledger_exchanged_peers: HashSet<PeerId> = HashSet::new();
 
@@ -2043,6 +2367,7 @@ pub async fn start_swarm_with_config(
         let mut relay_hour_start: f64 = js_sys::Date::now();
         let mut last_bootstrap_redial: f64 = js_sys::Date::now();
         let mut last_custody_pull: f64 = js_sys::Date::now();
+        let mut seen_delivery_convergence_markers: HashSet<String> = HashSet::new();
         let bootstrap_addrs_clone = bootstrap_addrs;
 
         wasm_bindgen_futures::spawn_local(async move {
@@ -2183,6 +2508,33 @@ pub async fn start_swarm_with_config(
                                                         &dispatch.custody_id,
                                                         "recipient_ack",
                                                     );
+                                                    let marker = DeliveryConvergenceMarker {
+                                                        relay_message_id: dispatch
+                                                            .relay_message_id
+                                                            .clone(),
+                                                        destination_peer_id: dispatch
+                                                            .destination_peer
+                                                            .to_string(),
+                                                        observed_by_peer_id: local_peer_id
+                                                            .to_string(),
+                                                        observed_at_ms: js_sys::Date::now() as u64,
+                                                    };
+                                                    if seen_delivery_convergence_markers
+                                                        .insert(marker.key())
+                                                    {
+                                                        apply_delivery_convergence_marker(
+                                                            &marker,
+                                                            &mut pending_messages,
+                                                            &mut pending_relay_requests,
+                                                            &mut pending_custody_dispatches,
+                                                            &relay_custody_store,
+                                                        )
+                                                        .await;
+                                                        publish_delivery_convergence_marker(
+                                                            &mut swarm,
+                                                            &marker,
+                                                        );
+                                                    }
                                                 } else {
                                                     let reason = response
                                                         .error
@@ -2379,6 +2731,32 @@ pub async fn start_swarm_with_config(
                                     peer_id,
                                     topic: topic_str,
                                 }).await;
+                            }
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Gossipsub(
+                                gossipsub::Event::Message { propagation_source, message, .. }
+                            )) => {
+                                if message.topic.as_str() == DELIVERY_CONVERGENCE_TOPIC {
+                                    if let Some(marker) =
+                                        decode_delivery_convergence_marker(&message.data)
+                                    {
+                                        if seen_delivery_convergence_markers.insert(marker.key()) {
+                                            apply_delivery_convergence_marker(
+                                                &marker,
+                                                &mut pending_messages,
+                                                &mut pending_relay_requests,
+                                                &mut pending_custody_dispatches,
+                                                &relay_custody_store,
+                                            )
+                                            .await;
+                                            if propagation_source != local_peer_id {
+                                                publish_delivery_convergence_marker(
+                                                    &mut swarm,
+                                                    &marker,
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Identify(
                                 identify::Event::Received { peer_id, info, .. }
