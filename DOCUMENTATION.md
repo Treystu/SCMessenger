@@ -63,6 +63,10 @@ Historical audit artifacts currently live under `docs/historical/`.
 - WS11 (2026-03-03) delivery-state UX and diagnostics/tester-readiness updates are tracked in:
   - `docs/CURRENT_STATE.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12 (2026-03-03) deterministic offline/partition test expansion, cross-platform parity gates, and docs parity lock are tracked in:
+  - `docs/TESTING_GUIDE.md`
+  - `docs/CURRENT_STATE.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 
 ## Documentation Governance Rules
 

@@ -1,91 +1,76 @@
 # SCMessenger Testing Guide
 
-This guide reflects the repository state verified on **2026-02-23**.
+Status: Active  
+Last updated: 2026-03-03
 
-## Primary Commands
+## WS12 Reproducible Validation Command
 
 ```bash
-# Full workspace verification
+ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./scripts/verify_ws12_matrix.sh
+```
+
+Notes:
+
+1. Set `SCM_SKIP_ANDROID=1` to skip Android parity checks.
+2. Set `SCM_SKIP_IOS=1` to skip iOS parity checks.
+3. iOS parity checks require macOS when `SCM_SKIP_IOS` is not set.
+
+## Mandatory Workspace Gates
+
+```bash
+cargo test --workspace --no-run
 cargo test --workspace
-
-# Build only
-cargo build --workspace
-
-# CLI command surface
-cargo run -p scmessenger-cli -- --help
 ```
 
-## Package-Level Tests
+## WS12 Deterministic Offline/Partition Suites
 
 ```bash
-# Core crate (unit + integration targets declared under core/tests)
-cargo test -p scmessenger-core
-
-# CLI crate
-cargo test -p scmessenger-cli
-
-# Mobile bindings crate
-cargo test -p scmessenger-mobile
-
-# WASM crate (native mode tests in this environment)
-cargo test -p scmessenger-wasm
+cargo test -p scmessenger-core --test integration_offline_partition_matrix
+cargo test -p scmessenger-core --test integration_retry_lifecycle
+cargo test -p scmessenger-core --test integration_receipt_convergence
+cargo test -p scmessenger-core --test integration_relay_custody -- --include-ignored
 ```
 
-## Integration Suites in `core/tests`
+## WS12 Role/Fallback Parity Suites
 
 ```bash
-cargo test --test integration_all_phases
-cargo test --test integration_e2e
-cargo test --test integration_ironcore_roundtrip
-cargo test --test integration_nat_reflection
-cargo test --test test_address_observation
-cargo test --test test_mesh_routing
-cargo test --test test_multiport
-cargo test --test test_persistence_restart
+# Desktop/WASM role-mode parity
+cargo test -p scmessenger-wasm test_desktop_role_resolution_defaults_to_relay_only_without_identity
+cargo test -p scmessenger-wasm test_desktop_relay_only_flow_blocks_outbound_message_prepare
+
+# Android role + fallback parity
+cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk \
+  ./gradlew :app:testDebugUnitTest \
+    --tests com.scmessenger.android.test.RoleNavigationPolicyTest \
+    --tests com.scmessenger.android.data.MeshRepositoryTest
+
+# iOS transport + role parity
+bash ./iOS/verify-local-transport.sh
+bash ./iOS/verify-role-mode.sh
 ```
 
-## Latest Verified Results
+## Latest Verified Results (2026-03-03)
 
 From `cargo test --workspace`:
 
-- CLI: `17 passed`
-- Core unit: `227 passed`, `7 ignored`
-- Core integrations (all `core/tests` files): `52 passed`
-- Mobile crate: `4 passed`
-- WASM crate (native/non-browser path): `24 passed`
-- Total: **324 passed, 0 failed, 7 ignored**
+1. CLI: `13 passed`
+2. Core unit: `265 passed`, `7 ignored`
+3. Core integrations: `52 passed`, `10 ignored`
+4. Mobile crate: `4 passed`
+5. WASM crate (native mode): `33 passed`
+6. Aggregate: **367 passed, 0 failed, 17 ignored**
 
-## Platform Setup Checks
+Additional WS12 parity checks:
 
-```bash
-./android/verify-build-setup.sh
-./iOS/verify-build-setup.sh
-```
+1. Android targeted parity tests: **pass**
+2. iOS local transport fallback tests: **pass**
+3. iOS role-mode parity source checks: **pass**
 
-### Latest verification notes
+## CI Enforcement
 
-- Android script passed most checks but failed in this environment because `ANDROID_HOME` is not set.
-- iOS script passed, including UniFFI generation and static library compilation.
+Primary CI gates for WS12 parity lock:
 
-## Browser/WASM Runtime Tests
-
-Browser-executed tests were not run in this environment because `wasm-pack` is not installed.
-
-Typical command (when toolchain is present):
-
-```bash
-wasm-pack test --node wasm/
-```
-
-## Warnings and Quality Follow-Ups
-
-- Core integration tests compile with some unused import/variable warnings.
-- No failing tests were observed in the verified run.
-
-## Recommended CI Baseline
-
-```bash
-cargo fmt --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-```
+1. `.github/workflows/ci.yml` `check-core`: deterministic offline/partition matrix tests.
+2. `.github/workflows/ci.yml` `check-wasm`: desktop role-mode parity tests.
+3. `.github/workflows/ci.yml` `check-android`: Android role/fallback parity tests.
+4. `.github/workflows/ci.yml` `check-ios`: `iOS/verify-test.sh` now runs both local transport and role-mode parity checks.

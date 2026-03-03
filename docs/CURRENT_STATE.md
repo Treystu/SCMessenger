@@ -13,12 +13,26 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - Totals from suite output:
     - CLI: 13 passed
     - Core unit: 265 passed, 7 ignored
-    - Core integration: 50 passed
+    - Core integration: 52 passed, 10 ignored
     - Mobile crate: 4 passed
     - WASM crate (native/non-browser tests): 33 passed
-  - Aggregate: **365 passed, 0 failed, 7 ignored**
+  - Aggregate: **367 passed, 0 failed, 17 ignored**
 - `cargo clippy --workspace` — **clean (0 warnings)**
 - `cargo fmt --all -- --check` — **clean**
+
+### WS12 Verification Snapshot (2026-03-03)
+
+- `cargo test --workspace --no-run` — **pass**
+- `cargo test --workspace` — **pass**
+- `cargo test -p scmessenger-core --test integration_offline_partition_matrix` — **pass** (deterministic offline/partition matrix)
+- `cargo test -p scmessenger-core --test integration_retry_lifecycle` — **pass**
+- `cargo test -p scmessenger-core --test integration_receipt_convergence` — **pass**
+- `cargo test -p scmessenger-core --test integration_relay_custody -- --include-ignored` — **pass**
+- `cargo test -p scmessenger-wasm test_desktop_role_resolution_defaults_to_relay_only_without_identity` — **pass**
+- `cargo test -p scmessenger-wasm test_desktop_relay_only_flow_blocks_outbound_message_prepare` — **pass**
+- `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:testDebugUnitTest --tests com.scmessenger.android.test.RoleNavigationPolicyTest --tests com.scmessenger.android.data.MeshRepositoryTest` — **pass**
+- `bash ./iOS/verify-test.sh` — **pass** (21 warnings, non-fatal policy; includes local transport fallback + role-mode parity checks)
+- `ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./scripts/verify_ws12_matrix.sh` — **pass**
 
 ### WS10 Verification Snapshot (2026-03-03)
 
@@ -70,7 +84,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - Result: **pass** (with `ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk`)
 - `./iOS/verify-test.sh`
   - Result: **pass**
-  - Confirmed simulator build plus local transport fallback checks
+  - Confirmed simulator build plus local transport fallback and role-mode parity checks
 
 ### Platform App Builds
 

@@ -15,7 +15,7 @@ Owner policy constraints (2026-02-23):
 
 ## v0.2.0 Execution Residual Register
 
-Residual risks from completed v0.2.0 phases (currently through WS11 execution) are tracked in:
+Residual risks from completed v0.2.0 phases (currently through WS12 execution) are tracked in:
 
 - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 
@@ -111,7 +111,20 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
 
 - Outcome (2026-03-03): Added explicit delivery-state UX mapping (`pending`, `stored`, `forwarding`, `delivered`) on Android+iOS chat surfaces, upgraded diagnostics exports into tester-readable bundles with contextual guidance, and added tester-facing reliability + permissions rationale notes in settings/diagnostics flows.
 
-12. Beta anti-abuse gate implementation and validation
+13. [x] WS12 test matrix expansion and docs parity lock
+
+- Outcome (2026-03-03):
+  - Added deterministic offline/partition integration coverage in `core/tests/integration_offline_partition_matrix.rs`.
+  - Stabilized and validated live custody reconnect suite (`core/tests/integration_relay_custody.rs`) for `--include-ignored` execution on socket-enabled hosts.
+  - Added reproducible WS12 validation runner: `scripts/verify_ws12_matrix.sh`.
+  - CI now enforces WS12 parity gates:
+    - core deterministic offline/partition suites,
+    - Android role/fallback parity tests,
+    - desktop/WASM role parity tests,
+    - iOS verify pipeline now includes local transport fallback and role-mode parity checks.
+  - Canonical documentation and residual-risk register were updated to align runtime behavior and release-gate status.
+
+14. Beta anti-abuse gate implementation and validation
 
 - Requirement: abuse controls are non-blocking in alpha but mandatory before beta.
 - Target: enable and validate anti-abuse protections with measurable pass criteria across Android, iOS, Web, and relay-critical paths.
@@ -204,10 +217,12 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
 
 ## Priority 1: Tooling, CI, and Experimental Surface
 
-1. Align CI with tri-platform target status
-   - Current: `.github/workflows/ci.yml` validates Rust workspace on Linux/macOS only.
-   - Gap: no canonical Android+iOS+Web parity gates in the primary CI workflow.
-   - Target: enforce Android+iOS+Web build-readiness checks in gating CI for mainline changes.
+1. [x] Align CI with tri-platform target status
+   - Outcome (2026-03-03): `.github/workflows/ci.yml` now includes explicit WS12 parity/test gates for:
+     - deterministic core offline/partition suites,
+     - Android role/fallback unit parity checks,
+     - desktop/WASM role parity checks,
+     - iOS verification with transport fallback + role-mode parity checks.
 
 2. Add browser-executed WASM test job (parity gate)
    - Current: native/non-browser WASM tests only in workspace run.

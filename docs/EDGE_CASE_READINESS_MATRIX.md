@@ -1,8 +1,8 @@
 # SCMessenger Edge-Case Readiness Matrix (v0.2.x)
 
 Status: Active planning artifact  
-Last updated: 2026-03-02  
-Baseline used: v0.2.0 execution tracking through WS8 evidence in `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+Last updated: 2026-03-03  
+Baseline used: v0.2.0 execution tracking through WS12 evidence in `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 
 ---
 
@@ -30,13 +30,12 @@ Strong foundations already in place:
 
 Known open/deferred constraints (from residual register):
 
-1. `R-WS3-01` - live socket-enabled custody reconnect test cannot run in restricted environments.
-2. `R-WS3-02` - relay custody default persistence path currently uses temp-dir.
-3. `R-WS4-02` - convergence marker anti-abuse/trust policy not yet hardened.
-4. `R-WS5-01` - storage-pressure snapshot can degrade to no-op on some platforms.
-5. `R-WS6-01` - Android WiFi hint staleness can reduce local fast-path hit rate.
-6. `R-WS7-01` - iOS Multipeer prefix-handle collisions can reduce local fast-path hit rate.
-7. `R-WS8-01` - headless-to-full promotion currently re-keys network identity with a transient restart.
+1. `R-WS3-02` - relay custody default persistence path currently uses temp-dir.
+2. `R-WS4-02` - convergence marker anti-abuse/trust policy not yet hardened.
+3. `R-WS5-01` - storage-pressure snapshot can degrade to no-op on some platforms.
+4. `R-WS6-01` - Android WiFi hint staleness can reduce local fast-path hit rate.
+5. `R-WS7-01` - iOS Multipeer prefix-handle collisions can reduce local fast-path hit rate.
+6. `R-WS8-01` - headless-to-full promotion currently re-keys network identity with a transient restart.
 
 ---
 
@@ -72,7 +71,7 @@ Known open/deferred constraints (from residual register):
 2. `EC-02` - Ensure all platform adapters provide `DeviceStorageSnapshot` so pressure policy cannot silently no-op (`R-WS5-01`).
 3. `EC-03` - Replace volatile local transport hints with authenticated stable alias mapping on Android/iOS (`R-WS6-01`, `R-WS7-01`).
 4. `EC-04` - Harden delivery convergence marker acceptance with additional anti-abuse validation (`R-WS4-02`).
-5. `EC-05` - Add socket-enabled CI/host lane for ignored live custody reconnect integration tests (`R-WS3-01`).
+5. `[Closed in WS12]` `EC-05` - Added socket-enabled validation lane by executing `integration_relay_custody -- --include-ignored` in WS12 reproducible checks and CI core parity gate (`R-WS3-01`).
 6. `EC-06` - Standardize sender-visible delivery states (`queued`, `pending retry`, `delivered`) to reduce ambiguity from first-pass failures (`R-WS2-01`).
 
 ### 4.2 v0.2.1 execution (WS13 stream)

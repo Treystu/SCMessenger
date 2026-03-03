@@ -401,6 +401,14 @@ Acceptance:
 
 1. Cross-platform parity checks pass in CI.
 2. Canonical docs no longer contradict runtime behavior for milestone scope.
+3. Team can reproduce WS12 validation via a documented command matrix/script.
+
+Execution note (2026-03-03):
+
+1. Added deterministic offline/partition integration suite: `core/tests/integration_offline_partition_matrix.rs`.
+2. Added CI-enforced parity gates for deterministic offline/partition suites (including live custody reconnect), Android role/fallback, desktop/WASM role mode, and iOS transport/role checks.
+3. Added reproducible validation runner: `scripts/verify_ws12_matrix.sh`.
+4. Canonical docs + residual-risk register were updated in the same run to lock docs/runtime parity.
 
 ---
 

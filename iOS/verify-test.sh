@@ -38,4 +38,7 @@ fi
 echo "Running iOS local transport fallback checks..."
 bash "./verify-local-transport.sh"
 
+echo "Running iOS role-mode parity checks..."
+bash "./verify-role-mode.sh"
+
 echo "iOS build verification passed!"

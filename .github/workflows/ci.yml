@@ -109,6 +109,13 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
+      - name: WS12 Deterministic Offline/Partition Matrix
+        run: |
+          cargo test -p scmessenger-core --test integration_offline_partition_matrix
+          cargo test -p scmessenger-core --test integration_retry_lifecycle
+          cargo test -p scmessenger-core --test integration_receipt_convergence
+          cargo test -p scmessenger-core --test integration_relay_custody -- --include-ignored
+
   check-wasm:
     name: Test Web/WASM
     runs-on: ubuntu-latest
@@ -129,6 +136,10 @@ jobs:
         run: |
           cd wasm
           wasm-pack test --headless --firefox
+      - name: WS12 Desktop Role Parity Checks
+        run: |
+          cargo test -p scmessenger-wasm test_desktop_role_resolution_defaults_to_relay_only_without_identity
+          cargo test -p scmessenger-wasm test_desktop_relay_only_flow_blocks_outbound_message_prepare
 
   check-android:
     name: Build Android App
@@ -153,6 +164,12 @@ jobs:
       - name: Build Android Debug APK
         working-directory: android
         run: ./gradlew assembleDebug
+      - name: WS12 Android Role/Fallback Parity Checks
+        working-directory: android
+        run: |
+          ./gradlew :app:testDebugUnitTest \
+            --tests com.scmessenger.android.test.RoleNavigationPolicyTest \
+            --tests com.scmessenger.android.data.MeshRepositoryTest
 
   check-ios:
     name: Build iOS App
