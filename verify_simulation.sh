@@ -7,104 +7,21 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-PREF_FILE=".docker_pref"
-INSTALLED_THIS_SESSION=false
+# --- Docker detection ---
+if ! command -v docker >/dev/null 2>&1; then
+    echo -e "${RED}Docker CLI is not installed.${NC}"
+    echo "Install Docker manually, then re-run this script."
+    exit 1
+fi
 
-# Function to check if Docker daemon is running
-check_docker_running() {
-    if docker info > /dev/null 2>&1; then
-        return 0
-    fi
-    return 1
-}
-
-# Function to install Docker on macOS
-install_docker_macos() {
-    echo -e "${YELLOW}Docker not found. Installing intelligently...${NC}"
-    
-    # Check for Homebrew
-    if ! command -v brew &> /dev/null; then
-        echo "Homebrew not found. Installing Homebrew..."
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    fi
-    
-    echo "Installing Docker Desktop via Homebrew..."
-    
-    # Attempt installation, handle conflicts (like hub-tool) by forcing if standard install fails
-    if ! brew install --cask docker; then
-        echo -e "${YELLOW}Standard installation encountered an issue. Retrying with --force to resolve conflicts...${NC}"
-        
-        # Specific fix for reported hub-tool conflict
-        if [ -f "/usr/local/bin/hub-tool" ]; then
-            echo "Detected potential conflict with /usr/local/bin/hub-tool. Attempting to move it setup..."
-            mv /usr/local/bin/hub-tool /usr/local/bin/hub-tool.bak 2>/dev/null || \
-            echo "Could not auto-move hub-tool. The --force install below might handle it or fail."
-        fi
-
-        if ! brew install --cask --force docker; then
-            # If force failed, check if the App exists anyway (sometimes post-install steps fail but App is there)
-            if [ -d "/Applications/Docker.app" ]; then
-                 echo -e "${YELLOW}Homebrew reported an error, but Docker.app was found in /Applications.${NC}"
-                 echo "Assuming installation was successful enough to proceed."
-            else
-                 echo -e "${RED}Critical: Docker installation failed.${NC}"
-                 echo "Please manually install Docker Desktop and re-run this script."
-                 exit 1
-            fi
-        fi
-    fi
-    
-    echo "Starting Docker Desktop..."
-    open -a Docker
-    
-    echo -e "${YELLOW}Waiting for Docker Engine to start...${NC}"
-    echo "NOTE: You may need to interact with the Docker Desktop window to accept terms or grant permissions."
-    
-    # Wait for Docker to be ready
-    local retries=0
-    while ! docker info > /dev/null 2>&1; do
-        sleep 5
-        echo -n "."
-        retries=$((retries + 1))
-        if [ $retries -gt 60 ]; then # Wait up to 5 minutes
-            echo -e "\n${RED}Timed out waiting for Docker. Please ensure Docker Desktop is running.${NC}"
-            exit 1
-        fi
-    done
-    echo -e "\n${GREEN}Docker is running!${NC}"
-}
-
-# --- Docker Detection & Installation ---
-
-if ! command -v docker &> /dev/null; then
-    # Check OS
+if ! docker info >/dev/null 2>&1; then
+    echo -e "${RED}Docker daemon is not running.${NC}"
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        install_docker_macos
-        INSTALLED_THIS_SESSION=true
+        echo "Start Docker Desktop manually (for example: open -a Docker), then re-run."
     else
-        echo -e "${RED}Docker is not installed and automatic installation is only supported on macOS.${NC}"
-        echo "Please install Docker manually and re-run this script."
-        exit 1
+        echo "Start your Docker daemon/service, then re-run."
     fi
-else
-    # Docker binary exists, check if daemon is running
-    if ! check_docker_running; then
-        echo -e "${YELLOW}Docker is installed but not running.${NC}"
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            echo "Attempting to start Docker Desktop..."
-            open -a Docker || true
-            
-            echo "Waiting for Docker Engine to start..."
-            while ! docker info > /dev/null 2>&1; do
-                sleep 2
-                echo -n "."
-            done
-            echo -e "\n${GREEN}Docker started.${NC}"
-        else
-            echo "Please start the Docker daemon and re-run this script."
-            exit 1
-        fi
-    fi
+    exit 1
 fi
 
 # --- Simulation Logic ---

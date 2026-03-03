@@ -5,6 +5,8 @@ import android.content.Context
 import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Semaphore
@@ -33,10 +35,25 @@ class BleGattClient(
     private val onIdentityReceived: (deviceAddress: String, identity: ByteArray) -> Unit,
     private val onDataReceived: (deviceAddress: String, data: ByteArray) -> Unit
 ) {
+    data class BleGattClientStats(
+        val connectAttempts: Int,
+        val connectInitiated: Int,
+        val connectFailures: Int,
+        val addressTypeMismatchConnectSkips: Int,
+        val connectStateSuccesses: Int,
+        val disconnects: Int,
+        val duplicatePermitReleasesIgnored: Int,
+        val semaphoreReleaseOverflows: Int,
+        val noResponseCallbacksIgnored: Int,
+        val addressTypeMismatchSignals: Int,
+        val activeConnections: Int
+    )
+
     companion object {
         // Initial identity beacon can arrive before the peer publishes final nickname.
         // Re-read shortly after connect to surface nickname promptly in Nearby UI.
         private val IDENTITY_REFRESH_DELAYS_MS = listOf(900L, 2200L)
+        private const val ADDRESS_TYPE_MISMATCH_BACKOFF_MS = 30_000L
     }
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
@@ -67,16 +84,25 @@ class BleGattClient(
     // the result arrives so the next enqueued op can proceed.
     private val gattOpQueues = ConcurrentHashMap<String, Channel<() -> Unit>>()
     private val gattOpSemaphores = ConcurrentHashMap<String, Semaphore>()
+    private val gattOpPermitHeld = ConcurrentHashMap<String, AtomicBoolean>()
 
-    // Tracks whether the current in-flight GATT op for a device was a
-    // WRITE_TYPE_NO_RESPONSE write. For those writes the Android GATT stack
-    // does NOT reliably deliver onCharacteristicWrite (behaviour varies by API
-    // level and peripheral).  The semaphore must be released immediately after
-    // writeCharacteristic() returns; this flag tells onCharacteristicWrite to
-    // skip the release so we never double-release.
-    private val noResponseWriteInFlight = ConcurrentHashMap<String, Boolean>()
+    // Tracks outstanding WRITE_TYPE_NO_RESPONSE writes per device. For these
+    // writes we release the queue permit immediately after initiation and treat
+    // callbacks as informational only to avoid double-release.
+    private val noResponseWritesOutstanding = ConcurrentHashMap<String, AtomicInteger>()
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val connectAttempts = AtomicInteger(0)
+    private val connectInitiated = AtomicInteger(0)
+    private val connectFailures = AtomicInteger(0)
+    private val connectStateSuccesses = AtomicInteger(0)
+    private val disconnectCount = AtomicInteger(0)
+    private val duplicatePermitReleasesIgnored = AtomicInteger(0)
+    private val semaphoreReleaseOverflows = AtomicInteger(0)
+    private val noResponseCallbacksIgnored = AtomicInteger(0)
+    private val addressTypeMismatchSignals = AtomicInteger(0)
+    private val addressTypeMismatchConnectSkips = AtomicInteger(0)
+    private val addressTypeMismatchBackoffUntilMs = ConcurrentHashMap<String, Long>()
 
     // ---------- GATT op queue helpers ----------
 
@@ -86,12 +112,20 @@ class BleGattClient(
             Channel<() -> Unit>(Channel.UNLIMITED).also { ch ->
                 val sem = Semaphore(1)
                 gattOpSemaphores[deviceAddress] = sem
+                gattOpPermitHeld[deviceAddress] = AtomicBoolean(false)
+                noResponseWritesOutstanding[deviceAddress] = AtomicInteger(0)
                 scope.launch {
                     for (op in ch) {
                         // Wait until the previous op's callback has fired before
                         // starting the next one.
                         sem.acquire()
-                        op()
+                        gattOpPermitHeld[deviceAddress]?.set(true)
+                        try {
+                            op()
+                        } catch (t: Throwable) {
+                            Timber.e(t, "Unhandled GATT op exception for %s", deviceAddress)
+                            releaseGattOp(deviceAddress)
+                        }
                     }
                 }
             }
@@ -122,7 +156,19 @@ class BleGattClient(
      * next queued operation is unblocked.
      */
     private fun releaseGattOp(deviceAddress: String) {
-        gattOpSemaphores[deviceAddress]?.release()
+        val semaphore = gattOpSemaphores[deviceAddress] ?: return
+        val held = gattOpPermitHeld[deviceAddress]?.compareAndSet(true, false) ?: false
+        if (!held) {
+            duplicatePermitReleasesIgnored.incrementAndGet()
+            Timber.w("Ignoring duplicate GATT op release for %s", deviceAddress)
+            return
+        }
+        try {
+            semaphore.release()
+        } catch (e: IllegalStateException) {
+            semaphoreReleaseOverflows.incrementAndGet()
+            Timber.e(e, "GATT semaphore release overflow for %s", deviceAddress)
+        }
     }
 
     /**
@@ -130,8 +176,21 @@ class BleGattClient(
      * Returns true if connection initiated, false if rejected (pool full, already connected).
      */
     fun connect(deviceAddress: String): Boolean {
+        connectAttempts.incrementAndGet()
+        val mismatchBackoffUntil = addressTypeMismatchBackoffUntilMs[deviceAddress] ?: 0L
+        if (mismatchBackoffUntil > System.currentTimeMillis()) {
+            addressTypeMismatchConnectSkips.incrementAndGet()
+            val waitMs = mismatchBackoffUntil - System.currentTimeMillis()
+            Timber.w(
+                "Skipping BLE connect to %s due to recent address-type mismatch (retry in %d ms)",
+                deviceAddress,
+                waitMs.coerceAtLeast(0L)
+            )
+            return false
+        }
         // Check connection pool limit
         if (activeConnections.size >= maxConnections) {
+            connectFailures.incrementAndGet()
             Timber.w("Connection pool full ($maxConnections), cannot connect to $deviceAddress")
             return false
         }
@@ -144,6 +203,7 @@ class BleGattClient(
 
         val adapter = bluetoothManager?.adapter
         if (adapter == null) {
+            connectFailures.incrementAndGet()
             Timber.e("Bluetooth adapter not available")
             return false
         }
@@ -160,15 +220,23 @@ class BleGattClient(
             )
 
             activeConnections[deviceAddress] = gatt
+            connectInitiated.incrementAndGet()
             Timber.d("Connecting to $deviceAddress")
             true
         } catch (e: SecurityException) {
             Timber.e(e, "Security exception connecting to $deviceAddress")
             connectionStates.remove(deviceAddress)
+            connectFailures.incrementAndGet()
             false
         } catch (e: Exception) {
             Timber.e(e, "Failed to connect to $deviceAddress")
             connectionStates.remove(deviceAddress)
+            connectFailures.incrementAndGet()
+            if (e.message?.contains("Address type mismatch", ignoreCase = true) == true) {
+                addressTypeMismatchSignals.incrementAndGet()
+                addressTypeMismatchBackoffUntilMs[deviceAddress] =
+                    System.currentTimeMillis() + ADDRESS_TYPE_MISMATCH_BACKOFF_MS
+            }
             false
         }
     }
@@ -186,11 +254,14 @@ class BleGattClient(
             negotiatedMtus.remove(deviceAddress)
             gattOpQueues.remove(deviceAddress)?.close()
             gattOpSemaphores.remove(deviceAddress)
-            noResponseWriteInFlight.remove(deviceAddress)
+            gattOpPermitHeld.remove(deviceAddress)
+            noResponseWritesOutstanding.remove(deviceAddress)
+            addressTypeMismatchBackoffUntilMs.remove(deviceAddress)
             // Clear any in-progress reassembly for this device to prevent stale
             // fragments from a prior connection contaminating a new connection.
             reassemblyBuffers.remove(deviceAddress)
             expectedFragments.remove(deviceAddress)
+            disconnectCount.incrementAndGet()
             Timber.d("Disconnected from $deviceAddress")
         } catch (e: SecurityException) {
             Timber.e(e, "Security exception disconnecting from $deviceAddress")
@@ -241,18 +312,24 @@ class BleGattClient(
                     // WRITE_TYPE_NO_RESPONSE: onCharacteristicWrite is not reliably
                     // called on all Android versions.  Release the semaphore here so
                     // the next fragment is not blocked waiting for a callback that may
-                    // never arrive.  noResponseWriteInFlight tells onCharacteristicWrite
-                    // to skip its own release to prevent a double-release.
-                    noResponseWriteInFlight[deviceAddress] = true
+                    // never arrive. noResponseWritesOutstanding tells
+                    // onCharacteristicWrite to ignore callback-side releases.
+                    if (initiated) {
+                        noResponseWritesOutstanding[deviceAddress]?.incrementAndGet()
+                    } else {
+                        noResponseWritesOutstanding[deviceAddress]?.set(0)
+                    }
                     releaseGattOp(deviceAddress)
                     if (!initiated) {
                         Timber.e("Failed to initiate characteristic write to $deviceAddress")
                     }
                 } catch (e: SecurityException) {
                     Timber.e(e, "Security exception sending data to $deviceAddress")
+                    noResponseWritesOutstanding[deviceAddress]?.set(0)
                     releaseGattOp(deviceAddress)
                 } catch (e: Exception) {
                     Timber.e(e, "Failed to send data to $deviceAddress")
+                    noResponseWritesOutstanding[deviceAddress]?.set(0)
                     releaseGattOp(deviceAddress)
                 }
             }
@@ -304,6 +381,7 @@ class BleGattClient(
 
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
+                    connectStateSuccesses.incrementAndGet()
                     Timber.d("Connected to $deviceAddress, requesting MTU...")
                     connectionStates[deviceAddress] = ConnectionState.DISCOVERING_SERVICES
 
@@ -405,19 +483,37 @@ class BleGattClient(
 
             val deviceAddress = gatt.device.address
 
+            val outstandingNoResponse = noResponseWritesOutstanding[deviceAddress]
+            val isNoResponseWrite =
+                characteristic.writeType == BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            if (isNoResponseWrite) {
+                noResponseCallbacksIgnored.incrementAndGet()
+                val remaining = if (outstandingNoResponse != null && outstandingNoResponse.get() > 0) {
+                    outstandingNoResponse.decrementAndGet().coerceAtLeast(0).also {
+                        if (it == 0) {
+                            noResponseWritesOutstanding[deviceAddress]?.set(0)
+                        }
+                    }
+                } else {
+                    0
+                }
+                Timber.v(
+                    "Ignoring WRITE_TYPE_NO_RESPONSE callback for %s (status=%d, remaining=%d, outstanding_missing=%s)",
+                    deviceAddress,
+                    status,
+                    remaining,
+                    (outstandingNoResponse == null || outstandingNoResponse.get() == 0)
+                )
+                pendingWrites.remove(deviceAddress)
+                return
+            }
+
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Timber.d("Characteristic write successful to $deviceAddress")
             } else {
                 Timber.e("Characteristic write failed to $deviceAddress: $status")
             }
             pendingWrites.remove(deviceAddress)
-
-            // For WRITE_TYPE_NO_RESPONSE, the semaphore was already released
-            // immediately after writeCharacteristic() — do not release again.
-            if (noResponseWriteInFlight.remove(deviceAddress) == true) {
-                Timber.v("Skipping semaphore release for NO_RESPONSE write on $deviceAddress")
-                return
-            }
             releaseGattOp(deviceAddress)
         }
 
@@ -513,6 +609,22 @@ class BleGattClient(
                 disconnect(deviceAddress)
             }
         }
+    }
+
+    fun getClientStats(): BleGattClientStats {
+        return BleGattClientStats(
+            connectAttempts = connectAttempts.get(),
+            connectInitiated = connectInitiated.get(),
+            connectFailures = connectFailures.get(),
+            addressTypeMismatchConnectSkips = addressTypeMismatchConnectSkips.get(),
+            connectStateSuccesses = connectStateSuccesses.get(),
+            disconnects = disconnectCount.get(),
+            duplicatePermitReleasesIgnored = duplicatePermitReleasesIgnored.get(),
+            semaphoreReleaseOverflows = semaphoreReleaseOverflows.get(),
+            noResponseCallbacksIgnored = noResponseCallbacksIgnored.get(),
+            addressTypeMismatchSignals = addressTypeMismatchSignals.get(),
+            activeConnections = activeConnections.size
+        )
     }
 
     private fun readIdentityBeacon(gatt: BluetoothGatt) {

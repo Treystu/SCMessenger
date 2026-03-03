@@ -120,15 +120,15 @@ impl LedgerEntry {
             .unwrap_or_default()
             .as_secs();
 
-        self.consecutive_failures += 1;
+        self.consecutive_failures = self.consecutive_failures.saturating_add(1);
 
-        // Exponential backoff: 5s, 10s, 20s, 40s, 80s, 160s, 300s (cap at 5 min)
-        self.backoff_seconds = std::cmp::min(
-            5 * 2u64.pow(self.consecutive_failures.saturating_sub(1)),
-            300,
-        );
+        // Exponential backoff: 5s, 10s, 20s, 40s, 80s, 160s, 300s (cap at 5 min).
+        // Clamp exponent before shifting to avoid overflow under long-lived failure streaks.
+        let exponent = self.consecutive_failures.saturating_sub(1).min(6);
+        let uncapped_backoff = 5u64.saturating_mul(1u64 << exponent);
+        self.backoff_seconds = std::cmp::min(uncapped_backoff, 300);
 
-        self.next_attempt_after = now + self.backoff_seconds;
+        self.next_attempt_after = now.saturating_add(self.backoff_seconds);
     }
 
     /// Check if we should attempt connection now
@@ -490,6 +490,18 @@ mod tests {
         assert_eq!(entry.consecutive_failures, 0);
         assert_eq!(entry.backoff_seconds, 0);
         assert_eq!(entry.last_peer_id, Some("12D3KooWTest".to_string()));
+    }
+
+    #[test]
+    fn test_ledger_entry_backoff_overflow_safety() {
+        let mut entry = LedgerEntry::new("/ip4/1.2.3.4/tcp/9001".to_string(), false);
+        entry.consecutive_failures = u32::MAX;
+
+        entry.record_failure();
+
+        assert_eq!(entry.consecutive_failures, u32::MAX);
+        assert_eq!(entry.backoff_seconds, 300);
+        assert!(entry.next_attempt_after >= entry.backoff_seconds);
     }
 
     #[test]

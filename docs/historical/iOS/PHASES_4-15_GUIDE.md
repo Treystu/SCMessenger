@@ -1,6 +1,7 @@
 # iOS Implementation - Phases 4-15 Complete Guide
 
 > Design/implementation guide snapshot. Validate against `docs/CURRENT_STATE.md` before treating status claims as current.
+> Historical checklist triage (2026-03-03 HST): open boxes are superseded planning artifacts and are not active backlog.
 
 ## Overview
 This document provides a complete implementation guide for iOS Phases 4-15. Each phase includes file structure, key patterns, and implementation requirements.
@@ -12,8 +13,8 @@ This document provides a complete implementation guide for iOS Phases 4-15. Each
 ### Status: FOUNDATION COMPLETE
 - [x] MeshBLEConstants.swift - BLE UUIDs matching Android
 - [x] BLECentralManager.swift - Scanning and GATT client (skeleton)
-- [ ] BLEPeripheralManager.swift - Advertising and GATT server
-- [ ] BLEL2CAPManager.swift - L2CAP bulk transfer
+- [Historical - Superseded] BLEPeripheralManager.swift - Advertising and GATT server
+- [Historical - Superseded] BLEL2CAPManager.swift - L2CAP bulk transfer
 
 ### Remaining Work
 Complete peripheral manager and L2CAP manager following patterns in BLECentralManager.swift. See PHASE4_IMPLEMENTATION.md for detailed requirements.

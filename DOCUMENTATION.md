@@ -89,6 +89,38 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.10 runtime re-baseline + action roundup (2026-03-03 HST, custody gate stabilized, relay rollout skew closed, iOS main-thread I/O startup hotfix) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.13 wave-2 backlog consolidation (2026-03-03 HST, mixed-doc checklist normalization + verification script reconciliation) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+- WS12.11 iOS relay flapping diagnosis (2026-03-03 HST, no-code-change runtime triage for GCP relay visibility churn and potential state/race paths) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.12 Android<->iOS pairing message-delivery RCA (2026-03-03 HST, diagnosis-only pass for non-delivery despite active pairing) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.13 5-node orchestration script hardening + post-update issue slate triage (2026-03-03 HST) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.14 Android Bluetooth-only pairing diagnosis (2026-03-03 HST, no-code-change RCA for Android<->iOS BLE path failure) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.16 wave-2 runtime hardening pass (2026-03-03 HST, Android BLE race hardening + iOS relay/multipeer guardrails + delivery-attempt diagnostics timeline) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.17 wave-3 governance closure sweep (2026-03-03 HST, historical checklist triage + strict BLE-only/diagnostics hardening + deterministic harness additions) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 
 ## Documentation Governance Rules
 

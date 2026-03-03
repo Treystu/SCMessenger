@@ -110,6 +110,135 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - Code path:
   - `iOS/SCMessenger/SCMessenger/Views/Dashboard/MeshDashboardView.swift`
 
+### WS12.10 Runtime Re-baseline + Action Roundup (2026-03-03 HST)
+
+- Live verification commands:
+  - `ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./scripts/verify_ws12_matrix.sh` — **pass**
+  - `cargo test -p scmessenger-core --test integration_relay_custody offline_recipient_receives_after_reconnect_without_sender_resend -- --include-ignored --exact` (3 consecutive runs) — **pass/pass/pass**
+  - `adb kill-server && adb start-server && adb mdns services && adb devices -l`
+  - `adb logcat -d | rg "MeshRepository|delivery_state|relay|custody|swarm"`
+  - `xcrun simctl spawn booted log show --style compact --last 60m --predicate 'eventMessage CONTAINS[c] "NSFileManager" OR eventMessage CONTAINS[c] "createDirectory"'`
+  - `bash ./iOS/verify-test.sh` — **pass** (74 warnings, non-fatal per script policy)
+- Runtime findings:
+  - Custody reconnect gate is now stable in this environment (3/3 consecutive passes).
+  - Android live logs were successfully captured after reconnect and showed active `scmessenger/0.2.0/headless/relay/*` peers; wireless ADB visibility later dropped again after daemon restart, so endpoint persistence remains an operational follow-up.
+  - iOS runtime issue warnings were reproducible and attributable to app startup path (`NSFileManager createDirectory*` on main actor in `MeshRepository.init()`), not simulator-only noise.
+  - Post-fix quick-launch probe (`xcrun simctl launch booted SovereignCommunications.SCMessenger` + 2-minute log window) showed no new `createDirectory` runtime-issue entries for SCMessenger.
+  - Fresh CLI runtime probe did not reproduce `Could not register relay circuit reservation` warnings in this pass.
+- Fixes applied:
+  - iOS: removed main-actor storage directory creation from `MeshRepository.init()` and moved diagnostic file persistence to a background serial queue (`iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift`).
+  - iOS: fixed dashboard compile regression by passing `Array(merged.values)` into alias dedup helper (`iOS/SCMessenger/SCMessenger/Views/Dashboard/MeshDashboardView.swift`).
+
+### WS12.13 Wave-2 Backlog Consolidation Snapshot (2026-03-03 HST)
+
+- Validation/debt reconciliation commands:
+  - `cargo check --workspace` — **pass**
+  - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:generateUniFFIBindings` — **pass**
+  - `bash iOS/copy-bindings.sh` — **pass**
+  - `ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk bash ./verify_integration.sh` — **pass**
+  - `bash ./verify_simulation.sh` — **expected fail-fast** (Docker unavailable in this environment)
+  - `cd wasm && wasm-pack build` — **pass** (with release `wasm-opt` disabled in `wasm/Cargo.toml` for host compatibility)
+- Tooling adjustments in this wave:
+  - `verify_integration.sh` was modernized to delegate to canonical `scripts/verify_ws12_matrix.sh` instead of stale grep-pattern checks that were producing false negatives.
+  - `verify_simulation.sh` no longer attempts automatic Docker installation and now exits with explicit operator guidance when Docker is not preinstalled/running.
+- Backlog-governance outcome:
+  - Non-historical mixed docs were reclassified from open checkboxes to status-tagged guidance/roadmap entries (`FEATURE_WORKFLOW.md`, `AUDIT_QUICK_REFERENCE.md`, `FEATURE_PARITY.md`, `DRIFTNET_MESH_BLUEPRINT.md`, `docs/TRANSPORT_ARCHITECTURE.md`).
+  - `docs/TRANSPORT_ARCHITECTURE.md` future enhancements now include explicit owner/milestone/gate/acceptance metadata.
+- Post-update issue-slate evidence triage (live artifacts, no code edits):
+  - Android live watch (`/tmp/scm_android_live_watch.log`) captured `BluetoothGatt` callback exceptions during BLE fallback writes (`IllegalStateException: The number of released permits cannot be greater than 1` in `BleGattClient.releaseGattOp`), alongside mixed "write successful" callbacks for the same peer window.
+  - Android same window retained repeated `Core-routed delivery failed ... Network error` and `Relay-circuit retry failed ... Network error` with stalled `messagesRelayed=0`, reinforcing unresolved delivery convergence risk.
+  - iOS live watch (`/tmp/scm_ios_live_watch.log`) captured high-churn Multipeer sessions (`Connection attempt in progress` on many channels, followed by repeated `Timed out, enforcing clean up` and `Disconnected` transitions), consistent with local session instability symptoms observed during relay flapping runs.
+  - These findings were classified into "possibly in-flight" versus "likely still open" TODO buckets in `REMAINING_WORK_TRACKING.md` WS12.13 section for immediate post-update validation.
+
+### WS12.11 iOS Relay Flapping Diagnosis Snapshot (2026-03-03 HST, no code edits)
+
+- Live/runtime evidence reviewed:
+  - iOS diagnostics (`ios_diagnostics_latest.log`) show repeated relay rediscovery and repeated relay-circuit dial attempts to bootstrap endpoints (`34.135.34.73:9001` and `104.28.216.43:9010`) in short intervals.
+  - Same windows contain repeated `peer_identified` churn for relay agents, including headless relay identities reappearing multiple times per minute.
+  - Runtime logs include `dial_throttled` events interleaved with new dial attempts, indicating retry pressure rather than stable session hold.
+  - Prior GCP-side mesh logs (`logs/5mesh/gcp.log`) show disconnect/reconnect oscillation (`Lost relay peer ... scheduling reconnect with backoff`) for the same peers, consistent with cross-side instability rather than iOS-only UI artifact.
+- Diagnosis outcome (current confidence: medium-high):
+  - iOS "relay appears/disappears" behavior is reproducible and consistent with transport-session churn plus repeated identify/dial cycles.
+  - No direct crash evidence was found in this pass; primary symptom is flapping connection state and redundant relay rediscovery.
+  - Most likely contributors are state-churn/race interactions between repeated relay bootstrap priming and concurrent route-based connect attempts, amplified under unstable relay/session conditions.
+- No-code-change constraints honored:
+  - This run was documentation/diagnosis only; no source edits were applied to transport/runtime code.
+
+### WS12.12 Android<->iOS Pairing Message Non-Delivery RCA (2026-03-03 HST, no code edits)
+
+- Runtime evidence reviewed:
+  - Android device diagnostics (`run-as com.scmessenger.android ... files/mesh_diagnostics.log`) repeatedly show:
+    - `Core-routed delivery failed ... Network error; trying alternative transports`
+    - `Relay-circuit retry failed ... Network error`
+    - message state cycling `forwarding -> stored` with `awaiting_receipt_delay_sec=8` and rising retry attempts.
+  - In the same windows Android logs repeatedly emit `✓ Delivery via BLE (target=...)` immediately followed by `Failed to initiate characteristic write ...` while also emitting characteristic-write-success callbacks.
+  - Android stats remain effectively stalled for delivery (`messagesRelayed=0`) during these retries.
+  - iOS diagnostics history (`ios_diagnostics_latest.log`) and prior relay logs show heavy relay dial/identify churn and throttling, consistent with unstable internet-route availability during pairing runs.
+- RCA conclusion:
+  - Primary failure mode is end-to-end delivery confirmation failure, not pairing absence: devices discover each other, but routed sends fail over internet (`Network error`) and BLE fallback does not converge to recipient receipt.
+  - Most probable root-cause cluster is transport-state inconsistency in Android BLE send path under fallback load (conflicting write initiation/result signals) combined with relay route instability.
+  - Secondary contributing factor: legacy pending outbox items with very high retry counts keep retry pressure high, obscuring fresh-message behavior and increasing contention.
+- No-code-change constraints honored:
+  - This pass performed diagnosis and documentation only; no implementation edits were applied.
+
+### WS12.14 Android Bluetooth-Only Pairing Diagnosis (2026-03-03 HST, no code edits)
+
+- Runtime evidence reviewed:
+  - Android USB+ADB logcat during "Bluetooth-only" run showed sustained BLE stack churn for the iOS peer address with repeated `BluetoothRemoteDevices: Address type mismatch ... new type: 1`.
+  - In the same window, Android app telemetry dropped to `Mesh Stats: 0 peers (Core), 0 full, 0 headless (Repo)` and `NearbyMediums: No BLE Fast/GATT advertisements found in the latest cycle`.
+  - iOS logs during the same interval showed repeated Multipeer invitation timeouts/declines (`Invite timeout`, `Peer ... declined invitation`) and session resets.
+  - iOS multipeer connection attempts in these traces reported `transportType=WiFi` (`interfaceName=en0`) rather than an explicit BLE-only transport hold.
+- RCA conclusion (current confidence: high):
+  - The requested Android<->iOS Bluetooth-only path is not converging to a stable BLE data path in this run.
+  - Primary symptoms point to transport-path mismatch and BLE identity/address instability: Android repeatedly reclassifies peer address type while iOS multipeer flow repeatedly times out and appears to favor WiFi-backed session attempts.
+  - Resulting behavior is consistent with fallback churn rather than sustained BLE-only connectivity, so message exchange fails before reliable send/receipt convergence.
+- No-code-change constraints honored:
+  - This pass was diagnosis/documentation only; no transport implementation edits were made.
+
+### WS12.16 Wave-2 Runtime Hardening Pass (2026-03-03 HST)
+
+- Verification commands:
+  - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:compileDebugKotlin` — **pass**
+  - `bash ./iOS/verify-test.sh` — **pass**
+  - `cargo check --workspace` — **pass**
+- Fixes delivered:
+  - Android BLE callback/permit race hardening in `BleGattClient`:
+    - single-release permit guard for queued GATT operations,
+    - overflow-safe semaphore release handling,
+    - `WRITE_TYPE_NO_RESPONSE` callback path treated as informational to avoid contradictory final write outcomes.
+  - Android+iOS per-message `delivery_attempt` diagnostics timeline now emitted for local fallback, core direct route, relay-circuit retry, and aggregate terminal outcome with message ID context.
+  - iOS relay-flap visibility and guardrails in `MeshRepository`:
+    - relay dial debounce and bootstrap in-progress guard,
+    - relay availability state export (`stable`/`flapping`/`backoff`/`recovering`) with timestamps and event counters,
+    - relay timeline markers for identify/disconnect/dial attempt outcomes keyed to relay peer IDs.
+  - iOS Multipeer channel-storm guardrails in `MultipeerTransport`:
+    - invite debounce,
+    - in-flight invite dedupe,
+    - concurrent invite cap,
+    - timeout/decline diagnostics counters.
+- Remaining wave-2 live-evidence gates:
+  - Re-run synchronized Android+iOS+relay live probe and confirm reduced relay/multipeer churn plus receipt convergence for both send directions.
+  - Capture synchronized BLE-only and internet-degraded artifact bundles with message ID timeline continuity for residual-risk closure.
+
+### WS12.17 Wave-3 Governance + Runtime Closure Sweep (2026-03-03 HST)
+
+- Runtime/code updates applied:
+  - Android BLE address-type mismatch mitigation now includes reconnect cooldown/backoff and skip counters in `BleGattClient`.
+  - Android+iOS strict BLE-only validation mode and diagnostics export fields are active (`strict_ble_only_validation` markers).
+  - Android BLE discovery/client counters and iOS Multipeer diagnostics snapshot counters are exported for operator triage.
+- New deterministic harnesses added and executed:
+  - `./scripts/correlate_relay_flap_windows.sh ios_diagnostics_latest.log logs/5mesh/gcp.log` — classified sampled pair as `unsynchronized_artifacts_no_time_overlap`.
+  - `./scripts/verify_relay_flap_regression.sh ios_diagnostics_latest.log` — pass (no deterministic relay dial-loop regression for sampled artifact).
+  - `./scripts/verify_receipt_convergence.sh android_mesh_diagnostics_device.log ios_diagnostics_latest.log` — no message IDs in sampled historical artifacts.
+  - `./scripts/verify_ble_only_pairing.sh android_logcat_latest.txt ios_diagnostics_latest.log` — no strict BLE-only markers in sampled historical artifacts.
+- Validation commands:
+  - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:compileDebugKotlin` — **pass**
+  - `cd wasm && wasm-pack build` — **pass**
+- Documentation/backlog governance outcomes:
+  - Historical open-checkbox sources were triaged with explicit status tags in `docs/historical/*` and are no longer active checklist noise.
+  - `docs/ALPHA_RELEASE_AUDIT_V0.1.2.md` version-bump/redeploy steps were explicitly marked as historical closeout and superseded by v0.2.0 release-sync docs.
+  - Final checklist inventory after wave-3 triage: 10 open checklist items repo-wide, all in `REMAINING_WORK_TRACKING.md` (no historical open checkboxes remain).
+
 ### WS10 Verification Snapshot (2026-03-03)
 
 - `cargo test --workspace --no-run` — **pass**
@@ -191,8 +320,8 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 ### Browser/WASM Runtime Validation
 
 - `wasm-pack --version`
-  - Result: **not available** (`wasm-pack` not installed in this environment)
-  - Note: browser runtime tests were not executed here
+  - Result: **available** (`wasm-pack 0.14.0`)
+  - `cd wasm && wasm-pack build` — **pass**
 
 ## Implemented Functionality (Repository State)
 

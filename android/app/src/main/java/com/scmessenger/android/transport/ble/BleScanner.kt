@@ -14,6 +14,7 @@ import android.os.ParcelUuid
 import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Handles Bluetooth Low Energy scanning for mesh peers.
@@ -30,6 +31,12 @@ class BleScanner(
     private val onPeerDiscovered: (String) -> Unit,
     private val onDataReceived: (String, ByteArray) -> Unit
 ) {
+    data class BleDiscoveryStats(
+        val advertisementsSeen: Int,
+        val peersDiscovered: Int,
+        val scanFailures: Int,
+        val peerCacheSize: Int
+    )
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val bluetoothAdapter = bluetoothManager.adapter
@@ -47,6 +54,9 @@ class BleScanner(
     // Scan result caching to avoid duplicate processing
     private val recentlySeenPeers = ConcurrentHashMap<String, Long>()
     private val peerCacheTimeoutMs = 5000L  // 5 seconds
+    private val advertisementsSeen = AtomicInteger(0)
+    private val peersDiscoveredCount = AtomicInteger(0)
+    private val scanFailures = AtomicInteger(0)
 
     // SCMessenger Service UUID: 0xDF01
     // Full UUID: 0000DF01-0000-1000-8000-00805F9B34FB
@@ -69,6 +79,7 @@ class BleScanner(
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             result?.let { scanResult ->
+                advertisementsSeen.incrementAndGet()
                 val device = scanResult.device
                 val peerId = device.address
 
@@ -82,6 +93,7 @@ class BleScanner(
 
                 // Update cache
                 recentlySeenPeers[peerId] = now
+                peersDiscoveredCount.incrementAndGet()
 
                 // Prune old entries
                 pruneOldPeers(now)
@@ -108,6 +120,7 @@ class BleScanner(
 
         override fun onScanFailed(errorCode: Int) {
             Timber.e("BLE Scan failed with error code: $errorCode")
+            scanFailures.incrementAndGet()
             isScanning = false
         }
     }
@@ -299,6 +312,15 @@ class BleScanner(
     fun clearPeerCache() {
         recentlySeenPeers.clear()
         Timber.d("Peer cache cleared")
+    }
+
+    fun getDiscoveryStats(): BleDiscoveryStats {
+        return BleDiscoveryStats(
+            advertisementsSeen = advertisementsSeen.get(),
+            peersDiscovered = peersDiscoveredCount.get(),
+            scanFailures = scanFailures.get(),
+            peerCacheSize = recentlySeenPeers.size
+        )
     }
 
     /**

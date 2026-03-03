@@ -7,20 +7,43 @@
 # BLE discovery between Android ↔ iOS Device are logged at V level.
 #
 # Usage: ./run5.sh
-set -uo pipefail
+set -euo pipefail
 
 LOGDIR="logs/5mesh"
 mkdir -p "$LOGDIR"
 
-APPLE_TEAM_ID=$(security find-identity -v -p codesigning 2>/dev/null | grep -oE '[A-Z0-9]{10}' | head -1)
-IOS_DEVICE_UDID="00008130-001A48DA18EB8D3A"
-IOS_SIM_UDID="F7AAF4C8-8431-4660-93FE-6E54C559C6B9"
+APPLE_TEAM_ID=$(security find-identity -v -p codesigning 2>/dev/null | grep -oE '[A-Z0-9]{10}' | head -1 || true)
+IOS_DEVICE_UDID="${IOS_DEVICE_UDID:-$(xcrun devicectl list devices 2>/dev/null | awk '/ connected / {print $3; exit}')}"
+IOS_SIM_UDID="${IOS_SIM_UDID:-$(xcrun simctl list devices | awk -F '[()]' '/Booted/ {print $2; exit}')}"
 BUNDLE_ID="SovereignCommunications.SCMessenger"
 TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
+
+if [ -z "${IOS_DEVICE_UDID:-}" ]; then
+  echo "❌ No connected iOS physical device found (devicectl)."
+  exit 1
+fi
+
+if [ -z "${IOS_SIM_UDID:-}" ]; then
+  DEFAULT_SIM=$(xcrun simctl list devices available | awk -F '[()]' '/iPhone 16e/ {print $2; exit}')
+  if [ -n "${DEFAULT_SIM:-}" ]; then
+    xcrun simctl boot "$DEFAULT_SIM" >/dev/null 2>&1 || true
+    IOS_SIM_UDID="$DEFAULT_SIM"
+  else
+    IOS_SIM_UDID=$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ {print $2; exit}')
+    [ -n "${IOS_SIM_UDID:-}" ] && xcrun simctl boot "$IOS_SIM_UDID" >/dev/null 2>&1 || true
+  fi
+fi
+
+if ! adb get-state >/dev/null 2>&1; then
+  echo "❌ Android device not attached/authorized for adb."
+  exit 1
+fi
 
 echo "========================================"
 echo "  SCMessenger 5-Node Mesh Test — $TIMESTAMP"
 echo "  Android: CELLULAR (NAT traversal test)"
+echo "  iOS Device: ${IOS_DEVICE_UDID}"
+echo "  iOS Sim: ${IOS_SIM_UDID:-none}"
 echo "  Logs → $LOGDIR/"
 echo "========================================"
 echo ""
@@ -28,7 +51,7 @@ echo ""
 # ── 1. GCP headless relay ─────────────────────────────────────────────────────
 echo "1. Streaming GCP relay logs..."
 gcloud compute ssh scmessenger-bootstrap --zone=us-central1-a \
-  --command="sudo docker logs -f \$(sudo docker ps -q) 2>&1" \
+  --command="CID=\$(sudo docker ps -q | head -n1); if [ -n \"\$CID\" ]; then sudo docker logs -f \"\$CID\" 2>&1; else echo 'No running container found on scmessenger-bootstrap'; fi" \
   > "$LOGDIR/gcp.log" 2>&1 &
 GCP_PID=$!
 echo "   GCP PID=$GCP_PID → $LOGDIR/gcp.log"
@@ -86,14 +109,19 @@ else
   echo "   ⚠️  No built device app found — launching existing install (may be stale)"
 fi
 
-xcrun devicectl device process launch \
-  --device "$IOS_DEVICE_UDID" \
-  --console \
-  --terminate-existing \
-  "$BUNDLE_ID" \
-  > "$LOGDIR/ios-device.log" 2>&1 &
-IOS_DEV_PID=$!
-echo "   iOS Dev PID=$IOS_DEV_PID → $LOGDIR/ios-device.log"
+if [ -n "${IOS_DEVICE_UDID:-}" ]; then
+  xcrun devicectl device process launch \
+    --device "$IOS_DEVICE_UDID" \
+    --console \
+    --terminate-existing \
+    "$BUNDLE_ID" \
+    > "$LOGDIR/ios-device.log" 2>&1 &
+  IOS_DEV_PID=$!
+  echo "   iOS Dev PID=$IOS_DEV_PID → $LOGDIR/ios-device.log"
+else
+  IOS_DEV_PID=""
+  echo "   ⚠️  Skipping iOS device launch: no device UDID"
+fi
 
 # ── 5. iOS Simulator ──────────────────────────────────────────────────────────
 echo "5. Installing + launching SCMessenger on iOS Simulator..."
@@ -106,15 +134,20 @@ if [ -n "$IOS_SIM_APP" ]; then
   xcrun simctl install "$IOS_SIM_UDID" "$IOS_SIM_APP" 2>&1 || true
 fi
 
-xcrun simctl launch "$IOS_SIM_UDID" "$BUNDLE_ID" > /dev/null 2>&1 || true
-# Stream logs: info+ from SCMessenger process; captures NSLog + os_log
-xcrun simctl spawn "$IOS_SIM_UDID" log stream \
-  --level info \
-  --style compact \
-  --predicate 'process == "SCMessenger"' \
-  > "$LOGDIR/ios-sim.log" 2>&1 &
-IOS_SIM_PID=$!
-echo "   iOS Sim PID=$IOS_SIM_PID → $LOGDIR/ios-sim.log"
+if [ -n "${IOS_SIM_UDID:-}" ]; then
+  xcrun simctl launch "$IOS_SIM_UDID" "$BUNDLE_ID" > /dev/null 2>&1 || true
+  # Stream logs: info+ from SCMessenger process; captures NSLog + os_log
+  xcrun simctl spawn "$IOS_SIM_UDID" log stream \
+    --level info \
+    --style compact \
+    --predicate 'process == "SCMessenger"' \
+    > "$LOGDIR/ios-sim.log" 2>&1 &
+  IOS_SIM_PID=$!
+  echo "   iOS Sim PID=$IOS_SIM_PID → $LOGDIR/ios-sim.log"
+else
+  IOS_SIM_PID=""
+  echo "   ⚠️  Skipping iOS simulator launch: no simulator UDID"
+fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""

@@ -1470,10 +1470,10 @@ MCP servers wrap the Rust core via UniFFI bindings, exposing mesh operations as 
 - [x] OPFS-backed message store
 
 ### [Needs Revalidation] Remaining Work
-- [ ] Wire IronCore (crypto/storage) to SwarmHandle (network) via CLI
-- [ ] MCP servers (mesh-node, mesh-bridge, mesh-monitor)
-- [ ] Dedicated hardware relay (ESP32/RPi)
-- [ ] Full integration testing across all transports
+- [Planned] Wire IronCore (crypto/storage) to SwarmHandle (network) via CLI
+- [Planned] MCP servers (mesh-node, mesh-bridge, mesh-monitor)
+- [Planned] Dedicated hardware relay (ESP32/RPi)
+- [Planned] Full integration testing across all transports
 
 ---
 

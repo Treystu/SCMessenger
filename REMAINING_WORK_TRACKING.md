@@ -225,16 +225,199 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
 3. [x] Android: apply local uptime fallback when Core stats report `uptimeSecs=0` while service is running.
 4. [x] Re-validate live delivery behavior after GCP relay rollout fully replaces `scmessenger/0.1.0/headless/relay/*` nodes still observed in active logs.
    - Outcome (2026-03-02 HST): live CLI runtime probe confirmed relay identity rotation on `34.135.34.73:9001` (`12D3KooWET...` -> `12D3KooWJa...`); post-rotation delivery path still requires follow-up due reservation/custody regression signals.
-5. [ ] Investigate operational handling for long-lived historical pending outbox entries (high-attempt legacy items) without violating no-give-up retry policy.
-6. [ ] Triage iOS simulator startup runtime-issue warnings (`NSFileManager createDirectory*` main-thread I/O) and confirm whether they reflect app codepaths vs simulator-only diagnostics noise.
+5. [x] Investigate operational handling for long-lived historical pending outbox entries (high-attempt legacy items) without violating no-give-up retry policy.
+   - Outcome (2026-03-03 HST): Added explicit operator runbook guidance for legacy pending-outbox triage in `docs/RELAY_OPERATOR_GUIDE.md` without introducing retry exhaustion semantics.
+6. [x] Triage iOS simulator startup runtime-issue warnings (`NSFileManager createDirectory*` main-thread I/O) and confirm whether they reflect app codepaths vs simulator-only diagnostics noise.
+   - Outcome (2026-03-03 HST): Confirmed app-side startup path was invoking `FileManager.createDirectory` on `@MainActor` in `MeshRepository.init()`. Hotfix moved diagnostics file persistence to background I/O queue and removed main-thread storage directory creation.
 
 ### WS12.8 Runtime Recheck Follow-ups (2026-03-02 HST)
 
 1. [x] iOS: fix dashboard node-count inflation where discovered metrics were correct but node totals were overstated by stale/alias peer entries.
    - Outcome (2026-03-03): `MeshDashboardView` now computes full/headless totals from online-only deduplicated peers and performs stronger alias collapse across canonical/libp2p/BLE/public-key identifiers.
-2. [ ] Restore Android live-log visibility by re-establishing wireless ADB endpoint (`adb devices`/`adb mdns services` were empty during this pass).
-3. [ ] Investigate relay-circuit reservation failure post-redeploy using new debug error detail emitted from `core/src/transport/swarm.rs`.
-4. [ ] Resolve failing live custody integration gate: `cargo test -p scmessenger-core --test integration_relay_custody -- --include-ignored` (timeout waiting for reconnect delivery).
+2. [x] Restore Android live-log visibility by re-establishing wireless ADB endpoint (`adb devices`/`adb mdns services` were empty during this pass).
+   - Outcome (2026-03-03 HST): Wireless endpoint was restored and Android runtime logs were captured (including active `scmessenger/0.2.0/headless/relay/*` agent observations). Endpoint later dropped again after daemon restart; persistence follow-up remains open below.
+3. [x] Investigate relay-circuit reservation failure post-redeploy using new debug error detail emitted from `core/src/transport/swarm.rs`.
+   - Outcome (2026-03-03 HST): Fresh CLI runtime probe did not reproduce `Could not register relay circuit reservation`; relay reservation failure signal is not currently reproducible in this environment.
+4. [x] Resolve failing live custody integration gate: `cargo test -p scmessenger-core --test integration_relay_custody -- --include-ignored` (timeout waiting for reconnect delivery).
+   - Outcome (2026-03-03 HST): `ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./scripts/verify_ws12_matrix.sh` now passes, and `integration_relay_custody` passed 3/3 consecutive reruns (stable-pass classification).
+5. [ ] Stabilize Android wireless ADB endpoint persistence across reconnect cycles (`adb devices` may drop back to empty after daemon restart despite prior successful discovery).
+
+### WS12.10 Repo-Wide Action Roundup (2026-03-03 HST)
+
+Inventory from repo-wide checklist scan (`rg -P "^\s*(?:[-*]|\d+\.)\s+\[ \]" --glob "*.md"`):
+
+1. Open markdown checklist items repo-wide: **84**
+2. Active canonical open checklist items: **31** (WS12.8/WS12.11/WS12.12/WS12.13/WS12.14/WS12.15)
+3. Deferred residual risks requiring explicit carry-forward:
+   - `R-WS10-02` (peer-identity rotation vs per-peer token buckets)
+4. Non-historical open checklist sources (execution truth):
+   - `REMAINING_WORK_TRACKING.md` (31)
+5. Historical open checklist sources (context only, not canonical execution truth):
+   - `docs/historical/iOS/FINAL_STATUS.md` (21)
+   - `docs/historical/iOS/PHASE4_IMPLEMENTATION.md` (14)
+   - `docs/historical/REMEDIATION_PLAN.md` (14)
+   - `docs/historical/iOS/PHASES_4-15_GUIDE.md` (2)
+   - `docs/historical/APP_VERSION_0.1.2_ALPHA_PLAN.md` (2)
+6. Planned v0.2.1 queues (explicitly outside v0.2.0 closeout):
+   - WS13 decomposition in `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md`
+   - WS14 decomposition in `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`
+
+### WS12.11 iOS Relay Flapping Follow-ups (2026-03-03 HST, implementation + follow-up)
+
+1. [x] Add iOS-side relay connection state timeline instrumentation keyed by canonical relay peer ID (connect, disconnect, identify, reservation attempt/result) to prove whether duplicate `peer_identified` events are from distinct sessions or repeated callbacks on one session.
+   - Outcome (2026-03-03 HST): Added relay timeline diagnostics in `MeshRepository` for identify/disconnect/dial-allowed/dial-debounced/dial-attempt/dial-started/dial-failed keyed to extracted relay peer IDs.
+2. [x] Add guardrails to prevent overlapping relay bootstrap priming and route-triggered connect attempts for the same relay within a short debounce window.
+   - Outcome (2026-03-03 HST): Added bootstrap in-progress gate plus relay-peer dial debounce in `primeRelayBootstrapConnections()` and `connectToPeer(...)`.
+3. [x] Add explicit "relay availability state machine" metrics in iOS diagnostics export (`stable`, `flapping`, `backoff`, `recovering`) for operator-visible triage.
+   - Outcome (2026-03-03 HST): `exportDiagnostics()` now emits relay availability state fields (`relay_availability_state`, `relay_recent_events_60s`, `relay_backoff_until_ms`, and related timestamps).
+4. [x] Correlate iOS relay flapping windows against GCP relay/server logs in the same UTC intervals to separate client race behavior from remote relay churn.
+   - Outcome (2026-03-03 HST): Added `scripts/correlate_relay_flap_windows.sh` and executed artifact correlation (`ios_diagnostics_latest.log` vs `logs/5mesh/gcp.log`), classifying the sampled pair as `unsynchronized_artifacts_no_time_overlap`.
+5. [x] Add regression coverage (integration or deterministic harness) that fails when repeated identify/dial loops occur without sustained connected hold time.
+   - Outcome (2026-03-03 HST): Added `scripts/verify_relay_flap_regression.sh` deterministic harness; run on current iOS diagnostics artifact completed with pass summary and explicit relay dial-loop counters.
+6. [ ] Re-run dual-device live probe (Android + iOS + CLI/GCP) with synchronized timestamps and capture one full flap cycle artifact bundle for post-fix comparison.
+
+### WS12.12 Android<->iOS Pairing Non-Delivery Follow-ups (2026-03-03 HST, implementation + follow-up)
+
+1. [x] Add Android BLE send-path consistency guardrails so a single payload cannot concurrently report both write-init failure and write success without a deterministic final outcome state.
+   - Outcome (2026-03-03 HST): `BleGattClient` now guards GATT queue permit ownership with atomic tracking, hardens callback/release races, and treats `WRITE_TYPE_NO_RESPONSE` callbacks as informational-only to prevent contradictory final outcomes.
+2. [x] Add explicit per-message transport-attempt timeline diagnostics (`core`, `relay-circuit`, `BLE`) with final attempt verdict to isolate where receipt convergence breaks.
+   - Outcome (2026-03-03 HST): Android+iOS `MeshRepository` now emit structured `delivery_attempt` markers for local fallback/core/relay retry paths with message ID + context (`initial_send`, `outbox_retry`).
+3. [x] Add a focused integration test for Android fallback behavior: when internet route fails and BLE fallback fires, require deterministic recipient receipt or deterministic terminal-failure signal.
+   - Outcome (2026-03-03 HST): Added Android unit test `ble-only fallback path emits deterministic terminal failure when BLE send fails` in `MeshRepositoryTest`, plus iOS local transport test `testBleOnlyTerminalFailureSignal`.
+4. [x] Add temporary operator/tester playbook step to clear or quarantine extreme legacy pending-outbox entries before pairing validation runs so fresh-message behavior is observable.
+   - Outcome (2026-03-03 HST): Added "Legacy Pending Outbox Triage (No-Give-Up Safe)" operator workflow to `docs/RELAY_OPERATOR_GUIDE.md` with concrete Android/iOS inspection commands.
+5. [ ] Capture synchronized tri-platform traces (Android logcat + iOS diagnostics + relay log window) for one failed message ID from send initiation through retry cycle.
+6. [ ] Verify iOS-side receipt/ack emission path during Android BLE fallback attempts to confirm whether recipient ingest succeeds but ack path fails, or ingest fails entirely.
+
+### WS12.13 Wave-2 Backlog Consolidation (2026-03-03 HST)
+
+1. Non-historical mixed-doc checklists were normalized to status-tagged guidance/roadmap entries (no open checkbox ambiguity):
+   - `FEATURE_WORKFLOW.md`
+   - `AUDIT_QUICK_REFERENCE.md`
+   - `FEATURE_PARITY.md`
+   - `DRIFTNET_MESH_BLUEPRINT.md`
+   - `docs/TRANSPORT_ARCHITECTURE.md`
+2. `docs/TRANSPORT_ARCHITECTURE.md` future enhancements were migrated to explicit roadmap lines with status, owner, milestone, gate command, and acceptance criteria.
+3. Validation/debt reconciliation executed:
+   - `cargo check --workspace` — pass
+   - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:generateUniFFIBindings` — pass
+   - `bash iOS/copy-bindings.sh` — pass
+   - `ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk bash ./verify_integration.sh` — pass (now delegates to canonical WS12 matrix)
+   - `bash ./verify_simulation.sh` — fail-fast as designed when Docker is unavailable (no auto-install side effects)
+   - `cd wasm && wasm-pack build` — pass (after installing `wasm-pack` and disabling release `wasm-opt` in `wasm/Cargo.toml` for host compatibility)
+4. Script hygiene updates:
+   - `verify_integration.sh` converted from stale grep-based checks to canonical `scripts/verify_ws12_matrix.sh` execution.
+   - `verify_simulation.sh` now requires preinstalled/running Docker and exits with explicit operator instructions instead of attempting automatic system installs.
+5. Repo-wide checklist inventory after wave-2 normalization:
+   - Open markdown checkboxes repo-wide: **71**
+   - Active canonical open checkboxes: **18**
+   - Historical open checkboxes: **53** (all under `docs/historical/*`)
+6. Residual-risk carry-forward:
+   - `R-WS10-02` remains `Deferred`.
+7. Post-update issue slate (based on live watch artifacts from 2026-03-02/03):
+   - [Tracked Live Gate] Relay session stability under active pairing run: verify iOS no longer oscillates through rapid connect/timeout/disconnect cycles in Multipeer + relay coexistence windows.
+   - [Tracked Live Gate] Android internet route resilience in pairing runs: verify `Core-routed delivery failed` / `Relay-circuit retry failed` rates materially drop and `messagesRelayed` progresses.
+   - Likely still remaining TODO unless explicitly fixed in this update:
+     - [x] Android BLE GATT operation-state race: eliminate `IllegalStateException: The number of released permits cannot be greater than 1` in `BleGattClient.releaseGattOp` during callback races.
+       - Outcome (2026-03-03 HST): `BleGattClient` now enforces single-release semantics per queued op using atomic permit-held state and overflow-safe release handling.
+     - [x] Android BLE stack mismatch noise triage: investigate repetitive `BluetoothRemoteDevices Address type mismatch` flood and determine whether app-level dedupe/throttle or transport-state correction is required.
+       - Outcome (2026-03-03 HST): Added address-type mismatch mitigation in `BleGattClient` (`ADDRESS_TYPE_MISMATCH_BACKOFF_MS`) with connect-throttle + stats counter (`addressTypeMismatchConnectSkips`) to prevent repeated immediate reconnect churn for the same peer address.
+     - [x] iOS Multipeer channel storm guardrails: bound concurrent channel attempts and enforce deterministic cleanup to prevent repeated `Timed out, enforcing clean up` cascades under reconnect pressure.
+       - Outcome (2026-03-03 HST): Added invite debounce, in-flight gating, concurrent-invite cap, and timeout/decline diagnostics counters in `MultipeerTransport`.
+     - [x] End-to-end receipt convergence assertion: add one deterministic cross-platform test/runbook step proving recipient ingest + receipt emit for Android->iOS and iOS->Android when internet route degrades and BLE fallback activates.
+       - Outcome (2026-03-03 HST): Added deterministic operator runbook in `docs/RELAY_OPERATOR_GUIDE.md` ("Cross-Platform Receipt Convergence Assertion").
+
+### WS12.14 Android Bluetooth-Only Pairing Follow-ups (2026-03-03 HST, implementation + follow-up)
+
+1. [x] Add a strict "BLE-only validation mode" for mobile test runs that hard-disables internet/relay route usage and emits a fail-fast diagnostic marker when non-BLE paths (for example WiFi-backed multipeer sessions) are used.
+   - Outcome (2026-03-03 HST): Implemented `SC_BLE_ONLY_VALIDATION` gating in Android+iOS `MeshRepository`; non-BLE route usage is explicitly blocked and logged via deterministic `delivery_attempt ... reason=strict_ble_only_mode` markers.
+2. [x] Harden Android BLE peer address-type handling for iOS peers; investigate and resolve repeated `Address type mismatch` churn so one canonical address-type mapping is retained per session.
+   - Outcome (2026-03-03 HST): Added mismatch detection counter + per-address cooldown backoff to suppress reconnect hammering after address-type mismatch events in `BleGattClient`.
+3. [x] Add Android BLE discovery-health counters (advertisements seen, GATT connects attempted/succeeded, address-type transitions) to diagnostics export and Mesh stats.
+   - Outcome (2026-03-03 HST): Added `BleScanner` discovery stats and `BleGattClient` connect/mismatch counters, merged into Android diagnostics export (`ble_discovery`, `ble_client`, `strict_ble_only_validation`).
+4. [x] Add iOS diagnostics marker for effective Multipeer transport medium per session (BLE/AWDL/WiFi) and include invitation timeout/decline reason counts.
+   - Outcome (2026-03-03 HST): Added `MultipeerTransport.diagnosticsSnapshot()` and export fields in iOS diagnostics (`multipeer_effective_medium_estimate`, `multipeer_invite_timeout_count`, `multipeer_invite_decline_count`, `strict_ble_only_validation`).
+5. [x] Add deterministic integration harness for Android<->iOS Bluetooth-only pairing/send/ack flow that fails on repeated invite timeout loops or zero-advertisement windows.
+   - Outcome (2026-03-03 HST): Added `scripts/verify_ble_only_pairing.sh` and `scripts/verify_receipt_convergence.sh` harnesses for strict BLE-only marker validation and message ID receipt-convergence checks.
+6. [ ] Capture synchronized BLE-only artifact bundle (Android logcat + iOS logs + one message ID timeline) after fixes and compare against WS12.14 baseline before closing risk.
+
+### WS12.15 Wave-2 Continuation Plan Intake (2026-03-03 HST)
+
+1. [x] Fix CLI reconnect-ledger panic under long failure streaks (`attempt to multiply with overflow` in `cli/src/ledger.rs`).
+   - Outcome (2026-03-03 HST): backoff math now uses saturating arithmetic and clamped exponent; added regression test `test_ledger_entry_backoff_overflow_safety`; `cargo test -p scmessenger-cli ledger` and `cargo check -p scmessenger-cli` both pass.
+2. [x] Install `wasm-pack` on the active dev host and rerun `cd wasm && wasm-pack build` to clear remaining local validation-debt blocker.
+   - Outcome (2026-03-03 HST): Installed `wasm-pack 0.14.0`, added `wasm-opt = false` release-profile metadata in `wasm/Cargo.toml` for this host target, and re-ran `cd wasm && wasm-pack build` successfully.
+3. [ ] Provision Docker runtime on the active dev host and rerun `bash ./verify_simulation.sh` to convert fail-fast prerequisite guidance into executed simulation evidence.
+4. [ ] Execute live network matrix validation (GCP + direct P2P + relay fallback, Android+iOS) and store artifact bundle pointer in canonical docs.
+5. [ ] Execute ACK-safe path switching validation (mid-send route switch, no duplicate/loss, sender receipt convergence) and record evidence.
+6. [ ] Execute app-update + reinstall continuity validation on real Android+iOS devices and record identity/contact/history continuity evidence.
+7. [ ] Capture iOS power settings runtime evidence on a real iPhone for beta-gate carry-forward and link artifacts.
+8. [x] Resolve historical carry-forward decision from `docs/ALPHA_RELEASE_AUDIT_V0.1.2.md`: explicitly mark v0.1.2 version-bump/redeploy tasks as either superseded by v0.2.0 release-sync docs or carried into a dedicated historical closeout note.
+   - Outcome (2026-03-03 HST): Updated `docs/ALPHA_RELEASE_AUDIT_V0.1.2.md` with explicit historical closeout status and canonical v0.2.0 release-sync pointers.
+
+### WS12.16 Wave-2 Runtime Hardening Closure (2026-03-03 HST)
+
+1. Implemented in this pass:
+   - Android BLE GATT permit/callback race hardening (`BleGattClient`).
+   - Android+iOS per-message `delivery_attempt` timeline diagnostics.
+   - iOS relay timeline instrumentation + debounce/availability-state export.
+   - iOS Multipeer invitation storm guardrails + timeout/decline diagnostics counters.
+2. Verification commands:
+   - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:compileDebugKotlin` — pass.
+   - `bash ./iOS/verify-test.sh` — pass.
+   - `cargo check --workspace` — pass.
+3. Updated checklist inventory after WS12.16:
+   - Open markdown checkboxes repo-wide: **76**
+   - Active canonical open checkboxes: **23**
+   - Historical open checkboxes: **53**
+   - Note: this snapshot is superseded by WS12.17 final-wave inventory below.
+4. Highest-priority remaining wave-2 actions (post-implementation evidence gates):
+   - Re-run synchronized Android+iOS+GCP live probe and verify reduced relay/multipeer churn with receipt convergence in both directions.
+   - Capture synchronized BLE-only and internet-degraded artifact bundle with one message ID end-to-end timeline for residual-risk closure.
+   - Provision Docker runtime and rerun `bash ./verify_simulation.sh` to clear the final local validation-debt blocker.
+
+### WS12.17 Wave-3 Governance Closure (2026-03-03 HST)
+
+1. Historical checklist triage completed:
+   - `docs/historical/APP_VERSION_0.1.2_ALPHA_PLAN.md`
+   - `docs/historical/REMEDIATION_PLAN.md`
+   - `docs/historical/iOS/PHASE4_IMPLEMENTATION.md`
+   - `docs/historical/iOS/PHASES_4-15_GUIDE.md`
+   - `docs/historical/iOS/FINAL_STATUS.md`
+   - All open checkboxes in these historical files were converted to explicit historical status tags (`Historical - Superseded`, `Historical - Re-scoped`, `Historical - Carry-forward`).
+2. Added deterministic runtime-harness set for active follow-ups:
+   - `scripts/correlate_relay_flap_windows.sh`
+   - `scripts/verify_relay_flap_regression.sh`
+   - `scripts/verify_receipt_convergence.sh`
+   - `scripts/verify_ble_only_pairing.sh`
+3. Normalized future execution queue (v0.2.1+ planning scope, non-blocking for v0.2.0 closeout):
+   - `WS13.1` Identity metadata persistence — Owner: Core + Mobile Bridge — Gate: identity persistence + migration test suite.
+   - `WS13.2` Contact/request schema updates — Owner: Core Data + Mobile/WASM adapters — Gate: schema migration + parity adapter tests.
+   - `WS13.3` Registration protocol/signature verification — Owner: Core Transport — Gate: protocol signature validation integration tests.
+   - `WS13.4` Relay registry/custody enforcement — Owner: Core Transport + Relay Ops — Gate: custody routing + registry state-machine tests.
+   - `WS13.5` Handover/abandon queue migration + UX — Owner: Core + Android+iOS clients — Gate: queue migration and user-facing rejection-path tests.
+   - `WS13.6` Compatibility/migration matrix — Owner: Cross-platform QA — Gate: upgrade/migration matrix and manual runbook evidence.
+   - `WS14.1` Notification policy model — Owner: Core + Bindings — Gate: classifier/unit tests + UDL/WASM API parity checks.
+   - `WS14.2` iOS notification completion — Owner: iOS — Gate: DM/DM-request routing integration tests.
+   - `WS14.3` Android notification completion — Owner: Android — Gate: channel/action parity tests + foreground suppression checks.
+   - `WS14.4` WASM notification wiring — Owner: Web/WASM — Gate: browser worker notification flow tests.
+   - `WS14.5` Hybrid endpoint interface prep — Owner: Core + Adapter surfaces — Gate: endpoint registration persistence/validation tests.
+   - `WS14.6` Verification + docs gate — Owner: Cross-platform QA + Docs — Gate: parity matrix pass + residual-risk sync.
+4. Final inventory after wave-3 triage (`rg -P "^\s*(?:[-*]|\d+\.)\s+\[ \]" --glob "*.md"`):
+   - Open markdown checklist items repo-wide: **10**
+   - Active canonical open checklist items: **10** (`REMAINING_WORK_TRACKING.md` only)
+   - Historical open checklist items: **0**
+5. Remaining action items (repo-wide, exhaustive active list):
+   - WS12.8.5: stabilize Android wireless ADB endpoint persistence across daemon reconnect cycles.
+   - WS12.11.6: run synchronized dual-device live probe and capture full flap-cycle bundle.
+   - WS12.12.5: capture synchronized tri-platform traces for one failed message ID.
+   - WS12.12.6: verify iOS receipt/ack emission path during Android BLE fallback attempts.
+   - WS12.14.6: capture synchronized BLE-only artifact bundle and compare against baseline.
+   - WS12.15.3: provision Docker runtime and rerun `verify_simulation.sh`.
+   - WS12.15.4: execute live network matrix validation (GCP + direct + relay fallback).
+   - WS12.15.5: execute ACK-safe path switching validation and record evidence.
+   - WS12.15.6: execute app-update + reinstall continuity validation on real Android+iOS devices.
+   - WS12.15.7: capture iOS power settings runtime evidence on real iPhone.
 
 ## Priority 1: Tooling, CI, and Experimental Surface
 

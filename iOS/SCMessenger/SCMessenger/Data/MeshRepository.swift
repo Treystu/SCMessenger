@@ -45,6 +45,7 @@ final class MeshRepository {
     private let logger = Logger(subsystem: "com.scmessenger", category: "Repository")
     private let storagePath: String
     private let diagnosticsLogFileName = "mesh_diagnostics.log"
+    private let diagnosticsIOQueue = DispatchQueue(label: "com.scmessenger.diagnostics.io", qos: .utility)
     private var diagnosticsBuffer: [String] = []
     private let diagnosticsMaxLines = 1000
     private var heartbeatTimer: Timer?
@@ -72,6 +73,13 @@ final class MeshRepository {
         )
         return BootstrapResolver(config: config).resolve()
     }()
+
+    private static func isEnabledFlag(_ raw: String?) -> Bool {
+        guard let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() else {
+            return false
+        }
+        return value == "1" || value == "true" || value == "yes" || value == "on"
+    }
 
     private static let bootstrapRelayPeerIds: Set<String> = Set(
         defaultBootstrapNodes.compactMap { parseBootstrapRelay(from: $0)?.relayPeerId }
@@ -101,9 +109,25 @@ final class MeshRepository {
     private var pendingOutboxRetryTask: Task<Void, Never>?
     private var coverTrafficTask: Task<Void, Never>?
     private var lastRelayBootstrapDialAt: Date = .distantPast
+    private var relayBootstrapDialInProgress = false
     private var dialThrottleState: [String: (attempts: Int, nextAllowedAt: Date)] = [:]
+    private var relayDialDebounceState: [String: Date] = [:]
+    private let relayDialDebounceInterval: TimeInterval = 2.5
     private let receiptAwaitSeconds: UInt64 = 8
     private var identitySyncSentPeers: Set<String> = []
+
+    private enum RelayAvailabilityState: String {
+        case stable
+        case flapping
+        case backoff
+        case recovering
+    }
+    private var relayAvailabilityState: RelayAvailabilityState = .stable
+    private var relayAvailabilityUpdatedAt: Date = .distantPast
+    private var relayRecentEventTimes: [Date] = []
+    private var relayLastDisconnectAt: Date?
+    private var relayBackoffUntil: Date = .distantPast
+    private let strictBleOnlyValidation = MeshRepository.isEnabledFlag(ProcessInfo.processInfo.environment["SC_BLE_ONLY_VALIDATION"])
 
     private var pendingOutboxURL: URL {
         URL(fileURLWithPath: storagePath).appendingPathComponent("pending_outbox.json")
@@ -294,9 +318,9 @@ final class MeshRepository {
         }
 
         logger.info("MeshRepository initialized with storage: \(self.storagePath)")
-
-        // Create storage directory if needed
-        try? FileManager.default.createDirectory(at: meshPath, withIntermediateDirectories: true)
+        if strictBleOnlyValidation {
+            logger.warning("Strict BLE-only validation mode is enabled (SC_BLE_ONLY_VALIDATION)")
+        }
 
         // Do NOT exclude the entire mesh directory from backup.
         // history.db and contacts.db must survive app reinstalls via iCloud/device backup.
@@ -865,7 +889,9 @@ final class MeshRepository {
             addresses: routing.listeners,
             envelopeData: envelopeData,
             multipeerPeerId: multipeerPeerId,
-            blePeerId: routing.blePeerId
+            blePeerId: routing.blePeerId,
+            traceMessageId: messageId,
+            attemptContext: "initial_send"
         )
         let selectedRoutePeerId = delivery.routePeerId ?? preferredRoutePeerId
 
@@ -1877,19 +1903,56 @@ final class MeshRepository {
     }
 
     func exportDiagnostics() -> String {
+        let multipeerStats = multipeerTransport?.diagnosticsSnapshot()
         if let diagnostics = meshService?.exportDiagnostics(),
            !diagnostics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let data = diagnostics.data(using: .utf8),
+               var object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+                object["relay_availability_state"] = relayAvailabilityState.rawValue
+                object["relay_availability_updated_at_ms"] = Int(relayAvailabilityUpdatedAt.timeIntervalSince1970 * 1000)
+                object["relay_recent_events_60s"] = relayRecentEventTimes.count
+                if let relayLastDisconnectAt {
+                    object["relay_last_disconnect_at_ms"] = Int(relayLastDisconnectAt.timeIntervalSince1970 * 1000)
+                }
+                object["relay_backoff_until_ms"] = Int(relayBackoffUntil.timeIntervalSince1970 * 1000)
+                object["strict_ble_only_validation"] = strictBleOnlyValidation
+                if let multipeerStats {
+                    object["multipeer_connected_peers"] = multipeerStats.connectedPeers
+                    object["multipeer_connecting_peers"] = multipeerStats.connectingPeers
+                    object["multipeer_invites_in_flight"] = multipeerStats.inviteInFlight
+                    object["multipeer_invite_timeouts"] = multipeerStats.inviteTimeoutCount
+                    object["multipeer_invite_declines"] = multipeerStats.inviteDeclineCount
+                    object["multipeer_effective_medium_estimate"] = multipeerStats.effectiveMediumEstimate
+                }
+                if let mergedData = try? JSONSerialization.data(withJSONObject: object),
+                   let merged = String(data: mergedData, encoding: .utf8) {
+                    return merged
+                }
+            }
             return diagnostics
         }
 
-        let fallback: [String: Any] = [
+        var fallback: [String: Any] = [
             "service_state": String(describing: serviceState),
             "connection_path_state": String(describing: getConnectionPathState()),
             "nat_status": getNatStatus(),
             "discovered_peers": discoveredPeerMap.count,
             "pending_outbox": loadPendingOutbox().count,
+            "relay_availability_state": relayAvailabilityState.rawValue,
+            "relay_availability_updated_at_ms": Int(relayAvailabilityUpdatedAt.timeIntervalSince1970 * 1000),
+            "relay_recent_events_60s": relayRecentEventTimes.count,
+            "relay_backoff_until_ms": Int(relayBackoffUntil.timeIntervalSince1970 * 1000),
+            "strict_ble_only_validation": strictBleOnlyValidation,
             "generated_at_ms": Int(Date().timeIntervalSince1970 * 1000),
         ]
+        if let multipeerStats {
+            fallback["multipeer_connected_peers"] = multipeerStats.connectedPeers
+            fallback["multipeer_connecting_peers"] = multipeerStats.connectingPeers
+            fallback["multipeer_invites_in_flight"] = multipeerStats.inviteInFlight
+            fallback["multipeer_invite_timeouts"] = multipeerStats.inviteTimeoutCount
+            fallback["multipeer_invite_declines"] = multipeerStats.inviteDeclineCount
+            fallback["multipeer_effective_medium_estimate"] = multipeerStats.effectiveMediumEstimate
+        }
         guard let data = try? JSONSerialization.data(withJSONObject: fallback),
               let json = String(data: data, encoding: .utf8) else {
             return "{}"
@@ -2310,6 +2373,9 @@ final class MeshRepository {
         }
         peerDisconnectDedupCache[trimmedId] = now
 
+        if isKnownRelay(trimmedId) || isBootstrapRelayPeer(trimmedId) {
+            updateRelayAvailability(peerId: trimmedId, event: "disconnected")
+        }
         connectedEmissionCache.removeValue(forKey: trimmedId)
         pruneDisconnectedPeer(peerId)
     }
@@ -2346,6 +2412,7 @@ final class MeshRepository {
         let isHeadless = agentVersion.contains("/headless/")
         if isBootstrapRelayPeer(peerId) || isHeadless {
             logger.info("Headless/Relay transport node identified: \(peerId) (agent: \(agentVersion))")
+            updateRelayAvailability(peerId: trimmedPeerId, event: "identified")
             let relayDiscovery = PeerDiscoveryInfo(
                 canonicalPeerId: peerId,
                 publicKey: nil,
@@ -2838,10 +2905,41 @@ final class MeshRepository {
         addresses: [String],
         envelopeData: Data,
         multipeerPeerId: String? = nil,
-        blePeerId: String? = nil
+        blePeerId: String? = nil,
+        traceMessageId: String? = nil,
+        attemptContext: String = "send"
     ) async -> DeliveryAttemptResult {
+        let routePeerFallback = routePeerCandidates.first ?? "unknown_route_\(Date().timeIntervalSince1970)"
+        if strictBleOnlyValidation {
+            logDeliveryAttempt(
+                messageId: traceMessageId,
+                medium: "ble-only",
+                phase: "mode",
+                outcome: "enabled",
+                detail: "ctx=\(attemptContext) route_candidates=\(routePeerCandidates.count)"
+            )
+            if !(multipeerPeerId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+                logDeliveryAttempt(
+                    messageId: traceMessageId,
+                    medium: "multipeer",
+                    phase: "ble_only",
+                    outcome: "blocked",
+                    detail: "ctx=\(attemptContext) reason=strict_ble_only_mode"
+                )
+            }
+            if !routePeerCandidates.isEmpty || !addresses.isEmpty {
+                logDeliveryAttempt(
+                    messageId: traceMessageId,
+                    medium: "core",
+                    phase: "ble_only",
+                    outcome: "blocked",
+                    detail: "ctx=\(attemptContext) reason=strict_ble_only_mode"
+                )
+            }
+        }
+
         let localFallback = LocalTransportFallback.attemptMultipeerThenBle(
-            multipeerPeerId: multipeerPeerId,
+            multipeerPeerId: strictBleOnlyValidation ? nil : multipeerPeerId,
             blePeerId: blePeerId,
             tryMultipeer: { multipeerAddr in
                 guard let transport = multipeerTransport else {
@@ -2851,9 +2949,23 @@ final class MeshRepository {
                 do {
                     try transport.sendData(toPeerId: multipeerAddr, data: envelopeData)
                     logger.info("✓ Delivery via Multipeer (target=\(multipeerAddr))")
+                    logDeliveryAttempt(
+                        messageId: traceMessageId,
+                        medium: "multipeer",
+                        phase: "local_fallback",
+                        outcome: "success",
+                        detail: "ctx=\(attemptContext) target=\(multipeerAddr)"
+                    )
                     return true
                 } catch {
                     logger.debug("tryMultipeerDelivery failed for \(multipeerAddr): \(error.localizedDescription)")
+                    logDeliveryAttempt(
+                        messageId: traceMessageId,
+                        medium: "multipeer",
+                        phase: "local_fallback",
+                        outcome: "failed",
+                        detail: "ctx=\(attemptContext) target=\(multipeerAddr) reason=\(error.localizedDescription)"
+                    )
                     return false
                 }
             },
@@ -2869,9 +2981,23 @@ final class MeshRepository {
                 if let central = bleCentralManager {
                     if central.sendData(to: uuid, data: envelopeData) {
                         logger.info("✓ Delivery via BLE Central (target=\(bleAddr))")
+                        logDeliveryAttempt(
+                            messageId: traceMessageId,
+                            medium: "ble",
+                            phase: "local_fallback",
+                            outcome: "accepted",
+                            detail: "ctx=\(attemptContext) target=\(bleAddr)"
+                        )
                         sent = true
                     } else {
                         logger.warning("tryBleDelivery: bleCentralManager.sendData returned false for \(bleAddr)")
+                        logDeliveryAttempt(
+                            messageId: traceMessageId,
+                            medium: "ble",
+                            phase: "local_fallback",
+                            outcome: "failed",
+                            detail: "ctx=\(attemptContext) target=\(bleAddr) reason=central_send_false"
+                        )
                     }
                 } else {
                     logger.debug("tryBleDelivery: bleCentralManager is null")
@@ -2883,6 +3009,13 @@ final class MeshRepository {
                     peripheral.sendDataToConnectedCentral(peerId: bleAddr, data: envelopeData)
                     // We return true if EITHER transport succeeded. Even if Peripheral just buffers,
                     // it counts as a delivery attempt that high-level shouldn't immediately re-queue.
+                    logDeliveryAttempt(
+                        messageId: traceMessageId,
+                        medium: "ble",
+                        phase: "local_fallback",
+                        outcome: "accepted",
+                        detail: "ctx=\(attemptContext) target=\(bleAddr) role=peripheral"
+                    )
                     sent = true
                 } else {
                     logger.debug("tryBleDelivery: blePeripheralManager is null")
@@ -2891,9 +3024,25 @@ final class MeshRepository {
             }
         )
         let localAcked = localFallback.acked
+        if strictBleOnlyValidation {
+            logDeliveryAttempt(
+                messageId: traceMessageId,
+                medium: "ble-only",
+                phase: "aggregate",
+                outcome: localAcked ? "accepted" : "failed",
+                detail: "ctx=\(attemptContext) route_fallback=\(routePeerFallback)"
+            )
+            return DeliveryAttemptResult(acked: localAcked, routePeerId: routePeerFallback)
+        }
 
-        let routePeerFallback = routePeerCandidates.first ?? "unknown_route_\(Date().timeIntervalSince1970)"
         guard let swarmBridge else {
+            logDeliveryAttempt(
+                messageId: traceMessageId,
+                medium: "core",
+                phase: "direct",
+                outcome: localAcked ? "skipped_local_accepted" : "failed",
+                detail: "ctx=\(attemptContext) reason=swarm_bridge_unavailable route_fallback=\(routePeerFallback)"
+            )
             return DeliveryAttemptResult(acked: localAcked, routePeerId: routePeerFallback)
         }
         
@@ -2905,6 +3054,13 @@ final class MeshRepository {
             }
         
         guard !sanitizedCandidates.isEmpty else {
+            logDeliveryAttempt(
+                messageId: traceMessageId,
+                medium: "core",
+                phase: "direct",
+                outcome: localAcked ? "skipped_local_accepted" : "failed",
+                detail: "ctx=\(attemptContext) reason=no_route_candidates route_fallback=\(routePeerFallback)"
+            )
             return DeliveryAttemptResult(acked: localAcked, routePeerId: routePeerFallback)
         }
 
@@ -2921,12 +3077,33 @@ final class MeshRepository {
                 _ = await awaitPeerConnection(peerId: routePeerId)
             }
 
+            logDeliveryAttempt(
+                messageId: traceMessageId,
+                medium: "core",
+                phase: "direct",
+                outcome: "attempt",
+                detail: "ctx=\(attemptContext) route=\(routePeerId)"
+            )
             do {
                 try swarmBridge.sendMessage(peerId: routePeerId, data: envelopeData)
                 logger.info("✓ Direct delivery ACK from \(routePeerId)")
+                logDeliveryAttempt(
+                    messageId: traceMessageId,
+                    medium: "core",
+                    phase: "direct",
+                    outcome: "success",
+                    detail: "ctx=\(attemptContext) route=\(routePeerId)"
+                )
                 return DeliveryAttemptResult(acked: true, routePeerId: routePeerId)
             } catch {
                 logger.warning("Core-routed delivery failed for \(routePeerId): \(error.localizedDescription); trying alternative transports")
+                logDeliveryAttempt(
+                    messageId: traceMessageId,
+                    medium: "core",
+                    phase: "direct",
+                    outcome: "failed",
+                    detail: "ctx=\(attemptContext) route=\(routePeerId) reason=\(error.localizedDescription)"
+                )
             }
 
             let relayOnly = relayCircuitAddresses(for: routePeerId)
@@ -2934,16 +3111,44 @@ final class MeshRepository {
                 connectToPeer(routePeerId, addresses: relayOnly)
                 _ = await awaitPeerConnection(peerId: routePeerId, timeoutMs: 3000)
                 try? await Task.sleep(nanoseconds: 500_000_000)
+                logDeliveryAttempt(
+                    messageId: traceMessageId,
+                    medium: "relay-circuit",
+                    phase: "retry",
+                    outcome: "attempt",
+                    detail: "ctx=\(attemptContext) route=\(routePeerId)"
+                )
                 do {
                     try swarmBridge.sendMessage(peerId: routePeerId, data: envelopeData)
                     logger.info("✓ Delivery ACK from \(routePeerId) after relay-circuit retry")
+                    logDeliveryAttempt(
+                        messageId: traceMessageId,
+                        medium: "relay-circuit",
+                        phase: "retry",
+                        outcome: "success",
+                        detail: "ctx=\(attemptContext) route=\(routePeerId)"
+                    )
                     return DeliveryAttemptResult(acked: true, routePeerId: routePeerId)
                 } catch {
                     logger.warning("Relay-circuit retry failed for \(routePeerId): \(error.localizedDescription)")
+                    logDeliveryAttempt(
+                        messageId: traceMessageId,
+                        medium: "relay-circuit",
+                        phase: "retry",
+                        outcome: "failed",
+                        detail: "ctx=\(attemptContext) route=\(routePeerId) reason=\(error.localizedDescription)"
+                    )
                 }
             }
         }
-        
+
+        logDeliveryAttempt(
+            messageId: traceMessageId,
+            medium: "final",
+            phase: "aggregate",
+            outcome: localAcked ? "local_accepted_no_core_ack" : "failed",
+            detail: "ctx=\(attemptContext) route_fallback=\(sanitizedCandidates.first ?? routePeerFallback)"
+        )
         return DeliveryAttemptResult(acked: localAcked, routePeerId: sanitizedCandidates.first)
     }
 
@@ -3036,7 +3241,9 @@ final class MeshRepository {
                 addresses: resolvedAddresses,
                 envelopeData: envelopeData,
                 multipeerPeerId: latestRouting.multipeerPeerId ?? fallbackMultipeerPeerId,
-                blePeerId: latestRouting.blePeerId
+                blePeerId: latestRouting.blePeerId,
+                traceMessageId: item.historyRecordId,
+                attemptContext: "outbox_retry"
             )
             let selectedRoutePeerId = delivery.routePeerId ?? resolvedRoutePeerId
 
@@ -3280,17 +3487,99 @@ final class MeshRepository {
         return relays
     }
 
+    private func extractRelayPeerId(from multiaddr: String) -> String? {
+        let components = multiaddr
+            .split(separator: "/")
+            .map(String.init)
+            .filter { !$0.isEmpty }
+        guard !components.isEmpty else { return nil }
+
+        if let circuitIndex = components.firstIndex(of: "p2p-circuit"),
+           circuitIndex >= 2,
+           components[circuitIndex - 2] == "p2p" {
+            let relayPeerId = components[circuitIndex - 1]
+            return isLibp2pPeerId(relayPeerId) ? relayPeerId : nil
+        }
+
+        if components.count >= 2, components[components.count - 2] == "p2p" {
+            let trailingPeer = components[components.count - 1]
+            return isLibp2pPeerId(trailingPeer) ? trailingPeer : nil
+        }
+
+        return nil
+    }
+
+    private func shouldAttemptRelayDial(peerId: String, source: String) -> Bool {
+        let trimmed = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let now = Date()
+        if let last = relayDialDebounceState[trimmed],
+           now.timeIntervalSince(last) < relayDialDebounceInterval {
+            appendDiagnostic("relay_dial_debounced peer=\(trimmed) source=\(source)")
+            updateRelayAvailability(peerId: trimmed, event: "dial_debounced")
+            return false
+        }
+        relayDialDebounceState[trimmed] = now
+        updateRelayAvailability(peerId: trimmed, event: "dial_allowed")
+        return true
+    }
+
+    private func updateRelayAvailability(peerId: String, event: String) {
+        let now = Date()
+        relayRecentEventTimes.append(now)
+        relayRecentEventTimes = relayRecentEventTimes.filter { now.timeIntervalSince($0) <= 60 }
+
+        if event == "disconnected" {
+            relayLastDisconnectAt = now
+        } else if event == "identified" {
+            if let lastDisconnect = relayLastDisconnectAt, now.timeIntervalSince(lastDisconnect) <= 20 {
+                relayAvailabilityState = .recovering
+            }
+        }
+
+        if relayRecentEventTimes.count >= 6 {
+            relayAvailabilityState = .flapping
+            relayBackoffUntil = now.addingTimeInterval(12)
+        } else if now < relayBackoffUntil {
+            relayAvailabilityState = .backoff
+        } else if relayAvailabilityState != .recovering {
+            relayAvailabilityState = .stable
+        }
+        relayAvailabilityUpdatedAt = now
+        appendDiagnostic("relay_state peer=\(peerId) event=\(event) state=\(relayAvailabilityState.rawValue) events_60s=\(relayRecentEventTimes.count)")
+    }
+
     private func primeRelayBootstrapConnections() {
         guard let swarmBridge else { return }
+        guard !relayBootstrapDialInProgress else {
+            appendDiagnostic("relay_prime_skipped reason=in_progress")
+            return
+        }
         let now = Date()
         guard now.timeIntervalSince(lastRelayBootstrapDialAt) >= 10 else { return }
+        relayBootstrapDialInProgress = true
+        defer { relayBootstrapDialInProgress = false }
         lastRelayBootstrapDialAt = now
 
         for addr in Self.defaultBootstrapNodes {
+            let relayPeerId = Self.parseBootstrapRelay(from: addr)?.relayPeerId
             do {
+                if let relayPeerId,
+                   !shouldAttemptRelayDial(peerId: relayPeerId, source: "prime_bootstrap") {
+                    continue
+                }
                 if !shouldAttemptDial(addr) { continue }
+                if let relayPeerId {
+                    updateRelayAvailability(peerId: relayPeerId, event: "dial_attempt")
+                }
                 try swarmBridge.dial(multiaddr: addr)
+                if let relayPeerId {
+                    updateRelayAvailability(peerId: relayPeerId, event: "dial_started")
+                }
             } catch {
+                if let relayPeerId {
+                    updateRelayAvailability(peerId: relayPeerId, event: "dial_failed")
+                }
                 logger.debug("Relay bootstrap dial skipped for \(addr): \(error.localizedDescription)")
             }
         }
@@ -3621,14 +3910,28 @@ final class MeshRepository {
             if isLibp2pPeerId(peerId) && !addr.contains("/p2p/") {
                 finalAddr = "\(addr)/p2p/\(peerId)"
             }
+            let relayPeerId = extractRelayPeerId(from: finalAddr)
             do {
+                if let relayPeerId,
+                   !shouldAttemptRelayDial(peerId: relayPeerId, source: "connect_to_peer") {
+                    continue
+                }
                 if !shouldAttemptDial(finalAddr) { continue }
+                if let relayPeerId {
+                    updateRelayAvailability(peerId: relayPeerId, event: "dial_attempt")
+                }
                 try swarmBridge?.dial(multiaddr: finalAddr)
                 logger.info("Dialing \(finalAddr)")
                 appendDiagnostic("dial_attempt addr=\(finalAddr)")
+                if let relayPeerId {
+                    updateRelayAvailability(peerId: relayPeerId, event: "dial_started")
+                }
             } catch {
                 logger.error("Failed to dial \(finalAddr): \(error.localizedDescription)")
                 appendDiagnostic("dial_failure addr=\(finalAddr) error=\(error.localizedDescription)")
+                if let relayPeerId {
+                    updateRelayAvailability(peerId: relayPeerId, event: "dial_failed")
+                }
             }
         }
     }
@@ -3665,6 +3968,19 @@ final class MeshRepository {
         diagnosticsLogURL.path
     }
 
+    private func logDeliveryAttempt(
+        messageId: String?,
+        medium: String,
+        phase: String,
+        outcome: String,
+        detail: String
+    ) {
+        let msg = (messageId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            ? messageId!
+            : "unknown"
+        appendDiagnostic("delivery_attempt msg=\(msg) medium=\(medium) phase=\(phase) outcome=\(outcome) detail=\(detail)")
+    }
+
     func diagnosticsSnapshot(limit: Int = 120) -> String {
         diagnosticsBuffer.suffix(max(1, limit)).joined(separator: "\n")
     }
@@ -3690,21 +4006,25 @@ final class MeshRepository {
     private func persistDiagnosticLine(_ line: String) {
         let url = diagnosticsLogURL
         let data = (line + "\n").data(using: .utf8) ?? Data()
-        
-        if !FileManager.default.fileExists(atPath: url.path) {
-            try? data.write(to: url)
-            return
-        }
-        
-        do {
-            let fileHandle = try FileHandle(forWritingTo: url)
-            defer { try? fileHandle.close() }
-            try fileHandle.seekToEnd()
-            try fileHandle.write(contentsOf: data)
-        } catch {
-            // Fallback to full write if append fails
-            let payload = diagnosticsBuffer.joined(separator: "\n") + "\n"
-            try? payload.write(to: url, atomically: true, encoding: .utf8)
+
+        // Keep diagnostic file I/O off the main actor to avoid startup/runtime warnings.
+        diagnosticsIOQueue.async {
+            let parent = url.deletingLastPathComponent()
+            try? FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+
+            if !FileManager.default.fileExists(atPath: url.path) {
+                try? data.write(to: url)
+                return
+            }
+
+            do {
+                let fileHandle = try FileHandle(forWritingTo: url)
+                defer { try? fileHandle.close() }
+                try fileHandle.seekToEnd()
+                try fileHandle.write(contentsOf: data)
+            } catch {
+                try? data.write(to: url, options: .atomic)
+            }
         }
     }
     func clearDiagnostics() {

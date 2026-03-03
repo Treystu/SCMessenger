@@ -96,3 +96,11 @@ These documents may contain both current and historical sections; verify section
 5. WS12.7 (2026-03-02 HST) live runtime sanity/hotfix updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
 6. WS12.8 (2026-03-02 HST) post-redeploy runtime recheck updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
 7. WS12.9 (2026-03-03) iOS dashboard node-count hotfix updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
+8. WS12.10 (2026-03-03 HST) runtime re-baseline + action roundup updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
+9. WS12.13 (2026-03-03 HST) wave-2 backlog consolidation updates are reflected in active docs (`docs/CURRENT_STATE.md` and `REMAINING_WORK_TRACKING.md`).
+10. WS12.11 (2026-03-03 HST) iOS relay flapping diagnosis updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
+11. WS12.12 (2026-03-03 HST) Android/iOS pairing message-delivery RCA updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
+12. WS12.13 (2026-03-03 HST) 5-node script hardening + post-update issue-slate triage updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
+13. WS12.14 (2026-03-03 HST) Android Bluetooth-only pairing diagnosis updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
+14. WS12.16 (2026-03-03 HST) wave-2 runtime hardening pass updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
+15. WS12.17 (2026-03-03 HST) wave-3 governance closure updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`), with historical checklist triage updates under `docs/historical/*`.

@@ -113,6 +113,17 @@ class MeshRepositoryTest {
     }
 
     @Test
+    fun `feature-flag helper accepts common enabled forms`() {
+        assertTrue(MeshRepository.isEnabledFlag("1"))
+        assertTrue(MeshRepository.isEnabledFlag("true"))
+        assertTrue(MeshRepository.isEnabledFlag("YES"))
+        assertTrue(MeshRepository.isEnabledFlag(" on "))
+        assertFalse(MeshRepository.isEnabledFlag("0"))
+        assertFalse(MeshRepository.isEnabledFlag("false"))
+        assertFalse(MeshRepository.isEnabledFlag(null))
+    }
+
+    @Test
     fun `wifi local path succeeds without BLE fallback`() {
         val attempted = mutableListOf<String>()
 
@@ -201,5 +212,32 @@ class MeshRepositoryTest {
         assertEquals(500, bleCalls)
         assertEquals(1_000, wifiSuccesses)
         assertEquals(500, bleFallbackSuccesses)
+    }
+
+    @Test
+    fun `ble-only fallback path emits deterministic terminal failure when BLE send fails`() {
+        var wifiCalled = false
+        var bleCalled = false
+
+        val result = MeshRepository.attemptWifiThenBleFallback(
+            wifiPeerId = null,
+            blePeerId = "7f8089ea-329d-4f6b-81a3-d376cce9f311",
+            tryWifi = {
+                wifiCalled = true
+                true
+            },
+            tryBle = {
+                bleCalled = true
+                false
+            }
+        )
+
+        assertFalse(wifiCalled)
+        assertTrue(bleCalled)
+        assertFalse(result.wifiAttempted)
+        assertFalse(result.wifiAcked)
+        assertTrue(result.bleAttempted)
+        assertFalse(result.bleAcked)
+        assertFalse(result.acked)
     }
 }

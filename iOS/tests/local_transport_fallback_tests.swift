@@ -119,10 +119,35 @@ private func testReconnectContinuationAndThroughputStability() {
     expect(bleFallbackSuccesses == 500, "BLE fallback count should match availability pattern")
 }
 
+private func testBleOnlyTerminalFailureSignal() {
+    var multipeerCalled = false
+    var bleCalled = false
+
+    let result = LocalTransportFallback.attemptMultipeerThenBle(
+        multipeerPeerId: nil,
+        blePeerId: "2cc7db8f-3142-4b8c-9157-2be2d7502e7f",
+        tryMultipeer: { _ in
+            multipeerCalled = true
+            return true
+        },
+        tryBle: { _ in
+            bleCalled = true
+            return false
+        }
+    )
+
+    expect(!multipeerCalled, "multipeer must not be called in BLE-only fallback path")
+    expect(bleCalled, "BLE path should be attempted")
+    expect(result.bleAttempted, "BLE should be marked attempted")
+    expect(!result.bleAcked, "BLE should be marked failed")
+    expect(!result.acked, "overall result must report deterministic terminal failure")
+}
+
 func runAllTests() {
     testMultipeerPathSuccess()
     testFallbackWhenMultipeerUnavailable()
     testReconnectContinuationAndThroughputStability()
+    testBleOnlyTerminalFailureSignal()
     print("PASS: local transport fallback tests")
 }
 

@@ -75,6 +75,13 @@ class MeshRepository(private val context: Context) {
             }
         }
 
+        internal fun isEnabledFlag(raw: String?): Boolean {
+            return when (raw?.trim()?.lowercase()) {
+                "1", "true", "yes", "on" -> true
+                else -> false
+            }
+        }
+
         internal data class LocalTransportFallbackResult(
             val wifiAttempted: Boolean,
             val wifiAcked: Boolean,
@@ -284,8 +291,13 @@ class MeshRepository(private val context: Context) {
         val blePeerId: String?
     )
 
+    private val strictBleOnlyValidation = isEnabledFlag(System.getenv("SC_BLE_ONLY_VALIDATION"))
+
     init {
         Timber.d("MeshRepository initialized with storage: $storagePath")
+        if (strictBleOnlyValidation) {
+            Timber.w("Strict BLE-only validation mode is enabled (SC_BLE_ONLY_VALIDATION)")
+        }
         checkReinstallState()
         initializeManagers()
     }
@@ -1811,7 +1823,9 @@ class MeshRepository(private val context: Context) {
                     listeners = routingHints.listeners,
                     encryptedData = encryptedData,
                     wifiPeerId = routingHints.wifiPeerId,
-                    blePeerId = routingHints.blePeerId
+                    blePeerId = routingHints.blePeerId,
+                    traceMessageId = messageId,
+                    attemptContext = "initial_send"
                 )
                 val selectedRoutePeerId = delivery.routePeerId ?: preferredRoutePeerId
 
@@ -2179,8 +2193,35 @@ class MeshRepository(private val context: Context) {
             null
         }
 
+        val bleDiscovery = bleScanner?.getDiscoveryStats()
+        val bleClient = bleGattClient?.getClientStats()
+
         if (!coreDiagnostics.isNullOrBlank()) {
-            return coreDiagnostics
+            try {
+                val obj = org.json.JSONObject(coreDiagnostics)
+                bleDiscovery?.let { stats ->
+                    obj.put("ble_advertisements_seen", stats.advertisementsSeen)
+                    obj.put("ble_peers_discovered", stats.peersDiscovered)
+                    obj.put("ble_scan_failures", stats.scanFailures)
+                    obj.put("ble_peer_cache_size", stats.peerCacheSize)
+                }
+                bleClient?.let { stats ->
+                    obj.put("ble_gatt_connect_attempts", stats.connectAttempts)
+                    obj.put("ble_gatt_connect_initiated", stats.connectInitiated)
+                    obj.put("ble_gatt_connect_failures", stats.connectFailures)
+                    obj.put("ble_gatt_connect_state_successes", stats.connectStateSuccesses)
+                    obj.put("ble_gatt_disconnects", stats.disconnects)
+                    obj.put("ble_duplicate_permit_releases_ignored", stats.duplicatePermitReleasesIgnored)
+                    obj.put("ble_semaphore_release_overflows", stats.semaphoreReleaseOverflows)
+                    obj.put("ble_no_response_callbacks_ignored", stats.noResponseCallbacksIgnored)
+                    obj.put("ble_address_type_mismatch_signals", stats.addressTypeMismatchSignals)
+                    obj.put("ble_active_connections", stats.activeConnections)
+                }
+                obj.put("strict_ble_only_validation", strictBleOnlyValidation)
+                return obj.toString()
+            } catch (_: Exception) {
+                return coreDiagnostics
+            }
         }
 
         val fallback = org.json.JSONObject()
@@ -2189,7 +2230,26 @@ class MeshRepository(private val context: Context) {
             .put("nat_status", getNatStatus())
             .put("discovered_peers", _discoveredPeers.value.size)
             .put("pending_outbox", loadPendingOutbox().size)
+            .put("strict_ble_only_validation", strictBleOnlyValidation)
             .put("generated_at_ms", System.currentTimeMillis())
+        bleDiscovery?.let { stats ->
+            fallback.put("ble_advertisements_seen", stats.advertisementsSeen)
+            fallback.put("ble_peers_discovered", stats.peersDiscovered)
+            fallback.put("ble_scan_failures", stats.scanFailures)
+            fallback.put("ble_peer_cache_size", stats.peerCacheSize)
+        }
+        bleClient?.let { stats ->
+            fallback.put("ble_gatt_connect_attempts", stats.connectAttempts)
+            fallback.put("ble_gatt_connect_initiated", stats.connectInitiated)
+            fallback.put("ble_gatt_connect_failures", stats.connectFailures)
+            fallback.put("ble_gatt_connect_state_successes", stats.connectStateSuccesses)
+            fallback.put("ble_gatt_disconnects", stats.disconnects)
+            fallback.put("ble_duplicate_permit_releases_ignored", stats.duplicatePermitReleasesIgnored)
+            fallback.put("ble_semaphore_release_overflows", stats.semaphoreReleaseOverflows)
+            fallback.put("ble_no_response_callbacks_ignored", stats.noResponseCallbacksIgnored)
+            fallback.put("ble_address_type_mismatch_signals", stats.addressTypeMismatchSignals)
+            fallback.put("ble_active_connections", stats.activeConnections)
+        }
         return fallback.toString()
     }
 
@@ -2518,10 +2578,41 @@ class MeshRepository(private val context: Context) {
         listeners: List<String>,
         encryptedData: ByteArray,
         wifiPeerId: String? = null,
-        blePeerId: String? = null
+        blePeerId: String? = null,
+        traceMessageId: String? = null,
+        attemptContext: String = "send"
     ): DeliveryAttemptResult {
+        val routePeerFallback = routePeerCandidates.firstOrNull() ?: "unknown_route_${System.currentTimeMillis()}"
+        if (strictBleOnlyValidation) {
+            logDeliveryAttempt(
+                messageId = traceMessageId,
+                medium = "ble-only",
+                phase = "mode",
+                outcome = "enabled",
+                detail = "ctx=$attemptContext route_candidates=${routePeerCandidates.size}"
+            )
+            if (!wifiPeerId.isNullOrBlank()) {
+                logDeliveryAttempt(
+                    messageId = traceMessageId,
+                    medium = "wifi-direct",
+                    phase = "ble_only",
+                    outcome = "blocked",
+                    detail = "ctx=$attemptContext reason=strict_ble_only_mode"
+                )
+            }
+            if (routePeerCandidates.isNotEmpty() || listeners.isNotEmpty()) {
+                logDeliveryAttempt(
+                    messageId = traceMessageId,
+                    medium = "core",
+                    phase = "ble_only",
+                    outcome = "blocked",
+                    detail = "ctx=$attemptContext reason=strict_ble_only_mode"
+                )
+            }
+        }
+
         val localFallback = Companion.attemptWifiThenBleFallback(
-            wifiPeerId = wifiPeerId,
+            wifiPeerId = if (strictBleOnlyValidation) null else wifiPeerId,
             blePeerId = blePeerId,
             tryWifi = { wifiId ->
                 val wifi = wifiTransportManager ?: run {
@@ -2531,13 +2622,34 @@ class MeshRepository(private val context: Context) {
                 try {
                     if (wifi.sendData(wifiId, encryptedData)) {
                         Timber.i("✓ Delivery via WiFi Direct (target=$wifiId)")
+                        logDeliveryAttempt(
+                            messageId = traceMessageId,
+                            medium = "wifi-direct",
+                            phase = "local_fallback",
+                            outcome = "success",
+                            detail = "ctx=$attemptContext target=$wifiId"
+                        )
                         true
                     } else {
                         Timber.d("tryWifiDelivery: wifiTransportManager.sendData returned false for $wifiId")
+                        logDeliveryAttempt(
+                            messageId = traceMessageId,
+                            medium = "wifi-direct",
+                            phase = "local_fallback",
+                            outcome = "failed",
+                            detail = "ctx=$attemptContext target=$wifiId reason=sendData_false"
+                        )
                         false
                     }
                 } catch (wifiEx: Exception) {
                     Timber.w(wifiEx, "WiFi send failed for $wifiId")
+                    logDeliveryAttempt(
+                        messageId = traceMessageId,
+                        medium = "wifi-direct",
+                        phase = "local_fallback",
+                        outcome = "failed",
+                        detail = "ctx=$attemptContext target=$wifiId reason=${wifiEx.message ?: "exception"}"
+                    )
                     false
                 }
             },
@@ -2549,27 +2661,73 @@ class MeshRepository(private val context: Context) {
                 try {
                     if (bleGatt.sendData(bleAddr, encryptedData)) {
                         Timber.i("✓ Delivery via BLE (target=$bleAddr)")
+                        logDeliveryAttempt(
+                            messageId = traceMessageId,
+                            medium = "ble",
+                            phase = "local_fallback",
+                            outcome = "accepted",
+                            detail = "ctx=$attemptContext target=$bleAddr"
+                        )
                         true
                     } else {
                         Timber.d("tryBleDelivery: bleGatt.sendData returned false for $bleAddr")
+                        logDeliveryAttempt(
+                            messageId = traceMessageId,
+                            medium = "ble",
+                            phase = "local_fallback",
+                            outcome = "failed",
+                            detail = "ctx=$attemptContext target=$bleAddr reason=sendData_false"
+                        )
                         false
                     }
                 } catch (bleEx: Exception) {
                     Timber.w(bleEx, "BLE send failed for $bleAddr")
+                    logDeliveryAttempt(
+                        messageId = traceMessageId,
+                        medium = "ble",
+                        phase = "local_fallback",
+                        outcome = "failed",
+                        detail = "ctx=$attemptContext target=$bleAddr reason=${bleEx.message ?: "exception"}"
+                    )
                     false
                 }
             }
         )
         val localAcked = localFallback.acked
+        if (strictBleOnlyValidation) {
+            logDeliveryAttempt(
+                messageId = traceMessageId,
+                medium = "ble-only",
+                phase = "aggregate",
+                outcome = if (localAcked) "accepted" else "failed",
+                detail = "ctx=$attemptContext route_fallback=$routePeerFallback"
+            )
+            return DeliveryAttemptResult(acked = localAcked, routePeerId = routePeerFallback)
+        }
 
-        val routePeerFallback = routePeerCandidates.firstOrNull() ?: "unknown_route_${System.currentTimeMillis()}"
-        val bridge = swarmBridge ?: return DeliveryAttemptResult(acked = localAcked, routePeerId = routePeerFallback)
+        val bridge = swarmBridge ?: run {
+            logDeliveryAttempt(
+                messageId = traceMessageId,
+                medium = "core",
+                phase = "direct",
+                outcome = if (localAcked) "skipped_local_accepted" else "failed",
+                detail = "ctx=$attemptContext reason=swarm_bridge_unavailable route_fallback=$routePeerFallback"
+            )
+            return DeliveryAttemptResult(acked = localAcked, routePeerId = routePeerFallback)
+        }
         val sanitizedCandidates = routePeerCandidates
             .map { it.trim() }
             .filter { it.isNotEmpty() && isLibp2pPeerId(it) && !isBootstrapRelayPeer(it) }
             .distinct()
 
         if (sanitizedCandidates.isEmpty()) {
+            logDeliveryAttempt(
+                messageId = traceMessageId,
+                medium = "core",
+                phase = "direct",
+                outcome = if (localAcked) "skipped_local_accepted" else "failed",
+                detail = "ctx=$attemptContext reason=no_route_candidates route_fallback=$routePeerFallback"
+            )
             return DeliveryAttemptResult(acked = localAcked, routePeerId = routePeerFallback)
         }
 
@@ -2586,12 +2744,33 @@ class MeshRepository(private val context: Context) {
                 awaitPeerConnection(routePeerId, timeoutMs = 5000L) // Increased from 2s for mesh/relay paths
             }
 
+            logDeliveryAttempt(
+                messageId = traceMessageId,
+                medium = "core",
+                phase = "direct",
+                outcome = "attempt",
+                detail = "ctx=$attemptContext route=$routePeerId"
+            )
             try {
                 bridge.sendMessage(routePeerId, encryptedData)
                 Timber.i("✓ Direct delivery ACK from $routePeerId")
+                logDeliveryAttempt(
+                    messageId = traceMessageId,
+                    medium = "core",
+                    phase = "direct",
+                    outcome = "success",
+                    detail = "ctx=$attemptContext route=$routePeerId"
+                )
                 return DeliveryAttemptResult(acked = true, routePeerId = routePeerId)
             } catch (e: Exception) {
                 Timber.w("Core-routed delivery failed for $routePeerId: ${e.message}; trying alternative transports")
+                logDeliveryAttempt(
+                    messageId = traceMessageId,
+                    medium = "core",
+                    phase = "direct",
+                    outcome = "failed",
+                    detail = "ctx=$attemptContext route=$routePeerId reason=${e.message ?: "exception"}"
+                )
             }
 
             val relayOnlyCandidates = relayCircuitAddressesForPeer(routePeerId)
@@ -2599,15 +2778,43 @@ class MeshRepository(private val context: Context) {
                 connectToPeer(routePeerId, relayOnlyCandidates)
                 awaitPeerConnection(routePeerId, timeoutMs = 3500L)
                 kotlinx.coroutines.delay(500)
+                logDeliveryAttempt(
+                    messageId = traceMessageId,
+                    medium = "relay-circuit",
+                    phase = "retry",
+                    outcome = "attempt",
+                    detail = "ctx=$attemptContext route=$routePeerId"
+                )
                 try {
                     bridge.sendMessage(routePeerId, encryptedData)
                     Timber.i("✓ Delivery ACK from $routePeerId after relay-circuit retry")
+                    logDeliveryAttempt(
+                        messageId = traceMessageId,
+                        medium = "relay-circuit",
+                        phase = "retry",
+                        outcome = "success",
+                        detail = "ctx=$attemptContext route=$routePeerId"
+                    )
                     return DeliveryAttemptResult(acked = true, routePeerId = routePeerId)
                 } catch (e: Exception) {
                     Timber.w("Relay-circuit retry failed for $routePeerId: ${e.message}")
+                    logDeliveryAttempt(
+                        messageId = traceMessageId,
+                        medium = "relay-circuit",
+                        phase = "retry",
+                        outcome = "failed",
+                        detail = "ctx=$attemptContext route=$routePeerId reason=${e.message ?: "exception"}"
+                    )
                 }
             }
         }
+        logDeliveryAttempt(
+            messageId = traceMessageId,
+            medium = "final",
+            phase = "aggregate",
+            outcome = if (localAcked) "local_accepted_no_core_ack" else "failed",
+            detail = "ctx=$attemptContext route_fallback=${sanitizedCandidates.firstOrNull() ?: routePeerFallback}"
+        )
         return DeliveryAttemptResult(acked = localAcked, routePeerId = sanitizedCandidates.firstOrNull())
     }
 
@@ -2682,7 +2889,9 @@ class MeshRepository(private val context: Context) {
                     listeners = resolvedListeners,
                     encryptedData = envelope,
                     wifiPeerId = latestRouting.wifiPeerId,
-                    blePeerId = latestRouting.blePeerId
+                    blePeerId = latestRouting.blePeerId,
+                    traceMessageId = item.historyRecordId,
+                    attemptContext = "outbox_retry"
                 )
                 val selectedRoutePeerId = delivery.routePeerId ?: resolvedRoutePeerId
 
@@ -3949,5 +4158,23 @@ class MeshRepository(private val context: Context) {
     private fun logDeliveryState(messageId: String, state: String, detail: String) {
         if (messageId.isBlank()) return
         Timber.i("delivery_state msg=$messageId state=$state detail=$detail")
+    }
+
+    private fun logDeliveryAttempt(
+        messageId: String?,
+        medium: String,
+        phase: String,
+        outcome: String,
+        detail: String
+    ) {
+        val msg = messageId?.takeIf { it.isNotBlank() } ?: "unknown"
+        Timber.i(
+            "delivery_attempt msg=%s medium=%s phase=%s outcome=%s detail=%s",
+            msg,
+            medium,
+            phase,
+            outcome,
+            detail
+        )
     }
 }

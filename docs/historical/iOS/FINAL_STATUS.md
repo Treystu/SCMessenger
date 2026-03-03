@@ -1,6 +1,7 @@
 # iOS Implementation - Final Status Report
 
 > Historical snapshot. For current verified status, use `docs/CURRENT_STATE.md`.
+> Historical checklist triage (2026-03-03 HST): open boxes are superseded readiness/planning artifacts and do not represent active backlog.
 
 ## [Current] Section Action Outcome (2026-02-23)
 
@@ -134,8 +135,8 @@ if !isRelayEnabled {
   - iOS-specific constraints
 
 **Remaining Work:**
-- [ ] BLEPeripheralManager.swift (~300 LoC) - Follow documented patterns
-- [ ] BLEL2CAPManager.swift (~150 LoC) - Follow documented patterns
+- [Historical - Superseded] BLEPeripheralManager.swift (~300 LoC) - Follow documented patterns
+- [Historical - Superseded] BLEL2CAPManager.swift (~150 LoC) - Follow documented patterns
 
 **Testing**: Ready for Xcode implementation
 
@@ -444,27 +445,27 @@ All technical decisions finalized. All patterns documented. Implementation is no
 ## Success Criteria
 
 ### Phase Completion Checklist
-- [ ] All 15 phases implemented
-- [ ] Compiles without errors in Xcode
-- [ ] Runs on iOS simulator
-- [ ] Runs on physical iOS device
-- [ ] BLE transport works between devices
-- [ ] Multipeer transport works
-- [ ] Relay enforcement verified (send throws, receive drops)
-- [ ] Settings persistence works
-- [ ] Background tasks execute
-- [ ] Notifications arrive
-- [ ] Android ↔ iOS interoperability confirmed
+- [Historical - Superseded] All 15 phases implemented
+- [Historical - Superseded] Compiles without errors in Xcode
+- [Historical - Superseded] Runs on iOS simulator
+- [Historical - Superseded] Runs on physical iOS device
+- [Historical - Superseded] BLE transport works between devices
+- [Historical - Superseded] Multipeer transport works
+- [Historical - Superseded] Relay enforcement verified (send throws, receive drops)
+- [Historical - Superseded] Settings persistence works
+- [Historical - Superseded] Background tasks execute
+- [Historical - Superseded] Notifications arrive
+- [Historical - Superseded] Android ↔ iOS interoperability confirmed
 
 ### Production Readiness Checklist
-- [ ] All XCTests passing
-- [ ] Memory leaks addressed
-- [ ] Battery usage optimized
-- [ ] App Store review guidelines met
-- [ ] Privacy policy implemented
-- [ ] Crash reporting integrated
-- [ ] Analytics implemented
-- [ ] Localization prepared
+- [Historical - Superseded] All XCTests passing
+- [Historical - Superseded] Memory leaks addressed
+- [Historical - Superseded] Battery usage optimized
+- [Historical - Superseded] App Store review guidelines met
+- [Historical - Superseded] Privacy policy implemented
+- [Historical - Superseded] Crash reporting integrated
+- [Historical - Superseded] Analytics implemented
+- [Historical - Superseded] Localization prepared
 
 ---
 

@@ -224,6 +224,76 @@ journalctl -u scm-relay -f
 - Relay nodes do not store messages — they forward in real-time.
 - The relay budget (max messages/hour) is configurable to prevent abuse.
 
+## Legacy Pending Outbox Triage (No-Give-Up Safe)
+
+SCMessenger v0.2.0 intentionally keeps no terminal retry exhaustion for queued outbound messages.
+High-attempt legacy entries are expected in unstable network windows and should be triaged, not dropped.
+
+Recommended operator triage flow:
+
+1. Confirm service/runtime health first (relay reachability, peer count, and recent reconnects).
+2. Inspect pending outbox age + attempt distribution.
+3. Separate old/high-attempt entries from fresh entries in diagnostics exports.
+4. Keep retries enabled; do not manually delete pending outbox files unless doing a full reset procedure.
+
+Android inspection commands:
+
+```bash
+adb shell run-as com.scmessenger.android cat files/pending_outbox.json
+adb logcat -d | rg "delivery_state|Flushing pending outbox|Core-routed delivery failed|Relay-circuit retry failed"
+```
+
+iOS simulator inspection commands:
+
+```bash
+APP_DATA=$(xcrun simctl get_app_container booted SovereignCommunications.SCMessenger data)
+cat "$APP_DATA/Documents/pending_outbox.json"
+xcrun simctl spawn booted log show --style compact --last 15m --predicate 'process == "SCMessenger"'
+```
+
+Operational interpretation:
+
+- `attempt_count` high and `created_at` old: legacy backlog item; keep for eventual delivery semantics.
+- repeated `stored` -> `forwarding` cycles with growing backoff: expected under intermittent path availability.
+- no movement in queue and no dial/relay activity: treat as connectivity/runtime issue first (not message corruption).
+
+## Cross-Platform Receipt Convergence Assertion
+
+Use this deterministic runbook when validating Android<->iOS fallback behavior under degraded internet routing.
+
+1. Capture synchronized UTC timestamps and start logs on both devices.
+2. Send one message Android -> iOS and one message iOS -> Android while internet route is degraded.
+3. For each message ID, require both:
+   - recipient ingest marker (`msg_rx_processed`), and
+   - sender delivered marker (`delivery_state ... state=delivered`).
+4. If either marker is missing for a message ID after retry delay windows, classify as convergence failure and capture the artifact bundle.
+
+Android capture commands:
+
+```bash
+adb shell date -u
+adb logcat -v threadtime | rg "delivery_attempt|delivery_state|msg_rx_processed|Core-routed delivery failed|Relay-circuit retry failed"
+```
+
+iOS simulator capture commands:
+
+```bash
+xcrun simctl spawn booted date -u
+xcrun simctl spawn booted log stream --style compact --predicate 'process == "SCMessenger"'
+```
+
+Pass criteria per direction (A->iOS, iOS->A):
+
+- same `msg=<id>` appears with `delivery_attempt` timeline entries,
+- recipient shows `msg_rx_processed`,
+- sender shows `state=delivered` without duplicate terminal oscillation.
+
+Fail criteria:
+
+- repeated retry loops without `msg_rx_processed`,
+- recipient ingest observed but sender never reaches `delivered`,
+- conflicting terminal states for the same message ID after retry window.
+
 ## Troubleshooting
 
 | Issue | Solution |

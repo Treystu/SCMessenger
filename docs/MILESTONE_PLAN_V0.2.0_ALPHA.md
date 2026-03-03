@@ -1,6 +1,6 @@
 # SCMessenger v0.2.0 Alpha Milestone Plan
 
-Status: Active (execution complete through WS12.5 audit)  
+Status: Active (execution complete through WS12.17 wave-3 governance closure sweep)  
 Date: 2026-03-03  
 Scope: Core + Android + iOS + Desktop GUI + Relay topology
 
@@ -12,6 +12,26 @@ Scope: Core + Android + iOS + Desktop GUI + Relay topology
    - Discovery metric path remained correct.
    - Dashboard node totals now use online-only deduplicated peers and collapse alias IDs (canonical/libp2p/BLE/public-key) before counting.
 2. This was classified as a runtime correctness fix within v0.2.0 scope (no milestone scope expansion).
+
+## Runtime Re-baseline Addendum (WS12.10, 2026-03-03 HST)
+
+1. Live custody reconnect verification is stable again (`integration_relay_custody` passed in matrix run and 3 consecutive reruns).
+2. Relay rollout skew risk was closed with fresh runtime evidence of `0.2.0` relay agents.
+3. iOS startup main-thread I/O warning source was triaged and fixed in `MeshRepository` startup/diagnostics path.
+
+## Wave-3 Closure Addendum (WS12.17, 2026-03-03 HST)
+
+1. Historical checklist triage is complete for targeted `docs/historical/*` sources; ambiguous open boxes were converted to explicit historical status tags.
+2. Runtime hardening closure includes strict BLE-only validation mode, BLE/multipeer diagnostics expansion, and Android address-type mismatch reconnect backoff mitigation.
+3. Deterministic harness suite added for remaining live-risk closure:
+   - `scripts/correlate_relay_flap_windows.sh`
+   - `scripts/verify_relay_flap_regression.sh`
+   - `scripts/verify_receipt_convergence.sh`
+   - `scripts/verify_ble_only_pairing.sh`
+4. Local validation debt reduced:
+   - `wasm-pack` installed and `cd wasm && wasm-pack build` now passes.
+   - Docker-based simulation remains the only local prerequisite blocker.
+5. Repo-wide checklist governance result: open checklist inventory reduced to 10 active items (all in `REMAINING_WORK_TRACKING.md`), with historical open-checkbox ambiguity removed.
 
 ---
 
@@ -425,6 +445,11 @@ Execution note (2026-03-03):
 5. WS12.5 burndown audit reconciled remaining doc/backlog drift and re-validated custody reconnect evidence used for `R-WS3-01` closure.
 6. WS12.7 live runtime sanity sweep (2026-03-02 HST) added Android runtime hotfixes for beacon hint preservation, outbox flush serialization, and uptime fallback; remaining live gap is relay-fleet version skew during rollout.
 7. WS12.8 runtime recheck (2026-03-02 HST) confirmed GCP relay identity rotation is active post-redeploy, but live custody reconnect validation (`integration_relay_custody -- --include-ignored`) now times out and requires follow-up triage.
+8. WS12.10 re-baseline (2026-03-03 HST) closed the live custody timeout signal with stable 3/3 reruns, closed relay rollout-skew risk with fresh `0.2.0` relay evidence, and added iOS main-thread I/O hotfix for startup diagnostics path.
+9. WS12.13 wave-2 consolidation (2026-03-03 HST) normalized mixed-doc checklists into status-tagged guidance, migrated transport future tasks into explicit roadmap metadata, and reconciled legacy validation scripts with canonical WS12 matrix gates.
+10. WS12.11 runtime triage (2026-03-03 HST) documented iOS relay visibility flapping patterns and established state/race hardening follow-up queue.
+11. WS12.14 diagnosis-only Bluetooth run (2026-03-03 HST) documented Android/iOS BLE-only path instability (Android BLE address-type mismatch flood + zero-advertisement windows, iOS multipeer invite timeout loops, and WiFi transport traces during attempted sessions) with explicit follow-up gates for strict BLE-only validation and instrumentation.
+12. WS12.16 wave-2 runtime hardening pass (2026-03-03 HST) implemented Android BLE callback/permit race fixes, Android+iOS `delivery_attempt` diagnostics timelines, iOS relay state/debounce instrumentation, and iOS Multipeer invite storm guardrails.
 
 ---
 

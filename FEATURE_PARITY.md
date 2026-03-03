@@ -97,7 +97,7 @@ To ensure consistent feature rollout and prevent regressions:
 
 ### [Needs Revalidation] Regression Prevention Checklist
 
-- [ ] Does the new feature break existing identity/storage?
-- [ ] Is the feature flag/setting persisted correctly?
-- [ ] Does the UI handle empty/null states (e.g., no relay connected)?
-- [ ] Are mobile-specific constraints (background execution, battery) respected?
+- Does the new feature break existing identity/storage?
+- Is the feature flag/setting persisted correctly?
+- Does the UI handle empty/null states (e.g., no relay connected)?
+- Are mobile-specific constraints (background execution, battery) respected?

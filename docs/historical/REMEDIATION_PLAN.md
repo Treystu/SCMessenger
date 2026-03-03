@@ -13,6 +13,12 @@
 - `delete/replace`: roadmap checkpoints here are historical unless reflected in canonical backlog and rollout docs.
 - `keep`: retain this file as historical remediation context.
 
+## [Historical] Checklist Triage (2026-03-03 HST)
+
+- Open checklist markers in this file were converted to historical status tags.
+- Active implementation truth is tracked in `REMAINING_WORK_TRACKING.md`.
+- Planned future work ownership remains in WS13/WS14 plans under `docs/V0.2.1_*`.
+
 ## [Needs Revalidation] 📊 Current Status Summary
 
 A cross-platform audit reveals that while the core mesh connectivity (via UniFFI) is functional, there is significant non-parity between Android and iOS, particularly in UX (Onboarding) and advanced Privacy features.
@@ -23,33 +29,33 @@ A cross-platform audit reveals that while the core mesh connectivity (via UniFFI
 
 **Objective:** Align the first-run experience and core messaging interface.
 
-- [ ] **Android Onboarding**: Implement `OnboardingScreen.kt` using the iOS 5-step flow (Welcome, Identity, Permissions, Relay Info, Completion).
-- [ ] **iOS Notification Enhancements**: Update `NotificationManager.swift` to support Identicons and grouped messaging (matching Android's `NotificationHelper`).
-- [ ] **Android Chat Polish**: Fix the "TODO: Create icon" in `MeshForegroundService` and ensure the `ChatScreen` scroll-to-bottom logic is robust.
-- [ ] **iOS Chat Error Handling**: Improve `ChatViewModel` error mapping to be as descriptive as the Android equivalent.
+- [Historical - Re-scoped] **Android Onboarding**: Implement `OnboardingScreen.kt` using the iOS 5-step flow (Welcome, Identity, Permissions, Relay Info, Completion).
+- [Historical - Re-scoped] **iOS Notification Enhancements**: Update `NotificationManager.swift` to support Identicons and grouped messaging (matching Android's `NotificationHelper`).
+- [Historical - Re-scoped] **Android Chat Polish**: Fix the "TODO: Create icon" in `MeshForegroundService` and ensure the `ChatScreen` scroll-to-bottom logic is robust.
+- [Historical - Re-scoped] **iOS Chat Error Handling**: Improve `ChatViewModel` error mapping to be as descriptive as the Android equivalent.
 
 ## [Needs Revalidation] 🔐 Phase 2: Privacy & Core Feature Wiring
 
 **Objective:** Connect the UI toggles to the Rust backend.
 
-- [ ] **UniFFI Expansion**: Update `api.udl` to expose `CoverTraffic`, `MessagePadding`, and `TimingObfuscation` settings.
-- [ ] **Settings Wiring (iOS)**: Implement the `TODO` items in `SettingsViewModel.swift` to forward privacy toggles to the core.
-- [ ] **Settings Wiring (Android)**: Ensure `SettingsViewModel.kt` is synchronized with the new UniFFI privacy settings.
-- [ ] **Identity Management**: Unify the "Identity Export" formats between platforms to ensure seamless contact sharing.
+- [Historical - Re-scoped] **UniFFI Expansion**: Update `api.udl` to expose `CoverTraffic`, `MessagePadding`, and `TimingObfuscation` settings.
+- [Historical - Re-scoped] **Settings Wiring (iOS)**: Implement the `TODO` items in `SettingsViewModel.swift` to forward privacy toggles to the core.
+- [Historical - Re-scoped] **Settings Wiring (Android)**: Ensure `SettingsViewModel.kt` is synchronized with the new UniFFI privacy settings.
+- [Historical - Re-scoped] **Identity Management**: Unify the "Identity Export" formats between platforms to ensure seamless contact sharing.
 
 ## [Needs Revalidation] 📡 Phase 3: Transport & Reliability
 
 **Objective:** Finalize local discovery and background stability.
 
-- [ ] **iOS Multipeer Integration**: Fully wire `MultipeerTransport.swift` into the Rust swarm.
-- [ ] **Android Background Stability**: Optimize `MeshForegroundService` for better battery life during long-running mesh sessions.
-- [ ] **Dashboard Sync**: Update `MeshDashboardView.swift` (iOS) to allow service control (Start/Stop) matching the Android `DashboardScreen`.
+- [Historical - Re-scoped] **iOS Multipeer Integration**: Fully wire `MultipeerTransport.swift` into the Rust swarm.
+- [Historical - Re-scoped] **Android Background Stability**: Optimize `MeshForegroundService` for better battery life during long-running mesh sessions.
+- [Historical - Re-scoped] **Dashboard Sync**: Update `MeshDashboardView.swift` (iOS) to allow service control (Start/Stop) matching the Android `DashboardScreen`.
 
 ## [Needs Revalidation] 📦 Phase 4: Final Polish & Assets
 
-- [ ] **Vector Assets**: Generate/Add proper notification icons (`ic_notification.xml`) for Android.
-- [ ] **Theme Alignment**: Ensure HSL color tokens are identical across `Theme.swift` and `Color.kt`.
-- [ ] **Documentation**: Finalize the user-facing `README.md` for both platforms.
+- [Historical - Re-scoped] **Vector Assets**: Generate/Add proper notification icons (`ic_notification.xml`) for Android.
+- [Historical - Re-scoped] **Theme Alignment**: Ensure HSL color tokens are identical across `Theme.swift` and `Color.kt`.
+- [Historical - Re-scoped] **Documentation**: Finalize the user-facing `README.md` for both platforms.
 
 ---
 

@@ -33,6 +33,9 @@
 
 **Production timeline:** 4-6 weeks to 1M user capacity
 
+Wave-2 normalization note (2026-03-03 HST):
+- Open checkboxes in this mixed-status file were converted to explicit `[Planned]` roadmap markers to avoid ambiguity with active canonical backlog tracking.
+
 ---
 
 ## [Needs Revalidation] Summary of Changes Made
@@ -253,31 +256,31 @@ fun getConnectedPeers(): List<String> {
 ## [Needs Revalidation] Deployment Checklist for 1M Users
 
 ### [Needs Revalidation] Infrastructure (Week 1)
-- [ ] Deploy 10-20 bootstrap nodes (geographically distributed)
-- [ ] Set up load balancers for bootstrap endpoints
-- [ ] Configure metrics collection (Prometheus/Grafana)
-- [ ] Set up monitoring alerts
+- [Planned] Deploy 10-20 bootstrap nodes (geographically distributed)
+- [Planned] Set up load balancers for bootstrap endpoints
+- [Planned] Configure metrics collection (Prometheus/Grafana)
+- [Planned] Set up monitoring alerts
 
 ### [Needs Revalidation] P2 Issues (Week 2)
-- [ ] Wire platform bridge callbacks
-- [ ] Fix service statistics collection
-- [ ] Add message persistence integration tests
+- [Planned] Wire platform bridge callbacks
+- [Planned] Fix service statistics collection
+- [Planned] Add message persistence integration tests
 
 ### [Needs Revalidation] Testing (Weeks 3-4)
-- [ ] Load test with 1000+ simulated nodes
-- [ ] Multi-device integration tests
-- [ ] Battery drain testing (target: < 10%/hour)
-- [ ] Message delivery reliability (target: 99%+)
+- [Planned] Load test with 1000+ simulated nodes
+- [Planned] Multi-device integration tests
+- [Planned] Battery drain testing (target: < 10%/hour)
+- [Planned] Message delivery reliability (target: 99%+)
 
 ### [Needs Revalidation] Security (Weeks 4-5)
-- [ ] Third-party security audit
-- [ ] Penetration testing
-- [ ] Privacy policy review
+- [Planned] Third-party security audit
+- [Planned] Penetration testing
+- [Planned] Privacy policy review
 
 ### [Needs Revalidation] Launch (Week 6)
-- [ ] Beta testing (100-1000 users)
-- [ ] Monitor and optimize
-- [ ] Progressive rollout to 1M
+- [Planned] Beta testing (100-1000 users)
+- [Planned] Monitor and optimize
+- [Planned] Progressive rollout to 1M
 
 ---
 

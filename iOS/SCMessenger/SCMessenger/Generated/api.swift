@@ -1256,11 +1256,15 @@ public func FfiConverterTypeHistoryManager_lower(_ value: HistoryManager) -> Uns
 
 public protocol IronCoreProtocol : AnyObject {
     
+    func contactsManager()  -> ContactManager
+    
     func exportIdentityBackup() throws  -> String
     
     func extractPublicKeyFromPeerId(peerId: String) throws  -> String
     
     func getIdentityInfo()  -> IdentityInfo
+    
+    func historyManager()  -> HistoryManager
     
     func importIdentityBackup(backup: String) throws 
     
@@ -1357,6 +1361,13 @@ public static func withStorage(storagePath: String) -> IronCore {
     
 
     
+open func contactsManager() -> ContactManager {
+    return try!  FfiConverterTypeContactManager.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_ironcore_contacts_manager(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func exportIdentityBackup()throws  -> String {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_export_identity_backup(self.uniffiClonePointer(),$0
@@ -1375,6 +1386,13 @@ open func extractPublicKeyFromPeerId(peerId: String)throws  -> String {
 open func getIdentityInfo() -> IdentityInfo {
     return try!  FfiConverterTypeIdentityInfo.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_get_identity_info(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func historyManager() -> HistoryManager {
+    return try!  FfiConverterTypeHistoryManager.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_ironcore_history_manager(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -4790,6 +4808,9 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_historymanager_stats() != 45938) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_contacts_manager() != 24902) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_export_identity_backup() != 49536) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4797,6 +4818,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_get_identity_info() != 10640) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_history_manager() != 59889) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_import_identity_backup() != 7432) {

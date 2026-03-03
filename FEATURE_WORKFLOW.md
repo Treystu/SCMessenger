@@ -18,17 +18,17 @@ This guide outlines the streamlined process for adding new features to SCMesseng
 
 **Location**: `core/src/`
 
-- [ ] **Define Data Structures**: Update structs/enums in `api.udl` (for UniFFI) and `lib.rs`.
-- [ ] **Implement Logic**: Add business logic in the appropriate Rust modules.
-- [ ] **Expose API**: Ensure public methods are exposed via `IronCore` or other UniFFI-compatible structs.
-- [ ] **Unit Tests**: Add Rust unit tests in `core/src/...`.
-- [ ] **Verify Bindings**: Run `cargo check` and ensure `api.udl` is valid.
+- **Define Data Structures**: Update structs/enums in `api.udl` (for UniFFI) and `lib.rs`.
+- **Implement Logic**: Add business logic in the appropriate Rust modules.
+- **Expose API**: Ensure public methods are exposed via `IronCore` or other UniFFI-compatible structs.
+- **Unit Tests**: Add Rust unit tests in `core/src/...`.
+- **Verify Bindings**: Run `cargo check` and ensure `api.udl` is valid.
 
 ## [Needs Revalidation] 2. Generate Bindings
 
-- [ ] **Android**: Run `./gradlew :app:generateUniFFIBindings` (in `android/`).
-- [ ] **iOS**: Run `iOS/copy-bindings.sh`.
-- [ ] **WASM**: Run `wasm-pack build` (in `core/`).
+- **Android**: Run `./gradlew :app:generateUniFFIBindings` (in `android/`).
+- **iOS**: Run `iOS/copy-bindings.sh`.
+- **WASM**: Run `wasm-pack build` (in `core/`).
 
 ## [Needs Revalidation] 3. Platform Integration
 
@@ -47,42 +47,42 @@ For each platform, ensure the feature is integrated into the UI and logic.
 
 **Checklist:**
 
-- [ ] **Data Layer**: Update repositories to expose new core functionality.
-- [ ] **UI/UX**: Create or update UI components (Views/Screens).
-  - [ ] Ensure **scrolling works properly** on mobile screens (iOS/Android).
-  - [ ] Verify buttons and interactive elements are accessible.
-- [ ] **Manual Test**: Build and run on Emulator/Device.
+- **Data Layer**: Update repositories to expose new core functionality.
+- **UI/UX**: Create or update UI components (Views/Screens).
+  - Ensure **scrolling works properly** on mobile screens (iOS/Android).
+  - Verify buttons and interactive elements are accessible.
+- **Manual Test**: Build and run on Emulator/Device.
 
 ### [Needs Revalidation] iOS (Swift)
 
 **Location**: `iOS/SCMessenger/`
 
-- [ ] **Update Repository**: Update `MeshRepository.swift` to use the new Core API methods.
-- [ ] **Update UI**: Add SwiftUI Views/ViewModels to expose the feature.
-- [ ] **Manual Test**: Build and run in Simulator (Cmd+R).
+- **Update Repository**: Update `MeshRepository.swift` to use the new Core API methods.
+- **Update UI**: Add SwiftUI Views/ViewModels to expose the feature.
+- **Manual Test**: Build and run in Simulator (Cmd+R).
 
 ### [Needs Revalidation] Android (Kotlin)
 
 **Location**: `android/app/src/main/java/`
 
-- [ ] **Update Repository**: Update `MeshRepository.kt` to use the new Core API actions.
-- [ ] **Update UI**: Add Jetpack Compose screens/components.
-- [ ] **Manual Test**: Build and run on Emulator/Device.
+- **Update Repository**: Update `MeshRepository.kt` to use the new Core API actions.
+- **Update UI**: Add Jetpack Compose screens/components.
+- **Manual Test**: Build and run on Emulator/Device.
 
 ### [Needs Revalidation] Web / WASM (TypeScript/Rust)
 
 **Location**: `ui/` or `wasm/`
 
-- [ ] **Update WASM Bridge**: Ensure `wasm-pack` output is consumed correctly.
-- [ ] **Update UI**: Add HTML/JS/TS components.
-- [ ] **Test**: Run local dev server.
+- **Update WASM Bridge**: Ensure `wasm-pack` output is consumed correctly.
+- **Update UI**: Add HTML/JS/TS components.
+- **Test**: Run local dev server.
 
 ### [Needs Revalidation] CLI (Rust)
 
 **Location**: `cli/`
 
-- [ ] **Update Commands**: Add new subcommands or flags in `cli/src/main.rs`.
-- [ ] **Test**: Run `cargo run -- <command>`.
+- **Update Commands**: Add new subcommands or flags in `cli/src/main.rs`.
+- **Test**: Run `cargo run -- <command>`.
 
 ## [Needs Revalidation] 4. Feature Harmonization & Rollout
 
@@ -110,20 +110,20 @@ To avoid regressions and ensure consistency:
 
 ## [Needs Revalidation] 4. Verification & Testing
 
-- [ ] **Docker Simulation**: Update `verify_simulation.sh` if the feature involves networking/messaging.
-- [ ] **Integration Tests**: Run `./verify_integration.sh` (if applicable).
-- [ ] **End-to-End**: Verify feature works between platforms (e.g., iOS <-> Android).
+- **Docker Simulation**: Update `verify_simulation.sh` if the feature involves networking/messaging (script now fail-fasts when Docker prerequisites are missing; no auto-install).
+- **Integration Tests**: Run `./verify_integration.sh` (delegates to canonical `./scripts/verify_ws12_matrix.sh`).
+- **End-to-End**: Verify feature works between platforms (e.g., iOS <-> Android).
 
 ## [Needs Revalidation] 5. Documentation
 
-- [ ] **User Guide**: Update `README.md` or specific guides in `docs/` with new feature usage.
-- [ ] **Developer Docs**: Update struct/API documentation if significant changes were made.
-- [ ] **Changelog**: Add entry to user-facing changelogs.
+- **User Guide**: Update `README.md` or specific guides in `docs/` with new feature usage.
+- **Developer Docs**: Update struct/API documentation if significant changes were made.
+- **Changelog**: Add entry to user-facing changelogs.
 
 ## [Needs Revalidation] 6. Commit & Context Cleanup
 
-- [ ] **Commit**: `git commit -m "feat(scope): Description"`
-- [ ] **AI Context**: When starting a new major task with an AI agent, summarize the finished state and start a fresh session to keep context clean.
+- **Commit**: `git commit -m "feat(scope): Description"`
+- **AI Context**: When starting a new major task with an AI agent, summarize the finished state and start a fresh session to keep context clean.
 
 ## [Needs Revalidation] 7. Final Validation Protocol
 

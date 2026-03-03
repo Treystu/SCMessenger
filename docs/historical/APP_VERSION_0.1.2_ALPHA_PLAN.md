@@ -289,12 +289,16 @@ Deterministic, event-driven transitions to ensure cross-platform parity.
 
 ## 9) Deliverables checklist for v0.1.2-alpha
 
+Historical checklist triage (2026-03-03 HST):
+- This checklist is no longer canonical execution truth for v0.2.0+.
+- Any still-relevant validation gates are carried forward in `REMAINING_WORK_TRACKING.md` WS12.15 (`live network matrix` and `ACK-safe path switching`).
+
 - [x] Migration framework validated across Core/iOS/Android/WASM.
 - [x] Identity/contact/message continuity — code complete (backup/restore + storage migration); device validation pending.
 - [x] Unified connection orchestrator live across all clients.
-- [ ] GCP bootstrap + direct P2P + relay fallback validated (requires live network testing).
+- [Historical - Carry-forward to WS12.15.4] GCP bootstrap + direct P2P + relay fallback validated (requires live network testing).
 - [x] WASM swarm path validated (no `wasm32` swarm bail-out).
-- [ ] ACK-safe path switching validated (no duplicates/loss on transitions).
+- [Historical - Carry-forward to WS12.15.5] ACK-safe path switching validated (no duplicates/loss on transitions).
 - [x] Parity audit closed for core chat workflows.
 - [x] Structured diagnostics export available for partner bug reports.
 - [x] Release notes + partner test playbook published.

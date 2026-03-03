@@ -442,22 +442,22 @@ swarm.dial("/ip4/203.0.113.10/tcp/9999/p2p/QmABC...".parse()?).await?;
 ## [Needs Revalidation] Future Enhancements
 
 ### [Needs Revalidation] Short Term
-- [ ] Simultaneous multi-path delivery (try 3 relays at once)
-- [ ] WebRTC transport for browser support
-- [ ] Circuit relay v2 (libp2p standardized)
-- [ ] Bandwidth accounting (relay resource limits)
+- [Planned | Owner: Core Transport | Milestone: v0.2.1+] Simultaneous multi-path delivery (try 3 relays at once). Gate: `cargo test -p scmessenger-core --test integration_offline_partition_matrix`. Acceptance: deterministic relay-path ranking with bounded fanout and no duplicate terminal delivery.
+- [Planned | Owner: Web/WASM + Core Transport | Milestone: v0.2.1+] WebRTC transport for browser support. Gate: `wasm-pack test --headless --firefox`. Acceptance: browser peers can complete offer/answer and exchange encrypted payloads over WebRTC path.
+- [Planned | Owner: Core Transport | Milestone: v0.2.2+] Circuit relay v2 (libp2p standardized). Gate: targeted relay-v2 integration suite (to be added). Acceptance: reservation and relay forwarding interoperate with standardized v2 semantics.
+- [Planned | Owner: Core Transport + Ops | Milestone: v0.2.2+] Bandwidth accounting (relay resource limits). Gate: relay stress/load test lane (to be added). Acceptance: relay enforces configured throughput ceilings without dropping control-plane stability.
 
 ### [Needs Revalidation] Medium Term
-- [ ] Onion routing (3-hop privacy)
-- [ ] Relay incentivization (reputation → rewards)
-- [ ] NAT-PMP/UPnP port forwarding
-- [ ] QUIC hole-punching
+- [Planned | Owner: Privacy Transport | Milestone: v0.2.2+] Onion routing (3-hop privacy). Gate: privacy integration suite with route obfuscation assertions (to be added). Acceptance: multi-hop payload forwarding preserves confidentiality and deterministic unwrap semantics.
+- [Planned | Owner: Reputation/Economics | Milestone: Post-v0.2.2] Relay incentivization (reputation -> rewards). Gate: policy simulation + abuse review (to be added). Acceptance: incentives improve relay participation without degrading anti-abuse posture.
+- [Planned | Owner: Core Transport | Milestone: v0.2.2+] NAT-PMP/UPnP port forwarding. Gate: NAT traversal hardware/router matrix (to be added). Acceptance: supported environments can auto-open ports with explicit user/ops controls.
+- [Planned | Owner: Core Transport | Milestone: v0.2.2+] QUIC hole-punching. Gate: NAT traversal integration suite (to be added). Acceptance: direct QUIC path establishment succeeds across supported NAT types with relay fallback intact.
 
 ### [Needs Revalidation] Long Term
-- [ ] Distributed reputation consensus (Byzantine fault tolerance)
-- [ ] Identity vouching (web of trust)
-- [ ] Proof-of-relay (cryptographic relay receipts)
-- [ ] Anonymous relay selection (mix networks)
+- [Planned | Owner: Research + Core | Milestone: Post-v0.2.x] Distributed reputation consensus (Byzantine fault tolerance). Gate: consensus simulation harness (to be added). Acceptance: reputation convergence remains stable under adversarial updates.
+- [Planned | Owner: Identity/Trust | Milestone: Post-v0.2.x] Identity vouching (web of trust). Gate: trust-graph validation scenarios (to be added). Acceptance: attestations can be created, revoked, and evaluated consistently across clients.
+- [Planned | Owner: Core Transport + Crypto | Milestone: Post-v0.2.x] Proof-of-relay (cryptographic relay receipts). Gate: receipt verification suite (to be added). Acceptance: relay participation can be cryptographically audited without exposing message content.
+- [Planned | Owner: Privacy Research | Milestone: Post-v0.2.x] Anonymous relay selection (mix networks). Gate: anonymity-set benchmark scenarios (to be added). Acceptance: path selection improves metadata resistance with bounded latency overhead.
 
 ## [Needs Revalidation] Conclusion
 

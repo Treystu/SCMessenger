@@ -230,7 +230,7 @@ struct MeshDashboardView: View {
             }
         }
 
-        peersByKey = deduplicatePeersByIdentityAndAliases(merged.values)
+        peersByKey = deduplicatePeersByIdentityAndAliases(Array(merged.values))
     }
 
     private func handlePeerEvent(_ event: MeshEventBus.PeerEvent) {

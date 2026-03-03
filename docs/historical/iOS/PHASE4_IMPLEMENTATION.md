@@ -1,6 +1,7 @@
 # Phase 4: CoreBluetooth Transport - Implementation Guide
 
 > Design/implementation guide snapshot. Validate against `docs/CURRENT_STATE.md` before treating status claims as current.
+> Historical checklist triage (2026-03-03 HST): open boxes are superseded implementation-planning artifacts and not canonical execution tasks.
 
 ## Overview
 Phase 4 requires ~900 LoC split across 4 files. This document provides the complete implementation structure.
@@ -225,25 +226,25 @@ func applyBleAdjustment(_ adjustment: BleAdjustment) {
 ## Testing Checklist
 
 ### Unit Tests (XCTest)
-- [ ] Scan start/stop
-- [ ] Peripheral discovery and caching
-- [ ] Write queue management (never overlap)
-- [ ] State restoration
-- [ ] Privacy rotation
-- [ ] L2CAP channel opening
+- [Historical - Superseded] Scan start/stop
+- [Historical - Superseded] Peripheral discovery and caching
+- [Historical - Superseded] Write queue management (never overlap)
+- [Historical - Superseded] State restoration
+- [Historical - Superseded] Privacy rotation
+- [Historical - Superseded] L2CAP channel opening
 
 ### Integration Tests
-- [ ] Two iOS devices discover each other
-- [ ] GATT write/notify round-trip
-- [ ] L2CAP bulk transfer
-- [ ] Background state restoration
-- [ ] Android ↔ iOS interoperability
+- [Historical - Superseded] Two iOS devices discover each other
+- [Historical - Superseded] GATT write/notify round-trip
+- [Historical - Superseded] L2CAP bulk transfer
+- [Historical - Superseded] Background state restoration
+- [Historical - Superseded] Android ↔ iOS interoperability
 
 ## Implementation Status
 - [x] MeshBLEConstants.swift created
-- [ ] BLECentralManager.swift (300 LoC) - **TO BE COMPLETED IN XCODE**
-- [ ] BLEPeripheralManager.swift (300 LoC) - **TO BE COMPLETED IN XCODE**
-- [ ] BLEL2CAPManager.swift (150 LoC) - **TO BE COMPLETED IN XCODE**
+- [Historical - Superseded] BLECentralManager.swift (300 LoC) - **TO BE COMPLETED IN XCODE**
+- [Historical - Superseded] BLEPeripheralManager.swift (300 LoC) - **TO BE COMPLETED IN XCODE**
+- [Historical - Superseded] BLEL2CAPManager.swift (150 LoC) - **TO BE COMPLETED IN XCODE**
 
 ## Notes
 Due to the complexity and length of CoreBluetooth implementation (~900 LoC), these files should be completed in Xcode on macOS where:

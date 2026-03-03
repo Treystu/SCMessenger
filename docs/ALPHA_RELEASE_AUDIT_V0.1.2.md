@@ -1,5 +1,9 @@
 # SCMessenger v0.1.2 Alpha Release Audit
 
+> **Component Status Notice (2026-03-03 HST)**
+> This audit is a mixed-status historical reference. Use `REMAINING_WORK_TRACKING.md` and `docs/CURRENT_STATE.md` as execution truth for active work.
+> Open checkbox syntax in this file has been normalized to explicit status labels to avoid backlog ambiguity.
+
 **Audited:** 2026-02-26 | **Updated:** 2026-02-26
 **Branch:** `claude/audit-alpha-release-plan-bq4sA` (merged from `origin/main` ce2a1ad)
 **Method:** Full codebase audit — documentation review, code inspection, runtime log analysis (android_log.txt)
@@ -173,16 +177,16 @@ RESOLVED (all code complete):
 [x] cargo fmt clean across workspace — this branch
 
 VALIDATION REQUIRED (no code changes):
-[ ] Live network validation: GCP + direct P2P + relay fallback (Android + iOS)
-[ ] ACK-safe path switching validation (both platforms)
-[ ] App-update + reinstall continuity validation on real devices
+[Deferred Validation] Live network validation: GCP + direct P2P + relay fallback (Android + iOS)
+[Deferred Validation] ACK-safe path switching validation (both platforms)
+[Deferred Validation] App-update + reinstall continuity validation on real devices
 
 FINAL STEP (do LAST after testing passes):
-[ ] Version bump: Cargo.toml + behaviour.rs → 0.1.2
-[ ] Rebuild and redeploy GCP relay after version bump
+[Historical Closeout 2026-03-03 HST] Version bump: Cargo.toml + behaviour.rs → 0.1.2 (superseded by v0.2.0 release sync track in `docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md`)
+[Historical Closeout 2026-03-03 HST] Rebuild and redeploy GCP relay after version bump (superseded by active v0.2.0 relay rollout and runtime re-baseline in `docs/CURRENT_STATE.md`)
 
 SHOULD DO SHORTLY AFTER ALPHA:
-[ ] Capture iOS power settings runtime evidence for beta gate
+[Deferred Post-Alpha] Capture iOS power settings runtime evidence for beta gate
 ```
 
 ---
@@ -197,7 +201,7 @@ SHOULD DO SHORTLY AFTER ALPHA:
 | .gitignore + remove android_log.txt | 1 | ✅ Done (this branch) |
 | iOS BLE delayed identity refresh reads | ~15 LOC | ✅ Done (this branch, 2c4436d) |
 | WASM NatStatusChanged match arm + cargo fmt | ~3 LOC | ✅ Done (this branch) |
-| Version bump (after testing) | 2 | ⏳ Deferred — do after validation |
+| Version bump (after testing) | 2 | Historical closeout: superseded by v0.2.0 release sync track |
 
 ---
 
