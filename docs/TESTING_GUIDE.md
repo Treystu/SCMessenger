@@ -6,14 +6,15 @@ Last updated: 2026-03-03
 ## WS12 Reproducible Validation Command
 
 ```bash
-ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./scripts/verify_ws12_matrix.sh
+ANDROID_HOME=/path/to/android/sdk ./scripts/verify_ws12_matrix.sh
 ```
 
 Notes:
 
-1. Set `SCM_SKIP_ANDROID=1` to skip Android parity checks.
-2. Set `SCM_SKIP_IOS=1` to skip iOS parity checks.
-3. iOS parity checks require macOS when `SCM_SKIP_IOS` is not set.
+1. Set `ANDROID_HOME` to your local SDK path before running Android parity checks.
+2. Set `SCM_SKIP_ANDROID=1` to skip Android parity checks.
+3. Set `SCM_SKIP_IOS=1` to skip iOS parity checks.
+4. iOS parity checks require macOS when `SCM_SKIP_IOS` is not set.
 
 ## Mandatory Workspace Gates
 
@@ -39,7 +40,7 @@ cargo test -p scmessenger-wasm test_desktop_role_resolution_defaults_to_relay_on
 cargo test -p scmessenger-wasm test_desktop_relay_only_flow_blocks_outbound_message_prepare
 
 # Android role + fallback parity
-cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk \
+cd android && ANDROID_HOME=/path/to/android/sdk \
   ./gradlew :app:testDebugUnitTest \
     --tests com.scmessenger.android.test.RoleNavigationPolicyTest \
     --tests com.scmessenger.android.data.MeshRepositoryTest
@@ -65,6 +66,12 @@ Additional WS12 parity checks:
 1. Android targeted parity tests: **pass**
 2. iOS local transport fallback tests: **pass**
 3. iOS role-mode parity source checks: **pass**
+
+WS12.5 re-validation (2026-03-03):
+
+1. `cargo test -p scmessenger-core --test integration_offline_partition_matrix` — **pass**
+2. `cargo test -p scmessenger-core --test integration_retry_lifecycle` — **pass**
+3. `cargo test -p scmessenger-core --test integration_relay_custody -- --include-ignored` — **pass**
 
 ## CI Enforcement
 

@@ -1,6 +1,6 @@
 # SCMessenger v0.2.0 Alpha Milestone Plan
 
-Status: Draft for execution lock  
+Status: Active (execution complete through WS12.5 audit)  
 Date: 2026-03-03  
 Scope: Core + Android + iOS + Desktop GUI + Relay topology
 
@@ -54,9 +54,13 @@ Follow-up locks:
 2. For ASCII payloads, max length is `8192` characters.
 3. For UTF-8 multi-byte characters, max character count is lower than `8192`.
 
-Current code reference to update:
+Historical baseline reference (pre-WS1):
 
-- `core/src/message/codec.rs` currently sets `MAX_PAYLOAD_SIZE = 64 * 1024`.
+- `core/src/message/codec.rs` previously set `MAX_PAYLOAD_SIZE = 64 * 1024`.
+
+Current v0.2.0 state:
+
+- `core/src/message/codec.rs` enforces `MAX_PAYLOAD_SIZE = 8 * 1024`.
 
 ---
 
@@ -409,6 +413,7 @@ Execution note (2026-03-03):
 2. Added CI-enforced parity gates for deterministic offline/partition suites (including live custody reconnect), Android role/fallback, desktop/WASM role mode, and iOS transport/role checks.
 3. Added reproducible validation runner: `scripts/verify_ws12_matrix.sh`.
 4. Canonical docs + residual-risk register were updated in the same run to lock docs/runtime parity.
+5. WS12.5 burndown audit reconciled remaining doc/backlog drift and re-validated custody reconnect evidence used for `R-WS3-01` closure.
 
 ---
 

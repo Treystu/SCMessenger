@@ -1,5 +1,8 @@
 # SCMessenger Current State (Verified)
 
+Status: Active  
+Last updated: 2026-03-03
+
 Last verified: **2026-03-03** (local workspace checks on this machine)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
@@ -33,6 +36,12 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:testDebugUnitTest --tests com.scmessenger.android.test.RoleNavigationPolicyTest --tests com.scmessenger.android.data.MeshRepositoryTest` — **pass**
 - `bash ./iOS/verify-test.sh` — **pass** (21 warnings, non-fatal policy; includes local transport fallback + role-mode parity checks)
 - `ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./scripts/verify_ws12_matrix.sh` — **pass**
+
+### WS12.5 Burndown Audit Snapshot (2026-03-03)
+
+- `cargo test -p scmessenger-core --test integration_offline_partition_matrix` — **pass**
+- `cargo test -p scmessenger-core --test integration_retry_lifecycle` — **pass**
+- `cargo test -p scmessenger-core --test integration_relay_custody -- --include-ignored` — **pass**
 
 ### WS10 Verification Snapshot (2026-03-03)
 

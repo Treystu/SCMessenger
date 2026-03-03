@@ -1,5 +1,8 @@
 # SCMessenger Remaining Work Tracking
 
+Status: Active  
+Last updated: 2026-03-03
+
 This is the active implementation backlog based on repository state verified on **2026-03-03**.
 
 Primary delivery target: **one unified Android + iOS + Web app**.
@@ -15,7 +18,7 @@ Owner policy constraints (2026-02-23):
 
 ## v0.2.0 Execution Residual Register
 
-Residual risks from completed v0.2.0 phases (currently through WS12 execution) are tracked in:
+Residual risks from completed v0.2.0 phases (currently through WS12.5 burndown audit) are tracked in:
 
 - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 
@@ -370,7 +373,7 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
 
 ## Verified Stable Areas (No Active Gap)
 
-- `cargo test --workspace` passes (343 passed, 0 failed, 7 ignored — verified 2026-02-25)
+- `cargo test --workspace` passes (367 passed, 0 failed, 17 ignored — verified 2026-03-03)
 - `cargo clippy --workspace` clean (0 warnings)
 - `cargo fmt --all -- --check` clean
 - Core NAT reflection integration tests pass
@@ -413,7 +416,26 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
    - Canonical plan: `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md`.
    - Kickoff prompt: `docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md` section `WS13 Kickoff (v0.2.1) - Tight Pairing start`.
 
-4. **WS14 (v0.2.1): Direct Message + Direct Message Request Notifications (iOS/Android/WASM)**
+4. **WS13.x (v0.2.1): GitHub release/version synchronization and release-note publishing flow**
+   - Requirement: normalize repository/app version metadata and GitHub release artifacts so release tags, release notes, and workspace versions remain consistent.
+   - Target:
+     - align workspace/package versions for the intended release cut,
+     - ensure `v0.1.2` GitHub release notes are finalized/publish-ready,
+     - stage `v0.2.0` draft release notes and release checklist inputs for final cut timing.
+   - Scope:
+     - Cargo/workspace version synchronization (`Cargo.toml` files as applicable at release-cut time),
+     - release note doc finalization for GitHub paste/publish flow,
+     - release workflow checklist alignment with residual-risk closure evidence,
+     - promote external planning artifacts into repo-local docs before execution (to avoid workstation-specific paths).
+   - Source inputs (planning artifacts provided by user):
+     - `/Users/christymaxwell/Downloads/implementation_plan.md.resolved`
+     - `/Users/christymaxwell/Downloads/RELEASE_NOTES_V0.1.2_GH.md.resolved`
+     - `/Users/christymaxwell/Downloads/RELEASE_NOTES_V0.2.0_DRAFT.md.resolved`
+   - Canonicalization target (during WS13.x execution):
+     - `docs/releases/v0.2.1/` (or equivalent repo-local path) with links updated in tracking/docs.
+   - Execution note: queue this after current WS12 in-flight session and after WS12/WS12.5 closure evidence is captured.
+
+5. **WS14 (v0.2.1): Direct Message + Direct Message Request Notifications (iOS/Android/WASM)**
    - Requirement: notification parity for direct messages and direct message requests across iOS, Android, and WASM.
    - Delivery model: hybrid.
      - Local notifications are fully shipped in WS14.
@@ -432,11 +454,11 @@ Canonical scenario matrix and rationale:
 
 Priority items to track into remaining v0.2.x execution:
 
-1. `EC-01` (WS11/WS12): move relay custody default persistence from temp-dir to durable app path (`R-WS3-02`).
-2. `EC-02` (WS11/WS12): ensure platform storage snapshots always exist so pressure policy cannot no-op (`R-WS5-01`).
-3. `EC-03` (WS11/WS12): replace volatile local transport route hints with stable authenticated alias mapping (`R-WS6-01`, `R-WS7-01`).
-4. `EC-04` (WS11/WS12): add convergence marker anti-abuse validation and trust hardening (`R-WS4-02`).
-5. `EC-05` (WS11/WS12): run custody reconnect integration tests in socket-enabled CI/host lane (`R-WS3-01`).
-6. `EC-06` (WS11): sender-facing delivery states normalized in Android+iOS UI/export surfaces (`R-WS2-01` reduced, still tracked for Core-native state exposure in WS12).
+1. `EC-01` (Deferred post-WS12): move relay custody default persistence from temp-dir to durable app path (`R-WS3-02`, next execution target: v0.2.1 / WS13 planning).
+2. `EC-02` (Deferred post-WS12): ensure platform storage snapshots always exist so pressure policy cannot no-op (`R-WS5-01`, next execution target: v0.2.1 platform adapters).
+3. `EC-03` (Accepted in v0.2.0 alpha): replace volatile local transport route hints with stable authenticated alias mapping (`R-WS6-01`, `R-WS7-01`, revisit before beta hardening).
+4. `EC-04` (Deferred post-WS12): add convergence marker anti-abuse validation and trust hardening (`R-WS4-02`).
+5. `[Closed in WS12]` `EC-05`: custody reconnect integration test is now CI-gated and reproducible (`R-WS3-01` closed).
+6. `EC-06` (Reduced in WS11, accepted in WS12): sender-facing delivery states are normalized in Android+iOS UI/export surfaces; remaining Core-native transition API work is tracked via `R-WS11-01` for post-v0.2.0 follow-up.
 7. `EC-07` to `EC-09` (v0.2.1 WS13): execute tight-pair single-active-device lifecycle.
 8. `EC-10` to `EC-16` (post-v0.2.1): captive portal adaptation, high-latency profile tuning, censorship-resilience strategy, wake/delegate architecture, sparse encounter optimization, and clock-skew normalization.

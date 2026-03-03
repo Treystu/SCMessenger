@@ -67,6 +67,10 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `docs/TESTING_GUIDE.md`
   - `docs/CURRENT_STATE.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.5 (2026-03-03) burndown audit reconciliation (doc/backlog drift closure + residual-risk evidence revalidation) is tracked in:
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+  - `REMAINING_WORK_TRACKING.md`
 
 ## Documentation Governance Rules
 
