@@ -394,6 +394,17 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
    - Canonical plan: `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md`.
    - Kickoff prompt: `docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md` section `WS13 Kickoff (v0.2.1) - Tight Pairing start`.
 
+4. **WS14 (v0.2.1): Direct Message + Direct Message Request Notifications (iOS/Android/WASM)**
+   - Requirement: notification parity for direct messages and direct message requests across iOS, Android, and WASM.
+   - Delivery model: hybrid.
+     - Local notifications are fully shipped in WS14.
+     - Remote-push interfaces/contracts are prepared in WS14, while APNs/FCM/Web Push backend dispatch is deferred.
+   - Product rules:
+     - DM Request source is both unknown-sender inference and explicit request flag/type support.
+     - Notification tap behavior: existing conversation opens the exact conversation; new request opens Requests Inbox.
+   - LoC planning envelope: `2,500-4,550 LoC`.
+   - Canonical plan (full context): `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`.
+
 ## Edge-Case Hardening Backlog (Global/Extreme Conditions)
 
 Canonical scenario matrix and rationale:
