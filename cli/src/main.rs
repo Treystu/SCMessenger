@@ -135,6 +135,18 @@ enum Commands {
     Send { recipient: String, message: String },
     /// Show network status
     Status,
+    /// Mark an outbox message as delivered/sent
+    MarkSent { message_id: String },
+    /// Clear all local history records
+    HistoryClear {
+        /// Required confirmation flag
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Keep only the newest N history messages
+    HistoryEnforceRetention { max_messages: u32 },
+    /// Remove history older than a unix timestamp (seconds)
+    HistoryPruneBefore { before_timestamp: u64 },
     /// Stop the running node
     Stop,
     /// Run self-tests
@@ -144,7 +156,19 @@ enum Commands {
 #[derive(Subcommand)]
 enum IdentityAction {
     Show,
-    Export,
+    Export {
+        /// Optional output file path for backup payload
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+    Import {
+        /// Backup payload string
+        #[arg(long, conflicts_with = "input")]
+        backup: Option<String>,
+        /// Read backup payload from file
+        #[arg(short = 'i', long)]
+        input: Option<String>,
+    },
     SetName { name: String },
 }
 
@@ -165,6 +189,12 @@ enum ContactAction {
     },
     Search {
         query: String,
+    },
+    SetLocalNickname {
+        contact: String,
+        nickname: Option<String>,
+        #[arg(long)]
+        clear: bool,
     },
 }
 
@@ -242,6 +272,14 @@ async fn main() -> Result<()> {
         Commands::Stop => cmd_stop().await,
         Commands::Send { recipient, message } => cmd_send_offline(recipient, message).await,
         Commands::Status => cmd_status().await,
+        Commands::MarkSent { message_id } => cmd_mark_sent(message_id).await,
+        Commands::HistoryClear { yes } => cmd_history_clear(yes).await,
+        Commands::HistoryEnforceRetention { max_messages } => {
+            cmd_history_enforce_retention(max_messages).await
+        }
+        Commands::HistoryPruneBefore { before_timestamp } => {
+            cmd_history_prune_before(before_timestamp).await
+        }
         Commands::Test => cmd_test().await,
     }
 }
@@ -319,21 +357,53 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
                 name.bright_cyan()
             );
         }
-        Some(IdentityAction::Export) => {
+        Some(IdentityAction::Export { output }) => {
+            let backup = core
+                .export_identity_backup()
+                .context("Failed to export identity backup")?;
             let info = core.get_identity_info();
-            println!("{}", "Export Identity (Backup)".bold());
+
+            println!("{}", "Export Identity Backup".bold());
             println!();
             println!(
                 "{}",
-                "⚠️  WARNING: Keep your keys secure!".bright_red().bold()
+                "⚠️  WARNING: backup payload contains private key material.".bright_red().bold()
             );
+            println!("Identity ID: {}", info.identity_id.unwrap_or_default());
+            println!("Public Key:  {}", info.public_key_hex.unwrap_or_default());
+            println!("Payload size: {} bytes", backup.len());
             println!();
-            println!("Identity ID: {}", info.identity_id.unwrap());
-            println!("Public Key:  {}", info.public_key_hex.unwrap());
-            println!();
+
+            if let Some(path) = output {
+                std::fs::write(&path, &backup)
+                    .with_context(|| format!("Failed to write backup file: {}", path))?;
+                println!("{} Backup written to {}", "✓".green(), path.bright_cyan());
+            } else {
+                println!("{}", "Backup payload:".bold());
+                println!("{}", backup);
+            }
+        }
+        Some(IdentityAction::Import { backup, input }) => {
+            let payload = if let Some(path) = input {
+                std::fs::read_to_string(&path)
+                    .with_context(|| format!("Failed to read backup file: {}", path))?
+            } else if let Some(raw) = backup {
+                raw
+            } else {
+                anyhow::bail!("Provide --backup <payload> or --input <file>");
+            };
+
+            core.import_identity_backup(payload)
+                .context("Failed to import identity backup")?;
+            let info = core.get_identity_info();
+            println!("{}", "✓ Identity backup imported".green());
             println!(
-                "Keys stored in: {}",
-                storage_path.display().to_string().bright_cyan()
+                "  Identity ID: {}",
+                info.identity_id.unwrap_or_default().bright_cyan()
+            );
+            println!(
+                "  Public Key:  {}",
+                info.public_key_hex.unwrap_or_default().bright_yellow()
             );
         }
     }
@@ -547,6 +617,40 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                                 .unwrap_or_else(|| contact.peer_id.clone());
                             println!("  {} {}", "•".bright_green(), display.bright_cyan());
                             println!("    {}", contact.peer_id.dimmed());
+                        }
+                    }
+                }
+
+                ContactAction::SetLocalNickname {
+                    contact: query,
+                    nickname,
+                    clear,
+                } => {
+                    if clear && nickname.is_some() {
+                        anyhow::bail!("Use either <nickname> or --clear, not both");
+                    }
+
+                    let contact = find_contact(&contacts, &query)?;
+                    let local = if clear { None } else { nickname };
+                    contacts
+                        .set_local_nickname(contact.peer_id.clone(), local.clone())
+                        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+
+                    match local {
+                        Some(name) => {
+                            println!(
+                                "{} Local nickname set for {} -> {}",
+                                "✓".green(),
+                                contact.peer_id.dimmed(),
+                                name.bright_cyan()
+                            );
+                        }
+                        None => {
+                            println!(
+                                "{} Local nickname cleared for {}",
+                                "✓".green(),
+                                contact.peer_id.dimmed()
+                            );
                         }
                     }
                 }
@@ -921,7 +1025,6 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let api_ctx = api::ApiContext {
         core: core.clone(),
         swarm_handle: Arc::new(swarm_handle.clone()),
-        peers: peers.clone(),
     };
 
     tokio::spawn(async move {
@@ -1511,7 +1614,6 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     let api_ctx = api::ApiContext {
         core: core_arc.clone(),
         swarm_handle: Arc::new(swarm_handle.clone()),
-        peers: peers.clone(),
     };
     tokio::spawn(async move {
         if let Err(e) = api::start_api_server(api_ctx).await {
@@ -1843,6 +1945,115 @@ async fn cmd_status() -> Result<()> {
         stats.total_messages, stats.sent_count, stats.received_count
     );
 
+    if api::is_api_available().await {
+        println!();
+        println!("{}", "Runtime Network Surface".bold());
+
+        match api::get_peers_via_api().await {
+            Ok(peers) => println!("Peers: {}", peers.len()),
+            Err(e) => println!("Peers: {} ({})", "unavailable".yellow(), e),
+        }
+
+        match api::get_listeners_via_api().await {
+            Ok(listeners) => println!("Listeners: {}", listeners.len()),
+            Err(e) => println!("Listeners: {} ({})", "unavailable".yellow(), e),
+        }
+
+        match api::get_external_address_via_api().await {
+            Ok(addrs) => {
+                if addrs.is_empty() {
+                    println!("External Addresses: {}", "(none)".dimmed());
+                } else {
+                    println!("External Addresses:");
+                    for addr in addrs {
+                        println!("  - {}", addr.dimmed());
+                    }
+                }
+            }
+            Err(e) => println!("External Addresses: {} ({})", "unavailable".yellow(), e),
+        }
+
+        match api::get_connection_path_state_via_api().await {
+            Ok(state) => println!("Connection Path State: {}", state.bright_cyan()),
+            Err(e) => println!("Connection Path State: {} ({})", "unavailable".yellow(), e),
+        }
+
+        match api::export_diagnostics_via_api().await {
+            Ok(diag) => {
+                println!("Diagnostics JSON bytes: {}", diag.len());
+            }
+            Err(e) => println!("Diagnostics: {} ({})", "unavailable".yellow(), e),
+        }
+    }
+
+    Ok(())
+}
+
+async fn cmd_mark_sent(message_id: String) -> Result<()> {
+    let data_dir = config::Config::data_dir()?;
+    let storage_path = data_dir.join("storage");
+    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let removed = core.mark_message_sent(message_id.clone());
+    if removed {
+        println!(
+            "{} Marked message as sent: {}",
+            "✓".green(),
+            message_id.bright_cyan()
+        );
+    } else {
+        println!(
+            "{} Message ID not found in outbox: {}",
+            "⚠".yellow(),
+            message_id.dimmed()
+        );
+    }
+    Ok(())
+}
+
+async fn cmd_history_clear(yes: bool) -> Result<()> {
+    if !yes {
+        anyhow::bail!("Refusing destructive clear without --yes");
+    }
+    let data_dir = config::Config::data_dir()?;
+    let storage_path = data_dir.join("storage");
+    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let history = core.history_store_manager();
+    history.clear().map_err(|e| anyhow::anyhow!("{:?}", e))?;
+    println!("{} Cleared all message history", "✓".green());
+    Ok(())
+}
+
+async fn cmd_history_enforce_retention(max_messages: u32) -> Result<()> {
+    let data_dir = config::Config::data_dir()?;
+    let storage_path = data_dir.join("storage");
+    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let history = core.history_store_manager();
+    let pruned = history
+        .enforce_retention(max_messages)
+        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+    println!(
+        "{} Retention enforced (max={}): pruned {}",
+        "✓".green(),
+        max_messages,
+        pruned
+    );
+    Ok(())
+}
+
+async fn cmd_history_prune_before(before_timestamp: u64) -> Result<()> {
+    let data_dir = config::Config::data_dir()?;
+    let storage_path = data_dir.join("storage");
+    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let history = core.history_store_manager();
+    let pruned = history
+        .prune_before(before_timestamp)
+        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+    println!(
+        "{} Pruned {} message(s) older than {}",
+        "✓".green(),
+        pruned,
+        before_timestamp
+    );
     Ok(())
 }
 

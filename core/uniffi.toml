@@ -4,6 +4,8 @@
 [bindings.kotlin]
 package_name = "uniffi.api"
 cdylib_name = "scmessenger_core"
+android = true
+android_cleaner = true
 
 [bindings.swift]
 module_name = "SCMessengerCore"

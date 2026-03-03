@@ -51,7 +51,9 @@ final class BLECentralManager: NSObject {
         super.init()
         centralManager = CBCentralManager(
             delegate: self,
-            queue: .global(qos: .utility),
+            // Keep mutable connection dictionaries on one queue to avoid races
+            // with send paths invoked from repository/main actor code.
+            queue: .main,
             options: [CBCentralManagerOptionRestoreIdentifierKey: MeshBLEConstants.centralRestoreId]
         )
     }
@@ -98,9 +100,19 @@ final class BLECentralManager: NSObject {
 
     @discardableResult
     func sendData(to peripheralId: UUID, data: Data) -> Bool {
-        guard let peripheral = connectedPeripherals[peripheralId],
-              let characteristic = messageCharacteristics[peripheralId] else {
-            logger.error("Cannot send: peripheral \(peripheralId) not connected or Message char not found")
+        guard let peripheral = connectedPeripherals[peripheralId] else {
+            if let discovered = discoveredPeripherals[peripheralId] {
+                logger.warning("Cannot send: peripheral \(peripheralId) not connected, reconnecting")
+                centralManager.connect(discovered, options: nil)
+                meshRepository?.appendDiagnostic("ble_central_reconnect_requested id=\(peripheralId)")
+            } else {
+                logger.error("Cannot send: peripheral \(peripheralId) not connected and not discovered")
+            }
+            return false
+        }
+        guard messageCharacteristics[peripheralId] != nil else {
+            logger.warning("Cannot send: Message characteristic missing for \(peripheralId), rediscovering")
+            peripheral.discoverServices([MeshBLEConstants.serviceUUID])
             return false
         }
 
@@ -112,6 +124,10 @@ final class BLECentralManager: NSObject {
             enqueueFragment(fragment, for: peripheralId)
         }
         return true
+    }
+
+    func connectedPeripheralIds() -> [String] {
+        connectedPeripherals.keys.map(\.uuidString)
     }
 
     private func enqueueFragment(_ fragment: Data, for peripheralId: UUID) {
@@ -168,7 +184,9 @@ final class BLECentralManager: NSObject {
             self.scanTimer = Timer.scheduledTimer(withTimeInterval: self.scanInterval, repeats: true) { [weak self] _ in
                 self?.performScanCycle()
             }
-            RunLoop.main.add(self.scanTimer!, forMode: .common)
+            if let scanTimer = self.scanTimer {
+                RunLoop.main.add(scanTimer, forMode: .common)
+            }
             self.performScanCycle() // Start immediately
         }
     }

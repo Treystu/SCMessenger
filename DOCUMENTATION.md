@@ -19,6 +19,7 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 - [v0.2.0 Phase Prompts](docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md)
 - [v0.2.0 Residual Risk Register](docs/V0.2.0_RESIDUAL_RISK_REGISTER.md)
 - [Platform Support Matrix](docs/PLATFORM_SUPPORT_MATRIX.md)
+- [Alpha Interop Matrix](docs/INTEROP_MATRIX_V0.2.0_ALPHA.md)
 - [Protocol Specification](docs/PROTOCOL.md)
 - [Testing Guide](docs/TESTING_GUIDE.md)
 - [Edge-Case Readiness Matrix](docs/EDGE_CASE_READINESS_MATRIX.md)
@@ -52,6 +53,7 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 - [Relay Operator Guide](docs/RELAY_OPERATOR_GUIDE.md)
 - [Bootstrap Governance](docs/BOOTSTRAP_GOVERNANCE.md)
 - [NAT Traversal Guide](docs/NAT_TRAVERSAL_GUIDE.md)
+- [Scripts Operations Guide](scripts/README.md)
 
 ## Mixed and Historical Context
 
@@ -117,6 +119,32 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `REMAINING_WORK_TRACKING.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 - WS12.17 wave-3 governance closure sweep (2026-03-03 HST, historical checklist triage + strict BLE-only/diagnostics hardening + deterministic harness additions) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.18 alpha readiness sanity + interoperability closure pass (2026-03-03 HST, Rust clippy strict cleanup + Android lint blocker closure + matrix/historical relocation/doc-lock sync) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `docs/INTEROP_MATRIX_V0.2.0_ALPHA.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.20 alpha readiness completion sweep (2026-03-03 HST, CLI/WASM parity closure + adapter-consumption closure + zero-gap interop matrix refresh + scripts operations guide) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `docs/INTEROP_MATRIX_V0.2.0_ALPHA.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+  - `scripts/README.md`
+- WS12.21 pairwise deep-dive status sweep (2026-03-03 HST, deep-dive script reruns + live probe attempt + pairing status reconciliation) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.22 Android+iOS crash-and-stability hardening sweep (2026-03-03 HST, iOS send-path crash guardrails + Android null-safety cleanup + fresh build/lint verification) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.23 pending-outbox synchronization reliability pass (2026-03-03 HST, active-peer-triggered queue promotion + route-alias retry drain for stuck pending messages) is tracked in:
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`

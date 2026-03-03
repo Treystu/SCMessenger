@@ -168,13 +168,29 @@ class TransportManager(
 
     private fun sendViaTransport(peerId: String, data: ByteArray, transport: TransportType): Boolean {
         return when (transport) {
-            TransportType.BLE -> {
-                // Try L2CAP first, then GATT client, then advertiser
-                // Each returns Boolean, so we evaluate success not just nullability
-                bleL2capManager?.sendData(peerId, data)?.takeIf { it }
-                    ?: bleGattClient?.sendData(peerId, data)?.takeIf { it }
-                    ?: bleAdvertiser?.sendData(data)?.takeIf { it }
-                    ?: false
+            TransportType.BLE -> run {
+                // Prefer connected transport channels before non-targeted advertiser payloads.
+                if (bleL2capManager?.sendData(peerId, data) == true) {
+                    return@run true
+                }
+                if (bleGattClient?.sendData(peerId, data) == true) {
+                    return@run true
+                }
+                val gattServer = bleGattServer
+                if (gattServer != null) {
+                    if (gattServer.sendData(peerId, data)) {
+                        return@run true
+                    }
+                    val connectedDevices = gattServer.getConnectedDeviceAddresses()
+                        .filter { address -> address != peerId }
+                    if (connectedDevices.size == 1 && gattServer.sendData(connectedDevices.first(), data)) {
+                        Timber.d(
+                            "BLE send fallback via GATT server connected peer ${connectedDevices.first()} (requested=$peerId)"
+                        )
+                        return@run true
+                    }
+                }
+                bleAdvertiser?.sendData(data) ?: false
             }
             TransportType.WIFI_AWARE -> {
                 wifiAware?.sendData(peerId, data) ?: false

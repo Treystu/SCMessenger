@@ -45,14 +45,34 @@ read_connected_android_serials() {
   done < <(adb devices | awk -F'\t' 'NR>1 && $2=="device" {print $1}')
 }
 
-read_connected_android_serials
-if [ "${#ANDROID_DEVICE_SERIALS[@]}" -eq 0 ]; then
-  echo "No active adb device found, attempting wireless reconnect..."
+attempt_wireless_adb_reconnect() {
+  local round="$1"
+  echo "ADB reconnect round $round..."
+
+  # Restart daemon from round 2 onward to recover dropped endpoint discovery.
+  if [ "$round" -ge 2 ]; then
+    adb kill-server >/dev/null 2>&1 || true
+    adb start-server >/dev/null 2>&1 || true
+    sleep 1
+  fi
+
   while IFS= read -r endpoint; do
     [ -n "$endpoint" ] || continue
     adb connect "$endpoint" >/dev/null 2>&1 || true
   done < <(adb mdns services 2>/dev/null | awk '/_adb-tls-connect\._tcp/ {print $NF}')
-  read_connected_android_serials
+}
+
+read_connected_android_serials
+if [ "${#ANDROID_DEVICE_SERIALS[@]}" -eq 0 ]; then
+  echo "No active adb device found, attempting wireless reconnect..."
+  for round in 1 2 3; do
+    attempt_wireless_adb_reconnect "$round"
+    read_connected_android_serials
+    if [ "${#ANDROID_DEVICE_SERIALS[@]}" -gt 0 ]; then
+      break
+    fi
+    sleep 1
+  done
 fi
 
 if [ "${#ANDROID_DEVICE_SERIALS[@]}" -eq 0 ]; then

@@ -3,12 +3,14 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+pub type ScanResult = Vec<(Vec<u8>, Vec<u8>)>;
+
 /// Unified storage trait for cross-platform data persistence
 pub trait StorageBackend: Send + Sync {
     fn put(&self, key: &[u8], value: &[u8]) -> Result<(), String>;
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, String>;
     fn remove(&self, key: &[u8]) -> Result<(), String>;
-    fn scan_prefix(&self, prefix: &[u8]) -> Result<Vec<(Vec<u8>, Vec<u8>)>, String>;
+    fn scan_prefix(&self, prefix: &[u8]) -> Result<ScanResult, String>;
     fn count_prefix(&self, prefix: &[u8]) -> Result<usize, String>;
     fn flush(&self) -> Result<(), String>;
 }
@@ -24,6 +26,12 @@ impl MemoryStorage {
         Self {
             data: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+}
+
+impl Default for MemoryStorage {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -45,7 +53,7 @@ impl StorageBackend for MemoryStorage {
         Ok(())
     }
 
-    fn scan_prefix(&self, prefix: &[u8]) -> Result<Vec<(Vec<u8>, Vec<u8>)>, String> {
+    fn scan_prefix(&self, prefix: &[u8]) -> Result<ScanResult, String> {
         let mut results = Vec::new();
         for (key, value) in self.data.read().unwrap().iter() {
             if key.starts_with(prefix) {
@@ -101,7 +109,7 @@ impl StorageBackend for SledStorage {
         Ok(())
     }
 
-    fn scan_prefix(&self, prefix: &[u8]) -> Result<Vec<(Vec<u8>, Vec<u8>)>, String> {
+    fn scan_prefix(&self, prefix: &[u8]) -> Result<ScanResult, String> {
         let mut results = Vec::new();
         for item in self.db.scan_prefix(prefix) {
             let (k, v) = item.map_err(|e| e.to_string())?;
@@ -232,7 +240,7 @@ impl StorageBackend for IndexedDbStorage {
         Ok(())
     }
 
-    fn scan_prefix(&self, prefix: &[u8]) -> Result<Vec<(Vec<u8>, Vec<u8>)>, String> {
+    fn scan_prefix(&self, prefix: &[u8]) -> Result<ScanResult, String> {
         let mut results = Vec::new();
         for (k, v) in self.data.read().unwrap().iter() {
             if k.starts_with(prefix) {

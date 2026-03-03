@@ -51,7 +51,9 @@ final class BLEPeripheralManager: NSObject {
         super.init()
         peripheralManager = CBPeripheralManager(
             delegate: self,
-            queue: .global(qos: .utility),
+            // Keep all mutable BLE state on main to avoid cross-queue races
+            // with repository send paths (subscribedCentrals/pendingNotifications).
+            queue: .main,
             options: [CBPeripheralManagerOptionRestoreIdentifierKey: MeshBLEConstants.peripheralRestoreId]
         )
     }
@@ -114,40 +116,91 @@ final class BLEPeripheralManager: NSObject {
     }
     
     func broadcastDataToCentrals(_ data: Data) {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in
+                self?.broadcastDataToCentrals(data)
+            }
+            return
+        }
         for central in subscribedCentrals {
-            sendDataToCentral(central, data: data)
+            _ = sendDataToCentral(central, data: data)
         }
     }
 
     /// Send data to a subscribed central identified by its UUID string.
     /// Used when we are acting as Peripheral and need to push data to a Central peer.
-    func sendDataToConnectedCentral(peerId: String, data: Data) {
+    @discardableResult
+    func sendDataToConnectedCentral(peerId: String, data: Data) -> Bool {
+        if !Thread.isMainThread {
+            return DispatchQueue.main.sync { [weak self] in
+                self?.sendDataToConnectedCentral(peerId: peerId, data: data) ?? false
+            }
+        }
         guard let uuid = UUID(uuidString: peerId) else {
             logger.warning("sendDataToConnectedCentral: invalid UUID string \(peerId)")
-            return
+            return false
         }
         guard let central = subscribedCentrals.first(where: { $0.identifier == uuid }) else {
             logger.warning("sendDataToConnectedCentral: no subscribed central for \(peerId)")
-            return
+            return false
         }
-        sendDataToCentral(central, data: data)
+        return sendDataToCentral(central, data: data)
     }
 
-    private func sendDataToCentral(_ central: CBCentral, data: Data) {
+    func subscribedCentralIds() -> [String] {
+        if !Thread.isMainThread {
+            return DispatchQueue.main.sync { [weak self] in
+                self?.subscribedCentralIds() ?? []
+            }
+        }
+        return subscribedCentrals.map { $0.identifier.uuidString }
+    }
+
+    @discardableResult
+    private func sendDataToCentral(_ central: CBCentral, data: Data) -> Bool {
+        if !Thread.isMainThread {
+            return DispatchQueue.main.sync { [weak self] in
+                self?.sendDataToCentral(central, data: data) ?? false
+            }
+        }
+        guard let messageCharacteristic else {
+            logger.warning("sendDataToCentral: message characteristic unavailable")
+            return false
+        }
+        guard subscribedCentrals.contains(where: { $0.identifier == central.identifier }) else {
+            logger.warning("sendDataToCentral: central no longer subscribed \(central.identifier)")
+            pendingNotifications.removeAll(where: { $0.central.identifier == central.identifier })
+            return false
+        }
         let mtu = central.maximumUpdateValueLength
+        if mtu <= 4 {
+            logger.warning("sendDataToCentral: invalid central MTU \(mtu) for \(central.identifier)")
+            return false
+        }
         let fragments = fragmentData(data, mtu: mtu)
+        var accepted = false
         
         for fragment in fragments {
-            let success = peripheralManager.updateValue(fragment, for: messageCharacteristic!, onSubscribedCentrals: [central])
+            if !subscribedCentrals.contains(where: { $0.identifier == central.identifier }) {
+                logger.warning("sendDataToCentral: central unsubscribed mid-send \(central.identifier)")
+                pendingNotifications.removeAll(where: { $0.central.identifier == central.identifier })
+                return accepted
+            }
+            let success = peripheralManager.updateValue(fragment, for: messageCharacteristic, onSubscribedCentrals: [central])
             if !success {
                 logger.warning("Failed to send fragment, buffering")
                 meshRepository?.appendDiagnostic("ble_tx_buffer fragment to=\(central.identifier.uuidString.prefix(8))")
                 pendingNotifications.append((central: central, data: fragment))
+                // Buffered notifications are still tied to an active subscribed central.
+                accepted = true
+            } else {
+                accepted = true
             }
         }
         if fragments.count > 1 {
             meshRepository?.appendDiagnostic("ble_tx_start fragments=\(fragments.count) to=\(central.identifier.uuidString.prefix(8))")
         }
+        return accepted
     }
 
     private func fragmentData(_ data: Data, mtu: Int) -> [Data] {
@@ -209,11 +262,19 @@ final class BLEPeripheralManager: NSObject {
         )
 
         // Create service
-        meshService = CBMutableService(type: MeshBLEConstants.serviceUUID, primary: true)
-        meshService?.characteristics = [messageCharacteristic!, syncCharacteristic!, identityCharacteristic!]
+        guard let messageCharacteristic,
+              let syncCharacteristic,
+              let identityCharacteristic else {
+            logger.error("setupService: failed to initialize mesh characteristics")
+            meshRepository?.appendDiagnostic("ble_peripheral_setup_fail reason=missing_characteristics")
+            return
+        }
+        let service = CBMutableService(type: MeshBLEConstants.serviceUUID, primary: true)
+        service.characteristics = [messageCharacteristic, syncCharacteristic, identityCharacteristic]
+        meshService = service
 
         // Add service and start advertising
-        peripheralManager.add(meshService!)
+        peripheralManager.add(service)
     }
     
     private func beginAdvertising() {
@@ -239,7 +300,9 @@ final class BLEPeripheralManager: NSObject {
             self.rotationTimer = Timer.scheduledTimer(withTimeInterval: self.rotationInterval, repeats: true) { [weak self] _ in
                 self?.rotateIdentity()
             }
-            RunLoop.main.add(self.rotationTimer!, forMode: .common)
+            if let timer = self.rotationTimer {
+                RunLoop.main.add(timer, forMode: .common)
+            }
         }
     }
     
@@ -249,7 +312,7 @@ final class BLEPeripheralManager: NSObject {
         isAdvertising = false // Ensure we clear state so beginAdvertising succeeds
         
         // Short delay to let hardware settle
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.beginAdvertising()
         }
     }
@@ -401,6 +464,7 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
         logger.info("Central \(central.identifier) unsubscribed from \(characteristic.uuid.shortUUID)")
         subscribedCentrals.removeAll(where: { $0.identifier == central.identifier })
+        pendingNotifications.removeAll(where: { $0.central.identifier == central.identifier })
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, willRestoreState dict: [String: Any]) {
@@ -421,6 +485,11 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
         
         while !self.pendingNotifications.isEmpty {
             let next = self.pendingNotifications[0]
+            guard self.subscribedCentrals.contains(where: { $0.identifier == next.central.identifier }) else {
+                self.logger.debug("Dropping buffered notification for unsubscribed central \(next.central.identifier)")
+                self.pendingNotifications.removeFirst()
+                continue
+            }
             let success = self.peripheralManager.updateValue(next.data, for: messageChar, onSubscribedCentrals: [next.central])
             if success {
                 self.pendingNotifications.removeFirst()

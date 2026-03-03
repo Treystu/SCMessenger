@@ -114,7 +114,11 @@ final class MeshRepository {
     private var relayDialDebounceState: [String: Date] = [:]
     private let relayDialDebounceInterval: TimeInterval = 2.5
     private let receiptAwaitSeconds: UInt64 = 8
+    private let pendingOutboxMaxAttempts: UInt32 = 720
+    private let pendingOutboxMaxAgeSeconds: UInt64 = 7 * 24 * 60 * 60
     private var identitySyncSentPeers: Set<String> = []
+    private var deliveredReceiptCache: [String: Date] = [:]
+    private let deliveredReceiptCacheTtl: TimeInterval = 2 * 60 * 60
 
     private enum RelayAvailabilityState: String {
         case stable
@@ -161,6 +165,7 @@ final class MeshRepository {
         let createdAtEpochSec: UInt64
         let attemptCount: UInt32
         let nextAttemptAtEpochSec: UInt64
+        let strictBleOnlyMode: Bool?
     }
 
     struct DeliveryStatePresentation {
@@ -896,6 +901,10 @@ final class MeshRepository {
         let selectedRoutePeerId = delivery.routePeerId ?? preferredRoutePeerId
 
         if delivery.acked {
+            promotePendingOutboundForPeer(peerId: peerId, excludingMessageId: messageId)
+        }
+
+        if delivery.acked {
             enqueuePendingOutbound(
                 historyRecordId: messageId,
                 peerId: peerId,
@@ -903,7 +912,8 @@ final class MeshRepository {
                 addresses: routing.listeners,
                 envelopeData: envelopeData,
                 initialAttemptCount: 1,
-                initialDelaySec: receiptAwaitSeconds
+                initialDelaySec: receiptAwaitSeconds,
+                strictBleOnlyMode: strictBleOnlyValidation
             )
         } else {
             enqueuePendingOutbound(
@@ -913,7 +923,8 @@ final class MeshRepository {
                 addresses: routing.listeners,
                 envelopeData: envelopeData,
                 initialAttemptCount: 1,
-                initialDelaySec: 0
+                initialDelaySec: 0,
+                strictBleOnlyMode: strictBleOnlyValidation
             )
         }
     }
@@ -1155,11 +1166,22 @@ final class MeshRepository {
     func onDeliveryReceipt(messageId: String, status: String) {
         let normalized = status.lowercased()
         guard normalized == "delivered" || normalized == "read" else { return }
+        let firstReceiptSeen = markDeliveredReceiptSeen(messageId)
+        if !firstReceiptSeen {
+            return
+        }
+        let wasAlreadyDelivered = ((try? historyManager?.get(id: messageId))?.delivered == true)
         appendDiagnostic("receipt_rx msg=\(messageId) status=\(normalized)")
-        try? historyManager?.markDelivered(id: messageId)
-        historyManager?.flush()
-        _ = ironCore?.markMessageSent(messageId: messageId)
+        if !wasAlreadyDelivered {
+            try? historyManager?.markDelivered(id: messageId)
+            historyManager?.flush()
+        }
         removePendingOutbound(historyRecordId: messageId)
+        if wasAlreadyDelivered {
+            appendDiagnostic("delivery_state msg=\(messageId) state=delivered detail=delivery_receipt_duplicate_status=\(normalized)")
+            return
+        }
+        _ = ironCore?.markMessageSent(messageId: messageId)
         appendDiagnostic("delivery_state msg=\(messageId) state=delivered detail=delivery_receipt_status=\(normalized)")
         MeshEventBus.shared.messageEvents.send(.delivered(messageId: messageId))
     }
@@ -1404,13 +1426,16 @@ final class MeshRepository {
         let hintedLibp2p = (sender?["libp2p_peer_id"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty
+        let validatedLibp2p = hintedLibp2p.flatMap { candidate in
+            isLibp2pPeerId(candidate) ? candidate : nil
+        }
         let hints = MessageIdentityHints(
             identityId: (sender?["identity_id"] as? String)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .nilIfEmpty,
             publicKey: normalizePublicKey(sender?["public_key"] as? String),
             nickname: normalizeNickname(sender?["nickname"] as? String),
-            libp2pPeerId: (hintedLibp2p != nil && isLibp2pPeerId(hintedLibp2p!)) ? hintedLibp2p : nil,
+            libp2pPeerId: validatedLibp2p,
             listeners: parseStringArray(sender?["listeners"]),
             externalAddresses: parseStringArray(sender?["external_addresses"]),
             connectionHints: parseStringArray(sender?["connection_hints"])
@@ -2230,6 +2255,12 @@ final class MeshRepository {
         }
     }
 
+    func resetServiceStats() {
+        logger.info("Resetting mesh service stats")
+        meshService?.resetStats()
+        updateStats()
+    }
+
     func quickPeerDiscovery() async throws {
         logger.info("Quick peer discovery")
         if serviceState != .running {
@@ -2409,6 +2440,7 @@ final class MeshRepository {
             includeRelayCircuits: true
         )
 
+        var syncPeerIds: [String] = [peerId]
         let isHeadless = agentVersion.contains("/headless/")
         if isBootstrapRelayPeer(peerId) || isHeadless {
             logger.info("Headless/Relay transport node identified: \(peerId) (agent: \(agentVersion))")
@@ -2427,6 +2459,7 @@ final class MeshRepository {
         } else {
             let transportIdentity = resolveTransportIdentity(libp2pPeerId: peerId)
             if let transportIdentity {
+                syncPeerIds.append(transportIdentity.canonicalPeerId)
                 let discoveredNickname = prepopulateDiscoveryNickname(
                     nickname: transportIdentity.nickname,
                     peerId: transportIdentity.canonicalPeerId,
@@ -2493,7 +2526,7 @@ final class MeshRepository {
         }
 
         // Identified implies an active session already exists; avoid re-dial loops here.
-        Task { await flushPendingOutbox(reason: "peer_identified:\(peerId)") }
+        triggerPendingSyncForPeerIds(syncPeerIds, reason: "peer_identified:\(peerId)")
         broadcastIdentityBeacon()
     }
 
@@ -2516,16 +2549,33 @@ final class MeshRepository {
 
         // Direct packet to appropriate manager based on UUID match
         // Note: peerId here is likely the UUID from the transport layer if Rust is treating it as a handle
-
-        // Try Central role first (we are client, sending to peripheral)
-        if let uuid = UUID(uuidString: peerId) {
-            bleCentralManager?.sendData(to: uuid, data: data)
-        } else {
-            logger.warning("sendBlePacket: Invalid UUID string \(peerId)")
+        let sendTargets = ([peerId] + (bleCentralManager?.connectedPeripheralIds() ?? []) + (blePeripheralManager?.subscribedCentralIds() ?? []))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .reduce(into: [String]()) { deduped, next in
+                if !deduped.contains(next) {
+                    deduped.append(next)
+                }
+            }
+        if sendTargets.isEmpty {
+            logger.warning("sendBlePacket: no BLE targets available for \(peerId)")
+            return
         }
 
-        // Also try Peripheral role (we are server, pushing notification to central)
-        blePeripheralManager?.sendDataToConnectedCentral(peerId: peerId, data: data)
+        var accepted = false
+        for target in sendTargets {
+            if let uuid = UUID(uuidString: target), bleCentralManager?.sendData(to: uuid, data: data) == true {
+                accepted = true
+                break
+            }
+            if blePeripheralManager?.sendDataToConnectedCentral(peerId: target, data: data) == true {
+                accepted = true
+                break
+            }
+        }
+        if !accepted {
+            logger.warning("sendBlePacket: no BLE transport accepted payload for requested \(peerId)")
+        }
     }
 
     /// Called when BLE central reads the identity GATT characteristic from a peer.
@@ -2592,15 +2642,13 @@ final class MeshRepository {
             }
         }
 
-        // TRIGGER IMMEDIATE SYNC: Now that we have identified a peer over BLE,
-        // don't wait for the periodic loop.
-        Task {
-            await flushPendingOutbox(reason: "peer_discovered")
-        }
-
         // Emit to nearby peers bus — UI will show peer in Nearby section for user to manually add
         let nonEmptyNickname = rawNickname.isEmpty ? nil : rawNickname
         let nonEmptyLibp2p = normalizedLibp2p
+        triggerPendingSyncForPeerIds(
+            [identityId, blePeerId, nonEmptyLibp2p].compactMap { $0 },
+            reason: "peer_discovered"
+        )
         let mergedHints = (listeners ?? []) + (externalAddresses ?? []) + (connectionHints ?? [])
         let dialCandidates = buildDialCandidatesForPeer(
             routePeerId: nonEmptyLibp2p,
@@ -2663,7 +2711,10 @@ final class MeshRepository {
         if let peerId = nonEmptyLibp2p, !dialCandidates.isEmpty {
             logger.info("Auto-dialing discovered peer over Swarm: \(peerId)")
             connectToPeer(peerId, addresses: dialCandidates)
-            Task { await flushPendingOutbox(reason: "peer_identity_read") }
+            triggerPendingSyncForPeerIds(
+                [identityId, blePeerId, peerId],
+                reason: "peer_identity_read"
+            )
         }
     }
 
@@ -2764,6 +2815,9 @@ final class MeshRepository {
         }
         connectedEmissionCache[normalizedPeerId] = now
         MeshEventBus.shared.peerEvents.send(.connected(peerId: normalizedPeerId))
+        if !isBootstrapRelayPeer(normalizedPeerId) {
+            triggerPendingSyncForPeerIds([normalizedPeerId], reason: "peer_connected:\(normalizedPeerId)")
+        }
     }
 
     private func parseRoutingHintsFromNotes(_ notes: String?) -> RoutingHints {
@@ -2907,10 +2961,12 @@ final class MeshRepository {
         multipeerPeerId: String? = nil,
         blePeerId: String? = nil,
         traceMessageId: String? = nil,
-        attemptContext: String = "send"
+        attemptContext: String = "send",
+        strictBleOnlyOverride: Bool? = nil
     ) async -> DeliveryAttemptResult {
+        let strictBleOnly = strictBleOnlyOverride ?? strictBleOnlyValidation
         let routePeerFallback = routePeerCandidates.first ?? "unknown_route_\(Date().timeIntervalSince1970)"
-        if strictBleOnlyValidation {
+        if strictBleOnly {
             logDeliveryAttempt(
                 messageId: traceMessageId,
                 medium: "ble-only",
@@ -2938,9 +2994,32 @@ final class MeshRepository {
             }
         }
 
+        let connectedBlePeerIds = (
+            (bleCentralManager?.connectedPeripheralIds() ?? []) +
+            (blePeripheralManager?.subscribedCentralIds() ?? [])
+        )
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .reduce(into: [String]()) { deduped, next in
+                if !deduped.contains(next) {
+                    deduped.append(next)
+                }
+            }
+        let trimmedBlePeerId = blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let effectiveBlePeerId = (trimmedBlePeerId?.isEmpty == false ? trimmedBlePeerId : nil) ?? connectedBlePeerIds.first
+        if (trimmedBlePeerId?.isEmpty ?? true), let fallbackPeer = effectiveBlePeerId {
+            logDeliveryAttempt(
+                messageId: traceMessageId,
+                medium: "ble",
+                phase: "local_fallback",
+                outcome: "target_fallback",
+                detail: "ctx=\(attemptContext) target=\(fallbackPeer) reason=ble_peer_missing_connected_device_available"
+            )
+        }
+
         let localFallback = LocalTransportFallback.attemptMultipeerThenBle(
-            multipeerPeerId: strictBleOnlyValidation ? nil : multipeerPeerId,
-            blePeerId: blePeerId,
+            multipeerPeerId: strictBleOnly ? nil : multipeerPeerId,
+            blePeerId: effectiveBlePeerId,
             tryMultipeer: { multipeerAddr in
                 guard let transport = multipeerTransport else {
                     logger.debug("tryMultipeerDelivery: multipeerTransport is null")
@@ -2971,60 +3050,67 @@ final class MeshRepository {
             },
             tryBle: { bleAddr in
                 logger.debug("tryBleDelivery: given blePeerId=\(bleAddr)")
-                guard let uuid = UUID(uuidString: bleAddr) else {
-                    logger.debug("tryBleDelivery: blePeerId is not a valid UUID, returning false")
+                let sendTargets = ([bleAddr] + connectedBlePeerIds)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                    .reduce(into: [String]()) { deduped, next in
+                        if !deduped.contains(next) {
+                            deduped.append(next)
+                        }
+                    }
+                if sendTargets.isEmpty {
+                    logger.debug("tryBleDelivery: no send targets available")
                     return false
                 }
 
-                var sent = false
-                // Try Central role first (we are client, sending to peripheral)
-                if let central = bleCentralManager {
-                    if central.sendData(to: uuid, data: envelopeData) {
-                        logger.info("✓ Delivery via BLE Central (target=\(bleAddr))")
-                        logDeliveryAttempt(
-                            messageId: traceMessageId,
-                            medium: "ble",
-                            phase: "local_fallback",
-                            outcome: "accepted",
-                            detail: "ctx=\(attemptContext) target=\(bleAddr)"
-                        )
-                        sent = true
-                    } else {
-                        logger.warning("tryBleDelivery: bleCentralManager.sendData returned false for \(bleAddr)")
-                        logDeliveryAttempt(
-                            messageId: traceMessageId,
-                            medium: "ble",
-                            phase: "local_fallback",
-                            outcome: "failed",
-                            detail: "ctx=\(attemptContext) target=\(bleAddr) reason=central_send_false"
-                        )
+                var lastFailureReason = "no_target_attempted"
+                for target in sendTargets {
+                    if let central = bleCentralManager {
+                        if let uuid = UUID(uuidString: target) {
+                            if central.sendData(to: uuid, data: envelopeData) {
+                                logger.info("✓ Delivery via BLE Central (target=\(target))")
+                                logDeliveryAttempt(
+                                    messageId: traceMessageId,
+                                    medium: "ble",
+                                    phase: "local_fallback",
+                                    outcome: "accepted",
+                                    detail: "ctx=\(attemptContext) role=central requested_target=\(bleAddr) target=\(target)"
+                                )
+                                return true
+                            }
+                            lastFailureReason = "central_send_false:\(target)"
+                        } else {
+                            lastFailureReason = "central_invalid_uuid:\(target)"
+                        }
                     }
-                } else {
-                    logger.debug("tryBleDelivery: bleCentralManager is null")
+
+                    if let peripheral = blePeripheralManager {
+                        if peripheral.sendDataToConnectedCentral(peerId: target, data: envelopeData) {
+                            logDeliveryAttempt(
+                                messageId: traceMessageId,
+                                medium: "ble",
+                                phase: "local_fallback",
+                                outcome: "accepted",
+                                detail: "ctx=\(attemptContext) role=peripheral requested_target=\(bleAddr) target=\(target)"
+                            )
+                            return true
+                        }
+                        lastFailureReason = "peripheral_send_false:\(target)"
+                    }
                 }
 
-                // Also try Peripheral role (we are server, pushing notification to central)
-                if let peripheral = blePeripheralManager {
-                    logger.debug("tryBleDelivery: delegating to blePeripheralManager for \(bleAddr)")
-                    peripheral.sendDataToConnectedCentral(peerId: bleAddr, data: envelopeData)
-                    // We return true if EITHER transport succeeded. Even if Peripheral just buffers,
-                    // it counts as a delivery attempt that high-level shouldn't immediately re-queue.
-                    logDeliveryAttempt(
-                        messageId: traceMessageId,
-                        medium: "ble",
-                        phase: "local_fallback",
-                        outcome: "accepted",
-                        detail: "ctx=\(attemptContext) target=\(bleAddr) role=peripheral"
-                    )
-                    sent = true
-                } else {
-                    logger.debug("tryBleDelivery: blePeripheralManager is null")
-                }
-                return sent
+                logDeliveryAttempt(
+                    messageId: traceMessageId,
+                    medium: "ble",
+                    phase: "local_fallback",
+                    outcome: "failed",
+                    detail: "ctx=\(attemptContext) requested_target=\(bleAddr) reason=\(lastFailureReason) connected=\(connectedBlePeerIds.count)"
+                )
+                return false
             }
         )
         let localAcked = localFallback.acked
-        if strictBleOnlyValidation {
+        if strictBleOnly {
             logDeliveryAttempt(
                 messageId: traceMessageId,
                 medium: "ble-only",
@@ -3171,7 +3257,8 @@ final class MeshRepository {
         addresses: [String],
         envelopeData: Data,
         initialAttemptCount: UInt32 = 0,
-        initialDelaySec: UInt64 = 0
+        initialDelaySec: UInt64 = 0,
+        strictBleOnlyMode: Bool = false
     ) {
         let now = UInt64(Date().timeIntervalSince1970)
         var queue = loadPendingOutbox().filter { $0.historyRecordId != historyRecordId }
@@ -3185,7 +3272,8 @@ final class MeshRepository {
                 envelopeBase64: envelopeData.base64EncodedString(),
                 createdAtEpochSec: now,
                 attemptCount: initialAttemptCount,
-                nextAttemptAtEpochSec: now + initialDelaySec
+                nextAttemptAtEpochSec: now + initialDelaySec,
+                strictBleOnlyMode: strictBleOnlyMode
             )
         )
         savePendingOutbox(queue)
@@ -3206,12 +3294,18 @@ final class MeshRepository {
         nextQueue.reserveCapacity(queue.count)
 
         for item in queue {
+            if let expiryReason = pendingOutboxExpiryReason(for: item, nowEpochSec: now) {
+                appendDiagnostic(
+                    "delivery_state msg=\(item.historyRecordId) state=failed detail=dropped_pending_outbox reason=\(expiryReason) attempt=\(item.attemptCount)"
+                )
+                continue
+            }
             if item.nextAttemptAtEpochSec > now {
                 nextQueue.append(item)
                 continue
             }
 
-            if let existing = try? historyManager?.get(id: item.historyRecordId), existing.delivered == true {
+            if isMessageDeliveredLocally(item.historyRecordId) {
                 continue
             }
             appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=forwarding detail=retry_attempt=\(item.attemptCount + 1)")
@@ -3243,9 +3337,13 @@ final class MeshRepository {
                 multipeerPeerId: latestRouting.multipeerPeerId ?? fallbackMultipeerPeerId,
                 blePeerId: latestRouting.blePeerId,
                 traceMessageId: item.historyRecordId,
-                attemptContext: "outbox_retry"
+                attemptContext: "outbox_retry",
+                strictBleOnlyOverride: item.strictBleOnlyMode
             )
             let selectedRoutePeerId = delivery.routePeerId ?? resolvedRoutePeerId
+            if isMessageDeliveredLocally(item.historyRecordId) {
+                continue
+            }
 
             if delivery.acked {
                 nextQueue.append(
@@ -3258,7 +3356,8 @@ final class MeshRepository {
                         envelopeBase64: item.envelopeBase64,
                         createdAtEpochSec: item.createdAtEpochSec,
                         attemptCount: item.attemptCount + 1,
-                        nextAttemptAtEpochSec: now + receiptAwaitSeconds
+                        nextAttemptAtEpochSec: now + receiptAwaitSeconds,
+                        strictBleOnlyMode: item.strictBleOnlyMode
                     )
                 )
                 appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=stored detail=awaiting_receipt_delay_sec=\(receiptAwaitSeconds)")
@@ -3277,8 +3376,9 @@ final class MeshRepository {
                         addresses: resolvedAddresses,
                         envelopeBase64: item.envelopeBase64,
                         createdAtEpochSec: item.createdAtEpochSec,
-                    attemptCount: nextAttemptCount,
-                    nextAttemptAtEpochSec: now + backoff
+                        attemptCount: nextAttemptCount,
+                        nextAttemptAtEpochSec: now + backoff,
+                        strictBleOnlyMode: item.strictBleOnlyMode
                 )
             )
             appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=stored detail=retry_backoff_sec=\(backoff) attempt=\(nextAttemptCount)")
@@ -3307,12 +3407,109 @@ final class MeshRepository {
         }
     }
 
+    private func pendingOutboxExpiryReason(
+        for item: PendingOutboundEnvelope,
+        nowEpochSec: UInt64
+    ) -> String? {
+        if item.attemptCount >= pendingOutboxMaxAttempts {
+            return "max_attempts_\(pendingOutboxMaxAttempts)"
+        }
+        let age = nowEpochSec >= item.createdAtEpochSec
+            ? nowEpochSec - item.createdAtEpochSec
+            : 0
+        if age >= pendingOutboxMaxAgeSeconds {
+            return "max_age_sec_\(pendingOutboxMaxAgeSeconds)"
+        }
+        return nil
+    }
+
     private func removePendingOutbound(historyRecordId: String) {
         guard !historyRecordId.isEmpty else { return }
         let queue = loadPendingOutbox()
         let filtered = queue.filter { $0.historyRecordId != historyRecordId }
         guard filtered.count != queue.count else { return }
         savePendingOutbox(filtered)
+    }
+
+    private func triggerPendingSyncForPeerIds(_ peerIds: [String], reason: String) {
+        let normalizedIds = peerIds
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .reduce(into: [String]()) { acc, next in
+                if !acc.contains(next) {
+                    acc.append(next)
+                }
+            }
+        if normalizedIds.isEmpty {
+            Task { await flushPendingOutbox(reason: reason) }
+            return
+        }
+        normalizedIds.forEach { promotePendingOutboundForPeer(peerId: $0) }
+        Task { await flushPendingOutbox(reason: reason) }
+    }
+
+    private func promotePendingOutboundForPeer(peerId: String, excludingMessageId: String? = nil) {
+        let trimmedPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPeerId.isEmpty else { return }
+        let now = UInt64(Date().timeIntervalSince1970)
+        let queue = loadPendingOutbox()
+        var changed = false
+        let promoted = queue.map { item -> PendingOutboundEnvelope in
+            let routePeerId = item.routePeerId?.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard item.peerId == trimmedPeerId || routePeerId == trimmedPeerId else { return item }
+            if let excludingMessageId, item.historyRecordId == excludingMessageId {
+                return item
+            }
+            if item.nextAttemptAtEpochSec <= now {
+                return item
+            }
+            changed = true
+            return PendingOutboundEnvelope(
+                queueId: item.queueId,
+                historyRecordId: item.historyRecordId,
+                peerId: item.peerId,
+                routePeerId: item.routePeerId,
+                addresses: item.addresses,
+                envelopeBase64: item.envelopeBase64,
+                createdAtEpochSec: item.createdAtEpochSec,
+                attemptCount: item.attemptCount,
+                nextAttemptAtEpochSec: now,
+                strictBleOnlyMode: item.strictBleOnlyMode
+            )
+        }
+        guard changed else { return }
+        savePendingOutbox(promoted)
+        appendDiagnostic("delivery_state msg=\(excludingMessageId ?? "unknown") state=forwarding detail=peer_queue_promoted peer=\(trimmedPeerId)")
+    }
+
+    private func isMessageDeliveredLocally(_ messageId: String) -> Bool {
+        pruneDeliveredReceiptCache()
+        if deliveredReceiptCache[messageId] != nil {
+            return true
+        }
+        return ((try? historyManager?.get(id: messageId))?.delivered == true)
+    }
+
+    @discardableResult
+    private func markDeliveredReceiptSeen(_ messageId: String) -> Bool {
+        pruneDeliveredReceiptCache()
+        if deliveredReceiptCache[messageId] != nil {
+            return false
+        }
+        deliveredReceiptCache[messageId] = Date()
+        return true
+    }
+
+    private func pruneDeliveredReceiptCache(now: Date = Date()) {
+        deliveredReceiptCache = deliveredReceiptCache.filter { now.timeIntervalSince($0.value) <= deliveredReceiptCacheTtl }
+        if deliveredReceiptCache.count <= 2048 {
+            return
+        }
+        let trimmed = deliveredReceiptCache
+            .sorted { $0.value > $1.value }
+            .prefix(1024)
+            .map { ($0.key, $0.value) }
+        deliveredReceiptCache = Dictionary(uniqueKeysWithValues: trimmed)
     }
 
     private func prioritizeAddressesForCurrentNetwork(_ addresses: [String]) -> [String] {
@@ -3376,9 +3573,14 @@ final class MeshRepository {
             deduped.append(addr)
         }
         let prioritized = prioritizeAddressesForCurrentNetwork(deduped)
-        let relayCircuits = (includeRelayCircuits && (routePeerId?.isEmpty == false))
-            ? relayCircuitAddresses(for: routePeerId!)
-            : []
+        let relayCircuits: [String]
+        if includeRelayCircuits,
+           let routePeerId,
+           !routePeerId.isEmpty {
+            relayCircuits = relayCircuitAddresses(for: routePeerId)
+        } else {
+            relayCircuits = []
+        }
         var merged: [String] = []
         for addr in prioritized + relayCircuits where !merged.contains(addr) {
             merged.append(addr)
@@ -3975,9 +4177,8 @@ final class MeshRepository {
         outcome: String,
         detail: String
     ) {
-        let msg = (messageId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
-            ? messageId!
-            : "unknown"
+        let trimmedId = messageId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let msg = (trimmedId?.isEmpty == false) ? (trimmedId ?? "unknown") : "unknown"
         appendDiagnostic("delivery_attempt msg=\(msg) medium=\(medium) phase=\(phase) outcome=\(outcome) detail=\(detail)")
     }
 
@@ -4058,8 +4259,8 @@ final class MeshRepository {
         meshService?.stop()
         meshService = nil
         ironCore?.stop()
-        try? contactManager?.flush()
-        try? historyManager?.flush()
+        contactManager?.flush()
+        historyManager?.flush()
         ironCore = nil
         contactManager = nil
         historyManager = nil

@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # Android Build Verification Script
 # Checks prerequisites and verifies the build setup
 
@@ -132,9 +133,7 @@ echo
 # 7. Test bindings generation
 echo "7. Testing UniFFI bindings generation..."
 cd core
-OUTPUT=$(cargo run --bin gen_kotlin --features gen-bindings 2>&1)
-CARGO_STATUS=$?
-if [ $CARGO_STATUS -eq 0 ]; then
+if OUTPUT=$(cargo run --bin gen_kotlin --features gen-bindings 2>&1); then
     if [ -f "target/generated-sources/uniffi/kotlin/uniffi/api/api.kt" ]; then
         FILE_SIZE=$(stat -f%z "target/generated-sources/uniffi/kotlin/uniffi/api/api.kt" 2>/dev/null || stat -c%s "target/generated-sources/uniffi/kotlin/uniffi/api/api.kt" 2>/dev/null)
         echo -e "${GREEN}✓${NC} Bindings generated successfully ($FILE_SIZE bytes)"

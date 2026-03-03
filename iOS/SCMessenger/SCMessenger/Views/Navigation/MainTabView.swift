@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import OSLog
 
 struct MainTabView: View {
     @Environment(MeshRepository.self) private var repository
@@ -80,6 +81,7 @@ struct ConversationListView: View {
     @State private var conversations: [Conversation] = []
     @State private var conversationToDelete: Conversation?
     @State private var showingDeleteConfirmation = false
+    private let logger = Logger(subsystem: "com.scmessenger", category: "ConversationList")
 
     var body: some View {
         List {
@@ -142,7 +144,11 @@ struct ConversationListView: View {
     }
 
     private func deleteConversation(_ conversation: Conversation) {
-        try? repository.clearConversation(peerId: conversation.peerId)
+        do {
+            try repository.clearConversation(peerId: conversation.peerId)
+        } catch {
+            logger.error("Failed to clear conversation for \(conversation.peerId, privacy: .private): \(error.localizedDescription, privacy: .public)")
+        }
         conversations.removeAll { $0.id == conversation.id }
     }
     
@@ -158,7 +164,7 @@ struct ConversationListView: View {
                     : (contact.nickname ?? String(contact.peerId.prefix(8)) + "...")
                 let recentMsgs = (try? repository.getConversation(peerId: contact.peerId, limit: 1)) ?? []
                 let lastMsg = recentMsgs.last
-                let lastTime = lastMsg != nil ? Date(timeIntervalSince1970: Double(lastMsg!.timestamp)) : nil
+                let lastTime = lastMsg.map { Date(timeIntervalSince1970: Double($0.timestamp)) }
                 return Conversation(
                     peerId: contact.peerId, 
                     peerNickname: displayName,
@@ -167,7 +173,7 @@ struct ConversationListView: View {
                 )
             }.sorted { ($0.lastMessageTime ?? Date.distantPast) > ($1.lastMessageTime ?? Date.distantPast) }
         } catch {
-            // Handle error
+            logger.error("Failed to load conversations: \(error.localizedDescription, privacy: .public)")
         }
     }
 

@@ -127,7 +127,9 @@ class MainViewModel @Inject constructor(
                 val nickname = json.optString("nickname").takeIf { it.isNotBlank() }
                 val libp2pPeerId = json.optString("libp2p_peer_id").takeIf { it.isNotBlank() }
                 val listenersArr = json.optJSONArray("listeners")
-                val listeners = (0 until (listenersArr?.length() ?: 0)).map { i -> listenersArr!!.getString(i) }
+                val listeners = listenersArr?.let { arr ->
+                    (0 until arr.length()).map { i -> arr.getString(i) }
+                } ?: emptyList()
                 val notes = libp2pPeerId?.let { pid ->
                     buildString {
                         append("libp2p_peer_id:$pid")

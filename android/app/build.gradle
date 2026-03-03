@@ -230,6 +230,7 @@ task generateUniFFIBindings(type: Exec) {
     doFirst {
         file('../../core/target/generated-sources/uniffi/kotlin').mkdirs()
     }
+
 }
 
 // Ensure tasks run before build

@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # SCMessenger Control Script
 # Usage: ./scripts/scm.sh [start|stop|restart|status|logs]
 
@@ -38,18 +39,20 @@ function stop_all {
     fi
 
     # 2. Aggressive cleanup of any lingering instances
-    PIDS=$(pgrep -f "scmessenger-cli")
+    PIDS=$(pgrep -f "scmessenger-cli" || true)
     if [ ! -z "$PIDS" ]; then
         log_warn "Found lingering local processes: $PIDS. Killing..."
         kill -9 $PIDS 2>/dev/null || true
     fi
     
     # 3. Stop Docker Containers (optional, but requested to 'kill it')
-    DOCKER_IDS=$(docker ps -q --filter name="scm-")
-    if [ ! -z "$DOCKER_IDS" ]; then
-        log_warn "Stopping Docker containers (scm-*)..."
-        docker stop $DOCKER_IDS > /dev/null
-        docker rm $DOCKER_IDS > /dev/null
+    if command -v docker > /dev/null 2>&1; then
+        DOCKER_IDS=$(docker ps -q --filter name="scm-" || true)
+        if [ ! -z "$DOCKER_IDS" ]; then
+            log_warn "Stopping Docker containers (scm-*)..."
+            docker stop $DOCKER_IDS > /dev/null
+            docker rm $DOCKER_IDS > /dev/null
+        fi
     fi
 
     log_info "All stopped."
@@ -88,7 +91,11 @@ function status {
     fi
     
     echo "Docker Containers:"
-    docker ps --filter name="scm-" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+    if command -v docker > /dev/null 2>&1; then
+        docker ps --filter name="scm-" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+    else
+        echo "docker not installed"
+    fi
 }
 
 function logs {
@@ -130,7 +137,7 @@ function factory_reset {
     log_info "Factory reset complete. You can now start fresh."
 }
 
-case "$1" in
+case "${1:-}" in
     "start")
         start
         ;;

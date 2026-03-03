@@ -34,4 +34,4 @@ Binding generators live in `scmessenger-core`:
 Platform helper scripts:
 
 - Android setup check: `./android/verify-build-setup.sh`
-- iOS setup check: `./iOS/verify-build-setup.sh`
+- iOS setup check: `bash ./iOS/verify-test.sh`

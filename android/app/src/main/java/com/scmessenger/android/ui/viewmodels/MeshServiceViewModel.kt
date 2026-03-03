@@ -1,8 +1,8 @@
 package com.scmessenger.android.ui.viewmodels
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.scmessenger.android.data.MeshRepository
@@ -22,6 +22,7 @@ import javax.inject.Inject
  * and control methods.
  */
 @HiltViewModel
+@SuppressLint("StaticFieldLeak")
 class MeshServiceViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val meshRepository: MeshRepository,
@@ -78,11 +79,7 @@ class MeshServiceViewModel @Inject constructor(
                     action = MeshForegroundService.ACTION_START
                 }
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    context.startForegroundService(intent)
-                } else {
-                    context.startService(intent)
-                }
+                context.startForegroundService(intent)
 
                 Timber.i("Mesh service start requested")
             } catch (e: Exception) {

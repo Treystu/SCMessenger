@@ -165,7 +165,7 @@ class AndroidPlatformBridge @Inject constructor(
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
 
-        networkCallback = object : ConnectivityManager.NetworkCallback() {
+        val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 updateNetworkState()
             }
@@ -181,8 +181,9 @@ class AndroidPlatformBridge @Inject constructor(
                 updateNetworkState()
             }
         }
+        networkCallback = callback
 
-        connectivityManager.registerNetworkCallback(request, networkCallback!!)
+        connectivityManager.registerNetworkCallback(request, callback)
     }
 
     private fun updateNetworkState() {

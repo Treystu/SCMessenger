@@ -96,7 +96,7 @@ def log_age(path):
         if secs < 60: return f"{secs}s"
         elif secs < 3600: return f"{secs//60}m{secs%60:02d}s"
         else: return f"{secs//3600}h{(secs%3600)//60:02d}m"
-    except:
+    except OSError:
         return "?"
 
 def count_events(content, pat):
@@ -115,7 +115,7 @@ try:
             try:
                 with open(path, 'r', errors='ignore') as f:
                     contents[name] = f.read()
-            except Exception:
+            except OSError:
                 contents[name] = ""
 
         # Update peer ID discovery and visibility matrix

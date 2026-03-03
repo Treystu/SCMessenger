@@ -152,10 +152,22 @@ struct ContactsListView: View {
         do {
             try viewModel.addContact(contact)
             if !peer.listeners.isEmpty {
-                let dialPeerId = (peer.libp2pPeerId?.isEmpty == false) ? peer.libp2pPeerId! : peer.peerId
+                let dialPeerId: String
+                if let libp2pPeerId = peer.libp2pPeerId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !libp2pPeerId.isEmpty {
+                    dialPeerId = libp2pPeerId
+                } else {
+                    dialPeerId = peer.peerId
+                }
                 repository.connectToPeer(dialPeerId, addresses: peer.listeners)
             }
-            let displayName = peer.nickname?.isEmpty == false ? peer.nickname! : String(peer.peerId.prefix(8))
+            let displayName: String
+            if let nickname = peer.nickname?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !nickname.isEmpty {
+                displayName = nickname
+            } else {
+                displayName = String(peer.peerId.prefix(8))
+            }
             pendingChatConversation = Conversation(peerId: peer.peerId, peerNickname: displayName)
             navigateToPendingChat = true
         } catch {

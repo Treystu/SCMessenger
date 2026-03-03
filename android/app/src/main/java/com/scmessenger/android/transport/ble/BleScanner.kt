@@ -239,7 +239,8 @@ class BleScanner(
         }
 
         // Start first cycle after scan window
-        handler.postDelayed(dutyCycleRunnable!!, scanWindowMs)
+        val runnable = dutyCycleRunnable ?: return
+        handler.postDelayed(runnable, scanWindowMs)
         Timber.d("Duty cycle started: ${scanWindowMs}ms scan / ${scanIntervalMs}ms interval")
     }
 

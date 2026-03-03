@@ -1,0 +1,20 @@
+[build]
+command = "chmod +x ./scripts/build-headless.sh && ./scripts/build-headless.sh"
+publish = "dist"
+
+[build.environment]
+# Ensure Rust and wasm-pack are available
+RUST_VERSION = "stable"
+WASM_PACK_VERSION = "0.12.1"
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200
+
+# Optimization for WASM files
+[[headers]]
+for = "*.wasm"
+[headers.values]
+Content-Type = "application/wasm"
+Cache-Control = "public, max-age=31536000, immutable"

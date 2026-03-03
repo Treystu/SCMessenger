@@ -23,6 +23,122 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - `cargo clippy --workspace` — **clean (0 warnings)**
 - `cargo fmt --all -- --check` — **clean**
 
+### WS12.18 Alpha Readiness Sanity + Interop Closure (2026-03-03 HST)
+
+- Rust quality/build gates:
+  - `cargo check --workspace` — **pass**
+  - `cargo fmt --all -- --check` — **pass**
+  - `cargo clippy --workspace` — **pass**
+  - `cargo clippy --workspace --lib --bins --examples -- -D warnings` — **pass**
+- Android quality/build gates:
+  - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:compileDebugKotlin` — **pass**
+  - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:lintDebug` — **pass** (all prior 21 lint errors remediated; warnings remain)
+- iOS/WASM gates:
+  - `bash ./iOS/verify-test.sh` — **pass**
+  - `cd wasm && wasm-pack build` — **pass**
+- Hard-blocker remediation delivered:
+  - Android lint `MissingPermission`/`NewApi` blockers closed in BLE advertiser/GATT server, WiFi transport manager, notification posting paths, and foreground-service API gating.
+  - Rust clippy strict failures closed in store backend/contact/history/custody codepaths and example code.
+- Interoperability/function completeness artifacts:
+  - Added deterministic matrix generator: `scripts/generate_interop_matrix.sh`
+  - Generated matrix doc: `docs/INTEROP_MATRIX_V0.2.0_ALPHA.md`
+  - WS12.18 matrix triage identified adapter-parity gaps, now closed in WS12.20 follow-up wiring.
+- Historical relocation (no purge):
+  - Root-level one-off scripts/log buffers moved to `reference/historical/` with provenance index (`reference/historical/README.md`).
+
+### WS12.19 Documentation/Folder Cleanup Correction (2026-03-03 HST)
+
+- Cleanup drift correction:
+  - Restored active iOS install/build helpers from historical location into active `iOS/` script surface:
+    - `iOS/build-device.sh`
+    - `iOS/install-device.sh`
+    - `iOS/install-sim.sh`
+  - Kept stale/non-canonical scripts (`build-rust.sh`, `verify-build-setup.sh`) in `docs/historical/iOS/scripts/` with explicit archive README.
+- Active doc path fixes:
+  - Replaced stale references to the legacy iOS setup-check script in active docs with `bash ./iOS/verify-test.sh`.
+  - Updated iOS setup docs to point at active canonical docs/backlog instead of archived iOS planning files.
+
+### WS12.20 Alpha Readiness Completion Sweep (2026-03-03 HST)
+
+- Interop/fn-completeness closures:
+  - CLI now wires identity backup import/export, explicit mark-sent, history clear, listeners/path-state/diagnostics/peers status surfaces.
+  - WASM now wires local nickname override, history retention/prune controls, and external-address visibility.
+  - Android+iOS adapters now consume `reset_stats`; CLI/WASM consume history retention/prune controls.
+- Build/gate revalidation:
+  - `cargo check --workspace` — **pass**
+  - `cargo clippy --workspace --lib --bins --examples -- -D warnings` — **pass**
+  - `cd android && ./gradlew :app:generateUniFFIBindings :app:compileDebugKotlin :app:lintDebug` — **pass**
+  - `bash ./iOS/verify-test.sh` — **pass** (`0 warnings` in this run)
+  - `cd wasm && wasm-pack build` — **pass**
+- Interop evidence update:
+  - `docs/INTEROP_MATRIX_V0.2.0_ALPHA.md` now reports no static adapter-consumption gaps.
+- Script operations docs:
+  - Added active operations guide: `scripts/README.md` (5-node + launch/control/debug workflow map).
+
+### WS12.21 Pairwise Deep-Dive Status Sweep (2026-03-03 HST)
+
+- Deep-dive analyzers run on current artifacts:
+  - `bash ./scripts/correlate_relay_flap_windows.sh ios_diagnostics_latest.log logs/5mesh/gcp.log`
+    - classification: `unsynchronized_artifacts_no_time_overlap`
+  - `bash ./scripts/verify_relay_flap_regression.sh ios_diagnostics_latest.log`
+    - `PASS` (no deterministic relay dial-loop regression in this artifact)
+  - `bash ./scripts/verify_receipt_convergence.sh android_mesh_diagnostics_device.log ios_diagnostics_latest.log`
+    - result: no `delivery_attempt` message markers found in this artifact pair
+  - `bash ./scripts/verify_ble_only_pairing.sh android_logcat_latest.txt ios_diagnostics_latest.log`
+    - result: no strict-BLE markers/timeouts in this artifact pair
+- Fresh live probe attempt:
+  - `IOS_TARGET=device IOS_INSTALL=0 ANDROID_INSTALL=0 DURATION_SEC=20 GCP_RELAY_CHECK=1 bash ./scripts/live-smoke.sh`
+  - result: Android connected, iOS physical device listed as `unavailable` by `xcrun devicectl`, so physical dual-device pairing deep dive could not complete in this pass.
+- Simulator fallback probe:
+  - `IOS_TARGET=simulator IOS_INSTALL=0 ANDROID_INSTALL=0 DURATION_SEC=20 GCP_RELAY_CHECK=1 bash ./scripts/live-smoke.sh`
+  - artifacts captured under `logs/live-smoke/20260303-005207/`; expected limitation remains (no CoreBluetooth hardware path in simulator).
+- Pairwise closure status:
+  - `Core -> Android`: closed in static interop matrix.
+  - `Core -> iOS`: closed in static interop matrix.
+  - `Core -> WASM/Desktop`: closed in static interop matrix.
+  - `Android <-> iOS` direct/relay delivery+receipt continuity: still open pending synchronized physical-device artifact capture.
+  - `Android <-> iOS` strict BLE-only continuity: still open pending synchronized physical-device BLE-only artifact capture.
+
+### WS12.22 Android+iOS Crash + Stability Hardening Sweep (2026-03-03 HST)
+
+- Fresh runtime evidence captured:
+  - iOS debug-detach bundle: `logs/pairwise/ios-debug-detach-20260303-014559`
+  - Android USB capture: `logs/pairwise/android-usb-pull-20260303-014849`
+- iOS crash RCA from latest SCMessenger crash artifact in the captured bundle:
+  - crash path pointed to BLE peripheral send flow (`BLEPeripheralManager.sendDataToCentral`) with force-unwrap-sensitive code under active send.
+- iOS hardening applied:
+  - BLE central/peripheral managers now run on the main queue for consistent delegate/state access.
+  - Removed force-unwrap hotspots in BLE peripheral send/advertise paths; send methods now return explicit success/failure booleans.
+  - Added reconnect/service-rediscovery behavior in BLE central send flow when disconnected or missing message characteristic.
+  - Added pending outbox bounded-expiry drop policy in repository (`attempt_count` and age guard) with explicit diagnostics markers.
+- Android hardening applied:
+  - Removed all Kotlin `!!` force unwrap usage from app source paths (repository, BLE transport, settings/viewmodel, platform bridge).
+  - BLE advertiser restart churn reduced by skipping unnecessary restart when identity payload does not change advertisement-visible bytes.
+  - BLE GATT client send path now attempts reconnect when disconnected/not-ready instead of immediate terminal false path.
+  - Added pending outbox bounded-expiry drop policy mirroring iOS diagnostics semantics.
+- Verification gates rerun after fixes:
+  - `cd android && ./gradlew :app:compileDebugKotlin :app:lintDebug` — **pass** (`0 errors`, warnings remain)
+  - `bash ./iOS/verify-test.sh` — **pass** (`0 warnings` in this run)
+  - `bash ./scripts/generate_interop_matrix.sh` — **pass**
+- Remaining closure dependency:
+  - Requires fresh synchronized physical Android+iOS live send/receipt artifact capture to confirm no new iOS send crash and to close remaining pairwise runtime risks.
+
+### WS12.23 Pending-Outbox Synchronization Reliability Pass (2026-03-03 HST)
+
+- Root-cause closure target:
+  - older pending messages could remain stuck while a newer message to the same peer delivered, because promotion/flush triggers were not consistently tied to active-connection events.
+- Reliability hardening applied in `MeshRepository` on Android+iOS:
+  - pending queue promotion now matches both canonical `peerId` and cached `routePeerId`,
+  - `peer_identified` and BLE identity-read paths now promote same-peer queue entries and immediately flush retries,
+  - iOS connected-event emission now also triggers targeted same-peer promotion/flush.
+- Expected behavior shift:
+  - when any usable path to a peer is active, the app immediately opportunistically drains older undelivered entries for that peer instead of waiting for periodic backoff windows.
+- Verification after patch:
+  - `cd android && ./gradlew :app:compileDebugKotlin` — **pass**
+  - `bash ./iOS/verify-test.sh` — **pass** (`3 warnings`, non-fatal)
+- Remaining live proof requirement:
+  - capture fresh synchronized physical Android+iOS traces and confirm deterministic backlog drain + pending-to-delivered convergence on both directions.
+
 ### WS12 Verification Snapshot (2026-03-03)
 
 - `cargo test --workspace --no-run` — **pass**

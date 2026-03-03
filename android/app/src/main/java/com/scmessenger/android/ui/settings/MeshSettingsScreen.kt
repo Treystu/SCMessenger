@@ -64,15 +64,7 @@ fun MeshSettingsScreen(
                 )
             }
 
-            if (settings == null) {
-                Box(
-                    modifier = Modifier.fillMaxWidth().height(200.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                val currentSettings = settings!!
+            settings?.let { currentSettings ->
 
                 // Relay Settings
                 SettingsSection(title = "Network Participation") {
@@ -202,6 +194,11 @@ fun MeshSettingsScreen(
                         enabled = !isSaving
                     )
                 }
+            } ?: Box(
+                modifier = Modifier.fillMaxWidth().height(200.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
             }
 
             Spacer(modifier = Modifier.height(16.dp))

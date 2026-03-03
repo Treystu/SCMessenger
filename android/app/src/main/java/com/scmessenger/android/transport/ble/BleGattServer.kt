@@ -1,7 +1,11 @@
 package com.scmessenger.android.transport.ble
 
+import android.Manifest
 import android.bluetooth.*
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -183,8 +187,7 @@ class BleGattServer(
                 sendFragmented(device, characteristic, data, mtu)
             } else {
                 characteristic.value = data
-                gattServer?.notifyCharacteristicChanged(device, characteristic, false)
-                true
+                notifyCharacteristicChangedSafe(device, characteristic)
             }
         } catch (e: SecurityException) {
             Timber.e(e, "Security exception sending data")
@@ -193,6 +196,10 @@ class BleGattServer(
             Timber.e(e, "Failed to send data to $deviceAddress")
             false
         }
+    }
+
+    fun getConnectedDeviceAddresses(): List<String> {
+        return connectedDevices.keys().toList()
     }
 
     private fun sendFragmented(
@@ -219,7 +226,9 @@ class BleGattServer(
             header[3] = ((i shr 8) and 0xFF).toByte()
 
             characteristic.value = header + chunk
-            gattServer?.notifyCharacteristicChanged(device, characteristic, false)
+            if (!notifyCharacteristicChangedSafe(device, characteristic)) {
+                return false
+            }
 
             offset = end
             if (i < totalFragments - 1) {
@@ -271,7 +280,7 @@ class BleGattServer(
                     } else {
                         ByteArray(0)
                     }
-                    gattServer?.sendResponse(
+                    sendResponseSafe(
                         device,
                         requestId,
                         BluetoothGatt.GATT_SUCCESS,
@@ -283,7 +292,7 @@ class BleGattServer(
                 SYNC_CHAR_UUID -> {
                     // Return sync handshake data
                     val syncData = "SYNC_HANDSHAKE".toByteArray()
-                    gattServer?.sendResponse(
+                    sendResponseSafe(
                         device,
                         requestId,
                         BluetoothGatt.GATT_SUCCESS,
@@ -293,7 +302,7 @@ class BleGattServer(
                 }
 
                 else -> {
-                    gattServer?.sendResponse(
+                    sendResponseSafe(
                         device,
                         requestId,
                         BluetoothGatt.GATT_FAILURE,
@@ -317,7 +326,7 @@ class BleGattServer(
 
             if (value == null) {
                 if (responseNeeded) {
-                    gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, offset, null)
+                    sendResponseSafe(device, requestId, BluetoothGatt.GATT_FAILURE, offset, null)
                 }
                 return
             }
@@ -329,7 +338,7 @@ class BleGattServer(
                         Timber.d("Reassembled complete message (${completeData.size} bytes) from ${device.address}")
                     }
                     if (responseNeeded) {
-                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                        sendResponseSafe(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
                     }
                 }
 
@@ -339,13 +348,13 @@ class BleGattServer(
                         // Note: SYNC handler is currently mostly logging as Drift handles it via SwarmBridge
                     }
                     if (responseNeeded) {
-                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                        sendResponseSafe(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
                     }
                 }
 
                 else -> {
                     if (responseNeeded) {
-                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, offset, null)
+                        sendResponseSafe(device, requestId, BluetoothGatt.GATT_FAILURE, offset, null)
                     }
                 }
             }
@@ -407,13 +416,55 @@ class BleGattServer(
             }
             pendingWrites.remove(device.address)
 
-            gattServer?.sendResponse(
+            sendResponseSafe(
                 device,
                 requestId,
                 BluetoothGatt.GATT_SUCCESS,
                 0,
                 null
             )
+        }
+    }
+
+    private fun hasBluetoothConnectPermission(): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun sendResponseSafe(
+        device: BluetoothDevice,
+        requestId: Int,
+        status: Int,
+        offset: Int,
+        value: ByteArray?
+    ) {
+        if (!hasBluetoothConnectPermission()) {
+            Timber.w("BLUETOOTH_CONNECT permission missing; dropping GATT response")
+            return
+        }
+        try {
+            gattServer?.sendResponse(device, requestId, status, offset, value)
+        } catch (e: SecurityException) {
+            Timber.e(e, "Security exception while sending GATT response")
+        }
+    }
+
+    private fun notifyCharacteristicChangedSafe(
+        device: BluetoothDevice,
+        characteristic: BluetoothGattCharacteristic
+    ): Boolean {
+        if (!hasBluetoothConnectPermission()) {
+            Timber.w("BLUETOOTH_CONNECT permission missing; cannot notify characteristic")
+            return false
+        }
+        return try {
+            gattServer?.notifyCharacteristicChanged(device, characteristic, false) ?: false
+        } catch (e: SecurityException) {
+            Timber.e(e, "Security exception while notifying characteristic")
+            false
         }
     }
 

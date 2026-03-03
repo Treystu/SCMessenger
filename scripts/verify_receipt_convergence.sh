@@ -20,12 +20,21 @@ trap 'rm -f "$tmp_all" "$tmp_ids"' EXIT
 
 cat "$ANDROID_LOG" "$IOS_LOG" > "$tmp_all"
 
-# Use recent IDs so this stays deterministic and fast on large archives.
-rg -o "delivery_attempt msg=[^ ]+" "$tmp_all" \
-  | sed 's/delivery_attempt msg=//' \
+# Prefer newly prepared outbound IDs for deterministic run-scoped validation.
+rg -o "delivery_state msg=[^ ]+ state=pending detail=message_prepared_local_history_written" "$tmp_all" \
+  | sed -E 's/.*delivery_state msg=([^ ]+) .*/\1/' \
   | grep -v '^unknown$' \
   | tail -n "$MAX_IDS" \
   | sort -u > "$tmp_ids" || true
+
+# Fallback for archives that do not include the pending marker format.
+if [[ ! -s "$tmp_ids" ]]; then
+  rg -o "delivery_attempt msg=[^ ]+" "$tmp_all" \
+    | sed 's/delivery_attempt msg=//' \
+    | grep -v '^unknown$' \
+    | tail -n "$MAX_IDS" \
+    | sort -u > "$tmp_ids" || true
+fi
 
 total_ids="$(wc -l < "$tmp_ids" | tr -d " ")"
 if [[ "$total_ids" -eq 0 ]]; then
@@ -67,4 +76,3 @@ echo "  missing_sender_delivered_markers: $missing_delivered"
 if [[ "$failed_ids" -gt 0 ]]; then
   exit 1
 fi
-

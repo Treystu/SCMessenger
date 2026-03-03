@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # Get SCMessenger Node Information
 # Usage: ./scripts/get-node-info.sh [container-name]
 
@@ -34,7 +35,7 @@ echo "📦 Container: ${CONTAINER_NAME}"
 echo ""
 
 # Get Peer ID
-PEER_ID=$(docker logs ${CONTAINER_NAME} 2>&1 | grep "Peer ID:" | tail -1 | awk '{print $NF}')
+PEER_ID=$(docker logs "${CONTAINER_NAME}" 2>&1 | grep "Peer ID:" | tail -1 | awk '{print $NF}' || true)
 if [ -z "$PEER_ID" ]; then
     echo "⚠️  Could not find Peer ID in logs. Is the node fully started?"
     exit 1
@@ -45,7 +46,7 @@ echo "   ${PEER_ID}"
 echo ""
 
 # Get Identity
-IDENTITY=$(docker logs ${CONTAINER_NAME} 2>&1 | grep "^Identity:" | tail -1 | awk '{print $2}')
+IDENTITY=$(docker logs "${CONTAINER_NAME}" 2>&1 | grep "^Identity:" | tail -1 | awk '{print $2}' || true)
 if [ ! -z "$IDENTITY" ]; then
     echo "🔑 Identity:"
     echo "   ${IDENTITY}"
@@ -61,12 +62,12 @@ if command -v curl &> /dev/null; then
     # If docker is available and scmessenger container is running, use docker exec
     CONTAINER_NAME="${CONTAINER_NAME:-scmessenger}"
     if command -v docker &> /dev/null && docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAME}"; then
-        API_RESPONSE=$(docker exec "$CONTAINER_NAME" curl -s http://127.0.0.1:9876/api/external-address 2>/dev/null)
+        API_RESPONSE=$(docker exec "$CONTAINER_NAME" curl -s http://127.0.0.1:9876/api/external-address 2>/dev/null || true)
     else
-        API_RESPONSE=$(curl -s http://localhost:9876/api/external-address 2>/dev/null)
+        API_RESPONSE=$(curl -s http://localhost:9876/api/external-address 2>/dev/null || true)
     fi
     
-    if [ $? -eq 0 ] && [ ! -z "$API_RESPONSE" ]; then
+    if [ ! -z "$API_RESPONSE" ]; then
         # Parse JSON response to get first address
         # Try jq first for robust parsing, fall back to regex
         if command -v jq &> /dev/null; then
@@ -77,7 +78,7 @@ if command -v curl &> /dev/null; then
         if [ -z "$PUBLIC_IP" ]; then
             # Match IPv4, IPv6 (with brackets), or hostname with optional port
             # Examples: "192.168.1.1", "[::1]", "example.com:8080"
-            PUBLIC_IP=$(echo "$API_RESPONSE" | grep -oE '"[^"]+"' | head -1 | tr -d '"')
+            PUBLIC_IP=$(echo "$API_RESPONSE" | grep -oE '"[^"]+"' | head -1 | tr -d '"' || true)
         fi
     fi
 fi
@@ -88,12 +89,12 @@ if [ -z "$PUBLIC_IP" ]; then
     # Try to get default route IP (works on Linux/macOS)
     if command -v ip &> /dev/null; then
         # Linux
-        PUBLIC_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K\S+')
+        PUBLIC_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K\S+' || true)
     elif command -v route &> /dev/null; then
         # macOS
-        DEFAULT_IFACE=$(route -n get default 2>/dev/null | grep 'interface:' | awk '{print $2}')
+        DEFAULT_IFACE=$(route -n get default 2>/dev/null | grep 'interface:' | awk '{print $2}' || true)
         if [ ! -z "$DEFAULT_IFACE" ]; then
-            PUBLIC_IP=$(ifconfig "$DEFAULT_IFACE" 2>/dev/null | grep 'inet ' | awk '{print $2}')
+            PUBLIC_IP=$(ifconfig "$DEFAULT_IFACE" 2>/dev/null | grep 'inet ' | awk '{print $2}' || true)
         fi
     fi
 fi

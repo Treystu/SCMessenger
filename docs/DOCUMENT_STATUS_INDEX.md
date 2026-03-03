@@ -32,9 +32,11 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 | `docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md` | Active | Execution prompts per phase |
 | `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md` | Active | Residual-risk source of truth |
 | `docs/PLATFORM_SUPPORT_MATRIX.md` | Active | Platform support baseline |
+| `docs/INTEROP_MATRIX_V0.2.0_ALPHA.md` | Active | Cross-platform function completeness + interoperability matrix |
 | `docs/PROTOCOL.md` | Active | Protocol identifiers and wire contract |
 | `docs/TESTING_GUIDE.md` | Active | Validation commands and expected outcomes |
 | `docs/EDGE_CASE_READINESS_MATRIX.md` | Active | Extreme environment readiness and hardening backlog |
+| `scripts/README.md` | Active | Canonical launch/debug/5-node script operations guide |
 | `docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md` | Active | Release synchronization and tagging checklist |
 | `docs/releases/RELEASE_NOTES_V0.2.0_DRAFT.md` | Active | v0.2.0 draft release notes |
 | `docs/releases/RELEASE_NOTES_V0.1.2_GH.md` | Active | v0.1.2 GitHub release notes draft |
@@ -104,3 +106,9 @@ These documents may contain both current and historical sections; verify section
 13. WS12.14 (2026-03-03 HST) Android Bluetooth-only pairing diagnosis updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
 14. WS12.16 (2026-03-03 HST) wave-2 runtime hardening pass updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
 15. WS12.17 (2026-03-03 HST) wave-3 governance closure updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`), with historical checklist triage updates under `docs/historical/*`.
+16. WS12.18 (2026-03-03 HST) alpha readiness sanity + interoperability closure updates are reflected in active docs (`docs/CURRENT_STATE.md`, `docs/INTEROP_MATRIX_V0.2.0_ALPHA.md`, `docs/PLATFORM_SUPPORT_MATRIX.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
+17. WS12.19 (2026-03-03 HST) doc/folder cleanup correction updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `iOS/README.md`, `iOS/XCODE_SETUP.md`, and `mobile/README.md`) and in historical archive clarification (`docs/historical/iOS/scripts/README.md`).
+18. WS12.20 (2026-03-03 HST) alpha readiness completion sweep updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`, `docs/PLATFORM_SUPPORT_MATRIX.md`, and `docs/INTEROP_MATRIX_V0.2.0_ALPHA.md`) plus active script operations guide (`scripts/README.md`).
+19. WS12.21 (2026-03-03 HST) pairwise deep-dive status sweep updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`), including live probe blocker evidence for physical iOS availability.
+20. WS12.22 (2026-03-03 HST) Android+iOS crash-and-stability hardening sweep updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`), including iOS send-path crash mitigation and Android null-safety cleanup evidence.
+21. WS12.23 (2026-03-03 HST) pending-outbox synchronization reliability pass updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`), including active-peer-triggered queue promotion and route-alias retry-drain behavior.

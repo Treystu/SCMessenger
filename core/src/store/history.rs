@@ -264,9 +264,9 @@ impl HistoryManager {
         records.sort_by(|a, b| a.1.timestamp.cmp(&b.1.timestamp));
 
         let to_remove = records.len() - max_messages as usize;
-        for i in 0..to_remove {
+        for (key, _) in records.iter().take(to_remove) {
             self.backend
-                .remove(&records[i].0)
+                .remove(key)
                 .map_err(|_| IronCoreError::StorageError)?;
         }
 

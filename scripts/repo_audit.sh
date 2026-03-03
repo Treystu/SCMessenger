@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # Efficiently search for TODOs and incomplete implementations in SCMessenger
 # This script avoids large binary/build directories to prevent hanging.
 
@@ -23,7 +24,7 @@ find "$SEARCH_DIR" \
     -path "*/.agents" -prune -o \
     -path "*/_agents" -prune -o \
     -type f \( -name "*.rs" -o -name "*.kt" -o -name "*.swift" -o -name "*.ts" -o -name "*.js" -o -name "*.h" -o -name "*.c" -o -name "*.md" -o -name "Cargo.toml" \) \
-    -print0 | xargs -0 grep -nE "$PATTERNS" | head -n 200
+    -print0 | xargs -0 grep -nE "$PATTERNS" | head -n 200 || true
 
 echo "----------------------------------------"
 echo "Audit complete."

@@ -1,5 +1,6 @@
 package com.scmessenger.android.utils
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationChannelGroup
@@ -7,11 +8,13 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.IconCompat
 import com.scmessenger.android.R
 import com.scmessenger.android.ui.components.generateIdenticonBitmap
@@ -61,71 +64,69 @@ object NotificationHelper {
      * Must be called before posting any notifications.
      */
     fun createNotificationChannels(context: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-            // Create channel group
-            val channelGroup = NotificationChannelGroup(GROUP_MESH, "Mesh Network")
-            notificationManager.createNotificationChannelGroup(channelGroup)
+        // Create channel group
+        val channelGroup = NotificationChannelGroup(GROUP_MESH, "Mesh Network")
+        notificationManager.createNotificationChannelGroup(channelGroup)
 
-            // 1. Messages Channel (HIGH priority)
-            val messagesChannel = NotificationChannel(
-                CHANNEL_MESSAGES,
-                "Messages",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "New messages from contacts"
-                group = GROUP_MESH
-                enableLights(true)
-                enableVibration(true)
-                setShowBadge(true)
-            }
-
-            // 2. Mesh Status Channel (LOW priority)
-            val meshStatusChannel = NotificationChannel(
-                CHANNEL_MESH_STATUS,
-                "Mesh Status",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Mesh network connection status"
-                group = GROUP_MESH
-                enableLights(false)
-                enableVibration(false)
-                setShowBadge(false)
-            }
-
-            // 3. Peer Events Channel (DEFAULT priority)
-            val peerEventsChannel = NotificationChannel(
-                CHANNEL_PEER_EVENTS,
-                "Peer Events",
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = "Peer discovery and connection events"
-                group = GROUP_MESH
-                enableLights(false)
-                enableVibration(false)
-                setShowBadge(false)
-            }
-
-            // 4. System Channel (LOW priority)
-            val systemChannel = NotificationChannel(
-                CHANNEL_SYSTEM,
-                "System",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "System notifications and updates"
-                group = GROUP_MESH
-                enableLights(false)
-                enableVibration(false)
-                setShowBadge(false)
-            }
-
-            notificationManager.createNotificationChannels(
-                listOf(messagesChannel, meshStatusChannel, peerEventsChannel, systemChannel)
-            )
-
-            Timber.d("Notification channels created")
+        // 1. Messages Channel (HIGH priority)
+        val messagesChannel = NotificationChannel(
+            CHANNEL_MESSAGES,
+            "Messages",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "New messages from contacts"
+            group = GROUP_MESH
+            enableLights(true)
+            enableVibration(true)
+            setShowBadge(true)
         }
+
+        // 2. Mesh Status Channel (LOW priority)
+        val meshStatusChannel = NotificationChannel(
+            CHANNEL_MESH_STATUS,
+            "Mesh Status",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = "Mesh network connection status"
+            group = GROUP_MESH
+            enableLights(false)
+            enableVibration(false)
+            setShowBadge(false)
+        }
+
+        // 3. Peer Events Channel (DEFAULT priority)
+        val peerEventsChannel = NotificationChannel(
+            CHANNEL_PEER_EVENTS,
+            "Peer Events",
+            NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
+            description = "Peer discovery and connection events"
+            group = GROUP_MESH
+            enableLights(false)
+            enableVibration(false)
+            setShowBadge(false)
+        }
+
+        // 4. System Channel (LOW priority)
+        val systemChannel = NotificationChannel(
+            CHANNEL_SYSTEM,
+            "System",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = "System notifications and updates"
+            group = GROUP_MESH
+            enableLights(false)
+            enableVibration(false)
+            setShowBadge(false)
+        }
+
+        notificationManager.createNotificationChannels(
+            listOf(messagesChannel, meshStatusChannel, peerEventsChannel, systemChannel)
+        )
+
+        Timber.d("Notification channels created")
     }
 
     /**
@@ -286,8 +287,17 @@ object NotificationHelper {
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .build()
 
+        if (!hasNotificationPermission(context)) {
+            Timber.w("POST_NOTIFICATIONS permission missing; skipping message notification")
+            return
+        }
         val notificationId = NOTIFICATION_ID_MESSAGE_BASE + peerId.hashCode()
-        NotificationManagerCompat.from(context).notify(notificationId, notification)
+        try {
+            NotificationManagerCompat.from(context).notify(notificationId, notification)
+        } catch (e: SecurityException) {
+            Timber.e(e, "Security exception while posting message notification")
+            return
+        }
 
         Timber.d("Message notification shown for $peerId")
     }
@@ -320,10 +330,18 @@ object NotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
 
-        NotificationManagerCompat.from(context).notify(
-            NOTIFICATION_ID_PEER_EVENT + peerId.hashCode(),
-            notification
-        )
+        if (!hasNotificationPermission(context)) {
+            Timber.w("POST_NOTIFICATIONS permission missing; skipping peer discovered notification")
+            return
+        }
+        try {
+            NotificationManagerCompat.from(context).notify(
+                NOTIFICATION_ID_PEER_EVENT + peerId.hashCode(),
+                notification
+            )
+        } catch (e: SecurityException) {
+            Timber.e(e, "Security exception while posting peer discovered notification")
+        }
     }
 
     /**
@@ -342,7 +360,15 @@ object NotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_MESH_STATUS, notification)
+        if (!hasNotificationPermission(context)) {
+            Timber.w("POST_NOTIFICATIONS permission missing; skipping mesh status notification")
+            return
+        }
+        try {
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_MESH_STATUS, notification)
+        } catch (e: SecurityException) {
+            Timber.e(e, "Security exception while posting mesh status notification")
+        }
     }
 
     // Helper methods
@@ -371,11 +397,16 @@ object NotificationHelper {
     }
 
     private fun isDndEnabled(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            return notificationManager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
-        }
-        return false
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        return notificationManager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
+    }
+
+    private fun hasNotificationPermission(context: Context): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
     }
 
     /**

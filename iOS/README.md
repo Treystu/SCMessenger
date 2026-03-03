@@ -14,15 +14,14 @@ iOS client app for SCMessenger using SwiftUI with UniFFI bindings into Rust core
 ## Verify Environment
 
 ```bash
-./iOS/verify-build-setup.sh
+bash ./iOS/verify-test.sh
 ```
 
 Latest local verification summary (2026-02-23):
 
-- Rust toolchain: pass
-- iOS Rust targets: pass
-- UniFFI Swift generation: pass
-- Static library compilation (`scmessenger-mobile`): pass
+- iOS simulator build verification: pass
+- Local transport fallback checks: pass
+- Role-mode parity checks: pass
 
 ## Build Workflow
 

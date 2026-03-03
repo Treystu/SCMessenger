@@ -1,11 +1,15 @@
 package com.scmessenger.android.transport
 
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.net.wifi.p2p.WifiP2pManager
+import android.os.Build
 import android.os.Looper
+import androidx.core.content.ContextCompat
 import timber.log.Timber
 
 /**
@@ -59,21 +63,30 @@ class WifiTransportManager(
             Timber.d("WiFi P2P discovery already active; skipping duplicate start")
             return
         }
+        if (!hasDiscoveryPermissions()) {
+            Timber.w("WiFi P2P discovery skipped: missing required runtime permissions")
+            return
+        }
         wifiDirectTransport?.start()
         val c = channel ?: return
 
-        manager?.discoverPeers(c, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() {
-                Timber.i("WiFi P2P Discovery started")
-                isDiscovering = true
-                registerReceiver()
-            }
+        try {
+            manager?.discoverPeers(c, object : WifiP2pManager.ActionListener {
+                override fun onSuccess() {
+                    Timber.i("WiFi P2P Discovery started")
+                    isDiscovering = true
+                    registerReceiver()
+                }
 
-            override fun onFailure(reasonCode: Int) {
-                Timber.e("WiFi P2P Discovery failed: $reasonCode")
-                isDiscovering = false
-            }
-        })
+                override fun onFailure(reasonCode: Int) {
+                    Timber.e("WiFi P2P Discovery failed: $reasonCode")
+                    isDiscovering = false
+                }
+            })
+        } catch (e: SecurityException) {
+            Timber.e(e, "Missing permission while starting WiFi P2P discovery")
+            isDiscovering = false
+        }
     }
 
     fun stopDiscovery() {
@@ -114,14 +127,35 @@ class WifiTransportManager(
     }
 
     private fun requestPeers() {
-        val c = channel ?: return
-        manager?.requestPeers(c) { peers ->
-            peers.deviceList.forEach { device ->
-                val peerId = device.deviceAddress // Use MAC as ID for now
-                Timber.v("WiFi Peer discovered: $peerId (${device.deviceName})")
-                onPeerDiscovered(peerId)
-            }
+        if (!hasDiscoveryPermissions()) {
+            Timber.w("WiFi peer request skipped: missing required runtime permissions")
+            return
         }
+        val c = channel ?: return
+        try {
+            manager?.requestPeers(c) { peers ->
+                peers.deviceList.forEach { device ->
+                    val peerId = device.deviceAddress // Use MAC as ID for now
+                    Timber.v("WiFi Peer discovered: $peerId (${device.deviceName})")
+                    onPeerDiscovered(peerId)
+                }
+            }
+        } catch (e: SecurityException) {
+            Timber.e(e, "Missing permission while requesting WiFi peers")
+        }
+    }
+
+    private fun hasDiscoveryPermissions(): Boolean {
+        val hasLocation = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val hasNearbyWifi = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.NEARBY_WIFI_DEVICES
+            ) == PackageManager.PERMISSION_GRANTED
+        return hasLocation && hasNearbyWifi
     }
     fun sendData(peerId: String, data: ByteArray): Boolean {
         val normalizedPeerId = peerId.trim()

@@ -1,14 +1,18 @@
 package com.scmessenger.android.transport.ble
 
 import android.annotation.SuppressLint
+import android.Manifest
+import android.content.pm.PackageManager
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
+import androidx.core.content.ContextCompat
 import timber.log.Timber
 
 /**
@@ -54,11 +58,21 @@ class BleAdvertiser(private val context: Context) {
      * Set identity data to advertise (e.g., truncated peer ID or beacon).
      */
     fun setIdentityData(data: ByteArray) {
+        val previous = currentIdentityData
+        if (previous?.contentEquals(data) == true) {
+            return
+        }
         currentIdentityData = data
         Timber.d("Identity data set: ${data.size} bytes")
 
-        // Restart advertising if active
-        if (isAdvertising) {
+        // Refresh advertising payload only when service-data visibility can change.
+        // Large identity payloads are served via GATT, so restarting advertising
+        // for every GATT-only update creates unnecessary churn/disconnect noise.
+        val previousWasAdvertisable = (previous?.size ?: 0) <= 24
+        val currentIsAdvertisable = data.size <= 24
+        val requiresAdvertiseRefresh = previousWasAdvertisable || currentIsAdvertisable
+
+        if (isAdvertising && requiresAdvertiseRefresh) {
             stopAdvertising()
             startAdvertising()
         }
@@ -117,6 +131,10 @@ class BleAdvertiser(private val context: Context) {
             Timber.w("Bluetooth Advertiser not available")
             return
         }
+        if (!hasAdvertisePermission()) {
+            Timber.w("BLUETOOTH_ADVERTISE permission missing; cannot start BLE advertising")
+            return
+        }
         if (isAdvertising) return
 
         val settings = AdvertiseSettings.Builder()
@@ -148,6 +166,8 @@ class BleAdvertiser(private val context: Context) {
             if (rotationIntervalMs > 0) {
                 startRotation()
             }
+        } catch (e: SecurityException) {
+            Timber.e(e, "Missing permission while starting BLE advertising")
         } catch (e: Exception) {
             Timber.e(e, "Failed to start BLE advertising")
         }
@@ -163,6 +183,10 @@ class BleAdvertiser(private val context: Context) {
                     // Rotate: restart advertising without calling full stop/start cycle
                     // This prevents creating new rotation runnables
                     try {
+                        if (!hasAdvertisePermission()) {
+                            Timber.w("BLUETOOTH_ADVERTISE permission missing; skipping beacon rotation")
+                            return
+                        }
                         advertiser?.stopAdvertising(advertiseCallback)
                         isAdvertising = false
 
@@ -186,6 +210,8 @@ class BleAdvertiser(private val context: Context) {
 
                         advertiser?.startAdvertising(settings, dataBuilder.build(), advertiseCallback)
                         Timber.d("Beacon rotated")
+                    } catch (e: SecurityException) {
+                        Timber.e(e, "Missing permission while rotating beacon")
                     } catch (e: Exception) {
                         Timber.e(e, "Failed to rotate beacon")
                     }
@@ -198,7 +224,8 @@ class BleAdvertiser(private val context: Context) {
             }
         }
 
-        handler.postDelayed(rotationRunnable!!, rotationIntervalMs)
+        val runnable = rotationRunnable ?: return
+        handler.postDelayed(runnable, rotationIntervalMs)
         Timber.d("Beacon rotation started: ${rotationIntervalMs}ms interval")
     }
 
@@ -210,12 +237,20 @@ class BleAdvertiser(private val context: Context) {
     @SuppressLint("MissingPermission")
     fun stopAdvertising() {
         if (advertiser == null || !isAdvertising) return
+        if (!hasAdvertisePermission()) {
+            Timber.w("BLUETOOTH_ADVERTISE permission missing; cannot stop BLE advertising cleanly")
+            isAdvertising = false
+            stopRotation()
+            return
+        }
 
         try {
             advertiser.stopAdvertising(advertiseCallback)
             isAdvertising = false
             stopRotation()
             Timber.i("BLE Advertising stopped")
+        } catch (e: SecurityException) {
+            Timber.e(e, "Missing permission while stopping BLE advertising")
         } catch (e: Exception) {
             Timber.e(e, "Failed to stop BLE advertising")
         }
@@ -227,6 +262,10 @@ class BleAdvertiser(private val context: Context) {
      */
     @SuppressLint("MissingPermission")
     fun sendData(data: ByteArray): Boolean {
+        if (!hasAdvertisePermission()) {
+            Timber.w("BLUETOOTH_ADVERTISE permission missing; cannot send data via BLE advertising")
+            return false
+        }
         if (data.size > 24) {
             Timber.w("BLE data too large for legacy advertising (${data.size} bytes). Use GATT server.")
             return false
@@ -255,9 +294,20 @@ class BleAdvertiser(private val context: Context) {
             advertiser?.startAdvertising(settings, advertiseData, advertiseCallback)
             Timber.d("BLE Advertising updated with data payload")
             return true
+        } catch (e: SecurityException) {
+            Timber.e(e, "Missing permission while sending data via BLE advertising")
+            return false
         } catch (e: Exception) {
              Timber.e(e, "Failed to send data via BLE advertising")
              return false
         }
+    }
+
+    private fun hasAdvertisePermission(): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_ADVERTISE
+            ) == PackageManager.PERMISSION_GRANTED
     }
 }

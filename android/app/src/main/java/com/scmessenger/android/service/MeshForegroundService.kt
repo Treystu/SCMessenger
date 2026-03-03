@@ -2,7 +2,6 @@ package com.scmessenger.android.service
 
 import android.app.Notification
 import android.app.NotificationChannel
-import android.app.ForegroundServiceStartNotAllowedException
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -358,9 +357,15 @@ class MeshForegroundService : Service() {
         } catch (e: SecurityException) {
             Timber.e(e, "SecurityException while starting foreground service")
             false
-        } catch (e: ForegroundServiceStartNotAllowedException) {
-            Timber.e(e, "ForegroundServiceStartNotAllowedException while starting foreground service")
-            false
+        } catch (e: IllegalStateException) {
+            val isForegroundServiceStartNotAllowed = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                e.javaClass.name == "android.app.ForegroundServiceStartNotAllowedException"
+            if (isForegroundServiceStartNotAllowed) {
+                Timber.e(e, "ForegroundServiceStartNotAllowedException while starting foreground service")
+                false
+            } else {
+                throw e
+            }
         }
     }
 
@@ -393,19 +398,17 @@ class MeshForegroundService : Service() {
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.mesh_service_channel_name),
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = getString(R.string.mesh_service_channel_description)
-                setShowBadge(false)
-            }
-
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager.createNotificationChannel(channel)
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            getString(R.string.mesh_service_channel_name),
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = getString(R.string.mesh_service_channel_description)
+            setShowBadge(false)
         }
+
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager.createNotificationChannel(channel)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

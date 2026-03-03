@@ -132,8 +132,10 @@ async fn main() -> anyhow::Result<()> {
     println!("🔍 Step 2: NAT Type Detection");
     println!("─────────────────────────────");
 
-    let mut config = NatConfig::default();
-    config.peer_reflectors = vec![peer1_id.to_string(), peer2_id.to_string()];
+    let config = NatConfig {
+        peer_reflectors: vec![peer1_id.to_string(), peer2_id.to_string()],
+        ..NatConfig::default()
+    };
 
     let nat_traversal = NatTraversal::new(config)?;
 

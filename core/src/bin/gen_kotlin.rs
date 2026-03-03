@@ -1,6 +1,7 @@
 #[cfg(feature = "gen-bindings")]
 fn main() {
     use camino::Utf8Path;
+    use std::fs;
     use uniffi::KotlinBindingGenerator;
 
     // Use CARGO_MANIFEST_DIR to resolve paths correctly regardless of working directory
@@ -24,6 +25,22 @@ fn main() {
         false,
     )
     .expect("Failed to generate Kotlin bindings. Check core/uniffi.toml and core/src/api.udl");
+
+    // Keep Android lint stable for generated cleaner code paths without relying
+    // on Gradle post-generation mutation.
+    let generated_file = out_dir.join("uniffi/api/api.kt");
+    if generated_file.exists() {
+        let suppress = "@file:android.annotation.SuppressLint(\"NewApi\")";
+        let content = fs::read_to_string(generated_file.as_std_path())
+            .expect("Failed to read generated Kotlin bindings");
+        if !content.starts_with(suppress) {
+            fs::write(
+                generated_file.as_std_path(),
+                format!("{suppress}\n{content}"),
+            )
+            .expect("Failed to update generated Kotlin bindings with lint suppression");
+        }
+    }
 }
 
 #[cfg(not(feature = "gen-bindings"))]

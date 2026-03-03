@@ -31,7 +31,12 @@ struct NearbyPeer: Identifiable, Equatable {
         self.isOnline = isOnline
     }
 
-    var displayName: String { nickname?.isEmpty == false ? nickname! : String(peerId.prefix(16)) }
+    var displayName: String {
+        if let nickname, !nickname.isEmpty {
+            return nickname
+        }
+        return String(peerId.prefix(16))
+    }
     var hasFullIdentity: Bool { publicKey != nil }
 
     static func == (lhs: NearbyPeer, rhs: NearbyPeer) -> Bool { lhs.peerId == rhs.peerId }

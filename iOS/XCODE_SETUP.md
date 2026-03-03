@@ -7,7 +7,7 @@ This guide explains how to create and configure the SCMessenger Xcode project on
 - macOS 14+ (Sonoma)
 - Xcode 15.2+
 - Rust toolchain with iOS targets installed
-- Run `./iOS/verify-build-setup.sh` to verify prerequisites
+- Run `bash ./iOS/verify-test.sh` to verify the iOS build path
 
 ## Step 1: Create Xcode Project
 
@@ -178,7 +178,7 @@ Click "+ Capability" and add:
 
 #### Issue: "Rust compilation failed"
 **Solution**:
-- Run `./iOS/verify-build-setup.sh` to check Rust toolchain
+- Run `bash ./iOS/verify-test.sh` to check the end-to-end iOS build path
 - Ensure iOS targets are installed: `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`
 
 ### Test on Simulator
@@ -264,7 +264,7 @@ After successfully building:
 
 If you encounter issues:
 
-1. Check `iOS/verify-build-setup.sh` output
+1. Check `bash ./iOS/verify-test.sh` output
 2. Review Xcode build logs
 3. Check Rust compilation: `cd mobile && cargo build --target aarch64-apple-ios`
 4. Verify UniFFI bindings: `./iOS/copy-bindings.sh`
@@ -286,6 +286,7 @@ cargo clean
 
 ## Documentation
 
-- **Full iOS Plan**: `iOS/iosdesign.md`
-- **Plan Review**: `iOS/PLAN_REVIEW.md`
-- **Build Scripts**: `iOS/README.md`
+- **Current State**: `docs/CURRENT_STATE.md`
+- **Active Backlog**: `REMAINING_WORK_TRACKING.md`
+- **iOS Build/Install Scripts**: `iOS/README.md`
+- **Historical iOS planning archive**: `docs/historical/iOS/`

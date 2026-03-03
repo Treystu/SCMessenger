@@ -1,6 +1,6 @@
 # SCMessenger v0.2.0 Alpha Milestone Plan
 
-Status: Active (execution complete through WS12.17 wave-3 governance closure sweep)  
+Status: Active (execution complete through WS12.23 pending-outbox synchronization reliability pass)  
 Date: 2026-03-03  
 Scope: Core + Android + iOS + Desktop GUI + Relay topology
 
@@ -32,6 +32,58 @@ Scope: Core + Android + iOS + Desktop GUI + Relay topology
    - `wasm-pack` installed and `cd wasm && wasm-pack build` now passes.
    - Docker-based simulation remains the only local prerequisite blocker.
 5. Repo-wide checklist governance result: open checklist inventory reduced to 10 active items (all in `REMAINING_WORK_TRACKING.md`), with historical open-checkbox ambiguity removed.
+
+## Alpha Readiness Closure Addendum (WS12.18, 2026-03-03 HST)
+
+1. Code-quality hard blockers closed for alpha gate:
+   - Rust strict clippy gate (`cargo clippy --workspace --lib --bins --examples -- -D warnings`) now passes.
+   - Android lint gate (`:app:lintDebug`) now passes after permission/API hardening in BLE/WiFi/notification/foreground-service paths.
+2. Interoperability closure artifacts added:
+   - `scripts/generate_interop_matrix.sh`
+   - `docs/INTEROP_MATRIX_V0.2.0_ALPHA.md`
+3. Locked baseline alignment applied:
+   - Platform support matrix updated to current code baselines (Android `minSdk=26`, iOS floor `17`, app version `0.2.0`).
+4. Residual interoperability gaps are now explicitly tracked as backlog/risk entries instead of implicit drift.
+
+## Alpha Readiness Completion Addendum (WS12.20, 2026-03-03 HST)
+
+1. All WS12.18 interop follow-up gaps are now implemented:
+   - CLI identity backup import/export, mark-sent, history clear, and diagnostics/path/listener/peer surfaces.
+   - WASM local nickname override + external-address visibility + retention/prune parity.
+   - Android+iOS adapter consumption of `reset_stats`; CLI/WASM consumption of retention/prune controls.
+2. Matrix evidence is now gap-free for static adapter parity:
+   - `docs/INTEROP_MATRIX_V0.2.0_ALPHA.md` reports no `Implemented + Not Consumed` or `Missing/Drift` cells for alpha-required surfaces.
+3. `R-WS12.18-01` and `R-WS12.18-02` are closed in residual risk register with fresh build/lint evidence.
+4. Active unchecked backlog inventory is now reduced to runtime/live-validation and environment prerequisites only.
+
+## Pairwise Deep-Dive Addendum (WS12.21, 2026-03-03 HST)
+
+1. Pairwise deep-dive scripts were re-run against current artifacts (`relay_flap_correlation`, `relay_flap_regression`, `receipt_convergence`, `ble_only_pairing`).
+2. Static pairwise surfaces remain closed (`Core -> Android`, `Core -> iOS`, `Core -> WASM/Desktop`) per current interop matrix.
+3. Live pairwise closures remain pending physical synchronized capture:
+   - `Android <-> iOS` direct/relay delivery+receipt continuity.
+   - `Android <-> iOS` strict BLE-only continuity.
+4. Physical dual-device deep-dive probe was attempted but blocked by iOS device runtime availability (`xcrun devicectl` reported the phone as `unavailable` in this run).
+
+## Crash + Stability Hardening Addendum (WS12.22, 2026-03-03 HST)
+
+1. iOS send-path crash mitigation was applied in BLE transport/repository flows after crash-log triage identified a force-unwrap-sensitive send path.
+2. Android runtime safety sweep removed all Kotlin `!!` force unwrap usage in app sources and hardened BLE reconnect/advertise behavior.
+3. Local alpha sanity gates remained green after hardening:
+   - `cd android && ./gradlew :app:compileDebugKotlin :app:lintDebug` (pass)
+   - `bash ./iOS/verify-test.sh` (pass, 0 warnings in this run)
+   - `bash ./scripts/generate_interop_matrix.sh` (pass)
+4. Remaining milestone blocker class did not change: live synchronized physical Android+iOS evidence is still required to close pairwise delivery/BLE continuity residuals (`R-WS12-04/05/06`).
+
+## Pending-Outbox Synchronization Addendum (WS12.23, 2026-03-03 HST)
+
+1. Android+iOS send reliability was hardened for a shared failure mode where newer same-peer sends could succeed while older pending entries remained delayed/stuck.
+2. Pending queue promotion now matches both canonical `peerId` and cached `routePeerId` aliases before retry scheduling.
+3. Active-connection signals now trigger immediate same-peer queue promotion + outbox flush (peer-identified/BLE identity-read paths on both platforms, plus iOS connected-event path).
+4. Post-change sanity checks remained green:
+   - `cd android && ./gradlew :app:compileDebugKotlin` (pass)
+   - `bash ./iOS/verify-test.sh` (pass; 3 warnings, non-fatal)
+5. Milestone blocker remains unchanged: synchronized physical Android+iOS runtime evidence is still required to close `R-WS12-04/05/06`.
 
 ---
 

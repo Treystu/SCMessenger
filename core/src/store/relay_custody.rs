@@ -832,9 +832,9 @@ fn filesystem_usage_bytes(path: &std::path::Path) -> Option<(u64, u64)> {
     }
 
     let block_size = if stat.f_frsize > 0 {
-        stat.f_frsize as u64
+        stat.f_frsize
     } else {
-        stat.f_bsize as u64
+        stat.f_bsize
     };
     if block_size == 0 {
         return None;

@@ -3,7 +3,6 @@ package com.scmessenger.android.service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import com.scmessenger.android.data.PreferencesRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -53,11 +52,7 @@ class BootReceiver : BroadcastReceiver() {
         }
 
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+            context.startForegroundService(intent)
         } catch (e: Exception) {
             Timber.e(e, "Failed to start mesh service from BootReceiver (likely Android 12+ background restriction)")
         }

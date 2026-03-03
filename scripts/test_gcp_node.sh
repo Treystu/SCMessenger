@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # Test connection to GCP node
 # Usage: ./scripts/test_gcp_node.sh [GCP_IP]
 

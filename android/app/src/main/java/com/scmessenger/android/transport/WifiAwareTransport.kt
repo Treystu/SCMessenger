@@ -1,10 +1,10 @@
 package com.scmessenger.android.transport
 
-import android.annotation.TargetApi
 import android.content.Context
 import android.net.*
 import android.net.wifi.aware.*
 import android.os.Build
+import androidx.annotation.RequiresApi
 import timber.log.Timber
 import java.io.InputStream
 import java.io.OutputStream
@@ -29,18 +29,14 @@ import kotlinx.coroutines.*
  *
  * Gracefully falls back on unsupported devices.
  */
-@TargetApi(Build.VERSION_CODES.O)
 class WifiAwareTransport(
     private val context: Context,
     private val onPeerDiscovered: (peerId: String) -> Unit,
     private val onDataReceived: (peerId: String, data: ByteArray) -> Unit
 ) {
 
-    private val wifiAwareManager: WifiAwareManager? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+    private val wifiAwareManager: WifiAwareManager? =
         context.getSystemService(Context.WIFI_AWARE_SERVICE) as? WifiAwareManager
-    } else {
-        null
-    }
 
     private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
@@ -61,10 +57,6 @@ class WifiAwareTransport(
      * Check if WiFi Aware is available on this device.
      */
     fun isAvailable(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return false
-        }
-
         return wifiAwareManager?.isAvailable == true
     }
 
@@ -73,11 +65,6 @@ class WifiAwareTransport(
      * Attaches to WiFi Aware, publishes and subscribes to SCMessenger service.
      */
     fun start() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            Timber.w("WiFi Aware not supported on this device (API < 26)")
-            return
-        }
-
         if (isRunning) {
             Timber.w("WiFi Aware already running")
             return
@@ -178,8 +165,6 @@ class WifiAwareTransport(
     }
 
     private fun startPublishing() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-
         val config = PublishConfig.Builder()
             .setServiceName(SERVICE_NAME)
             .setPublishType(PublishConfig.PUBLISH_TYPE_UNSOLICITED)
@@ -196,8 +181,6 @@ class WifiAwareTransport(
     }
 
     private fun startSubscribing() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-
         val config = SubscribeConfig.Builder()
             .setServiceName(SERVICE_NAME)
             .setSubscribeType(SubscribeConfig.SUBSCRIBE_TYPE_PASSIVE)
@@ -269,7 +252,7 @@ class WifiAwareTransport(
         }
     }
 
-    @TargetApi(Build.VERSION_CODES.Q)
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun initiateDataPath(
         session: DiscoverySession,
         peerHandle: PeerHandle,
@@ -292,7 +275,7 @@ class WifiAwareTransport(
                 if (isPublisher) {
                     // Publisher is RESPONDER: open a ServerSocket and wait for the initiator
                     scope.launch {
-                        createResponderSocket(network, peerIdString)
+                        createResponderSocket(peerIdString)
                     }
                 }
                 // Initiator path is deferred to onCapabilitiesChanged where peer IPv6 is available
@@ -352,7 +335,7 @@ class WifiAwareTransport(
      * accept the single incoming connection from the Subscriber, then close the
      * server socket and hand the accepted socket to AwareConnection.
      */
-    private suspend fun createResponderSocket(network: Network, peerId: String) {
+    private suspend fun createResponderSocket(peerId: String) {
         withContext(Dispatchers.IO) {
             var serverSocket: ServerSocket? = null
             try {

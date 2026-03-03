@@ -370,6 +370,26 @@ impl IronCore {
             .map_err(|e| js_value_from_str(&format!("Failed to serialize peers: {}", e)))
     }
 
+    /// Get externally observed addresses (if available) for diagnostics parity.
+    #[wasm_bindgen(js_name = getExternalAddresses)]
+    pub async fn get_external_addresses(&self) -> Result<JsValue, JsValue> {
+        let handle = self
+            .swarm_handle
+            .lock()
+            .clone()
+            .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
+
+        let addrs = handle
+            .get_external_addresses()
+            .await
+            .map_err(|e| js_value_from_str(&format!("Failed to get external addresses: {}", e)))?;
+
+        let addr_strings: Vec<String> = addrs.into_iter().map(|a| a.to_string()).collect();
+        serde_wasm_bindgen::to_value(&addr_strings).map_err(|e| {
+            js_value_from_str(&format!("Failed to serialize external addresses: {}", e))
+        })
+    }
+
     #[wasm_bindgen(js_name = getConnectionPathState)]
     pub async fn get_connection_path_state(&self) -> Result<String, JsValue> {
         let maybe_handle = self.swarm_handle.lock().clone();
@@ -667,6 +687,17 @@ impl WasmContactManager {
     pub fn count(&self) -> u32 {
         self.inner.count()
     }
+
+    #[wasm_bindgen(js_name = setLocalNickname)]
+    pub fn set_local_nickname(
+        &self,
+        peer_id: String,
+        nickname: Option<String>,
+    ) -> Result<(), JsValue> {
+        self.inner
+            .set_local_nickname(peer_id, nickname)
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))
+    }
 }
 
 #[wasm_bindgen]
@@ -749,6 +780,20 @@ impl WasmHistoryManager {
     #[wasm_bindgen(js_name = count)]
     pub fn count(&self) -> u32 {
         self.inner.count()
+    }
+
+    #[wasm_bindgen(js_name = enforceRetention)]
+    pub fn enforce_retention(&self, max_messages: u32) -> Result<u32, JsValue> {
+        self.inner
+            .enforce_retention(max_messages)
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))
+    }
+
+    #[wasm_bindgen(js_name = pruneBefore)]
+    pub fn prune_before(&self, before_timestamp: u64) -> Result<u32, JsValue> {
+        self.inner
+            .prune_before(before_timestamp)
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))
     }
 }
 

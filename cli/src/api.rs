@@ -68,6 +68,16 @@ pub struct GetExternalAddressResponse {
     pub addresses: Vec<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetListenersResponse {
+    pub listeners: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConnectionPathStateResponse {
+    pub state: String,
+}
+
 // Check if API is available
 pub async fn is_api_available() -> bool {
     tokio::net::TcpStream::connect(API_ADDR).await.is_ok()
@@ -202,12 +212,49 @@ pub async fn get_external_address_via_api() -> Result<Vec<String>> {
     Ok(response.addresses)
 }
 
+pub async fn get_listeners_via_api() -> Result<Vec<String>> {
+    let client = hyper::Client::new();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}/api/listeners", API_ADDR))
+        .body(Body::empty())?;
+
+    let resp = client.request(req).await?;
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let response: GetListenersResponse = serde_json::from_slice(&body_bytes)?;
+    Ok(response.listeners)
+}
+
+pub async fn get_connection_path_state_via_api() -> Result<String> {
+    let client = hyper::Client::new();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}/api/connection-path-state", API_ADDR))
+        .body(Body::empty())?;
+
+    let resp = client.request(req).await?;
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let response: ConnectionPathStateResponse = serde_json::from_slice(&body_bytes)?;
+    Ok(response.state)
+}
+
+pub async fn export_diagnostics_via_api() -> Result<String> {
+    let client = hyper::Client::new();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}/api/diagnostics", API_ADDR))
+        .body(Body::empty())?;
+
+    let resp = client.request(req).await?;
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    String::from_utf8(body_bytes.to_vec()).context("Diagnostics response was not UTF-8")
+}
+
 // Server implementation
 
 pub struct ApiContext {
     pub core: Arc<scmessenger_core::IronCore>,
     pub swarm_handle: Arc<scmessenger_core::transport::SwarmHandle>,
-    pub peers: Arc<tokio::sync::Mutex<std::collections::HashMap<libp2p::PeerId, Option<String>>>>,
 }
 
 pub async fn stop_node_via_api() -> Result<()> {
@@ -229,8 +276,13 @@ async fn handle_request(
         (&Method::POST, "/api/send") => handle_send_message(req, ctx).await,
         (&Method::POST, "/api/contacts") => handle_add_contact(req, ctx).await,
         (&Method::GET, "/api/peers") => handle_get_peers(req, ctx).await,
+        (&Method::GET, "/api/listeners") => handle_get_listeners(req, ctx).await,
         (&Method::POST, "/api/history") => handle_get_history(req, ctx).await,
         (&Method::GET, "/api/external-address") => handle_get_external_address(req, ctx).await,
+        (&Method::GET, "/api/connection-path-state") => {
+            handle_get_connection_path_state(req, ctx).await
+        }
+        (&Method::GET, "/api/diagnostics") => handle_export_diagnostics(req, ctx).await,
         (&Method::POST, "/api/shutdown") => {
             // Spawn a task to exit after a brief delay to allow response to send
             tokio::spawn(async {
@@ -324,11 +376,37 @@ async fn handle_add_contact(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<
 }
 
 async fn handle_get_peers(_req: Request<Body>, ctx: Arc<ApiContext>) -> Result<Response<Body>> {
-    let peers = ctx.peers.lock().await;
-    let peer_ids: Vec<String> = peers.keys().map(|p| p.to_string()).collect();
+    let peer_ids: Vec<String> = ctx
+        .swarm_handle
+        .get_peers()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.to_string())
+        .collect();
 
     let response = GetPeersResponse { peers: peer_ids };
 
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&response)?))?)
+}
+
+async fn handle_get_listeners(
+    _req: Request<Body>,
+    ctx: Arc<ApiContext>,
+) -> Result<Response<Body>> {
+    let listeners = ctx
+        .swarm_handle
+        .get_listeners()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|addr| addr.to_string())
+        .collect();
+
+    let response = GetListenersResponse { listeners };
     Ok(Response::builder()
         .status(StatusCode::OK)
         .header("content-type", "application/json")
@@ -398,6 +476,133 @@ async fn handle_get_external_address(
         .status(StatusCode::OK)
         .header("content-type", "application/json")
         .body(Body::from(serde_json::to_string(&response)?))?)
+}
+
+fn get_connection_path_state(
+    peers: &[String],
+    listeners: &[String],
+    external_addrs: &[String],
+) -> String {
+    if peers.is_empty() {
+        return "Bootstrapping".to_string();
+    }
+    if !listeners.is_empty() {
+        return "DirectPreferred".to_string();
+    }
+    if !external_addrs.is_empty() {
+        return "RelayFallback".to_string();
+    }
+    "RelayOnly".to_string()
+}
+
+fn export_diagnostics(
+    peers: &[String],
+    listeners: &[String],
+    external_addrs: &[String],
+    connection_path_state: &str,
+    core: &scmessenger_core::IronCore,
+) -> String {
+    let history = core.history_store_manager();
+    let stats = history.stats().ok();
+    let payload = serde_json::json!({
+        "running": true,
+        "connection_path_state": connection_path_state,
+        "peers": peers,
+        "listeners": listeners,
+        "external_addrs": external_addrs,
+        "inbox_count": core.inbox_count(),
+        "outbox_count": core.outbox_count(),
+        "history_stats": stats.as_ref().map(|s| serde_json::json!({
+            "total_messages": s.total_messages,
+            "sent_count": s.sent_count,
+            "received_count": s.received_count,
+            "undelivered_count": s.undelivered_count,
+        })),
+        "timestamp_ms": chrono::Utc::now().timestamp_millis(),
+    });
+    payload.to_string()
+}
+
+async fn handle_get_connection_path_state(
+    _req: Request<Body>,
+    ctx: Arc<ApiContext>,
+) -> Result<Response<Body>> {
+    let peers: Vec<String> = ctx
+        .swarm_handle
+        .get_peers()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.to_string())
+        .collect();
+    let listeners: Vec<String> = ctx
+        .swarm_handle
+        .get_listeners()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.to_string())
+        .collect();
+    let external_addrs: Vec<String> = ctx
+        .swarm_handle
+        .get_external_addresses()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.to_string())
+        .collect();
+
+    let response = ConnectionPathStateResponse {
+        state: get_connection_path_state(&peers, &listeners, &external_addrs),
+    };
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&response)?))?)
+}
+
+async fn handle_export_diagnostics(
+    _req: Request<Body>,
+    ctx: Arc<ApiContext>,
+) -> Result<Response<Body>> {
+    let peers: Vec<String> = ctx
+        .swarm_handle
+        .get_peers()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.to_string())
+        .collect();
+    let listeners: Vec<String> = ctx
+        .swarm_handle
+        .get_listeners()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.to_string())
+        .collect();
+    let external_addrs: Vec<String> = ctx
+        .swarm_handle
+        .get_external_addresses()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.to_string())
+        .collect();
+    let connection_path_state = get_connection_path_state(&peers, &listeners, &external_addrs);
+    let diagnostics = export_diagnostics(
+        &peers,
+        &listeners,
+        &external_addrs,
+        &connection_path_state,
+        &ctx.core,
+    );
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(Body::from(diagnostics))?)
 }
 
 pub async fn start_api_server(ctx: ApiContext) -> Result<()> {

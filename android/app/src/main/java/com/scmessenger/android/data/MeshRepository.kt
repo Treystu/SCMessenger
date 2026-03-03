@@ -174,7 +174,11 @@ class MeshRepository(private val context: Context) {
     private val pendingOutboxFile = File(storagePath, "pending_outbox.json")
     private val pendingOutboxFlushMutex = kotlinx.coroutines.sync.Mutex()
     private val receiptAwaitSeconds: Long = 8L
+    private val pendingOutboxMaxAttempts: Int = 720
+    private val pendingOutboxMaxAgeSeconds: Long = 7L * 24L * 60L * 60L
     private val identitySyncSentPeers = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    private val deliveredReceiptCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val deliveredReceiptCacheTtlMs = 2L * 60L * 60L * 1000L
     @Volatile
     private var serviceStartedAtEpochSec: Long = 0L
     @Volatile
@@ -235,7 +239,8 @@ class MeshRepository(private val context: Context) {
         val envelopeBase64: String,
         val createdAtEpochSec: Long,
         val attemptCount: Int,
-        val nextAttemptAtEpochSec: Long
+        val nextAttemptAtEpochSec: Long,
+        val strictBleOnlyMode: Boolean? = null
     )
 
     private data class MessageIdentityHints(
@@ -452,7 +457,7 @@ class MeshRepository(private val context: Context) {
                     }
                 }
 
-                override fun onPeerIdentified(peerId: String, agentVersion: String, listenAddrs: List<String>) {
+	                override fun onPeerIdentified(peerId: String, agentVersion: String, listenAddrs: List<String>) {
                     // P0: Deduplicate peer-identified events — Rust core fires one per substream
                     val trimmedPeerId = peerId.trim()
                     val now = System.currentTimeMillis()
@@ -479,19 +484,10 @@ class MeshRepository(private val context: Context) {
                             includeRelayCircuits = true
                         )
 
+                        val syncPeerIds = linkedSetOf(peerId.trim())
                         val isHeadless = agentVersion.contains("/headless/")
                         if (isBootstrapRelayPeer(peerId) || isHeadless) {
                             Timber.i("Headless/Relay transport node identified: $peerId (agent: $agentVersion)")
-                            val relayDiscovery = PeerDiscoveryInfo(
-                                peerId = peerId,
-                                publicKey = null,
-                                nickname = null,
-                                localNickname = null,
-                                transport = com.scmessenger.android.service.TransportType.INTERNET,
-                                isFull = false,
-                                isRelay = true,
-                                lastSeen = System.currentTimeMillis().toULong() / 1000u
-                            )
                             emitConnectedIfChanged(
                                 peerId = peerId,
                                 transport = com.scmessenger.android.service.TransportType.INTERNET
@@ -500,6 +496,9 @@ class MeshRepository(private val context: Context) {
                             activeSessions[peerId] = System.currentTimeMillis()
                         } else {
                             val transportIdentity = resolveTransportIdentity(peerId)
+                            if (transportIdentity != null) {
+                                syncPeerIds.add(transportIdentity.canonicalPeerId)
+                        }
                             val canonicalId = transportIdentity?.canonicalPeerId ?: peerId
                             transportToCanonicalMap[peerId] = canonicalId
                             activeSessions[peerId] = System.currentTimeMillis()
@@ -568,9 +567,13 @@ class MeshRepository(private val context: Context) {
                                 routePeerId = peerId,
                                 knownPublicKey = transportIdentity?.publicKey
                             )
-                        }
+	                    }
 
                         // Identified implies an active session exists; avoid immediate re-dial loops.
+                        syncPeerIds
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() }
+                            .forEach { promotePendingOutboundForPeer(peerId = it) }
                         flushPendingOutbox("peer_identified:$peerId")
                         updateBleIdentityBeacon()
                     }
@@ -598,13 +601,11 @@ class MeshRepository(private val context: Context) {
                         _discoveredPeers.update { it - peerId }
 
                         emitDisconnectedIfChanged(
-                            peerId = peerId,
-                            transport = com.scmessenger.android.service.TransportType.INTERNET
+                            peerId = peerId
                         )
                         if (canonicalId != peerId) {
                             emitDisconnectedIfChanged(
-                                peerId = canonicalId,
-                                transport = com.scmessenger.android.service.TransportType.INTERNET
+                                peerId = canonicalId
                             )
                         }
                     }
@@ -895,9 +896,29 @@ class MeshRepository(private val context: Context) {
                     if (normalized != "delivered" && normalized != "read") {
                         return
                     }
-                    historyManager?.markDelivered(messageId)
-                    ironCore?.markMessageSent(messageId)
+                    val firstReceiptSeen = markDeliveredReceiptSeen(messageId)
+                    if (!firstReceiptSeen) {
+                        return
+                    }
+                    val wasAlreadyDelivered = try {
+                        historyManager?.get(messageId)?.delivered == true
+                    } catch (_: Exception) {
+                        false
+                    }
+                    if (!wasAlreadyDelivered) {
+                        historyManager?.markDelivered(messageId)
+                        historyManager?.flush()
+                    }
                     removePendingOutbound(messageId)
+                    if (wasAlreadyDelivered) {
+                        logDeliveryState(
+                            messageId = messageId,
+                            state = "delivered",
+                            detail = "delivery_receipt_duplicate_status=$normalized"
+                        )
+                        return
+                    }
+                    ironCore?.markMessageSent(messageId)
                     // Bridge to ChatViewModel: emit Delivered so UI delivery indicator updates
                     repoScope.launch {
                         com.scmessenger.android.service.MeshEventBus.emitMessageEvent(
@@ -1240,12 +1261,6 @@ class MeshRepository(private val context: Context) {
                 }
             }
 
-            // TRIGGER IMMEDIATE SYNC: Now that we have identified a peer over BLE,
-            // don't wait for the 8s loop.
-            repoScope.launch {
-                flushPendingOutbox("peer_discovered")
-            }
-
             val selfIdentity = ironCore?.getIdentityInfo()
             val selfKey = normalizePublicKey(selfIdentity?.publicKeyHex)
             val selfIdentityId = selfIdentity?.identityId?.trim().orEmpty()
@@ -1256,6 +1271,14 @@ class MeshRepository(private val context: Context) {
             ) {
                 Timber.d("Ignoring self BLE identity beacon from $blePeerId")
                 return
+            }
+
+            repoScope.launch {
+                listOfNotNull(identityId, blePeerId, normalizedLibp2p)
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .forEach { promotePendingOutboundForPeer(peerId = it) }
+                flushPendingOutbox("peer_discovered")
             }
 
             // Update discovery map
@@ -1288,14 +1311,20 @@ class MeshRepository(private val context: Context) {
 
             // Emit identity to nearby peers bus — UI will show peer in Nearby section for user to add
             val rawHints = mutableListOf<String>()
-            for (i in 0 until (listeners?.length() ?: 0)) {
-                rawHints.add(listeners!!.getString(i))
+            listeners?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    rawHints.add(arr.getString(i))
+                }
             }
-            for (i in 0 until (externalAddresses?.length() ?: 0)) {
-                rawHints.add(externalAddresses!!.getString(i))
+            externalAddresses?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    rawHints.add(arr.getString(i))
+                }
             }
-            for (i in 0 until (connectionHints?.length() ?: 0)) {
-                rawHints.add(connectionHints!!.getString(i))
+            connectionHints?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    rawHints.add(arr.getString(i))
+                }
             }
 
             val routePeerId = normalizedLibp2p
@@ -1587,6 +1616,15 @@ class MeshRepository(private val context: Context) {
     }
 
     /**
+     * Reset service runtime counters for a fresh diagnostics window.
+     */
+    fun resetServiceStats() {
+        meshService?.resetStats()
+        _serviceStats.value = meshService?.getStats()
+        Timber.d("Mesh service stats reset")
+    }
+
+    /**
      * Get current service state.
      */
     fun getServiceState(): uniffi.api.ServiceState {
@@ -1830,6 +1868,10 @@ class MeshRepository(private val context: Context) {
                 val selectedRoutePeerId = delivery.routePeerId ?: preferredRoutePeerId
 
                 if (delivery.acked) {
+                    promotePendingOutboundForPeer(peerId = peerId, excludingMessageId = messageId)
+                }
+
+                if (delivery.acked) {
                     enqueuePendingOutbound(
                         historyRecordId = messageId,
                         peerId = peerId,
@@ -1837,7 +1879,8 @@ class MeshRepository(private val context: Context) {
                         listeners = routingHints.listeners,
                         encryptedData = encryptedData,
                         initialAttemptCount = 1,
-                        initialDelaySec = receiptAwaitSeconds
+                        initialDelaySec = receiptAwaitSeconds,
+                        strictBleOnlyMode = strictBleOnlyValidation
                     )
                 } else {
                     enqueuePendingOutbound(
@@ -1847,7 +1890,8 @@ class MeshRepository(private val context: Context) {
                         listeners = routingHints.listeners,
                         encryptedData = encryptedData,
                         initialAttemptCount = 1,
-                        initialDelaySec = 0
+                        initialDelaySec = 0,
+                        strictBleOnlyMode = strictBleOnlyValidation
                     )
                 }
 
@@ -2335,8 +2379,7 @@ class MeshRepository(private val context: Context) {
         )
     }
     private suspend fun emitDisconnectedIfChanged(
-        peerId: String,
-        transport: com.scmessenger.android.service.TransportType
+        peerId: String
     ) {
         val normalizedPeerId = peerId.trim()
         if (normalizedPeerId.isEmpty()) return
@@ -2580,10 +2623,12 @@ class MeshRepository(private val context: Context) {
         wifiPeerId: String? = null,
         blePeerId: String? = null,
         traceMessageId: String? = null,
-        attemptContext: String = "send"
+        attemptContext: String = "send",
+        strictBleOnlyOverride: Boolean? = null
     ): DeliveryAttemptResult {
+        val strictBleOnly = strictBleOnlyOverride ?: strictBleOnlyValidation
         val routePeerFallback = routePeerCandidates.firstOrNull() ?: "unknown_route_${System.currentTimeMillis()}"
-        if (strictBleOnlyValidation) {
+        if (strictBleOnly) {
             logDeliveryAttempt(
                 messageId = traceMessageId,
                 medium = "ble-only",
@@ -2611,9 +2656,26 @@ class MeshRepository(private val context: Context) {
             }
         }
 
+        val connectedBleDevices = kotlin.runCatching { bleGattServer?.getConnectedDeviceAddresses().orEmpty() }
+            .getOrDefault(emptyList())
+            .mapNotNull { it.trim().takeIf { value -> value.isNotEmpty() } }
+            .distinct()
+        val effectiveBlePeerId = blePeerId?.trim()?.takeIf { it.isNotEmpty() }
+            ?: connectedBleDevices.firstOrNull()
+
+        if (blePeerId.isNullOrBlank() && effectiveBlePeerId != null) {
+            logDeliveryAttempt(
+                messageId = traceMessageId,
+                medium = "ble",
+                phase = "local_fallback",
+                outcome = "target_fallback",
+                detail = "ctx=$attemptContext target=$effectiveBlePeerId reason=ble_peer_missing_connected_device_available"
+            )
+        }
+
         val localFallback = Companion.attemptWifiThenBleFallback(
-            wifiPeerId = if (strictBleOnlyValidation) null else wifiPeerId,
-            blePeerId = blePeerId,
+            wifiPeerId = if (strictBleOnly) null else wifiPeerId,
+            blePeerId = effectiveBlePeerId,
             tryWifi = { wifiId ->
                 val wifi = wifiTransportManager ?: run {
                     Timber.d("tryWifiDelivery: wifiTransportManager is null, returning false")
@@ -2654,47 +2716,73 @@ class MeshRepository(private val context: Context) {
                 }
             },
             tryBle = { bleAddr ->
-                val bleGatt = bleGattClient ?: run {
-                    Timber.d("tryBleDelivery: bleGattClient is null, returning false")
+                val bleClient = bleGattClient
+                val bleServer = bleGattServer
+                if (bleClient == null && bleServer == null) {
+                    Timber.d("tryBleDelivery: both bleGattClient and bleGattServer are null, returning false")
                     return@attemptWifiThenBleFallback false
                 }
-                try {
-                    if (bleGatt.sendData(bleAddr, encryptedData)) {
-                        Timber.i("✓ Delivery via BLE (target=$bleAddr)")
-                        logDeliveryAttempt(
-                            messageId = traceMessageId,
-                            medium = "ble",
-                            phase = "local_fallback",
-                            outcome = "accepted",
-                            detail = "ctx=$attemptContext target=$bleAddr"
-                        )
-                        true
-                    } else {
-                        Timber.d("tryBleDelivery: bleGatt.sendData returned false for $bleAddr")
-                        logDeliveryAttempt(
-                            messageId = traceMessageId,
-                            medium = "ble",
-                            phase = "local_fallback",
-                            outcome = "failed",
-                            detail = "ctx=$attemptContext target=$bleAddr reason=sendData_false"
-                        )
-                        false
+
+                val sendTargets = linkedSetOf(bleAddr).apply { addAll(connectedBleDevices) }
+                var lastFailureReason = "no_target_attempted"
+
+                for (target in sendTargets) {
+                    if (bleClient != null) {
+                        try {
+                            if (bleClient.sendData(target, encryptedData)) {
+                                Timber.i("✓ Delivery via BLE client (target=$target)")
+                                logDeliveryAttempt(
+                                    messageId = traceMessageId,
+                                    medium = "ble",
+                                    phase = "local_fallback",
+                                    outcome = "accepted",
+                                    detail = "ctx=$attemptContext role=central requested_target=$bleAddr target=$target"
+                                )
+                                return@attemptWifiThenBleFallback true
+                            }
+                            lastFailureReason = "client_sendData_false:$target"
+                        } catch (bleClientEx: Exception) {
+                            Timber.w(bleClientEx, "BLE client send failed for $target")
+                            lastFailureReason = "client_exception:${bleClientEx.message ?: "unknown"}"
+                        }
                     }
-                } catch (bleEx: Exception) {
-                    Timber.w(bleEx, "BLE send failed for $bleAddr")
-                    logDeliveryAttempt(
-                        messageId = traceMessageId,
-                        medium = "ble",
-                        phase = "local_fallback",
-                        outcome = "failed",
-                        detail = "ctx=$attemptContext target=$bleAddr reason=${bleEx.message ?: "exception"}"
-                    )
-                    false
+
+                    if (bleServer != null) {
+                        try {
+                            if (bleServer.sendData(target, encryptedData)) {
+                                Timber.i("✓ Delivery via BLE server notify (target=$target)")
+                                logDeliveryAttempt(
+                                    messageId = traceMessageId,
+                                    medium = "ble",
+                                    phase = "local_fallback",
+                                    outcome = "accepted",
+                                    detail = "ctx=$attemptContext role=peripheral requested_target=$bleAddr target=$target"
+                                )
+                                return@attemptWifiThenBleFallback true
+                            }
+                            lastFailureReason = "server_sendData_false:$target"
+                        } catch (bleServerEx: Exception) {
+                            Timber.w(bleServerEx, "BLE server send failed for $target")
+                            lastFailureReason = "server_exception:${bleServerEx.message ?: "unknown"}"
+                        }
+                    }
                 }
+
+                Timber.d(
+                    "tryBleDelivery exhausted targets requested=$bleAddr connected=${connectedBleDevices.joinToString(",")}"
+                )
+                logDeliveryAttempt(
+                    messageId = traceMessageId,
+                    medium = "ble",
+                    phase = "local_fallback",
+                    outcome = "failed",
+                    detail = "ctx=$attemptContext requested_target=$bleAddr reason=$lastFailureReason connected=${connectedBleDevices.size}"
+                )
+                false
             }
         )
         val localAcked = localFallback.acked
-        if (strictBleOnlyValidation) {
+        if (strictBleOnly) {
             logDeliveryAttempt(
                 messageId = traceMessageId,
                 medium = "ble-only",
@@ -2848,9 +2936,19 @@ class MeshRepository(private val context: Context) {
             val iterator = queue.listIterator()
             while (iterator.hasNext()) {
                 val item = iterator.next()
+                val expiryReason = pendingOutboxExpiryReason(item, now)
+                if (expiryReason != null) {
+                    logDeliveryState(
+                        messageId = item.historyRecordId,
+                        state = "failed",
+                        detail = "dropped_pending_outbox reason=$expiryReason attempt=${item.attemptCount}"
+                    )
+                    iterator.remove()
+                    updated = true
+                    continue
+                }
                 if (item.nextAttemptAtEpochSec > now) continue
-                val existing = historyManager?.get(item.historyRecordId)
-                if (existing?.delivered == true) {
+                if (isMessageDeliveredLocally(item.historyRecordId)) {
                     iterator.remove()
                     updated = true
                     continue
@@ -2891,9 +2989,15 @@ class MeshRepository(private val context: Context) {
                     wifiPeerId = latestRouting.wifiPeerId,
                     blePeerId = latestRouting.blePeerId,
                     traceMessageId = item.historyRecordId,
-                    attemptContext = "outbox_retry"
+                    attemptContext = "outbox_retry",
+                    strictBleOnlyOverride = item.strictBleOnlyMode
                 )
                 val selectedRoutePeerId = delivery.routePeerId ?: resolvedRoutePeerId
+                if (isMessageDeliveredLocally(item.historyRecordId)) {
+                    iterator.remove()
+                    updated = true
+                    continue
+                }
 
                 if (delivery.acked) {
                     iterator.set(
@@ -2901,7 +3005,8 @@ class MeshRepository(private val context: Context) {
                             routePeerId = selectedRoutePeerId,
                             listeners = resolvedListeners,
                             attemptCount = item.attemptCount + 1,
-                            nextAttemptAtEpochSec = now + receiptAwaitSeconds
+                            nextAttemptAtEpochSec = now + receiptAwaitSeconds,
+                            strictBleOnlyMode = item.strictBleOnlyMode
                         )
                     )
                     logDeliveryState(
@@ -2920,7 +3025,8 @@ class MeshRepository(private val context: Context) {
                         routePeerId = selectedRoutePeerId,
                         listeners = resolvedListeners,
                         attemptCount = nextAttemptCount,
-                        nextAttemptAtEpochSec = now + backoffSecs
+                        nextAttemptAtEpochSec = now + backoffSecs,
+                        strictBleOnlyMode = item.strictBleOnlyMode
                     )
                 )
                 logDeliveryState(
@@ -2946,7 +3052,8 @@ class MeshRepository(private val context: Context) {
         listeners: List<String>,
         encryptedData: ByteArray,
         initialAttemptCount: Int = 0,
-        initialDelaySec: Long = 0
+        initialDelaySec: Long = 0,
+        strictBleOnlyMode: Boolean = false
     ) {
         val now = System.currentTimeMillis() / 1000
         val queue = loadPendingOutbox().toMutableList()
@@ -2964,7 +3071,8 @@ class MeshRepository(private val context: Context) {
                 ),
                 createdAtEpochSec = now,
                 attemptCount = initialAttemptCount,
-                nextAttemptAtEpochSec = now + initialDelaySec
+                nextAttemptAtEpochSec = now + initialDelaySec,
+                strictBleOnlyMode = strictBleOnlyMode
             )
         )
         savePendingOutbox(queue)
@@ -3005,7 +3113,8 @@ class MeshRepository(private val context: Context) {
                             envelopeBase64 = obj.optString("envelope_b64"),
                             createdAtEpochSec = obj.optLong("created_at", System.currentTimeMillis() / 1000),
                             attemptCount = obj.optInt("attempt_count", 0),
-                            nextAttemptAtEpochSec = obj.optLong("next_attempt_at", 0)
+                            nextAttemptAtEpochSec = obj.optLong("next_attempt_at", 0),
+                            strictBleOnlyMode = if (obj.has("strict_ble_only_mode")) obj.optBoolean("strict_ble_only_mode") else null
                         )
                     )
                 }
@@ -3034,12 +3143,24 @@ class MeshRepository(private val context: Context) {
                         .put("created_at", item.createdAtEpochSec)
                         .put("attempt_count", item.attemptCount)
                         .put("next_attempt_at", item.nextAttemptAtEpochSec)
+                        .put("strict_ble_only_mode", item.strictBleOnlyMode ?: false)
                 )
             }
             pendingOutboxFile.writeText(arr.toString())
         } catch (e: Exception) {
             Timber.w(e, "Failed to persist pending outbox")
         }
+    }
+
+    private fun pendingOutboxExpiryReason(item: PendingOutboundEnvelope, nowEpochSec: Long): String? {
+        if (item.attemptCount >= pendingOutboxMaxAttempts) {
+            return "max_attempts_${pendingOutboxMaxAttempts}"
+        }
+        val ageSec = (nowEpochSec - item.createdAtEpochSec).coerceAtLeast(0L)
+        if (ageSec >= pendingOutboxMaxAgeSeconds) {
+            return "max_age_sec_${pendingOutboxMaxAgeSeconds}"
+        }
+        return null
     }
 
     // ========================================================================
@@ -3650,6 +3771,67 @@ class MeshRepository(private val context: Context) {
         val queue = loadPendingOutbox().toMutableList()
         val removed = queue.removeAll { it.historyRecordId == historyRecordId }
         if (removed) savePendingOutbox(queue)
+    }
+
+    @Synchronized
+    private fun promotePendingOutboundForPeer(peerId: String, excludingMessageId: String? = null) {
+        val trimmedPeerId = peerId.trim()
+        if (trimmedPeerId.isEmpty()) return
+        val now = System.currentTimeMillis() / 1000
+        val queue = loadPendingOutbox().toMutableList()
+        var changed = false
+        for (idx in queue.indices) {
+            val item = queue[idx]
+            val routePeerId = item.routePeerId?.trim()
+            if (item.peerId != trimmedPeerId && routePeerId != trimmedPeerId) continue
+            if (!excludingMessageId.isNullOrBlank() && item.historyRecordId == excludingMessageId) continue
+            if (item.nextAttemptAtEpochSec <= now) continue
+            queue[idx] = item.copy(nextAttemptAtEpochSec = now)
+            changed = true
+        }
+        if (!changed) return
+        savePendingOutbox(queue)
+        logDeliveryState(
+            messageId = excludingMessageId ?: "unknown",
+            state = "forwarding",
+            detail = "peer_queue_promoted peer=$trimmedPeerId"
+        )
+    }
+
+    private fun isMessageDeliveredLocally(messageId: String): Boolean {
+        pruneDeliveredReceiptCache()
+        if (deliveredReceiptCache.containsKey(messageId)) {
+            return true
+        }
+        return try {
+            historyManager?.get(messageId)?.delivered == true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    @Synchronized
+    private fun markDeliveredReceiptSeen(messageId: String): Boolean {
+        pruneDeliveredReceiptCache()
+        val now = System.currentTimeMillis()
+        return deliveredReceiptCache.putIfAbsent(messageId, now) == null
+    }
+
+    private fun pruneDeliveredReceiptCache(nowMs: Long = System.currentTimeMillis()) {
+        deliveredReceiptCache.forEach { (messageId, seenAtMs) ->
+            if (nowMs - seenAtMs > deliveredReceiptCacheTtlMs) {
+                deliveredReceiptCache.remove(messageId, seenAtMs)
+            }
+        }
+        if (deliveredReceiptCache.size <= 2048) {
+            return
+        }
+        val keep = deliveredReceiptCache.entries
+            .sortedByDescending { it.value }
+            .take(1024)
+            .associate { it.key to it.value }
+        deliveredReceiptCache.clear()
+        deliveredReceiptCache.putAll(keep)
     }
 
     private fun parseRoutingHints(notes: String?): RoutingHints {
