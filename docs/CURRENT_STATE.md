@@ -43,6 +43,17 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - `cargo test -p scmessenger-core --test integration_retry_lifecycle` — **pass**
 - `cargo test -p scmessenger-core --test integration_relay_custody -- --include-ignored` — **pass**
 
+### WS12.6 Optional Closeout Snapshot (2026-03-03)
+
+- `cargo test --workspace --no-run` — **pass**
+- `cargo test -p scmessenger-core relay_custody -- --nocapture` — **pass**
+- `cargo test -p scmessenger-core convergence_marker -- --nocapture` — **pass**
+- v0.2.0 closeout outcomes:
+  - relay custody persistence defaults to durable app-data paths (env override + OS-local fallback chain),
+  - storage pressure enforcement now has synthetic snapshot fallback when platform probe data is unavailable,
+  - convergence-marker application now requires validation + local tracking correlation,
+  - workspace/app version metadata bumped to `0.2.0` for release synchronization.
+
 ### WS10 Verification Snapshot (2026-03-03)
 
 - `cargo test --workspace --no-run` — **pass**
@@ -178,8 +189,8 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 
 ### Operational/Test Coverage Gaps
 
-- Browser-executed WASM tests are not currently verified in this environment (`wasm-pack` missing)
-- Android build verification requires `ANDROID_HOME` to be set in-shell
+- Browser-executed WASM tests require local `wasm-pack`; CI enforces this path in `.github/workflows/ci.yml` (`check-wasm`).
+- Android build verification requires `ANDROID_HOME` to be set in-shell; CI now standardizes SDK env and enforces Android preflight in `.github/workflows/ci.yml` (`check-android`).
 - App-update continuity code is complete (backup/restore, schema migration, relay key migration); pending: real-device package upgrade validation runs on Android/iOS/WASM
 
 ### Non-Markdown Extraction Highlights (2026-02-23)

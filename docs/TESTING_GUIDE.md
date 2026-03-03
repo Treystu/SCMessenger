@@ -73,11 +73,17 @@ WS12.5 re-validation (2026-03-03):
 2. `cargo test -p scmessenger-core --test integration_retry_lifecycle` — **pass**
 3. `cargo test -p scmessenger-core --test integration_relay_custody -- --include-ignored` — **pass**
 
+WS12.6 closeout validation (2026-03-03):
+
+1. `cargo test --workspace --no-run` — **pass**
+2. `cargo test -p scmessenger-core relay_custody -- --nocapture` — **pass**
+3. `cargo test -p scmessenger-core convergence_marker -- --nocapture` — **pass**
+
 ## CI Enforcement
 
 Primary CI gates for WS12 parity lock:
 
 1. `.github/workflows/ci.yml` `check-core`: deterministic offline/partition matrix tests.
-2. `.github/workflows/ci.yml` `check-wasm`: desktop role-mode parity tests.
-3. `.github/workflows/ci.yml` `check-android`: Android role/fallback parity tests.
+2. `.github/workflows/ci.yml` `check-wasm`: browser-executed `wasm-pack test --headless --firefox` plus desktop role-mode parity tests.
+3. `.github/workflows/ci.yml` `check-android`: Android SDK/`ANDROID_HOME` preflight (`android/verify-build-setup.sh`) plus Android role/fallback parity tests.
 4. `.github/workflows/ci.yml` `check-ios`: `iOS/verify-test.sh` now runs both local transport and role-mode parity checks.

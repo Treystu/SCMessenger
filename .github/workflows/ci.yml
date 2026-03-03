@@ -146,6 +146,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -159,6 +161,17 @@ jobs:
           add-to-path: false
       - name: Setup ANDROID_NDK_HOME
         run: echo "ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
+      - name: Standardize Android SDK environment
+        run: |
+          SDK_PATH="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [ -z "$SDK_PATH" ]; then
+            echo "ANDROID_SDK_ROOT/ANDROID_HOME is not set after setup-android."
+            exit 1
+          fi
+          echo "ANDROID_HOME=$SDK_PATH" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$SDK_PATH" >> $GITHUB_ENV
+      - name: Android preflight verification
+        run: bash ./android/verify-build-setup.sh
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
       - name: Build Android Debug APK

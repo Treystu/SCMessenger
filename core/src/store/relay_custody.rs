@@ -16,6 +16,7 @@ const CUSTODY_MSG_PREFIX: &str = "relay_custody_msg_";
 const CUSTODY_AUDIT_PREFIX: &str = "relay_custody_audit_";
 const MAX_PENDING_PER_DESTINATION: usize = 10_000;
 const DEVICE_USAGE_CEILING_PERCENT: u64 = 90;
+const FALLBACK_STORAGE_TOTAL_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 
 static CUSTODY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -244,9 +245,7 @@ impl RelayCustodyStore {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn for_local_peer(local_peer_id: &str) -> Self {
-        let base = std::env::var("SCM_RELAY_CUSTODY_DIR")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|_| std::env::temp_dir().join("scmessenger_relay_custody"));
+        let base = custody_base_dir();
         let dir = base.join(local_peer_id);
         let _ = std::fs::create_dir_all(&dir);
 
@@ -309,8 +308,11 @@ impl RelayCustodyStore {
     }
 
     pub fn storage_pressure_state(&self) -> Option<StoragePressureState> {
-        let snapshot = self.pressure_probe.snapshot()?;
         let scm_bytes = self.current_scm_storage_bytes().ok()?;
+        let snapshot = self
+            .pressure_probe
+            .snapshot()
+            .or_else(|| synthetic_storage_snapshot(scm_bytes))?;
         let context = StoragePressureContext::from_snapshot(snapshot, scm_bytes)?;
         Some(context.state_for_scm_bytes(scm_bytes))
     }
@@ -501,13 +503,11 @@ impl RelayCustodyStore {
         incoming: Option<&CustodyMessage>,
     ) -> Result<StoragePressureReport, String> {
         let scm_before = self.current_scm_storage_bytes()?;
-        let Some(snapshot) = self.pressure_probe.snapshot() else {
-            return Ok(StoragePressureReport {
-                scm_bytes_before: scm_before,
-                scm_bytes_after: scm_before,
-                ..StoragePressureReport::default()
-            });
-        };
+        let snapshot = self
+            .pressure_probe
+            .snapshot()
+            .or_else(|| synthetic_storage_snapshot(scm_before))
+            .ok_or_else(|| "invalid_storage_snapshot".to_string())?;
 
         let context = StoragePressureContext::from_snapshot(snapshot, scm_before)
             .ok_or_else(|| "invalid_storage_snapshot".to_string())?;
@@ -667,6 +667,17 @@ impl RelayCustodyStore {
         Ok(None)
     }
 
+    pub fn has_message_for_destination(
+        &self,
+        destination_peer_id: &str,
+        relay_message_id: &str,
+    ) -> bool {
+        self.find_existing(destination_peer_id, relay_message_id)
+            .ok()
+            .flatten()
+            .is_some()
+    }
+
     fn require_record(
         &self,
         destination_peer_id: &str,
@@ -772,6 +783,40 @@ fn serialized_record_bytes(record: &CustodyMessage) -> Result<u64, String> {
     let bytes = bincode::serialize(record)
         .map_err(|e| format!("serialize custody record failed: {}", e))?;
     Ok(bytes.len() as u64)
+}
+
+fn synthetic_storage_snapshot(scm_bytes: u64) -> Option<DeviceStorageSnapshot> {
+    let total_bytes = std::env::var("SCM_STORAGE_TOTAL_BYTES")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(FALLBACK_STORAGE_TOTAL_BYTES);
+    let used_bytes = std::env::var("SCM_STORAGE_USED_BYTES")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(|value| value.max(scm_bytes))
+        .unwrap_or(scm_bytes);
+    if total_bytes == 0 {
+        return None;
+    }
+    Some(DeviceStorageSnapshot {
+        total_bytes,
+        used_bytes: used_bytes.min(total_bytes),
+    })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn custody_base_dir() -> PathBuf {
+    if let Ok(path) = std::env::var("SCM_RELAY_CUSTODY_DIR") {
+        return PathBuf::from(path);
+    }
+    if let Some(path) = dirs::data_local_dir() {
+        return path.join("scmessenger").join("relay_custody");
+    }
+    if let Some(path) = dirs::home_dir() {
+        return path.join(".scmessenger").join("relay_custody");
+    }
+    std::env::temp_dir().join("scmessenger_relay_custody")
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1248,5 +1293,35 @@ mod tests {
                 .len(),
             0
         );
+    }
+
+    #[test]
+    fn storage_pressure_state_uses_synthetic_snapshot_when_probe_unavailable() {
+        let store = RelayCustodyStore::in_memory();
+        store
+            .accept_custody(
+                "source-peer".to_string(),
+                "destination-peer".to_string(),
+                "relay-msg-snapshot-fallback".to_string(),
+                vec![1u8; 64],
+            )
+            .unwrap();
+        let state = store.storage_pressure_state();
+        assert!(state.is_some(), "expected synthetic snapshot fallback");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn for_local_peer_prefers_explicit_custody_dir_override() {
+        let temp = tempfile::tempdir().unwrap();
+        let base = temp.path().join("custody-base");
+        std::env::set_var("SCM_RELAY_CUSTODY_DIR", &base);
+        let peer = "peer-override";
+        let _store = RelayCustodyStore::for_local_peer(peer);
+        assert!(
+            base.join(peer).exists(),
+            "expected custody dir override to be created"
+        );
+        std::env::remove_var("SCM_RELAY_CUSTODY_DIR");
     }
 }

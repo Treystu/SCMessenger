@@ -227,18 +227,20 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
      - desktop/WASM role parity checks,
      - iOS verification with transport fallback + role-mode parity checks.
 
-2. Add browser-executed WASM test job (parity gate)
+2. [x] Add browser-executed WASM test job (parity gate)
    - Current: native/non-browser WASM tests only in workspace run.
    - Target: `wasm-pack` runtime test coverage in CI.
+   - Outcome: `.github/workflows/ci.yml` `check-wasm` installs `wasm-pack` and runs browser runtime tests (`wasm-pack test --headless --firefox`) in CI.
 
 3. [x] Resolve integration test warnings in core tests
    - Current: workspace tests pass with warning noise.
    - Target: warning-clean path for strict CI.
    - Outcome: Cleaned up unused assignments and unused variables across all integration suites. Unit and integration tests are 100% warning-clean.
 
-4. Standardize Android CI environment setup for `ANDROID_HOME`
+4. [x] Standardize Android CI environment setup for `ANDROID_HOME`
    - Current: local build requires explicit shell env setup.
    - Target: consistent CI env bootstrap and preflight enforcement.
+   - Outcome: `.github/workflows/ci.yml` `check-android` now sets up Android SDK, standardizes `ANDROID_HOME`/`ANDROID_SDK_ROOT`, and runs `android/verify-build-setup.sh` preflight before Gradle build/tests.
 
 5. [x] iOS legacy tree cleanup policy
    - Active app lives in `iOS/SCMessenger/SCMessenger/`.
@@ -306,10 +308,11 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
 - Target: one canonical generated artifact path tied to active Xcode targets and docs.
 - Outcome: `iOS/copy-bindings.sh` now writes only to `iOS/SCMessenger/SCMessenger/Generated/`, which matches active Xcode target paths.
 
-16. iOS historical artifact segmentation
+16. [x] iOS historical artifact segmentation
 
 - Current: `iOS/iosdesign.md` and `iOS/SCMessenger/build_*.txt` mix design/historical/runtime evidence in active tree.
 - Target: section-level historical tagging and relocation/retention policy to keep active docs concise.
+- Outcome: historical iOS design artifacts are retained under `docs/historical/` references, and active `iOS/` tree no longer contains `iOS/iosdesign.md` / `iOS/SCMessenger/build_*.txt` historical noise files.
 
 17. [x] TODO/FIXME accuracy sync pass (including external test/update signals)
 
@@ -389,7 +392,25 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
 - WASM swarm transport functional (`startSwarm`, `stopSwarm`, `sendPreparedEnvelope`, `getPeers`)
 - `mark_message_sent` exposed via UniFFI for bounded outbox management
 
-## Roadmap to 1.0.0 (Post v0.1.2-alpha)
+## Roadmap to 1.0.0 (Post v0.2.0-alpha)
+
+## Immediate v0.2.0 Closeout Queue (Feasible Remaining Work)
+
+The following items are feasible to execute as additional `v0.2.0` closure work without introducing net-new product scope:
+
+1. [x] `R-WS3-02` / `EC-01`: migrate relay custody default persistence from temp-dir to durable app data paths and add restart recovery verification.
+   - Outcome: `RelayCustodyStore::for_local_peer` now resolves to durable app-data paths (`SCM_RELAY_CUSTODY_DIR` override -> OS local data dir -> home fallback -> temp fallback), with restart persistence tests retained.
+2. [x] `R-WS5-01` / `EC-02`: ensure platform adapters always provide storage snapshots so dynamic pressure controls cannot no-op.
+   - Outcome: storage pressure enforcement now uses synthetic snapshot fallback when platform probes are unavailable, preventing no-op behavior in fallback paths.
+3. [x] `R-WS4-02` / `EC-04`: add low-cost convergence-marker trust hardening and abuse validation checks.
+   - Outcome: convergence markers now require structural/timestamp validation and local message-tracking correlation before retry/custody convergence is applied.
+4. [x] Release sync execution (`WS13.x` scoped to release ops): finalize versions/tags/release notes using `docs/releases/*` artifacts.
+   - Outcome: release artifacts are canonicalized in `docs/releases/*`, workspace/app version metadata is bumped to `0.2.0`, and CI/docs now reference repo-local release sources.
+
+Not feasible for `v0.2.0` without expanding release scope:
+
+1. `WS13` Tight Pairing (single active device lifecycle).
+2. `WS14` direct-message/direct-request notifications.
 
 1. **Automatic Environment Detection and Unified Hydration**
    - Requirement: The app must automatically detect if a previous identity, message history, contacts, or user preferences exist in local storage/backups and utilize them immediately on startup without user intervention.
@@ -432,7 +453,8 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
      - `/Users/christymaxwell/Downloads/RELEASE_NOTES_V0.1.2_GH.md.resolved`
      - `/Users/christymaxwell/Downloads/RELEASE_NOTES_V0.2.0_DRAFT.md.resolved`
    - Canonicalization target (during WS13.x execution):
-     - `docs/releases/v0.2.1/` (or equivalent repo-local path) with links updated in tracking/docs.
+     - `docs/releases/` with links updated in tracking/docs.
+   - Progress: repo-local release planning/note artifacts now exist under `docs/releases/` so WS13.x no longer depends on workstation-specific `~/Downloads` paths.
    - Execution note: queue this after current WS12 in-flight session and after WS12/WS12.5 closure evidence is captured.
 
 5. **WS14 (v0.2.1): Direct Message + Direct Message Request Notifications (iOS/Android/WASM)**

@@ -28,6 +28,12 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 - [v0.2.1 Tight Pair / WS13 Plan](docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md)
 - [v0.2.1 Notifications / WS14 Plan](docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md)
 
+## Release Docs
+
+- [Release Sync Plan (v0.1.2 -> v0.2.0)](docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md)
+- [Release Notes Draft (v0.2.0)](docs/releases/RELEASE_NOTES_V0.2.0_DRAFT.md)
+- [GitHub Release Notes Draft (v0.1.2)](docs/releases/RELEASE_NOTES_V0.1.2_GH.md)
+
 ## Component and Platform Docs
 
 - [Core Crate](core/README.md)

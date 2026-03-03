@@ -35,6 +35,9 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 | `docs/PROTOCOL.md` | Active | Protocol identifiers and wire contract |
 | `docs/TESTING_GUIDE.md` | Active | Validation commands and expected outcomes |
 | `docs/EDGE_CASE_READINESS_MATRIX.md` | Active | Extreme environment readiness and hardening backlog |
+| `docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md` | Active | Release synchronization and tagging checklist |
+| `docs/releases/RELEASE_NOTES_V0.2.0_DRAFT.md` | Active | v0.2.0 draft release notes |
+| `docs/releases/RELEASE_NOTES_V0.1.2_GH.md` | Active | v0.1.2 GitHub release notes draft |
 
 ---
 
@@ -89,3 +92,4 @@ These documents may contain both current and historical sections; verify section
 1. WS11 (2026-03-03) public beta readiness surface updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
 2. WS12 (2026-03-03) test-matrix/parity-lock updates are reflected in active docs (`docs/TESTING_GUIDE.md`, `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
 3. WS12.5 (2026-03-03) burndown/audit closure updates are reflected in active docs (`docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`, `docs/CURRENT_STATE.md`, and `REMAINING_WORK_TRACKING.md`).
+4. WS12.6 (2026-03-03) optional closeout burndown updates are reflected in active docs (`docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, `docs/CURRENT_STATE.md`, and `REMAINING_WORK_TRACKING.md`).

@@ -3501,7 +3501,7 @@ dependencies = [
 
 [[package]]
 name = "scmessenger-cli"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3531,7 +3531,7 @@ dependencies = [
 
 [[package]]
 name = "scmessenger-core"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3541,6 +3541,7 @@ dependencies = [
  "camino",
  "chacha20poly1305",
  "curve25519-dalek",
+ "dirs",
  "ed25519-dalek",
  "futures",
  "getrandom 0.2.17",
@@ -3574,7 +3575,7 @@ dependencies = [
 
 [[package]]
 name = "scmessenger-mobile"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "scmessenger-core",
  "uniffi",
@@ -3582,7 +3583,7 @@ dependencies = [
 
 [[package]]
 name = "scmessenger-wasm"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "console_error_panic_hook",
  "futures",

@@ -59,6 +59,7 @@ libp2p = { workspace = true, features = [
 ureq = "2"
 sled = { workspace = true }
 libc = "0.2"
+dirs = "5.0"
 
 [dev-dependencies]
 mockall = { workspace = true }

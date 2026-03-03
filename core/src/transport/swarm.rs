@@ -102,6 +102,7 @@ const RELAY_DUPLICATE_WINDOW_MS: u64 = 30_000;
 const RELAY_MAX_TRACKED_DUPLICATES: usize = 16_384;
 const RELAY_MAX_MESSAGE_ID_LEN: usize = 160;
 const RELAY_MAX_ENVELOPE_BYTES: usize = 64 * 1024;
+const DELIVERY_CONVERGENCE_MAX_CLOCK_SKEW_MS: u64 = 24 * 60 * 60 * 1000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct DeliveryConvergenceMarker {
@@ -327,6 +328,107 @@ where
         }
     }
     removed
+}
+
+fn marker_now_ms() -> u64 {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        js_sys::Date::now() as u64
+    }
+}
+
+fn validate_delivery_convergence_marker_shape(
+    marker: &DeliveryConvergenceMarker,
+    now_ms: u64,
+) -> Result<(), &'static str> {
+    if marker.relay_message_id.is_empty() {
+        return Err("marker_message_id_empty");
+    }
+    if marker.relay_message_id.len() > RELAY_MAX_MESSAGE_ID_LEN {
+        return Err("marker_message_id_too_long");
+    }
+    if marker.destination_peer_id.is_empty() {
+        return Err("marker_destination_empty");
+    }
+    if marker.observed_by_peer_id.is_empty() {
+        return Err("marker_observed_by_empty");
+    }
+    if now_ms > marker.observed_at_ms {
+        if now_ms.saturating_sub(marker.observed_at_ms) > DELIVERY_CONVERGENCE_MAX_CLOCK_SKEW_MS {
+            return Err("marker_too_old");
+        }
+    } else if marker.observed_at_ms.saturating_sub(now_ms) > DELIVERY_CONVERGENCE_MAX_CLOCK_SKEW_MS
+    {
+        return Err("marker_from_future");
+    }
+    Ok(())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn should_apply_delivery_convergence_marker(
+    marker: &DeliveryConvergenceMarker,
+    pending_messages: &HashMap<String, PendingMessage>,
+    request_to_message: &HashMap<libp2p::request_response::OutboundRequestId, String>,
+    pending_relay_requests: &HashMap<libp2p::request_response::OutboundRequestId, String>,
+    pending_custody_dispatches: &HashMap<
+        libp2p::request_response::OutboundRequestId,
+        PendingCustodyDispatch,
+    >,
+    relay_custody_store: &RelayCustodyStore,
+) -> Result<(), &'static str> {
+    validate_delivery_convergence_marker_shape(marker, marker_now_ms())?;
+    let tracked_locally = pending_messages.contains_key(&marker.relay_message_id)
+        || request_to_message
+            .values()
+            .any(|id| id == &marker.relay_message_id)
+        || pending_relay_requests
+            .values()
+            .any(|id| id == &marker.relay_message_id)
+        || pending_custody_dispatches.values().any(|dispatch| {
+            dispatch.relay_message_id == marker.relay_message_id
+                && dispatch.destination_peer.to_string() == marker.destination_peer_id
+        })
+        || relay_custody_store
+            .has_message_for_destination(&marker.destination_peer_id, &marker.relay_message_id);
+    if !tracked_locally {
+        return Err("marker_not_locally_tracked");
+    }
+    Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn should_apply_delivery_convergence_marker(
+    marker: &DeliveryConvergenceMarker,
+    pending_messages: &HashMap<String, PendingMessage>,
+    pending_relay_requests: &HashMap<libp2p::request_response::OutboundRequestId, String>,
+    pending_custody_dispatches: &HashMap<
+        libp2p::request_response::OutboundRequestId,
+        PendingCustodyDispatch,
+    >,
+    relay_custody_store: &RelayCustodyStore,
+) -> Result<(), &'static str> {
+    validate_delivery_convergence_marker_shape(marker, marker_now_ms())?;
+    let tracked_locally = pending_messages.contains_key(&marker.relay_message_id)
+        || pending_relay_requests
+            .values()
+            .any(|id| id == &marker.relay_message_id)
+        || pending_custody_dispatches.values().any(|dispatch| {
+            dispatch.relay_message_id == marker.relay_message_id
+                && dispatch.destination_peer.to_string() == marker.destination_peer_id
+        })
+        || relay_custody_store
+            .has_message_for_destination(&marker.destination_peer_id, &marker.relay_message_id);
+    if !tracked_locally {
+        return Err("marker_not_locally_tracked");
+    }
+    Ok(())
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1893,6 +1995,23 @@ pub async fn start_swarm_with_config(
                                     if let Some(marker) =
                                         decode_delivery_convergence_marker(&message.data)
                                     {
+                                        if let Err(reason) = should_apply_delivery_convergence_marker(
+                                            &marker,
+                                            &pending_messages,
+                                            &request_to_message,
+                                            &pending_relay_requests,
+                                            &pending_custody_dispatches,
+                                            &relay_custody_store,
+                                        ) {
+                                            tracing::warn!(
+                                                "Ignoring convergence marker message={} destination={} from={} reason={}",
+                                                marker.relay_message_id,
+                                                marker.destination_peer_id,
+                                                propagation_source,
+                                                reason
+                                            );
+                                            continue;
+                                        }
                                         if seen_delivery_convergence_markers.insert(marker.key()) {
                                             apply_delivery_convergence_marker(
                                                 &marker,
@@ -3043,6 +3162,22 @@ pub async fn start_swarm_with_config(
                                     if let Some(marker) =
                                         decode_delivery_convergence_marker(&message.data)
                                     {
+                                        if let Err(reason) = should_apply_delivery_convergence_marker(
+                                            &marker,
+                                            &pending_messages,
+                                            &pending_relay_requests,
+                                            &pending_custody_dispatches,
+                                            &relay_custody_store,
+                                        ) {
+                                            tracing::warn!(
+                                                "(wasm) ignoring convergence marker message={} destination={} from={} reason={}",
+                                                marker.relay_message_id,
+                                                marker.destination_peer_id,
+                                                propagation_source,
+                                                reason
+                                            );
+                                            continue;
+                                        }
                                         if seen_delivery_convergence_markers.insert(marker.key()) {
                                             apply_delivery_convergence_marker(
                                                 &marker,
@@ -3209,9 +3344,13 @@ use libp2p::{gossipsub, request_response};
 #[cfg(test)]
 mod tests {
     use super::{
-        RelayAbuseGuardrails, RELAY_DUPLICATE_WINDOW_MS, RELAY_PEER_BUCKET_BURST_CAPACITY,
+        should_apply_delivery_convergence_marker, validate_delivery_convergence_marker_shape,
+        DeliveryConvergenceMarker, PendingCustodyDispatch, PendingMessage, RelayAbuseGuardrails,
+        RELAY_DUPLICATE_WINDOW_MS, RELAY_PEER_BUCKET_BURST_CAPACITY,
         RELAY_PEER_BUCKET_REFILL_PER_SEC,
     };
+    use crate::store::relay_custody::RelayCustodyStore;
+    use std::collections::HashMap;
 
     #[test]
     fn abusive_peer_burst_is_rate_limited_but_other_peer_still_passes() {
@@ -3292,5 +3431,83 @@ mod tests {
         assert!(guardrails
             .should_reject_cheap_heuristics("ok", 1024)
             .is_none());
+    }
+
+    #[test]
+    fn convergence_marker_rejects_invalid_shape() {
+        let marker = DeliveryConvergenceMarker {
+            relay_message_id: "".to_string(),
+            destination_peer_id: "dest".to_string(),
+            observed_by_peer_id: "observer".to_string(),
+            observed_at_ms: super::marker_now_ms(),
+        };
+        assert_eq!(
+            validate_delivery_convergence_marker_shape(&marker, super::marker_now_ms()),
+            Err("marker_message_id_empty")
+        );
+    }
+
+    #[test]
+    fn convergence_marker_requires_local_tracking_context() {
+        let marker = DeliveryConvergenceMarker {
+            relay_message_id: "relay-msg-unknown".to_string(),
+            destination_peer_id: "dest-peer".to_string(),
+            observed_by_peer_id: "observer-peer".to_string(),
+            observed_at_ms: super::marker_now_ms(),
+        };
+        let pending_messages: HashMap<String, PendingMessage> = HashMap::new();
+        let request_to_message = HashMap::new();
+        let pending_relay_requests = HashMap::new();
+        let pending_custody_dispatches: HashMap<
+            libp2p::request_response::OutboundRequestId,
+            PendingCustodyDispatch,
+        > = HashMap::new();
+        let custody_store = RelayCustodyStore::in_memory();
+        assert_eq!(
+            should_apply_delivery_convergence_marker(
+                &marker,
+                &pending_messages,
+                &request_to_message,
+                &pending_relay_requests,
+                &pending_custody_dispatches,
+                &custody_store,
+            ),
+            Err("marker_not_locally_tracked")
+        );
+    }
+
+    #[test]
+    fn convergence_marker_accepts_when_custody_exists_locally() {
+        let custody_store = RelayCustodyStore::in_memory();
+        let _accepted = custody_store
+            .accept_custody(
+                "src-peer".to_string(),
+                "dest-peer".to_string(),
+                "relay-msg-known".to_string(),
+                vec![1, 2, 3],
+            )
+            .unwrap();
+        let marker = DeliveryConvergenceMarker {
+            relay_message_id: "relay-msg-known".to_string(),
+            destination_peer_id: "dest-peer".to_string(),
+            observed_by_peer_id: "observer-peer".to_string(),
+            observed_at_ms: super::marker_now_ms(),
+        };
+        let pending_messages: HashMap<String, PendingMessage> = HashMap::new();
+        let request_to_message = HashMap::new();
+        let pending_relay_requests = HashMap::new();
+        let pending_custody_dispatches: HashMap<
+            libp2p::request_response::OutboundRequestId,
+            PendingCustodyDispatch,
+        > = HashMap::new();
+        assert!(should_apply_delivery_convergence_marker(
+            &marker,
+            &pending_messages,
+            &request_to_message,
+            &pending_relay_requests,
+            &pending_custody_dispatches,
+            &custody_store,
+        )
+        .is_ok());
     }
 }

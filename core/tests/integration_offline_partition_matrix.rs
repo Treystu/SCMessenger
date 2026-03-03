@@ -55,7 +55,11 @@ fn offline_partition_custody_and_outbox_survive_restart_until_reconnect_delivery
         for attempt in 1..=3u32 {
             outbox.record_attempt(message_id);
             custody
-                .mark_dispatching(recipient_id, &accepted.custody_id, "partition_dispatch_attempt")
+                .mark_dispatching(
+                    recipient_id,
+                    &accepted.custody_id,
+                    "partition_dispatch_attempt",
+                )
                 .expect("dispatch transition should be recorded");
             custody
                 .mark_dispatch_failed(recipient_id, &accepted.custody_id, "partition_still_active")
@@ -143,8 +147,7 @@ fn partition_recency_recovery_prefers_fresh_relays_deterministically() {
         ROUTE_REASON_RELAY_RECENCY_SUCCESS
     );
     assert_eq!(
-        during_partition[1].path,
-        during_partition_repeat[1].path,
+        during_partition[1].path, during_partition_repeat[1].path,
         "ordering must remain deterministic across repeated reads"
     );
 
@@ -155,8 +158,7 @@ fn partition_recency_recovery_prefers_fresh_relays_deterministically() {
     assert_eq!(after_heal[0].path, vec![target]);
     assert_eq!(after_heal[1].path[0], relay_b);
     assert_eq!(
-        after_heal[1].path,
-        after_heal_repeat[1].path,
+        after_heal[1].path, after_heal_repeat[1].path,
         "post-heal ordering must remain deterministic"
     );
 }

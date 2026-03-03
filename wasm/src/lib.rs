@@ -63,7 +63,8 @@ impl MeshSettingsManager {
     pub fn load(&self) -> Result<MeshSettings, scmessenger_core::IronCoreError> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let settings_file = std::path::PathBuf::from(&self.storage_path).join("mesh_settings.json");
+            let settings_file =
+                std::path::PathBuf::from(&self.storage_path).join("mesh_settings.json");
             if settings_file.exists() {
                 let data = std::fs::read_to_string(&settings_file)
                     .map_err(|_| scmessenger_core::IronCoreError::StorageError)?;

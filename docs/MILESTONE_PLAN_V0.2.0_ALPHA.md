@@ -523,3 +523,26 @@ Tracking document:
 
 1. Planning/docs and backlog tracking are allowed.
 2. Enforcement/protocol implementation is out-of-scope unless milestone is explicitly re-scoped.
+
+---
+
+## 16) Optional v0.2.0 Closeout Burndown (No Net-New Product Scope)
+
+If additional closure work is pulled into `v0.2.0`, prioritize only residual-risk and release-ops items that do not expand product scope:
+
+1. `R-WS3-02` / `EC-01`: custody persistence path migration from temp-dir to durable app path + restart recovery verification.
+2. `R-WS5-01` / `EC-02`: platform storage snapshot adapters so pressure controls cannot no-op.
+3. `R-WS4-02` / `EC-04`: low-cost convergence-marker trust hardening checks.
+4. Release synchronization execution (workspace version alignment, tag/release checklist, release notes finalization) using `docs/releases/*`.
+
+Exclusions for this optional closeout:
+
+1. `WS13` Tight Pairing implementation.
+2. `WS14` notification implementation.
+
+WS12.6 closeout status (2026-03-03):
+
+1. Completed `R-WS3-02` closure (durable custody persistence default path migration).
+2. Completed `R-WS5-01` closure (synthetic storage snapshot fallback to avoid no-op pressure enforcement).
+3. Completed `R-WS4-02` closure (convergence-marker validation hardening).
+4. Completed release-sync preparation (`docs/releases/*` canonical artifacts + version metadata bump to `0.2.0`).
