@@ -5,12 +5,116 @@ pub mod transport;
 
 use libp2p::{Multiaddr, PeerId};
 use parking_lot::Mutex;
-use scmessenger_core::{
-    DiscoveryMode, IdentityInfo, IronCore as RustIronCore, MeshSettings, MeshSettingsManager,
-    SignatureResult,
-};
+use scmessenger_core::{IdentityInfo, IronCore as RustIronCore, SignatureResult};
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum DiscoveryMode {
+    Normal,
+    Cautious,
+    Paranoid,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MeshSettings {
+    pub relay_enabled: bool,
+    pub max_relay_budget: u32,
+    pub battery_floor: u8,
+    pub ble_enabled: bool,
+    pub wifi_aware_enabled: bool,
+    pub wifi_direct_enabled: bool,
+    pub internet_enabled: bool,
+    pub discovery_mode: DiscoveryMode,
+    pub onion_routing: bool,
+    pub cover_traffic_enabled: bool,
+    pub message_padding_enabled: bool,
+    pub timing_obfuscation_enabled: bool,
+}
+
+impl Default for MeshSettings {
+    fn default() -> Self {
+        Self {
+            relay_enabled: true,
+            max_relay_budget: 200,
+            battery_floor: 20,
+            ble_enabled: true,
+            wifi_aware_enabled: true,
+            wifi_direct_enabled: true,
+            internet_enabled: true,
+            discovery_mode: DiscoveryMode::Normal,
+            onion_routing: false,
+            cover_traffic_enabled: false,
+            message_padding_enabled: false,
+            timing_obfuscation_enabled: false,
+        }
+    }
+}
+
+pub struct MeshSettingsManager {
+    storage_path: String,
+}
+
+impl MeshSettingsManager {
+    pub fn new(storage_path: String) -> Self {
+        Self { storage_path }
+    }
+
+    pub fn load(&self) -> Result<MeshSettings, scmessenger_core::IronCoreError> {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let settings_file = std::path::PathBuf::from(&self.storage_path).join("mesh_settings.json");
+            if settings_file.exists() {
+                let data = std::fs::read_to_string(&settings_file)
+                    .map_err(|_| scmessenger_core::IronCoreError::StorageError)?;
+                let settings: MeshSettings = serde_json::from_str(&data)
+                    .map_err(|_| scmessenger_core::IronCoreError::Internal)?;
+                return Ok(settings);
+            }
+        }
+
+        Ok(MeshSettings::default())
+    }
+
+    pub fn save(&self, settings: MeshSettings) -> Result<(), scmessenger_core::IronCoreError> {
+        self.validate(settings.clone())?;
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let storage_path = std::path::PathBuf::from(&self.storage_path);
+            std::fs::create_dir_all(&storage_path)
+                .map_err(|_| scmessenger_core::IronCoreError::StorageError)?;
+
+            let settings_file = storage_path.join("mesh_settings.json");
+            let data = serde_json::to_string_pretty(&settings)
+                .map_err(|_| scmessenger_core::IronCoreError::Internal)?;
+            std::fs::write(&settings_file, data)
+                .map_err(|_| scmessenger_core::IronCoreError::StorageError)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn validate(&self, settings: MeshSettings) -> Result<(), scmessenger_core::IronCoreError> {
+        if settings.relay_enabled && settings.max_relay_budget == 0 {
+            return Err(scmessenger_core::IronCoreError::InvalidInput);
+        }
+
+        if !settings.ble_enabled
+            && !settings.wifi_aware_enabled
+            && !settings.wifi_direct_enabled
+            && !settings.internet_enabled
+        {
+            return Err(scmessenger_core::IronCoreError::InvalidInput);
+        }
+
+        if settings.battery_floor > 50 {
+            return Err(scmessenger_core::IronCoreError::InvalidInput);
+        }
+
+        Ok(())
+    }
+}
 
 #[wasm_bindgen]
 pub fn init_logging() {
@@ -987,6 +1091,30 @@ mod tests {
         core.initialize_identity().unwrap();
         let info = core.get_identity_info();
         assert!(!info.is_null());
+    }
+
+    #[test]
+    fn test_desktop_identity_flow_exposes_metadata_after_init() {
+        let core = RustIronCore::with_storage(temp_storage_path("identity-flow"));
+        core.start().unwrap();
+        core.initialize_identity().unwrap();
+        core.set_nickname("Desktop Node".to_string()).unwrap();
+
+        let info = core.get_identity_info();
+        assert!(info.initialized, "identity should be initialized");
+        assert!(
+            info.public_key_hex.is_some(),
+            "initialized identity should expose public key"
+        );
+        assert_eq!(
+            info.nickname.as_deref(),
+            Some("Desktop Node"),
+            "nickname update should round-trip through identity surface"
+        );
+        assert!(
+            info.libp2p_peer_id.is_some() || info.identity_id.is_some(),
+            "identity surface should provide stable peer or identity metadata"
+        );
     }
 
     #[test]

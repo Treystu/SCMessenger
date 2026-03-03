@@ -1607,6 +1607,9 @@ Loading...</textarea
               const relayEnabled = document.getElementById(
                 "setting-relay-enabled",
               ).checked;
+              const nickname = document
+                .getElementById("setting-nickname")
+                .value.trim();
 
               SCM.state.bootstrapAddrs =
                 bootstrap.length > 0 ? bootstrap : [...DEFAULT_BOOTSTRAP_NODES];
@@ -1615,8 +1618,17 @@ Loading...</textarea
               const settings = SCM.state.core.getSettings();
               settings.relayEnabled = relayEnabled;
               SCM.state.core.updateSettings(settings);
+
+              if (SCM.state.identity?.initialized) {
+                const currentNickname = SCM.state.identity.nickname || "";
+                if (nickname !== currentNickname) {
+                  SCM.state.core.setNickname(nickname);
+                }
+              }
+
               SCM.state.relayEnabled = relayEnabled;
               await SCM.restartSwarm();
+              await SCM.refreshIdentityRole();
 
               SCM.ui.updateRolePill();
               SCM.ui.closeModals();

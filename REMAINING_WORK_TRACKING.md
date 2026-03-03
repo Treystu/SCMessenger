@@ -95,17 +95,25 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
      - `wasm-pack` runtime browser test coverage in CI.
      - History UX and deep parity for settings/contacts surfaces on Web.
 
-10. [x] WS10 minimal anti-abuse guardrails (alpha level)
+10. [x] WS9 desktop full GUI parity (alpha scope)
+
+- Outcome (2026-03-03):
+  - Desktop GUI now executes onboarding/identity, contacts, chat send/receive, mesh dashboard, and relay-only mode via local `wasm` + Core APIs.
+  - Normal desktop workflows no longer depend on CLI websocket command fallback paths.
+  - Role gating now aligns with mobile parity (`full` vs `relay-only`), including explicit identity-init CTA and blocked chat/contact actions in relay-only mode.
+  - Remaining WS9 residual is tracked in `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md` (`R-WS9-01`).
+
+11. [x] WS10 minimal anti-abuse guardrails (alpha level)
 
 - Outcome (2026-03-03): Added per-peer token bucket limiting, global inflight custody-dispatch cap, duplicate suppression window, and cheap abuse heuristics in Core relay handling with native + wasm parity and targeted guardrail tests.
 
-11. Beta anti-abuse gate implementation and validation
+12. Beta anti-abuse gate implementation and validation
 
 - Requirement: abuse controls are non-blocking in alpha but mandatory before beta.
 - Target: enable and validate anti-abuse protections with measurable pass criteria across Android, iOS, Web, and relay-critical paths.
 - Scope: relay spam/flood controls, abuse detection thresholds, and regression coverage in CI/release checks.
 
-12. [x] Active-session reliability + durable eventual delivery guarantees
+13. [x] Active-session reliability + durable eventual delivery guarantees
     - Requirement: while app is open/relaying, service should remain available and messages should not be dropped.
     - Target: explicit durability contract (persisted outbox/inbox semantics, resend/recovery behavior) plus failure-mode tests.
     - Scope: crash/restart recovery, relay outage handling, offline queue replay, duplicate-safe redelivery.

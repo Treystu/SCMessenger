@@ -11,12 +11,12 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - `cargo test --workspace`
   - Result: **pass**
   - Totals from suite output:
-    - CLI: 17 passed
-    - Core unit: 242 passed, 7 ignored
-    - Core integration: 52 passed
+    - CLI: 13 passed
+    - Core unit: 265 passed, 7 ignored
+    - Core integration: 50 passed
     - Mobile crate: 4 passed
-    - WASM crate (native/non-browser tests): 24 passed
-  - Aggregate: **343 passed, 0 failed, 7 ignored**
+    - WASM crate (native/non-browser tests): 33 passed
+  - Aggregate: **365 passed, 0 failed, 7 ignored**
 - `cargo clippy --workspace` — **clean (0 warnings)**
 - `cargo fmt --all -- --check` — **clean**
 
@@ -29,6 +29,23 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - per-peer token bucket limiting,
   - global inflight custody-dispatch cap,
   - duplicate suppression window and cheap abuse-shape heuristics.
+
+### WS9 Verification Snapshot (2026-03-03)
+
+- `cargo test --workspace --no-run` — **pass**
+- `cargo test --workspace` — **pass**
+- `cargo test -p scmessenger-wasm` — **pass** (includes desktop WS9 flow tests)
+- `cargo check -p scmessenger-core --target wasm32-unknown-unknown` — **pass**
+- `cargo check -p scmessenger-wasm --target wasm32-unknown-unknown` — **pass**
+- Desktop target checks from release matrix:
+  - `cargo check --bin scmessenger-cli --target aarch64-apple-darwin` — **pass**
+  - `cargo check --bin scmessenger-cli --target x86_64-apple-darwin` — **pass**
+  - `cargo zigbuild --bin scmessenger-cli --target x86_64-unknown-linux-gnu` — **pass**
+  - `PATH="/opt/homebrew/opt/llvm@20/bin:$PATH" cargo xwin check --bin scmessenger-cli --target x86_64-pc-windows-msvc` — **pass**
+- `./scripts/docs_sync_check.sh` — **pass**
+- Desktop GUI WS9 outcomes:
+  - onboarding/identity, contacts, chat send/receive, mesh dashboard, and relay-only mode are now GUI-native through local WASM/Core APIs.
+  - normal desktop workflows no longer depend on CLI websocket command fallback.
 
 ### CLI Surface
 
