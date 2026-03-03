@@ -58,6 +58,12 @@ Use these for context only; do not treat as execution source of truth unless rev
 
 Historical audit artifacts currently live under `docs/historical/`.
 
+## Recent Execution Notes
+
+- WS11 (2026-03-03) delivery-state UX and diagnostics/tester-readiness updates are tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+
 ## Documentation Governance Rules
 
 1. Execution truth must come from Active docs listed above.

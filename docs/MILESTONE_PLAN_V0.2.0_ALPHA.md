@@ -380,6 +380,11 @@ Acceptance:
 1. Testers can understand message state without developer guidance.
 2. Install + first-message path is reliable and observable.
 
+Execution note (2026-03-03):
+
+1. WS11 implemented in Android+iOS surfaces with explicit delivery-state mapping, tester-focused diagnostics bundles, and permissions/reliability rationale text.
+2. Residual-risk review and evidence are recorded in `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md` under the WS11 section.
+
 ### WS12 - Test matrix expansion and docs parity lock
 
 Scope:

@@ -676,6 +676,20 @@ fun AdvancedSettingsSection(
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
+            Text(
+                text = "Reliability: messages may appear as pending/stored/forwarding before delivered while routes are discovered.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            Text(
+                text = "Permissions rationale: Bluetooth, Location, and Nearby WiFi are required for peer discovery and transport fallback.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+
             Button(
                 onClick = onNavigateToDiagnostics,
                 modifier = Modifier.fillMaxWidth()

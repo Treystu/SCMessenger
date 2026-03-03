@@ -886,6 +886,11 @@ class MeshRepository(private val context: Context) {
                             com.scmessenger.android.service.MessageEvent.Delivered(messageId)
                         )
                     }
+                    logDeliveryState(
+                        messageId = messageId,
+                        state = "delivered",
+                        detail = "delivery_receipt_status=$normalized"
+                    )
                 }
             }
             ironCore?.setDelegate(coreDelegate)
@@ -1763,6 +1768,11 @@ class MeshRepository(private val context: Context) {
                 repoScope.launch {
                     _messageUpdates.emit(record)
                 }
+                logDeliveryState(
+                    messageId = messageId,
+                    state = "pending",
+                    detail = "message_prepared_local_history_written"
+                )
 
                 // 4. Send over core-selected swarm route only.
                 // Mobile apps provide identity/routing hints; Rust core owns path selection.
@@ -2104,6 +2114,30 @@ class MeshRepository(private val context: Context) {
         } catch (e: Exception) {
             Timber.w(e, "Failed to read NAT status")
             "unknown"
+        }
+    }
+
+    fun getServiceStateName(): String {
+        return meshService?.getState()?.name ?: "STOPPED"
+    }
+
+    fun getDiscoveredPeerCount(): Int {
+        return _discoveredPeers.value.size
+    }
+
+    fun getPendingOutboxCount(): Int {
+        return loadPendingOutbox().size
+    }
+
+    fun getPendingDeliverySnapshot(messageId: String): Pair<Int, Long>? {
+        if (messageId.isBlank()) return null
+        val pending = loadPendingOutbox().firstOrNull { it.historyRecordId == messageId } ?: return null
+        return pending.attemptCount to pending.nextAttemptAtEpochSec
+    }
+
+    fun getMissingRuntimePermissions(): List<String> {
+        return Permissions.required.filter { permission ->
+            ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
         }
     }
 
@@ -2582,6 +2616,11 @@ class MeshRepository(private val context: Context) {
                 updated = true
                 continue
             }
+            logDeliveryState(
+                messageId = item.historyRecordId,
+                state = "forwarding",
+                detail = "retry_attempt=${item.attemptCount + 1}"
+            )
 
             val envelope = try {
                 android.util.Base64.decode(item.envelopeBase64, android.util.Base64.NO_WRAP)
@@ -2624,6 +2663,11 @@ class MeshRepository(private val context: Context) {
                         nextAttemptAtEpochSec = now + receiptAwaitSeconds
                     )
                 )
+                logDeliveryState(
+                    messageId = item.historyRecordId,
+                    state = "stored",
+                    detail = "awaiting_receipt_delay_sec=$receiptAwaitSeconds"
+                )
                 updated = true
                 continue
             }
@@ -2637,6 +2681,11 @@ class MeshRepository(private val context: Context) {
                     attemptCount = nextAttemptCount,
                     nextAttemptAtEpochSec = now + backoffSecs
                 )
+            )
+            logDeliveryState(
+                messageId = item.historyRecordId,
+                state = "stored",
+                detail = "retry_backoff_sec=$backoffSecs attempt=$nextAttemptCount"
             )
             updated = true
         }
@@ -2675,6 +2724,12 @@ class MeshRepository(private val context: Context) {
             )
         )
         savePendingOutbox(queue)
+        val initialState = if (initialDelaySec > 0) "stored" else "forwarding"
+        logDeliveryState(
+            messageId = historyRecordId,
+            state = initialState,
+            detail = "enqueued attempt=$initialAttemptCount next_attempt_delay_sec=$initialDelaySec"
+        )
         repoScope.launch { flushPendingOutbox("enqueue") }
     }
 
@@ -3854,5 +3909,10 @@ class MeshRepository(private val context: Context) {
         } catch (e: Exception) {
             Timber.e(e, "Error clearing diagnostics")
         }
+    }
+
+    private fun logDeliveryState(messageId: String, state: String, detail: String) {
+        if (messageId.isBlank()) return
+        Timber.i("delivery_state msg=$messageId state=$state detail=$detail")
     }
 }

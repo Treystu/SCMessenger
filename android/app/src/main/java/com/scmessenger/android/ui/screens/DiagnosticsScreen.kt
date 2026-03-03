@@ -16,25 +16,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.scmessenger.android.ui.viewmodels.SettingsViewModel
 import androidx.core.content.FileProvider
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiagnosticsScreen(
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     var logText by remember { mutableStateOf("Loading logs...") }
 
     fun refreshLogs() {
-        val logFile = File(context.filesDir, "mesh_diagnostics.log")
-        if (logFile.exists()) {
-            val lines = logFile.readLines().takeLast(100)
-            logText = if (lines.isEmpty()) "Log file empty." else lines.joinToString("\n")
-        } else {
-            logText = "Log file not found."
-        }
+        logText = viewModel.getDiagnosticsLogs(limit = 250)
     }
 
     LaunchedEffect(Unit) {
@@ -55,15 +52,12 @@ fun DiagnosticsScreen(
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
                     IconButton(onClick = {
-                        val logFile = File(context.filesDir, "mesh_diagnostics.log")
-                        if (logFile.exists()) {
-                            logFile.writeText("")
-                            refreshLogs()
-                        }
+                        viewModel.clearDiagnosticsLogs()
+                        refreshLogs()
                     }) {
                         Icon(imageVector = Icons.Default.Delete, contentDescription = "Clear")
                     }
-                    IconButton(onClick = { shareLogFile(context) }) {
+                    IconButton(onClick = { shareDiagnosticsBundle(context, viewModel.buildTesterDiagnosticsBundle()) }) {
                         Icon(Icons.Default.Share, contentDescription = "Share")
                     }
                 }
@@ -77,6 +71,22 @@ fun DiagnosticsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
+            AssistChip(
+                onClick = {},
+                label = {
+                    Text(
+                        "pending -> stored -> forwarding -> delivered",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Tester note: share bundle after reproducing issue. Include permission prompts and install/first-message steps.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = logText,
                 style = MaterialTheme.typography.bodySmall,
@@ -86,20 +96,21 @@ fun DiagnosticsScreen(
     }
 }
 
-private fun shareLogFile(context: Context) {
-    val logFile = File(context.filesDir, "mesh_diagnostics.log")
-    if (!logFile.exists()) return
+private fun shareDiagnosticsBundle(context: Context, bundleText: String) {
+    val bundleFile = File(context.cacheDir, "scmessenger_diagnostics_bundle.txt")
+    bundleFile.writeText(bundleText)
 
     val uri = FileProvider.getUriForFile(
         context,
         "${context.packageName}.fileprovider",
-        logFile
+        bundleFile
     )
 
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_STREAM, uri)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        putExtra(Intent.EXTRA_SUBJECT, "SCMessenger Diagnostics Bundle")
     }
-    context.startActivity(Intent.createChooser(intent, "Share Logs"))
+    context.startActivity(Intent.createChooser(intent, "Share Diagnostics Bundle"))
 }

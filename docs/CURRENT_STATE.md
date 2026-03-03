@@ -30,6 +30,18 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - global inflight custody-dispatch cap,
   - duplicate suppression window and cheap abuse-shape heuristics.
 
+### WS11 Verification Snapshot (2026-03-03)
+
+- `cargo test --workspace --no-run` — **pass**
+- `cargo test --workspace` — **pass**
+- `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew testDebugUnitTest` — **pass** (includes WS11 delivery-state + diagnostics formatter tests)
+- `ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./android/verify-build-setup.sh` — **pass**
+- `bash ./iOS/verify-test.sh` — **pass** (26 warnings, non-fatal per script policy)
+- WS11 surface outcomes:
+  - Android+iOS chat now expose explicit tester-facing delivery states: `pending`, `stored`, `forwarding`, `delivered`.
+  - Android+iOS diagnostics exports now include structured tester bundle context (runtime summary, reliability notes, permissions rationale, delivery-state guide).
+  - Android+iOS settings surfaces now include concise reliability and permissions rationale text for beta testers.
+
 ### WS9 Verification Snapshot (2026-03-03)
 
 - `cargo test --workspace --no-run` — **pass**
@@ -56,9 +68,9 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 
 - `./android/verify-build-setup.sh`
   - Result: **pass** (with `ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk`)
-- `./iOS/verify-build-setup.sh`
+- `./iOS/verify-test.sh`
   - Result: **pass**
-  - Confirmed Swift bindings generation and static library build
+  - Confirmed simulator build plus local transport fallback checks
 
 ### Platform App Builds
 

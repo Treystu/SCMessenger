@@ -2,8 +2,12 @@ package com.scmessenger.android.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.scmessenger.android.BuildConfig
 import com.scmessenger.android.data.MeshRepository
 import com.scmessenger.android.data.PreferencesRepository
+import com.scmessenger.android.ui.diagnostics.DiagnosticsBundleFormatter
+import com.scmessenger.android.ui.diagnostics.DiagnosticsBundleInput
+import com.scmessenger.android.utils.Permissions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -364,6 +368,38 @@ class SettingsViewModel @Inject constructor(
 
     fun exportDiagnostics(): String {
         return meshRepository.exportDiagnostics()
+    }
+
+    fun getDiagnosticsLogPath(): String {
+        return meshRepository.getDiagnosticsLogPath()
+    }
+
+    fun getDiagnosticsLogs(limit: Int = 500): String {
+        return meshRepository.getDiagnosticsLogs(limit)
+    }
+
+    fun clearDiagnosticsLogs() {
+        meshRepository.clearDiagnosticsLogs()
+    }
+
+    fun buildTesterDiagnosticsBundle(): String {
+        val missingPermissions = meshRepository.getMissingRuntimePermissions().map { permission ->
+            "${Permissions.getPermissionName(permission)} ($permission)"
+        }
+        return DiagnosticsBundleFormatter.format(
+            DiagnosticsBundleInput(
+                generatedAtEpochMs = System.currentTimeMillis(),
+                appVersion = BuildConfig.VERSION_NAME,
+                serviceState = meshRepository.getServiceStateName(),
+                connectionPathState = meshRepository.getConnectionPathState().name,
+                natStatus = meshRepository.getNatStatus(),
+                discoveredPeers = meshRepository.getDiscoveredPeerCount(),
+                pendingOutbox = meshRepository.getPendingOutboxCount(),
+                missingPermissions = missingPermissions,
+                coreDiagnosticsJson = meshRepository.exportDiagnostics(),
+                recentLogs = meshRepository.getDiagnosticsLogs(limit = 1500)
+            )
+        )
     }
 
 

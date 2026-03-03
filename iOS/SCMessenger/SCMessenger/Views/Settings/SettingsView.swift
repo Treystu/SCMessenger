@@ -83,6 +83,12 @@ struct SettingsView: View {
                 NavigationLink("Diagnostics") {
                     DiagnosticsView()
                 }
+                Text("Reliability: messages can move through pending/stored/forwarding before delivered while routes stabilize.")
+                    .font(Theme.bodySmall)
+                    .foregroundStyle(Theme.onSurfaceVariant)
+                Text("Permissions rationale: Bluetooth/Local Network support peer discovery and direct transport fallback.")
+                    .font(Theme.bodySmall)
+                    .foregroundStyle(Theme.onSurfaceVariant)
             } header: {
                 Text("Advanced")
             }

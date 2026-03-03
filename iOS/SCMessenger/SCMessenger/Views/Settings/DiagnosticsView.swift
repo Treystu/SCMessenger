@@ -10,6 +10,17 @@ struct DiagnosticsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Delivery states: pending -> stored -> forwarding -> delivered")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Tester note: export after reproducing install/first-message issues and include permission prompts seen on device.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
+
             // Technical info header
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
@@ -133,10 +144,33 @@ struct DiagnosticsView: View {
     private func prepareExport() {
         let jsonMetrics = repository.exportDiagnostics()
         let recentLogs = repository.diagnosticsSnapshot(limit: 5000)
+        let missingPermissions = [
+            "Bluetooth (peer discovery and nearby transport)",
+            "Local Network (peer connectivity in local mesh)",
+            "Notifications (optional delivery alerts)"
+        ]
         let bundleText = """
-        === SCMessenger Diagnostics Bundle ===
+        === SCMessenger Diagnostics Bundle (v0.2.0 alpha) ===
         Generated: \(Date())
-        Version: 0.1.2
+        Version: 0.2.0-alpha
+
+        --- Runtime Summary ---
+        connection_path_state: \(repository.getConnectionPathState())
+        nat_status: \(repository.getNatStatus())
+
+        --- Delivery State Guide ---
+        pending: queued locally, first route attempt in progress.
+        stored: queued for retry while recipient is unreachable.
+        forwarding: active retry is running now.
+        delivered: recipient delivery receipt confirmed.
+
+        --- Reliability Notes For Testers ---
+        1) First send may remain pending/stored while routes warm up.
+        2) Stored/forwarding are expected on unstable links; retries continue automatically.
+        3) Report cases that never reach delivered after network recovery.
+
+        --- Permissions Rationale ---
+        \(missingPermissions.joined(separator: "\n"))
 
         --- Node State Metrics ---
         \(jsonMetrics)

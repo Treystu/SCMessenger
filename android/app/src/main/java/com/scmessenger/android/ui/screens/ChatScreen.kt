@@ -20,6 +20,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.scmessenger.android.ui.chat.DeliveryStatePresentation
+import com.scmessenger.android.ui.chat.DeliveryStateSurface
 import com.scmessenger.android.utils.toEpochMillis
 import com.scmessenger.android.ui.viewmodels.ConversationsViewModel
 import java.text.SimpleDateFormat
@@ -36,6 +38,7 @@ fun ChatScreen(
     val chatMessages = remember(messages, conversationId) {
         messages.filter { it.peerId == conversationId }.sortedBy { it.timestamp }
     }
+    val nowEpochSec = System.currentTimeMillis() / 1000
 
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -77,6 +80,7 @@ fun ChatScreen(
                 .padding(paddingValues)
         ) {
             // Messages List
+            StateLegendCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -87,9 +91,13 @@ fun ChatScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(chatMessages) { message ->
+                    val deliveryState = remember(message.id, message.delivered, nowEpochSec) {
+                        viewModel.resolveDeliveryState(message, nowEpochSec)
+                    }
                     MessageBubble(
                         message = message,
-                        isMe = message.direction == uniffi.api.MessageDirection.SENT
+                        isMe = message.direction == uniffi.api.MessageDirection.SENT,
+                        deliveryState = deliveryState
                     )
                 }
             }
@@ -135,7 +143,11 @@ fun ChatScreen(
 }
 
 @Composable
-fun MessageBubble(message: uniffi.api.MessageRecord, isMe: Boolean) {
+fun MessageBubble(
+    message: uniffi.api.MessageRecord,
+    isMe: Boolean,
+    deliveryState: DeliveryStatePresentation
+) {
     val bubbleColor = if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val textColor = if (isMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     val alignment = if (isMe) Alignment.End else Alignment.Start
@@ -163,6 +175,40 @@ fun MessageBubble(message: uniffi.api.MessageRecord, isMe: Boolean) {
             color = MaterialTheme.colorScheme.outline,
             modifier = Modifier.padding(top = 4.dp, start = 4.dp, end = 4.dp)
         )
+        if (isMe) {
+            Text(
+                text = deliveryState.label,
+                style = MaterialTheme.typography.labelSmall,
+                color = when (deliveryState.state) {
+                    DeliveryStateSurface.DELIVERED -> MaterialTheme.colorScheme.primary
+                    DeliveryStateSurface.FORWARDING -> MaterialTheme.colorScheme.tertiary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StateLegendCard(modifier: Modifier = Modifier) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "Delivery states",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "pending: first attempt in progress • stored: queued for retry • forwarding: retry active • delivered: receipt confirmed",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 

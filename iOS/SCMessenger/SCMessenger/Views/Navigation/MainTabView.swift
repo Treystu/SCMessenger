@@ -271,11 +271,18 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            DeliveryStateLegend()
+                .padding(.horizontal, Theme.spacingMedium)
+                .padding(.top, Theme.spacingSmall)
+
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(viewModel?.messages ?? [], id: \.id) { message in
-                            MessageBubble(message: message)
+                            MessageBubble(
+                                message: message,
+                                deliveryState: repository.deliveryStatePresentation(for: message)
+                            )
                                 .id(message.id)
                         }
                         // Invisible anchor at the bottom for auto-scroll
@@ -340,6 +347,7 @@ struct ChatView: View {
 
 struct MessageBubble: View {
     let message: MessageRecord
+    let deliveryState: MeshRepository.DeliveryStatePresentation
     
     private var isSent: Bool {
         message.direction == .sent
@@ -357,6 +365,11 @@ struct MessageBubble: View {
                 Text(formatMessageDate(msgDate))
                     .font(Theme.labelSmall)
                     .foregroundStyle(isSent ? Theme.onPrimaryContainer.opacity(0.8) : Theme.onSurface.opacity(0.8))
+                if isSent {
+                    Text(deliveryState.label)
+                        .font(Theme.labelSmall.weight(.semibold))
+                        .foregroundStyle(deliveryState.label == "delivered" ? .green : Theme.onSurface.opacity(0.8))
+                }
             }
             .padding(Theme.spacingMedium)
             .background(isSent ? Theme.primaryContainer : Theme.surfaceVariant)
@@ -374,6 +387,18 @@ struct MessageBubble: View {
         formatter.dateStyle = Calendar.current.isDateInToday(date) ? .none : .short
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+}
+
+private struct DeliveryStateLegend: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Delivery states")
+                .font(Theme.labelLarge.weight(.semibold))
+            Text("pending: first attempt in progress • stored: queued for retry • forwarding: retry active • delivered: receipt confirmed")
+                .font(Theme.labelSmall)
+                .foregroundStyle(Theme.onSurfaceVariant)
+        }
     }
 }
 

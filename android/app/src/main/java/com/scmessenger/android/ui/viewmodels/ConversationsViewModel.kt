@@ -3,6 +3,9 @@ package com.scmessenger.android.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.scmessenger.android.data.MeshRepository
+import com.scmessenger.android.ui.chat.DeliveryStateMapper
+import com.scmessenger.android.ui.chat.DeliveryStatePresentation
+import com.scmessenger.android.ui.chat.PendingDeliverySnapshot
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -228,5 +231,18 @@ class ConversationsViewModel @Inject constructor(
      */
     fun getMessageCount(): UInt {
         return meshRepository.getMessageCount()
+    }
+
+    fun resolveDeliveryState(
+        message: uniffi.api.MessageRecord,
+        nowEpochSec: Long = System.currentTimeMillis() / 1000
+    ): DeliveryStatePresentation {
+        val pendingPair = meshRepository.getPendingDeliverySnapshot(message.id)
+        val pending = pendingPair?.let { PendingDeliverySnapshot(it.first, it.second) }
+        return DeliveryStateMapper.resolve(
+            delivered = message.delivered,
+            pending = pending,
+            nowEpochSec = nowEpochSec
+        )
     }
 }

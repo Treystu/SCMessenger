@@ -15,7 +15,7 @@ Owner policy constraints (2026-02-23):
 
 ## v0.2.0 Execution Residual Register
 
-Residual risks from completed v0.2.0 phases (currently through WS10 execution) are tracked in:
+Residual risks from completed v0.2.0 phases (currently through WS11 execution) are tracked in:
 
 - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 
@@ -106,6 +106,10 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
 11. [x] WS10 minimal anti-abuse guardrails (alpha level)
 
 - Outcome (2026-03-03): Added per-peer token bucket limiting, global inflight custody-dispatch cap, duplicate suppression window, and cheap abuse heuristics in Core relay handling with native + wasm parity and targeted guardrail tests.
+
+12. [x] WS11 public beta readiness surfaces
+
+- Outcome (2026-03-03): Added explicit delivery-state UX mapping (`pending`, `stored`, `forwarding`, `delivered`) on Android+iOS chat surfaces, upgraded diagnostics exports into tester-readable bundles with contextual guidance, and added tester-facing reliability + permissions rationale notes in settings/diagnostics flows.
 
 12. Beta anti-abuse gate implementation and validation
 
@@ -418,6 +422,6 @@ Priority items to track into remaining v0.2.x execution:
 3. `EC-03` (WS11/WS12): replace volatile local transport route hints with stable authenticated alias mapping (`R-WS6-01`, `R-WS7-01`).
 4. `EC-04` (WS11/WS12): add convergence marker anti-abuse validation and trust hardening (`R-WS4-02`).
 5. `EC-05` (WS11/WS12): run custody reconnect integration tests in socket-enabled CI/host lane (`R-WS3-01`).
-6. `EC-06` (WS11/WS12): normalize sender-facing delivery states for intermittent/harsh networks (`R-WS2-01`).
+6. `EC-06` (WS11): sender-facing delivery states normalized in Android+iOS UI/export surfaces (`R-WS2-01` reduced, still tracked for Core-native state exposure in WS12).
 7. `EC-07` to `EC-09` (v0.2.1 WS13): execute tight-pair single-active-device lifecycle.
 8. `EC-10` to `EC-16` (post-v0.2.1): captive portal adaptation, high-latency profile tuning, censorship-resilience strategy, wake/delegate architecture, sparse encounter optimization, and clock-skew normalization.

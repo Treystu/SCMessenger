@@ -83,3 +83,7 @@ These documents may contain both current and historical sections; verify section
    4. `docs/CURRENT_STATE.md` (verified baseline),
    5. `docs/REPO_CONTEXT.md` (architecture context).
 4. `./scripts/docs_sync_check.sh` should pass before finalizing implementation work or documentation-only changes.
+
+## 7) Recent Canonical Sync
+
+1. WS11 (2026-03-03) public beta readiness surface updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).

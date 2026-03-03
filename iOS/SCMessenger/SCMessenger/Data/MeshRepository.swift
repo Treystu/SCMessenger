@@ -139,6 +139,11 @@ final class MeshRepository {
         let nextAttemptAtEpochSec: UInt64
     }
 
+    struct DeliveryStatePresentation {
+        let label: String
+        let detail: String
+    }
+
     private struct MessageIdentityHints {
         let identityId: String?
         let publicKey: String?
@@ -850,6 +855,7 @@ final class MeshRepository {
 
         // Notify UI (Unified flow for sent messages)
         messageUpdates.send(messageRecord)
+        appendDiagnostic("delivery_state msg=\(messageId) state=pending detail=message_prepared_local_history_written")
 
         // 3. Attempt deterministic local fallback first (Multipeer -> BLE),
         // then send over core-selected swarm route.
@@ -1128,6 +1134,7 @@ final class MeshRepository {
         historyManager?.flush()
         _ = ironCore?.markMessageSent(messageId: messageId)
         removePendingOutbound(historyRecordId: messageId)
+        appendDiagnostic("delivery_state msg=\(messageId) state=delivered detail=delivery_receipt_status=\(normalized)")
         MeshEventBus.shared.messageEvents.send(.delivered(messageId: messageId))
     }
 
@@ -1840,6 +1847,33 @@ final class MeshRepository {
 
     func getNatStatus() -> String {
         return meshService?.getNatStatus() ?? "unknown"
+    }
+
+    func deliveryStatePresentation(for message: MessageRecord, nowEpochSec: UInt64 = UInt64(Date().timeIntervalSince1970)) -> DeliveryStatePresentation {
+        if message.delivered {
+            return DeliveryStatePresentation(
+                label: "delivered",
+                detail: "Delivery receipt confirmed by the recipient node."
+            )
+        }
+
+        if let pending = loadPendingOutbox().first(where: { $0.historyRecordId == message.id }) {
+            if pending.nextAttemptAtEpochSec <= nowEpochSec {
+                return DeliveryStatePresentation(
+                    label: "forwarding",
+                    detail: "Actively retrying through direct or relay paths."
+                )
+            }
+            return DeliveryStatePresentation(
+                label: "stored",
+                detail: "Stored for retry while the recipient is offline or unreachable."
+            )
+        }
+
+        return DeliveryStatePresentation(
+            label: "pending",
+            detail: "Queued locally. First route attempt is still in progress."
+        )
     }
 
     func exportDiagnostics() -> String {
@@ -2950,6 +2984,8 @@ final class MeshRepository {
             )
         )
         savePendingOutbox(queue)
+        let initialState = initialDelaySec > 0 ? "stored" : "forwarding"
+        appendDiagnostic("delivery_state msg=\(historyRecordId) state=\(initialState) detail=enqueued attempt=\(initialAttemptCount) next_attempt_delay_sec=\(initialDelaySec)")
         Task { await flushPendingOutbox(reason: "enqueue") }
     }
 
@@ -2973,6 +3009,7 @@ final class MeshRepository {
             if let existing = try? historyManager?.get(id: item.historyRecordId), existing.delivered == true {
                 continue
             }
+            appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=forwarding detail=retry_attempt=\(item.attemptCount + 1)")
 
             guard let envelopeData = Data(base64Encoded: item.envelopeBase64) else {
                 logger.warning("Dropping corrupt pending envelope \(item.queueId)")
@@ -3017,6 +3054,7 @@ final class MeshRepository {
                         nextAttemptAtEpochSec: now + receiptAwaitSeconds
                     )
                 )
+                appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=stored detail=awaiting_receipt_delay_sec=\(receiptAwaitSeconds)")
                 continue
             }
 
@@ -3036,6 +3074,7 @@ final class MeshRepository {
                     nextAttemptAtEpochSec: now + backoff
                 )
             )
+            appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=stored detail=retry_backoff_sec=\(backoff) attempt=\(nextAttemptCount)")
         }
 
         savePendingOutbox(nextQueue)
