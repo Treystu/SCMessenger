@@ -214,6 +214,30 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - Remaining validation gap:
   - physical iOS-device + Android synchronized capture with WS12.27 binaries is still required for final field closure.
 
+### WS12.28 Transport Regression Hotfix (2026-03-03 HST)
+
+- Live regression evidence intake from the active trip log bundle:
+  - `logs/5mesh/20260303_115412/android.log` showed repeated `BleGattClient.connect` `NullPointerException` at line 238 while retry loops were active.
+  - same bundle showed repeated dials to special-use/unusable addresses (for example `/ip4/192.0.0.6/...`) and persistent `stored` retry loops with no core peers connected.
+- Root-cause conclusions (implementation confidence: high):
+  - Android BLE fallback could enter a crash loop when `BluetoothDevice.connectGatt(...)` returned `null` and the result was stored as a non-null `BluetoothGatt`.
+  - Android+iOS local address selection and dial filtering allowed special-use IPv4 values, enabling stale/unroutable candidate churn.
+- Fixes applied in this pass:
+  - Android `BleGattClient.connect`:
+    - added address format guard (`BluetoothAdapter.checkBluetoothAddress`),
+    - added explicit `connectGatt == null` handling with graceful failure instead of exception loop.
+  - Android `MeshRepository` networking helpers:
+    - added special-use IPv4 filtering for dialability checks,
+    - hardened local IPv4 selection to prefer usable private LAN addresses and skip special-use ranges.
+  - iOS `MeshRepository` networking helpers:
+    - mirrored special-use IPv4 filtering in dialability checks,
+    - hardened local IPv4 selection scoring to prefer usable private LAN addresses and skip special-use ranges.
+- Verification in this pass:
+  - `cd android && ./gradlew app:compileDebugKotlin -q` — **pass**
+  - `xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj -scheme SCMessenger -sdk iphonesimulator -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 16e' build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=''` — **pass**
+- Remaining closure gate:
+  - deploy WS12.28 binaries to physical Android+iOS and confirm live logs no longer show BLE NPE loops or special-use IPv4 dial attempts during retry windows.
+
 ### WS12 Verification Snapshot (2026-03-03)
 
 - `cargo test --workspace --no-run` — **pass**

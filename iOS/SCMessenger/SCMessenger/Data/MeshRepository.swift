@@ -3747,21 +3747,42 @@ final class MeshRepository {
     private func isDialableAddress(_ multiaddr: String) -> Bool {
         if multiaddr.contains("/p2p-circuit") { return true }
         guard let ip = extractIpv4FromMultiaddr(multiaddr) else { return true }
-        if ip == "0.0.0.0" { return false }
-        if ip.hasPrefix("127.") { return false }
-        if ip.hasPrefix("169.254.") { return false }
+        if isSpecialUseIPv4(ip) { return false }
         if isPrivateIPv4(ip) {
             return isSameLanAddress(multiaddr)
         }
         return true
     }
 
-    private func isPrivateIPv4(_ ip: String) -> Bool {
+    private func parseIPv4Octets(_ ip: String) -> [Int]? {
         let octets = ip.split(separator: ".").compactMap { Int($0) }
-        guard octets.count == 4 else { return false }
+        guard octets.count == 4 else { return nil }
+        guard octets.allSatisfy({ (0...255).contains($0) }) else { return nil }
+        return octets
+    }
+
+    private func isPrivateIPv4(_ ip: String) -> Bool {
+        guard let octets = parseIPv4Octets(ip) else { return false }
         return octets[0] == 10
             || (octets[0] == 172 && (16...31).contains(octets[1]))
             || (octets[0] == 192 && octets[1] == 168)
+    }
+
+    private func isSpecialUseIPv4(_ ip: String) -> Bool {
+        guard let octets = parseIPv4Octets(ip) else { return true }
+        let o0 = octets[0]
+        let o1 = octets[1]
+        let o2 = octets[2]
+
+        if o0 == 0 || o0 == 127 { return true }
+        if o0 == 169 && o1 == 254 { return true }
+        if o0 == 100 && (64...127).contains(o1) { return true } // RFC6598 CGNAT
+        if o0 == 192 && o1 == 0 && (o2 == 0 || o2 == 2) { return true }
+        if o0 == 198 && (o1 == 18 || o1 == 19) { return true } // Benchmark network
+        if o0 == 198 && o1 == 51 && o2 == 100 { return true }
+        if o0 == 203 && o1 == 0 && o2 == 113 { return true }
+        if o0 >= 224 { return true } // multicast/reserved/broadcast
+        return false
     }
 
     private func relayCircuitAddresses(for targetPeerId: String) -> [String] {
@@ -4440,7 +4461,8 @@ final class MeshRepository {
     }
 
     func getLocalIpAddress() -> String? {
-        var address: String?
+        var bestAddress: String?
+        var bestScore = Int.min
         var ifaddr: UnsafeMutablePointer<ifaddrs>?
         if getifaddrs(&ifaddr) == 0 {
             var ptr = ifaddr
@@ -4458,21 +4480,34 @@ final class MeshRepository {
                                    &hostname, socklen_t(hostname.count),
                                    nil, socklen_t(0), NI_NUMERICHOST)
                         let ip = String(cString: hostname)
-                        
-                        // Prioritize en0 (WiFi) but accept others if en0 not found
-                        if let namePtr = interface?.ifa_name,
-                           let name = String(validatingUTF8: namePtr),
-                           name == "en0" {
-                            freeifaddrs(ifaddr)
-                            return ip
+                        if ip.isEmpty || isSpecialUseIPv4(ip) { continue }
+
+                        let ifaceName: String
+                        if let namePtr = interface?.ifa_name, let name = String(validatingUTF8: namePtr) {
+                            ifaceName = name
+                        } else {
+                            ifaceName = ""
                         }
-                        address = ip
+                        let isPrivate = isPrivateIPv4(ip)
+                        let ifaceScore: Int
+                        if ifaceName == "en0" || ifaceName.hasPrefix("en") {
+                            ifaceScore = 3
+                        } else if ifaceName.hasPrefix("pdp_ip") {
+                            ifaceScore = 2
+                        } else {
+                            ifaceScore = 1
+                        }
+                        let score = (isPrivate ? 100 : 10) + ifaceScore
+                        if score > bestScore {
+                            bestScore = score
+                            bestAddress = ip
+                        }
                     }
                 }
             }
             freeifaddrs(ifaddr)
         }
-        return address
+        return bestAddress
     }
 
     // MARK: - Identity Helpers

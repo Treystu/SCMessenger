@@ -193,6 +193,11 @@ class BleGattClient(
      */
     fun connect(deviceAddress: String): Boolean {
         connectAttempts.incrementAndGet()
+        if (!BluetoothAdapter.checkBluetoothAddress(deviceAddress)) {
+            connectFailures.incrementAndGet()
+            Timber.w("Skipping BLE connect for invalid device address: %s", deviceAddress)
+            return false
+        }
         val mismatchBackoffUntil = addressTypeMismatchBackoffUntilMs[deviceAddress] ?: 0L
         if (mismatchBackoffUntil > System.currentTimeMillis()) {
             addressTypeMismatchConnectSkips.incrementAndGet()
@@ -233,7 +238,12 @@ class BleGattClient(
                 false, // autoConnect = false for faster connection
                 gattCallback,
                 BluetoothDevice.TRANSPORT_LE
-            )
+            ) ?: run {
+                Timber.w("connectGatt returned null for %s", deviceAddress)
+                connectionStates.remove(deviceAddress)
+                connectFailures.incrementAndGet()
+                return false
+            }
 
             activeConnections[deviceAddress] = gatt
             connectInitiated.incrementAndGet()

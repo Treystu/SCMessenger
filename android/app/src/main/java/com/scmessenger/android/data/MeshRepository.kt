@@ -4119,9 +4119,7 @@ class MeshRepository(private val context: Context) {
         if (multiaddr.contains("/p2p-circuit")) return true
 
         val ip = extractIpv4FromMultiaddr(multiaddr) ?: return true
-        if (ip == "0.0.0.0") return false
-        if (ip.startsWith("127.")) return false
-        if (ip.startsWith("169.254.")) return false
+        if (isSpecialUseIpv4(ip)) return false
 
         return if (isPrivateIpv4(ip)) {
             isSameLanAddress(multiaddr)
@@ -4130,12 +4128,35 @@ class MeshRepository(private val context: Context) {
         }
     }
 
-    private fun isPrivateIpv4(ip: String): Boolean {
+    private fun parseIpv4Octets(ip: String): List<Int>? {
         val octets = ip.split('.').mapNotNull { it.toIntOrNull() }
-        if (octets.size != 4) return false
+        if (octets.size != 4) return null
+        if (octets.any { it !in 0..255 }) return null
+        return octets
+    }
+
+    private fun isPrivateIpv4(ip: String): Boolean {
+        val octets = parseIpv4Octets(ip) ?: return false
         return (octets[0] == 10) ||
             (octets[0] == 172 && octets[1] in 16..31) ||
             (octets[0] == 192 && octets[1] == 168)
+    }
+
+    private fun isSpecialUseIpv4(ip: String): Boolean {
+        val octets = parseIpv4Octets(ip) ?: return true
+        val o0 = octets[0]
+        val o1 = octets[1]
+        val o2 = octets[2]
+
+        if (o0 == 0 || o0 == 127) return true
+        if (o0 == 169 && o1 == 254) return true
+        if (o0 == 100 && o1 in 64..127) return true // RFC6598 CGNAT
+        if (o0 == 192 && o1 == 0 && (o2 == 0 || o2 == 2)) return true
+        if (o0 == 198 && ((o1 == 18) || (o1 == 19))) return true // Benchmark network
+        if (o0 == 198 && o1 == 51 && o2 == 100) return true
+        if (o0 == 203 && o1 == 0 && o2 == 113) return true
+        if (o0 >= 224) return true // multicast/reserved/broadcast
+        return false
     }
 
     fun isKnownRelay(peerId: String): Boolean {
@@ -4294,17 +4315,41 @@ class MeshRepository(private val context: Context) {
 
     fun getLocalIpAddress(): String? {
         try {
-            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
+            val interfaces = java.net.NetworkInterface.getNetworkInterfaces() ?: return null
+            var bestIp: String? = null
+            var bestScore = Int.MIN_VALUE
+
             while (interfaces.hasMoreElements()) {
                 val networkInterface = interfaces.nextElement()
+                if (!networkInterface.isUp || networkInterface.isLoopback || networkInterface.isVirtual) {
+                    continue
+                }
+
+                val ifaceName = networkInterface.name?.lowercase().orEmpty()
                 val addresses = networkInterface.inetAddresses
                 while (addresses.hasMoreElements()) {
                     val address = addresses.nextElement()
-                    if (!address.isLoopbackAddress && address is java.net.Inet4Address) {
-                        return address.hostAddress
+                    if (address !is java.net.Inet4Address || address.isLoopbackAddress || address.isLinkLocalAddress) {
+                        continue
+                    }
+
+                    val ip = address.hostAddress?.trim().orEmpty()
+                    if (ip.isEmpty() || isSpecialUseIpv4(ip)) continue
+
+                    val isPrivate = isPrivateIpv4(ip)
+                    val ifaceScore = when {
+                        ifaceName.startsWith("wlan") || ifaceName.startsWith("wifi") || ifaceName == "en0" -> 3
+                        ifaceName.startsWith("eth") || ifaceName.startsWith("en") -> 2
+                        else -> 1
+                    }
+                    val score = (if (isPrivate) 100 else 10) + ifaceScore
+                    if (score > bestScore) {
+                        bestScore = score
+                        bestIp = ip
                     }
                 }
             }
+            return bestIp
         } catch (e: Exception) {
             timber.log.Timber.e(e, "Failed to get local IP")
         }

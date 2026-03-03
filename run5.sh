@@ -57,7 +57,9 @@ IOS_SIM_STREAM_PID=""
 TICKER_PID=""
 
 # ── Detect available devices ───────────────────────────────────────────────────
-IOS_DEVICE_UDID="${IOS_DEVICE_UDID:-$(xcrun devicectl list devices 2>/dev/null | awk '/ connected / {print $3; exit}')}"
+IOS_DEVICE_UDID="${IOS_DEVICE_UDID:-$(xcrun devicectl list devices \
+  --hide-default-columns --columns Identifier --columns State --hide-headers 2>/dev/null | \
+  awk '$2 ~ /(available|connected)/ {print $1; exit}')}"
 IOS_SIM_UDID="${IOS_SIM_UDID:-$(xcrun simctl list devices 2>/dev/null | awk -F '[()]' '/Booted/ {print $2; exit}')}"
 
 # Boot a simulator if none is running

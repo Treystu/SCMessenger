@@ -1,6 +1,6 @@
 # SCMessenger v0.2.0 Alpha Milestone Plan
 
-Status: Active (execution complete through WS12.27 node-role classification correction)  
+Status: Active (execution complete through WS12.28 transport-regression hotfix)  
 Date: 2026-03-03  
 Scope: Core + Android + iOS + Desktop GUI + Relay topology
 
@@ -127,6 +127,22 @@ Scope: Core + Android + iOS + Desktop GUI + Relay topology
    - `IOS_TARGET=simulator IOS_INSTALL=0 ANDROID_INSTALL=0 DURATION_SEC=25 GCP_RELAY_CHECK=0 bash ./scripts/live-smoke.sh` (pass capture)
 5. Milestone gate remains unchanged:
    - synchronized physical iOS-device + Android evidence is still required to close `R-WS12-04/05/06` and confirm no field misclassification regression.
+
+## Transport Regression Hotfix Addendum (WS12.28, 2026-03-03 HST)
+
+1. Runtime triage from active trip logs identified a concrete Android crash-loop path in BLE resend fallback:
+   - repeated `BleGattClient.connect` NPE when `connectGatt` returned null during retry windows.
+2. Root-cause fix shipped in-scope for v0.2.0 reliability closure:
+   - Android BLE connect path now handles invalid addresses and null `connectGatt` returns without exception-loop churn.
+3. Address-quality hardening shipped on Android+iOS:
+   - special-use IPv4 addresses are now rejected as dial candidates,
+   - local IPv4 selection now prefers usable private LAN addresses.
+4. Validation in this pass:
+   - `cd android && ./gradlew app:compileDebugKotlin -q` (pass)
+   - `xcodebuild ... -destination 'platform=iOS Simulator,name=iPhone 16e' build` (pass)
+5. Scope classification:
+   - reliability hardening only (no net-new feature scope expansion),
+   - milestone closeout gate remains synchronized physical evidence for `R-WS12-04/05/06` (+ `R-WS12-27-01`).
 
 ---
 

@@ -222,6 +222,29 @@ Still open after this pass:
 1. [ ] Re-run synchronized physical iOS-device + Android visibility capture on binaries containing WS12.27 patch to fully close misclassification regression risk in production-like topology.
 2. [ ] Confirm sender-state convergence (`stored` -> `delivered`) closure on physical-device message timelines post-WS12.26/WS12.27.
 
+## WS12.28 Transport Regression Hotfix (2026-03-03 HST)
+
+Completed in this pass:
+
+1. [x] Reproduced active Android resend-loop crash from live trip logs:
+   - `BleGattClient.connect(BleGattClient.kt:238)` `NullPointerException` observed repeatedly in `logs/5mesh/20260303_115412/android.log`.
+2. [x] Implemented Android BLE crash-loop root-cause fix:
+   - `BleGattClient.connect` now guards invalid addresses and handles `connectGatt(...) == null` without throwing.
+3. [x] Implemented Android+iOS dial candidate hardening for special-use IPv4:
+   - both platforms now reject special-use IPv4 dial targets,
+   - both platforms now prefer usable private LAN IPv4 during local listener/IP selection.
+4. [x] Revalidated compile/build gates after the patch:
+   - `cd android && ./gradlew app:compileDebugKotlin -q` (pass),
+   - `xcodebuild ... -destination 'platform=iOS Simulator,name=iPhone 16e' build ...` (pass).
+
+Still open after this pass:
+
+1. [ ] Install WS12.28 binaries on physical Android + iOS and verify passive logs no longer show:
+   - `BleGattClient.connect` NPE loop,
+   - dials to special-use IPv4 (for example `192.0.0.x`, `198.18.x.x`, `203.0.113.x`).
+2. [ ] Confirm previously stuck pending messages can progress/deliver under active connectivity with WS12.28 binaries.
+3. [ ] Re-run synchronized convergence checks (`verify_receipt_convergence`, relay-flap correlation, BLE-only validation) against fresh post-WS12.28 artifacts.
+
 ### WS12.25 Mega-Update Consolidated Next Steps (Open + Deferred)
 
 This is the current "burn-down" slate combining all active deferred/runtime closures still gating full reliability signoff:
