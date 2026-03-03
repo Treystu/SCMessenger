@@ -1,7 +1,7 @@
 # SCMessenger v0.2.0 Alpha Milestone Plan
 
 Status: Draft for execution lock  
-Date: 2026-03-02  
+Date: 2026-03-03  
 Scope: Core + Android + iOS + Desktop GUI + Relay topology
 
 ---
@@ -361,6 +361,7 @@ Acceptance:
 
 1. Single abusive peer cannot starve relay processing.
 2. Legitimate low-volume users remain unaffected.
+3. Guardrail trigger reasons are observable in runtime logs.
 
 ### WS11 - Public beta readiness surfaces
 

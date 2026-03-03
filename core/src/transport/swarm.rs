@@ -94,6 +94,14 @@ const ROUTE_ATTEMPT_REASON_RETRY_NEXT: &str = "RETRY_NEXT_CANDIDATE";
 const ROUTE_ATTEMPT_REASON_RETRY_CYCLE: &str = "RETRY_CYCLE_RESTART";
 const DELIVERY_CONVERGENCE_TOPIC: &str = "sc-receipt-convergence";
 const DELIVERY_CONVERGENCE_PREFIX: &[u8] = b"scm.delivery.convergence.v1:";
+const RELAY_MAX_INFLIGHT_DISPATCHES: usize = 256;
+const RELAY_PEER_BUCKET_REFILL_PER_SEC: f64 = 4.0;
+const RELAY_PEER_BUCKET_BURST_CAPACITY: f64 = 20.0;
+const RELAY_PEER_BUCKET_MAX_TRACKED: usize = 2048;
+const RELAY_DUPLICATE_WINDOW_MS: u64 = 30_000;
+const RELAY_MAX_TRACKED_DUPLICATES: usize = 16_384;
+const RELAY_MAX_MESSAGE_ID_LEN: usize = 160;
+const RELAY_MAX_ENVELOPE_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct DeliveryConvergenceMarker {
@@ -101,6 +109,141 @@ struct DeliveryConvergenceMarker {
     destination_peer_id: String,
     observed_by_peer_id: String,
     observed_at_ms: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TokenBucketState {
+    tokens: f64,
+    last_refill_ms: u64,
+}
+
+#[derive(Debug, Clone)]
+struct RelayAbuseGuardrails {
+    per_peer_buckets: HashMap<String, TokenBucketState>,
+    recent_duplicates: HashMap<String, u64>,
+}
+
+impl RelayAbuseGuardrails {
+    fn new() -> Self {
+        Self {
+            per_peer_buckets: HashMap::new(),
+            recent_duplicates: HashMap::new(),
+        }
+    }
+
+    fn should_reject_cheap_heuristics(
+        &self,
+        message_id: &str,
+        envelope_len: usize,
+    ) -> Option<&'static str> {
+        if message_id.is_empty() {
+            return Some("relay_message_id_empty");
+        }
+        if message_id.len() > RELAY_MAX_MESSAGE_ID_LEN {
+            return Some("relay_message_id_too_long");
+        }
+        if envelope_len == 0 {
+            return Some("relay_envelope_empty");
+        }
+        if envelope_len > RELAY_MAX_ENVELOPE_BYTES {
+            return Some("relay_envelope_too_large");
+        }
+        None
+    }
+
+    fn consume_peer_token(&mut self, peer_id: &str, now_ms: u64) -> bool {
+        self.prune_peer_buckets(now_ms);
+
+        let bucket = self
+            .per_peer_buckets
+            .entry(peer_id.to_string())
+            .or_insert(TokenBucketState {
+                tokens: RELAY_PEER_BUCKET_BURST_CAPACITY,
+                last_refill_ms: now_ms,
+            });
+        let elapsed_ms = now_ms.saturating_sub(bucket.last_refill_ms);
+        if elapsed_ms > 0 {
+            let refill = (elapsed_ms as f64 / 1000.0) * RELAY_PEER_BUCKET_REFILL_PER_SEC;
+            bucket.tokens = (bucket.tokens + refill).min(RELAY_PEER_BUCKET_BURST_CAPACITY);
+            bucket.last_refill_ms = now_ms;
+        }
+        if bucket.tokens < 1.0 {
+            return false;
+        }
+        bucket.tokens -= 1.0;
+        true
+    }
+
+    fn is_recent_duplicate(
+        &mut self,
+        source_peer_id: &str,
+        destination_peer_id: &str,
+        relay_message_id: &str,
+        now_ms: u64,
+    ) -> bool {
+        self.prune_duplicate_window(now_ms);
+        let key = format!(
+            "{}::{}::{}",
+            source_peer_id, destination_peer_id, relay_message_id
+        );
+        self.recent_duplicates
+            .get(&key)
+            .map(|seen_ms| now_ms.saturating_sub(*seen_ms) <= RELAY_DUPLICATE_WINDOW_MS)
+            .unwrap_or(false)
+    }
+
+    fn record_accepted(
+        &mut self,
+        source_peer_id: &str,
+        destination_peer_id: &str,
+        relay_message_id: &str,
+        now_ms: u64,
+    ) {
+        self.prune_duplicate_window(now_ms);
+        let key = format!(
+            "{}::{}::{}",
+            source_peer_id, destination_peer_id, relay_message_id
+        );
+        self.recent_duplicates.insert(key, now_ms);
+        if self.recent_duplicates.len() > RELAY_MAX_TRACKED_DUPLICATES {
+            self.prune_oldest_duplicate();
+        }
+    }
+
+    fn prune_peer_buckets(&mut self, now_ms: u64) {
+        self.per_peer_buckets
+            .retain(|_, bucket| now_ms.saturating_sub(bucket.last_refill_ms) <= 300_000);
+        if self.per_peer_buckets.len() > RELAY_PEER_BUCKET_MAX_TRACKED {
+            self.prune_oldest_peer_bucket();
+        }
+    }
+
+    fn prune_duplicate_window(&mut self, now_ms: u64) {
+        self.recent_duplicates
+            .retain(|_, seen_ms| now_ms.saturating_sub(*seen_ms) <= RELAY_DUPLICATE_WINDOW_MS);
+    }
+
+    fn prune_oldest_peer_bucket(&mut self) {
+        if let Some(oldest_peer) = self
+            .per_peer_buckets
+            .iter()
+            .min_by_key(|(_, state)| state.last_refill_ms)
+            .map(|(peer_id, _)| peer_id.clone())
+        {
+            self.per_peer_buckets.remove(&oldest_peer);
+        }
+    }
+
+    fn prune_oldest_duplicate(&mut self) {
+        if let Some(oldest_key) = self
+            .recent_duplicates
+            .iter()
+            .min_by_key(|(_, seen_ms)| *seen_ms)
+            .map(|(key, _)| key.clone())
+        {
+            self.recent_duplicates.remove(&oldest_key);
+        }
+    }
 }
 
 impl DeliveryConvergenceMarker {
@@ -414,9 +557,20 @@ fn dispatch_pending_custody_for_peer(
         libp2p::request_response::OutboundRequestId,
         PendingCustodyDispatch,
     >,
+    max_inflight_dispatches: usize,
     trigger_reason: &str,
 ) {
     if !swarm.is_connected(&destination_peer) {
+        return;
+    }
+
+    if pending_custody_dispatches.len() >= max_inflight_dispatches {
+        tracing::warn!(
+            "Relay inflight dispatch cap reached ({}) — skipping custody pull for {} ({})",
+            max_inflight_dispatches,
+            destination_peer,
+            trigger_reason
+        );
         return;
     }
 
@@ -427,6 +581,15 @@ fn dispatch_pending_custody_for_peer(
     }
 
     for custody in pending {
+        if pending_custody_dispatches.len() >= max_inflight_dispatches {
+            tracing::warn!(
+                "Relay inflight dispatch cap reached ({}) while dispatching to {} ({})",
+                max_inflight_dispatches,
+                destination_peer,
+                trigger_reason
+            );
+            break;
+        }
         if let Err(e) =
             custody_store.mark_dispatching(&destination_id, &custody.custody_id, trigger_reason)
         {
@@ -998,6 +1161,7 @@ pub async fn start_swarm_with_config(
             let mut relay_budget: u32 = 200;
             let mut relay_count_this_hour: u32 = 0;
             let mut relay_hour_start = std::time::Instant::now();
+            let mut relay_guardrails = RelayAbuseGuardrails::new();
 
             // Check for pending relay reconnects frequently
             let mut relay_reconnect_interval = tokio::time::interval(Duration::from_secs(5));
@@ -1094,6 +1258,7 @@ pub async fn start_swarm_with_config(
                                 &relay_custody_store,
                                 destination,
                                 &mut pending_custody_dispatches,
+                                RELAY_MAX_INFLIGHT_DISPATCHES,
                                 "periodic_pull",
                             );
                         }
@@ -1401,8 +1566,30 @@ pub async fn start_swarm_with_config(
                                             relay_hour_start = std::time::Instant::now();
                                         }
 
+                                        let now_ms = SystemTime::now()
+                                            .duration_since(UNIX_EPOCH)
+                                            .unwrap_or_default()
+                                            .as_millis() as u64;
+
                                         // Determine response; channel consumed exactly once at the end
-                                        let relay_response = if relay_budget > 0 && relay_count_this_hour >= relay_budget {
+                                        let relay_response = if let Some(reason) = relay_guardrails
+                                            .should_reject_cheap_heuristics(
+                                                &request.message_id,
+                                                request.envelope_data.len(),
+                                            )
+                                        {
+                                            tracing::warn!(
+                                                "Relay request rejected by heuristic from {} (message {}): {}",
+                                                peer,
+                                                request.message_id,
+                                                reason
+                                            );
+                                            RelayResponse {
+                                                accepted: false,
+                                                error: Some(reason.to_string()),
+                                                message_id: request.message_id.clone(),
+                                            }
+                                        } else if relay_budget > 0 && relay_count_this_hour >= relay_budget {
                                             tracing::warn!(
                                                 "Relay budget ({}/hr) exhausted — dropping relay request {}",
                                                 relay_budget,
@@ -1413,11 +1600,56 @@ pub async fn start_swarm_with_config(
                                                 error: Some("relay_budget_exhausted".to_string()),
                                                 message_id: request.message_id.clone(),
                                             }
+                                        } else if pending_custody_dispatches.len()
+                                            >= RELAY_MAX_INFLIGHT_DISPATCHES
+                                        {
+                                            tracing::warn!(
+                                                "Relay inflight cap reached ({}) — rejecting relay request {}",
+                                                RELAY_MAX_INFLIGHT_DISPATCHES,
+                                                request.message_id
+                                            );
+                                            RelayResponse {
+                                                accepted: false,
+                                                error: Some("relay_inflight_capped".to_string()),
+                                                message_id: request.message_id.clone(),
+                                            }
+                                        } else if !relay_guardrails.consume_peer_token(
+                                            &peer.to_string(),
+                                            now_ms,
+                                        ) {
+                                            tracing::warn!(
+                                                "Relay request rate-limited for peer {} (message {})",
+                                                peer,
+                                                request.message_id
+                                            );
+                                            RelayResponse {
+                                                accepted: false,
+                                                error: Some("relay_peer_rate_limited".to_string()),
+                                                message_id: request.message_id.clone(),
+                                            }
                                         } else {
                                             relay_count_this_hour += 1;
                                             match PeerId::from_bytes(&request.destination_peer) {
                                                 Ok(destination) => {
                                                     let relay_message_id = request.message_id.clone();
+                                                    if relay_guardrails.is_recent_duplicate(
+                                                        &peer.to_string(),
+                                                        &destination.to_string(),
+                                                        &relay_message_id,
+                                                        now_ms,
+                                                    ) {
+                                                        tracing::info!(
+                                                            "Relay duplicate suppressed from {} -> {} for message {}",
+                                                            peer,
+                                                            destination,
+                                                            relay_message_id
+                                                        );
+                                                        RelayResponse {
+                                                            accepted: true,
+                                                            error: None,
+                                                            message_id: relay_message_id,
+                                                        }
+                                                    } else {
                                                     match relay_custody_store.accept_custody(
                                                         peer.to_string(),
                                                         destination.to_string(),
@@ -1425,12 +1657,19 @@ pub async fn start_swarm_with_config(
                                                         request.envelope_data.clone(),
                                                     ) {
                                                         Ok(custody) => {
+                                                            relay_guardrails.record_accepted(
+                                                                &peer.to_string(),
+                                                                &destination.to_string(),
+                                                                &relay_message_id,
+                                                                now_ms,
+                                                            );
                                                             if swarm.is_connected(&destination) {
                                                                 dispatch_pending_custody_for_peer(
                                                                     &mut swarm,
                                                                     &relay_custody_store,
                                                                     destination,
                                                                     &mut pending_custody_dispatches,
+                                                                    RELAY_MAX_INFLIGHT_DISPATCHES,
                                                                     "accept_immediate_pull",
                                                                 );
                                                             } else {
@@ -1455,6 +1694,7 @@ pub async fn start_swarm_with_config(
                                                             )),
                                                             message_id: relay_message_id,
                                                         },
+                                                    }
                                                     }
                                                 }
                                                 Err(e) => {
@@ -1961,6 +2201,7 @@ pub async fn start_swarm_with_config(
                                     &relay_custody_store,
                                     peer_id,
                                     &mut pending_custody_dispatches,
+                                    RELAY_MAX_INFLIGHT_DISPATCHES,
                                     "peer_reconnect",
                                 );
 
@@ -2353,6 +2594,7 @@ pub async fn start_swarm_with_config(
         let mut address_observer = AddressObserver::new();
         let mut relay_budget: u32 = 200;
         let mut relay_count_this_hour: u32 = 0;
+        let mut relay_guardrails = RelayAbuseGuardrails::new();
         // `std::time::Instant` panics on wasm32-unknown-unknown; use
         // `js_sys::Date::now()` (f64 ms since epoch) instead.
         let mut relay_hour_start: f64 = js_sys::Date::now();
@@ -2604,16 +2846,61 @@ pub async fn start_swarm_with_config(
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Relay(ev)) => {
                                 match ev {
                                     request_response::Event::Message { peer, message, .. } => match message {
-                                        request_response::Message::Request { request, channel, .. } => {
+                                    request_response::Message::Request { request, channel, .. } => {
+                                            let now_ms = js_sys::Date::now() as u64;
                                             if js_sys::Date::now() - relay_hour_start >= 3_600_000.0 {
                                                 relay_count_this_hour = 0;
                                                 relay_hour_start = js_sys::Date::now();
                                             }
 
-                                            let relay_response = if relay_budget > 0 && relay_count_this_hour >= relay_budget {
+                                            let relay_response = if let Some(reason) = relay_guardrails
+                                                .should_reject_cheap_heuristics(
+                                                    &request.message_id,
+                                                    request.envelope_data.len(),
+                                                )
+                                            {
+                                                tracing::warn!(
+                                                    "Relay request rejected by heuristic from {} (message {}): {}",
+                                                    peer,
+                                                    request.message_id,
+                                                    reason
+                                                );
+                                                RelayResponse {
+                                                    accepted: false,
+                                                    error: Some(reason.to_string()),
+                                                    message_id: request.message_id.clone(),
+                                                }
+                                            } else if relay_budget > 0 && relay_count_this_hour >= relay_budget {
                                                 RelayResponse {
                                                     accepted: false,
                                                     error: Some("relay_budget_exhausted".to_string()),
+                                                    message_id: request.message_id.clone(),
+                                                }
+                                            } else if pending_custody_dispatches.len()
+                                                >= RELAY_MAX_INFLIGHT_DISPATCHES
+                                            {
+                                                tracing::warn!(
+                                                    "Relay inflight cap reached ({}) — rejecting relay request {}",
+                                                    RELAY_MAX_INFLIGHT_DISPATCHES,
+                                                    request.message_id
+                                                );
+                                                RelayResponse {
+                                                    accepted: false,
+                                                    error: Some("relay_inflight_capped".to_string()),
+                                                    message_id: request.message_id.clone(),
+                                                }
+                                            } else if !relay_guardrails.consume_peer_token(
+                                                &peer.to_string(),
+                                                now_ms,
+                                            ) {
+                                                tracing::warn!(
+                                                    "Relay request rate-limited for peer {} (message {})",
+                                                    peer,
+                                                    request.message_id
+                                                );
+                                                RelayResponse {
+                                                    accepted: false,
+                                                    error: Some("relay_peer_rate_limited".to_string()),
                                                     message_id: request.message_id.clone(),
                                                 }
                                             } else {
@@ -2621,36 +2908,62 @@ pub async fn start_swarm_with_config(
                                                 match PeerId::from_bytes(&request.destination_peer) {
                                                     Ok(destination) => {
                                                         let relay_message_id = request.message_id.clone();
-                                                        match relay_custody_store.accept_custody(
-                                                            peer.to_string(),
-                                                            destination.to_string(),
-                                                            relay_message_id.clone(),
-                                                            request.envelope_data.clone(),
+                                                        if relay_guardrails.is_recent_duplicate(
+                                                            &peer.to_string(),
+                                                            &destination.to_string(),
+                                                            &relay_message_id,
+                                                            now_ms,
                                                         ) {
-                                                            Ok(_) => {
-                                                                if swarm.is_connected(&destination) {
-                                                                    dispatch_pending_custody_for_peer(
-                                                                        &mut swarm,
-                                                                        &relay_custody_store,
-                                                                        destination,
-                                                                        &mut pending_custody_dispatches,
-                                                                        "accept_immediate_pull",
-                                                                    );
-                                                                }
-                                                                RelayResponse {
-                                                                    accepted: true,
-                                                                    error: None,
-                                                                    message_id: relay_message_id,
-                                                                }
-                                                            }
-                                                            Err(e) => RelayResponse {
-                                                                accepted: false,
-                                                                error: Some(format!(
-                                                                    "custody_store_failed: {}",
-                                                                    e
-                                                                )),
+                                                            tracing::info!(
+                                                                "Relay duplicate suppressed from {} -> {} for message {}",
+                                                                peer,
+                                                                destination,
+                                                                relay_message_id
+                                                            );
+                                                            RelayResponse {
+                                                                accepted: true,
+                                                                error: None,
                                                                 message_id: relay_message_id,
-                                                            },
+                                                            }
+                                                        } else {
+                                                            match relay_custody_store.accept_custody(
+                                                                peer.to_string(),
+                                                                destination.to_string(),
+                                                                relay_message_id.clone(),
+                                                                request.envelope_data.clone(),
+                                                            ) {
+                                                                Ok(_) => {
+                                                                    relay_guardrails.record_accepted(
+                                                                        &peer.to_string(),
+                                                                        &destination.to_string(),
+                                                                        &relay_message_id,
+                                                                        now_ms,
+                                                                    );
+                                                                    if swarm.is_connected(&destination) {
+                                                                        dispatch_pending_custody_for_peer(
+                                                                            &mut swarm,
+                                                                            &relay_custody_store,
+                                                                            destination,
+                                                                            &mut pending_custody_dispatches,
+                                                                            RELAY_MAX_INFLIGHT_DISPATCHES,
+                                                                            "accept_immediate_pull",
+                                                                        );
+                                                                    }
+                                                                    RelayResponse {
+                                                                        accepted: true,
+                                                                        error: None,
+                                                                        message_id: relay_message_id,
+                                                                    }
+                                                                }
+                                                                Err(e) => RelayResponse {
+                                                                    accepted: false,
+                                                                    error: Some(format!(
+                                                                        "custody_store_failed: {}",
+                                                                        e
+                                                                    )),
+                                                                    message_id: relay_message_id,
+                                                                },
+                                                            }
                                                         }
                                                     }
                                                     Err(_) => RelayResponse {
@@ -2785,6 +3098,7 @@ pub async fn start_swarm_with_config(
                                     &relay_custody_store,
                                     peer_id,
                                     &mut pending_custody_dispatches,
+                                    RELAY_MAX_INFLIGHT_DISPATCHES,
                                     "peer_reconnect",
                                 );
                                 let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
@@ -2842,6 +3156,7 @@ pub async fn start_swarm_with_config(
                             &relay_custody_store,
                             destination,
                             &mut pending_custody_dispatches,
+                            RELAY_MAX_INFLIGHT_DISPATCHES,
                             "periodic_pull",
                         );
                     }
@@ -2890,3 +3205,92 @@ use libp2p::identify;
 #[cfg(not(target_arch = "wasm32"))]
 use libp2p::mdns;
 use libp2p::{gossipsub, request_response};
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        RelayAbuseGuardrails, RELAY_DUPLICATE_WINDOW_MS, RELAY_PEER_BUCKET_BURST_CAPACITY,
+        RELAY_PEER_BUCKET_REFILL_PER_SEC,
+    };
+
+    #[test]
+    fn abusive_peer_burst_is_rate_limited_but_other_peer_still_passes() {
+        let mut guardrails = RelayAbuseGuardrails::new();
+        let now_ms = 1_000_000;
+        let mut accepted = 0usize;
+        for _ in 0..50 {
+            if guardrails.consume_peer_token("peer-abusive", now_ms) {
+                accepted += 1;
+            }
+        }
+        assert!(accepted <= RELAY_PEER_BUCKET_BURST_CAPACITY as usize);
+        assert!(guardrails.consume_peer_token("peer-normal", now_ms));
+    }
+
+    #[test]
+    fn normal_low_volume_usage_is_unaffected() {
+        let mut guardrails = RelayAbuseGuardrails::new();
+        let start_ms = 2_000_000;
+        for step in 0..10 {
+            let now_ms = start_ms + (step * 1_000) as u64;
+            assert!(
+                guardrails.consume_peer_token("peer-family", now_ms),
+                "expected token to be available at step {}",
+                step
+            );
+        }
+    }
+
+    #[test]
+    fn duplicate_window_suppresses_immediate_replay_then_expires() {
+        let mut guardrails = RelayAbuseGuardrails::new();
+        let source = "peer-a";
+        let destination = "peer-b";
+        let relay_message_id = "msg-dup";
+        let now_ms = 3_000_000;
+
+        assert!(!guardrails.is_recent_duplicate(source, destination, relay_message_id, now_ms));
+        guardrails.record_accepted(source, destination, relay_message_id, now_ms);
+        assert!(guardrails.is_recent_duplicate(
+            source,
+            destination,
+            relay_message_id,
+            now_ms + 100
+        ));
+        assert!(!guardrails.is_recent_duplicate(
+            source,
+            destination,
+            relay_message_id,
+            now_ms + RELAY_DUPLICATE_WINDOW_MS + 1
+        ));
+    }
+
+    #[test]
+    fn token_bucket_refills_after_elapsed_time() {
+        let mut guardrails = RelayAbuseGuardrails::new();
+        let now_ms = 4_000_000;
+        for _ in 0..RELAY_PEER_BUCKET_BURST_CAPACITY as usize {
+            assert!(guardrails.consume_peer_token("peer-a", now_ms));
+        }
+        assert!(!guardrails.consume_peer_token("peer-a", now_ms));
+
+        let refill_ms = (1_000.0 / RELAY_PEER_BUCKET_REFILL_PER_SEC).ceil() as u64;
+        assert!(guardrails.consume_peer_token("peer-a", now_ms + refill_ms));
+    }
+
+    #[test]
+    fn cheap_heuristics_reject_invalid_payload_shapes() {
+        let guardrails = RelayAbuseGuardrails::new();
+        assert_eq!(
+            guardrails.should_reject_cheap_heuristics("", 12),
+            Some("relay_message_id_empty")
+        );
+        assert_eq!(
+            guardrails.should_reject_cheap_heuristics("ok", 0),
+            Some("relay_envelope_empty")
+        );
+        assert!(guardrails
+            .should_reject_cheap_heuristics("ok", 1024)
+            .is_none());
+    }
+}

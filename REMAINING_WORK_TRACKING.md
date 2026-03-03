@@ -1,6 +1,6 @@
 # SCMessenger Remaining Work Tracking
 
-This is the active implementation backlog based on repository state verified on **2026-02-23**.
+This is the active implementation backlog based on repository state verified on **2026-03-03**.
 
 Primary delivery target: **one unified Android + iOS + Web app**.
 
@@ -15,7 +15,7 @@ Owner policy constraints (2026-02-23):
 
 ## v0.2.0 Execution Residual Register
 
-Residual risks from completed v0.2.0 phases (currently WS0-WS2) are tracked in:
+Residual risks from completed v0.2.0 phases (currently through WS10 execution) are tracked in:
 
 - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 
@@ -95,13 +95,17 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
      - `wasm-pack` runtime browser test coverage in CI.
      - History UX and deep parity for settings/contacts surfaces on Web.
 
-10. Beta anti-abuse gate implementation and validation
+10. [x] WS10 minimal anti-abuse guardrails (alpha level)
+
+- Outcome (2026-03-03): Added per-peer token bucket limiting, global inflight custody-dispatch cap, duplicate suppression window, and cheap abuse heuristics in Core relay handling with native + wasm parity and targeted guardrail tests.
+
+11. Beta anti-abuse gate implementation and validation
 
 - Requirement: abuse controls are non-blocking in alpha but mandatory before beta.
 - Target: enable and validate anti-abuse protections with measurable pass criteria across Android, iOS, Web, and relay-critical paths.
 - Scope: relay spam/flood controls, abuse detection thresholds, and regression coverage in CI/release checks.
 
-11. [x] Active-session reliability + durable eventual delivery guarantees
+12. [x] Active-session reliability + durable eventual delivery guarantees
     - Requirement: while app is open/relaying, service should remain available and messages should not be dropped.
     - Target: explicit durability contract (persisted outbox/inbox semantics, resend/recovery behavior) plus failure-mode tests.
     - Scope: crash/restart recovery, relay outage handling, offline queue replay, duplicate-safe redelivery.
@@ -110,7 +114,7 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
       - **Outbox persistence/Retry gap:** iOS now explicitly re-hydrates stuck messages (`delivered: false`, `direction: .sent`) via `historyManager.recent()` on startup inside `startPendingOutboxRetryLoop`. Resurrects them into the `sendMessage` pipeline with new routable identifiers.
       - **Duplicate-safe redelivery:** `HistoryManager.add(record:)` remains idempotent on `id` over stable UUID generation path in `ironCore`.
 
-12. [x] Message timestamp parity (iOS align to Android)
+13. [x] Message timestamp parity (iOS align to Android)
 
 - Requirement: Messages must display the **time they were sent**, not the time they were received or rendered.
 - Android: already correctly associates each message with its sent timestamp from the message envelope.
@@ -125,28 +129,28 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
 - Scope: Android, iOS, and Web local storage behavior and defaults.
 - Outcome: Implemented `enforce_retention(max_messages)` and `prune_before(before_timestamp)` in `HistoryManager` (Rust core) with UniFFI exposure. Both return pruned count for observability. Mobile clients can call these on startup or periodically.
 
-13. [x] First-run consent gate (mandatory)
+14. [x] First-run consent gate (mandatory)
 
 - Requirement: first app launch must present consent text explaining privacy/security boundaries.
 - Target: consent acknowledgment gate on Android/iOS/Web before first messaging actions.
 - Scope: UX copy parity, acceptance persistence, and re-display rules after major policy changes.
 - Outcome: Added `ConsentView` to iOS onboarding (6-step flow) and consent gate card to Android `OnboardingScreen`. Users must acknowledge keypair identity, local-only data, relay participation, E2E encryption, and alpha software status before proceeding. Consent state persisted via `UserDefaults` (iOS) and in-memory state gates (Android).
 
-14. [x] 80/20 platform support matrix
+15. [x] 80/20 platform support matrix
 
 - Requirement: prioritize the smallest support matrix that covers the majority of active users.
 - Target: explicit minimum OS/browser matrix and validation plan tied to release gates.
 - Scope: Android API levels, iOS versions/devices, and browser families/versions.
 - Outcome: Created `docs/PLATFORM_SUPPORT_MATRIX.md` documenting Android 10+ (API 29), iOS 15+, latest 3 browser versions, with rationales, transport compatibility, known limitations, and validation plan.
 
-15. [x] Community-operated relay/bootstrap topology support
+16. [x] Community-operated relay/bootstrap topology support
 
 - Requirement: both self-hosted and third-party-operated infra must be valid without protocol-level assumptions.
 - Target: operator docs + connectivity tests for cloud-hosted and home-hosted relays/bootstrap nodes.
 - Scope: examples for GCP-style deployments and low-resource/self-hosted setups.
 - Outcome: Created `docs/RELAY_OPERATOR_GUIDE.md` covering Docker and manual setups, cloud deployment (GCP example), monitoring, security, and troubleshooting.
 
-16. [x] Bootstrap governance mode decision (product choice pending)
+17. [x] Bootstrap governance mode decision (product choice pending)
 
 - Requirement: choose how clients trust and discover bootstrap updates.
 - Target: lock one governance mode and document it in canonical docs.

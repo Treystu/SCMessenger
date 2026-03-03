@@ -1,6 +1,6 @@
 # SCMessenger Current State (Verified)
 
-Last verified: **2026-02-24** (local workspace checks on this machine)
+Last verified: **2026-03-03** (local workspace checks on this machine)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
 
@@ -19,6 +19,16 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - Aggregate: **343 passed, 0 failed, 7 ignored**
 - `cargo clippy --workspace` — **clean (0 warnings)**
 - `cargo fmt --all -- --check` — **clean**
+
+### WS10 Verification Snapshot (2026-03-03)
+
+- `cargo test --workspace --no-run` — **pass**
+- `cargo test --workspace` — **pass**
+- `cargo test -p scmessenger-core swarm::tests:: -- --nocapture` — **pass** (5 guardrail tests)
+- Core relay guardrails now enforce:
+  - per-peer token bucket limiting,
+  - global inflight custody-dispatch cap,
+  - duplicate suppression window and cheap abuse-shape heuristics.
 
 ### CLI Surface
 
