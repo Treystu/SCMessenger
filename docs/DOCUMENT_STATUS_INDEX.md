@@ -93,3 +93,6 @@ These documents may contain both current and historical sections; verify section
 2. WS12 (2026-03-03) test-matrix/parity-lock updates are reflected in active docs (`docs/TESTING_GUIDE.md`, `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
 3. WS12.5 (2026-03-03) burndown/audit closure updates are reflected in active docs (`docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`, `docs/CURRENT_STATE.md`, and `REMAINING_WORK_TRACKING.md`).
 4. WS12.6 (2026-03-03) optional closeout burndown updates are reflected in active docs (`docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, `docs/CURRENT_STATE.md`, and `REMAINING_WORK_TRACKING.md`).
+5. WS12.7 (2026-03-02 HST) live runtime sanity/hotfix updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
+6. WS12.8 (2026-03-02 HST) post-redeploy runtime recheck updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
+7. WS12.9 (2026-03-03) iOS dashboard node-count hotfix updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).

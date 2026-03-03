@@ -218,6 +218,24 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
     - [x] Update iOS `CoreDelegateImpl.swift` and `MeshRepository.swift` to handle `agentVersion` and identify headless peers.
     - [x] Confirm that direct P2P messaging works over cellular with fallback to relaying (mandatory for 0.1.2 Alpha).
 
+### WS12.7 Runtime Sanity Follow-ups (2026-03-02 HST)
+
+1. [x] Android: fix BLE identity beacon payload fallback so listener/external routing hints are not unconditionally stripped.
+2. [x] Android: serialize pending outbox flush execution to prevent overlapping retry passes for the same queue item.
+3. [x] Android: apply local uptime fallback when Core stats report `uptimeSecs=0` while service is running.
+4. [x] Re-validate live delivery behavior after GCP relay rollout fully replaces `scmessenger/0.1.0/headless/relay/*` nodes still observed in active logs.
+   - Outcome (2026-03-02 HST): live CLI runtime probe confirmed relay identity rotation on `34.135.34.73:9001` (`12D3KooWET...` -> `12D3KooWJa...`); post-rotation delivery path still requires follow-up due reservation/custody regression signals.
+5. [ ] Investigate operational handling for long-lived historical pending outbox entries (high-attempt legacy items) without violating no-give-up retry policy.
+6. [ ] Triage iOS simulator startup runtime-issue warnings (`NSFileManager createDirectory*` main-thread I/O) and confirm whether they reflect app codepaths vs simulator-only diagnostics noise.
+
+### WS12.8 Runtime Recheck Follow-ups (2026-03-02 HST)
+
+1. [x] iOS: fix dashboard node-count inflation where discovered metrics were correct but node totals were overstated by stale/alias peer entries.
+   - Outcome (2026-03-03): `MeshDashboardView` now computes full/headless totals from online-only deduplicated peers and performs stronger alias collapse across canonical/libp2p/BLE/public-key identifiers.
+2. [ ] Restore Android live-log visibility by re-establishing wireless ADB endpoint (`adb devices`/`adb mdns services` were empty during this pass).
+3. [ ] Investigate relay-circuit reservation failure post-redeploy using new debug error detail emitted from `core/src/transport/swarm.rs`.
+4. [ ] Resolve failing live custody integration gate: `cargo test -p scmessenger-core --test integration_relay_custody -- --include-ignored` (timeout waiting for reconnect delivery).
+
 ## Priority 1: Tooling, CI, and Experimental Surface
 
 1. [x] Align CI with tri-platform target status

@@ -86,6 +86,24 @@ fn is_discoverable_multiaddr(addr: &Multiaddr) -> bool {
     true
 }
 
+fn relay_reservation_multiaddr(base: &Multiaddr, relay_peer_id: PeerId) -> Multiaddr {
+    use libp2p::multiaddr::Protocol;
+
+    // Canonical reservation form must be:
+    // /ip4|ip6/.../tcp/<port>/p2p/<relay-peer-id>/p2p-circuit
+    // Identify addresses can already contain p2p segments; strip path suffixes first.
+    let mut normalized = Multiaddr::empty();
+    for proto in base.iter() {
+        match proto {
+            Protocol::P2p(_) | Protocol::P2pCircuit => {}
+            other => normalized.push(other),
+        }
+    }
+    normalized
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit)
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 const ROUTE_ATTEMPT_REASON_INITIAL_SEND: &str = "INITIAL_SEND";
 #[cfg(not(target_arch = "wasm32"))]
@@ -2243,11 +2261,10 @@ pub async fn start_swarm_with_config(
 
                                             // Pick the first routable relay address and register a circuit reservation.
                                             // Format: /ip4/<relay-ip>/tcp/<port>/p2p/<relay-peer-id>/p2p-circuit
-                                            use libp2p::multiaddr::Protocol;
-                                            let relay_circuit_addr = routable_relay_addrs[0]
-                                                .clone()
-                                                .with(Protocol::P2p(peer_id))
-                                                .with(Protocol::P2pCircuit);
+                                            let relay_circuit_addr = relay_reservation_multiaddr(
+                                                &routable_relay_addrs[0],
+                                                peer_id,
+                                            );
 
                                             tracing::info!(
                                                 "📡 Attempting relay circuit reservation via {}: {}",
@@ -2259,7 +2276,7 @@ pub async fn start_swarm_with_config(
                                                     listener_id, peer_id
                                                 ),
                                                 Err(e) => tracing::warn!(
-                                                    "⚠️ Could not register relay circuit reservation via {}: {}",
+                                                    "⚠️ Could not register relay circuit reservation via {}: {:?}",
                                                     peer_id, e
                                                 ),
                                             }

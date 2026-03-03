@@ -111,6 +111,23 @@ Multi-hop:      Alice ↔ Eve (via Relay1 → Relay2)
 
 ## Usage
 
+### Install-Mode Choice (Relay-Only vs Identity)
+
+Containerized/operator flows follow the same model as mobile/desktop:
+
+- Relay-only install path:
+  ```bash
+  scm relay --listen /ip4/0.0.0.0/tcp/9001 --http-port 9000
+  ```
+- Promote later to full identity mode without reinstall:
+  ```bash
+  scm init --name "<nickname>"
+  scm start --port 9001
+  ```
+
+For app variants with GUI (iOS/Android/Desktop/WASM), this is exposed as first-run choice:
+`Generate Identity Now` or `Skip for Relay-Only Install`, plus later identity creation from Settings -> Identity.
+
 ### Basic Setup (3 nodes)
 
 Start the basic environment with one relay and two clients:

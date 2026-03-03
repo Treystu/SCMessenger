@@ -55,12 +55,16 @@ struct MeshDashboardView: View {
         peersByKey.values.sorted { $0.lastSeen > $1.lastSeen }
     }
 
+    private var onlinePeers: [DashboardPeer] {
+        peers.filter(\.isOnline)
+    }
+
     private var fullPeers: Int {
-        peers.filter { $0.isFull }.count
+        onlinePeers.filter { $0.isFull }.count
     }
 
     private var headlessPeers: Int {
-        peers.filter { !$0.isFull }.count
+        onlinePeers.filter { !$0.isFull }.count
     }
 
     var body: some View {
@@ -69,7 +73,7 @@ struct MeshDashboardView: View {
                 ServiceStatusCard(stats: stats)
 
                 DiscoveredNodesSection(
-                    peers: peers,
+                    peers: onlinePeers,
                     fullPeers: fullPeers,
                     headlessPeers: headlessPeers
                 )
@@ -158,7 +162,7 @@ struct MeshDashboardView: View {
                 libp2pPeerId: routePeerId ?? existing?.libp2pPeerId,
                 blePeerId: existing?.blePeerId,
                 transport: existing?.transport ?? .unknown,
-                isOnline: existing?.isOnline ?? isRecent(contact.lastSeen),
+                isOnline: isRecent(contact.lastSeen) || isRecentlyOnline(existing),
                 isRelay: isRelay,
                 isFull: classifyPeerAsFull(
                     peerId: contact.peerId,
@@ -212,7 +216,7 @@ struct MeshDashboardView: View {
                     libp2pPeerId: routePeerId,
                     blePeerId: existing?.blePeerId,
                     transport: transportFromMultiaddr(entry.multiaddr),
-                    isOnline: isRecent(entry.lastSeen) || (existing?.isOnline == true),
+                    isOnline: isRecent(entry.lastSeen) || isRecentlyOnline(existing),
                     isRelay: relay,
                     isFull: classifyPeerAsFull(
                         peerId: canonicalPeerId,
@@ -226,29 +230,7 @@ struct MeshDashboardView: View {
             }
         }
 
-        // Final deduplication pass to merge any hanging libp2p nodes with identity nodes
-        var finalMerged: [String: DashboardPeer] = [:]
-        for (_, peer) in merged {
-            var shouldKeep = true
-            if let pk = peer.publicKey, !pk.isEmpty {
-                if let identityPeer = merged.values.first(where: { $0.publicKey == pk && isIdentityId($0.id) }) {
-                   if peer.id != identityPeer.id {
-                       shouldKeep = false
-                   }
-                }
-            } else if let nn = peer.nickname, !nn.isEmpty {
-                 if let identityPeer = merged.values.first(where: { $0.nickname == nn && isIdentityId($0.id) }) {
-                   if peer.id != identityPeer.id {
-                       shouldKeep = false
-                   }
-                }
-            }
-            if shouldKeep && !peer.id.isEmpty {
-                finalMerged[peer.id] = peer
-            }
-        }
-
-        peersByKey = finalMerged
+        peersByKey = deduplicatePeersByIdentityAndAliases(merged.values)
     }
 
     private func handlePeerEvent(_ event: MeshEventBus.PeerEvent) {
@@ -436,10 +418,74 @@ struct MeshDashboardView: View {
         return Date(timeIntervalSince1970: TimeInterval(epoch))
     }
 
+    private func isRecentlyOnline(_ peer: DashboardPeer?) -> Bool {
+        guard let peer, peer.isOnline else { return false }
+        return Date().timeIntervalSince(peer.lastSeen) < 300
+    }
+
     private func isRecent(_ epoch: UInt64?) -> Bool {
         guard let epoch else { return false }
         let now = UInt64(Date().timeIntervalSince1970)
         return epoch <= now && (now - epoch) < 300
+    }
+
+    private func deduplicatePeersByIdentityAndAliases(_ source: [DashboardPeer]) -> [String: DashboardPeer] {
+        var deduped: [String: DashboardPeer] = [:]
+        var aliasToPrimary: [String: String] = [:]
+
+        let ordered = source.sorted { lhs, rhs in
+            let lhsScore = deduplicationPriority(lhs)
+            let rhsScore = deduplicationPriority(rhs)
+            if lhsScore != rhsScore { return lhsScore > rhsScore }
+            return lhs.lastSeen > rhs.lastSeen
+        }
+
+        for peer in ordered {
+            let aliases = peerAliases(peer)
+            let existingPrimary = aliases.compactMap { aliasToPrimary[$0] }.first
+
+            if let primaryId = existingPrimary, var existing = deduped[primaryId] {
+                existing.isOnline = existing.isOnline || peer.isOnline
+                existing.lastSeen = max(existing.lastSeen, peer.lastSeen)
+                existing.transport = (existing.transport == .internet || peer.transport == .internet) ? .internet : existing.transport
+                existing.isRelay = existing.isRelay || peer.isRelay
+                existing.isFull = existing.isFull || peer.isFull
+                if existing.publicKey == nil { existing.publicKey = peer.publicKey }
+                if existing.nickname == nil { existing.nickname = peer.nickname }
+                if existing.localNickname == nil { existing.localNickname = peer.localNickname }
+                if existing.libp2pPeerId == nil { existing.libp2pPeerId = peer.libp2pPeerId }
+                if existing.blePeerId == nil { existing.blePeerId = peer.blePeerId }
+                deduped[primaryId] = existing
+                aliases.forEach { aliasToPrimary[$0] = primaryId }
+            } else if !peer.id.isEmpty {
+                deduped[peer.id] = peer
+                aliases.forEach { aliasToPrimary[$0] = peer.id }
+            }
+        }
+
+        return deduped
+    }
+
+    private func peerAliases(_ peer: DashboardPeer) -> [String] {
+        var aliases: [String] = []
+        for candidate in [peer.id, peer.peerId, peer.libp2pPeerId, peer.blePeerId] {
+            guard let value = candidate?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty else { continue }
+            if !aliases.contains(value) { aliases.append(value) }
+        }
+        if let key = peer.publicKey?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty {
+            let pkAlias = "pk:\(key.lowercased())"
+            if !aliases.contains(pkAlias) { aliases.append(pkAlias) }
+        }
+        return aliases
+    }
+
+    private func deduplicationPriority(_ peer: DashboardPeer) -> Int {
+        var score = 0
+        if peer.isOnline { score += 8 }
+        if peer.publicKey?.isEmpty == false { score += 4 }
+        if isIdentityId(peer.id) { score += 2 }
+        if peer.nickname?.isEmpty == false || peer.localNickname?.isEmpty == false { score += 1 }
+        return score
     }
 
     private func isIdentityId(_ value: String) -> Bool {

@@ -3761,7 +3761,12 @@ final class MeshRepository {
         SecItemDelete(keychainQuery as CFDictionary)
 
         // 5. Clear UserDefaults app state
-        let keysToRemove = ["hasCompletedOnboarding", "identity_backup", "consent_accepted"]
+        let keysToRemove = [
+            "hasCompletedOnboarding",
+            "hasCompletedInstallModeChoice",
+            "identity_backup",
+            "consent_accepted"
+        ]
         keysToRemove.forEach { UserDefaults.standard.removeObject(forKey: $0) }
 
         // 6. Delete all files in the mesh storage directory

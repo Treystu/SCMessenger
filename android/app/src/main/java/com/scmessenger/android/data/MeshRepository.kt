@@ -165,8 +165,11 @@ class MeshRepository(private val context: Context) {
     private var pendingOutboxRetryJob: kotlinx.coroutines.Job? = null
     private var coverTrafficJob: kotlinx.coroutines.Job? = null
     private val pendingOutboxFile = File(storagePath, "pending_outbox.json")
+    private val pendingOutboxFlushMutex = kotlinx.coroutines.sync.Mutex()
     private val receiptAwaitSeconds: Long = 8L
     private val identitySyncSentPeers = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    @Volatile
+    private var serviceStartedAtEpochSec: Long = 0L
     @Volatile
     private var lastRelayBootstrapDialMs: Long = 0L
     private val dialThrottleState = java.util.concurrent.ConcurrentHashMap<String, Pair<Int, Long>>()
@@ -331,6 +334,9 @@ class MeshRepository(private val context: Context) {
         Timber.i("service_start_requested")
         if (meshService?.getState() == uniffi.api.ServiceState.RUNNING) {
             _serviceState.value = uniffi.api.ServiceState.RUNNING
+            if (serviceStartedAtEpochSec == 0L) {
+                serviceStartedAtEpochSec = System.currentTimeMillis() / 1000
+            }
             Timber.d("MeshService is already running")
             return
         }
@@ -912,6 +918,7 @@ class MeshRepository(private val context: Context) {
             if (_serviceState.value != uniffi.api.ServiceState.RUNNING) {
                 throw IllegalStateException("MeshService did not reach RUNNING state")
             }
+            serviceStartedAtEpochSec = System.currentTimeMillis() / 1000
             updateStats()
             startPeriodicStatsUpdate()
 
@@ -1143,17 +1150,24 @@ class MeshRepository(private val context: Context) {
                 beaconJsonObject = buildBeacon()
                 beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
             }
+            if (beaconJson.size > 480) {
                 beaconJsonObject = org.json.JSONObject()
                     .put("identity_id", identity.identityId ?: "")
                     .put("public_key", publicKeyHex)
                     .put("nickname", nickname)
                     .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
                     .put("listeners", org.json.JSONArray())
+                    .put("external_addresses", org.json.JSONArray())
+                    .put("connection_hints", org.json.JSONArray())
                 beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
+            }
             bleAdvertiser?.updateIdentityBeacon(beaconJson)
             bleGattServer?.setIdentityData(beaconJson)
             identityData = beaconJson // Store for immediate use by GATT server
-            Timber.i("BLE GATT identity beacon updated: ${publicKeyHex.take(8)}... (${beaconJson.size} bytes, listeners=${listeners.size})")
+            Timber.i(
+                "BLE GATT identity beacon updated: ${publicKeyHex.take(8)}... " +
+                    "(${beaconJson.size} bytes, listeners=${resolvedListeners.size}, external=${resolvedExternal.size})"
+            )
         } catch (e: Exception) {
             Timber.w("Failed to set BLE GATT identity beacon: ${e.message}")
         }
@@ -1539,6 +1553,7 @@ class MeshRepository(private val context: Context) {
 
         _serviceState.value = uniffi.api.ServiceState.STOPPED
         _serviceStats.value = null
+        serviceStartedAtEpochSec = 0L
 
         Timber.i("Mesh service stopped")
     }
@@ -1577,17 +1592,32 @@ class MeshRepository(private val context: Context) {
                 val discovered = _discoveredPeers.value
                 val fullCount = discovered.values.count { it.isFull }
                 val headlessCount = discovered.values.count { !it.isFull }
+                val fallbackUptimeSecs = if (serviceStartedAtEpochSec > 0L) {
+                    ((System.currentTimeMillis() / 1000) - serviceStartedAtEpochSec).coerceAtLeast(0L).toULong()
+                } else {
+                    0uL
+                }
+                val normalizedStats = if (stats.uptimeSecs == 0uL && fallbackUptimeSecs > 0uL) {
+                    uniffi.api.ServiceStats(
+                        peersDiscovered = stats.peersDiscovered,
+                        messagesRelayed = stats.messagesRelayed,
+                        bytesTransferred = stats.bytesTransferred,
+                        uptimeSecs = fallbackUptimeSecs
+                    )
+                } else {
+                    stats
+                }
                 
                 // We use a custom stats object or just update the one from core
                 // For now, let's keep the core one but maybe log the detailed count
-                Timber.d("Mesh Stats: ${stats.peersDiscovered} peers (Core), $fullCount full, $headlessCount headless (Repo)")
+                Timber.d("Mesh Stats: ${normalizedStats.peersDiscovered} peers (Core), $fullCount full, $headlessCount headless (Repo)")
                 
-                _serviceStats.value = stats
+                _serviceStats.value = normalizedStats
                 
                 // Emit event for UI
                 repoScope.launch {
                     com.scmessenger.android.service.MeshEventBus.emitStatusEvent(
-                        com.scmessenger.android.service.StatusEvent.StatsUpdated(stats)
+                        com.scmessenger.android.service.StatusEvent.StatsUpdated(normalizedStats)
                     )
                 }
             }
@@ -2597,101 +2627,106 @@ class MeshRepository(private val context: Context) {
     }
 
     private suspend fun flushPendingOutbox(reason: String) {
-        // Ensure relay backbone is reachable whenever we check outbox
-        primeRelayBootstrapConnections()
-        
-        val now = System.currentTimeMillis() / 1000
-        val queue = loadPendingOutbox().toMutableList()
-        if (queue.isEmpty()) return
-        Timber.d("Flushing pending outbox (${queue.size} item(s)); reason=$reason")
+        pendingOutboxFlushMutex.lock()
+        try {
+            // Ensure relay backbone is reachable whenever we check outbox
+            primeRelayBootstrapConnections()
 
-        var updated = false
-        val iterator = queue.listIterator()
-        while (iterator.hasNext()) {
-            val item = iterator.next()
-            if (item.nextAttemptAtEpochSec > now) continue
-            val existing = historyManager?.get(item.historyRecordId)
-            if (existing?.delivered == true) {
-                iterator.remove()
-                updated = true
-                continue
-            }
-            logDeliveryState(
-                messageId = item.historyRecordId,
-                state = "forwarding",
-                detail = "retry_attempt=${item.attemptCount + 1}"
-            )
+            val now = System.currentTimeMillis() / 1000
+            val queue = loadPendingOutbox().toMutableList()
+            if (queue.isEmpty()) return
+            Timber.d("Flushing pending outbox (${queue.size} item(s)); reason=$reason")
 
-            val envelope = try {
-                android.util.Base64.decode(item.envelopeBase64, android.util.Base64.NO_WRAP)
-            } catch (_: Exception) {
-                Timber.w("Dropping corrupt pending envelope ${item.queueId}")
-                iterator.remove()
-                updated = true
-                continue
-            }
+            var updated = false
+            val iterator = queue.listIterator()
+            while (iterator.hasNext()) {
+                val item = iterator.next()
+                if (item.nextAttemptAtEpochSec > now) continue
+                val existing = historyManager?.get(item.historyRecordId)
+                if (existing?.delivered == true) {
+                    iterator.remove()
+                    updated = true
+                    continue
+                }
+                logDeliveryState(
+                    messageId = item.historyRecordId,
+                    state = "forwarding",
+                    detail = "retry_attempt=${item.attemptCount + 1}"
+                )
 
-            val contact = contactManager?.get(item.peerId)
-            val latestRouting = parseRoutingHints(contact?.notes)
-            val routePeerCandidates = buildRoutePeerCandidates(
-                peerId = item.peerId,
-                cachedRoutePeerId = item.routePeerId,
-                notes = contact?.notes
-            )
-            val resolvedRoutePeerId = routePeerCandidates.firstOrNull()
-            val resolvedListeners = buildDialCandidatesForPeer(
-                routePeerId = resolvedRoutePeerId,
-                rawAddresses = item.listeners + latestRouting.listeners,
-                includeRelayCircuits = true
-            )
+                val envelope = try {
+                    android.util.Base64.decode(item.envelopeBase64, android.util.Base64.NO_WRAP)
+                } catch (_: Exception) {
+                    Timber.w("Dropping corrupt pending envelope ${item.queueId}")
+                    iterator.remove()
+                    updated = true
+                    continue
+                }
 
-            val delivery = attemptDirectSwarmDelivery(
-                routePeerCandidates = routePeerCandidates,
-                listeners = resolvedListeners,
-                encryptedData = envelope,
-                wifiPeerId = latestRouting.wifiPeerId,
-                blePeerId = latestRouting.blePeerId
-            )
-            val selectedRoutePeerId = delivery.routePeerId ?: resolvedRoutePeerId
+                val contact = contactManager?.get(item.peerId)
+                val latestRouting = parseRoutingHints(contact?.notes)
+                val routePeerCandidates = buildRoutePeerCandidates(
+                    peerId = item.peerId,
+                    cachedRoutePeerId = item.routePeerId,
+                    notes = contact?.notes
+                )
+                val resolvedRoutePeerId = routePeerCandidates.firstOrNull()
+                val resolvedListeners = buildDialCandidatesForPeer(
+                    routePeerId = resolvedRoutePeerId,
+                    rawAddresses = item.listeners + latestRouting.listeners,
+                    includeRelayCircuits = true
+                )
 
-            if (delivery.acked) {
+                val delivery = attemptDirectSwarmDelivery(
+                    routePeerCandidates = routePeerCandidates,
+                    listeners = resolvedListeners,
+                    encryptedData = envelope,
+                    wifiPeerId = latestRouting.wifiPeerId,
+                    blePeerId = latestRouting.blePeerId
+                )
+                val selectedRoutePeerId = delivery.routePeerId ?: resolvedRoutePeerId
+
+                if (delivery.acked) {
+                    iterator.set(
+                        item.copy(
+                            routePeerId = selectedRoutePeerId,
+                            listeners = resolvedListeners,
+                            attemptCount = item.attemptCount + 1,
+                            nextAttemptAtEpochSec = now + receiptAwaitSeconds
+                        )
+                    )
+                    logDeliveryState(
+                        messageId = item.historyRecordId,
+                        state = "stored",
+                        detail = "awaiting_receipt_delay_sec=$receiptAwaitSeconds"
+                    )
+                    updated = true
+                    continue
+                }
+
+                val nextAttemptCount = item.attemptCount + 1
+                val backoffSecs = minOf(60L, 1L shl minOf(nextAttemptCount, 6))
                 iterator.set(
                     item.copy(
                         routePeerId = selectedRoutePeerId,
                         listeners = resolvedListeners,
-                        attemptCount = item.attemptCount + 1,
-                        nextAttemptAtEpochSec = now + receiptAwaitSeconds
+                        attemptCount = nextAttemptCount,
+                        nextAttemptAtEpochSec = now + backoffSecs
                     )
                 )
                 logDeliveryState(
                     messageId = item.historyRecordId,
                     state = "stored",
-                    detail = "awaiting_receipt_delay_sec=$receiptAwaitSeconds"
+                    detail = "retry_backoff_sec=$backoffSecs attempt=$nextAttemptCount"
                 )
                 updated = true
-                continue
             }
 
-            val nextAttemptCount = item.attemptCount + 1
-            val backoffSecs = minOf(60L, 1L shl minOf(nextAttemptCount, 6))
-            iterator.set(
-                item.copy(
-                    routePeerId = selectedRoutePeerId,
-                    listeners = resolvedListeners,
-                    attemptCount = nextAttemptCount,
-                    nextAttemptAtEpochSec = now + backoffSecs
-                )
-            )
-            logDeliveryState(
-                messageId = item.historyRecordId,
-                state = "stored",
-                detail = "retry_backoff_sec=$backoffSecs attempt=$nextAttemptCount"
-            )
-            updated = true
-        }
-
-        if (updated) {
-            savePendingOutbox(queue)
+            if (updated) {
+                savePendingOutbox(queue)
+            }
+        } finally {
+            pendingOutboxFlushMutex.unlock()
         }
     }
 

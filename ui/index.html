@@ -894,6 +894,45 @@
     </div>
 
     <!-- Modals -->
+    <div id="modal-first-run" class="modal-overlay">
+      <div class="modal glass" style="width: 480px">
+        <div class="modal-header">
+          <h3>Choose Install Mode</h3>
+        </div>
+        <p class="text-muted" style="margin-bottom: 12px">
+          This node can run relay-only, or initialize an identity for chats and contacts.
+        </p>
+        <div class="form-group">
+          <label class="form-label">Nickname (optional now, can change later)</label>
+          <input
+            type="text"
+            id="install-choice-nickname"
+            class="form-input"
+            placeholder="e.g. christy"
+          />
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 14px">
+          <button
+            class="btn btn-primary"
+            style="flex: 1"
+            onclick="SCM.actions.initializeIdentityFromInstallChoice()"
+          >
+            Generate Identity Now
+          </button>
+          <button
+            class="btn btn-secondary"
+            style="flex: 1"
+            onclick="SCM.actions.skipRelayOnlyInstallChoice()"
+          >
+            Skip for Relay-Only Install
+          </button>
+        </div>
+        <p class="text-xs text-muted" style="margin-top: 10px">
+          You can initialize identity later from Settings > Identity.
+        </p>
+      </div>
+    </div>
+
     <div id="modal-add-contact" class="modal-overlay">
       <div class="modal glass">
         <div class="modal-header">
@@ -1107,6 +1146,7 @@ Loading...</textarea
         "/ip4/104.28.216.43/tcp/9010/p2p/12D3KooWHpmuhytgzLcM4nj1hZvN5b4crB1wka3LCNfKRCd7yHj9",
       ];
       const BOOTSTRAP_STORAGE_KEY = "scm.desktop.bootstrap.v1";
+      const IDENTITY_INSTALL_CHOICE_KEY = "scm.desktop.identity.install.choice.v1";
 
       const errorOverlay = document.createElement("div");
       errorOverlay.id = "connection-error";
@@ -1151,6 +1191,7 @@ Loading...</textarea
           await this.loadWasmRuntime();
           await this.initializeCore();
           await this.refreshIdentityRole();
+          this.ui.maybeShowInstallChoice();
           await this.startSwarm();
           await this.actions.refreshContacts();
           this.startPolling();
@@ -1425,10 +1466,26 @@ Loading...</textarea
               await SCM.refreshIdentityRole();
               await SCM.restartSwarm();
               await SCM.actions.refreshContacts();
+              localStorage.setItem(IDENTITY_INSTALL_CHOICE_KEY, "done");
               SCM.ui.closeModals();
             } catch (error) {
               alert(`Identity initialization failed: ${error}`);
             }
+          },
+
+          async initializeIdentityFromInstallChoice() {
+            const nicknameInput = document
+              .getElementById("install-choice-nickname")
+              .value.trim();
+            if (nicknameInput) {
+              document.getElementById("setting-nickname").value = nicknameInput;
+            }
+            await SCM.actions.initializeIdentity();
+          },
+
+          skipRelayOnlyInstallChoice() {
+            localStorage.setItem(IDENTITY_INSTALL_CHOICE_KEY, "done");
+            document.getElementById("modal-first-run").classList.remove("visible");
           },
 
           async refreshContacts() {
@@ -1819,6 +1876,19 @@ Loading...</textarea
 
           openSettings() {
             document.getElementById("modal-settings").classList.add("visible");
+          },
+
+          maybeShowInstallChoice() {
+            const completed = localStorage.getItem(IDENTITY_INSTALL_CHOICE_KEY) === "done";
+            if (SCM.state.identity?.initialized) {
+                localStorage.setItem(IDENTITY_INSTALL_CHOICE_KEY, "done");
+                document.getElementById("modal-first-run").classList.remove("visible");
+                return;
+            }
+            if (!completed) {
+              document.getElementById("modal-first-run").classList.add("visible");
+              document.getElementById("install-choice-nickname").focus();
+            }
           },
 
           closeModals() {

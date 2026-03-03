@@ -9,6 +9,9 @@ import Foundation
 
 @Observable
 final class OnboardingViewModel {
+    private let onboardingKey = "hasCompletedOnboarding"
+    private let installChoiceKey = "hasCompletedInstallModeChoice"
+
     var currentStep = 0
     var hasCompletedOnboarding = false
     
@@ -28,7 +31,8 @@ final class OnboardingViewModel {
     
     func completeOnboarding() {
         hasCompletedOnboarding = true
-        UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+        UserDefaults.standard.set(true, forKey: onboardingKey)
+        UserDefaults.standard.set(true, forKey: installChoiceKey)
     }
     
     func skip() {

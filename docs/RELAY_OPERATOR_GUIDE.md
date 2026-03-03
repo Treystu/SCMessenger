@@ -1,7 +1,7 @@
 # Community Relay & Bootstrap Node Operator Guide
 
-> **Version:** v0.1.2-alpha  
-> **Last updated:** 2026-02-25
+> **Version:** v0.2.0-alpha  
+> **Last updated:** 2026-03-03
 
 ## Overview
 
@@ -61,6 +61,29 @@ The `relay` command starts the node in **headless mode**:
 ```
 
 The `start` command runs a **full node** with user identity and messaging.
+
+## Install-Mode Choice Parity
+
+SCMessenger now supports the same install-mode intent across GUI and operator flows:
+
+- GUI clients (iOS, Android, Desktop/WASM) show first-run choice:
+  - `Generate Identity Now`
+  - `Skip for Relay-Only Install`
+- Relay-only installs can be promoted later without reinstall from Settings -> Identity.
+
+For CLI/Docker/operator usage, the same choice is command-driven:
+
+- Relay-only mode:
+  ```bash
+  scm relay --listen /ip4/0.0.0.0/tcp/9001 --http-port 8080
+  ```
+- Full mode with identity (at any later time, no reinstall):
+  ```bash
+  scm init --name "<nickname>"
+  scm start --port 9001
+  ```
+
+This preserves headless relay-first deployments while allowing later identity enablement on the same node.
 
 ## Cloud Deployment (GCP Example)
 

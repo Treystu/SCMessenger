@@ -77,6 +77,18 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
   - `REMAINING_WORK_TRACKING.md`
+- WS12.7 runtime sanity sweep (2026-03-02 HST, live Android+iOS log triage while relay rollout was in progress) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.8 runtime recheck (2026-03-02 HST, post-redeploy relay verification + custody regression signal triage) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.9 iOS dashboard node-count hotfix (2026-03-03, discovery count remained correct while node count was inflated by stale/alias entries) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 
 ## Documentation Governance Rules
 

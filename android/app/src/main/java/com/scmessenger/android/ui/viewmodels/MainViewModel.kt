@@ -3,6 +3,7 @@ package com.scmessenger.android.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.scmessenger.android.data.MeshRepository
+import com.scmessenger.android.data.PreferencesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,12 +13,19 @@ import javax.inject.Inject
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
-    private val meshRepository: MeshRepository
+    private val meshRepository: MeshRepository,
+    private val preferencesRepository: PreferencesRepository
 ) : ViewModel() {
 
     private val _isReady = MutableStateFlow(false)
     val isReady = _isReady.asStateFlow()
     val hasIdentity = isReady
+    private val _onboardingCompleted = MutableStateFlow(false)
+    val onboardingCompleted = _onboardingCompleted.asStateFlow()
+    private val _installChoiceCompleted = MutableStateFlow(false)
+    val installChoiceCompleted = _installChoiceCompleted.asStateFlow()
+    private val _showOnboarding = MutableStateFlow(false)
+    val showOnboarding = _showOnboarding.asStateFlow()
 
     private val _isCreatingIdentity = MutableStateFlow(false)
     val isCreatingIdentity = _isCreatingIdentity.asStateFlow()
@@ -35,6 +43,18 @@ class MainViewModel @Inject constructor(
         get() = meshRepository.getIdentityInfo()
 
     init {
+        viewModelScope.launch {
+            preferencesRepository.onboardingCompleted.collect { completed ->
+                _onboardingCompleted.value = completed
+                updateOnboardingState()
+            }
+        }
+        viewModelScope.launch {
+            preferencesRepository.installChoiceCompleted.collect { completed ->
+                _installChoiceCompleted.value = completed
+                updateOnboardingState()
+            }
+        }
         refreshIdentityState()
     }
 
@@ -43,6 +63,15 @@ class MainViewModel @Inject constructor(
             val initialized = meshRepository.isIdentityInitialized()
             _identityError.value = null
             _isReady.value = initialized
+            if (initialized && !_installChoiceCompleted.value) {
+                preferencesRepository.setInstallChoiceCompleted(true)
+                _installChoiceCompleted.value = true
+            }
+            if (initialized && !_onboardingCompleted.value) {
+                preferencesRepository.setOnboardingCompleted(true)
+                _onboardingCompleted.value = true
+            }
+            updateOnboardingState()
         }
     }
 
@@ -61,10 +90,18 @@ class MainViewModel @Inject constructor(
                 meshRepository.createIdentity()
                 meshRepository.setNickname(trimmedNickname)
                 _isReady.value = meshRepository.isIdentityInitialized()
+                if (_isReady.value) {
+                    preferencesRepository.setOnboardingCompleted(true)
+                    preferencesRepository.setInstallChoiceCompleted(true)
+                    _onboardingCompleted.value = true
+                    _installChoiceCompleted.value = true
+                }
+                updateOnboardingState()
             } catch (e: Exception) {
                 Timber.e(e, "Failed to create identity")
                 _identityError.value = e.message ?: "Failed to create identity"
                 _isReady.value = false
+                updateOnboardingState()
             } finally {
                 _isCreatingIdentity.value = false
             }
@@ -122,5 +159,19 @@ class MainViewModel @Inject constructor(
     fun clearImportState() {
         _importError.value = null
         _importSuccess.value = false
+    }
+
+    fun skipOnboardingForRelayOnlyInstall() {
+        viewModelScope.launch {
+            preferencesRepository.setOnboardingCompleted(true)
+            preferencesRepository.setInstallChoiceCompleted(true)
+            _onboardingCompleted.value = true
+            _installChoiceCompleted.value = true
+            updateOnboardingState()
+        }
+    }
+
+    private fun updateOnboardingState() {
+        _showOnboarding.value = !_isReady.value && !_installChoiceCompleted.value
     }
 }

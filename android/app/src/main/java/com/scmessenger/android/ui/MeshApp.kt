@@ -30,6 +30,7 @@ import com.scmessenger.android.ui.viewmodels.MainViewModel
 fun MeshApp() {
     val mainViewModel: MainViewModel = hiltViewModel()
     val hasIdentity by mainViewModel.hasIdentity.collectAsState()
+    val showOnboarding by mainViewModel.showOnboarding.collectAsState()
     val navController = rememberNavController()
 
     LaunchedEffect(Unit) {
@@ -46,15 +47,22 @@ fun MeshApp() {
         }
     }
 
-    Scaffold(
-        bottomBar = { MeshBottomBar(navController = navController, hasIdentity = hasIdentity) }
-    ) { paddingValues ->
-        MeshNavHost(
-            navController = navController,
-            hasIdentity = hasIdentity,
-            onIdentityChanged = { mainViewModel.refreshIdentityState() },
-            modifier = Modifier.padding(paddingValues)
+    if (showOnboarding) {
+        OnboardingScreen(
+            onOnboardingComplete = { mainViewModel.refreshIdentityState() },
+            viewModel = mainViewModel
         )
+    } else {
+        Scaffold(
+            bottomBar = { MeshBottomBar(navController = navController, hasIdentity = hasIdentity) }
+        ) { paddingValues ->
+            MeshNavHost(
+                navController = navController,
+                hasIdentity = hasIdentity,
+                onIdentityChanged = { mainViewModel.refreshIdentityState() },
+                modifier = Modifier.padding(paddingValues)
+            )
+        }
     }
 }
 

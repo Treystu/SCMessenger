@@ -54,6 +54,62 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - convergence-marker application now requires validation + local tracking correlation,
   - workspace/app version metadata bumped to `0.2.0` for release synchronization.
 
+### WS12.7 Live Runtime Sanity Snapshot (2026-03-02 HST)
+
+- Live runtime/debug commands:
+  - `adb logcat --pid=$(adb shell pidof -s com.scmessenger.android) -T 1 -v threadtime`
+  - `xcrun simctl spawn booted log show --style compact --last 10m --predicate 'process == "SCMessenger"'`
+  - `adb shell run-as com.scmessenger.android cat files/pending_outbox.json`
+  - `xcrun simctl get_app_container booted SovereignCommunications.SCMessenger data`
+- Build verification after runtime fixes:
+  - `cd android && ./gradlew :app:compileDebugKotlin` — **pass**
+  - `xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj -scheme SCMessenger -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 16e' build CODE_SIGNING_ALLOWED=NO` — **pass**
+- Observed runtime state (pre-fix logs):
+  - Android live logs showed repeated `Core-routed delivery failed` / `Relay-circuit retry failed` while relay agent strings still included `scmessenger/0.1.0/headless/relay/*` (GCP rollout in progress).
+  - Android pending outbox contained long-lived entries with very high retry counts (for example `attempt_count=2055`), consistent with no-give-up retry semantics.
+  - Android emitted overlapping outbox flush runs (`reason=enqueue` and `reason=peer_identified`) with duplicate forwarding attempts for the same message in the same second.
+  - Android `ServiceStats.uptimeSecs` remained `0` in repeated status emissions.
+  - iOS simulator had no active pending-outbox backlog (`pending_outbox.json` = `[]`) during this pass.
+- Runtime fixes applied in this pass:
+  - Android: fixed BLE identity beacon fallback logic that previously overwrote non-empty listener/external hint payloads unconditionally.
+  - Android: serialized pending outbox flush execution with a coroutine mutex to prevent duplicate concurrent retry passes.
+  - Android: added uptime fallback when core-reported `uptimeSecs` is `0` while service is running.
+
+### WS12.8 Runtime Recheck Snapshot (2026-03-02 HST)
+
+- Live runtime/debug commands:
+  - `adb devices -l` / `adb mdns services`
+  - `xcrun simctl spawn booted log show --style compact --last 12m --predicate 'process == "SCMessenger" OR subsystem == "com.scmessenger"'`
+  - `nc -z -w 5 34.135.34.73 9001`
+  - `curl --max-time 8 http://34.135.34.73:9000`
+  - `curl --max-time 8 http://34.135.34.73:8080`
+  - `./target/debug/scmessenger-cli start` (interactive runtime probe)
+  - `./scripts/verify_ws12_matrix.sh`
+- Runtime observations:
+  - Android device log streaming was blocked in this pass (`adb devices` empty; no mDNS-discoverable wireless endpoint).
+  - iOS simulator process was active but reported only local Multipeer routing-table self state (`1 nodes`) in sampled logs.
+  - GCP relay endpoint `34.135.34.73:9001` was reachable over TCP.
+  - GCP relay landing page was reachable on `34.135.34.73:9000`; `:8080` timed out (current deploy script uses `--http-port 9000`).
+  - CLI runtime probe observed relay identity rotation at `34.135.34.73:9001`: `12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw` -> `12D3KooWJaLtGyFYvobdZyecLWKA45cjSLEjzWtKPeorgeFYrsjZ`.
+  - During the same probe, relay-circuit reservation warning remained active (`Could not register relay circuit reservation`), indicating a remaining runtime gap post-redeploy.
+- Verification delta:
+  - `./scripts/verify_ws12_matrix.sh` now fails on live suite `integration_relay_custody -- --include-ignored` with timeout at `core/tests/integration_relay_custody.rs:71`.
+- Fixes applied in this pass:
+  - Core: relay reservation address construction now canonicalizes identify addresses before appending `/p2p/<relay>/p2p-circuit` (`core/src/transport/swarm.rs`).
+  - Core: relay reservation warning logging now emits `Debug` error detail instead of potentially empty display text (`core/src/transport/swarm.rs`).
+  - Test hardening: recipient-side custody test flow no longer gates on a pre-delivery peer-readiness drain before waiting for envelope delivery, and uses a larger delivery wait budget (`core/tests/integration_relay_custody.rs`).
+
+### WS12.9 iOS Dashboard Node Count Hotfix (2026-03-03)
+
+- Issue context:
+  - iOS diagnostics/runtime checks showed `Peers Discovered` values were correct, but dashboard node totals could overcount due to stale online state and alias-key duplication (canonical/libp2p/BLE identifiers represented separately).
+- Fixes applied:
+  - iOS dashboard node counters now derive from online-only deduplicated peers (`full`/`headless` counts no longer include stale offline entries).
+  - iOS dashboard final merge now deduplicates by alias graph (`id`, `peerId`, `libp2pPeerId`, `blePeerId`, `publicKey`) to collapse duplicate rows for the same identity.
+  - iOS refresh merge no longer blindly preserves historical online state; prior online state now decays by recency guard before being retained.
+- Code path:
+  - `iOS/SCMessenger/SCMessenger/Views/Dashboard/MeshDashboardView.swift`
+
 ### WS10 Verification Snapshot (2026-03-03)
 
 - `cargo test --workspace --no-run` — **pass**
@@ -152,6 +208,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - embedded web landing/dashboard server
 - Mobile UniFFI surface (MeshService, SwarmBridge, managers, settings)
 - iOS and Android app codebases with active integration to Rust core
+- First-run install-mode choice restored on GUI variants (iOS/Android/Desktop-WASM): users can initialize identity immediately or skip into relay-only mode, then create identity later from Settings -> Identity without reinstall
 - iOS background lifecycle repository hooks are wired (`pause/resume`, ledger save, sync/discovery triggers)
 - WASM crate with full libp2p swarm transport (`startSwarm`, `stopSwarm`, `sendPreparedEnvelope`, `getPeers`) using browser-native websocket-websys; legacy `startReceiveLoop` deprecated as shim
 - Identity backup/restore wired end-to-end: iOS Keychain and Android SharedPreferences (`identity_backup_prefs.xml`); survives full app reinstall

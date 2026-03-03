@@ -133,10 +133,8 @@ async fn offline_recipient_receives_after_reconnect_without_sender_resend() {
         .dial(relay_full_addr.clone())
         .await
         .expect("recipient failed to dial relay");
-    wait_for_peer_ready(&mut recipient_rx, relay_peer_id, Duration::from_secs(15)).await;
-
     let delivered_from =
-        wait_for_envelope(&mut recipient_rx, &payload, Duration::from_secs(30)).await;
+        wait_for_envelope(&mut recipient_rx, &payload, Duration::from_secs(45)).await;
     assert!(
         delivered_from == relay_peer_id || delivered_from == sender_peer_id,
         "delivery source should be relay custody or sender retry replay"

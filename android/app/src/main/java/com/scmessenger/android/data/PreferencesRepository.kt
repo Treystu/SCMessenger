@@ -26,6 +26,7 @@ class PreferencesRepository(private val context: Context) {
         private val SERVICE_AUTO_START = booleanPreferencesKey("service_auto_start")
         private val VPN_MODE_ENABLED = booleanPreferencesKey("vpn_mode_enabled")
         private val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+        private val INSTALL_CHOICE_COMPLETED = booleanPreferencesKey("install_choice_completed")
         private val THEME_MODE = stringPreferencesKey("theme_mode")
         private val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
         private val SHOW_PEER_COUNT = booleanPreferencesKey("show_peer_count")
@@ -74,6 +75,17 @@ class PreferencesRepository(private val context: Context) {
             prefs[ONBOARDING_COMPLETED] = completed
         }
         Timber.i("Onboarding completed: $completed")
+    }
+
+    val installChoiceCompleted: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[INSTALL_CHOICE_COMPLETED] ?: false
+    }
+
+    suspend fun setInstallChoiceCompleted(completed: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[INSTALL_CHOICE_COMPLETED] = completed
+        }
+        Timber.i("Install choice completed: $completed")
     }
 
     // ========================================================================

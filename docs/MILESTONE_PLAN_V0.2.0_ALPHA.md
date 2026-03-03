@@ -6,6 +6,15 @@ Scope: Core + Android + iOS + Desktop GUI + Relay topology
 
 ---
 
+## Hotfix Addendum (WS12.9, 2026-03-03)
+
+1. iOS dashboard node-count accuracy hotfix completed:
+   - Discovery metric path remained correct.
+   - Dashboard node totals now use online-only deduplicated peers and collapse alias IDs (canonical/libp2p/BLE/public-key) before counting.
+2. This was classified as a runtime correctness fix within v0.2.0 scope (no milestone scope expansion).
+
+---
+
 ## 1) Planning policy alignment (repo philosophy)
 
 This plan follows repository policy from `CONTRIBUTING.md` and `CLAUDE.md`:
@@ -414,6 +423,8 @@ Execution note (2026-03-03):
 3. Added reproducible validation runner: `scripts/verify_ws12_matrix.sh`.
 4. Canonical docs + residual-risk register were updated in the same run to lock docs/runtime parity.
 5. WS12.5 burndown audit reconciled remaining doc/backlog drift and re-validated custody reconnect evidence used for `R-WS3-01` closure.
+6. WS12.7 live runtime sanity sweep (2026-03-02 HST) added Android runtime hotfixes for beacon hint preservation, outbox flush serialization, and uptime fallback; remaining live gap is relay-fleet version skew during rollout.
+7. WS12.8 runtime recheck (2026-03-02 HST) confirmed GCP relay identity rotation is active post-redeploy, but live custody reconnect validation (`integration_relay_custody -- --include-ignored`) now times out and requires follow-up triage.
 
 ---
 

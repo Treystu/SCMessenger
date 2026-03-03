@@ -13,6 +13,11 @@ private let logger = Logger(subsystem: "com.scmessenger", category: "Onboarding"
 struct OnboardingFlow: View {
     @Environment(MeshRepository.self) private var repository
     @State private var viewModel = OnboardingViewModel()
+    let onComplete: () -> Void
+
+    init(onComplete: @escaping () -> Void = {}) {
+        self.onComplete = onComplete
+    }
     
     var body: some View {
         TabView(selection: $viewModel.currentStep) {
@@ -31,6 +36,11 @@ struct OnboardingFlow: View {
         .tabViewStyle(.page)
         .indexViewStyle(.page(backgroundDisplayMode: .always))
         .environment(viewModel)
+        .onChange(of: viewModel.hasCompletedOnboarding) { _, completed in
+            if completed {
+                onComplete()
+            }
+        }
     }
 }
 
@@ -73,6 +83,7 @@ struct IdentityView: View {
     @State private var isGenerating = false
     @State private var identity: IdentityInfo?
     @State private var nickname = ""
+    @State private var setupError: String?
     
     var body: some View {
         VStack(spacing: Theme.spacingLarge) {
@@ -108,6 +119,12 @@ struct IdentityView: View {
                 .autocorrectionDisabled()
                 .padding(12)
                 .background(Theme.primaryContainer, in: RoundedRectangle(cornerRadius: 12))
+
+            if let setupError {
+                Text(setupError)
+                    .font(Theme.bodySmall)
+                    .foregroundStyle(.red)
+            }
             
             Spacer()
             
@@ -116,6 +133,16 @@ struct IdentityView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(identity == nil || nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            Button("Skip for Relay-Only Install") {
+                viewModel.completeOnboarding()
+            }
+            .buttonStyle(.bordered)
+
+            Text("You can create an identity later in Settings > Identity.")
+                .font(Theme.bodySmall)
+                .foregroundStyle(Theme.onSurfaceVariant)
+                .multilineTextAlignment(.center)
         }
         .padding(Theme.spacingLarge)
         .onAppear {
@@ -156,7 +183,10 @@ struct IdentityView: View {
 
             do {
                 let trimmedNickname = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmedNickname.isEmpty else { return }
+                guard !trimmedNickname.isEmpty else {
+                    setupError = "Nickname is required"
+                    return
+                }
 
                 if !(repository.getIdentityInfo()?.initialized ?? false) {
                     try repository.createIdentity()
@@ -165,8 +195,10 @@ struct IdentityView: View {
                 if let info = repository.getIdentityInfo(), info.initialized {
                     identity = info
                 }
+                setupError = nil
                 viewModel.advance()
             } catch {
+                setupError = "Failed to complete identity setup: \(error.localizedDescription)"
                 logger.error("Failed to complete identity step: \(error.localizedDescription)")
             }
         }

@@ -49,6 +49,7 @@ fun OnboardingScreen(
     val importError by viewModel.importError.collectAsState()
     val importSuccess by viewModel.importSuccess.collectAsState()
     val isReady by viewModel.isReady.collectAsState()
+    val onboardingCompleted by viewModel.onboardingCompleted.collectAsState()
     val isCreating by viewModel.isCreatingIdentity.collectAsState()
     val identityError by viewModel.identityError.collectAsState()
     var showImportDialog by remember { mutableStateOf(false) }
@@ -59,6 +60,12 @@ fun OnboardingScreen(
 
     LaunchedEffect(isReady) {
         if (isReady) {
+            onOnboardingComplete()
+        }
+    }
+
+    LaunchedEffect(onboardingCompleted) {
+        if (onboardingCompleted) {
             onOnboardingComplete()
         }
     }
@@ -189,12 +196,11 @@ fun OnboardingScreen(
                 }
             } else {
 
-            if (isCreating) {
-                CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Generating Identity keys...")
-            } else {
-                if (permissionsState.allPermissionsGranted) {
+                if (isCreating) {
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Generating Identity keys...")
+                } else {
                     OutlinedTextField(
                         value = nickname,
                         onValueChange = { nickname = it },
@@ -214,8 +220,18 @@ fun OnboardingScreen(
                         enabled = nickname.trim().isNotEmpty(),
                         modifier = Modifier.fillMaxWidth().height(56.dp)
                     ) {
-                        Text("Create New Identity")
+                        Text("Generate Identity")
                     }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = { viewModel.skipOnboardingForRelayOnlyInstall() },
+                        modifier = Modifier.fillMaxWidth().height(56.dp)
+                    ) {
+                        Text("Skip for Relay-Only Install")
+                    }
+
                     identityError?.let { error ->
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
@@ -225,37 +241,38 @@ fun OnboardingScreen(
                             color = MaterialTheme.colorScheme.error
                         )
                     }
-                } else {
-                    Button(
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "You can create an identity later from Settings > Identity without reinstalling.",
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (!permissionsState.allPermissionsGranted) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = { permissionsState.launchMultiplePermissionRequest() },
+                            modifier = Modifier.fillMaxWidth().height(52.dp)
+                        ) {
+                            Text("Grant Mesh Permissions (Recommended)")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    OutlinedButton(
                         onClick = {
-                            permissionsState.launchMultiplePermissionRequest()
+                            importCode = ""
+                            viewModel.clearImportState()
+                            showImportDialog = true
                         },
                         modifier = Modifier.fillMaxWidth().height(56.dp)
                     ) {
-                        Text("Grant Permissions")
+                        Text("Import Contact / Join Existing Mesh")
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Bluetooth and Location permissions are required for mesh networking.",
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.error
-                    )
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                OutlinedButton(
-                    onClick = {
-                        importCode = ""
-                        viewModel.clearImportState()
-                        showImportDialog = true
-                    },
-                    modifier = Modifier.fillMaxWidth().height(56.dp)
-                ) {
-                    Text("Import Contact / Join Existing Mesh")
-                }
-            }
             } // end consent else
         }
     }

@@ -25,6 +25,7 @@ This major update introduces significant improvements to reliability, transport 
 - **Delivery States**: Clearer mapping of message states (`pending`, `stored`, `forwarding`, `delivered`) in the UI.
 - **Auto-Resume**: All platforms now proactively check for existing local data on startup, hydrating the session without manual user intervention.
 - **First-Run Consent**: Added a mandatory privacy and security consent gate to all platform onboarding flows.
+- **Install-Mode Choice + Late Identity Creation**: GUI variants now restore explicit first-run choice (`Generate Identity Now` vs `Skip for Relay-Only Install`) and allow identity creation later from Settings -> Identity without reinstall.
 
 ## Developer & Ops
 - **Unified Core Settings**: Consolidated settings models into a single canonical schema in `IronCore`.

@@ -264,6 +264,8 @@ struct SettingsView: View {
         do {
             try repository.createIdentity()
             try repository.setNickname(trimmedNickname)
+            UserDefaults.standard.set(true, forKey: "hasCompletedInstallModeChoice")
+            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
             viewModel.loadNickname()
             identitySetupError = nil
             onIdentityChanged()
