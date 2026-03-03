@@ -6,10 +6,13 @@ This is the canonical "how everything fits together" document for the repository
 
 Execution references:
 
+- Document status lifecycle: `docs/DOCUMENT_STATUS_INDEX.md`
+- Active milestone execution: `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+- Active residual risk register: `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 - Global rollout plan: `docs/GLOBAL_ROLLOUT_PLAN.md`
 - Unified global app plan: `docs/UNIFIED_GLOBAL_APP_PLAN.md`
-- Triple-check verification report: `docs/TRIPLE_CHECK_REPORT.md`
-- Full file documentation tracker: `docs/DOC_PASS_TRACKER.md`
+- Triple-check verification report (historical): `docs/historical/TRIPLE_CHECK_REPORT.md`
+- Full file documentation tracker (historical): `docs/historical/DOC_PASS_TRACKER.md`
 
 ## 1) What This Repo Is
 

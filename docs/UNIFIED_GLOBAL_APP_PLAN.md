@@ -14,8 +14,8 @@ Deliver one **singular, dependable SCMessenger product** that works consistently
 ## 2) Current Baseline (Verified)
 
 - Full repo context review complete: **356/356 files checked**
-- Triple-check artifact: `docs/TRIPLE_CHECK_REPORT.md`
-- Canonical tracker pending count: **0** (`docs/DOC_PASS_TRACKER.md`)
+- Triple-check artifact (historical): `docs/historical/TRIPLE_CHECK_REPORT.md`
+- Canonical tracker pending count: **0** (`docs/historical/DOC_PASS_TRACKER.md`)
 
 This plan covers completion work from that baseline.
 
@@ -270,5 +270,5 @@ Implementation queue and owners should be managed in:
 Status verification should continue in:
 
 - `docs/CURRENT_STATE.md`
-- `docs/TRIPLE_CHECK_REPORT.md`
-- `docs/DOC_PASS_TRACKER.md`
+- `docs/historical/TRIPLE_CHECK_REPORT.md`
+- `docs/historical/DOC_PASS_TRACKER.md`

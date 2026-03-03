@@ -8,13 +8,14 @@ Decentralized, end-to-end encrypted messaging built on Rust + libp2p with mobile
 ## Start Here
 
 - Documentation hub: `DOCUMENTATION.md`
+- Documentation lifecycle/status map: `docs/DOCUMENT_STATUS_INDEX.md`
 - Full repo context map: `docs/REPO_CONTEXT.md`
 - Verified current state: `docs/CURRENT_STATE.md`
 - Active gap backlog: `REMAINING_WORK_TRACKING.md`
-- Global rollout plan: `docs/GLOBAL_ROLLOUT_PLAN.md`
-- Unified global app plan: `docs/UNIFIED_GLOBAL_APP_PLAN.md`
-- Triple-check verification report: `docs/TRIPLE_CHECK_REPORT.md`
-- Full file-level documentation tracker: `docs/DOC_PASS_TRACKER.md`
+- Active milestone plan: `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+- Active residual risks: `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- Edge-case readiness matrix: `docs/EDGE_CASE_READINESS_MATRIX.md`
+- Historical documentation index: `docs/historical/README.md`
 
 ## Quick Start (Development)
 

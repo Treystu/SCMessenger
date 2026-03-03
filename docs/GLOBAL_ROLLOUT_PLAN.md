@@ -47,11 +47,11 @@ Inventory snapshot from `rg --files` at plan creation:
   - Kotlin (`.kt`): 67
   - Swift (`.swift`): 53
 
-File-by-file checklist artifact: `docs/DOC_PASS_TRACKER.md`.
+File-by-file checklist artifact: `docs/historical/DOC_PASS_TRACKER.md`.
 
 ## 2.1) Coverage Baseline (Current Tracker State)
 
-From `docs/DOC_PASS_TRACKER.md`:
+From `docs/historical/DOC_PASS_TRACKER.md`:
 
 - Validated: 79
 - Follow-up (mixed-status section tagging applied): 278
@@ -75,7 +75,7 @@ Wave ordering is based on risk + dependency criticality:
 
 Exit condition for this track:
 
-- `docs/DOC_PASS_TRACKER.md` has zero `pending` entries.
+- `docs/historical/DOC_PASS_TRACKER.md` has zero `pending` entries.
 - All mixed-status docs have section-level markers and extracted canonical actions.
 
 ## 2.3) Progress Snapshot (Current)
@@ -89,7 +89,7 @@ Exit condition for this track:
 - Wave 4 and Wave 5 are complete for first-pass classification:
   - `cli/`, `docker/`, `scripts/`, `reference/`, `wasm/`, `mobile/`, `ui/`, and `SCMessengerCore.xcframework/` pending reduced to 0
 - Remaining pending workload:
-  - none (`docs/DOC_PASS_TRACKER.md` pending = 0)
+  - none (`docs/historical/DOC_PASS_TRACKER.md` pending = 0)
 
 ## 3) Documentation Pass Objectives
 
@@ -182,7 +182,7 @@ Acceptance criteria:
 
 - Freeze canonical decision set (Section 1).
 - Snapshot current build/test commands and results.
-- Confirm file inventory (`docs/DOC_PASS_TRACKER.md`).
+- Confirm file inventory (`docs/historical/DOC_PASS_TRACKER.md`).
 
 ## Phase 1: Canonical Docs Stabilization (Day 0-1)
 

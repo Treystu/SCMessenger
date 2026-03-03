@@ -1953,10 +1953,16 @@ mod tests {
         service.start().unwrap();
 
         let (first_keypair, first_headless) = service.resolve_swarm_keypair_and_mode().unwrap();
-        assert!(first_headless, "fresh install should default to headless mode");
+        assert!(
+            first_headless,
+            "fresh install should default to headless mode"
+        );
 
         let key_path = std::path::Path::new(&path).join("relay_network_key.pb");
-        assert!(key_path.exists(), "headless key should persist on first resolve");
+        assert!(
+            key_path.exists(),
+            "headless key should persist on first resolve"
+        );
         service.stop();
 
         let reloaded = MeshService::with_storage(
@@ -1993,11 +1999,16 @@ mod tests {
         let (_, headless_before) = service.resolve_swarm_keypair_and_mode().unwrap();
         assert!(headless_before);
 
-        let core = service.get_core().expect("core should be available after start");
+        let core = service
+            .get_core()
+            .expect("core should be available after start");
         core.initialize_identity().unwrap();
 
         let (full_keypair, headless_after) = service.resolve_swarm_keypair_and_mode().unwrap();
-        assert!(!headless_after, "identity initialization should upgrade to full mode");
+        assert!(
+            !headless_after,
+            "identity initialization should upgrade to full mode"
+        );
 
         let identity_keypair = core.get_libp2p_keypair().unwrap();
         assert_eq!(

@@ -15,7 +15,13 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 pub fn init_logging() {
     console_error_panic_hook::set_once();
-    tracing_wasm::set_as_global_default();
+    #[cfg(target_arch = "wasm32")]
+    {
+        static LOG_INIT: std::sync::Once = std::sync::Once::new();
+        LOG_INIT.call_once(|| {
+            tracing_wasm::set_as_global_default();
+        });
+    }
 }
 
 #[wasm_bindgen]
@@ -101,7 +107,7 @@ impl IronCore {
     pub fn start(&self) -> Result<(), JsValue> {
         self.inner
             .start()
-            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
     pub fn stop(&self) {
@@ -117,7 +123,7 @@ impl IronCore {
     pub fn initialize_identity(&self) -> Result<(), JsValue> {
         self.inner
             .initialize_identity()
-            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
     #[wasm_bindgen(js_name = getIdentityInfo)]
@@ -131,7 +137,7 @@ impl IronCore {
         self.inner
             .sign_data(data)
             .map(|sig| serde_wasm_bindgen::to_value(&WasmSignatureResult::from(sig)).unwrap())
-            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
     #[wasm_bindgen(js_name = verifySignature)]
@@ -143,7 +149,7 @@ impl IronCore {
     ) -> Result<bool, JsValue> {
         self.inner
             .verify_signature(data, signature, public_key_hex)
-            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
     #[wasm_bindgen(js_name = prepareMessage)]
@@ -152,37 +158,28 @@ impl IronCore {
         recipient_public_key_hex: String,
         text: String,
     ) -> Result<Vec<u8>, JsValue> {
-        // Relay enforcement: when OFF, block all outbound messaging (parity with Android/iOS)
-        if !self.settings.lock().relay_enabled {
-            return Err(JsValue::from_str(
-                "Messaging blocked: mesh participation is disabled (relay toggle OFF)",
-            ));
-        }
+        ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
         self.inner
             .prepare_message(recipient_public_key_hex, text)
-            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
     #[wasm_bindgen(js_name = receiveMessage)]
     pub fn receive_message(&self, envelope_bytes: Vec<u8>) -> Result<JsValue, JsValue> {
-        // Relay enforcement: when OFF, silently drop inbound messages (parity with Android/iOS)
-        if !self.settings.lock().relay_enabled {
-            return Err(JsValue::from_str(
-                "Message dropped: mesh participation is disabled (relay toggle OFF)",
-            ));
-        }
+        ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
         self.inner
             .receive_message(envelope_bytes)
             .map(|msg| {
                 serde_wasm_bindgen::to_value(&WasmMessage {
                     id: msg.id.clone(),
                     sender_id: msg.sender_id.clone(),
+                    sender_peer_id: None,
                     text: msg.text_content(),
                     timestamp: msg.timestamp,
                 })
                 .unwrap()
             })
-            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
     #[wasm_bindgen(js_name = outboxCount)]
@@ -219,7 +216,7 @@ impl IronCore {
             handle
                 .shutdown()
                 .await
-                .map_err(|e| JsValue::from_str(&format!("Failed to stop swarm: {}", e)))?;
+                .map_err(|e| js_value_from_str(&format!("Failed to stop swarm: {}", e)))?;
         }
         Ok(())
     }
@@ -231,26 +228,22 @@ impl IronCore {
         peer_id: String,
         envelope_bytes: Vec<u8>,
     ) -> Result<(), JsValue> {
-        if !self.settings.lock().relay_enabled {
-            return Err(JsValue::from_str(
-                "Messaging blocked: mesh participation is disabled (relay toggle OFF)",
-            ));
-        }
+        ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
 
         let peer_id: PeerId = peer_id
             .parse()
-            .map_err(|e| JsValue::from_str(&format!("Invalid peer ID: {}", e)))?;
+            .map_err(|e| js_value_from_str(&format!("Invalid peer ID: {}", e)))?;
 
         let handle = self
             .swarm_handle
             .lock()
             .clone()
-            .ok_or_else(|| JsValue::from_str("Swarm is not running"))?;
+            .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
 
         handle
             .send_message(peer_id, envelope_bytes)
             .await
-            .map_err(|e| JsValue::from_str(&format!("Failed to send envelope: {}", e)))
+            .map_err(|e| js_value_from_str(&format!("Failed to send envelope: {}", e)))
     }
 
     /// Get currently connected peer IDs.
@@ -260,16 +253,16 @@ impl IronCore {
             .swarm_handle
             .lock()
             .clone()
-            .ok_or_else(|| JsValue::from_str("Swarm is not running"))?;
+            .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
 
         let peers = handle
             .get_peers()
             .await
-            .map_err(|e| JsValue::from_str(&format!("Failed to get peers: {}", e)))?;
+            .map_err(|e| js_value_from_str(&format!("Failed to get peers: {}", e)))?;
 
         let peer_strings: Vec<String> = peers.into_iter().map(|p| p.to_string()).collect();
         serde_wasm_bindgen::to_value(&peer_strings)
-            .map_err(|e| JsValue::from_str(&format!("Failed to serialize peers: {}", e)))
+            .map_err(|e| js_value_from_str(&format!("Failed to serialize peers: {}", e)))
     }
 
     #[wasm_bindgen(js_name = getConnectionPathState)]
@@ -282,7 +275,7 @@ impl IronCore {
         let peers = handle
             .get_peers()
             .await
-            .map_err(|e| JsValue::from_str(&format!("Failed to get peers: {}", e)))?;
+            .map_err(|e| js_value_from_str(&format!("Failed to get peers: {}", e)))?;
         if peers.is_empty() {
             return Ok("Bootstrapping".to_string());
         }
@@ -290,7 +283,7 @@ impl IronCore {
         let listeners = handle
             .get_listeners()
             .await
-            .map_err(|e| JsValue::from_str(&format!("Failed to get listeners: {}", e)))?;
+            .map_err(|e| js_value_from_str(&format!("Failed to get listeners: {}", e)))?;
         if listeners.is_empty() {
             Ok("RelayFallback".to_string())
         } else {
@@ -341,7 +334,7 @@ impl IronCore {
             "startReceiveLoop(relayUrl) is deprecated; use startSwarm(bootstrapAddrs) instead"
         );
         let relay_multiaddr = relay_url_to_multiaddr(&relay_url)
-            .map_err(|e| JsValue::from_str(&format!("Invalid relay URL: {}", e)))?;
+            .map_err(|e| js_value_from_str(&format!("Invalid relay URL: {}", e)))?;
 
         start_swarm_runtime(
             Arc::clone(&self.inner),
@@ -390,13 +383,13 @@ impl IronCore {
     #[wasm_bindgen(js_name = updateSettings)]
     pub fn update_settings(&self, js_settings: JsValue) -> Result<(), JsValue> {
         let wasm_settings: WasmMeshSettings = serde_wasm_bindgen::from_value(js_settings)
-            .map_err(|e| JsValue::from_str(&format!("Invalid settings: {}", e)))?;
+            .map_err(|e| js_value_from_str(&format!("Invalid settings: {}", e)))?;
         let settings: MeshSettings = wasm_settings.into();
 
         // Persist if we have a storage manager
         if let Some(ref mgr) = self.settings_manager {
             mgr.save(settings.clone())
-                .map_err(|e| JsValue::from_str(&format!("Failed to save settings: {:?}", e)))?;
+                .map_err(|e| js_value_from_str(&format!("Failed to save settings: {:?}", e)))?;
         }
 
         *self.settings.lock() = settings;
@@ -424,7 +417,7 @@ impl IronCore {
     pub fn set_nickname(&self, nickname: String) -> Result<(), JsValue> {
         self.inner
             .set_nickname(nickname)
-            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
     /// Export the local identity as a backup string (for import on another device).
@@ -432,7 +425,7 @@ impl IronCore {
     pub fn export_identity_backup(&self) -> Result<String, JsValue> {
         self.inner
             .export_identity_backup()
-            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
     /// Import an identity from a backup string produced by `exportIdentityBackup`.
@@ -440,7 +433,7 @@ impl IronCore {
     pub fn import_identity_backup(&self, backup: String) -> Result<(), JsValue> {
         self.inner
             .import_identity_backup(backup)
-            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
     /// Derive the Ed25519 public key hex from a libp2p PeerId string.
@@ -448,7 +441,7 @@ impl IronCore {
     pub fn extract_public_key_from_peer_id(&self, peer_id: String) -> Result<String, JsValue> {
         self.inner
             .extract_public_key_from_peer_id(peer_id)
-            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
     // ── Messaging (extended) ─────────────────────────────────────────────
@@ -461,11 +454,7 @@ impl IronCore {
         recipient_public_key_hex: String,
         text: String,
     ) -> Result<JsValue, JsValue> {
-        if !self.settings.lock().relay_enabled {
-            return Err(JsValue::from_str(
-                "Messaging blocked: mesh participation is disabled (relay toggle OFF)",
-            ));
-        }
+        ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
         self.inner
             .prepare_message_with_id(recipient_public_key_hex, text)
             .map(|p| {
@@ -475,7 +464,7 @@ impl IronCore {
                 })
                 .unwrap()
             })
-            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
     /// Prepare a delivery receipt envelope to send back to the original sender.
@@ -488,7 +477,7 @@ impl IronCore {
     ) -> Result<Vec<u8>, JsValue> {
         self.inner
             .prepare_receipt(recipient_public_key_hex, message_id)
-            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
     /// Generate a cover traffic payload — random bytes that look like an
@@ -499,7 +488,7 @@ impl IronCore {
     pub fn prepare_cover_traffic(&self, size_bytes: u32) -> Result<Vec<u8>, JsValue> {
         self.inner
             .prepare_cover_traffic(size_bytes)
-            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
     /// Remove a message from the Rust outbox after it has been delivered.
@@ -534,10 +523,10 @@ impl WasmContactManager {
     #[wasm_bindgen(js_name = add)]
     pub fn add(&self, js_contact: JsValue) -> Result<(), JsValue> {
         let contact: scmessenger_core::store::Contact = serde_wasm_bindgen::from_value(js_contact)
-            .map_err(|e| JsValue::from_str(&format!("Invalid contact: {}", e)))?;
+            .map_err(|e| js_value_from_str(&format!("Invalid contact: {}", e)))?;
         self.inner
             .add(contact)
-            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))
     }
 
     #[wasm_bindgen(js_name = get)]
@@ -545,7 +534,7 @@ impl WasmContactManager {
         let contact = self
             .inner
             .get(peer_id)
-            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))?;
         Ok(serde_wasm_bindgen::to_value(&contact).unwrap())
     }
 
@@ -553,7 +542,7 @@ impl WasmContactManager {
     pub fn remove(&self, peer_id: String) -> Result<(), JsValue> {
         self.inner
             .remove(peer_id)
-            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))
     }
 
     #[wasm_bindgen(js_name = list)]
@@ -561,7 +550,7 @@ impl WasmContactManager {
         let list = self
             .inner
             .list()
-            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))?;
         let array = js_sys::Array::new();
         for item in list {
             array.push(&serde_wasm_bindgen::to_value(&item).unwrap());
@@ -594,10 +583,10 @@ impl WasmHistoryManager {
     pub fn add(&self, js_record: JsValue) -> Result<(), JsValue> {
         let record: scmessenger_core::store::MessageRecord =
             serde_wasm_bindgen::from_value(js_record)
-                .map_err(|e| JsValue::from_str(&format!("Invalid record: {}", e)))?;
+                .map_err(|e| js_value_from_str(&format!("Invalid record: {}", e)))?;
         self.inner
             .add(record)
-            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))
     }
 
     #[wasm_bindgen(js_name = recent)]
@@ -609,7 +598,7 @@ impl WasmHistoryManager {
         let records = self
             .inner
             .recent(peer_filter, limit)
-            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))?;
         let array = js_sys::Array::new();
         for rec in records {
             array.push(&serde_wasm_bindgen::to_value(&rec).unwrap());
@@ -622,7 +611,7 @@ impl WasmHistoryManager {
         let records = self
             .inner
             .conversation(peer_id, limit)
-            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))?;
         let array = js_sys::Array::new();
         for rec in records {
             array.push(&serde_wasm_bindgen::to_value(&rec).unwrap());
@@ -634,7 +623,7 @@ impl WasmHistoryManager {
     pub fn clear(&self) -> Result<(), JsValue> {
         self.inner
             .clear()
-            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))
     }
 
     #[wasm_bindgen(js_name = stats)]
@@ -642,7 +631,7 @@ impl WasmHistoryManager {
         let stats = self
             .inner
             .stats()
-            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))?;
         let payload = WasmHistoryStats {
             total_messages: stats.total_messages,
             sent_count: stats.sent_count,
@@ -658,13 +647,25 @@ impl WasmHistoryManager {
     }
 }
 
+fn js_value_from_str(message: &str) -> JsValue {
+    #[cfg(target_arch = "wasm32")]
+    {
+        JsValue::from_str(message)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = message;
+        JsValue::NULL
+    }
+}
+
 fn parse_bootstrap_addrs(value: JsValue) -> Result<Vec<String>, JsValue> {
     if value.is_null() || value.is_undefined() {
         return Ok(Vec::new());
     }
 
     serde_wasm_bindgen::from_value(value)
-        .map_err(|e| JsValue::from_str(&format!("bootstrapAddrs must be string[]: {}", e)))
+        .map_err(|e| js_value_from_str(&format!("bootstrapAddrs must be string[]: {}", e)))
 }
 
 fn relay_url_to_multiaddr(relay_url: &str) -> Result<String, String> {
@@ -720,6 +721,15 @@ fn relay_url_to_multiaddr(relay_url: &str) -> Result<String, String> {
     Ok(format!("{}/tcp/{}/{}", host_segment, port, ws_segment))
 }
 
+fn ensure_mesh_participation_enabled(relay_enabled: bool) -> Result<(), JsValue> {
+    if relay_enabled {
+        return Ok(());
+    }
+    Err(js_value_from_str(
+        "Messaging blocked: mesh participation is disabled (relay toggle OFF)",
+    ))
+}
+
 async fn start_swarm_runtime(
     inner: Arc<RustIronCore>,
     rx_messages: Arc<Mutex<Vec<WasmMessage>>>,
@@ -728,34 +738,22 @@ async fn start_swarm_runtime(
     bootstrap_addrs: Vec<String>,
 ) -> Result<(), JsValue> {
     if swarm_handle.lock().is_some() {
-        return Err(JsValue::from_str("Swarm is already running"));
+        return Err(js_value_from_str("Swarm is already running"));
     }
 
     if !inner.is_running() {
         inner
             .start()
-            .map_err(|e| JsValue::from_str(&format!("Failed to start core: {}", e)))?;
+            .map_err(|e| js_value_from_str(&format!("Failed to start core: {}", e)))?;
     }
 
-    if inner.get_identity_keys().is_none() {
-        inner
-            .initialize_identity()
-            .map_err(|e| JsValue::from_str(&format!("Failed to initialize identity: {}", e)))?;
-    }
-
-    let identity_keys = inner
-        .get_identity_keys()
-        .ok_or_else(|| JsValue::from_str("Identity keys unavailable after initialization"))?;
-
-    let libp2p_keys = identity_keys
-        .to_libp2p_keypair()
-        .map_err(|e| JsValue::from_str(&format!("Failed to derive libp2p keypair: {}", e)))?;
+    let (libp2p_keys, headless_mode) = resolve_swarm_keypair_and_mode(inner.as_ref())?;
 
     let bootstrap_multiaddrs: Vec<Multiaddr> = bootstrap_addrs
         .iter()
         .map(|raw| {
             raw.parse::<Multiaddr>().map_err(|e| {
-                JsValue::from_str(&format!("Invalid bootstrap multiaddr '{}': {}", raw, e))
+                js_value_from_str(&format!("Invalid bootstrap multiaddr '{}': {}", raw, e))
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -767,10 +765,10 @@ async fn start_swarm_runtime(
         event_tx,
         None,
         bootstrap_multiaddrs,
-        false, // WASM browser clients are full user nodes, not headless relays
+        headless_mode,
     )
     .await
-    .map_err(|e| JsValue::from_str(&format!("Failed to start swarm: {}", e)))?;
+    .map_err(|e| js_value_from_str(&format!("Failed to start swarm: {}", e)))?;
 
     *swarm_handle.lock() = Some(handle);
 
@@ -792,6 +790,7 @@ async fn start_swarm_runtime(
                             rx_messages.lock().push(WasmMessage {
                                 id: msg.id.clone(),
                                 sender_id: msg.sender_id.clone(),
+                                sender_peer_id: Some(peer_id.to_string()),
                                 text: msg.text_content(),
                                 timestamp: msg.timestamp,
                             });
@@ -829,12 +828,31 @@ async fn start_swarm_runtime(
     Ok(())
 }
 
+fn resolve_swarm_keypair_and_mode(
+    inner: &RustIronCore,
+) -> Result<(libp2p::identity::Keypair, bool), JsValue> {
+    if let Some(identity_keys) = inner.get_identity_keys() {
+        let libp2p_keys = identity_keys.to_libp2p_keypair().map_err(|e| {
+            js_value_from_str(&format!(
+                "Failed to derive libp2p keypair from identity: {}",
+                e
+            ))
+        })?;
+        return Ok((libp2p_keys, false));
+    }
+
+    tracing::info!("No identity available; starting swarm in relay-only mode");
+    Ok((libp2p::identity::Keypair::generate_ed25519(), true))
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WasmIdentityInfo {
     identity_id: Option<String>,
     public_key_hex: Option<String>,
     initialized: bool,
+    nickname: Option<String>,
+    libp2p_peer_id: Option<String>,
 }
 
 impl From<IdentityInfo> for WasmIdentityInfo {
@@ -843,6 +861,8 @@ impl From<IdentityInfo> for WasmIdentityInfo {
             identity_id: info.identity_id,
             public_key_hex: info.public_key_hex,
             initialized: info.initialized,
+            nickname: info.nickname,
+            libp2p_peer_id: info.libp2p_peer_id,
         }
     }
 }
@@ -875,6 +895,7 @@ struct WasmPreparedMessage {
 struct WasmMessage {
     id: String,
     sender_id: String,
+    sender_peer_id: Option<String>,
     text: Option<String>,
     timestamp: u64,
 }
@@ -946,6 +967,7 @@ impl From<WasmMeshSettings> for MeshSettings {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use scmessenger_core::store::{Contact, MessageDirection, MessageRecord};
     use wasm_bindgen_test::*;
 
     wasm_bindgen_test_configure!(run_in_browser);
@@ -989,5 +1011,108 @@ mod tests {
     fn test_relay_url_to_multiaddr_rejects_http() {
         let err = relay_url_to_multiaddr("https://relay.example.com").unwrap_err();
         assert!(err.contains("ws:// or wss://"));
+    }
+
+    #[test]
+    fn test_desktop_role_resolution_defaults_to_relay_only_without_identity() {
+        let core = RustIronCore::new();
+        let (_, relay_only) = resolve_swarm_keypair_and_mode(&core).unwrap();
+        assert!(
+            relay_only,
+            "desktop should start relay-only when identity is absent"
+        );
+
+        core.initialize_identity().unwrap();
+        let (_, full_role) = resolve_swarm_keypair_and_mode(&core).unwrap();
+        assert!(
+            !full_role,
+            "desktop should switch to full role after identity initialization"
+        );
+    }
+
+    #[test]
+    fn test_desktop_relay_only_flow_blocks_outbound_message_prepare() {
+        let err = ensure_mesh_participation_enabled(false);
+        assert!(
+            err.is_err(),
+            "relay-only mode should block message prepare path"
+        );
+        assert!(ensure_mesh_participation_enabled(true).is_ok());
+    }
+
+    #[test]
+    fn test_desktop_contacts_and_messaging_interaction_flow() {
+        let core = RustIronCore::with_storage(temp_storage_path("contacts-flow"));
+        core.start().unwrap();
+        core.initialize_identity().unwrap();
+
+        let contact_manager = core.contacts_store_manager();
+        let history = core.history_store_manager();
+
+        let peer_id = "12D3KooWEfZ2fJ8AcGvVfEUi2wFQPo6z8kZVr5TsgP7JQF2B9kS1".to_string();
+        let mut contact = Contact::new(peer_id.clone(), "11".repeat(32));
+        contact.local_nickname = Some("Alice".to_string());
+        contact.last_seen = Some(1);
+        contact_manager.add(contact).unwrap();
+        assert_eq!(contact_manager.count(), 1);
+
+        let outbound = MessageRecord {
+            id: "desktop-outbound-1".to_string(),
+            direction: MessageDirection::Sent,
+            peer_id: "12D3KooWEfZ2fJ8AcGvVfEUi2wFQPo6z8kZVr5TsgP7JQF2B9kS1".to_string(),
+            content: "hello from desktop".to_string(),
+            timestamp: 2,
+            delivered: false,
+        };
+        history.add(outbound).unwrap();
+
+        let conversation = history.conversation(peer_id, 20).unwrap();
+        assert_eq!(
+            conversation.len(),
+            1,
+            "contact conversation should include saved outbound record"
+        );
+    }
+
+    #[test]
+    fn test_desktop_mesh_dashboard_stats_update_with_message_flow() {
+        let core = RustIronCore::with_storage(temp_storage_path("dashboard-stats"));
+        let history = core.history_store_manager();
+
+        let sent = MessageRecord {
+            id: "stats-sent".to_string(),
+            direction: MessageDirection::Sent,
+            peer_id: "peer-a".to_string(),
+            content: "pending".to_string(),
+            timestamp: 10,
+            delivered: false,
+        };
+        let received = MessageRecord {
+            id: "stats-recv".to_string(),
+            direction: MessageDirection::Received,
+            peer_id: "peer-b".to_string(),
+            content: "ack".to_string(),
+            timestamp: 11,
+            delivered: true,
+        };
+
+        history.add(sent).unwrap();
+        history.add(received).unwrap();
+
+        let stats = history.stats().unwrap();
+        assert_eq!(stats.total_messages, 2);
+        assert_eq!(stats.sent_count, 1);
+        assert_eq!(stats.received_count, 1);
+        assert_eq!(stats.undelivered_count, 1);
+    }
+
+    fn temp_storage_path(label: &str) -> String {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("scm-wasm-{}-{}", label, nonce));
+        std::fs::create_dir_all(&path).unwrap();
+        path.to_string_lossy().to_string()
     }
 }

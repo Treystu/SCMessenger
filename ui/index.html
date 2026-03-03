@@ -699,9 +699,24 @@
               <div class="app-logo">SC</div>
               <span style="font-weight: 600">SCMessenger</span>
             </div>
-          </div>
-          <div style="margin-top: 16px; display: flex; gap: 8px">
             <button
+              id="settings-trigger"
+              style="
+                background: none;
+                border: none;
+                color: var(--text-muted);
+                font-size: 1.2rem;
+                cursor: pointer;
+                margin-left: auto;
+              "
+              onclick="app.ui.openSettings()"
+            >
+              ⚙
+            </button>
+          </div>
+          <div id="add-contact-row" style="margin-top: 16px; display: flex; gap: 8px">
+            <button
+              id="add-contact-btn"
               class="btn-primary"
               style="
                 width: 100%;
@@ -719,6 +734,7 @@
         <div class="search-container">
           <input
             type="text"
+            id="contact-search"
             class="search-input"
             placeholder="Search contacts..."
             onkeyup="app.ui.filterContacts(this.value)"
@@ -773,10 +789,15 @@
         <div id="empty-state">
           <div class="logo-large">SC</div>
           <h2>Sovereign Communication</h2>
-          <p style="max-width: 400px; line-height: 1.6">
+          <p id="empty-state-copy" style="max-width: 400px; line-height: 1.6">
             Connect freely. No servers. No masters.<br />
             Select a contact to start messaging or add a new peer to the mesh.
           </p>
+          <div id="relay-onboarding-cta" class="hidden" style="margin-top: 16px">
+            <button class="btn btn-primary" onclick="app.actions.initializeIdentity()">
+              Initialize Identity to Enable Chats
+            </button>
+          </div>
         </div>
 
         <!-- Active Chat -->
@@ -862,6 +883,7 @@
         </div>
         <div class="flex gap-2">
           <div
+            id="role-pill"
             class="status-pill"
             style="border: 1px solid var(--glass-border)"
           >
@@ -942,16 +964,6 @@
         <!-- Network Tab -->
         <div id="tab-content-network" class="tab-content">
           <div class="form-group">
-            <label class="form-label">Listen Port</label>
-            <input
-              type="number"
-              id="setting-port"
-              class="form-input"
-              value="9000"
-            />
-          </div>
-
-          <div class="form-group">
             <label class="form-label">Bootstrap Nodes</label>
             <textarea
               id="setting-bootstrap"
@@ -962,6 +974,18 @@
 /ip4/bootstrap.example.com/tcp/4001</textarea
             >
           </div>
+          <div class="form-group">
+            <label class="form-label" for="setting-relay-enabled">
+              Mesh Participation
+            </label>
+            <div class="text-sm text-muted" style="margin-bottom: 8px">
+              When disabled, send/receive messaging and relay participation are blocked.
+            </div>
+            <label style="display: flex; align-items: center; gap: 8px">
+              <input type="checkbox" id="setting-relay-enabled" checked />
+              <span>Enable mesh messaging + relay traffic</span>
+            </label>
+          </div>
 
           <button
             class="btn btn-primary"
@@ -971,30 +995,6 @@
             Save Configuration
           </button>
 
-          <!-- Danger Zone -->
-          <div
-            style="
-              margin-top: 30px;
-              border-top: 1px solid var(--glass-border);
-              padding-top: 20px;
-            "
-          >
-            <h5 style="color: var(--danger); margin: 0 0 10px 0">
-              Danger Zone
-            </h5>
-            <button
-              class="btn btn-secondary"
-              onclick="SCM.actions.factoryReset()"
-              style="
-                width: 100%;
-                border-color: var(--danger);
-                color: var(--danger);
-                opacity: 0.8;
-              "
-            >
-              Factory Reset (Delete Data & Exit)
-            </button>
-          </div>
         </div>
 
         <!-- Identity Tab -->
@@ -1020,6 +1020,15 @@
 Loading...</textarea
             >
           </div>
+          <div class="form-group">
+            <label class="form-label">Nickname</label>
+            <input
+              type="text"
+              id="setting-nickname"
+              class="form-input"
+              placeholder="Optional display name"
+            />
+          </div>
           <div
             style="
               font-size: 0.75rem;
@@ -1031,6 +1040,13 @@ Loading...</textarea
             Identity is managed by the core node. Keys are stored securely.
           </div>
           <div style="margin-top: 20px; text-align: right">
+            <button
+              class="btn btn-primary"
+              style="margin-right: 8px"
+              onclick="SCM.actions.initializeIdentity()"
+            >
+              Initialize Identity
+            </button>
             <button
               class="btn btn-secondary"
               onclick="SCM.actions.exportIdentity()"
@@ -1086,83 +1102,62 @@ Loading...</textarea
     </div>
 
     <script>
-      /**
-       * SCMessenger Core Logic
-       * strict adherence to GEMINI_UI_GUIDE.md protocol.
-       */
+      const DEFAULT_BOOTSTRAP_NODES = [
+        "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw",
+        "/ip4/104.28.216.43/tcp/9010/p2p/12D3KooWHpmuhytgzLcM4nj1hZvN5b4crB1wka3LCNfKRCd7yHj9",
+      ];
+      const BOOTSTRAP_STORAGE_KEY = "scm.desktop.bootstrap.v1";
 
-      // Connection Error Overlay Logic
       const errorOverlay = document.createElement("div");
       errorOverlay.id = "connection-error";
       errorOverlay.className = "modal-overlay";
       errorOverlay.innerHTML = `
-            <div class="modal glass" style="text-align: center; max-width: 450px;">
-                <div class="logo-large" style="margin: 0 auto 20px auto; width: 60px; height: 60px; font-size: 30px;">SC</div>
-                <h3 style="margin-bottom: 10px;">Connection Failed</h3>
-                <p class="text-muted" style="margin-bottom: 20px;">
-                    Could not connect to the SCMessenger node.<br>
-                    Please ensure the core is running:
-                </p>
-                <div style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; font-family: monospace; margin-bottom: 20px; text-align: left; font-size: 0.85rem; overflow-x: auto;">
-                    $ cargo run -p scmessenger-cli -- start --port 9000
-                </div>
-                <button class="btn btn-primary" onclick="window.location.reload()">Retry Connection</button>
-            </div>
-        `;
+        <div class="modal glass" style="text-align: center; max-width: 520px;">
+          <div class="logo-large" style="margin: 0 auto 20px auto; width: 60px; height: 60px; font-size: 30px;">SC</div>
+          <h3 style="margin-bottom: 10px;">Desktop Runtime Unavailable</h3>
+          <p class="text-muted" id="runtime-error-copy" style="margin-bottom: 20px;">
+            Could not initialize the SCMessenger desktop runtime.
+          </p>
+          <button class="btn btn-primary" onclick="window.location.reload()">Retry</button>
+        </div>
+      `;
       document.body.appendChild(errorOverlay);
 
       const SCM = {
         state: {
-          socket: null,
-          connected: false,
-          contacts: {}, // Map<peer_id, Contact>
-          messages: {}, // Map<peer_id, Message[]>
-          activeChat: null, // peer_id
-          myself: {
-            peer_id: "Loading...",
-            public_key: "",
-          },
-          network: {
-            peers: 0,
-            status: "offline",
-            relay_active: false,
-          },
-          reconnectTimer: null,
-          messageQueue: [], // For offline storage
+          wasmModule: null,
+          core: null,
+          contactManager: null,
+          historyManager: null,
+          identity: null,
+          role: "relay-only",
+          relayEnabled: true,
+          swarmRunning: false,
+          bootstrapAddrs: [],
+          contacts: {},
+          messages: {},
+          activeChat: null,
+          peers: [],
+          dashboardTimer: null,
+          inboxTimer: null,
         },
 
-        // Environment Detection
-        env: {
-          get isDocker() {
-            const h = window.location.hostname;
-            return h && h !== "localhost" && h !== "127.0.0.1";
-          },
-          getWsUrl() {
-            // If served via HTTPS, use wss://. Otherwise ws://
-            const protocol =
-              window.location.protocol === "https:" ? "wss:" : "ws:";
-            const host = window.location.hostname;
-            const port = window.location.port ? `:${window.location.port}` : "";
+        async init() {
+          this.bindEvents();
+          this.state.bootstrapAddrs = this.loadBootstrapNodes();
+          document.getElementById("setting-bootstrap").value =
+            this.state.bootstrapAddrs.join("\n");
 
-            // If running locally (file:// or localhost), default to CLI port 9000
-            if (!host || host === "localhost" || host === "127.0.0.1") {
-              return `ws://127.0.0.1:9000/ws`;
-            }
-
-            // Otherwise use the current host/port (GCP Cloud Run, Docker, etc.)
-            return `${protocol}//${host}${port}/ws`;
-          },
+          await this.loadWasmRuntime();
+          await this.initializeCore();
+          await this.refreshIdentityRole();
+          await this.startSwarm();
+          await this.actions.refreshContacts();
+          this.startPolling();
+          await this.refreshDashboard();
         },
 
-        init() {
-          console.log("SCMessenger Initializing...");
-          console.log(
-            `Environment: ${this.env.isDocker ? "Docker" : "Local CLI"}`,
-          );
-
-          this.connect();
-
-          // Event Listeners
+        bindEvents() {
           document
             .getElementById("send-btn")
             .addEventListener("click", () => this.actions.sendMessage());
@@ -1171,355 +1166,377 @@ Loading...</textarea
             .addEventListener("keypress", (e) => {
               if (e.key === "Enter") this.actions.sendMessage();
             });
-
-          // Periodic status check
-          setInterval(() => {
-            if (this.state.connected) this.actions.sendCommand("status");
-          }, 5000);
         },
 
-        connect() {
-          const url = this.env.getWsUrl();
-          console.log(`Connecting to backend at ${url}...`);
-
+        loadBootstrapNodes() {
           try {
-            this.state.socket = new WebSocket(url);
-
-            this.state.socket.onopen = () => {
-              console.log("✅ WebSocket Connected");
-              this.state.connected = true;
-              this.ui.updateNetworkStatus("online");
-
-              // Hide error overlay if visible
-              document
-                .getElementById("connection-error")
-                .classList.remove("visible");
-
-              // Initial Hydration
-              this.actions.sendCommand("identity_show");
-              this.actions.sendCommand("contact_list");
-              this.actions.sendCommand("status");
-
-              // Process Queue
-              this.processQueue();
-
-              clearInterval(this.state.reconnectTimer);
-              this.state.reconnectTimer = null;
-
-              // Request initial data
-              this.actions.sendCommand("identity_show");
-              this.actions.sendCommand("contact_list");
-              this.actions.sendCommand("status");
-
-              // Clear offline indicator
-              const dot = document.getElementById("net-dot");
-              if (dot) dot.classList.remove("status-offline");
-            };
-
-            this.state.socket.onclose = () => {
-              console.warn("❌ WebSocket Disconnected");
-              this.state.connected = false;
-              this.ui.updateNetworkStatus("offline");
-
-              // Retry logic
-              if (!this.state.reconnectTimer) {
-                this.state.reconnectTimer = setInterval(() => {
-                  console.log("Retrying connection...");
-                  this.connect();
-                }, 3000);
-              }
-            };
-
-            this.state.socket.onmessage = (event) => {
-              try {
-                const data = JSON.parse(event.data);
-                this.handleEvent(data);
-
-                // Pulse sync indicator
-                const syncEl = document.getElementById("sync-status");
-                if (syncEl) {
-                  syncEl.style.color = "var(--text-main)";
-                  setTimeout(() => (syncEl.style.color = "inherit"), 200);
-                }
-              } catch (e) {
-                console.error("Failed to parse WS message:", event.data);
-              }
-            };
-
-            this.state.socket.onerror = (err) => {
-              console.error("WebSocket Error:", err);
-              // Show error overlay instantly if offline
-              if (
-                !this.state.connected &&
-                Object.keys(this.state.contacts).length === 0
-              ) {
-                document
-                  .getElementById("connection-error")
-                  .classList.add("visible");
-              }
-            };
-          } catch (e) {
-            console.error("Connection setup failed", e);
-            document
-              .getElementById("connection-error")
-              .classList.add("visible");
+            const raw = localStorage.getItem(BOOTSTRAP_STORAGE_KEY);
+            if (!raw) return [...DEFAULT_BOOTSTRAP_NODES];
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              return parsed.filter((item) => typeof item === "string");
+            }
+          } catch (error) {
+            console.warn("Failed to load bootstrap nodes from local storage", error);
           }
+          return [...DEFAULT_BOOTSTRAP_NODES];
         },
 
-        processQueue() {
-          if (this.state.messageQueue.length > 0 && this.state.connected) {
-            console.log(
-              `Processing ${this.state.messageQueue.length} queued messages...`,
+        persistBootstrapNodes(nodes) {
+          localStorage.setItem(BOOTSTRAP_STORAGE_KEY, JSON.stringify(nodes));
+        },
+
+        parseBootstrapTextarea() {
+          const raw = document.getElementById("setting-bootstrap").value;
+          const nodes = raw
+            .split("\n")
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0);
+          return [...new Set(nodes)];
+        },
+
+        async loadWasmRuntime() {
+          const candidates = [
+            "/wasm/pkg/scmessenger_wasm.js",
+            "../wasm/pkg/scmessenger_wasm.js",
+            "./wasm/pkg/scmessenger_wasm.js",
+          ];
+
+          let lastError = null;
+          for (const candidate of candidates) {
+            try {
+              const module = await import(candidate);
+              if (typeof module.default === "function") {
+                await module.default();
+              }
+              if (!module.IronCore) {
+                throw new Error(`IronCore export missing in ${candidate}`);
+              }
+              this.state.wasmModule = module;
+              return;
+            } catch (error) {
+              lastError = error;
+            }
+          }
+
+          throw new Error(
+            `Failed to load scmessenger-wasm runtime. Last error: ${lastError}`,
+          );
+        },
+
+        async initializeCore() {
+          const { IronCore } = this.state.wasmModule;
+          const core =
+            typeof IronCore.withStorage === "function"
+              ? IronCore.withStorage("scm_desktop")
+              : new IronCore();
+
+          core.start();
+          this.state.core = core;
+          this.state.contactManager = core.getContactManager();
+          this.state.historyManager = core.getHistoryManager();
+
+          const settings = core.getSettings();
+          this.state.relayEnabled = settings.relayEnabled !== false;
+          document.getElementById("setting-relay-enabled").checked =
+            this.state.relayEnabled;
+        },
+
+        async startSwarm() {
+          if (this.state.swarmRunning) return;
+          await this.state.core.startSwarm(this.state.bootstrapAddrs);
+          this.state.swarmRunning = true;
+        },
+
+        async stopSwarm() {
+          if (!this.state.swarmRunning) return;
+          await this.state.core.stopSwarm();
+          this.state.swarmRunning = false;
+        },
+
+        async restartSwarm() {
+          await this.stopSwarm();
+          await this.startSwarm();
+        },
+
+        startPolling() {
+          clearInterval(this.state.dashboardTimer);
+          clearInterval(this.state.inboxTimer);
+
+          this.state.dashboardTimer = setInterval(() => {
+            this.refreshDashboard().catch((error) =>
+              console.warn("Dashboard refresh failed", error),
             );
-            const queue = [...this.state.messageQueue];
-            this.state.messageQueue = [];
-            queue.forEach((msg) => this.actions.sendCommand("send", msg));
+          }, 2500);
+
+          this.state.inboxTimer = setInterval(() => {
+            this.pollIncomingMessages().catch((error) =>
+              console.warn("Incoming message poll failed", error),
+            );
+          }, 900);
+        },
+
+        async refreshIdentityRole() {
+          const info = this.state.core.getIdentityInfo();
+          this.state.identity = info;
+          const fullRole = !!info.initialized;
+          this.state.role = fullRole ? "full" : "relay-only";
+
+          const displayPeer = info.libp2pPeerId || info.identityId || "Relay-Only Mode";
+          document.getElementById("my-peer-id").textContent = displayPeer;
+          document.getElementById("setting-peer-id").value = displayPeer;
+          document.getElementById("setting-pub-key").value =
+            info.publicKeyHex || "No identity initialized";
+          document.getElementById("setting-nickname").value = info.nickname || "";
+
+          this.ui.applyRoleGating(fullRole);
+          this.ui.updateRolePill();
+        },
+
+        async refreshDashboard() {
+          if (!this.state.core) return;
+
+          const peers = await this.state.core.getPeers().catch(() => []);
+          this.state.peers = Array.isArray(peers) ? peers : [];
+          document.getElementById("peer-count").textContent = this.state.peers.length;
+
+          const pathState = await this.state.core
+            .getConnectionPathState()
+            .catch(() => "Disconnected");
+          const statusMode = this.utils.networkModeFromPath(pathState);
+          this.ui.updateNetworkStatus(statusMode, pathState);
+
+          const stats = this.state.historyManager
+            ? this.state.historyManager.stats()
+            : null;
+          if (stats) {
+            const sync = document.getElementById("sync-status");
+            sync.textContent = `Inbox ${stats.receivedCount} / Outbox ${this.state.core.outboxCount()}`;
+          }
+
+          const onlinePeers = new Set(this.state.peers);
+          Object.values(this.state.contacts).forEach((contact) => {
+            contact.status = onlinePeers.has(contact.peer_id) ? "online" : "offline";
+          });
+          this.ui.renderContacts();
+          this.ui.updateRolePill();
+        },
+
+        async pollIncomingMessages() {
+          if (!this.state.core) return;
+
+          const drained = Array.from(this.state.core.drainReceivedMessages());
+          if (drained.length === 0) return;
+
+          for (const incoming of drained) {
+            const peerId = incoming.senderPeerId || incoming.senderId;
+            if (!peerId) continue;
+
+            await this.ensureContactForPeer(peerId);
+
+            const timestampMs = Number(incoming.timestamp || 0) * 1000;
+            const content = incoming.text || "";
+            const record = {
+              id: incoming.id || `incoming-${Date.now()}`,
+              direction: "received",
+              content,
+              timestamp: timestampMs || Date.now(),
+              status: "read",
+            };
+
+            this.storeMessage(peerId, record);
+            this.addHistoryRecord({
+              id: record.id,
+              direction: "Received",
+              peer_id: peerId,
+              content,
+              timestamp: Math.floor(record.timestamp / 1000),
+              delivered: true,
+            });
           }
         },
 
-        handleEvent(data) {
-          console.log("📩 IN:", data);
+        async ensureContactForPeer(peerId) {
+          if (this.state.contacts[peerId]) return;
 
-          switch (data.type) {
-            case "peer_discovered":
-              // { type: "peer_discovered", peer_id: "...", transport: "..." }
-              console.log(
-                `Discovered peer: ${data.peer_id} via ${data.transport}`,
-              );
-              // Optimistically add to contacts if not exists or update status
-              if (this.state.contacts[data.peer_id]) {
-                this.state.contacts[data.peer_id].status = "online";
-                this.state.contacts[data.peer_id].last_seen = Date.now() / 1000; // Store as seconds to match backend
-                this.ui.renderContacts();
-              }
-              break;
-
-            case "contact_list": // Assuming list response is wrapped like this
-              if (data.contacts) {
-                data.contacts.forEach((c) => {
-                  this.state.contacts[c.peer_id] = c;
-                });
-                this.ui.renderContacts();
-              }
-              break;
-
-            case "history_list":
-              if (data.messages) {
-                const peerId = data.peer_id;
-                this.state.messages[peerId] = data.messages.map((m) => ({
-                  id: m.id || `msg-${Date.now()}-${Math.random()}`,
-                  direction: m.direction,
-                  content: m.content,
-                  timestamp: m.timestamp * 1000,
-                  status: "read",
-                }));
-                if (this.state.activeChat === peerId) {
-                  this.ui.renderMessages(peerId);
-                }
-              }
-              break;
-
-            case "message_received":
-              // { from: "...", content: "...", timestamp: ... }
-              this.storeMessage(data.from, {
-                id: data.message_id || `msg-${Date.now()}`,
-                direction: "received",
-                content: data.content,
-                timestamp: (data.timestamp || 0) * 1000, // Convert seconds to ms
-                status: "read",
-              });
-
-              // Play notification sound (optional, silent for now)
-              // Update contact last seen
-              if (this.state.contacts[data.from]) {
-                this.state.contacts[data.from].last_seen = Date.now() / 1000;
-                this.ui.renderContacts();
-              }
-              break;
-
-            case "identity_export_data":
-              document.getElementById("export-path").value = data.storage_path;
-              document.getElementById("export-pub").value = data.public_key;
-              document.getElementById("export-priv").value = data.private_key;
-              document.getElementById("modal-export").classList.add("visible");
-              break;
-
-            case "message_status":
-              // { message_id: "...", status: "delivered" }
-              this.updateMessageStatus(data.message_id, data.status);
-              break;
-
-            case "network_status":
-              // { status: "online", peer_count: 12, relay_active: true }
-              if (data.status) this.ui.updateNetworkStatus(data.status);
-              if (data.peer_count !== undefined)
-                document.getElementById("peer-count").textContent =
-                  data.peer_count;
-              break;
-
-            case "identity_export_data":
-              document.getElementById("export-path").value =
-                data.storage_path || "N/A";
-              document.getElementById("export-pub").value =
-                data.public_key || "N/A";
-              document.getElementById("export-priv").value =
-                data.private_key || "Protected";
-              document.getElementById("modal-export").classList.add("visible");
-              break;
-
-            case "identity_info":
-              this.state.myself = data;
-              document.getElementById("my-peer-id").textContent = data.peer_id;
-              // Generate colorful avatar for ME
-              const meAvatar = document.querySelector("#sidebar .avatar");
-              if (meAvatar) {
-                meAvatar.style.background = SCM.utils.stringToColor(
-                  data.peer_id,
-                );
-                meAvatar.textContent = "ME";
-              }
-              break;
+          let publicKey = "";
+          try {
+            publicKey = this.state.core.extractPublicKeyFromPeerId(peerId);
+          } catch (_error) {
+            publicKey = "00".repeat(32);
           }
+
+          const now = Math.floor(Date.now() / 1000);
+          const contact = {
+            peer_id: peerId,
+            nickname: null,
+            local_nickname: `Peer ${peerId.slice(0, 8)}`,
+            public_key: publicKey,
+            added_at: now,
+            last_seen: now,
+            notes: null,
+            status: "online",
+          };
+
+          this.state.contactManager.add(contact);
+          this.state.contacts[peerId] = contact;
+          this.ui.renderContacts();
+        },
+
+        addHistoryRecord(record) {
+          if (!this.state.historyManager) return;
+          try {
+            this.state.historyManager.add(record);
+          } catch (error) {
+            console.warn("History write failed", error);
+          }
+        },
+
+        storeMessage(peerId, msg) {
+          if (!this.state.messages[peerId]) this.state.messages[peerId] = [];
+          if (this.state.messages[peerId].find((existing) => existing.id === msg.id)) {
+            return;
+          }
+
+          this.state.messages[peerId].push(msg);
+          this.state.messages[peerId].sort((a, b) => a.timestamp - b.timestamp);
+
+          if (this.state.activeChat === peerId) {
+            this.ui.renderMessages(peerId);
+          }
+          this.ui.updateContactPreview(peerId, msg);
+        },
+
+        handleFatal(error) {
+          console.error(error);
+          document.getElementById("runtime-error-copy").textContent = `${error}`;
+          document.getElementById("connection-error").classList.add("visible");
+          this.ui.updateNetworkStatus("offline", "Runtime error");
         },
 
         actions: {
-          // Wrapper to match Guide's command structure
-          sendCommand(cmd, params = {}) {
-            if (SCM.state.connected) {
-              const payload = JSON.stringify({ cmd, ...params });
-              console.log("bw OUT:", payload);
-              SCM.state.socket.send(payload);
-            } else {
-              console.warn("Offline: Queuing command", cmd);
-              if (cmd === "send") {
-                SCM.state.messageQueue.push(params);
-              }
+          async initializeIdentity() {
+            try {
+              SCM.state.core.initializeIdentity();
+              const nickname = document
+                .getElementById("setting-nickname")
+                .value.trim();
+              if (nickname) SCM.state.core.setNickname(nickname);
+              await SCM.refreshIdentityRole();
+              await SCM.restartSwarm();
+              await SCM.actions.refreshContacts();
+              SCM.ui.closeModals();
+            } catch (error) {
+              alert(`Identity initialization failed: ${error}`);
             }
           },
 
-          sendMessage() {
-            const input = document.getElementById("message-input");
-            const text = input.value.trim();
-            const peerId = SCM.state.activeChat;
-
-            if (!text || !peerId) return;
-
-            const msgId = `msg-${Date.now()}`;
-
-            // 1. Send Command
-            this.sendCommand("send", {
-              recipient: peerId,
-              message: text,
-              id: msgId,
-            });
-
-            // 2. Optimistic UI Update
-            SCM.storeMessage(peerId, {
-              id: msgId,
-              direction: "sent",
-              content: text,
-              timestamp: Date.now(),
-              status: SCM.state.connected ? "sent" : "queued",
-            });
-
-            input.value = "";
-          },
-
-          saveSettings() {
-            const port = document.getElementById("setting-port").value;
-
-            this.sendCommand("config_set", { key: "listen_port", value: port });
-
-            SCM.ui.closeModals();
-            alert("Settings saved!");
-          },
-
-          factoryReset() {
-            if (
-              confirm(
-                "DANGER: This will delete ALL data (Identity, Contacts, History) and stop the app.\n\nYou must manually restart the app after this.",
-              )
-            ) {
-              this.sendCommand("factory_reset");
-              setTimeout(() => window.location.reload(), 1000);
-            }
-          },
-
-          addContact() {
-            const name = document.getElementById("add-name").value;
-            const peerId = document.getElementById("add-peer-id").value;
-
-            if (name && peerId) {
-              this.sendCommand("contact_add", {
-                peer_id: peerId,
-                name: name,
-                public_key: "", // Would handle key input in real app
-              });
-
-              // Optimistic Add
-              SCM.state.contacts[peerId] = {
-                peer_id: peerId,
-                nickname: name,
-                nickname: name,
-                status: "offline", // Until confirmed
-                last_seen: Date.now() / 1000,
+          async refreshContacts() {
+            const list = Array.from(SCM.state.contactManager.list());
+            SCM.state.contacts = {};
+            for (const contact of list) {
+              const normalized = {
+                ...contact,
+                nickname:
+                  contact.local_nickname ||
+                  contact.nickname ||
+                  `Peer ${contact.peer_id.slice(0, 8)}`,
+                status: "offline",
               };
-              SCM.state.messages[peerId] = [];
+              SCM.state.contacts[contact.peer_id] = normalized;
+            }
+            SCM.ui.renderContacts();
+          },
 
+          async addContact() {
+            if (SCM.state.role !== "full") {
+              alert("Relay-only mode: initialize identity to add contacts.");
+              return;
+            }
+
+            const name = document.getElementById("add-name").value.trim();
+            const peerId = document.getElementById("add-peer-id").value.trim();
+            if (!peerId) return;
+
+            try {
+              const publicKey = SCM.state.core.extractPublicKeyFromPeerId(peerId);
+              const now = Math.floor(Date.now() / 1000);
+              const contact = {
+                peer_id: peerId,
+                nickname: null,
+                local_nickname: name || null,
+                public_key: publicKey,
+                added_at: now,
+                last_seen: now,
+                notes: null,
+                status: "offline",
+              };
+
+              SCM.state.contactManager.add(contact);
+              SCM.state.contacts[peerId] = {
+                ...contact,
+                nickname: name || `Peer ${peerId.slice(0, 8)}`,
+              };
+              SCM.state.messages[peerId] = SCM.state.messages[peerId] || [];
               SCM.ui.renderContacts();
               SCM.ui.closeModals();
+            } catch (error) {
+              alert(`Failed to add contact: ${error}`);
             }
           },
 
-          exportIdentity() {
-            this.sendCommand("identity_export");
-          },
-
-          removeContact(peerId) {
-            if (confirm("Are you sure you want to remove this contact?")) {
-              this.sendCommand("contact_remove", { contact: peerId });
+          async removeContact(peerId) {
+            if (!confirm("Are you sure you want to remove this contact?")) return;
+            try {
+              SCM.state.contactManager.remove(peerId);
               delete SCM.state.contacts[peerId];
+              delete SCM.state.messages[peerId];
 
               if (SCM.state.activeChat === peerId) {
                 SCM.state.activeChat = null;
-                document
-                  .getElementById("chat-interface")
-                  .classList.add("hidden");
-                document
-                  .getElementById("empty-state")
-                  .classList.remove("hidden");
+                document.getElementById("chat-interface").classList.add("hidden");
+                document.getElementById("empty-state").classList.remove("hidden");
               }
 
               SCM.ui.renderContacts();
+            } catch (error) {
+              alert(`Failed to remove contact: ${error}`);
             }
           },
 
-          selectContact(peerId) {
+          async selectContact(peerId) {
+            if (SCM.state.role !== "full") return;
             SCM.state.activeChat = peerId;
 
-            // Request history from backend
-            this.sendCommand("history_list", { peer_id: peerId, limit: 50 });
-
-            // UI Updates
             const contact = SCM.state.contacts[peerId];
+            const records = Array.from(
+              SCM.state.historyManager.conversation(peerId, 200),
+            ).sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
+
+            SCM.state.messages[peerId] = records.map((record) => ({
+              id: record.id,
+              direction: SCM.utils.historyDirectionToUi(record.direction),
+              content: record.content,
+              timestamp: Number(record.timestamp) * 1000,
+              status: record.delivered ? "delivered" : "sent",
+            }));
+
             document.getElementById("empty-state").classList.add("hidden");
             const chatInterface = document.getElementById("chat-interface");
             chatInterface.classList.remove("hidden");
             chatInterface.style.display = "flex";
 
-            // Update Header
             document.getElementById("current-chat-name").textContent =
-              contact.nickname || peerId.substring(0, 8);
+              contact.nickname || peerId.slice(0, 8);
             document.getElementById("current-chat-id").textContent =
-              "ID: " + peerId.substring(0, 12) + "...";
+              "ID: " + peerId.slice(0, 12) + "...";
 
             const avatar = document.getElementById("current-chat-avatar");
-            avatar.textContent = (contact.nickname || "U")[0].toUpperCase();
+            avatar.textContent = (contact.nickname || "P")[0].toUpperCase();
             avatar.style.background = SCM.utils.stringToColor(peerId);
 
             SCM.ui.renderMessages(peerId);
 
-            // Update Active Class
             document
               .querySelectorAll(".contact-item")
               .forEach((el) => el.classList.remove("active"));
@@ -1528,48 +1545,148 @@ Loading...</textarea
 
             document.getElementById("message-input").focus();
           },
-        },
 
-        storeMessage(peerId, msg) {
-          if (!this.state.messages[peerId]) this.state.messages[peerId] = [];
-
-          // Avoid duplicates
-          if (this.state.messages[peerId].find((m) => m.id === msg.id)) return;
-
-          this.state.messages[peerId].push(msg);
-
-          // Update UI if active
-          if (this.state.activeChat === peerId) {
-            this.ui.appendMessage(msg);
-            this.ui.scrollToBottom();
-          }
-
-          // Update Sidebar
-          this.ui.updateContactPreview(peerId, msg);
-        },
-
-        updateMessageStatus(msgId, status) {
-          // Find message across all chats (inefficient but fine for UI demo)
-          for (const peerId in this.state.messages) {
-            const msg = this.state.messages[peerId].find((m) => m.id === msgId);
-            if (msg) {
-              msg.status = status;
-              // Re-render if active
-              if (this.state.activeChat === peerId)
-                this.ui.renderMessages(peerId);
-              break;
+          async sendMessage() {
+            if (SCM.state.role !== "full") {
+              alert("Relay-only mode: initialize identity to send messages.");
+              return;
             }
-          }
+            if (!SCM.state.relayEnabled) {
+              alert("Mesh participation is disabled in settings.");
+              return;
+            }
+
+            const input = document.getElementById("message-input");
+            const text = input.value.trim();
+            const peerId = SCM.state.activeChat;
+            if (!text || !peerId) return;
+
+            const contact = SCM.state.contacts[peerId];
+            if (!contact?.public_key) {
+              alert("Contact is missing public key metadata.");
+              return;
+            }
+
+            try {
+              const prepared = SCM.state.core.prepareMessageWithId(
+                contact.public_key,
+                text,
+              );
+              await SCM.state.core.sendPreparedEnvelope(
+                peerId,
+                prepared.envelopeData,
+              );
+
+              const nowMs = Date.now();
+              const message = {
+                id: prepared.messageId,
+                direction: "sent",
+                content: text,
+                timestamp: nowMs,
+                status: "sent",
+              };
+
+              SCM.storeMessage(peerId, message);
+              SCM.addHistoryRecord({
+                id: prepared.messageId,
+                direction: "Sent",
+                peer_id: peerId,
+                content: text,
+                timestamp: Math.floor(nowMs / 1000),
+                delivered: false,
+              });
+              input.value = "";
+            } catch (error) {
+              alert(`Send failed: ${error}`);
+            }
+          },
+
+          async saveSettings() {
+            try {
+              const bootstrap = SCM.parseBootstrapTextarea();
+              const relayEnabled = document.getElementById(
+                "setting-relay-enabled",
+              ).checked;
+
+              SCM.state.bootstrapAddrs =
+                bootstrap.length > 0 ? bootstrap : [...DEFAULT_BOOTSTRAP_NODES];
+              SCM.persistBootstrapNodes(SCM.state.bootstrapAddrs);
+
+              const settings = SCM.state.core.getSettings();
+              settings.relayEnabled = relayEnabled;
+              SCM.state.core.updateSettings(settings);
+              SCM.state.relayEnabled = relayEnabled;
+              await SCM.restartSwarm();
+
+              SCM.ui.updateRolePill();
+              SCM.ui.closeModals();
+              await SCM.refreshDashboard();
+              alert("Settings saved.");
+            } catch (error) {
+              alert(`Failed to save settings: ${error}`);
+            }
+          },
+
+          exportIdentity() {
+            try {
+              if (!SCM.state.identity?.initialized) {
+                alert("No identity initialized yet.");
+                return;
+              }
+              const backup = SCM.state.core.exportIdentityBackup();
+              document.getElementById("export-path").value =
+                "Desktop storage: scm_desktop";
+              document.getElementById("export-pub").value =
+                SCM.state.identity.publicKeyHex || "N/A";
+              document.getElementById("export-priv").value = backup;
+              document.getElementById("modal-export").classList.add("visible");
+            } catch (error) {
+              alert(`Identity export failed: ${error}`);
+            }
+          },
         },
 
         ui: {
+          applyRoleGating(fullRole) {
+            document
+              .getElementById("add-contact-row")
+              .classList.toggle("hidden", !fullRole);
+            document
+              .getElementById("contact-search")
+              .parentElement.classList.toggle("hidden", !fullRole);
+            document
+              .getElementById("contact-list")
+              .classList.toggle("hidden", !fullRole);
+            document
+              .getElementById("relay-onboarding-cta")
+              .classList.toggle("hidden", fullRole);
+
+            const input = document.getElementById("message-input");
+            input.disabled = !fullRole || !SCM.state.relayEnabled;
+            document.getElementById("send-btn").disabled = input.disabled;
+
+            const emptyCopy = document.getElementById("empty-state-copy");
+            if (fullRole) {
+              emptyCopy.innerHTML =
+                "Connect freely. No servers. No masters.<br />Select a contact to start messaging or add a new peer to the mesh.";
+            } else {
+              emptyCopy.innerHTML =
+                "Relay-only mode active.<br />This node participates in the mesh without a local identity.";
+              document.getElementById("chat-interface").classList.add("hidden");
+              document.getElementById("empty-state").classList.remove("hidden");
+              SCM.state.activeChat = null;
+            }
+          },
+
           renderContacts() {
             const list = document.getElementById("contact-list");
             list.innerHTML = "";
 
             Object.values(SCM.state.contacts).forEach((contact) => {
               const el = document.createElement("div");
-              el.className = `contact-item ${SCM.state.activeChat === contact.peer_id ? "active" : ""}`;
+              el.className = `contact-item ${
+                SCM.state.activeChat === contact.peer_id ? "active" : ""
+              }`;
               el.id = `contact-${contact.peer_id}`;
               el.onclick = () => SCM.actions.selectContact(contact.peer_id);
 
@@ -1578,21 +1695,21 @@ Loading...</textarea
               const initial = (contact.nickname || "?")[0].toUpperCase();
 
               el.innerHTML = `
-                            <div class="avatar" style="background: ${SCM.utils.stringToColor(contact.peer_id)}">
-                                ${initial}
-                                <div class="status-dot status-${contact.status || "offline"}"></div>
-                            </div>
-                            <div class="contact-info">
-                                <div class="contact-name">${contact.nickname}</div>
-                                <div class="last-msg">${lastMsgText}</div>
-                            </div>
-                            <div class="contact-meta">
-                                <div>${SCM.utils.formatTime(contact.last_seen)}</div>
-                                <div class="contact-actions">
-                                    <button class="btn-icon-sm" onclick="event.stopPropagation(); SCM.actions.removeContact('${contact.peer_id}')" title="Remove Contact">×</button>
-                                </div>
-                            </div>
-                        `;
+                <div class="avatar" style="background: ${SCM.utils.stringToColor(contact.peer_id)}">
+                  ${initial}
+                  <div class="status-dot status-${contact.status || "offline"}"></div>
+                </div>
+                <div class="contact-info">
+                  <div class="contact-name">${SCM.utils.escapeHtml(contact.nickname || "Unknown")}</div>
+                  <div class="last-msg">${SCM.utils.escapeHtml(lastMsgText)}</div>
+                </div>
+                <div class="contact-meta">
+                  <div>${SCM.utils.formatTime(contact.last_seen || contact.added_at)}</div>
+                  <div class="contact-actions">
+                    <button class="btn-icon-sm" onclick="event.stopPropagation(); SCM.actions.removeContact('${contact.peer_id}')" title="Remove Contact">×</button>
+                  </div>
+                </div>
+              `;
               list.appendChild(el);
             });
           },
@@ -1612,7 +1729,6 @@ Loading...</textarea
             const div = document.createElement("div");
             div.className = `message-group ${isMine ? "mine" : "theirs"}`;
 
-            // Status indicator
             let statusIcon = "";
             if (isMine) {
               if (msg.status === "queued") statusIcon = "◷";
@@ -1622,14 +1738,14 @@ Loading...</textarea
             }
 
             div.innerHTML = `
-                        <div class="message-bubble" title="ID: ${msg.id}">
-                            ${msg.content}
-                        </div>
-                        <div class="message-meta">
-                            ${new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                            <span>${statusIcon}</span>
-                        </div>
-                    `;
+              <div class="message-bubble" title="ID: ${SCM.utils.escapeHtml(msg.id)}">
+                ${SCM.utils.escapeHtml(msg.content)}
+              </div>
+              <div class="message-meta">
+                ${new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                <span>${statusIcon}</span>
+              </div>
+            `;
 
             container.appendChild(div);
             if (scroll) this.scrollToBottom();
@@ -1648,46 +1764,49 @@ Loading...</textarea
             }
           },
 
-          updateNetworkStatus(status) {
+          updateNetworkStatus(mode, pathState = "") {
             const dot = document.getElementById("net-dot");
             const text = document.getElementById("net-text");
             const pill = document.getElementById("network-status-pill");
-
-            // Reset
             dot.className = "status-dot";
 
-            if (status === "online") {
-              text.textContent = "Network Online";
-              dot.classList.add("status-online");
-              dot.classList.add("pulse");
+            if (mode === "online") {
+              text.textContent = pathState || "Direct Preferred";
+              dot.classList.add("status-online", "pulse");
               pill.style.borderColor = "var(--success)";
-            } else if (status === "mesh") {
-              text.textContent = "Local Mesh Only";
+            } else if (mode === "mesh") {
+              text.textContent = pathState || "Mesh Connected";
               dot.classList.add("status-mesh");
               pill.style.borderColor = "var(--primary)";
             } else {
-              text.textContent = "Offline";
+              text.textContent = pathState || "Offline";
               dot.classList.add("status-offline");
               pill.style.borderColor = "var(--danger)";
             }
           },
 
+          updateRolePill() {
+            const rolePill = document.getElementById("role-pill");
+            if (SCM.state.role === "relay-only") {
+              rolePill.textContent = "🛰 Relay-Only Mode";
+              return;
+            }
+            rolePill.textContent = SCM.state.relayEnabled
+              ? "⚡ Full Node (Relay ON)"
+              : "⛔ Mesh Participation Disabled";
+          },
+
           openAddContact() {
-            document
-              .getElementById("modal-add-contact")
-              .classList.add("visible");
+            if (SCM.state.role !== "full") {
+              alert("Initialize identity to manage contacts.");
+              return;
+            }
+            document.getElementById("modal-add-contact").classList.add("visible");
             document.getElementById("add-name").focus();
           },
 
           openSettings() {
             document.getElementById("modal-settings").classList.add("visible");
-            // Populate Identity fields
-            if (SCM.state.myself) {
-              const pid = document.getElementById("setting-peer-id");
-              const pub = document.getElementById("setting-pub-key");
-              if (pid) pid.value = SCM.state.myself.peer_id || "Loading...";
-              if (pub) pub.value = SCM.state.myself.public_key || "Loading...";
-            }
           },
 
           closeModals() {
@@ -1697,86 +1816,84 @@ Loading...</textarea
           },
 
           switchTab(tabName) {
-            // Update Buttons
             document
               .querySelectorAll(".tab-btn")
-              .forEach((b) => b.classList.remove("active"));
-            const btn = document.getElementById(`tab-btn-${tabName}`);
-            if (btn) btn.classList.add("active");
+              .forEach((button) => button.classList.remove("active"));
+            document
+              .getElementById(`tab-btn-${tabName}`)
+              .classList.add("active");
 
-            // Update Content
             document
               .querySelectorAll(".tab-content")
-              .forEach((c) => c.classList.add("hidden"));
-            const content = document.getElementById(`tab-content-${tabName}`);
-            if (content) content.classList.remove("hidden");
+              .forEach((content) => content.classList.add("hidden"));
+            document
+              .getElementById(`tab-content-${tabName}`)
+              .classList.remove("hidden");
           },
 
           filterContacts(query) {
             const term = query.toLowerCase();
             document.querySelectorAll(".contact-item").forEach((el) => {
-              const name = el
-                .querySelector(".contact-name")
-                .textContent.toLowerCase();
+              const name = el.querySelector(".contact-name").textContent.toLowerCase();
               el.style.display = name.includes(term) ? "flex" : "none";
             });
           },
         },
 
         utils: {
-          // Generate a consistent color from a string
+          networkModeFromPath(pathState) {
+            if (pathState === "DirectPreferred") return "online";
+            if (pathState === "RelayFallback" || pathState === "RelayOnly")
+              return "mesh";
+            if (pathState === "Bootstrapping") return "mesh";
+            return "offline";
+          },
+
+          historyDirectionToUi(direction) {
+            if (direction === "Sent") return "sent";
+            if (direction === "Received") return "received";
+            if (typeof direction === "string") {
+              return direction.toLowerCase() === "sent" ? "sent" : "received";
+            }
+            return "received";
+          },
+
           stringToColor(str) {
             let hash = 0;
-            for (let i = 0; i < str.length; i++) {
+            for (let i = 0; i < str.length; i += 1) {
               hash = str.charCodeAt(i) + ((hash << 5) - hash);
             }
-            const c = (hash & 0x00ffffff).toString(16).toUpperCase();
-            return "#" + "00000".substring(0, 6 - c.length) + c;
+            const color = (hash & 0x00ffffff).toString(16).toUpperCase();
+            return "#" + "00000".substring(0, 6 - color.length) + color;
           },
 
           formatTime(seconds) {
             if (!seconds) return "";
-            const date = new Date(seconds * 1000);
+            const date = new Date(Number(seconds) * 1000);
             const now = new Date();
-            // If today, show time
             if (date.toDateString() === now.toDateString()) {
               return date.toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
               });
             }
-            // If this year, show Month Day
             return date.toLocaleDateString([], {
               month: "short",
               day: "numeric",
             });
           },
+
+          escapeHtml(text) {
+            const tmp = document.createElement("div");
+            tmp.textContent = text;
+            return tmp.innerHTML;
+          },
         },
       };
 
-      // Initialize App
       window.app = SCM;
-
-      // Add settings button handler since we added the modal
-      // We need to inject the settings button into the UI
       window.addEventListener("DOMContentLoaded", () => {
-        // Add Settings Button to Sidebar Header
-        const header = document.querySelector(".sidebar-header .app-title");
-        if (header && !document.getElementById("settings-trigger")) {
-          const btn = document.createElement("button");
-          btn.id = "settings-trigger";
-          btn.innerHTML = "⚙";
-          btn.style.background = "none";
-          btn.style.border = "none";
-          btn.style.color = "var(--text-muted)";
-          btn.style.fontSize = "1.2rem";
-          btn.style.cursor = "pointer";
-          btn.style.marginLeft = "auto";
-          btn.onclick = () => SCM.ui.openSettings();
-          header.appendChild(btn);
-        }
-
-        SCM.init();
+        SCM.init().catch((error) => SCM.handleFatal(error));
       });
     </script>
   </body>

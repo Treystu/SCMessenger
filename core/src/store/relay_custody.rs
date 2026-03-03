@@ -1142,9 +1142,8 @@ mod tests {
             )
             .unwrap();
 
-        let (purged_records, purged_bytes) = store
-            .purge_oldest_by_policy(1, "test_pressure")
-            .unwrap();
+        let (purged_records, purged_bytes) =
+            store.purge_oldest_by_policy(1, "test_pressure").unwrap();
         assert_eq!(purged_records, 1);
         assert!(purged_bytes > 0);
 

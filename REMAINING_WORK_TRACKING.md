@@ -281,7 +281,7 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
 
 - Current: TODO/FIXME markers are distributed across code/docs; external testing updates can drift from tracked backlog.
 - Target: recurring TODO/FIXME audit that syncs canonical backlog items with current implementation evidence.
-- Evidence source: `docs/TRIPLE_CHECK_REPORT.md` risk scan + direct file review.
+- Evidence source: `docs/historical/TRIPLE_CHECK_REPORT.md` risk scan + direct file review.
 - Companion reference: `docs/STUBS_AND_UNIMPLEMENTED.md` — comprehensive stub/placeholder inventory (43 items across 4 severity tiers).
 - Outcome: Full sweep completed. Core Rust, CLI, WASM, and Android codebases are clean of actionable TODO/FIXME markers. iOS TODOs are exclusively auto-generated UniFFI scaffolding comments (not actionable).
 
@@ -318,7 +318,7 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
 
 ## Priority 2: Documentation Completion and Governance
 
-1. Full-file documentation pass completion using `docs/DOC_PASS_TRACKER.md` (completed)
+1. Full-file documentation pass completion using `docs/historical/DOC_PASS_TRACKER.md` (completed)
    - Current: all tracked files are reviewed (`pending` = 0, checked = 356).
    - Ongoing target: keep this at 0 pending via delta checks on new/changed files.
 
@@ -381,3 +381,20 @@ Do not start the next v0.2.0 phase without checking the corresponding entry gate
    - Execution decomposition: `WS13.1` through `WS13.6`.
    - Canonical plan: `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md`.
    - Kickoff prompt: `docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md` section `WS13 Kickoff (v0.2.1) - Tight Pairing start`.
+
+## Edge-Case Hardening Backlog (Global/Extreme Conditions)
+
+Canonical scenario matrix and rationale:
+
+- `docs/EDGE_CASE_READINESS_MATRIX.md`
+
+Priority items to track into remaining v0.2.x execution:
+
+1. `EC-01` (WS11/WS12): move relay custody default persistence from temp-dir to durable app path (`R-WS3-02`).
+2. `EC-02` (WS11/WS12): ensure platform storage snapshots always exist so pressure policy cannot no-op (`R-WS5-01`).
+3. `EC-03` (WS11/WS12): replace volatile local transport route hints with stable authenticated alias mapping (`R-WS6-01`, `R-WS7-01`).
+4. `EC-04` (WS11/WS12): add convergence marker anti-abuse validation and trust hardening (`R-WS4-02`).
+5. `EC-05` (WS11/WS12): run custody reconnect integration tests in socket-enabled CI/host lane (`R-WS3-01`).
+6. `EC-06` (WS11/WS12): normalize sender-facing delivery states for intermittent/harsh networks (`R-WS2-01`).
+7. `EC-07` to `EC-09` (v0.2.1 WS13): execute tight-pair single-active-device lifecycle.
+8. `EC-10` to `EC-16` (post-v0.2.1): captive portal adaptation, high-latency profile tuning, censorship-resilience strategy, wake/delegate architecture, sparse encounter optimization, and clock-skew normalization.

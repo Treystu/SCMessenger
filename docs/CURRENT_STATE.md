@@ -162,7 +162,11 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 Use this file plus:
 
 - `README.md` (repo entrypoint)
+- `docs/DOCUMENT_STATUS_INDEX.md` (documentation lifecycle map)
 - `docs/TESTING_GUIDE.md` (test commands and expected outcomes)
 - `REMAINING_WORK_TRACKING.md` (active gap backlog)
+- `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md` (active milestone scope/order)
+- `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md` (active residual risk posture)
+- `docs/EDGE_CASE_READINESS_MATRIX.md` (extreme environment readiness/hardening)
 
-Treat older status and audit report docs as historical snapshots unless they are explicitly linked from the three files above as current.
+Treat older status and audit report docs as historical snapshots unless they are explicitly linked from the files above as current.

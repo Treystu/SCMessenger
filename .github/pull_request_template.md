@@ -23,6 +23,7 @@ Why is this change required? What problem does it solve?
 ## Checklist
 - [ ] My code follows the project's code style and conventions
 - [ ] I have updated documentation as needed
+- [ ] `./scripts/docs_sync_check.sh` passes
 - [ ] I have added tests that prove my fix is effective or that my feature works
 - [ ] All new and existing tests passed
 - [ ] My changes generate no new warnings

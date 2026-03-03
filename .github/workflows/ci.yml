@@ -55,6 +55,28 @@ jobs:
             exit 1
           fi
 
+  check-doc-sync:
+    name: Documentation Sync Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run documentation sync checks
+        run: |
+          chmod +x ./scripts/docs_sync_check.sh
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${{ github.base_ref }}" --depth=1
+            BASE_REF="origin/${{ github.base_ref }}"
+          else
+            if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+              BASE_REF="$(git rev-parse HEAD~1)"
+            else
+              BASE_REF="HEAD"
+            fi
+          fi
+          DOC_SYNC_REQUIRE_DOC_UPDATES=1 DOC_SYNC_BASE_REF="$BASE_REF" ./scripts/docs_sync_check.sh
+
   check-core:
     name: Build & Test Core (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
