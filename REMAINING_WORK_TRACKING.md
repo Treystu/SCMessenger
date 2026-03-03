@@ -130,7 +130,7 @@ Still open after this pass:
 1. [ ] Capture synchronized physical Android+iOS message sessions that demonstrate older pending entries draining immediately once peer connectivity is active.
 2. [ ] Re-run convergence verifiers on new artifacts and close residual runtime transport risks (`R-WS12-04/05/06`) when evidence confirms deterministic behavior.
 
-## WS12.24 Sender-State Convergence + Conversation Long-Press Delete Intake (2026-03-03 HST)
+## WS12.24 Sender-State Convergence + Conversation Swipe-Delete Parity (2026-03-03 HST)
 
 Planned in this pass:
 
@@ -141,12 +141,11 @@ Planned in this pass:
    - Acceptance: iOS sender state transitions to `delivered` in-session and does not regress back to `stored` for that message.
 3. [ ] Add deterministic regression gate for recipient-ingest vs sender-state mismatch.
    - Extend receipt convergence verification to fail when recipient ingest is proven but sender remains non-delivered.
-4. [ ] Add conversation-list long-press contextual menu for deletion parity (Delete-only in v1).
-   - Android: long-press conversation row opens menu with `Delete`.
-   - iOS: long-press conversation row opens menu with `Delete` (keep confirmation dialog).
-5. [ ] Validate long-press delete flow with platform evidence and tests.
-   - Android: verify long-press -> menu -> confirm -> `clearConversation(peerId)` path and list refresh behavior.
-   - iOS: verify long-press -> menu -> confirm -> `clearConversation(peerId)` path and list refresh behavior.
+4. [x] Align conversation deletion UX to swipe parity (iOS + Android).
+   - Outcome (2026-03-03 HST): Android conversation rows now support end-to-start swipe-to-delete with confirmation dialog, matching existing iOS swipe-delete behavior.
+5. [ ] Validate swipe delete flow with platform evidence and tests.
+   - Android: verify swipe -> confirm -> `clearConversation(peerId)` path and list refresh behavior.
+   - iOS: verify swipe -> confirm -> `clearConversation(peerId)` path and list refresh behavior.
 
 ## Priority 0: Tri-Platform Semantics and Reliability
 
@@ -330,7 +329,7 @@ Planned in this pass:
 - Requirement: Ensure complete parity across all instances (Android, iOS, Web) for deleting a contact and deleting a message thread.
 - Target: Allow users to securely remove contacts and clear entire message threads, ensuring changes are fully persisted and reflected in the UI.
 - Scope: Bind deletion operations in `ContactsManager` and `HistoryManager` to UI interactions on all platforms, including cleaning up associated metadata.
-- Outcome: Contact/thread deletion APIs are wired in Android+iOS repository layers (`removeContact`/`deleteContacts` + `clearConversation`) and backed by `HistoryManager` core functions. Conversation-list long-press UX parity follow-up is tracked in WS12.24.
+- Outcome: Contact/thread deletion APIs are wired in Android+iOS repository layers (`removeContact`/`deleteContacts` + `clearConversation`) and backed by `HistoryManager` core functions. Conversation-list swipe-delete parity is tracked and implemented in WS12.24.
 
 19. [x] Headless/Relay logic Refinement
     - [x] Update `IronCoreBehaviour::new` to accept `headless` boolean flag and incorporate it into the `agent_version` string.

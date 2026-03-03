@@ -3,12 +3,27 @@
 # Nodes: GCP (headless relay), OSX (headless relay), Android (Pixel 6a / cellular),
 #        iOS Device (iPhone 15 Pro Max), iOS Simulator
 #
-# Android is expected to run on WIFI to validate NAT traversal.
-# iOS Device can be on CELLULAR.
-# BLE discovery between Android ↔ iOS Device are logged at V level.
+# Nodes: GCP (headless relay), OSX (headless relay), Android (auto-detect),
+#        iOS Device (auto-detect), iOS Simulator (auto-detect)
 #
-# Usage: ./run5.sh
+# Usage: ./run5.sh [--time=5] [--update]
 set -euo pipefail
+
+DURATION_MIN=5
+UPDATE_APPS=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -t=*|--time=*)
+      DURATION_MIN="${1#*=}"
+      ;;
+    -u|--update)
+      UPDATE_APPS=1
+      ;;
+    *)
+      ;;
+  esac
+  shift
+done
 
 LOGDIR="logs/5mesh"
 mkdir -p "$LOGDIR"
@@ -21,8 +36,7 @@ TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 SYNC_MARKER="=== TEST_START_MARKER: $(date -u +'%Y-%m-%dT%H:%M:%SZ') ==="
 
 if [ -z "${IOS_DEVICE_UDID:-}" ]; then
-  echo "❌ No connected iOS physical device found (devicectl)."
-  exit 1
+  echo "⚠️  No connected iOS physical device found (devicectl) — skipping."
 fi
 
 if [ -z "${IOS_SIM_UDID:-}" ]; then
@@ -37,14 +51,17 @@ if [ -z "${IOS_SIM_UDID:-}" ]; then
 fi
 
 if ! adb get-state >/dev/null 2>&1; then
-  echo "❌ Android device not attached/authorized for adb."
-  exit 1
+  echo "⚠️  Android device not attached/authorized for adb — skipping."
+  ANDROID_AVAILABLE=0
+else
+  ANDROID_AVAILABLE=1
 fi
 
 echo "========================================"
-echo "  SCMessenger 5-Node Mesh Test — $TIMESTAMP"
-echo "  Android: WIFI (NAT traversal test)"
-echo "  iOS Device: CELLULAR (${IOS_DEVICE_UDID})"
+echo "  SCMessenger Adaptable Mesh Test — $TIMESTAMP"
+echo "  Duration: ${DURATION_MIN}m | Auto-Update: $UPDATE_APPS"
+echo "  Android: $( [ "$ANDROID_AVAILABLE" = "1" ] && echo "Ready" || echo "none" )"
+echo "  iOS Device: ${IOS_DEVICE_UDID:-none}"
 echo "  iOS Sim: ${IOS_SIM_UDID:-none}"
 echo "  Logs → $LOGDIR/"
 echo "========================================"
@@ -72,51 +89,58 @@ RUST_LOG=info,libp2p_autonat=debug,libp2p_dcutr=debug,libp2p_relay=debug,scmesse
 OSX_PID=$!
 echo "   OSX PID=$OSX_PID → $LOGDIR/osx.log"
 
-# ── 3. Android (Pixel 6a) ─────────────────────────────────────────────────────
-echo "3. Launching SCMessenger on Android (ensure it is on WIFI for adb access)..."
-# Bring to foreground without force-stop (preserves mesh state)
-adb shell am start -n com.scmessenger.android/.ui.MainActivity > /dev/null 2>&1 || true
-echo "$SYNC_MARKER" > "$LOGDIR/android.log"
-sleep 1
-# Capture all SCMessenger-relevant tags at Verbose + BLE + Rust bridge + Rust core
-adb logcat -v threadtime \
-  MeshRepository:V \
-  SwarmBridge:V \
-  IronCore:V \
-  CoreDelegateImpl:V \
-  MainViewModel:V \
-  DashboardViewModel:V \
-  BleScanner:V \
-  BleGattClient:V \
-  BleGattServer:V \
-  BleAdvertiser:V \
-  MeshService:V \
-  ContactsViewModel:V \
-  Rust:V \
-  SCMessengerCore:V \
-  rust_logger:V \
-  "*:S" \
-  >> "$LOGDIR/android.log" 2>&1 &
-ANDROID_PID=$!
-echo "   Android PID=$ANDROID_PID → $LOGDIR/android.log"
-
-# ── 4. iOS Device (iPhone 15 Pro Max) ─────────────────────────────────────────
-echo "4. Installing + launching SCMessenger on iOS Device..."
-# Find freshly built app
-IOS_DEVICE_APP=$(find iOS/SCMessenger/build/Build/Products/Debug-iphoneos \
-                      iOS/SCMessenger/build/Device/Build/Products/Debug-iphoneos \
-                  -name "SCMessenger.app" -not -path "*/dSYM*" 2>/dev/null | head -1 || true)
-
-if [ -n "$IOS_DEVICE_APP" ]; then
-  echo "   Installing $IOS_DEVICE_APP..."
-  xcrun devicectl device install app \
-    --device "$IOS_DEVICE_UDID" \
-    "$IOS_DEVICE_APP" 2>&1 | grep -E "Install|Error|error|Success" || true
+ANDROID_PID=""
+if [ "$ANDROID_AVAILABLE" = "1" ]; then
+  echo "3. Launching SCMessenger on Android..."
+  # Bring to foreground without force-stop (preserves mesh state)
+  adb shell am start -n com.scmessenger.android/.ui.MainActivity > /dev/null 2>&1 || true
+  echo "$SYNC_MARKER" > "$LOGDIR/android.log"
+  sleep 1
+  # Capture all SCMessenger-relevant tags at Verbose + BLE + Rust bridge + Rust core
+  adb logcat -v threadtime \
+    MeshRepository:V \
+    SwarmBridge:V \
+    IronCore:V \
+    CoreDelegateImpl:V \
+    MainViewModel:V \
+    DashboardViewModel:V \
+    BleScanner:V \
+    BleGattClient:V \
+    BleGattServer:V \
+    BleAdvertiser:V \
+    MeshService:V \
+    ContactsViewModel:V \
+    Rust:V \
+    SCMessengerCore:V \
+    rust_logger:V \
+    "*:S" \
+    >> "$LOGDIR/android.log" 2>&1 &
+  ANDROID_PID=$!
+  echo "   Android PID=$ANDROID_PID → $LOGDIR/android.log"
 else
-  echo "   ⚠️  No built device app found — launching existing install (may be stale)"
+  echo "3. ⚠️  Skipping Android launch."
 fi
 
+# ── 4. iOS Device (iPhone 15 Pro Max) ─────────────────────────────────────────
+
 if [ -n "${IOS_DEVICE_UDID:-}" ]; then
+  echo "4. Launching SCMessenger on iOS Device..."
+  if [ "$UPDATE_APPS" = "1" ]; then
+    # Find freshly built app
+    IOS_DEVICE_APP=$(find iOS/SCMessenger/build/Build/Products/Debug-iphoneos \
+                          iOS/SCMessenger/build/Device/Build/Products/Debug-iphoneos \
+                      -name "SCMessenger.app" -not -path "*/dSYM*" 2>/dev/null | head -1 || true)
+
+    if [ -n "$IOS_DEVICE_APP" ]; then
+      echo "   Installing $IOS_DEVICE_APP..."
+      xcrun devicectl device install app \
+        --device "$IOS_DEVICE_UDID" \
+        "$IOS_DEVICE_APP" 2>&1 | grep -E "Install|Error|error|Success" || true
+    else
+      echo "   ⚠️  No built device app found — skipping reinstall."
+    fi
+  fi
+
   echo "$SYNC_MARKER" > "$LOGDIR/ios-device.log"
   # 1. Launch the process and get basic console output
   xcrun devicectl device process launch \
@@ -138,21 +162,23 @@ if [ -n "${IOS_DEVICE_UDID:-}" ]; then
 else
   IOS_DEV_PID=""
   IOS_DEV_STREAM_PID=""
-  echo "   ⚠️  Skipping iOS device launch: no device UDID"
+  echo "4. ⚠️  Skipping iOS device launch."
 fi
 
 # ── 5. iOS Simulator ──────────────────────────────────────────────────────────
-echo "5. Installing + launching SCMessenger on iOS Simulator..."
-IOS_SIM_APP=$(find iOS/SCMessenger/build_sim/Build/Products/Debug-iphonesimulator \
-                   iOS/SCMessenger/build/Build/Products/Debug-iphonesimulator \
-              -name "SCMessenger.app" -not -path "*/dSYM*" 2>/dev/null | head -1 || true)
-
-if [ -n "$IOS_SIM_APP" ]; then
-  echo "   Installing $IOS_SIM_APP..."
-  xcrun simctl install "$IOS_SIM_UDID" "$IOS_SIM_APP" 2>&1 || true
-fi
 
 if [ -n "${IOS_SIM_UDID:-}" ]; then
+  echo "5. Launching SCMessenger on iOS Simulator..."
+  if [ "$UPDATE_APPS" = "1" ]; then
+    IOS_SIM_APP=$(find iOS/SCMessenger/build_sim/Build/Products/Debug-iphonesimulator \
+                       iOS/SCMessenger/build/Build/Products/Debug-iphonesimulator \
+                  -name "SCMessenger.app" -not -path "*/dSYM*" 2>/dev/null | head -1 || true)
+
+    if [ -n "$IOS_SIM_APP" ]; then
+      echo "   Installing $IOS_SIM_APP..."
+      xcrun simctl install "$IOS_SIM_UDID" "$IOS_SIM_APP" 2>&1 || true
+    fi
+  fi
   xcrun simctl launch "$IOS_SIM_UDID" "$BUNDLE_ID" > /dev/null 2>&1 || true
   echo "$SYNC_MARKER" > "$LOGDIR/ios-sim.log"
   # Stream logs: info+ from SCMessenger process; captures NSLog + os_log
@@ -165,18 +191,18 @@ if [ -n "${IOS_SIM_UDID:-}" ]; then
   echo "   iOS Sim PID=$IOS_SIM_PID → $LOGDIR/ios-sim.log"
 else
   IOS_SIM_PID=""
-  echo "   ⚠️  Skipping iOS simulator launch: no simulator UDID"
+  echo "5. ⚠️  Skipping iOS simulator launch."
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "========================================"
-echo "All 5 nodes started."
+echo "Available nodes started. Auto-stopping in ${DURATION_MIN}m."
 echo "  GCP     PID=$GCP_PID        → $LOGDIR/gcp.log"
 echo "  OSX     PID=$OSX_PID        → $LOGDIR/osx.log"
-echo "  Android PID=$ANDROID_PID    → $LOGDIR/android.log"
-echo "  iOS Dev PID=$IOS_DEV_PID    → $LOGDIR/ios-device.log"
-echo "  iOS Sim PID=$IOS_SIM_PID    → $LOGDIR/ios-sim.log"
+[ -n "$ANDROID_PID" ] && echo "  Android PID=$ANDROID_PID    → $LOGDIR/android.log"
+[ -n "$IOS_DEV_PID" ] && echo "  iOS Dev PID=$IOS_DEV_PID    → $LOGDIR/ios-device.log"
+[ -n "$IOS_SIM_PID" ] && echo "  iOS Sim PID=$IOS_SIM_PID    → $LOGDIR/ios-sim.log"
 echo "========================================"
 echo ""
 echo "Monitor in another terminal:"
@@ -236,4 +262,8 @@ TICKER_PID=$!
 # Clean shutdown on Ctrl+C
 trap "echo ''; echo 'Stopping all nodes...'; kill $GCP_PID $OSX_PID $ANDROID_PID $IOS_DEV_PID $IOS_DEV_STREAM_PID $IOS_SIM_PID $TICKER_PID 2>/dev/null; echo 'Done.'; exit 0" INT TERM
 
-wait
+# Wait for requested duration, then exit
+sleep $((DURATION_MIN * 60))
+echo ""
+echo "⏰ Time limit (${DURATION_MIN}m) reached."
+kill -TERM $$

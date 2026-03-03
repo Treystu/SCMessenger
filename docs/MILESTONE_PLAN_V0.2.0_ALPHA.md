@@ -1,6 +1,6 @@
 # SCMessenger v0.2.0 Alpha Milestone Plan
 
-Status: Active (execution complete through WS12.24 sender-state convergence + conversation-delete UX follow-up intake)  
+Status: Active (execution complete through WS12.24 sender-state convergence + conversation swipe-delete parity update)  
 Date: 2026-03-03  
 Scope: Core + Android + iOS + Desktop GUI + Relay topology
 
@@ -85,10 +85,10 @@ Scope: Core + Android + iOS + Desktop GUI + Relay topology
    - `bash ./iOS/verify-test.sh` (pass; 3 warnings, non-fatal)
 5. Milestone blocker remains unchanged: synchronized physical Android+iOS runtime evidence is still required to close `R-WS12-04/05/06`.
 
-## Follow-up Intake Addendum (WS12.24, 2026-03-03 HST)
+## Follow-up Addendum (WS12.24, 2026-03-03 HST)
 
 1. Added explicit sender-state convergence closure gate for iOS -> Android flow: when Android recipient ingest is proven, iOS sender state must converge from `stored`/`forwarding` to `delivered` for the same message ID.
-2. Added conversation-list deletion UX parity follow-up: long-press contextual menu on conversation rows with `Delete` as the initial and only action.
+2. Added and implemented conversation-list deletion UX parity update: Android now uses end-to-start swipe-to-delete with confirmation to match iOS behavior.
 3. This remains in v0.2.0 closeout scope (reliability convergence + UX parity hardening), not a scope expansion into v0.2.1 features.
 
 ---

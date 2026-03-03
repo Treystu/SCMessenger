@@ -139,7 +139,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - Remaining live proof requirement:
   - capture fresh synchronized physical Android+iOS traces and confirm deterministic backlog drain + pending-to-delivered convergence on both directions.
 
-### WS12.24 Follow-up Intake: Sender-State Convergence + Conversation Delete UX (2026-03-03 HST)
+### WS12.24 Follow-up: Sender-State Convergence + Conversation Swipe-Delete Parity (2026-03-03 HST)
 
 - Field-reported issue intake:
   - iOS -> Android sends can still show `stored` on iOS sender even when Android recipient has already received/rendered the message.
@@ -149,8 +149,10 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - validate UI mapping does not regress message state from `delivered` back to `stored`.
 - Planned closure evidence gate:
   - synchronized Android+iOS+relay artifact bundle for at least one affected message ID, proving recipient ingest and sender-side `delivered` convergence in the same session.
-- Feature intake aligned in this pass:
-  - conversation list long-press contextual menu (Delete-only action initially) is now tracked for Android+iOS parity using existing `clearConversation(peerId)` data path + confirmation dialog.
+- Conversation-delete UX parity update in this pass:
+  - Android conversation list now supports end-to-start swipe-to-delete with confirmation dialog, matching iOS swipe-delete behavior and reusing existing `clearConversation(peerId)` data path.
+- Verification in this pass:
+  - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:compileDebugKotlin` - **pass**
 
 ### WS12 Verification Snapshot (2026-03-03)
 
