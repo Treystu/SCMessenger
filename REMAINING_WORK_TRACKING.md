@@ -130,6 +130,24 @@ Still open after this pass:
 1. [ ] Capture synchronized physical Android+iOS message sessions that demonstrate older pending entries draining immediately once peer connectivity is active.
 2. [ ] Re-run convergence verifiers on new artifacts and close residual runtime transport risks (`R-WS12-04/05/06`) when evidence confirms deterministic behavior.
 
+## WS12.24 Sender-State Convergence + Conversation Long-Press Delete Intake (2026-03-03 HST)
+
+Planned in this pass:
+
+1. [ ] Reproduce and isolate iOS-sender false `stored` status when Android recipient has already ingested the message.
+   - Capture synchronized Android+iOS+relay artifacts for one message ID where Android renders the message while iOS sender does not converge to `delivered`.
+2. [ ] Close iOS -> Android sender-state convergence gap end-to-end.
+   - Validate Android receipt/ack emission, iOS receipt ingest, and message-ID correlation in iOS history-state updates.
+   - Acceptance: iOS sender state transitions to `delivered` in-session and does not regress back to `stored` for that message.
+3. [ ] Add deterministic regression gate for recipient-ingest vs sender-state mismatch.
+   - Extend receipt convergence verification to fail when recipient ingest is proven but sender remains non-delivered.
+4. [ ] Add conversation-list long-press contextual menu for deletion parity (Delete-only in v1).
+   - Android: long-press conversation row opens menu with `Delete`.
+   - iOS: long-press conversation row opens menu with `Delete` (keep confirmation dialog).
+5. [ ] Validate long-press delete flow with platform evidence and tests.
+   - Android: verify long-press -> menu -> confirm -> `clearConversation(peerId)` path and list refresh behavior.
+   - iOS: verify long-press -> menu -> confirm -> `clearConversation(peerId)` path and list refresh behavior.
+
 ## Priority 0: Tri-Platform Semantics and Reliability
 
 1. [x] Privacy parity-first wiring (all toggles) on Android, iOS, and Web
@@ -312,7 +330,7 @@ Still open after this pass:
 - Requirement: Ensure complete parity across all instances (Android, iOS, Web) for deleting a contact and deleting a message thread.
 - Target: Allow users to securely remove contacts and clear entire message threads, ensuring changes are fully persisted and reflected in the UI.
 - Scope: Bind deletion operations in `ContactsManager` and `HistoryManager` to UI interactions on all platforms, including cleaning up associated metadata.
-- Outcome: Both Android and iOS already have `removeContact`/`deleteContacts` wired to UI (swipe-to-delete on iOS, delete button on Android) and `clearConversation` in repository layers backed by `HistoryManager` core functions. Data deletion parity is complete.
+- Outcome: Contact/thread deletion APIs are wired in Android+iOS repository layers (`removeContact`/`deleteContacts` + `clearConversation`) and backed by `HistoryManager` core functions. Conversation-list long-press UX parity follow-up is tracked in WS12.24.
 
 19. [x] Headless/Relay logic Refinement
     - [x] Update `IronCoreBehaviour::new` to accept `headless` boolean flag and incorporate it into the `agent_version` string.
@@ -513,7 +531,7 @@ Inventory from repo-wide checklist scan (`rg -P "^\s*(?:[-*]|\d+\.)\s+\[ \]" --g
    - Open markdown checklist items repo-wide: **10**
    - Active canonical open checklist items: **10** (`REMAINING_WORK_TRACKING.md` only)
    - Historical open checklist items: **0**
-5. Remaining action items (repo-wide, exhaustive active list):
+5. Remaining action items at WS12.17 closeout (repo-wide exhaustive list at that time):
    - WS12.8.5: stabilize Android wireless ADB endpoint persistence across daemon reconnect cycles.
    - WS12.11.6: run synchronized dual-device live probe and capture full flap-cycle bundle.
    - WS12.12.5: capture synchronized tri-platform traces for one failed message ID.

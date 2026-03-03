@@ -139,6 +139,19 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - Remaining live proof requirement:
   - capture fresh synchronized physical Android+iOS traces and confirm deterministic backlog drain + pending-to-delivered convergence on both directions.
 
+### WS12.24 Follow-up Intake: Sender-State Convergence + Conversation Delete UX (2026-03-03 HST)
+
+- Field-reported issue intake:
+  - iOS -> Android sends can still show `stored` on iOS sender even when Android recipient has already received/rendered the message.
+- Problem decomposition for closure:
+  - validate Android receipt/ack emission for affected message IDs,
+  - validate iOS receipt ingest + message-ID correlation into sender history state,
+  - validate UI mapping does not regress message state from `delivered` back to `stored`.
+- Planned closure evidence gate:
+  - synchronized Android+iOS+relay artifact bundle for at least one affected message ID, proving recipient ingest and sender-side `delivered` convergence in the same session.
+- Feature intake aligned in this pass:
+  - conversation list long-press contextual menu (Delete-only action initially) is now tracked for Android+iOS parity using existing `clearConversation(peerId)` data path + confirmation dialog.
+
 ### WS12 Verification Snapshot (2026-03-03)
 
 - `cargo test --workspace --no-run` — **pass**

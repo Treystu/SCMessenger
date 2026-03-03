@@ -3,7 +3,8 @@
 # Nodes: GCP (headless relay), OSX (headless relay), Android (Pixel 6a / cellular),
 #        iOS Device (iPhone 15 Pro Max), iOS Simulator
 #
-# Android is expected to run on CELLULAR to validate WAN/NAT traversal.
+# Android is expected to run on WIFI to validate NAT traversal.
+# iOS Device can be on CELLULAR.
 # BLE discovery between Android ↔ iOS Device are logged at V level.
 #
 # Usage: ./run5.sh
@@ -17,6 +18,7 @@ IOS_DEVICE_UDID="${IOS_DEVICE_UDID:-$(xcrun devicectl list devices 2>/dev/null |
 IOS_SIM_UDID="${IOS_SIM_UDID:-$(xcrun simctl list devices | awk -F '[()]' '/Booted/ {print $2; exit}')}"
 BUNDLE_ID="SovereignCommunications.SCMessenger"
 TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
+SYNC_MARKER="=== TEST_START_MARKER: $(date -u +'%Y-%m-%dT%H:%M:%SZ') ==="
 
 if [ -z "${IOS_DEVICE_UDID:-}" ]; then
   echo "❌ No connected iOS physical device found (devicectl)."
@@ -41,8 +43,8 @@ fi
 
 echo "========================================"
 echo "  SCMessenger 5-Node Mesh Test — $TIMESTAMP"
-echo "  Android: CELLULAR (NAT traversal test)"
-echo "  iOS Device: ${IOS_DEVICE_UDID}"
+echo "  Android: WIFI (NAT traversal test)"
+echo "  iOS Device: CELLULAR (${IOS_DEVICE_UDID})"
 echo "  iOS Sim: ${IOS_SIM_UDID:-none}"
 echo "  Logs → $LOGDIR/"
 echo "========================================"
@@ -51,7 +53,7 @@ echo ""
 # ── 1. GCP headless relay ─────────────────────────────────────────────────────
 echo "1. Streaming GCP relay logs..."
 gcloud compute ssh scmessenger-bootstrap --zone=us-central1-a \
-  --command="CID=\$(sudo docker ps -q | head -n1); if [ -n \"\$CID\" ]; then sudo docker logs -f \"\$CID\" 2>&1; else echo 'No running container found on scmessenger-bootstrap'; fi" \
+  --command="CID=\$(sudo docker ps -q | head -n1); if [ -n \"\$CID\" ]; then echo \"$SYNC_MARKER\"; sudo docker logs -f \"\$CID\" 2>&1; else echo 'No running container found on scmessenger-bootstrap'; fi" \
   > "$LOGDIR/gcp.log" 2>&1 &
 GCP_PID=$!
 echo "   GCP PID=$GCP_PID → $LOGDIR/gcp.log"
@@ -59,22 +61,24 @@ echo "   GCP PID=$GCP_PID → $LOGDIR/gcp.log"
 # ── 2. OSX headless relay ─────────────────────────────────────────────────────
 echo "2. Starting OSX relay node..."
 pkill -f "scmessenger-cli" 2>/dev/null || true
+echo "$SYNC_MARKER" > "$LOGDIR/osx.log"
 sleep 0.5
 # RUST_LOG includes autonat + dcutr + relay at debug so we see NAT probes & hole-punches
-RUST_LOG=info,libp2p_autonat=debug,libp2p_dcutr=debug,libp2p_relay=debug,scmessenger_core::transport::swarm=debug \
+RUST_LOG=info,libp2p_autonat=debug,libp2p_dcutr=debug,libp2p_relay=debug,scmessenger_core::transport::swarm=debug,scmessenger_core::store::relay_custody=debug,scmessenger_core::mesh::delivery=debug \
   cargo run -p scmessenger-cli -- relay \
   --listen /ip4/0.0.0.0/tcp/9010 \
   --http-port 9011 \
-  > "$LOGDIR/osx.log" 2>&1 &
+  >> "$LOGDIR/osx.log" 2>&1 &
 OSX_PID=$!
 echo "   OSX PID=$OSX_PID → $LOGDIR/osx.log"
 
 # ── 3. Android (Pixel 6a) ─────────────────────────────────────────────────────
-echo "3. Launching SCMessenger on Android (ensure it is on CELLULAR, not WiFi)..."
+echo "3. Launching SCMessenger on Android (ensure it is on WIFI for adb access)..."
 # Bring to foreground without force-stop (preserves mesh state)
 adb shell am start -n com.scmessenger.android/.ui.MainActivity > /dev/null 2>&1 || true
+echo "$SYNC_MARKER" > "$LOGDIR/android.log"
 sleep 1
-# Capture all SCMessenger-relevant tags at Verbose + BLE + Rust bridge
+# Capture all SCMessenger-relevant tags at Verbose + BLE + Rust bridge + Rust core
 adb logcat -v threadtime \
   MeshRepository:V \
   SwarmBridge:V \
@@ -88,8 +92,11 @@ adb logcat -v threadtime \
   BleAdvertiser:V \
   MeshService:V \
   ContactsViewModel:V \
+  Rust:V \
+  SCMessengerCore:V \
+  rust_logger:V \
   "*:S" \
-  > "$LOGDIR/android.log" 2>&1 &
+  >> "$LOGDIR/android.log" 2>&1 &
 ANDROID_PID=$!
 echo "   Android PID=$ANDROID_PID → $LOGDIR/android.log"
 
@@ -98,7 +105,7 @@ echo "4. Installing + launching SCMessenger on iOS Device..."
 # Find freshly built app
 IOS_DEVICE_APP=$(find iOS/SCMessenger/build/Build/Products/Debug-iphoneos \
                       iOS/SCMessenger/build/Device/Build/Products/Debug-iphoneos \
-                  -name "SCMessenger.app" -not -path "*/dSYM*" 2>/dev/null | head -1)
+                  -name "SCMessenger.app" -not -path "*/dSYM*" 2>/dev/null | head -1 || true)
 
 if [ -n "$IOS_DEVICE_APP" ]; then
   echo "   Installing $IOS_DEVICE_APP..."
@@ -110,16 +117,27 @@ else
 fi
 
 if [ -n "${IOS_DEVICE_UDID:-}" ]; then
+  echo "$SYNC_MARKER" > "$LOGDIR/ios-device.log"
+  # 1. Launch the process and get basic console output
   xcrun devicectl device process launch \
     --device "$IOS_DEVICE_UDID" \
     --console \
     --terminate-existing \
     "$BUNDLE_ID" \
-    > "$LOGDIR/ios-device.log" 2>&1 &
+    >> "$LOGDIR/ios-device.log" 2>&1 &
   IOS_DEV_PID=$!
-  echo "   iOS Dev PID=$IOS_DEV_PID → $LOGDIR/ios-device.log"
+
+  # 2. Concurrently stream system logs (specifically Bluetooth/Multipeer drop reasons)
+  xcrun devicectl device info log stream \
+    --device "$IOS_DEVICE_UDID" \
+    --predicate 'process == "SCMessenger" OR subsystem == "com.apple.bluetooth" OR subsystem == "com.apple.MultipeerConnectivity"' \
+    >> "$LOGDIR/ios-device.log" 2>&1 &
+  IOS_DEV_STREAM_PID=$!
+
+  echo "   iOS Dev PID=$IOS_DEV_PID, Stream PID=$IOS_DEV_STREAM_PID → $LOGDIR/ios-device.log"
 else
   IOS_DEV_PID=""
+  IOS_DEV_STREAM_PID=""
   echo "   ⚠️  Skipping iOS device launch: no device UDID"
 fi
 
@@ -127,7 +145,7 @@ fi
 echo "5. Installing + launching SCMessenger on iOS Simulator..."
 IOS_SIM_APP=$(find iOS/SCMessenger/build_sim/Build/Products/Debug-iphonesimulator \
                    iOS/SCMessenger/build/Build/Products/Debug-iphonesimulator \
-              -name "SCMessenger.app" -not -path "*/dSYM*" 2>/dev/null | head -1)
+              -name "SCMessenger.app" -not -path "*/dSYM*" 2>/dev/null | head -1 || true)
 
 if [ -n "$IOS_SIM_APP" ]; then
   echo "   Installing $IOS_SIM_APP..."
@@ -136,12 +154,13 @@ fi
 
 if [ -n "${IOS_SIM_UDID:-}" ]; then
   xcrun simctl launch "$IOS_SIM_UDID" "$BUNDLE_ID" > /dev/null 2>&1 || true
+  echo "$SYNC_MARKER" > "$LOGDIR/ios-sim.log"
   # Stream logs: info+ from SCMessenger process; captures NSLog + os_log
   xcrun simctl spawn "$IOS_SIM_UDID" log stream \
     --level info \
     --style compact \
     --predicate 'process == "SCMessenger"' \
-    > "$LOGDIR/ios-sim.log" 2>&1 &
+    >> "$LOGDIR/ios-sim.log" 2>&1 &
   IOS_SIM_PID=$!
   echo "   iOS Sim PID=$IOS_SIM_PID → $LOGDIR/ios-sim.log"
 else
@@ -215,6 +234,6 @@ status_ticker &
 TICKER_PID=$!
 
 # Clean shutdown on Ctrl+C
-trap "echo ''; echo 'Stopping all nodes...'; kill $GCP_PID $OSX_PID $ANDROID_PID $IOS_DEV_PID $IOS_SIM_PID $TICKER_PID 2>/dev/null; echo 'Done.'; exit 0" INT TERM
+trap "echo ''; echo 'Stopping all nodes...'; kill $GCP_PID $OSX_PID $ANDROID_PID $IOS_DEV_PID $IOS_DEV_STREAM_PID $IOS_SIM_PID $TICKER_PID 2>/dev/null; echo 'Done.'; exit 0" INT TERM
 
 wait

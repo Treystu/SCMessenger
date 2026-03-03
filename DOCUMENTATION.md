@@ -149,6 +149,11 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `REMAINING_WORK_TRACKING.md`
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.24 follow-up intake (2026-03-03 HST, iOS->Android sender-state convergence gap tracking + conversation long-press delete UX planning) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 
 ## Documentation Governance Rules
 
