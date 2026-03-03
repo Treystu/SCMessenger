@@ -162,8 +162,8 @@ struct ConversationListView: View {
                 let displayName = !local.isEmpty
                     ? local
                     : (contact.nickname ?? String(contact.peerId.prefix(8)) + "...")
-                let recentMsgs = (try? repository.getConversation(peerId: contact.peerId, limit: 1)) ?? []
-                let lastMsg = recentMsgs.last
+                let recentMsgs = (try? repository.getConversation(peerId: contact.peerId, limit: 25)) ?? []
+                let lastMsg = recentMsgs.max(by: { $0.timestamp < $1.timestamp })
                 let lastTime = lastMsg.map { Date(timeIntervalSince1970: Double($0.timestamp)) }
                 return Conversation(
                     peerId: contact.peerId, 

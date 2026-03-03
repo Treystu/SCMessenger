@@ -147,6 +147,100 @@ Planned in this pass:
    - Android: verify swipe -> confirm -> `clearConversation(peerId)` path and list refresh behavior.
    - iOS: verify swipe -> confirm -> `clearConversation(peerId)` path and list refresh behavior.
 
+## WS12.25 Mega-Update Intake: Pending-Sync RCA + Node-Role Unification (2026-03-03 HST)
+
+Completed in this pass:
+
+1. [x] Reviewed updated `run5.sh` plus associated runtime artifacts to diagnose why older pending entries stay undelivered while queue activity remains high.
+   - Key evidence set:
+     - `logs/5mesh/latest/android.log` (repeated `forwarding -> stored`, core/relay failures, local fallback accepts, repeated flush triggers),
+     - `logs/pairwise/ios-debug-detach-20260303-014559/pending_outbox.json` (same-peer queued items retaining stale route/address hints).
+2. [x] Implemented route-hint/route-candidate hardening in Android+iOS `MeshRepository`:
+   - refresh persisted route hints when values change (not only when absent),
+   - pass inbound observed route/listener hints into receipt sends,
+   - build recipient-key-aware route candidates and reject relay/mismatched candidates,
+   - block direct-chat sends to known relay/bootstrap identities.
+3. [x] Unified dashboard role buckets across Android+iOS:
+   - `Node` (full identity),
+   - `Headless Node` (no identity; relay/headless grouped together).
+4. [x] Revalidated local build/verification after changes:
+   - `cd android && ./gradlew :app:compileDebugKotlin` (pass),
+   - `bash ./iOS/verify-test.sh` (pass).
+
+Still open after this pass:
+
+1. [ ] Capture fresh synchronized physical Android+iOS artifacts post-fix to confirm previously stuck pending items now drain under active connectivity.
+2. [ ] Re-run deterministic convergence checks against fresh artifacts:
+   - `scripts/verify_receipt_convergence.sh`
+   - `scripts/verify_ble_only_pairing.sh`
+   - `scripts/correlate_relay_flap_windows.sh`
+3. [ ] Close WS12.24 sender-state convergence gate with message-ID-correlated evidence (`recipient ingest` => sender `delivered`, no persistent `stored` regression).
+
+## WS12.26 Sender-State + Conversation Preview Convergence Hotfix (2026-03-03 HST)
+
+Completed in this pass:
+
+1. [x] Closed receipt-path UI refresh gap on Android.
+   - `MeshRepository.onReceiptReceived` now emits refreshed `MessageRecord` through `messageUpdates` after delivery-state mutation and pending-outbox cleanup.
+   - `ConversationsViewModel` now reloads on `MessageEvent.Delivered`/`MessageEvent.Failed` to keep chat-list state aligned with receipt callbacks.
+2. [x] Closed receipt-path UI refresh gap on iOS.
+   - `MeshRepository.onDeliveryReceipt` now emits refreshed `MessageRecord` through `messageUpdates` after receipt-driven history/pending updates.
+3. [x] Hardened iOS conversation-row preview selection.
+   - Conversation list now chooses newest preview by max timestamp from a bounded recent sample, rather than relying on position-based ordering assumptions.
+4. [x] Revalidated regression-safety for the updated Android paths:
+   - `cd android && ./gradlew :app:testDebugUnitTest --tests "com.scmessenger.android.test.ChatViewModelTest" --tests "com.scmessenger.android.ui.viewmodels.ConversationsViewModelTest"` (pass).
+5. [x] Closed Swift strict-concurrency regression in generated UniFFI bindings.
+   - `iOS/SCMessenger/SCMessenger/Generated/api.swift` now uses `nonisolated(unsafe)` on `FfiConverter` helper statics.
+   - `core/src/bin/gen_swift.rs` now enforces the same rewrite post-generation to keep future binding refreshes non-regressive.
+   - `bash ./iOS/verify-test.sh` now passes after regeneration/copy.
+
+Still open after this pass:
+
+1. [ ] Validate the WS12.26 hotfix on live Android+iOS artifact capture (passive logs acceptable) and confirm no message remains `stored` after correlated recipient receipt.
+2. [ ] Close WS12.24 sender-state convergence gate using synchronized post-hotfix evidence.
+
+## WS12.27 Node-Role Classification Correction + Trip Readiness Validation (2026-03-03 HST)
+
+Completed in this pass:
+
+1. [x] Added explicit issue intake: iOS could render a confirmed full iOS-sim peer as `Headless Node`.
+2. [x] Root-cause fix on iOS + Android `MeshRepository` peer-identification flow:
+   - `/headless/` agent is now treated as provisional when transport identity resolves successfully.
+   - peers with resolved identity are promoted to full-node classification even if prior identify agent hinted headless.
+3. [x] Relay classification guardrail tightened on iOS + Android:
+   - `isKnownRelay` now treats only bootstrap peers and non-full dynamic relay peers as relay-only.
+   - full peers are no longer forced into headless display solely due relay capability flags.
+4. [x] iOS/Android compile validation after patch:
+   - `cd android && ./gradlew :app:compileDebugKotlin` (pass)
+   - `bash ./iOS/verify-test.sh` (pass)
+5. [x] Fast live relay-visibility probe captured for Android + iOS simulator:
+   - `IOS_TARGET=simulator IOS_INSTALL=0 ANDROID_INSTALL=0 DURATION_SEC=25 GCP_RELAY_CHECK=0 bash ./scripts/live-smoke.sh`
+   - Android evidence (`logs/live-smoke/20260303-113927/android-logcat.txt`) shows identity-discovered peer through relay-circuit addresses and `2 full, 0 headless` during this capture.
+
+Still open after this pass:
+
+1. [ ] Re-run synchronized physical iOS-device + Android visibility capture on binaries containing WS12.27 patch to fully close misclassification regression risk in production-like topology.
+2. [ ] Confirm sender-state convergence (`stored` -> `delivered`) closure on physical-device message timelines post-WS12.26/WS12.27.
+
+### WS12.25 Mega-Update Consolidated Next Steps (Open + Deferred)
+
+This is the current "burn-down" slate combining all active deferred/runtime closures still gating full reliability signoff:
+
+1. Runtime evidence closure gates (`R-WS12-04`, `R-WS12-05`, `R-WS12-06`):
+   - synchronized relay-flap correlation window,
+   - synchronized receipt convergence for both Android->iOS and iOS->Android,
+   - synchronized strict BLE-only convergence bundle.
+2. Pending-outbox + sender-state closure gates:
+   - prove old pending entries drain once peer route is active (post-WS12.25 fix),
+   - prove sender state converges to `delivered` when recipient ingest is confirmed.
+3. Environment validation debt:
+   - provision Docker and run `bash ./verify_simulation.sh` (`WS12.15.3`),
+   - execute live network matrix validation and ACK-safe path-switch validation (`WS12.15.4`, `WS12.15.5`),
+   - execute app-update/reinstall continuity evidence capture on real Android+iOS (`WS12.15.6`),
+   - capture iOS power-settings runtime evidence on real device (`WS12.15.7`).
+4. UX verification debt:
+   - complete swipe-delete evidence/test pass on both Android and iOS (`WS12.24.5`).
+
 ## Priority 0: Tri-Platform Semantics and Reliability
 
 1. [x] Privacy parity-first wiring (all toggles) on Android, iOS, and Web

@@ -3,6 +3,8 @@ package com.scmessenger.android.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.scmessenger.android.data.MeshRepository
+import com.scmessenger.android.service.MeshEventBus
+import com.scmessenger.android.service.MessageEvent
 import com.scmessenger.android.ui.chat.DeliveryStateMapper
 import com.scmessenger.android.ui.chat.DeliveryStatePresentation
 import com.scmessenger.android.ui.chat.PendingDeliverySnapshot
@@ -60,6 +62,18 @@ class ConversationsViewModel @Inject constructor(
         viewModelScope.launch {
             meshRepository.messageUpdates.collect {
                 loadMessages()
+            }
+        }
+
+        // Receipt/transport events can change delivery state without a new message
+        // body; refresh to keep conversation badges and previews accurate.
+        viewModelScope.launch {
+            MeshEventBus.messageEvents.collect { event ->
+                when (event) {
+                    is MessageEvent.Delivered,
+                    is MessageEvent.Failed -> loadMessages()
+                    else -> Unit
+                }
             }
         }
     }

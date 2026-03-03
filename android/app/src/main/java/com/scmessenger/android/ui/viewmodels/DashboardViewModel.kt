@@ -23,10 +23,6 @@ import javax.inject.Inject
 class DashboardViewModel @Inject constructor(
     private val meshRepository: MeshRepository
 ) : ViewModel() {
-    private val bootstrapRelayPeerIds: Set<String> = MeshRepository.DEFAULT_BOOTSTRAP_NODES
-        .mapNotNull { parseBootstrapRelayPeerId(it) }
-        .toSet()
-
     // Service stats
     private val _stats = MutableStateFlow<uniffi.api.ServiceStats?>(null)
     val stats: StateFlow<uniffi.api.ServiceStats?> = _stats.asStateFlow()
@@ -45,18 +41,10 @@ class DashboardViewModel @Inject constructor(
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
-    // Headless = infrastructure relay nodes (bootstrap peers only, not BLE neighbors pending identity)
+    // Headless = any discovered node without a confirmed identity (relay and non-relay share this bucket).
     val headlessPeersCount = meshRepository.discoveredPeers.map { discovered ->
         deduplicateDiscoveredPeers(discovered).values.count { peer ->
-            !peer.isFull && isBootstrapRelayPeer(peer.peerId)
-        }
-    }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-
-    // Nearby = BLE/WiFi peers discovered but identity not yet confirmed
-    val nearbyPendingCount = meshRepository.discoveredPeers.map { discovered ->
-        deduplicateDiscoveredPeers(discovered).values.count { peer ->
-            !peer.isFull && !isBootstrapRelayPeer(peer.peerId)
+            !peer.isFull
         }
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
@@ -326,18 +314,6 @@ class DashboardViewModel @Inject constructor(
         val seenAt = timestamp.toEpochSeconds()
         val fiveMinutes = 300L
         return seenAt <= now && (now - seenAt) < fiveMinutes
-    }
-
-    private fun isBootstrapRelayPeer(peerId: String): Boolean {
-        return bootstrapRelayPeerIds.contains(peerId)
-    }
-
-    private fun parseBootstrapRelayPeerId(multiaddr: String): String? {
-        val marker = "/p2p/"
-        val idx = multiaddr.lastIndexOf(marker)
-        if (idx < 0 || idx + marker.length >= multiaddr.length) return null
-        val relayPeerId = multiaddr.substring(idx + marker.length).trim()
-        return relayPeerId.takeIf { it.isNotEmpty() }
     }
 
     /**

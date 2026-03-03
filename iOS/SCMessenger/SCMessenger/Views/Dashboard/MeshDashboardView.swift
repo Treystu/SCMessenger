@@ -32,17 +32,12 @@ struct DashboardPeer: Identifiable, Equatable {
         if !local.isEmpty { return local }
         let federated = nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !federated.isEmpty { return federated }
-        
-        if isRelay {
-            // Check if it's a known bootstrap node via libp2pPeerId or canonicalId
-            return "Relay Node"
-        }
-        return isFull ? "Full Node" : "Headless Node"
+
+        return isFull ? "Node" : "Headless Node"
     }
 
     var roleLabel: String {
-        if isRelay { return "Relay" }
-        return isFull ? "Full" : "Headless"
+        return isFull ? "Node" : "Headless Node"
     }
 }
 
@@ -388,9 +383,8 @@ struct MeshDashboardView: View {
         publicKey: String?,
         nickname: String?,
         localNickname: String?,
-        isRelay: Bool
+        isRelay _: Bool
     ) -> Bool {
-        if isRelay { return false }
         if let key = publicKey?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty { return true }
         let hasNickname = !(nickname?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
         let hasLocalNickname = !(localNickname?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
@@ -560,11 +554,11 @@ struct DiscoveredNodesSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.spacingMedium) {
-            Text("Nodes (\(fullPeers) Full / \(headlessPeers) Headless)")
+            Text("Nodes (\(fullPeers) Node / \(headlessPeers) Headless)")
                 .font(Theme.titleLarge)
 
             if peers.isEmpty {
-                Text("No nodes discovered yet. Check Relay status in Transport section.")
+                Text("No nodes discovered yet. Check transport status below.")
                     .font(Theme.bodyMedium)
                     .foregroundStyle(Theme.onSurfaceVariant)
             } else {
@@ -613,7 +607,6 @@ struct DashboardPeerRow: View {
     }
 
     private var iconName: String {
-        if peer.isRelay { return "arrow.triangle.2.circlepath" }
         return peer.isFull ? "person.fill" : "person.2.fill"
     }
 }

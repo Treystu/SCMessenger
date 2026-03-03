@@ -478,27 +478,31 @@ class MeshRepository(private val context: Context) {
                             return@launch
                         }
 
-                        val dialCandidates = buildDialCandidatesForPeer(
-                            routePeerId = peerId,
-                            rawAddresses = listenAddrs,
-                            includeRelayCircuits = true
-                        )
+	                        val dialCandidates = buildDialCandidatesForPeer(
+	                            routePeerId = peerId,
+	                            rawAddresses = listenAddrs,
+	                            includeRelayCircuits = true
+	                        )
 
-                        val syncPeerIds = linkedSetOf(peerId.trim())
-                        val isHeadless = agentVersion.contains("/headless/")
-                        if (isBootstrapRelayPeer(peerId) || isHeadless) {
-                            Timber.i("Headless/Relay transport node identified: $peerId (agent: $agentVersion)")
-                            emitConnectedIfChanged(
-                                peerId = peerId,
-                                transport = com.scmessenger.android.service.TransportType.INTERNET
-                            )
-                            transportToCanonicalMap[peerId] = peerId // Relay counts as its own canonical
-                            activeSessions[peerId] = System.currentTimeMillis()
-                        } else {
-                            val transportIdentity = resolveTransportIdentity(peerId)
-                            if (transportIdentity != null) {
-                                syncPeerIds.add(transportIdentity.canonicalPeerId)
-                        }
+	                        val syncPeerIds = linkedSetOf(peerId.trim())
+	                        val isHeadless = agentVersion.contains("/headless/")
+	                        val transportIdentity = resolveTransportIdentity(peerId)
+	                        val shouldTreatAsHeadless = isBootstrapRelayPeer(peerId) || (isHeadless && transportIdentity == null)
+	                        if (shouldTreatAsHeadless) {
+	                            Timber.i("Headless/Relay transport node identified: $peerId (agent: $agentVersion)")
+	                            emitConnectedIfChanged(
+	                                peerId = peerId,
+	                                transport = com.scmessenger.android.service.TransportType.INTERNET
+	                            )
+	                            transportToCanonicalMap[peerId] = peerId // Relay counts as its own canonical
+	                            activeSessions[peerId] = System.currentTimeMillis()
+	                        } else {
+	                            if (isHeadless && transportIdentity != null) {
+	                                Timber.i("Promoting peer $peerId to full node: identity resolved despite headless agent $agentVersion")
+	                            }
+	                            if (transportIdentity != null) {
+	                                syncPeerIds.add(transportIdentity.canonicalPeerId)
+	                        }
                             val canonicalId = transportIdentity?.canonicalPeerId ?: peerId
                             transportToCanonicalMap[peerId] = canonicalId
                             activeSessions[peerId] = System.currentTimeMillis()
@@ -743,12 +747,16 @@ class MeshRepository(private val context: Context) {
                                 }
                             }
 
-                            // Persist explicit libp2p alias mapping when known so identity/libp2p IDs
-                            // stay canonicalized to one conversation thread.
-                            if (!routePeerId.isNullOrBlank() &&
+                            val currentRouting = parseRoutingHints(existingContact.notes)
+                            val normalizedRoutePeerId = routePeerId?.trim()?.takeIf { it.isNotEmpty() }
+                            val normalizedRouteWifiPeerId = routeWifiPeerId?.trim()?.takeIf { it.isNotEmpty() }
+
+                            // Persist updated libp2p alias mapping when known so identity/libp2p IDs
+                            // stay canonicalized to one conversation thread across peer-id rotations.
+                            if (!normalizedRoutePeerId.isNullOrBlank() &&
                                 normalizedSenderKey != null &&
                                 normalizePublicKey(existingContact.publicKey) == normalizedSenderKey &&
-                                parseRoutingHints(existingContact.notes).libp2pPeerId.isNullOrBlank()
+                                currentRouting.libp2pPeerId?.trim() != normalizedRoutePeerId
                             ) {
                                 val updatedNotes = appendRoutingHint(existingContact.notes, "libp2p_peer_id", routePeerId)
                                 val updatedNotesWithListeners = upsertRoutingListeners(
@@ -771,10 +779,10 @@ class MeshRepository(private val context: Context) {
                                 }
                             }
 
-                            if (!routeWifiPeerId.isNullOrBlank() &&
+                            if (!normalizedRouteWifiPeerId.isNullOrBlank() &&
                                 normalizedSenderKey != null &&
                                 normalizePublicKey(existingContact.publicKey) == normalizedSenderKey &&
-                                parseRoutingHints(existingContact.notes).wifiPeerId.isNullOrBlank()
+                                currentRouting.wifiPeerId?.trim() != normalizedRouteWifiPeerId
                             ) {
                                 val updatedNotes = appendRoutingHint(existingContact.notes, "wifi_peer_id", routeWifiPeerId)
                                 val updatedNotesWithListeners = upsertRoutingListeners(
@@ -850,7 +858,14 @@ class MeshRepository(private val context: Context) {
                         val messageKind = decodedPayload.kind.trim().lowercase()
                         if (messageKind == "identity_sync") {
                             Timber.d("Processed identity sync from $canonicalPeerId (route=$routePeerId)")
-                            sendDeliveryReceiptAsync(senderPublicKeyHex, messageId, senderId)
+                            sendDeliveryReceiptAsync(
+                                senderPublicKeyHex = senderPublicKeyHex,
+                                messageId = messageId,
+                                senderId = canonicalPeerId,
+                                preferredRoutePeerId = routePeerId,
+                                preferredWifiPeerId = routeWifiPeerId,
+                                preferredListenerHints = hintedDialCandidates
+                            )
                             return
                         }
 
@@ -861,7 +876,14 @@ class MeshRepository(private val context: Context) {
                         }
                         if (existingRecord?.direction == uniffi.api.MessageDirection.RECEIVED) {
                             Timber.d("Duplicate inbound message $messageId from $senderId; acknowledging without re-emitting UI")
-                            sendDeliveryReceiptAsync(senderPublicKeyHex, messageId, senderId)
+                            sendDeliveryReceiptAsync(
+                                senderPublicKeyHex = senderPublicKeyHex,
+                                messageId = messageId,
+                                senderId = canonicalPeerId,
+                                preferredRoutePeerId = routePeerId,
+                                preferredWifiPeerId = routeWifiPeerId,
+                                preferredListenerHints = hintedDialCandidates
+                            )
                             return
                         }
 
@@ -884,7 +906,14 @@ class MeshRepository(private val context: Context) {
                         }
 
                         // Send delivery receipt ACK back to sender.
-                        sendDeliveryReceiptAsync(senderPublicKeyHex, messageId, canonicalPeerId)
+                        sendDeliveryReceiptAsync(
+                            senderPublicKeyHex = senderPublicKeyHex,
+                            messageId = messageId,
+                            senderId = canonicalPeerId,
+                            preferredRoutePeerId = routePeerId,
+                            preferredWifiPeerId = routeWifiPeerId,
+                            preferredListenerHints = hintedDialCandidates
+                        )
                     } catch (e: Exception) {
                         Timber.e(e, "Failed to process received message")
                     }
@@ -910,6 +939,16 @@ class MeshRepository(private val context: Context) {
                         historyManager?.flush()
                     }
                     removePendingOutbound(messageId)
+                    val refreshedRecord = try {
+                        historyManager?.get(messageId)
+                    } catch (_: Exception) {
+                        null
+                    }
+                    if (refreshedRecord != null) {
+                        repoScope.launch {
+                            _messageUpdates.emit(refreshedRecord)
+                        }
+                    }
                     if (wasAlreadyDelivered) {
                         logDeliveryState(
                             messageId = messageId,
@@ -975,7 +1014,15 @@ class MeshRepository(private val context: Context) {
         }
     }
 
-    private fun sendDeliveryReceiptAsync(senderPublicKeyHex: String, messageId: String, senderId: String) {
+    private fun sendDeliveryReceiptAsync(
+        senderPublicKeyHex: String,
+        messageId: String,
+        senderId: String,
+        preferredRoutePeerId: String? = null,
+        preferredWifiPeerId: String? = null,
+        preferredBlePeerId: String? = null,
+        preferredListenerHints: List<String> = emptyList()
+    ) {
         repoScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val receiptBytes = ironCore?.prepareReceipt(senderPublicKeyHex, messageId)
@@ -984,14 +1031,18 @@ class MeshRepository(private val context: Context) {
                     val hints = parseRoutingHints(contact?.notes)
                     val routeCandidates = buildRoutePeerCandidates(
                         peerId = senderId,
-                        cachedRoutePeerId = hints.libp2pPeerId,
-                        notes = contact?.notes
+                        cachedRoutePeerId = preferredRoutePeerId ?: hints.libp2pPeerId,
+                        notes = contact?.notes,
+                        recipientPublicKey = senderPublicKeyHex
                     )
                     attemptDirectSwarmDelivery(
                         routePeerCandidates = routeCandidates,
-                        listeners = hints.listeners,
+                        listeners = (preferredListenerHints + hints.listeners).distinct(),
                         encryptedData = receiptBytes,
-                        blePeerId = hints.blePeerId
+                        wifiPeerId = preferredWifiPeerId ?: hints.wifiPeerId,
+                        blePeerId = preferredBlePeerId ?: hints.blePeerId,
+                        traceMessageId = messageId,
+                        attemptContext = "receipt_send",
                     )
                     Timber.d("Targeted delivery receipt sent for $messageId to $senderId")
                 }
@@ -1037,7 +1088,8 @@ class MeshRepository(private val context: Context) {
                 val routeCandidates = buildRoutePeerCandidates(
                     peerId = contact?.peerId ?: normalizedRoute,
                     cachedRoutePeerId = normalizedRoute,
-                    notes = contact?.notes
+                    notes = contact?.notes,
+                    recipientPublicKey = recipientPublicKey
                 )
 
                 attemptDirectSwarmDelivery(
@@ -1816,10 +1868,11 @@ class MeshRepository(private val context: Context) {
                 val routePeerCandidates = buildRoutePeerCandidates(
                     peerId = peerId,
                     cachedRoutePeerId = routingHints.libp2pPeerId,
-                    notes = contact.notes
+                    notes = contact.notes,
+                    recipientPublicKey = publicKey
                 )
-                if (routePeerCandidates.any { isBootstrapRelayPeer(it) } || isBootstrapRelayPeer(peerId)) {
-                    throw IllegalStateException("Refusing to use bootstrap relay identity as a chat recipient: $peerId")
+                if (isKnownRelay(peerId) || isBootstrapRelayPeer(peerId)) {
+                    throw IllegalStateException("Refusing to use headless relay identity as a chat recipient: $peerId")
                 }
                 val preferredRoutePeerId = routePeerCandidates.firstOrNull()
                 // 2. Encrypt/Prepare message (use trimmed key)
@@ -2973,7 +3026,8 @@ class MeshRepository(private val context: Context) {
                 val routePeerCandidates = buildRoutePeerCandidates(
                     peerId = item.peerId,
                     cachedRoutePeerId = item.routePeerId,
-                    notes = contact?.notes
+                    notes = contact?.notes,
+                    recipientPublicKey = contact?.publicKey
                 )
                 val resolvedRoutePeerId = routePeerCandidates.firstOrNull()
                 val resolvedListeners = buildDialCandidatesForPeer(
@@ -3896,7 +3950,8 @@ class MeshRepository(private val context: Context) {
     private fun buildRoutePeerCandidates(
         peerId: String,
         cachedRoutePeerId: String?,
-        notes: String?
+        notes: String?,
+        recipientPublicKey: String? = null
     ): List<String> {
         val candidates = mutableListOf<String>()
         val notedPeerIds = parseAllRoutingPeerIds(notes)
@@ -3904,11 +3959,68 @@ class MeshRepository(private val context: Context) {
         if (!newestHint.isNullOrBlank()) candidates.add(newestHint)
         for (hint in notedPeerIds.asReversed()) candidates.add(hint)
         cachedRoutePeerId?.trim()?.takeIf { it.isNotEmpty() }?.let { candidates.add(it) }
+        candidates.addAll(discoverRoutePeersForPublicKey(recipientPublicKey))
         if (isLibp2pPeerId(peerId)) candidates.add(peerId)
         return candidates
             .map { it.trim() }
-            .filter { it.isNotEmpty() && isLibp2pPeerId(it) }
+            .filter { candidate ->
+                candidate.isNotEmpty() &&
+                    isLibp2pPeerId(candidate) &&
+                    routeCandidateMatchesRecipient(candidate, recipientPublicKey)
+            }
             .distinct()
+    }
+
+    private fun discoverRoutePeersForPublicKey(recipientPublicKey: String?): List<String> {
+        val normalizedRecipientKey = normalizePublicKey(recipientPublicKey) ?: return emptyList()
+        val fromDiscovery = _discoveredPeers.value.values
+            .asSequence()
+            .map { it.peerId.trim() }
+            .filter { candidate ->
+                candidate.isNotEmpty() &&
+                    isLibp2pPeerId(candidate) &&
+                    !isKnownRelay(candidate)
+            }
+            .filter { candidate ->
+                normalizePublicKey(_discoveredPeers.value[candidate]?.publicKey) == normalizedRecipientKey ||
+                    _discoveredPeers.value.values.any {
+                        it.peerId == candidate && normalizePublicKey(it.publicKey) == normalizedRecipientKey
+                    }
+            }
+            .toList()
+
+        val fromLedger = (ledgerManager?.dialableAddresses() ?: emptyList())
+            .asSequence()
+            .mapNotNull { entry ->
+                val candidate = entry.peerId?.trim().orEmpty()
+                if (candidate.isEmpty() || !isLibp2pPeerId(candidate) || isKnownRelay(candidate)) {
+                    return@mapNotNull null
+                }
+                val candidateKey = normalizePublicKey(entry.publicKey) ?: return@mapNotNull null
+                if (candidateKey != normalizedRecipientKey) return@mapNotNull null
+                candidate
+            }
+            .toList()
+
+        return (fromDiscovery + fromLedger).distinct()
+    }
+
+    private fun routeCandidateMatchesRecipient(
+        routePeerId: String,
+        recipientPublicKey: String?
+    ): Boolean {
+        val normalizedRoute = routePeerId.trim()
+        if (normalizedRoute.isEmpty() || !isLibp2pPeerId(normalizedRoute)) return false
+        if (isKnownRelay(normalizedRoute)) return false
+
+        val normalizedRecipientKey = normalizePublicKey(recipientPublicKey) ?: return true
+        val extractedKey = try {
+            ironCore?.extractPublicKeyFromPeerId(normalizedRoute)
+        } catch (_: Exception) {
+            null
+        }
+        val normalizedExtractedKey = normalizePublicKey(extractedKey) ?: return true
+        return normalizedExtractedKey == normalizedRecipientKey
     }
 
     private fun isLibp2pPeerId(value: String): Boolean {
@@ -4029,7 +4141,8 @@ class MeshRepository(private val context: Context) {
     fun isKnownRelay(peerId: String): Boolean {
         val normalized = peerId.trim()
         if (isBootstrapRelayPeer(normalized)) return true
-        return _discoveredPeers.value[normalized]?.isRelay == true
+        val info = _discoveredPeers.value[normalized] ?: return false
+        return info.isRelay && !info.isFull
     }
 
     private fun relayCircuitAddressesForPeer(targetPeerId: String): List<String> {

@@ -154,6 +154,66 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - Verification in this pass:
   - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:compileDebugKotlin` - **pass**
 
+### WS12.25 Mega-Update Intake: Pending-Sync RCA + Node-Role Unification (2026-03-03 HST)
+
+- `run5.sh` and associated logs were reviewed for the reported "older pending messages remain undelivered while newer traffic still appears active" issue:
+  - `logs/5mesh/latest/android.log` shows the same message ID (`1c24a6d2-5114-42cc-8545-01f9bfc41eb1`) repeatedly cycling `forwarding -> stored`, with `Core-routed delivery failed` / `Relay-circuit retry failed` and repeated flush triggers (`peer_discovered`, `peer_identified`).
+  - `logs/pairwise/ios-debug-detach-20260303-014559/pending_outbox.json` shows multiple queued items for one canonical peer with persisted `routePeerId` and relay-circuit address hints tied to prior relay identities.
+- Root-cause conclusion (implementation confidence: medium-high):
+  - route hints/candidates can become stale under peer-id/alias churn, and receipt/retry paths were not consistently preferring fresh inbound route/listener context for the active sender identity.
+- Fixes applied on both Android and iOS:
+  - existing-contact route-hint updates now refresh on route change (not only when hints are initially blank),
+  - delivery-receipt send path now accepts preferred inbound route/listener hints and uses them for targeted retries,
+  - route candidate building now includes recipient-public-key-aware candidate discovery/filtering and relay/mismatched-candidate rejection,
+  - outbound send guard now rejects relay/bootstrap identities as direct chat recipients.
+- UI role-model unification applied (Android + iOS dashboard):
+  - reduced displayed node-role buckets to exactly two categories:
+    - `Node` (full identity),
+    - `Headless Node` (no identity; includes relay/headless transport peers).
+- Verification in this pass:
+  - `cd android && ./gradlew :app:compileDebugKotlin` — **pass**
+  - `bash ./iOS/verify-test.sh` — **pass** (3 warnings, non-fatal in script policy)
+- Remaining closure gate:
+  - capture fresh synchronized physical Android+iOS artifacts post-fix to confirm previously stuck pending entries drain and sender-side states converge to `delivered`.
+
+### WS12.26 Sender-State + Conversation Preview Convergence Hotfix (2026-03-03 HST)
+
+- Field issue intake addressed in this pass:
+  - message status and conversation-row previews could stay stale (`stored`/older preview text) even after receipt-driven delivery state transitions.
+- Root-cause conclusion (implementation confidence: high):
+  - Android+iOS receipt handlers updated durable history state but did not always publish a fresh `messageUpdates` event after mutating delivered/pending state, so UI lists could continue rendering stale records.
+  - iOS conversation preview selection depended on a narrow ordering assumption (`recentMsgs.last` from a minimal slice), making "latest preview" correctness fragile under ordering/alias drift.
+- Fixes applied:
+  - Android `MeshRepository.onReceiptReceived` now emits refreshed `MessageRecord` via `messageUpdates` immediately after `markDelivered` + pending-outbox removal.
+  - Android `ConversationsViewModel` now also refreshes conversation state on `MessageEvent.Delivered`/`MessageEvent.Failed`.
+  - iOS `MeshRepository.onDeliveryReceipt` now emits refreshed `MessageRecord` via `messageUpdates` after receipt-driven history/pending updates.
+  - iOS `ConversationListView` preview selection now chooses newest message by timestamp from a bounded recent sample (`limit: 25` + `max(timestamp)`), removing reliance on list order assumptions.
+  - UniFFI Swift bridge now marks `FfiConverter` helper statics as `nonisolated(unsafe)` for Swift strict-concurrency compatibility, and this rewrite is persisted in `core/src/bin/gen_swift.rs` so regenerated bindings keep compiling under `-default-isolation=MainActor`.
+- Verification in this pass:
+  - `cd android && ./gradlew :app:testDebugUnitTest --tests "com.scmessenger.android.test.ChatViewModelTest" --tests "com.scmessenger.android.ui.viewmodels.ConversationsViewModelTest"` — **pass**
+  - `bash ./iOS/verify-test.sh` — **pass** (build succeeds under current Swift isolation settings)
+- Remaining closure gate:
+  - live/passive-log confirmation for this hotfix still requires mobile binaries that include this patch set.
+
+### WS12.27 Node-Role Classification Correction + Trip Readiness Validation (2026-03-03 HST)
+
+- Field issue intake:
+  - iOS reported a confirmed full iOS-sim peer rendered as `Headless Node`.
+- Root-cause correction applied on Android+iOS:
+  - peer-identify classification now treats `/headless/` agent string as provisional when transport identity resolves.
+  - resolved identity peers are promoted to full classification even when prior identify metadata indicated headless.
+  - `isKnownRelay` now treats only bootstrap peers and non-full dynamic relay peers as relay-only, preventing full peers from being forced into headless bucket due relay-capability flags.
+- Build verification after patch:
+  - `cd android && ./gradlew :app:compileDebugKotlin` — **pass**
+  - `bash ./iOS/verify-test.sh` — **pass**
+- Live relay visibility snapshot (fast run, no reinstall):
+  - `IOS_TARGET=simulator IOS_INSTALL=0 ANDROID_INSTALL=0 DURATION_SEC=25 GCP_RELAY_CHECK=0 bash ./scripts/live-smoke.sh`
+  - Android capture `logs/live-smoke/20260303-113927/android-logcat.txt` showed:
+    - `IdentityDiscovered(... listeners=[.../p2p-circuit/...])`
+    - dashboard/runtime state: `Loaded 2 discovered peers (2 full)` and `Mesh Stats: ... 2 full, 0 headless`.
+- Remaining validation gap:
+  - physical iOS-device + Android synchronized capture with WS12.27 binaries is still required for final field closure.
+
 ### WS12 Verification Snapshot (2026-03-03)
 
 - `cargo test --workspace --no-run` — **pass**

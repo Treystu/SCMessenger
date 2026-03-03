@@ -40,7 +40,6 @@ fun DashboardScreen(
     
     val fullPeers by dashboardViewModel.fullPeersCount.collectAsState()
     val headlessPeers by dashboardViewModel.headlessPeersCount.collectAsState()
-    val nearbyPending by dashboardViewModel.nearbyPendingCount.collectAsState()
     val totalPeers by dashboardViewModel.totalPeersCount.collectAsState()
 
     Scaffold(
@@ -72,9 +71,8 @@ fun DashboardScreen(
                 StatCard(
                     modifier = Modifier.weight(1.5f),
                     title = buildString {
-                        append("$fullPeers Full")
-                        if (headlessPeers > 0) append(" / $headlessPeers Relay")
-                        if (nearbyPending > 0) append(" / $nearbyPending Nearby")
+                        append("$fullPeers Node")
+                        if (headlessPeers > 0) append(" / $headlessPeers Headless")
                     },
                     value = totalPeers.toString(),
                     icon = Icons.Filled.People,
@@ -154,7 +152,6 @@ fun PeerItem(peer: com.scmessenger.android.ui.viewmodels.PeerInfo) {
         ) {
             Icon(
                 when {
-                    peer.isRelay -> Icons.Filled.Router
                     peer.isFull -> Icons.Filled.Person
                     else -> Icons.Filled.People
                 },
@@ -170,10 +167,8 @@ fun PeerItem(peer: com.scmessenger.android.ui.viewmodels.PeerInfo) {
                 text = peer.localNickname
                     ?: peer.nickname
                     ?: when {
-                        peer.isRelay -> "Relay Node"
-                        peer.isFull -> "Full Node"
-                        peer.transport == "BLE" -> "Nearby (pending identity)"
-                        else -> "Unknown Node"
+                        peer.isFull -> "Node"
+                        else -> "Headless Node"
                     },
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold
@@ -194,10 +189,8 @@ fun PeerItem(peer: com.scmessenger.android.ui.viewmodels.PeerInfo) {
                     append(" • ")
                     append(
                         when {
-                            peer.isRelay -> "Relay"
-                            peer.isFull -> "Full"
-                            peer.transport == "BLE" -> "Nearby"
-                            else -> "Pending"
+                            peer.isFull -> "Node"
+                            else -> "Headless Node"
                         }
                     )
                 },

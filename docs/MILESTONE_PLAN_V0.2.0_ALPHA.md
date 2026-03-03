@@ -1,6 +1,6 @@
 # SCMessenger v0.2.0 Alpha Milestone Plan
 
-Status: Active (execution complete through WS12.24 sender-state convergence + conversation swipe-delete parity update)  
+Status: Active (execution complete through WS12.27 node-role classification correction)  
 Date: 2026-03-03  
 Scope: Core + Android + iOS + Desktop GUI + Relay topology
 
@@ -90,6 +90,43 @@ Scope: Core + Android + iOS + Desktop GUI + Relay topology
 1. Added explicit sender-state convergence closure gate for iOS -> Android flow: when Android recipient ingest is proven, iOS sender state must converge from `stored`/`forwarding` to `delivered` for the same message ID.
 2. Added and implemented conversation-list deletion UX parity update: Android now uses end-to-start swipe-to-delete with confirmation to match iOS behavior.
 3. This remains in v0.2.0 closeout scope (reliability convergence + UX parity hardening), not a scope expansion into v0.2.1 features.
+
+## Mega-Update Intake Addendum (WS12.25, 2026-03-03 HST)
+
+1. The pending-sync "older messages remain undelivered" regression was re-triaged from the updated `run5.sh` artifact set and pairwise pending-outbox snapshots.
+2. Android+iOS route/receipt hardening was applied in-scope for v0.2.0 reliability closure:
+   - route hints now refresh on change, not only first-write,
+   - receipt sends now prefer observed inbound route/listener hints,
+   - route candidate selection now includes recipient-key-aware filtering to reduce stale/mismatched route retries.
+3. Dashboard role classification was unified into two explicit buckets (`Node`, `Headless Node`) with relay/headless grouped together.
+4. Scope classification:
+   - this is reliability/consistency hardening inside existing v0.2.0 streams (WS12 residual closure),
+   - not a net-new feature expansion.
+5. Remaining milestone gate is unchanged:
+   - close `R-WS12-04/05/06` with synchronized post-fix physical Android+iOS evidence.
+
+## Sender-State + Preview Convergence Addendum (WS12.26, 2026-03-03 HST)
+
+1. Addressed sender-facing reliability/UI consistency gap where receipt transitions could be persisted but not reflected promptly in conversation/chat surfaces.
+2. Android+iOS receipt handlers now publish refreshed message updates immediately after receipt-driven history/pending state mutation.
+3. iOS conversation preview logic now deterministically selects the newest message by timestamp from bounded recent conversation data.
+4. Scope classification:
+   - reliability/consistency closure inside existing WS12 v0.2.0 surface,
+   - no net-new feature scope expansion.
+5. Milestone gate remains unchanged:
+   - closure of `R-WS12-04/05/06` still requires synchronized post-fix physical evidence.
+
+## Node-Role Classification Correction Addendum (WS12.27, 2026-03-03 HST)
+
+1. Added explicit correction for field-observed regression where a full iOS-sim peer could be rendered as headless.
+2. Android+iOS peer identify flow now treats `/headless/` agent strings as provisional when transport identity resolves, promoting resolved peers to full classification.
+3. Android+iOS relay-only guardrail now excludes full peers from `isKnownRelay` unless they are bootstrap relays, preventing relay-capability from forcing headless display.
+4. Validation in this pass:
+   - `cd android && ./gradlew :app:compileDebugKotlin` (pass)
+   - `bash ./iOS/verify-test.sh` (pass)
+   - `IOS_TARGET=simulator IOS_INSTALL=0 ANDROID_INSTALL=0 DURATION_SEC=25 GCP_RELAY_CHECK=0 bash ./scripts/live-smoke.sh` (pass capture)
+5. Milestone gate remains unchanged:
+   - synchronized physical iOS-device + Android evidence is still required to close `R-WS12-04/05/06` and confirm no field misclassification regression.
 
 ---
 

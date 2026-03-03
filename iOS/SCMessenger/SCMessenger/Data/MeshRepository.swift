@@ -857,8 +857,12 @@ final class MeshRepository {
         let routePeerCandidates = buildRoutePeerCandidates(
             peerId: peerId,
             cachedRoutePeerId: routing.libp2pPeerId,
-            notes: contact?.notes
+            notes: contact?.notes,
+            recipientPublicKey: trimmedKey
         )
+        if isKnownRelay(peerId) || isBootstrapRelayPeer(peerId) {
+            throw MeshError.contactNotFound("Refusing to use headless relay identity as a chat recipient: \(peerId)")
+        }
         let preferredRoutePeerId = routePeerCandidates.first
 
         // Prepare and send message (use trimmed key to handle any stored whitespace)
@@ -1050,10 +1054,14 @@ final class MeshRepository {
                 contactManager?.flush()
             }
 
-            if let routePeerId, !routePeerId.isEmpty,
+            let currentRouting = parseRoutingHintsFromNotes(existingContact.notes)
+            let normalizedRoutePeerId = routePeerId?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty
+            if let normalizedRoutePeerId,
                let normalizedSenderKey,
                normalizePublicKey(existingContact.publicKey) == normalizedSenderKey,
-               parseRoutingHintsFromNotes(existingContact.notes).libp2pPeerId == nil {
+               currentRouting.libp2pPeerId != normalizedRoutePeerId {
                 let updatedNotes = appendRoutingHint(notes: existingContact.notes, key: "libp2p_peer_id", value: routePeerId)
                 let updatedNotesWithListeners = upsertRoutingListeners(
                     notes: updatedNotes,
@@ -1125,7 +1133,13 @@ final class MeshRepository {
         if messageKind == "identity_sync" {
             logger.debug("Processed identity sync from \(canonicalPeerId) (route=\(routePeerId ?? "none"))")
             appendDiagnostic("msg_identity_sync peer=\(canonicalPeerId) route=\(routePeerId ?? "none")")
-            sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId, senderId: canonicalPeerId)
+            sendDeliveryReceiptAsync(
+                senderPublicKeyHex: senderPublicKeyHex,
+                messageId: messageId,
+                senderId: canonicalPeerId,
+                preferredRoutePeerId: routePeerId,
+                preferredListenerHints: hintedDialCandidates
+            )
             return
         }
 
@@ -1135,7 +1149,13 @@ final class MeshRepository {
         if let existing = try? historyManager?.get(id: messageId),
            existing.direction == .received {
             logger.debug("Duplicate inbound message \(messageId); acknowledging without UI emit")
-            sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId, senderId: canonicalPeerId)
+            sendDeliveryReceiptAsync(
+                senderPublicKeyHex: senderPublicKeyHex,
+                messageId: messageId,
+                senderId: canonicalPeerId,
+                preferredRoutePeerId: routePeerId,
+                preferredListenerHints: hintedDialCandidates
+            )
             return
         }
 
@@ -1158,7 +1178,13 @@ final class MeshRepository {
         appendDiagnostic("msg_rx_processed peer=\(canonicalPeerId) msg=\(messageId)")
 
         // Send delivery receipt ACK back to sender
-        sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId, senderId: canonicalPeerId)
+        sendDeliveryReceiptAsync(
+            senderPublicKeyHex: senderPublicKeyHex,
+            messageId: messageId,
+            senderId: canonicalPeerId,
+            preferredRoutePeerId: routePeerId,
+            preferredListenerHints: hintedDialCandidates
+        )
     }
 
     /// Handle delivery receipt callbacks from CoreDelegate.
@@ -1177,6 +1203,10 @@ final class MeshRepository {
             historyManager?.flush()
         }
         removePendingOutbound(historyRecordId: messageId)
+        if let updated = try? historyManager?.get(id: messageId) {
+            // Keep chat and conversation views aligned after receipt-driven status changes.
+            messageUpdates.send(updated)
+        }
         if wasAlreadyDelivered {
             appendDiagnostic("delivery_state msg=\(messageId) state=delivered detail=delivery_receipt_duplicate_status=\(normalized)")
             return
@@ -1186,7 +1216,15 @@ final class MeshRepository {
         MeshEventBus.shared.messageEvents.send(.delivered(messageId: messageId))
     }
 
-    private func sendDeliveryReceiptAsync(senderPublicKeyHex: String, messageId: String, senderId: String) {
+    private func sendDeliveryReceiptAsync(
+        senderPublicKeyHex: String,
+        messageId: String,
+        senderId: String,
+        preferredRoutePeerId: String? = nil,
+        preferredListenerHints: [String] = [],
+        preferredMultipeerPeerId: String? = nil,
+        preferredBlePeerId: String? = nil
+    ) {
         Task {
             do {
                 guard let receiptBytes = try ironCore?.prepareReceipt(recipientPublicKeyHex: senderPublicKeyHex, messageId: messageId) else { return }
@@ -1195,15 +1233,21 @@ final class MeshRepository {
                 let hints = parseRoutingHintsFromNotes(contact?.notes)
                 let routeCandidates = buildRoutePeerCandidates(
                     peerId: senderId,
-                    cachedRoutePeerId: hints.libp2pPeerId,
-                    notes: contact?.notes
+                    cachedRoutePeerId: preferredRoutePeerId ?? hints.libp2pPeerId,
+                    notes: contact?.notes,
+                    recipientPublicKey: senderPublicKeyHex
                 )
                 
                 _ = await attemptDirectSwarmDelivery(
                     routePeerCandidates: routeCandidates,
-                    addresses: hints.listeners,
+                    addresses: (preferredListenerHints + hints.listeners).reduce(into: [String]()) { acc, addr in
+                        if !acc.contains(addr) { acc.append(addr) }
+                    },
                     envelopeData: receiptBytes,
-                    blePeerId: hints.blePeerId
+                    multipeerPeerId: preferredMultipeerPeerId ?? hints.multipeerPeerId,
+                    blePeerId: preferredBlePeerId ?? hints.blePeerId,
+                    traceMessageId: messageId,
+                    attemptContext: "receipt_send"
                 )
                 logger.debug("Targeted delivery receipt sent for \(messageId) to \(senderId)")
             } catch {
@@ -1253,7 +1297,8 @@ final class MeshRepository {
                 let routeCandidates = buildRoutePeerCandidates(
                     peerId: contact?.peerId ?? normalizedRoute,
                     cachedRoutePeerId: normalizedRoute,
-                    notes: contact?.notes
+                    notes: contact?.notes,
+                    recipientPublicKey: recipientPublicKey
                 )
 
                 _ = await self.attemptDirectSwarmDelivery(
@@ -2442,7 +2487,9 @@ final class MeshRepository {
 
         var syncPeerIds: [String] = [peerId]
         let isHeadless = agentVersion.contains("/headless/")
-        if isBootstrapRelayPeer(peerId) || isHeadless {
+        let transportIdentity = resolveTransportIdentity(libp2pPeerId: peerId)
+        let shouldTreatAsHeadless = isBootstrapRelayPeer(peerId) || (isHeadless && transportIdentity == nil)
+        if shouldTreatAsHeadless {
             logger.info("Headless/Relay transport node identified: \(peerId) (agent: \(agentVersion))")
             updateRelayAvailability(peerId: trimmedPeerId, event: "identified")
             let relayDiscovery = PeerDiscoveryInfo(
@@ -2457,7 +2504,9 @@ final class MeshRepository {
             updateDiscoveredPeer(peerId, info: relayDiscovery)
             emitConnectedIfChanged(peerId: peerId)
         } else {
-            let transportIdentity = resolveTransportIdentity(libp2pPeerId: peerId)
+            if isHeadless, transportIdentity != nil {
+                logger.info("Promoting peer \(peerId) to full node: identity resolved despite headless agent \(agentVersion)")
+            }
             if let transportIdentity {
                 syncPeerIds.append(transportIdentity.canonicalPeerId)
                 let discoveredNickname = prepopulateDiscoveryNickname(
@@ -2889,7 +2938,12 @@ final class MeshRepository {
         return out
     }
 
-    private func buildRoutePeerCandidates(peerId: String, cachedRoutePeerId: String?, notes: String?) -> [String] {
+    private func buildRoutePeerCandidates(
+        peerId: String,
+        cachedRoutePeerId: String?,
+        notes: String?,
+        recipientPublicKey: String? = nil
+    ) -> [String] {
         var candidates: [String] = []
         let notedPeerIds = parseAllRoutingPeerIds(from: notes)
         if let newest = notedPeerIds.last, !newest.isEmpty {
@@ -2903,10 +2957,54 @@ final class MeshRepository {
            !candidates.contains(cached) {
             candidates.append(cached)
         }
+        for discovered in discoverRoutePeersForPublicKey(recipientPublicKey) where !candidates.contains(discovered) {
+            candidates.append(discovered)
+        }
         if isLibp2pPeerId(peerId), !candidates.contains(peerId) {
             candidates.append(peerId)
         }
-        return candidates.filter { isLibp2pPeerId($0) }
+        return candidates.filter {
+            isLibp2pPeerId($0) && routeCandidateMatchesRecipient($0, recipientPublicKey: recipientPublicKey)
+        }
+    }
+
+    private func discoverRoutePeersForPublicKey(_ recipientPublicKey: String?) -> [String] {
+        guard let normalizedRecipientKey = normalizePublicKey(recipientPublicKey) else { return [] }
+
+        let fromDiscovery = discoveredPeerMap.values
+            .compactMap { info -> String? in
+                guard normalizePublicKey(info.publicKey) == normalizedRecipientKey else { return nil }
+                let candidate = info.canonicalPeerId.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !candidate.isEmpty, isLibp2pPeerId(candidate), !isKnownRelay(candidate) else { return nil }
+                return candidate
+            }
+
+        let fromLedger = (ledgerManager?.dialableAddresses() ?? [])
+            .compactMap { entry -> String? in
+                guard let candidate = entry.peerId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !candidate.isEmpty,
+                      isLibp2pPeerId(candidate),
+                      !isKnownRelay(candidate),
+                      normalizePublicKey(entry.publicKey) == normalizedRecipientKey else {
+                    return nil
+                }
+                return candidate
+            }
+
+        return (fromDiscovery + fromLedger).reduce(into: [String]()) { acc, next in
+            if !acc.contains(next) { acc.append(next) }
+        }
+    }
+
+    private func routeCandidateMatchesRecipient(_ routePeerId: String, recipientPublicKey: String?) -> Bool {
+        let normalizedRoute = routePeerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedRoute.isEmpty, isLibp2pPeerId(normalizedRoute) else { return false }
+        guard !isKnownRelay(normalizedRoute) else { return false }
+
+        guard let normalizedRecipientKey = normalizePublicKey(recipientPublicKey) else { return true }
+        let extractedKey = (try? ironCore?.extractPublicKeyFromPeerId(peerId: normalizedRoute)) ?? nil
+        guard let normalizedExtracted = normalizePublicKey(extractedKey) else { return true }
+        return normalizedExtracted == normalizedRecipientKey
     }
 
     private func isLibp2pPeerId(_ value: String) -> Bool {
@@ -3321,7 +3419,8 @@ final class MeshRepository {
             let routePeerCandidates = buildRoutePeerCandidates(
                 peerId: item.peerId,
                 cachedRoutePeerId: item.routePeerId,
-                notes: contact?.notes
+                notes: contact?.notes,
+                recipientPublicKey: contact?.publicKey
             )
             let resolvedRoutePeerId = routePeerCandidates.first
             let resolvedAddresses = buildDialCandidatesForPeer(
@@ -3560,7 +3659,8 @@ final class MeshRepository {
     /// Check if a peer is a known relay (either bootstrap or dynamically discovered headless)
     func isKnownRelay(_ peerId: String) -> Bool {
         if isBootstrapRelayPeer(peerId) { return true }
-        return discoveredPeerMap[peerId]?.isRelay == true
+        guard let info = discoveredPeerMap[peerId] else { return false }
+        return info.isRelay && !info.isFull
     }
 
     private func buildDialCandidatesForPeer(

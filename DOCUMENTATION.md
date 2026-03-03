@@ -154,6 +154,21 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `REMAINING_WORK_TRACKING.md`
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.25 mega-update intake + pending-sync route-hint hardening (2026-03-03 HST, run5/log-driven RCA + Android/iOS queue/receipt route fix + headless/relay dashboard-role unification) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.26 sender-state/preview convergence hotfix (2026-03-03 HST, receipt-path UI refresh propagation + conversation preview newest-message selection hardening) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.27 node-role classification correction (2026-03-03 HST, full-node vs headless misclassification fix + iOS/Android relay visibility validation snapshot) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 
 ## Documentation Governance Rules
 
