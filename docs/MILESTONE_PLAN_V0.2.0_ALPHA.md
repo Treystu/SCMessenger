@@ -1,6 +1,6 @@
 # SCMessenger v0.2.0 Alpha Milestone Plan
 
-Status: Active (execution complete through WS12.28 transport-regression hotfix)  
+Status: Active (execution complete through WS12.29 known-issues consolidation pass)  
 Date: 2026-03-03  
 Scope: Core + Android + iOS + Desktop GUI + Relay topology
 
@@ -143,6 +143,40 @@ Scope: Core + Android + iOS + Desktop GUI + Relay topology
 5. Scope classification:
    - reliability hardening only (no net-new feature scope expansion),
    - milestone closeout gate remains synchronized physical evidence for `R-WS12-04/05/06` (+ `R-WS12-27-01`).
+
+## Known-Issues Consolidation Addendum (WS12.29, 2026-03-03 HST)
+
+1. Field evidence in this pass confirms the milestone gate is still blocked by real-device stability/convergence classes:
+   - iOS send-path crash reports (`SIGTRAP` in BLE peripheral send path),
+   - iOS CPU watchdog kills under retry pressure,
+   - Android stale-route/stale-BLE-target retry churn.
+2. Canonical known-issues + remediation sequence is now explicitly tracked in:
+   - `docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`
+3. Milestone scope classification:
+   - no scope expansion beyond v0.2.0 reliability closure;
+   - this pass is a consolidation and execution-order reset so remaining work can be burned down deterministically.
+4. New explicit UX safety TODO captured for closeout:
+   - iOS confirmation prompt before contact deletion.
+5. Milestone gate remains unchanged:
+   - full closeout still requires synchronized physical Android+iOS evidence to retire `R-WS12-04/05/06` and associated WS12.29 risks.
+
+## Live Verification Loop Addendum (WS12.30, 2026-03-03 HST)
+
+1. Added a dedicated step-gated orchestration harness to execute WS12.29 burndown in immediate feedback cycles without changing baseline `run5.sh`:
+   - `scripts/run5-live-feedback.sh`
+2. Harness gate sequence is now explicit and deterministic for each fix-step:
+   - deploy mobile updates (optional),
+   - run `run5.sh --update` to refresh/capture 5-node topology,
+   - require all-node log health,
+   - require full directed node-pair visibility matrix,
+   - require crash/fatal marker clean scan,
+   - run deterministic verifier suite.
+3. Evidence output is now standardized per attempt:
+   - `logs/live-verify/<step>_<timestamp>/attempt_*`
+4. Scope classification:
+   - execution-orchestration hardening only; no feature scope expansion.
+5. Milestone closure gate remains unchanged:
+   - P0/P1 issues still require synchronized physical Android+iOS convergence evidence to retire residual risks.
 
 ---
 

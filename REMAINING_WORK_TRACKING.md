@@ -245,6 +245,51 @@ Still open after this pass:
 2. [ ] Confirm previously stuck pending messages can progress/deliver under active connectivity with WS12.28 binaries.
 3. [ ] Re-run synchronized convergence checks (`verify_receipt_convergence`, relay-flap correlation, BLE-only validation) against fresh post-WS12.28 artifacts.
 
+## WS12.29 Known-Issues Consolidation + Full-Functionality Burndown (2026-03-03 HST)
+
+Completed in this pass:
+
+1. [x] Pulled fresh Android+iOS device-side diagnostics and crash artifacts:
+   - `logs/device-debug-20260303-140445/`
+   - `logs/device-debug-20260303-140445/ios-crashpull/`
+2. [x] Consolidated issue ledger + remediation plan into canonical doc:
+   - `docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`
+3. [x] Correlated critical crash class from fresh iOS reports:
+   - send-path crash (`SIGTRAP`) in `BLEPeripheralManager.sendDataToCentral`,
+   - recurring iOS `cpu_resource_fatal` under retry pressure.
+4. [x] Correlated Android stale-route/stale-BLE-target retry churn from on-device diagnostics.
+
+Still open after this pass:
+
+1. [ ] Prove iOS send-path crash non-repro on latest installed iPhone binary with synchronized artifacts.
+2. [ ] Prove iOS watchdog (`cpu_resource_fatal`) non-repro under retry-heavy send scenarios.
+3. [ ] Close Android stale-route and stale-BLE-target retry loops with post-fix evidence tied to active conversation peer IDs.
+4. [ ] Close cross-device continuity gate (`Android <-> iOS`) with synchronized bidirectional delivered-state evidence.
+5. [ ] Harden/document reliable iOS large-diagnostics extraction workflow for repeatable RCA.
+6. [ ] Add iOS confirmation prompt before contact deletion and capture validation evidence.  <!-- user-requested todo -->
+
+## WS12.30 Live Verification Feedback Loop (2026-03-03 HST)
+
+Completed in this pass:
+
+1. [x] Added dedicated iterative harness copy for step-gated 5-node verification without modifying `run5.sh`:
+   - `scripts/run5-live-feedback.sh`
+2. [x] Added strict sequential gate flow in harness:
+   - build/deploy phase (optional skip),
+   - `run5 --update` capture phase,
+   - log-health gate,
+   - directed pair-matrix gate for all node pairings,
+   - crash/fatal marker gate,
+   - deterministic verifier gate set (`verify_relay_flap_regression`, `verify_ble_only_pairing`, `verify_receipt_convergence`).
+3. [x] Added per-attempt evidence packaging under:
+   - `logs/live-verify/<step>_<timestamp>/attempt_*`
+4. [x] Updated scripts operations guide and known-issues execution plan with exact usage/runbook.
+
+Still open after this pass:
+
+1. [ ] Execute WS12.29 issue burndown using the new loop for each active issue ID and archive pass/fail manifests per attempt.
+2. [ ] Close all P0/P1 issue IDs only after corresponding loop runs pass required gates with synchronized Android+iOS real-device evidence.
+
 ### WS12.25 Mega-Update Consolidated Next Steps (Open + Deferred)
 
 This is the current "burn-down" slate combining all active deferred/runtime closures still gating full reliability signoff:

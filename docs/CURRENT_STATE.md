@@ -238,6 +238,44 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - Remaining closure gate:
   - deploy WS12.28 binaries to physical Android+iOS and confirm live logs no longer show BLE NPE loops or special-use IPv4 dial attempts during retry windows.
 
+### WS12.29 Known-Issues Consolidation + Full-Functionality Burndown (2026-03-03 HST)
+
+- Fresh field evidence intake in this pass:
+  - iOS crash reports pulled from device crash storage show repeated send-path `SIGTRAP` in `BLEPeripheralManager.sendDataToCentral` during outbox flush/send flow.
+    - `logs/device-debug-20260303-140445/ios-crashpull/SCMessenger-2026-03-02-185622.ips`
+    - `logs/device-debug-20260303-140445/ios-crashpull/SCMessenger-2026-03-02-185659.ips`
+  - iOS watchdog reports show CPU resource kills under retry pressure.
+    - `logs/device-debug-20260303-140445/ios-crashpull/SCMessenger.cpu_resource_fatal-2026-02-27-213024.ips`
+  - Android on-device diagnostics show persistent stale-route/stale-BLE-target retry churn:
+    - `Network error` count in extracted log: 291
+    - repeated route target: `12D3KooWHqa2jd8Ec3bbXR24Fn8Lc2rPQQwjeEiY2zUyXXMCez27`
+    - repeated BLE fallback target: `65:99:F2:D9:77:01`
+    - source: `logs/device-debug-20260303-140445/android-mesh_diagnostics-device.log`
+- Additional operator-evidence gap identified:
+  - direct pull of large iOS `mesh_diagnostics.log` from app container repeatedly failed with file-service socket closure; this blocks deterministic device-side timeline extraction until workflow/tooling is hardened.
+- Consolidated remediation source of truth added:
+  - `docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`
+- Requested TODO explicitly added for UX safety:
+  - require confirmation in iOS before contact deletion (`UX-IOS-001` in WS12.29 plan and active backlog).
+
+### WS12.30 Live Verification Feedback-Loop Harness (2026-03-03 HST)
+
+- Added a non-destructive iterative harness copy for field step-by-step validation:
+  - `scripts/run5-live-feedback.sh`
+- Execution model:
+  - deploy Android+iOS build updates (`scripts/deploy_to_device.sh both`, optional skip flag),
+  - run `run5.sh` with `--update` for synchronized 5-node capture,
+  - enforce sequential gates before accepting a step:
+    - log-health gate (all five node logs),
+    - directed pair-matrix gate (all node pairings),
+    - crash/fatal marker gate,
+    - deterministic verifiers (`relay_flap`, `ble_only`, `receipt_convergence`).
+- Evidence packaging:
+  - each attempt writes a self-contained bundle under `logs/live-verify/<step>_<timestamp>/attempt_*`.
+- Recommended command per fix:
+  - `./scripts/run5-live-feedback.sh --step=<fix-id> --time=5 --attempts=3`
+  - add `--require-receipt-gate` when sender/receipt convergence is the closure target.
+
 ### WS12 Verification Snapshot (2026-03-03)
 
 - `cargo test --workspace --no-run` — **pass**

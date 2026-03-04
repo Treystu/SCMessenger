@@ -20,22 +20,32 @@ This guide covers active launch/debug/verification scripts, with a focus on AI-a
    - `./scripts/verify_ble_only_pairing.sh <android_log> <ios_log>`
 6. Interop/function completeness matrix refresh:
    - `./scripts/generate_interop_matrix.sh`
+7. Live 5-node step-gated feedback loop (build/deploy + pair-matrix gating):
+   - `./scripts/run5-live-feedback.sh --step=<fix-id> --time=5 --attempts=3`
 
 ## 5-Node / Multi-Node Debug Stack
 
 Primary scripts used during 5-node and relay continuity investigations:
 
-1. `scripts/verify_ws12_matrix.sh`
+1. `scripts/run5-live-feedback.sh`
+   - Iterative harness that keeps `run5.sh` untouched while enforcing strict phase gates per fix step:
+     - mobile build/deploy (optional),
+     - 5-node update/capture run,
+     - log-health gate,
+     - all-node pair matrix gate (directed visibility),
+     - deterministic verifier gates (`relay_flap`, `ble_only`, `receipt_convergence`).
+   - Produces per-attempt evidence bundles under `logs/live-verify/`.
+2. `scripts/verify_ws12_matrix.sh`
    - Canonical multi-surface verification gate (Rust + Android + iOS parity checks).
-2. `scripts/live-smoke.sh`
+3. `scripts/live-smoke.sh`
    - Live interaction harness for Android+iOS runtime checks with synchronized log capture.
-3. `scripts/correlate_relay_flap_windows.sh`
+4. `scripts/correlate_relay_flap_windows.sh`
    - Correlates iOS relay churn windows with GCP relay logs.
-4. `scripts/verify_relay_flap_regression.sh`
+5. `scripts/verify_relay_flap_regression.sh`
    - Deterministic iOS relay dial-loop regression check.
-5. `scripts/verify_receipt_convergence.sh`
+6. `scripts/verify_receipt_convergence.sh`
    - Message-ID convergence validation across Android/iOS diagnostics.
-6. `scripts/verify_ble_only_pairing.sh`
+7. `scripts/verify_ble_only_pairing.sh`
    - BLE-only strict-mode behavior and instability checks.
 
 ## Launch / Control Scripts

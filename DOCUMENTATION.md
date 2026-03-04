@@ -15,6 +15,7 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 - [Repository Context](docs/REPO_CONTEXT.md)
 - [Current Verified State](docs/CURRENT_STATE.md)
 - [Active Backlog](REMAINING_WORK_TRACKING.md)
+- [WS12.29 Known Issues + Burndown Plan](docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md)
 - [v0.2.0 Milestone Plan](docs/MILESTONE_PLAN_V0.2.0_ALPHA.md)
 - [v0.2.0 Phase Prompts](docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md)
 - [v0.2.0 Residual Risk Register](docs/V0.2.0_RESIDUAL_RISK_REGISTER.md)
@@ -170,6 +171,20 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 - WS12.28 transport-regression hotfix (2026-03-03 HST, Android BLE `connectGatt` null crash-loop fix + Android/iOS special-use IPv4 filtering/local-IP selection hardening) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.29 known-issues consolidation + full-functionality burndown plan (2026-03-03 HST, field iOS send-crash evidence + Android stale-route loops + clean remediation sequence) is tracked in:
+  - `docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.30 live verification feedback-loop orchestration (2026-03-03 HST, sequential phase gates + all-node-pairing validation + per-attempt evidence bundles) is tracked in:
+  - `scripts/run5-live-feedback.sh`
+  - `scripts/README.md`
+  - `docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
