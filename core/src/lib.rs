@@ -1087,22 +1087,53 @@ impl IronCore {
         // Final receipt transitions delivery state in-core so all platform
         // adapters observe coherent outbox/history state.
         let mut receipt_event: Option<(String, &'static str)> = None;
+        let mut receipt_handled = false;
         if msg.message_type == message::MessageType::Receipt {
+            receipt_handled = true;
             if let Ok(receipt) = bincode::deserialize::<message::Receipt>(&msg.payload) {
-                if matches!(receipt.status, message::DeliveryStatus::Delivered) {
-                    let _ = self.mark_message_sent(receipt.message_id.clone());
-                    let _ = self
-                        .history
-                        .read()
-                        .mark_delivered(receipt.message_id.clone());
+                let local_public_key_hex = hex::encode(keys.signing_key.verifying_key().to_bytes());
+                let expected_sender_identity = hex::encode(blake3::hash(&envelope.sender_public_key).as_bytes());
+                let outbound_match = self
+                    .history
+                    .read()
+                    .get(receipt.message_id.clone())
+                    .ok()
+                    .flatten()
+                    .filter(|record| {
+                        record.direction == store::MessageDirection::Sent
+                            && record.peer_id.eq_ignore_ascii_case(&sender_pub_key_hex)
+                    });
+                if outbound_match.is_none() {
+                    eprintln!(
+                        "[IronCore] ignoring receipt for message {}: sender key does not match outbound recipient",
+                        receipt.message_id
+                    );
+                } else if !msg.recipient_id.eq_ignore_ascii_case(&local_public_key_hex) {
+                    eprintln!(
+                        "[IronCore] ignoring receipt for message {}: recipient mismatch (msg recipient != local key)",
+                        receipt.message_id
+                    );
+                } else if !msg.sender_id.eq_ignore_ascii_case(&expected_sender_identity) {
+                    eprintln!(
+                        "[IronCore] ignoring receipt for message {}: sender identity does not match envelope sender key",
+                        receipt.message_id
+                    );
+                } else {
+                    if matches!(receipt.status, message::DeliveryStatus::Delivered) {
+                        let _ = self.mark_message_sent(receipt.message_id.clone());
+                        let _ = self
+                            .history
+                            .read()
+                            .mark_delivered(receipt.message_id.clone());
+                    }
+                    let status_str = match receipt.status {
+                        message::DeliveryStatus::Sent => "sent",
+                        message::DeliveryStatus::Delivered => "delivered",
+                        message::DeliveryStatus::Read => "read",
+                        message::DeliveryStatus::Failed(_) => "failed",
+                    };
+                    receipt_event = Some((receipt.message_id, status_str));
                 }
-                let status_str = match receipt.status {
-                    message::DeliveryStatus::Sent => "sent",
-                    message::DeliveryStatus::Delivered => "delivered",
-                    message::DeliveryStatus::Read => "read",
-                    message::DeliveryStatus::Failed(_) => "failed",
-                };
-                receipt_event = Some((receipt.message_id, status_str));
             }
         }
 
@@ -1110,7 +1141,7 @@ impl IronCore {
         if let Some(delegate) = self.delegate.read().as_ref() {
             if let Some((message_id, status)) = receipt_event {
                 delegate.on_receipt_received(message_id, status.to_string());
-            } else {
+            } else if !receipt_handled {
                 delegate.on_message_received(
                     msg.sender_id.clone(),
                     sender_pub_key_hex,
@@ -1606,5 +1637,39 @@ mod tests {
             .expect("history lookup should succeed")
             .expect("history record should exist");
         assert!(record.delivered);
+    }
+
+    #[test]
+    fn test_mismatched_sender_receipt_is_ignored() {
+        let sender = IronCore::new();
+        let recipient = IronCore::new();
+        let attacker = IronCore::new();
+        sender.initialize_identity().unwrap();
+        recipient.initialize_identity().unwrap();
+        attacker.initialize_identity().unwrap();
+
+        let recipient_pk = recipient.get_identity_info().public_key_hex.unwrap();
+        let sender_pk = sender.get_identity_info().public_key_hex.unwrap();
+
+        let prepared = sender
+            .prepare_message_with_id(recipient_pk, "forged receipt should be ignored".to_string())
+            .unwrap();
+        assert_eq!(sender.outbox_count(), 1);
+
+        let forged_receipt_envelope = attacker
+            .prepare_receipt(sender_pk, prepared.message_id.clone())
+            .expect("attacker can craft syntactically valid receipt envelope");
+
+        sender
+            .receive_message(forged_receipt_envelope)
+            .expect("sender should still decrypt forged receipt envelope");
+
+        assert_eq!(sender.outbox_count(), 1);
+        let history = sender.history_store_manager();
+        let record = history
+            .get(prepared.message_id)
+            .expect("history lookup should succeed")
+            .expect("history record should exist");
+        assert!(!record.delivered);
     }
 }

@@ -276,6 +276,31 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - `./scripts/run5-live-feedback.sh --step=<fix-id> --time=5 --attempts=3`
   - add `--require-receipt-gate` when sender/receipt convergence is the closure target.
 
+### WS12.31 Stale-Target Convergence Hardening + Transport Priority Clarification (2026-03-04 HST)
+
+- Field issue intake addressed in this pass:
+  - active Android/iOS paired usage still reported non-delivery with stale route/BLE retry churn under WS12.29 open-risk class.
+- Reliability hardening applied in `MeshRepository` on Android+iOS:
+  - route candidate ordering now prefers fresh discovery/ledger candidates before persisted note/cached hints.
+  - route-candidate recipient validation now requires either:
+    - extracted route peer key matches recipient key, or
+    - runtime-discovered/ledger evidence that route peer maps to recipient key.
+  - failed send attempts no longer persist failed route IDs back into pending-outbox entries (`routePeerId` stays unset when no route ACK succeeded), preventing stale-route lock-in across retries.
+  - local BLE fallback target selection now prefers currently connected BLE peers ahead of cached `ble_peer_id` hints.
+  - Android disconnect handling now prunes disconnected aliases by peer ID + canonical ID + matched public-key aliases (previously only direct keys were removed in callback path).
+- Transport-priority audit (current behavior):
+  - Android send path: `WiFi Direct` -> `BLE` -> `Core direct route candidates (LAN-prioritized addresses first)` -> `relay-circuit retry`.
+  - iOS send path: `Multipeer` -> `BLE` -> `Core direct route candidates (LAN-prioritized addresses first)` -> `relay-circuit retry`.
+  - strict BLE-only mode (`SC_BLE_ONLY_VALIDATION=1`) blocks Multipeer/WiFi/Core attempts and keeps only BLE local fallback.
+- UX safety closure in this pass:
+  - iOS contacts list now requires explicit confirmation before contact deletion.
+- Verification in this pass:
+  - `cd android && ./gradlew :app:compileDebugKotlin` — **pass**
+  - `cd android && ./gradlew :app:testDebugUnitTest --tests "com.scmessenger.android.data.MeshRepositoryTest"` — **pass**
+  - `bash ./iOS/verify-test.sh` — **pass** (`10 warnings`, non-fatal policy)
+- Remaining closure gate:
+  - synchronized physical Android+iOS evidence is still required to retire `R-WS12-29-02` and paired-delivery residuals (`R-WS12-04/05/06`).
+
 ### WS12 Verification Snapshot (2026-03-03)
 
 - `cargo test --workspace --no-run` — **pass**

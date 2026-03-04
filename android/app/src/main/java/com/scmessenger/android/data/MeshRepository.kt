@@ -179,6 +179,8 @@ class MeshRepository(private val context: Context) {
     private val identitySyncSentPeers = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private val deliveredReceiptCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val deliveredReceiptCacheTtlMs = 2L * 60L * 60L * 1000L
+    private val pendingReceiptSendJobs = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+    private val receiptSendMaxAttempts = 6
     @Volatile
     private var serviceStartedAtEpochSec: Long = 0L
     @Volatile
@@ -598,11 +600,11 @@ class MeshRepository(private val context: Context) {
                         val canonicalId = transportToCanonicalMap.remove(peerId) ?: peerId
                         activeSessions.remove(peerId)
 
-                        // Clear from discovery if no other connections exist for this peer
-                        if (!transportToCanonicalMap.values.contains(canonicalId)) {
-                             _discoveredPeers.update { it - canonicalId }
+                        // Remove disconnected aliases (peerId + canonical + same-key aliases).
+                        pruneDisconnectedPeer(peerId)
+                        if (canonicalId != peerId) {
+                            pruneDisconnectedPeer(canonicalId)
                         }
-                        _discoveredPeers.update { it - peerId }
 
                         emitDisconnectedIfChanged(
                             peerId = peerId
@@ -925,14 +927,29 @@ class MeshRepository(private val context: Context) {
                     if (normalized != "delivered" && normalized != "read") {
                         return
                     }
-                    val firstReceiptSeen = markDeliveredReceiptSeen(messageId)
-                    if (!firstReceiptSeen) {
+                    val existingRecord = try {
+                        historyManager?.get(messageId)
+                    } catch (_: Exception) {
+                        null
+                    }
+                    if (existingRecord == null || existingRecord.direction != uniffi.api.MessageDirection.SENT) {
+                        logDeliveryState(
+                            messageId = messageId,
+                            state = "pending",
+                            detail = "delivery_receipt_ignored_non_outbound status=$normalized direction=${existingRecord?.direction ?: "missing"}"
+                        )
                         return
                     }
-                    val wasAlreadyDelivered = try {
-                        historyManager?.get(messageId)?.delivered == true
-                    } catch (_: Exception) {
-                        false
+                    val wasAlreadyDelivered = existingRecord.delivered
+                    val firstReceiptSeen = markDeliveredReceiptSeen(messageId)
+                    if (!firstReceiptSeen && wasAlreadyDelivered) {
+                        removePendingOutbound(messageId)
+                        logDeliveryState(
+                            messageId = messageId,
+                            state = "delivered",
+                            detail = "delivery_receipt_duplicate_status=$normalized"
+                        )
+                        return
                     }
                     if (!wasAlreadyDelivered) {
                         historyManager?.markDelivered(messageId)
@@ -949,14 +966,7 @@ class MeshRepository(private val context: Context) {
                             _messageUpdates.emit(refreshedRecord)
                         }
                     }
-                    if (wasAlreadyDelivered) {
-                        logDeliveryState(
-                            messageId = messageId,
-                            state = "delivered",
-                            detail = "delivery_receipt_duplicate_status=$normalized"
-                        )
-                        return
-                    }
+                    if (wasAlreadyDelivered) return
                     ironCore?.markMessageSent(messageId)
                     // Bridge to ChatViewModel: emit Delivered so UI delivery indicator updates
                     repoScope.launch {
@@ -1023,10 +1033,20 @@ class MeshRepository(private val context: Context) {
         preferredBlePeerId: String? = null,
         preferredListenerHints: List<String> = emptyList()
     ) {
-        repoScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        val normalizedMessageId = messageId.trim()
+        if (normalizedMessageId.isEmpty()) return
+
+        val candidateJob = repoScope.launch(
+            kotlinx.coroutines.Dispatchers.IO,
+            start = kotlinx.coroutines.CoroutineStart.LAZY
+        ) {
             try {
-                val receiptBytes = ironCore?.prepareReceipt(senderPublicKeyHex, messageId)
-                if (receiptBytes != null) {
+                for (attempt in 1..receiptSendMaxAttempts) {
+                    val receiptBytes = ironCore?.prepareReceipt(senderPublicKeyHex, normalizedMessageId)
+                    if (receiptBytes == null) {
+                        Timber.d("Skipping delivery receipt for $normalizedMessageId: prepareReceipt returned null")
+                        return@launch
+                    }
                     val contact = try { contactManager?.get(senderId) } catch (_: Exception) { null }
                     val hints = parseRoutingHints(contact?.notes)
                     val routeCandidates = buildRoutePeerCandidates(
@@ -1035,21 +1055,80 @@ class MeshRepository(private val context: Context) {
                         notes = contact?.notes,
                         recipientPublicKey = senderPublicKeyHex
                     )
-                    attemptDirectSwarmDelivery(
+                    val delivery = attemptDirectSwarmDelivery(
                         routePeerCandidates = routeCandidates,
                         listeners = (preferredListenerHints + hints.listeners).distinct(),
                         encryptedData = receiptBytes,
                         wifiPeerId = preferredWifiPeerId ?: hints.wifiPeerId,
                         blePeerId = preferredBlePeerId ?: hints.blePeerId,
-                        traceMessageId = messageId,
+                        traceMessageId = normalizedMessageId,
                         attemptContext = "receipt_send",
                     )
-                    Timber.d("Targeted delivery receipt sent for $messageId to $senderId")
+                    if (delivery.acked) {
+                        logDeliveryAttempt(
+                            messageId = normalizedMessageId,
+                            medium = "receipt",
+                            phase = "aggregate",
+                            outcome = "acked",
+                            detail = "ctx=receipt_send sender=$senderId attempt=$attempt"
+                        )
+                        Timber.d("Targeted delivery receipt sent for $normalizedMessageId to $senderId")
+                        return@launch
+                    }
+
+                    if (attempt < receiptSendMaxAttempts) {
+                        val delaySec = receiptRetryDelaySec(attempt)
+                        logDeliveryAttempt(
+                            messageId = normalizedMessageId,
+                            medium = "receipt",
+                            phase = "retry",
+                            outcome = "scheduled",
+                            detail = "ctx=receipt_send sender=$senderId attempt=$attempt delay_sec=$delaySec"
+                        )
+                        kotlinx.coroutines.delay(delaySec * 1000L)
+                    } else {
+                        logDeliveryAttempt(
+                            messageId = normalizedMessageId,
+                            medium = "receipt",
+                            phase = "aggregate",
+                            outcome = "exhausted",
+                            detail = "ctx=receipt_send sender=$senderId attempts=$receiptSendMaxAttempts"
+                        )
+                    }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Timber.d("Failed to send delivery receipt for $messageId: ${e.message}")
+                Timber.d("Failed to send delivery receipt for $normalizedMessageId: ${e.message}")
+            } finally {
+                pendingReceiptSendJobs.remove(normalizedMessageId)
             }
         }
+
+        val existingJob = pendingReceiptSendJobs.putIfAbsent(normalizedMessageId, candidateJob)
+        if (existingJob != null && existingJob.isActive) {
+            candidateJob.cancel()
+            logDeliveryAttempt(
+                messageId = normalizedMessageId,
+                medium = "receipt",
+                phase = "dedupe",
+                outcome = "skipped_active",
+                detail = "ctx=receipt_send sender=$senderId"
+            )
+            return
+        }
+        if (existingJob != null) {
+            pendingReceiptSendJobs[normalizedMessageId] = candidateJob
+        }
+        candidateJob.invokeOnCompletion {
+            pendingReceiptSendJobs.remove(normalizedMessageId, candidateJob)
+        }
+        candidateJob.start()
+    }
+
+    private fun receiptRetryDelaySec(attempt: Int): Long {
+        val exponent = (attempt - 1).coerceIn(0, 3)
+        return 1L shl exponent
     }
 
     private fun sendIdentitySyncIfNeeded(routePeerId: String, knownPublicKey: String? = null) {
@@ -1611,6 +1690,8 @@ class MeshRepository(private val context: Context) {
         pendingOutboxRetryJob = null
         coverTrafficJob?.cancel()
         coverTrafficJob = null
+        pendingReceiptSendJobs.values.forEach { it.cancel() }
+        pendingReceiptSendJobs.clear()
 
         kotlin.runCatching { bleScanner?.stopScanning() }
             .onFailure { Timber.w(it, "Failed to stop BLE scanner") }
@@ -1918,34 +1999,47 @@ class MeshRepository(private val context: Context) {
                     traceMessageId = messageId,
                     attemptContext = "initial_send"
                 )
-                val selectedRoutePeerId = delivery.routePeerId ?: preferredRoutePeerId
+                val selectedRoutePeerId = if (delivery.acked) {
+                    delivery.routePeerId ?: preferredRoutePeerId
+                } else {
+                    delivery.routePeerId
+                }
 
                 if (delivery.acked) {
                     promotePendingOutboundForPeer(peerId = peerId, excludingMessageId = messageId)
                 }
 
-                if (delivery.acked) {
-                    enqueuePendingOutbound(
-                        historyRecordId = messageId,
-                        peerId = peerId,
-                        routePeerId = selectedRoutePeerId,
-                        listeners = routingHints.listeners,
-                        encryptedData = encryptedData,
-                        initialAttemptCount = 1,
-                        initialDelaySec = receiptAwaitSeconds,
-                        strictBleOnlyMode = strictBleOnlyValidation
+                if (isMessageDeliveredLocally(messageId)) {
+                    removePendingOutbound(messageId)
+                    logDeliveryState(
+                        messageId = messageId,
+                        state = "delivered",
+                        detail = "delivery_receipt_arrived_before_enqueue"
                     )
                 } else {
-                    enqueuePendingOutbound(
-                        historyRecordId = messageId,
-                        peerId = peerId,
-                        routePeerId = selectedRoutePeerId,
-                        listeners = routingHints.listeners,
-                        encryptedData = encryptedData,
-                        initialAttemptCount = 1,
-                        initialDelaySec = 0,
-                        strictBleOnlyMode = strictBleOnlyValidation
-                    )
+                    if (delivery.acked) {
+                        enqueuePendingOutbound(
+                            historyRecordId = messageId,
+                            peerId = peerId,
+                            routePeerId = selectedRoutePeerId,
+                            listeners = routingHints.listeners,
+                            encryptedData = encryptedData,
+                            initialAttemptCount = 1,
+                            initialDelaySec = receiptAwaitSeconds,
+                            strictBleOnlyMode = strictBleOnlyValidation
+                        )
+                    } else {
+                        enqueuePendingOutbound(
+                            historyRecordId = messageId,
+                            peerId = peerId,
+                            routePeerId = selectedRoutePeerId,
+                            listeners = routingHints.listeners,
+                            encryptedData = encryptedData,
+                            initialAttemptCount = 1,
+                            initialDelaySec = 0,
+                            strictBleOnlyMode = strictBleOnlyValidation
+                        )
+                    }
                 }
 
                 Timber.i("Message sent (encrypted) to $peerId")
@@ -2099,6 +2193,9 @@ class MeshRepository(private val context: Context) {
      */
     fun resetAllData() {
         Timber.w("RESETTING ALL APPLICATION DATA")
+
+        pendingReceiptSendJobs.values.forEach { it.cancel() }
+        pendingReceiptSendJobs.clear()
 
         // 1. Stop all active services and release UniFFI objects
         swarmBridge?.shutdown()
@@ -2713,16 +2810,28 @@ class MeshRepository(private val context: Context) {
             .getOrDefault(emptyList())
             .mapNotNull { it.trim().takeIf { value -> value.isNotEmpty() } }
             .distinct()
-        val effectiveBlePeerId = blePeerId?.trim()?.takeIf { it.isNotEmpty() }
-            ?: connectedBleDevices.firstOrNull()
+        val requestedBlePeerId = blePeerId?.trim()?.takeIf { it.isNotEmpty() }
+        val effectiveBlePeerId = connectedBleDevices.firstOrNull() ?: requestedBlePeerId
 
-        if (blePeerId.isNullOrBlank() && effectiveBlePeerId != null) {
+        if (requestedBlePeerId == null && effectiveBlePeerId != null) {
             logDeliveryAttempt(
                 messageId = traceMessageId,
                 medium = "ble",
                 phase = "local_fallback",
                 outcome = "target_fallback",
                 detail = "ctx=$attemptContext target=$effectiveBlePeerId reason=ble_peer_missing_connected_device_available"
+            )
+        } else if (
+            requestedBlePeerId != null &&
+            effectiveBlePeerId != null &&
+            requestedBlePeerId != effectiveBlePeerId
+        ) {
+            logDeliveryAttempt(
+                messageId = traceMessageId,
+                medium = "ble",
+                phase = "local_fallback",
+                outcome = "target_fallback",
+                detail = "ctx=$attemptContext target=$effectiveBlePeerId requested_target=$requestedBlePeerId reason=prefer_connected_device"
             )
         }
 
@@ -2956,7 +3065,7 @@ class MeshRepository(private val context: Context) {
             outcome = if (localAcked) "local_accepted_no_core_ack" else "failed",
             detail = "ctx=$attemptContext route_fallback=${sanitizedCandidates.firstOrNull() ?: routePeerFallback}"
         )
-        return DeliveryAttemptResult(acked = localAcked, routePeerId = sanitizedCandidates.firstOrNull())
+        return DeliveryAttemptResult(acked = localAcked, routePeerId = null)
     }
 
     private suspend fun awaitPeerConnection(peerId: String, timeoutMs: Long = 1200L): Boolean {
@@ -3046,7 +3155,11 @@ class MeshRepository(private val context: Context) {
                     attemptContext = "outbox_retry",
                     strictBleOnlyOverride = item.strictBleOnlyMode
                 )
-                val selectedRoutePeerId = delivery.routePeerId ?: resolvedRoutePeerId
+                val selectedRoutePeerId = if (delivery.acked) {
+                    delivery.routePeerId ?: resolvedRoutePeerId
+                } else {
+                    delivery.routePeerId
+                }
                 if (isMessageDeliveredLocally(item.historyRecordId)) {
                     iterator.remove()
                     updated = true
@@ -3109,6 +3222,14 @@ class MeshRepository(private val context: Context) {
         initialDelaySec: Long = 0,
         strictBleOnlyMode: Boolean = false
     ) {
+        if (isMessageDeliveredLocally(historyRecordId)) {
+            logDeliveryState(
+                messageId = historyRecordId,
+                state = "delivered",
+                detail = "skip_enqueue_already_delivered"
+            )
+            return
+        }
         val now = System.currentTimeMillis() / 1000
         val queue = loadPendingOutbox().toMutableList()
         queue.removeAll { it.historyRecordId == historyRecordId }
@@ -3954,12 +4075,12 @@ class MeshRepository(private val context: Context) {
         recipientPublicKey: String? = null
     ): List<String> {
         val candidates = mutableListOf<String>()
+        candidates.addAll(discoverRoutePeersForPublicKey(recipientPublicKey))
         val notedPeerIds = parseAllRoutingPeerIds(notes)
         val newestHint = notedPeerIds.lastOrNull()
         if (!newestHint.isNullOrBlank()) candidates.add(newestHint)
         for (hint in notedPeerIds.asReversed()) candidates.add(hint)
         cachedRoutePeerId?.trim()?.takeIf { it.isNotEmpty() }?.let { candidates.add(it) }
-        candidates.addAll(discoverRoutePeersForPublicKey(recipientPublicKey))
         if (isLibp2pPeerId(peerId)) candidates.add(peerId)
         return candidates
             .map { it.trim() }
@@ -4019,8 +4140,22 @@ class MeshRepository(private val context: Context) {
         } catch (_: Exception) {
             null
         }
-        val normalizedExtractedKey = normalizePublicKey(extractedKey) ?: return true
-        return normalizedExtractedKey == normalizedRecipientKey
+        val normalizedExtractedKey = normalizePublicKey(extractedKey)
+        if (normalizedExtractedKey != null) {
+            return normalizedExtractedKey == normalizedRecipientKey
+        }
+
+        val discoveryMatch = _discoveredPeers.value.entries.any { (key, info) ->
+            (key == normalizedRoute || info.peerId == normalizedRoute) &&
+                normalizePublicKey(info.publicKey) == normalizedRecipientKey
+        }
+        if (discoveryMatch) return true
+
+        val ledgerMatch = (ledgerManager?.dialableAddresses() ?: emptyList()).any { entry ->
+            entry.peerId?.trim() == normalizedRoute &&
+                normalizePublicKey(entry.publicKey) == normalizedRecipientKey
+        }
+        return ledgerMatch
     }
 
     private fun isLibp2pPeerId(value: String): Boolean {
@@ -4437,6 +4572,8 @@ class MeshRepository(private val context: Context) {
             pendingOutboxRetryJob = null
             coverTrafficJob?.cancel()
             coverTrafficJob = null
+            pendingReceiptSendJobs.values.forEach { it.cancel() }
+            pendingReceiptSendJobs.clear()
 
             // Clear references
             meshService = null

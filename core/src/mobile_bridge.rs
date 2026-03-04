@@ -1271,11 +1271,7 @@ impl HistoryManager {
         let db = self.db.lock().unwrap();
         let mut records = Vec::new();
 
-        for item in db.iter().rev() {
-            if records.len() >= limit as usize {
-                break;
-            }
-
+        for item in db.iter() {
             let (_, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
@@ -1287,6 +1283,13 @@ impl HistoryManager {
             } else {
                 records.push(record);
             }
+        }
+
+        // Do not rely on sled key order (message IDs are not time-ordered).
+        // Sort explicitly so callers receive newest records first.
+        records.sort_by(|a, b| b.timestamp.cmp(&a.timestamp).then_with(|| b.id.cmp(&a.id)));
+        if records.len() > limit as usize {
+            records.truncate(limit as usize);
         }
 
         Ok(records)
@@ -2229,6 +2232,53 @@ mod tests {
             .expect("message record should persist");
         assert_eq!(record.peer_id, "peer-one");
         assert!(record.delivered);
+    }
+
+    #[test]
+    fn test_history_manager_recent_sorts_by_timestamp_not_key_order() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_str().unwrap().to_string();
+        let history = HistoryManager::new(path).unwrap();
+
+        history
+            .add(MessageRecord {
+                id: "z_old".to_string(),
+                direction: MessageDirection::Sent,
+                peer_id: "peer-a".to_string(),
+                content: "old".to_string(),
+                timestamp: 100,
+                delivered: false,
+            })
+            .unwrap();
+        history
+            .add(MessageRecord {
+                id: "a_new".to_string(),
+                direction: MessageDirection::Sent,
+                peer_id: "peer-a".to_string(),
+                content: "new".to_string(),
+                timestamp: 200,
+                delivered: false,
+            })
+            .unwrap();
+        history
+            .add(MessageRecord {
+                id: "m_other".to_string(),
+                direction: MessageDirection::Received,
+                peer_id: "peer-b".to_string(),
+                content: "other".to_string(),
+                timestamp: 300,
+                delivered: true,
+            })
+            .unwrap();
+
+        let latest_any = history.recent(None, 1).unwrap();
+        assert_eq!(latest_any.len(), 1);
+        assert_eq!(latest_any[0].id, "m_other");
+
+        let peer_a = history.recent(Some("peer-a".to_string()), 2).unwrap();
+        assert_eq!(peer_a.len(), 2);
+        assert_eq!(peer_a[0].id, "a_new");
+        assert_eq!(peer_a[1].id, "z_old");
     }
 
     // -----------------------------------------------------------------------

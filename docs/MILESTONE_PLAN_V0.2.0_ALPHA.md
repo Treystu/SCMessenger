@@ -178,6 +178,22 @@ Scope: Core + Android + iOS + Desktop GUI + Relay topology
 5. Milestone closure gate remains unchanged:
    - P0/P1 issues still require synchronized physical Android+iOS convergence evidence to retire residual risks.
 
+## Stale-Target Convergence Addendum (WS12.31, 2026-03-04 HST)
+
+1. Android+iOS route-candidate selection now prioritizes fresh discovery/ledger evidence ahead of cached/persisted hints to reduce stale-route dominance in retry loops.
+2. Android+iOS route-candidate validation now requires recipient-key corroboration from extracted peer identity or runtime discovery/ledger evidence.
+3. Failed-route IDs are no longer persisted back into pending-outbox entries when no route ACK succeeds, preventing stale failed route reuse.
+4. Local fallback targeting now prefers currently connected BLE peers over cached BLE hints on both Android and iOS.
+5. iOS contact-delete confirmation safety gate is now implemented in contacts UX.
+6. Validation in this pass:
+   - `cd android && ./gradlew :app:compileDebugKotlin` (pass)
+   - `cd android && ./gradlew :app:testDebugUnitTest --tests "com.scmessenger.android.data.MeshRepositoryTest"` (pass)
+   - `bash ./iOS/verify-test.sh` (pass)
+7. Scope classification:
+   - reliability/UX safety hardening only; no net-new feature scope expansion.
+8. Milestone closure gate remains unchanged:
+   - synchronized physical Android+iOS evidence is still required to close `R-WS12-29-02` and paired convergence residuals (`R-WS12-04/05/06`).
+
 ---
 
 ## 1) Planning policy alignment (repo philosophy)

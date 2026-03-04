@@ -189,6 +189,12 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `REMAINING_WORK_TRACKING.md`
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.31 stale-target convergence hardening + transport-priority clarification (2026-03-04 HST, discovered-route preference + failed-route de-persistence + connected-BLE target preference + iOS contact delete confirmation) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+  - `docs/DOCUMENT_STATUS_INDEX.md`
 
 ## Documentation Governance Rules
 

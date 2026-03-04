@@ -119,6 +119,8 @@ final class MeshRepository {
     private var identitySyncSentPeers: Set<String> = []
     private var deliveredReceiptCache: [String: Date] = [:]
     private let deliveredReceiptCacheTtl: TimeInterval = 2 * 60 * 60
+    private var pendingReceiptSendTasks: [String: Task<Void, Never>] = [:]
+    private let receiptSendMaxAttempts = 6
 
     private enum RelayAvailabilityState: String {
         case stable
@@ -565,6 +567,8 @@ final class MeshRepository {
         pendingOutboxRetryTask = nil
         coverTrafficTask?.cancel()
         coverTrafficTask = nil
+        pendingReceiptSendTasks.values.forEach { $0.cancel() }
+        pendingReceiptSendTasks.removeAll()
         identitySyncSentPeers.removeAll()
         identityEmissionCache.removeAll()
         connectedEmissionCache.removeAll()
@@ -902,34 +906,41 @@ final class MeshRepository {
             traceMessageId: messageId,
             attemptContext: "initial_send"
         )
-        let selectedRoutePeerId = delivery.routePeerId ?? preferredRoutePeerId
+        let selectedRoutePeerId = delivery.acked
+            ? (delivery.routePeerId ?? preferredRoutePeerId)
+            : delivery.routePeerId
 
         if delivery.acked {
             promotePendingOutboundForPeer(peerId: peerId, excludingMessageId: messageId)
         }
 
-        if delivery.acked {
-            enqueuePendingOutbound(
-                historyRecordId: messageId,
-                peerId: peerId,
-                routePeerId: selectedRoutePeerId,
-                addresses: routing.listeners,
-                envelopeData: envelopeData,
-                initialAttemptCount: 1,
-                initialDelaySec: receiptAwaitSeconds,
-                strictBleOnlyMode: strictBleOnlyValidation
-            )
+        if isMessageDeliveredLocally(messageId) {
+            removePendingOutbound(historyRecordId: messageId)
+            appendDiagnostic("delivery_state msg=\(messageId) state=delivered detail=delivery_receipt_arrived_before_enqueue")
         } else {
-            enqueuePendingOutbound(
-                historyRecordId: messageId,
-                peerId: peerId,
-                routePeerId: selectedRoutePeerId,
-                addresses: routing.listeners,
-                envelopeData: envelopeData,
-                initialAttemptCount: 1,
-                initialDelaySec: 0,
-                strictBleOnlyMode: strictBleOnlyValidation
-            )
+            if delivery.acked {
+                enqueuePendingOutbound(
+                    historyRecordId: messageId,
+                    peerId: peerId,
+                    routePeerId: selectedRoutePeerId,
+                    addresses: routing.listeners,
+                    envelopeData: envelopeData,
+                    initialAttemptCount: 1,
+                    initialDelaySec: receiptAwaitSeconds,
+                    strictBleOnlyMode: strictBleOnlyValidation
+                )
+            } else {
+                enqueuePendingOutbound(
+                    historyRecordId: messageId,
+                    peerId: peerId,
+                    routePeerId: selectedRoutePeerId,
+                    addresses: routing.listeners,
+                    envelopeData: envelopeData,
+                    initialAttemptCount: 1,
+                    initialDelaySec: 0,
+                    strictBleOnlyMode: strictBleOnlyValidation
+                )
+            }
         }
     }
 
@@ -1192,11 +1203,22 @@ final class MeshRepository {
     func onDeliveryReceipt(messageId: String, status: String) {
         let normalized = status.lowercased()
         guard normalized == "delivered" || normalized == "read" else { return }
-        let firstReceiptSeen = markDeliveredReceiptSeen(messageId)
-        if !firstReceiptSeen {
+        let existingRecord = (try? historyManager?.get(id: messageId)) ?? nil
+        guard let existingRecord else {
+            appendDiagnostic("delivery_state msg=\(messageId) state=pending detail=delivery_receipt_ignored_non_outbound status=\(normalized) direction=missing")
             return
         }
-        let wasAlreadyDelivered = ((try? historyManager?.get(id: messageId))?.delivered == true)
+        guard existingRecord.direction == .sent else {
+            appendDiagnostic("delivery_state msg=\(messageId) state=pending detail=delivery_receipt_ignored_non_outbound status=\(normalized) direction=\(existingRecord.direction)")
+            return
+        }
+        let wasAlreadyDelivered = existingRecord.delivered
+        let firstReceiptSeen = markDeliveredReceiptSeen(messageId)
+        if !firstReceiptSeen && wasAlreadyDelivered {
+            removePendingOutbound(historyRecordId: messageId)
+            appendDiagnostic("delivery_state msg=\(messageId) state=delivered detail=delivery_receipt_duplicate_status=\(normalized)")
+            return
+        }
         appendDiagnostic("receipt_rx msg=\(messageId) status=\(normalized)")
         if !wasAlreadyDelivered {
             try? historyManager?.markDelivered(id: messageId)
@@ -1207,10 +1229,7 @@ final class MeshRepository {
             // Keep chat and conversation views aligned after receipt-driven status changes.
             messageUpdates.send(updated)
         }
-        if wasAlreadyDelivered {
-            appendDiagnostic("delivery_state msg=\(messageId) state=delivered detail=delivery_receipt_duplicate_status=\(normalized)")
-            return
-        }
+        if wasAlreadyDelivered { return }
         _ = ironCore?.markMessageSent(messageId: messageId)
         appendDiagnostic("delivery_state msg=\(messageId) state=delivered detail=delivery_receipt_status=\(normalized)")
         MeshEventBus.shared.messageEvents.send(.delivered(messageId: messageId))
@@ -1225,35 +1244,83 @@ final class MeshRepository {
         preferredMultipeerPeerId: String? = nil,
         preferredBlePeerId: String? = nil
     ) {
-        Task {
-            do {
-                guard let receiptBytes = try ironCore?.prepareReceipt(recipientPublicKeyHex: senderPublicKeyHex, messageId: messageId) else { return }
-                
-                let contact = try? contactManager?.get(peerId: senderId)
-                let hints = parseRoutingHintsFromNotes(contact?.notes)
-                let routeCandidates = buildRoutePeerCandidates(
-                    peerId: senderId,
-                    cachedRoutePeerId: preferredRoutePeerId ?? hints.libp2pPeerId,
-                    notes: contact?.notes,
-                    recipientPublicKey: senderPublicKeyHex
-                )
-                
-                _ = await attemptDirectSwarmDelivery(
-                    routePeerCandidates: routeCandidates,
-                    addresses: (preferredListenerHints + hints.listeners).reduce(into: [String]()) { acc, addr in
-                        if !acc.contains(addr) { acc.append(addr) }
-                    },
-                    envelopeData: receiptBytes,
-                    multipeerPeerId: preferredMultipeerPeerId ?? hints.multipeerPeerId,
-                    blePeerId: preferredBlePeerId ?? hints.blePeerId,
-                    traceMessageId: messageId,
-                    attemptContext: "receipt_send"
-                )
-                logger.debug("Targeted delivery receipt sent for \(messageId) to \(senderId)")
-            } catch {
-                logger.debug("Failed to send delivery receipt for \(messageId): \(error)")
+        let normalizedMessageId = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedMessageId.isEmpty else { return }
+
+        if let activeTask = pendingReceiptSendTasks[normalizedMessageId], !activeTask.isCancelled {
+            appendDiagnostic("receipt_send msg=\(normalizedMessageId) state=deduped sender=\(senderId)")
+            return
+        }
+
+        let task = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                Task { @MainActor [weak self] in
+                    self?.pendingReceiptSendTasks.removeValue(forKey: normalizedMessageId)
+                }
+            }
+
+            for attempt in 1...self.receiptSendMaxAttempts {
+                if Task.isCancelled { return }
+                do {
+                    guard let receiptBytes = try self.ironCore?.prepareReceipt(
+                        recipientPublicKeyHex: senderPublicKeyHex,
+                        messageId: normalizedMessageId
+                    ) else {
+                        self.logger.debug("Skipping delivery receipt for \(normalizedMessageId): prepareReceipt returned nil")
+                        return
+                    }
+
+                    let contact = try? self.contactManager?.get(peerId: senderId)
+                    let hints = self.parseRoutingHintsFromNotes(contact?.notes)
+                    let routeCandidates = self.buildRoutePeerCandidates(
+                        peerId: senderId,
+                        cachedRoutePeerId: preferredRoutePeerId ?? hints.libp2pPeerId,
+                        notes: contact?.notes,
+                        recipientPublicKey: senderPublicKeyHex
+                    )
+
+                    let delivery = await self.attemptDirectSwarmDelivery(
+                        routePeerCandidates: routeCandidates,
+                        addresses: (preferredListenerHints + hints.listeners).reduce(into: [String]()) { acc, addr in
+                            if !acc.contains(addr) { acc.append(addr) }
+                        },
+                        envelopeData: receiptBytes,
+                        multipeerPeerId: preferredMultipeerPeerId ?? hints.multipeerPeerId,
+                        blePeerId: preferredBlePeerId ?? hints.blePeerId,
+                        traceMessageId: normalizedMessageId,
+                        attemptContext: "receipt_send"
+                    )
+                    if delivery.acked {
+                        self.appendDiagnostic("receipt_send msg=\(normalizedMessageId) state=acked sender=\(senderId) attempt=\(attempt)")
+                        self.logger.debug("Targeted delivery receipt sent for \(normalizedMessageId) to \(senderId)")
+                        return
+                    }
+
+                    if attempt < self.receiptSendMaxAttempts {
+                        let delaySec = self.receiptRetryDelaySeconds(forAttempt: attempt)
+                        self.appendDiagnostic(
+                            "receipt_send msg=\(normalizedMessageId) state=retry_scheduled sender=\(senderId) attempt=\(attempt) delay_sec=\(delaySec)"
+                        )
+                        try? await Task.sleep(nanoseconds: delaySec * 1_000_000_000)
+                    } else {
+                        self.appendDiagnostic(
+                            "receipt_send msg=\(normalizedMessageId) state=exhausted sender=\(senderId) attempts=\(self.receiptSendMaxAttempts)"
+                        )
+                    }
+                } catch is CancellationError {
+                    return
+                } catch {
+                    self.logger.debug("Failed to send delivery receipt for \(normalizedMessageId): \(error)")
+                }
             }
         }
+        pendingReceiptSendTasks[normalizedMessageId] = task
+    }
+
+    private func receiptRetryDelaySeconds(forAttempt attempt: Int) -> UInt64 {
+        let exponent = min(max(attempt - 1, 0), 3)
+        return UInt64(1 << exponent)
     }
 
     private func sendIdentitySyncIfNeeded(routePeerId: String, knownPublicKey: String? = nil) {
@@ -1946,13 +2013,6 @@ final class MeshRepository {
     }
 
     func deliveryStatePresentation(for message: MessageRecord, nowEpochSec: UInt64 = UInt64(Date().timeIntervalSince1970)) -> DeliveryStatePresentation {
-        if message.delivered {
-            return DeliveryStatePresentation(
-                label: "delivered",
-                detail: "Delivery receipt confirmed by the recipient node."
-            )
-        }
-
         if let pending = loadPendingOutbox().first(where: { $0.historyRecordId == message.id }) {
             if pending.nextAttemptAtEpochSec <= nowEpochSec {
                 return DeliveryStatePresentation(
@@ -1963,6 +2023,13 @@ final class MeshRepository {
             return DeliveryStatePresentation(
                 label: "stored",
                 detail: "Stored for retry while the recipient is offline or unreachable."
+            )
+        }
+
+        if message.delivered {
+            return DeliveryStatePresentation(
+                label: "delivered",
+                detail: "Delivery receipt confirmed by the recipient node."
             )
         }
 
@@ -2945,6 +3012,9 @@ final class MeshRepository {
         recipientPublicKey: String? = nil
     ) -> [String] {
         var candidates: [String] = []
+        for discovered in discoverRoutePeersForPublicKey(recipientPublicKey) where !candidates.contains(discovered) {
+            candidates.append(discovered)
+        }
         let notedPeerIds = parseAllRoutingPeerIds(from: notes)
         if let newest = notedPeerIds.last, !newest.isEmpty {
             candidates.append(newest)
@@ -2956,9 +3026,6 @@ final class MeshRepository {
            !cached.isEmpty,
            !candidates.contains(cached) {
             candidates.append(cached)
-        }
-        for discovered in discoverRoutePeersForPublicKey(recipientPublicKey) where !candidates.contains(discovered) {
-            candidates.append(discovered)
         }
         if isLibp2pPeerId(peerId), !candidates.contains(peerId) {
             candidates.append(peerId)
@@ -3003,8 +3070,21 @@ final class MeshRepository {
 
         guard let normalizedRecipientKey = normalizePublicKey(recipientPublicKey) else { return true }
         let extractedKey = (try? ironCore?.extractPublicKeyFromPeerId(peerId: normalizedRoute)) ?? nil
-        guard let normalizedExtracted = normalizePublicKey(extractedKey) else { return true }
-        return normalizedExtracted == normalizedRecipientKey
+        if let normalizedExtracted = normalizePublicKey(extractedKey) {
+            return normalizedExtracted == normalizedRecipientKey
+        }
+
+        let discoveryMatch = discoveredPeerMap.contains { key, info in
+            let keyMatches = key == normalizedRoute || info.canonicalPeerId == normalizedRoute
+            return keyMatches && normalizePublicKey(info.publicKey) == normalizedRecipientKey
+        }
+        if discoveryMatch { return true }
+
+        let ledgerMatch = (ledgerManager?.dialableAddresses() ?? []).contains { entry in
+            entry.peerId?.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedRoute &&
+                normalizePublicKey(entry.publicKey) == normalizedRecipientKey
+        }
+        return ledgerMatch
     }
 
     private func isLibp2pPeerId(_ value: String) -> Bool {
@@ -3103,15 +3183,23 @@ final class MeshRepository {
                     deduped.append(next)
                 }
             }
-        let trimmedBlePeerId = blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let effectiveBlePeerId = (trimmedBlePeerId?.isEmpty == false ? trimmedBlePeerId : nil) ?? connectedBlePeerIds.first
-        if (trimmedBlePeerId?.isEmpty ?? true), let fallbackPeer = effectiveBlePeerId {
+        let requestedBlePeerId = blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let effectiveBlePeerId = connectedBlePeerIds.first ?? requestedBlePeerId
+        if requestedBlePeerId == nil, let fallbackPeer = effectiveBlePeerId {
             logDeliveryAttempt(
                 messageId: traceMessageId,
                 medium: "ble",
                 phase: "local_fallback",
                 outcome: "target_fallback",
                 detail: "ctx=\(attemptContext) target=\(fallbackPeer) reason=ble_peer_missing_connected_device_available"
+            )
+        } else if let requestedBlePeerId, let effectiveBlePeerId, requestedBlePeerId != effectiveBlePeerId {
+            logDeliveryAttempt(
+                messageId: traceMessageId,
+                medium: "ble",
+                phase: "local_fallback",
+                outcome: "target_fallback",
+                detail: "ctx=\(attemptContext) target=\(effectiveBlePeerId) requested_target=\(requestedBlePeerId) reason=prefer_connected_device"
             )
         }
 
@@ -3333,7 +3421,7 @@ final class MeshRepository {
             outcome: localAcked ? "local_accepted_no_core_ack" : "failed",
             detail: "ctx=\(attemptContext) route_fallback=\(sanitizedCandidates.first ?? routePeerFallback)"
         )
-        return DeliveryAttemptResult(acked: localAcked, routePeerId: sanitizedCandidates.first)
+        return DeliveryAttemptResult(acked: localAcked, routePeerId: nil)
     }
 
     private func awaitPeerConnection(peerId: String, timeoutMs: UInt64 = 5000) async -> Bool {
@@ -3358,6 +3446,10 @@ final class MeshRepository {
         initialDelaySec: UInt64 = 0,
         strictBleOnlyMode: Bool = false
     ) {
+        if isMessageDeliveredLocally(historyRecordId) {
+            appendDiagnostic("delivery_state msg=\(historyRecordId) state=delivered detail=skip_enqueue_already_delivered")
+            return
+        }
         let now = UInt64(Date().timeIntervalSince1970)
         var queue = loadPendingOutbox().filter { $0.historyRecordId != historyRecordId }
         queue.append(
@@ -3439,7 +3531,9 @@ final class MeshRepository {
                 attemptContext: "outbox_retry",
                 strictBleOnlyOverride: item.strictBleOnlyMode
             )
-            let selectedRoutePeerId = delivery.routePeerId ?? resolvedRoutePeerId
+            let selectedRoutePeerId = delivery.acked
+                ? (delivery.routePeerId ?? resolvedRoutePeerId)
+                : delivery.routePeerId
             if isMessageDeliveredLocally(item.historyRecordId) {
                 continue
             }
@@ -4371,6 +4465,8 @@ final class MeshRepository {
         pendingOutboxRetryTask = nil
         coverTrafficTask?.cancel()
         coverTrafficTask = nil
+        pendingReceiptSendTasks.values.forEach { $0.cancel() }
+        pendingReceiptSendTasks.removeAll()
         bleCentralManager?.stopScanning()
         blePeripheralManager?.stopAdvertising()
 

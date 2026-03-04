@@ -14,6 +14,7 @@ UPDATE_EACH=1
 DEPLOY_MOBILE=1
 TAIL_LINES=60
 MIN_LOG_LINES=20
+DIAG_TAIL_LINES=6000
 REQUIRE_RECEIPT_GATE=0
 ANDROID_DIAG_SOURCE=""
 IOS_DIAG_SOURCE=""
@@ -31,6 +32,7 @@ Options:
   --attempts=<n>              Max attempts before final fail (default: 3)
   --tail-lines=<n>            Tail lines per node log in snapshot (default: 60)
   --min-log-lines=<n>         Minimum lines required per node log (default: 20)
+  --diag-tail-lines=<n>       Tail lines to keep from diagnostics before verifiers (default: 6000)
   --skip-update               Do not pass --update to run5.sh
   --skip-mobile-deploy        Skip Android+iOS deploy script before each attempt
   --require-receipt-gate      Treat receipt convergence verifier as required (default: warn-only)
@@ -52,6 +54,7 @@ for arg in "$@"; do
     --attempts=*) MAX_ATTEMPTS="${arg#*=}" ;;
     --tail-lines=*) TAIL_LINES="${arg#*=}" ;;
     --min-log-lines=*) MIN_LOG_LINES="${arg#*=}" ;;
+    --diag-tail-lines=*) DIAG_TAIL_LINES="${arg#*=}" ;;
     --skip-update) UPDATE_EACH=0 ;;
     --skip-mobile-deploy) DEPLOY_MOBILE=0 ;;
     --require-receipt-gate) REQUIRE_RECEIPT_GATE=1 ;;
@@ -82,6 +85,10 @@ if ! [[ "$TAIL_LINES" =~ ^[0-9]+$ ]] || [ "$TAIL_LINES" -le 0 ]; then
 fi
 if ! [[ "$MIN_LOG_LINES" =~ ^[0-9]+$ ]] || [ "$MIN_LOG_LINES" -le 0 ]; then
   echo "--min-log-lines must be a positive integer" >&2
+  exit 2
+fi
+if ! [[ "$DIAG_TAIL_LINES" =~ ^[0-9]+$ ]] || [ "$DIAG_TAIL_LINES" -le 0 ]; then
+  echo "--diag-tail-lines must be a positive integer" >&2
   exit 2
 fi
 
@@ -166,8 +173,102 @@ collect_android_diagnostics() {
     fi
   fi
 
+  # Release builds may not allow run-as. Fall back to filtered logcat
+  # delivery markers so convergence/ordering verifiers still have signal.
+  local raw_logcat="$out_file.raw.logcat"
+  if adb -s "$serial" logcat -d -v time > "$raw_logcat" 2>> "$stderr_file"; then
+    rg -i "delivery_state|delivery_attempt|Receipt for|msg_rx|msg_rx_processed|delivery_receipt" "$raw_logcat" > "$out_file" || true
+    rm -f "$raw_logcat"
+    if [ -s "$out_file" ]; then
+      return 0
+    fi
+  else
+    rm -f "$raw_logcat"
+  fi
+
   echo "Android diagnostics pull failed for serial $serial" >> "$stderr_file"
   return 1
+}
+
+collect_ios_diagnostics() {
+  local out_file="$1"
+  local stderr_file="$2"
+  : > "$stderr_file"
+
+  if ! command -v xcrun >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local devices_json
+  devices_json="$(mktemp)"
+  if ! xcrun devicectl list devices --json-output "$devices_json" >/dev/null 2>>"$stderr_file"; then
+    rm -f "$devices_json"
+    echo "Unable to list iOS devices via devicectl" >> "$stderr_file"
+    return 1
+  fi
+
+  local device_id
+  device_id="$(python3 - "$devices_json" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, "r", encoding="utf-8") as f:
+        payload = json.load(f)
+except Exception:
+    print("")
+    raise SystemExit(0)
+
+devices = payload.get("result", {}).get("devices", [])
+for d in devices:
+    identifier = d.get("identifier") or ""
+    if not identifier:
+        continue
+    pairing_state = (d.get("connectionProperties", {}).get("pairingState") or "").lower()
+    if pairing_state == "paired":
+        print(identifier)
+        raise SystemExit(0)
+print("")
+PY
+)"
+  rm -f "$devices_json"
+
+  if [ -z "$device_id" ]; then
+    echo "No paired iOS device found for diagnostics pull" >> "$stderr_file"
+    return 1
+  fi
+
+  rm -f "$out_file"
+  if xcrun devicectl device copy from \
+      --device "$device_id" \
+      --domain-type appDataContainer \
+      --domain-identifier SovereignCommunications.SCMessenger \
+      --source Documents/mesh_diagnostics.log \
+      --destination "$out_file" >>"$stderr_file" 2>&1; then
+    if [ -s "$out_file" ]; then
+      return 0
+    fi
+  fi
+
+  # Some devicectl failures still leave a partial/complete destination file.
+  if [ -s "$out_file" ]; then
+    echo "iOS diagnostics copy returned non-zero but produced output; proceeding" >> "$stderr_file"
+    return 0
+  fi
+
+  echo "iOS diagnostics pull failed for device $device_id" >> "$stderr_file"
+  return 1
+}
+
+tail_diagnostics_window() {
+  local input_file="$1"
+  local output_file="$2"
+  if [ ! -f "$input_file" ]; then
+    return 1
+  fi
+  tail -n "$DIAG_TAIL_LINES" "$input_file" > "$output_file"
+  return 0
 }
 
 pair_matrix_gate() {
@@ -397,6 +498,7 @@ SESSION_MANIFEST="$SESSION_DIR/session_manifest.txt"
   echo "update_each=$UPDATE_EACH"
   echo "deploy_mobile=$DEPLOY_MOBILE"
   echo "require_receipt_gate=$REQUIRE_RECEIPT_GATE"
+  echo "diag_tail_lines=$DIAG_TAIL_LINES"
   echo "output_root=$(absolute_path "$OUTPUT_ROOT")"
 } > "$SESSION_MANIFEST"
 
@@ -496,14 +598,25 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     fi
 
     # iOS diagnostics source precedence:
-    # 1) explicit --ios-diag, 2) repo ios_diagnostics_latest.log (if present), 3) run5 ios-device log
+    # 1) explicit --ios-diag, 2) pulled device diagnostics, 3) repo ios_diagnostics_latest.log (if present), 4) run5 ios-device log
     ios_receipt_log="$mesh_logdir/ios-device.log"
     if [ -n "$IOS_DIAG_SOURCE" ]; then
       cp "$IOS_DIAG_SOURCE" "$ATTEMPT_DIR/ios_diag_input.log"
       ios_receipt_log="$ATTEMPT_DIR/ios_diag_input.log"
+    elif collect_ios_diagnostics "$ATTEMPT_DIR/ios-mesh_diagnostics-device.log" "$ATTEMPT_DIR/ios-mesh_diagnostics.stderr"; then
+      ios_receipt_log="$ATTEMPT_DIR/ios-mesh_diagnostics-device.log"
     elif [ -f "$ROOT_DIR/ios_diagnostics_latest.log" ] && [ -s "$ROOT_DIR/ios_diagnostics_latest.log" ]; then
       cp "$ROOT_DIR/ios_diagnostics_latest.log" "$ATTEMPT_DIR/ios_diag_input.log"
       ios_receipt_log="$ATTEMPT_DIR/ios_diag_input.log"
+    fi
+
+    # Restrict convergence/ordering verifiers to recent diagnostics lines to avoid
+    # stale historical messages in long-running device logs.
+    if tail_diagnostics_window "$android_receipt_log" "$ATTEMPT_DIR/android_receipt_window.log"; then
+      android_receipt_log="$ATTEMPT_DIR/android_receipt_window.log"
+    fi
+    if tail_diagnostics_window "$ios_receipt_log" "$ATTEMPT_DIR/ios_receipt_window.log"; then
+      ios_receipt_log="$ATTEMPT_DIR/ios_receipt_window.log"
     fi
 
     if run_verifier "relay_flap_regression" "$ATTEMPT_DIR/verify_relay_flap_regression.log" \
@@ -535,6 +648,15 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
       else
         log "Attempt $attempt: receipt convergence verifier WARN (non-blocking)"
       fi
+    fi
+
+    if run_verifier "delivery_state_monotonicity" "$ATTEMPT_DIR/verify_delivery_state_monotonicity.log" \
+      bash "$ROOT_DIR/scripts/verify_delivery_state_monotonicity.sh" "$android_receipt_log" "$ios_receipt_log"; then
+      log "Attempt $attempt: delivery-state monotonicity verifier PASS"
+    else
+      attempt_fail=1
+      fail_reasons+=("delivery-state monotonicity verifier failed")
+      log "Attempt $attempt: delivery-state monotonicity verifier FAIL"
     fi
 
     tail_snapshot "$mesh_logdir" "$ATTEMPT_DIR/tail_snapshot.txt"

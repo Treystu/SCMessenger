@@ -266,7 +266,9 @@ Still open after this pass:
 3. [ ] Close Android stale-route and stale-BLE-target retry loops with post-fix evidence tied to active conversation peer IDs.
 4. [ ] Close cross-device continuity gate (`Android <-> iOS`) with synchronized bidirectional delivered-state evidence.
 5. [ ] Harden/document reliable iOS large-diagnostics extraction workflow for repeatable RCA.
-6. [ ] Add iOS confirmation prompt before contact deletion and capture validation evidence.  <!-- user-requested todo -->
+6. [x] Add iOS confirmation prompt before contact deletion and capture validation evidence.  <!-- user-requested todo -->
+   - Implemented in `iOS/SCMessenger/SCMessenger/Views/Contacts/ContactsListView.swift` via explicit destructive-action alert.
+   - Verification: `bash ./iOS/verify-test.sh` (pass).
 
 ## WS12.30 Live Verification Feedback Loop (2026-03-03 HST)
 
@@ -289,6 +291,32 @@ Still open after this pass:
 
 1. [ ] Execute WS12.29 issue burndown using the new loop for each active issue ID and archive pass/fail manifests per attempt.
 2. [ ] Close all P0/P1 issue IDs only after corresponding loop runs pass required gates with synchronized Android+iOS real-device evidence.
+
+## WS12.31 Stale-Target Convergence Hardening + Transport Priority Clarification (2026-03-04 HST)
+
+Completed in this pass:
+
+1. [x] Hardened Android+iOS route candidate prioritization:
+   - prefer discovery/ledger-backed route candidates before persisted notes/cached route IDs.
+2. [x] Hardened Android+iOS route-candidate recipient validation:
+   - candidate must either resolve to recipient key directly or be corroborated by runtime discovery/ledger key evidence.
+3. [x] Stopped failed-route persistence in Android+iOS pending-outbox retry state:
+   - when no route ACK succeeds, `routePeerId` is no longer re-written to a failed candidate.
+4. [x] Hardened local BLE fallback target selection on Android+iOS:
+   - connected BLE peers are now preferred over stale cached `ble_peer_id` hints.
+5. [x] Hardened Android disconnect cleanup:
+   - callback path now prunes disconnected aliases by peer ID/canonical ID/public-key match.
+6. [x] Added explicit iOS contact-delete confirmation safety gate:
+   - `ContactsListView` now prompts before destructive remove.
+7. [x] Revalidated local build/test gates after WS12.31:
+   - `cd android && ./gradlew :app:compileDebugKotlin` (pass)
+   - `cd android && ./gradlew :app:testDebugUnitTest --tests "com.scmessenger.android.data.MeshRepositoryTest"` (pass)
+   - `bash ./iOS/verify-test.sh` (pass)
+
+Still open after this pass:
+
+1. [ ] Validate WS12.31 stale-route/BLE-target behavior with synchronized physical Android+iOS artifacts tied to active conversation peer IDs.
+2. [ ] Close `R-WS12-29-02` only after post-WS12.31 logs show deterministic route refresh/convergence (no persistent stale-target loops).
 
 ### WS12.25 Mega-Update Consolidated Next Steps (Open + Deferred)
 

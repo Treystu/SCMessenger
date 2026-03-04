@@ -17,6 +17,8 @@ struct ContactsListView: View {
     @State private var navigateToPendingChat = false
     @State private var nearbyPrefilledPeer: NearbyPeer? = nil
     @State private var quickConnectError: String? = nil
+    @State private var pendingDeletePeerId: String? = nil
+    @State private var pendingDeleteDisplayName: String = ""
 
     var body: some View {
         List {
@@ -53,7 +55,11 @@ struct ContactsListView: View {
                     }
                 }
                 .onDelete { offsets in
-                    viewModel?.deleteContacts(at: offsets)
+                    let contacts = viewModel?.filteredContacts ?? []
+                    guard let index = offsets.first, contacts.indices.contains(index) else { return }
+                    let contact = contacts[index]
+                    pendingDeletePeerId = contact.peerId
+                    pendingDeleteDisplayName = conversationDisplayName(for: contact)
                 }
             } header: {
                 if !(viewModel?.filteredContacts ?? []).isEmpty {
@@ -113,6 +119,27 @@ struct ContactsListView: View {
             },
             message: {
                 Text(quickConnectError ?? "Unknown error")
+            }
+        )
+        .alert(
+            "Delete Contact?",
+            isPresented: Binding(
+                get: { pendingDeletePeerId != nil },
+                set: { if !$0 { pendingDeletePeerId = nil } }
+            ),
+            actions: {
+                Button("Delete", role: .destructive) {
+                    guard let peerId = pendingDeletePeerId else { return }
+                    try? viewModel?.removeContact(peerId: peerId)
+                    viewModel?.loadContacts()
+                    pendingDeletePeerId = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    pendingDeletePeerId = nil
+                }
+            },
+            message: {
+                Text("Remove \(pendingDeleteDisplayName) from contacts?")
             }
         )
     }
