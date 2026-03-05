@@ -186,6 +186,14 @@ final class BLEPeripheralManager: NSObject {
                 pendingNotifications.removeAll(where: { $0.central.identifier == central.identifier })
                 return accepted
             }
+            // IOS-CRASH-001: Guard against SIGTRAP when CBPeripheralManager is
+            // not in .poweredOn state (e.g. transitioning after BT toggle).
+            guard self.peripheralManager.state == .poweredOn else {
+                self.logger.warning("sendDataToCentral: peripheralManager not poweredOn (\(self.peripheralManager.state.rawValue)), buffering fragment")
+                self.pendingNotifications.append((central: central, data: fragment))
+                accepted = true
+                continue
+            }
             let success = peripheralManager.updateValue(fragment, for: messageCharacteristic, onSubscribedCentrals: [central])
             if !success {
                 logger.warning("Failed to send fragment, buffering")
@@ -482,7 +490,10 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     
     private func processPendingNotifications() {
         guard let messageChar = messageCharacteristic else { return }
-        
+        guard peripheralManager.state == .poweredOn else {
+            logger.debug("Skipping pending notification flush: peripheralManager not poweredOn")
+            return
+        }
         while !self.pendingNotifications.isEmpty {
             let next = self.pendingNotifications[0]
             guard self.subscribedCentrals.contains(where: { $0.identifier == next.central.identifier }) else {

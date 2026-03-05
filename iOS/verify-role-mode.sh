@@ -7,7 +7,7 @@ MAIN_TAB="$DIR/SCMessenger/SCMessenger/Views/Navigation/MainTabView.swift"
 require_pattern() {
   local pattern="$1"
   local message="$2"
-  if ! rg -q "$pattern" "$MAIN_TAB"; then
+  if ! grep -Eq "$pattern" "$MAIN_TAB"; then
     echo "Role-mode parity check failed: $message"
     exit 1
   fi

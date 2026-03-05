@@ -1,7 +1,7 @@
 # SCMessenger Document Status Index
 
 Status: Active  
-Last updated: 2026-03-03
+Last updated: 2026-03-04
 
 Purpose: classify documentation by lifecycle state so execution decisions use authoritative files and historical content remains discoverable without causing drift.
 
@@ -19,37 +19,39 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 
 ## 2) Active canonical chain (use first)
 
-| Document | Status | Purpose |
-| --- | --- | --- |
-| `README.md` | Active | Repo entrypoint and quick-start links |
-| `DOCUMENTATION.md` | Active | Main docs hub and navigation policy |
-| `AGENTS.md` | Active | Codex run policy, including mandatory doc sync behavior |
-| `docs/DOCUMENT_STATUS_INDEX.md` | Active | Lifecycle map (this file) |
-| `docs/REPO_CONTEXT.md` | Active | Cross-component architecture and operating context |
-| `docs/CURRENT_STATE.md` | Active | Verified current runtime/build state |
-| `REMAINING_WORK_TRACKING.md` | Active | Backlog and active work tracking |
-| `docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md` | Active | Consolidated known-issues ledger and remediation sequence |
-| `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md` | Active | v0.2.0 milestone definition and sequencing |
-| `docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md` | Active | Execution prompts per phase |
-| `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md` | Active | Residual-risk source of truth |
-| `docs/PLATFORM_SUPPORT_MATRIX.md` | Active | Platform support baseline |
-| `docs/INTEROP_MATRIX_V0.2.0_ALPHA.md` | Active | Cross-platform function completeness + interoperability matrix |
-| `docs/PROTOCOL.md` | Active | Protocol identifiers and wire contract |
-| `docs/TESTING_GUIDE.md` | Active | Validation commands and expected outcomes |
-| `docs/EDGE_CASE_READINESS_MATRIX.md` | Active | Extreme environment readiness and hardening backlog |
-| `scripts/README.md` | Active | Canonical launch/debug/5-node script operations guide |
-| `docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md` | Active | Release synchronization and tagging checklist |
-| `docs/releases/RELEASE_NOTES_V0.2.0_DRAFT.md` | Active | v0.2.0 draft release notes |
-| `docs/releases/RELEASE_NOTES_V0.1.2_GH.md` | Active | v0.1.2 GitHub release notes draft |
+| Document                                              | Status | Purpose                                                        |
+| ----------------------------------------------------- | ------ | -------------------------------------------------------------- |
+| `README.md`                                           | Active | Repo entrypoint and quick-start links                          |
+| `DOCUMENTATION.md`                                    | Active | Main docs hub and navigation policy                            |
+| `AGENTS.md`                                           | Active | Codex run policy, including mandatory doc sync behavior        |
+| `docs/DOCUMENT_STATUS_INDEX.md`                       | Active | Lifecycle map (this file)                                      |
+| `docs/REPO_CONTEXT.md`                                | Active | Cross-component architecture and operating context             |
+| `docs/CURRENT_STATE.md`                               | Active | Verified current runtime/build state                           |
+| `REMAINING_WORK_TRACKING.md`                          | Active | Backlog and active work tracking                               |
+| `docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`          | Active | Consolidated known-issues ledger and remediation sequence      |
+| `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`                 | Active | v0.2.0 milestone definition and sequencing                     |
+| `docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md`              | Active | Execution prompts per phase                                    |
+| `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`               | Active | Residual-risk source of truth                                  |
+| `docs/PLATFORM_SUPPORT_MATRIX.md`                     | Active | Platform support baseline                                      |
+| `docs/INTEROP_MATRIX_V0.2.0_ALPHA.md`                 | Active | Cross-platform function completeness + interoperability matrix |
+| `docs/PROTOCOL.md`                                    | Active | Protocol identifiers and wire contract                         |
+| `docs/TESTING_GUIDE.md`                               | Active | Validation commands and expected outcomes                      |
+| `docs/EDGE_CASE_READINESS_MATRIX.md`                  | Active | Extreme environment readiness and hardening backlog            |
+| `scripts/README.md`                                   | Active | Canonical launch/debug/5-node script operations guide          |
+| `docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md` | Active | Release synchronization and tagging checklist                  |
+| `docs/releases/RELEASE_NOTES_V0.2.0_DRAFT.md`         | Active | v0.2.0 draft release notes                                     |
+| `docs/releases/RELEASE_NOTES_V0.1.2_GH.md`            | Active | v0.1.2 GitHub release notes draft                              |
+| `docs/global_viability_audit.md`                      | Active | Global viability audit + gap map vs desired end state          |
+| `docs/implementation_cheatsheet_3.4.2026.md`          | Active | 10-action-item implementation reference with exact code plans  |
 
 ---
 
 ## 3) Active planned docs (future scope)
 
-| Document | Status | Notes |
-| --- | --- | --- |
-| `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md` | Planned | WS13 workstream for v0.2.1, not in v0.2.0 scope |
-| `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md` | Planned | WS14 workstream for v0.2.1 DM + DM Request notifications (iOS/Android/WASM, hybrid mode) |
+| Document                                              | Status  | Notes                                                                                    |
+| ----------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------- |
+| `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md` | Planned | WS13 workstream for v0.2.1, not in v0.2.0 scope                                          |
+| `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`                | Planned | WS14 workstream for v0.2.1 DM + DM Request notifications (iOS/Android/WASM, hybrid mode) |
 
 ---
 
@@ -57,13 +59,13 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 
 These documents may contain both current and historical sections; verify section markers before acting on them.
 
-| Document | Status | Usage rule |
-| --- | --- | --- |
-| `docs/TRANSPORT_ARCHITECTURE.md` | Mixed | Use section markers (`[Current]`, `[Needs Revalidation]`) |
-| `docs/GLOBAL_ROLLOUT_PLAN.md` | Mixed | Strategic context; validate against active milestone docs |
-| `docs/UNIFIED_GLOBAL_APP_PLAN.md` | Mixed | Strategic context; backlog source remains `REMAINING_WORK_TRACKING.md` |
-| `docs/NAT_TRAVERSAL_PLAN.md` | Mixed | Planning reference; verify against current transport code/tests |
-| `docs/NAT_TRAVERSAL_GUIDE.md` | Mixed | Operational guidance; validate command/runtime assumptions |
+| Document                          | Status | Usage rule                                                             |
+| --------------------------------- | ------ | ---------------------------------------------------------------------- |
+| `docs/TRANSPORT_ARCHITECTURE.md`  | Mixed  | Use section markers (`[Current]`, `[Needs Revalidation]`)              |
+| `docs/GLOBAL_ROLLOUT_PLAN.md`     | Mixed  | Strategic context; validate against active milestone docs              |
+| `docs/UNIFIED_GLOBAL_APP_PLAN.md` | Mixed  | Strategic context; backlog source remains `REMAINING_WORK_TRACKING.md` |
+| `docs/NAT_TRAVERSAL_PLAN.md`      | Mixed  | Planning reference; verify against current transport code/tests        |
+| `docs/NAT_TRAVERSAL_GUIDE.md`     | Mixed  | Operational guidance; validate command/runtime assumptions             |
 
 ---
 

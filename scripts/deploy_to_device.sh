@@ -87,6 +87,16 @@ deploy_ios() {
         log_info "Detected iOS device: $device_id"
     fi
 
+    # P5: Rebuild Rust Core + XCFramework before iOS app
+    log_info "Rebuilding Rust core and updating XCFramework..."
+    cd "$PROJECT_ROOT"
+    if [ -f "./rebuild_ios_core.sh" ]; then
+        ./rebuild_ios_core.sh
+    else
+        log_warn "rebuild_ios_core.sh not found, skipping core rebuild..."
+    fi
+    cd "$ios_dir"
+
     # P5: Clean build to prevent stale binary issues
     log_info "Cleaning build artifacts..."
     xcodebuild clean -scheme SCMessenger -quiet 2>/dev/null || true

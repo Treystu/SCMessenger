@@ -82,7 +82,8 @@ class ChatViewModel @Inject constructor(
             try {
                 val currentPeer = _peerId.value ?: return@launch
                 val messageList = meshRepository.getConversation(currentPeer, limit = _conversationLimit.value)
-                _messages.value = messageList.sortedBy { it.timestamp }
+                // MSG-ORDER-001: Sort strictly by sender-assigned timestamp to ensure consistent ordering across platforms
+                _messages.value = messageList.sortedBy { it.senderTimestamp }
 
                 Timber.d("Loaded ${messageList.size} messages for $currentPeer")
             } catch (e: Exception) {
@@ -252,6 +253,7 @@ class ChatViewModel @Inject constructor(
                     direction = msg.direction,
                     content = msg.content,
                     timestamp = msg.timestamp,
+                    senderTimestamp = msg.senderTimestamp,
                     delivered = delivered
                 )
             } else {

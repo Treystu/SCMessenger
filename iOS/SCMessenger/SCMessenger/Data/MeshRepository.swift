@@ -67,7 +67,7 @@ final class MeshRepository {
     static let defaultBootstrapNodes: [String] = {
         let config = BootstrapConfig(
             staticNodes: staticBootstrapNodes,
-            remoteUrl: nil,  // Set to a bootstrap-list URL when available
+            remoteUrl: "https://bootstrap.scmessenger.net/nodes.json",
             fetchTimeoutSecs: 5,
             envOverrideKey: "SC_BOOTSTRAP_NODES"
         )
@@ -112,9 +112,9 @@ final class MeshRepository {
     private var relayBootstrapDialInProgress = false
     private var dialThrottleState: [String: (attempts: Int, nextAllowedAt: Date)] = [:]
     private var relayDialDebounceState: [String: Date] = [:]
-    private let relayDialDebounceInterval: TimeInterval = 2.5
+    private let relayDialDebounceInterval: TimeInterval = 10
     private let receiptAwaitSeconds: UInt64 = 8
-    private let pendingOutboxMaxAttempts: UInt32 = 720
+    private let pendingOutboxMaxAttempts: UInt32 = 120
     private let pendingOutboxMaxAgeSeconds: UInt64 = 7 * 24 * 60 * 60
     private var identitySyncSentPeers: Set<String> = []
     private var deliveredReceiptCache: [String: Date] = [:]
@@ -380,9 +380,50 @@ final class MeshRepository {
 
             appendDiagnostic("repo_managers_init_success")
             logger.info("✓ All managers initialized successfully")
+
+            // One-time migration: clear stale routing hints inherited from
+            // pre-fix builds that accumulated duplicate BLE MACs and stale
+            // libp2p_peer_id entries causing endless retry loops.
+            migrateStaleRoutingHints()
         } catch {
             logger.error("Failed to initialize managers: \(error.localizedDescription)")
             throw error
+        }
+    }
+
+    private func migrateStaleRoutingHints() {
+        let key = "v1_routing_hint_cleanup"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+
+        do {
+            let contacts = try contactManager?.list() ?? []
+            var cleaned = 0
+            for contact in contacts {
+                guard let notes = contact.notes, !notes.isEmpty else { continue }
+                guard notes.contains("libp2p_peer_id:") || notes.contains("ble_peer_id:") else { continue }
+                // Strip stale routing entries — fresh discovery will repopulate them.
+                let stripped = notes
+                    .split(whereSeparator: { $0 == ";" || $0 == "\n" })
+                    .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { segment in
+                        !segment.hasPrefix("libp2p_peer_id:") &&
+                            !segment.hasPrefix("ble_peer_id:")
+                    }
+                    .joined(separator: ";")
+                let updatedNotes: String? = stripped.isEmpty ? nil : stripped
+                if updatedNotes != notes {
+                    var updated = contact
+                    updated.notes = updatedNotes
+                    try? contactManager?.add(contact: updated)
+                    cleaned += 1
+                }
+            }
+            UserDefaults.standard.set(true, forKey: key)
+            if cleaned > 0 {
+                logger.info("Routing hint migration: cleaned \(cleaned) contact(s) with stale routing entries")
+            }
+        } catch {
+            logger.warning("Routing hint migration failed (non-fatal): \(error.localizedDescription)")
         }
     }
 
@@ -815,12 +856,11 @@ final class MeshRepository {
     func sendMessage(peerId: String, content: String) async throws {
         logger.info("Send message to \(peerId)")
 
-        // RELAY ENFORCEMENT (matches Android pattern exactly)
+        // RELAY ENFORCEMENT
         // Check if relay/messaging is enabled (bidirectional control)
-        // Treat null/missing settings as disabled (fail-safe)
-        // Cache settings value to avoid race condition during check
+        // Default to ENABLED when settings unavailable (matches Rust default: relay_enabled=true)
         let currentSettings = try? settingsManager?.load()
-        let isRelayEnabled = currentSettings?.relayEnabled == true
+        let isRelayEnabled = currentSettings?.relayEnabled ?? true
 
         if !isRelayEnabled {
             let errorMsg = "Cannot send message: Relay is disabled. Enable relay in Settings to send and receive messages."
@@ -885,6 +925,7 @@ final class MeshRepository {
             peerId: peerId,
             content: content,
             timestamp: UInt64(Date().timeIntervalSince1970),
+            senderTimestamp: UInt64(Date().timeIntervalSince1970),
             delivered: false
         )
         try? historyManager?.add(record: messageRecord)
@@ -955,16 +996,15 @@ final class MeshRepository {
         logger.info("Message from \(senderId): \(messageId)")
         appendDiagnostic("msg_rx sender=\(senderId) msg=\(messageId)")
 
-        // RELAY ENFORCEMENT (matches Android pattern exactly)
+        // RELAY ENFORCEMENT
         // Check if relay/messaging is enabled (bidirectional control)
-        // Treat null/missing settings as disabled (fail-safe)
-        // Cache settings value to avoid race condition during check
+        // Default to ENABLED when settings unavailable (matches Rust default: relay_enabled=true)
         let currentSettings = try? settingsManager?.load()
-        let isRelayEnabled = currentSettings?.relayEnabled == true
+        let isRelayEnabled = currentSettings?.relayEnabled ?? true
 
         if !isRelayEnabled {
-            // Silently drop message when relay disabled (matches Android)
             logger.warning("Dropped message from \(senderId): relay disabled")
+            appendDiagnostic("msg_rx_dropped sender=\(senderId) msg=\(messageId) reason=relay_disabled")
             return
         }
 
@@ -1020,8 +1060,11 @@ final class MeshRepository {
         }
 
         // Auto-upsert contact: senderPublicKeyHex is guaranteed valid (Rust verified it during decrypt)
+        let messageKind = decodedPayload.kind.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let isChatEvent = messageKind == "text" || messageKind.isEmpty
+
         let existingContact = try? contactManager?.get(peerId: canonicalPeerId)
-        if existingContact == nil {
+        if existingContact == nil && isChatEvent {
             if let normalizedSenderKey {
                 var routeNotes: String?
                 if let routePeerId, !routePeerId.isEmpty {
@@ -1138,9 +1181,6 @@ final class MeshRepository {
             )
         }
 
-        let messageKind = decodedPayload.kind
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
         if messageKind == "identity_sync" {
             logger.debug("Processed identity sync from \(canonicalPeerId) (route=\(routePeerId ?? "none"))")
             appendDiagnostic("msg_identity_sync peer=\(canonicalPeerId) route=\(routePeerId ?? "none")")
@@ -1178,6 +1218,7 @@ final class MeshRepository {
             peerId: canonicalPeerId,
             content: content,
             timestamp: canonicalTimestamp,
+            senderTimestamp: senderTimestamp,
             delivered: true
         )
 
@@ -1878,20 +1919,20 @@ final class MeshRepository {
         }
 
         let existing = notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let segments = existing.split(whereSeparator: { $0 == ";" || $0 == "\n" }).map { String($0) }
-        let alreadyPresent = segments.contains {
-            let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard trimmed.hasPrefix("\(key):") else { return false }
-            let current = trimmed.replacingOccurrences(of: "\(key):", with: "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return current == value
-        }
-        if alreadyPresent { return notes }
+        var segments = existing.split(whereSeparator: { $0 == ";" || $0 == "\n" }).map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+        let newEntry = "\(key):\(value)"
 
-        let merged = [existing, "\(key):\(value)"]
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .joined(separator: ";")
+        // Replace existing entry for this key instead of appending a duplicate.
+        // This prevents stale BLE MACs / route peer IDs from accumulating.
+        if let existingIndex = segments.firstIndex(where: { $0.hasPrefix("\(key):") }) {
+            if segments[existingIndex] == newEntry { return notes } // unchanged
+            logger.info("Routing hint update: replacing old \(segments[existingIndex]) with \(newEntry)")
+            segments[existingIndex] = newEntry
+        } else {
+            segments.append(newEntry)
+        }
+
+        let merged = segments.filter { !$0.isEmpty }.joined(separator: ";")
         return merged.isEmpty ? nil : merged
     }
 
@@ -2274,6 +2315,7 @@ final class MeshRepository {
     }
 
     func reportNetwork(wifi: Bool, cellular: Bool) {
+        let previousWifi = networkStatus.wifi
         logger.debug("Network: wifi=\(wifi) cellular=\(cellular)")
         networkStatus.wifi = wifi
         networkStatus.cellular = cellular
@@ -2288,6 +2330,14 @@ final class MeshRepository {
         meshService?.updateDeviceState(profile: profile)
         applyPowerAdjustments(reason: "network_changed")
         broadcastIdentityBeacon()
+
+        // When WiFi comes back, immediately try to deliver pending messages
+        if wifi && !previousWifi {
+            logger.info("WiFi recovered — flushing pending outbox")
+            appendDiagnostic("network_recovery wifi=true flush_triggered=true")
+            primeRelayBootstrapConnections()
+            dispatchFlushPendingOutbox(reason: "wifi_recovered")
+        }
     }
 
     func reportMotion(state: MotionState) {
@@ -2684,7 +2734,11 @@ final class MeshRepository {
                 accepted = true
                 break
             }
-            if blePeripheralManager?.sendDataToConnectedCentral(peerId: target, data: data) == true {
+            guard let blePeripheralManager = blePeripheralManager, !blePeripheralManager.subscribedCentralIds().isEmpty else {
+                appendDiagnostic("ble_peripheral_send_skip_no_subscribers")
+                continue
+            }
+            if blePeripheralManager.sendDataToConnectedCentral(peerId: target, data: data) == true {
                 accepted = true
                 break
             }
@@ -3469,10 +3523,25 @@ final class MeshRepository {
         savePendingOutbox(queue)
         let initialState = initialDelaySec > 0 ? "stored" : "forwarding"
         appendDiagnostic("delivery_state msg=\(historyRecordId) state=\(initialState) detail=enqueued attempt=\(initialAttemptCount) next_attempt_delay_sec=\(initialDelaySec)")
-        Task { await flushPendingOutbox(reason: "enqueue") }
+        dispatchFlushPendingOutbox(reason: "enqueue")
+    }
+
+    private var outboxFlushInFlight = false
+    private let retryThrottleMs: Int = 2000
+
+    private func dispatchFlushPendingOutbox(reason: String) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(retryThrottleMs)) { [weak self] in
+            Task { [weak self] in
+                await self?.flushPendingOutbox(reason: reason)
+            }
+        }
     }
 
     private func flushPendingOutbox(reason: String) async {
+        guard !outboxFlushInFlight else { return }
+        outboxFlushInFlight = true
+        defer { outboxFlushInFlight = false }
+
         // Ensure relay backbone is reachable whenever we check outbox
         primeRelayBootstrapConnections()
         
@@ -3484,6 +3553,11 @@ final class MeshRepository {
         nextQueue.reserveCapacity(queue.count)
 
         for item in queue {
+            // Yield between items to prevent CPU starvation (IOS-PERF-001).
+            // Without this, a large outbox under retry load can spike CPU to
+            // 99% and trigger the iOS watchdog kill.
+            await Task.yield()
+
             if let expiryReason = pendingOutboxExpiryReason(for: item, nowEpochSec: now) {
                 appendDiagnostic(
                     "delivery_state msg=\(item.historyRecordId) state=failed detail=dropped_pending_outbox reason=\(expiryReason) attempt=\(item.attemptCount)"
@@ -3539,6 +3613,19 @@ final class MeshRepository {
             }
 
             if delivery.acked {
+                // Adaptive post-ACK receipt wait: grows with attempt count to prevent
+                // re-delivering the same message every 8 seconds indefinitely when
+                // receipt delivery is slow or broken.
+                let adaptiveReceiptWait: UInt64
+                if item.attemptCount <= 3 {
+                    adaptiveReceiptWait = receiptAwaitSeconds      // 8s for first few
+                } else if item.attemptCount <= 10 {
+                    adaptiveReceiptWait = 30                       // 30s for moderate retries
+                } else if item.attemptCount <= 30 {
+                    adaptiveReceiptWait = 60                       // 60s for persistent retries
+                } else {
+                    adaptiveReceiptWait = 120                      // 2 min for very old messages
+                }
                 nextQueue.append(
                     PendingOutboundEnvelope(
                         queueId: item.queueId,
@@ -3549,17 +3636,27 @@ final class MeshRepository {
                         envelopeBase64: item.envelopeBase64,
                         createdAtEpochSec: item.createdAtEpochSec,
                         attemptCount: item.attemptCount + 1,
-                        nextAttemptAtEpochSec: now + receiptAwaitSeconds,
+                        nextAttemptAtEpochSec: now + adaptiveReceiptWait,
                         strictBleOnlyMode: item.strictBleOnlyMode
                     )
                 )
-                appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=stored detail=awaiting_receipt_delay_sec=\(receiptAwaitSeconds)")
+                appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=stored detail=awaiting_receipt_delay_sec=\(adaptiveReceiptWait)")
                 continue
             }
 
             let nextAttemptCount = item.attemptCount + 1
-            let shift = Int(min(nextAttemptCount, 6))
-            let backoff = UInt64(min(60, 1 << shift))
+            // Progressive backoff: fast retries first, then slow down
+            // Attempts 1-6: 2^n seconds (2, 4, 8, 16, 32, 64)
+            // Attempts 7-20: 60 seconds
+            // Attempts 21+: 300 seconds (5 min) — patient but persistent
+            let backoff: UInt64
+            if nextAttemptCount <= 6 {
+                backoff = UInt64(min(64, 1 << Int(nextAttemptCount)))
+            } else if nextAttemptCount <= 20 {
+                backoff = 60
+            } else {
+                backoff = 300
+            }
             nextQueue.append(
                     PendingOutboundEnvelope(
                         queueId: item.queueId,
@@ -3604,15 +3701,8 @@ final class MeshRepository {
         for item: PendingOutboundEnvelope,
         nowEpochSec: UInt64
     ) -> String? {
-        if item.attemptCount >= pendingOutboxMaxAttempts {
-            return "max_attempts_\(pendingOutboxMaxAttempts)"
-        }
-        let age = nowEpochSec >= item.createdAtEpochSec
-            ? nowEpochSec - item.createdAtEpochSec
-            : 0
-        if age >= pendingOutboxMaxAgeSeconds {
-            return "max_age_sec_\(pendingOutboxMaxAgeSeconds)"
-        }
+        // PHILOSOPHY: Messages NEVER expire. Every message retries
+        // until successfully delivered. No attempt limit, no age limit.
         return nil
     }
 
@@ -3634,11 +3724,11 @@ final class MeshRepository {
                 }
             }
         if normalizedIds.isEmpty {
-            Task { await flushPendingOutbox(reason: reason) }
+            dispatchFlushPendingOutbox(reason: reason)
             return
         }
         normalizedIds.forEach { promotePendingOutboundForPeer(peerId: $0) }
-        Task { await flushPendingOutbox(reason: reason) }
+        dispatchFlushPendingOutbox(reason: reason)
     }
 
     private func promotePendingOutboundForPeer(peerId: String, excludingMessageId: String? = nil) {
@@ -3779,7 +3869,9 @@ final class MeshRepository {
         for addr in prioritized + relayCircuits where !merged.contains(addr) {
             merged.append(addr)
         }
-        return merged
+        // Cap at 6 candidates to avoid excessive dialing.
+        // Priority: LAN addresses first, then relay circuits, then public
+        return Array(merged.prefix(6))
     }
 
     private func normalizeOutboundListenerHints(_ raw: [String]) -> [String] {
@@ -3940,10 +4032,15 @@ final class MeshRepository {
         updateRelayAvailability(peerId: trimmed, event: "dial_allowed")
         return true
     }
-
     private func updateRelayAvailability(peerId: String, event: String) {
         let now = Date()
-        relayRecentEventTimes.append(now)
+        // Don't count debounced or proactive maintenance events towards flapping.
+        // Proactive dial attempts (allowed, attempt, started) are part of normal
+        // maintenance and don't indicate connection instability.
+        let isProactiveIntent = event == "dial_allowed" || event == "dial_attempt" || event == "dial_started" || event == "dial_debounced"
+        if !isProactiveIntent {
+            relayRecentEventTimes.append(now)
+        }
         relayRecentEventTimes = relayRecentEventTimes.filter { now.timeIntervalSince($0) <= 60 }
 
         if event == "disconnected" {
@@ -3954,16 +4051,23 @@ final class MeshRepository {
             }
         }
 
-        if relayRecentEventTimes.count >= 6 {
+        // Raised from 6→30: each relay dial generates 3+ events (allowed+attempt+started),
+        // and with 2 relay peers one normal round is ~6 events. The old threshold caused
+        // immediate self-reinforcing flapping that prevented relay reservations.
+        if relayRecentEventTimes.count >= 30 {
             relayAvailabilityState = .flapping
-            relayBackoffUntil = now.addingTimeInterval(12)
+            relayBackoffUntil = now.addingTimeInterval(30)
         } else if now < relayBackoffUntil {
             relayAvailabilityState = .backoff
         } else if relayAvailabilityState != .recovering {
             relayAvailabilityState = .stable
         }
         relayAvailabilityUpdatedAt = now
-        appendDiagnostic("relay_state peer=\(peerId) event=\(event) state=\(relayAvailabilityState.rawValue) events_60s=\(relayRecentEventTimes.count)")
+        // Throttle relay diagnostics: log every 10th event when flapping
+        // to reduce disk/CPU pressure (was generating 70+ log lines/minute)
+        if relayAvailabilityState != .flapping || relayRecentEventTimes.count % 10 == 0 {
+            appendDiagnostic("relay_state peer=\(peerId) event=\(event) state=\(relayAvailabilityState.rawValue) events_60s=\(relayRecentEventTimes.count)")
+        }
     }
 
     private func primeRelayBootstrapConnections() {
@@ -4319,6 +4423,7 @@ final class MeshRepository {
             includeRelayCircuits: false
         )
 
+        var consecutiveDebounces = 0
         for addr in dialCandidates {
             // Only append /p2p/ component if the peerId is a valid libp2p PeerId format
             // (base58btc multihash, starts with "12D3Koo" or "Qm").
@@ -4331,8 +4436,14 @@ final class MeshRepository {
             do {
                 if let relayPeerId,
                    !shouldAttemptRelayDial(peerId: relayPeerId, source: "connect_to_peer") {
+                    consecutiveDebounces += 1
+                    // P0: Stop trying after 2 consecutive debounces — all remaining
+                    // relay addresses for the same peer will also be debounced, and
+                    // each attempt generates log I/O that starves the main thread.
+                    if consecutiveDebounces >= 2 { break }
                     continue
                 }
+                consecutiveDebounces = 0
                 if !shouldAttemptDial(finalAddr) { continue }
                 if let relayPeerId {
                     updateRelayAvailability(peerId: relayPeerId, event: "dial_attempt")
@@ -4402,8 +4513,18 @@ final class MeshRepository {
     }
 
     @MainActor
+    private static let diagnosticDateFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    // Throttle os_log output: only log every Nth diagnostic to avoid flooding
+    // the system console (each os_log call has significant overhead).
+    private var diagnosticLogCounter: Int = 0
+    private let diagnosticLogThrottle: Int = 10 // log 1 in every 10
+
     func appendDiagnostic(_ message: String) {
-        let ts = ISO8601DateFormatter().string(from: Date())
+        let ts = Self.diagnosticDateFormatter.string(from: Date())
         let line = "\(ts) \(message)"
         
         // 1. Update memory buffer
@@ -4412,8 +4533,11 @@ final class MeshRepository {
             diagnosticsBuffer.removeFirst(diagnosticsBuffer.count - diagnosticsMaxLines)
         }
         
-        // 2. Write to System Console (os_log / Logger)
-        logger.info("DIAG: \(message)")
+        // 2. Write to System Console — throttled to avoid flooding
+        diagnosticLogCounter += 1
+        if diagnosticLogCounter % diagnosticLogThrottle == 0 {
+            logger.info("DIAG: \(message)")
+        }
         
         // 3. Persist to Disk (Append only)
         persistDiagnosticLine(line)

@@ -52,7 +52,7 @@ class MeshRepository(private val context: Context) {
             try {
                 val config = uniffi.api.BootstrapConfig(
                     staticNodes = STATIC_BOOTSTRAP_NODES,
-                    remoteUrl = null,  // Set to a bootstrap-list URL when available
+                    remoteUrl = "https://bootstrap.scmessenger.net/nodes.json",
                     fetchTimeoutSecs = 5u,
                     envOverrideKey = "SC_BOOTSTRAP_NODES"
                 )
@@ -64,7 +64,8 @@ class MeshRepository(private val context: Context) {
         }
 
         internal fun isMeshParticipationEnabled(settings: uniffi.api.MeshSettings?): Boolean {
-            return settings?.relayEnabled == true
+            // Default to ENABLED when settings unavailable (matches Rust default: relay_enabled=true)
+            return settings?.relayEnabled ?: true
         }
 
         internal fun requireMeshParticipationEnabled(settings: uniffi.api.MeshSettings?) {
@@ -335,8 +336,55 @@ class MeshRepository(private val context: Context) {
 
             Timber.i("all_managers_init_success")
             Timber.i("All managers initialized successfully")
+
+            // One-time migration: clear stale routing hints inherited from
+            // pre-fix builds.  The old appendRoutingHint accumulated duplicate
+            // BLE MACs and stale libp2p_peer_id entries that now cause endless
+            // retry loops to unreachable peers.
+            migrateStaleRoutingHints()
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize managers")
+        }
+    }
+
+    private fun migrateStaleRoutingHints() {
+        try {
+            val prefs = context.getSharedPreferences("mesh_migrations", android.content.Context.MODE_PRIVATE)
+            if (prefs.getBoolean("v1_routing_hint_cleanup", false)) return
+
+            val contacts = contactManager?.list().orEmpty()
+            var cleaned = 0
+            for (contact in contacts) {
+                val notes = contact.notes ?: continue
+                if (!notes.contains("libp2p_peer_id:") && !notes.contains("ble_peer_id:")) continue
+                // Strip stale routing entries — fresh discovery will repopulate them.
+                val stripped = notes.split(';', '\n')
+                    .map { it.trim() }
+                    .filter { segment ->
+                        !segment.startsWith("libp2p_peer_id:") &&
+                            !segment.startsWith("ble_peer_id:")
+                    }
+                    .joinToString(";")
+                val updatedNotes = stripped.ifEmpty { null }
+                if (updatedNotes != notes) {
+                    contactManager?.add(uniffi.api.Contact(
+                        peerId = contact.peerId,
+                        nickname = contact.nickname,
+                        localNickname = contact.localNickname,
+                        publicKey = contact.publicKey,
+                        addedAt = contact.addedAt,
+                        lastSeen = contact.lastSeen,
+                        notes = updatedNotes
+                    ))
+                    cleaned++
+                }
+            }
+            prefs.edit().putBoolean("v1_routing_hint_cleanup", true).apply()
+            if (cleaned > 0) {
+                Timber.i("Routing hint migration: cleaned $cleaned contact(s) with stale routing entries")
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Routing hint migration failed (non-fatal)")
         }
     }
 
@@ -696,8 +744,11 @@ class MeshRepository(private val context: Context) {
 
                         // Auto-upsert contact: senderPublicKeyHex is guaranteed valid Ed25519 key
                         // (Rust only fires this callback after successful decryption)
+                        val messageKind = decodedPayload.kind.trim().lowercase()
+                        val isChatEvent = messageKind == "text" || messageKind.isEmpty()
+
                         val existingContact = try { contactManager?.get(canonicalPeerId) } catch (e: Exception) { null }
-                        if (existingContact == null && normalizedSenderKey != null) {
+                        if (existingContact == null && normalizedSenderKey != null && isChatEvent) {
                             var routeNotes = if (!routePeerId.isNullOrBlank()) {
                                 appendRoutingHint(notes = null, key = "libp2p_peer_id", value = routePeerId)
                             } else {
@@ -857,7 +908,6 @@ class MeshRepository(private val context: Context) {
                             )
                         }
 
-                        val messageKind = decodedPayload.kind.trim().lowercase()
                         if (messageKind == "identity_sync") {
                             Timber.d("Processed identity sync from $canonicalPeerId (route=$routePeerId)")
                             sendDeliveryReceiptAsync(
@@ -898,6 +948,7 @@ class MeshRepository(private val context: Context) {
                             peerId = canonicalPeerId,
                             content = content,
                             timestamp = canonicalTimestamp,
+                            senderTimestamp = senderTimestamp,
                             delivered = true
                         )
                         historyManager?.add(record)
@@ -1758,6 +1809,20 @@ class MeshRepository(private val context: Context) {
     }
 
     /**
+     * Called when WiFi connectivity is recovered. Immediately flushes
+     * the pending outbox and re-primes relay connections to maximize
+     * delivery opportunity.
+     */
+    fun notifyNetworkRecovered() {
+        Timber.i("WiFi recovered — flushing pending outbox immediately")
+        Timber.i("network_recovery wifi=true flush_triggered=true")
+        repoScope.launch {
+            primeRelayBootstrapConnections()
+            flushPendingOutbox("wifi_recovered")
+        }
+    }
+
+    /**
      * Get current service state.
      */
     fun getServiceState(): uniffi.api.ServiceState {
@@ -1973,6 +2038,7 @@ class MeshRepository(private val context: Context) {
                     direction = uniffi.api.MessageDirection.SENT,
                     content = content,
                     timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                    senderTimestamp = (System.currentTimeMillis() / 1000).toULong(),
                     delivered = false
                 )
                 historyManager?.add(record)
@@ -2885,6 +2951,20 @@ class MeshRepository(private val context: Context) {
                     return@attemptWifiThenBleFallback false
                 }
 
+                // Fast-skip: if no BLE devices are connected and the requested
+                // address is a cached hint (not actively connected), skip entirely
+                // to avoid wasting time on stale MACs.
+                if (connectedBleDevices.isEmpty() && bleAddr !in connectedBleDevices) {
+                    logDeliveryAttempt(
+                        messageId = traceMessageId,
+                        medium = "ble",
+                        phase = "local_fallback",
+                        outcome = "skipped",
+                        detail = "ctx=$attemptContext no_connected_ble_devices requested=$bleAddr"
+                    )
+                    return@attemptWifiThenBleFallback false
+                }
+
                 val sendTargets = linkedSetOf(bleAddr).apply { addAll(connectedBleDevices) }
                 var lastFailureReason = "no_target_attempted"
 
@@ -3097,6 +3177,8 @@ class MeshRepository(private val context: Context) {
             var updated = false
             val iterator = queue.listIterator()
             while (iterator.hasNext()) {
+                // Yield between items to prevent CPU starvation under retry load.
+                kotlinx.coroutines.yield()
                 val item = iterator.next()
                 val expiryReason = pendingOutboxExpiryReason(item, now)
                 if (expiryReason != null) {
@@ -3167,26 +3249,43 @@ class MeshRepository(private val context: Context) {
                 }
 
                 if (delivery.acked) {
+                    // Adaptive post-ACK receipt wait: grows with attempt count to prevent
+                    // re-delivering the same message every 8 seconds indefinitely when
+                    // receipt delivery is slow or broken.
+                    val adaptiveReceiptWait = when {
+                        item.attemptCount <= 3 -> receiptAwaitSeconds        // 8s for first few
+                        item.attemptCount <= 10 -> 30L                       // 30s for moderate retries
+                        item.attemptCount <= 30 -> 60L                       // 60s for persistent retries
+                        else -> 120L                                         // 2 min for very old messages
+                    }
                     iterator.set(
                         item.copy(
                             routePeerId = selectedRoutePeerId,
                             listeners = resolvedListeners,
                             attemptCount = item.attemptCount + 1,
-                            nextAttemptAtEpochSec = now + receiptAwaitSeconds,
+                            nextAttemptAtEpochSec = now + adaptiveReceiptWait,
                             strictBleOnlyMode = item.strictBleOnlyMode
                         )
                     )
                     logDeliveryState(
                         messageId = item.historyRecordId,
                         state = "stored",
-                        detail = "awaiting_receipt_delay_sec=$receiptAwaitSeconds"
+                        detail = "awaiting_receipt_delay_sec=$adaptiveReceiptWait"
                     )
                     updated = true
                     continue
                 }
 
                 val nextAttemptCount = item.attemptCount + 1
-                val backoffSecs = minOf(60L, 1L shl minOf(nextAttemptCount, 6))
+                // Progressive backoff: fast retries first, then slow down
+                // Attempts 1-6: 2^n seconds (2, 4, 8, 16, 32, 64)
+                // Attempts 7-20: 60 seconds
+                // Attempts 21+: 300 seconds (5 min) — patient but persistent
+                val backoffSecs = when {
+                    nextAttemptCount <= 6 -> minOf(64L, 1L shl nextAttemptCount)
+                    nextAttemptCount <= 20 -> 60L
+                    else -> 300L
+                }
                 iterator.set(
                     item.copy(
                         routePeerId = selectedRoutePeerId,
@@ -3328,13 +3427,8 @@ class MeshRepository(private val context: Context) {
     }
 
     private fun pendingOutboxExpiryReason(item: PendingOutboundEnvelope, nowEpochSec: Long): String? {
-        if (item.attemptCount >= pendingOutboxMaxAttempts) {
-            return "max_attempts_${pendingOutboxMaxAttempts}"
-        }
-        val ageSec = (nowEpochSec - item.createdAtEpochSec).coerceAtLeast(0L)
-        if (ageSec >= pendingOutboxMaxAgeSeconds) {
-            return "max_age_sec_${pendingOutboxMaxAgeSeconds}"
-        }
+        // PHILOSOPHY: Messages NEVER expire. Every message retries
+        // until successfully delivered. No attempt limit, no age limit.
         return null
     }
 
@@ -3726,17 +3820,24 @@ class MeshRepository(private val context: Context) {
 
         val existing = notes?.trim().orEmpty()
         val components = if (existing.isEmpty()) {
-            emptyList()
+            mutableListOf<String>()
         } else {
-            existing.split(';', '\n').map { it.trim() }
+            existing.split(';', '\n').map { it.trim() }.toMutableList()
         }
-        val alreadyPresent = components.any { it.startsWith("$key:") && it.removePrefix("$key:").trim() == normalizedValue }
-        if (alreadyPresent) return notes
 
-        return listOfNotNull(
-            existing.takeIf { it.isNotEmpty() },
-            "$key:$normalizedValue"
-        ).joinToString(";")
+        // Replace existing entry for this key instead of appending a duplicate.
+        // This prevents stale BLE MACs / route peer IDs from accumulating.
+        val existingIndex = components.indexOfFirst { it.startsWith("$key:") }
+        val newEntry = "$key:$normalizedValue"
+        if (existingIndex >= 0) {
+            if (components[existingIndex] == newEntry) return notes // unchanged
+            Timber.d("Routing hint update: replacing old ${components[existingIndex]} with $newEntry")
+            components[existingIndex] = newEntry
+        } else {
+            components.add(newEntry)
+        }
+
+        return components.filter { it.isNotEmpty() }.joinToString(";")
     }
 
     private fun resolveTransportIdentity(libp2pPeerId: String): TransportIdentityResolution? {
@@ -4182,7 +4283,10 @@ class MeshRepository(private val context: Context) {
         } else {
             emptyList()
         }
-        return (prioritized + relayCircuits).distinct()
+        // Cap at 6 candidates to avoid excessive dialing.
+        // Priority: LAN addresses first (from prioritized), then relay circuits,
+        // then remaining public addresses.
+        return (prioritized + relayCircuits).distinct().take(6)
     }
 
     fun getDialHintsForRoutePeer(routePeerId: String): List<String> {

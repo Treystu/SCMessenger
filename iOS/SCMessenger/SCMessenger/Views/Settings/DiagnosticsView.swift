@@ -70,7 +70,7 @@ struct DiagnosticsView: View {
                     Color.clear.frame(height: 1).id("bottom")
                 }
                 .background(Color(uiColor: .secondarySystemBackground))
-                .onChange(of: logText) { _ in
+                .onChange(of: logText) {
                     if isAutoRefreshing {
                         withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
                     }

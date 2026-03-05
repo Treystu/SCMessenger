@@ -29,7 +29,12 @@ final class ChatViewModel {
     func loadMessages() {
         do {
             let fetched = try repository?.getConversation(peerId: conversation.peerId) ?? []
-            messages = fetched.sorted { $0.timestamp < $1.timestamp }
+            messages = fetched.sorted(by: { a, b in
+                let t1 = a.senderTimestamp > 0 ? a.senderTimestamp : a.timestamp
+                let t2 = b.senderTimestamp > 0 ? b.senderTimestamp : b.timestamp
+                if t1 == t2 { return a.timestamp < b.timestamp }
+                return t1 < t2
+            })
         } catch {
             self.error = error.localizedDescription
         }
@@ -75,14 +80,21 @@ final class ChatViewModel {
         isSending = false
     }
     
+    private var reloadDebounceTask: Task<Void, Never>?
+
     private func subscribeToNewMessages() {
         repository?.messageUpdates
             .filter { [weak self] message in
                 message.peerId == self?.conversation.peerId
             }
             .sink { [weak self] _ in
-                // Reload messages on any update (sent or received)
-                self?.loadMessages()
+                // Debounce: cancel any pending reload, schedule a new one 80ms out
+                self?.reloadDebounceTask?.cancel()
+                self?.reloadDebounceTask = Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 80_000_000)
+                    guard !Task.isCancelled else { return }
+                    self?.loadMessages()
+                }
             }
             .store(in: &cancellables)
     }

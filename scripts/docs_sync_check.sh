@@ -21,10 +21,10 @@ check_header_fields() {
   fi
 
   head_block="$(head -n 12 "$file")"
-  if ! printf "%s\n" "$head_block" | rg -q '^Status:'; then
+  if ! printf "%s\n" "$head_block" | grep -qE '^Status:'; then
     fail "$file is missing a Status header near top-of-file"
   fi
-  if ! printf "%s\n" "$head_block" | rg -q '^Last updated:'; then
+  if ! printf "%s\n" "$head_block" | grep -qE '^Last updated:'; then
     fail "$file is missing a Last updated header near top-of-file"
   fi
 }

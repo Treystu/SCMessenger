@@ -393,10 +393,7 @@ async fn handle_get_peers(_req: Request<Body>, ctx: Arc<ApiContext>) -> Result<R
         .body(Body::from(serde_json::to_string(&response)?))?)
 }
 
-async fn handle_get_listeners(
-    _req: Request<Body>,
-    ctx: Arc<ApiContext>,
-) -> Result<Response<Body>> {
+async fn handle_get_listeners(_req: Request<Body>, ctx: Arc<ApiContext>) -> Result<Response<Body>> {
     let listeners = ctx
         .swarm_handle
         .get_listeners()

@@ -67,7 +67,14 @@ fn is_discoverable_multiaddr(addr: &Multiaddr) -> bool {
                 if ip.is_unspecified() {
                     return false;
                 } // 0.0.0.0
-                  // We intentionally allow RFC1918 and CGNAT for local discovery
+                if ip.is_link_local() {
+                    return false;
+                } // 169.254.x.x
+                  // Android uses 192.0.0.x for internal NAT / VPN-like interfaces
+                if ip.octets()[0] == 192 && ip.octets()[1] == 0 && ip.octets()[2] == 0 {
+                    return false;
+                }
+                // We intentionally allow RFC1918 and CGNAT for local discovery
             }
             Protocol::Ip6(ip) => {
                 if ip.is_loopback() {

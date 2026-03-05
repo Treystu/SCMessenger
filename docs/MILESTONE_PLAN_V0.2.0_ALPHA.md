@@ -1,7 +1,7 @@
 # SCMessenger v0.2.0 Alpha Milestone Plan
 
-Status: Active (execution complete through WS12.29 known-issues consolidation pass)  
-Date: 2026-03-03  
+Status: Active (execution complete through WS12.34 transport failure triage + reliability sweep)  
+Date: 2026-03-04  
 Scope: Core + Android + iOS + Desktop GUI + Relay topology
 
 ---
@@ -193,6 +193,31 @@ Scope: Core + Android + iOS + Desktop GUI + Relay topology
    - reliability/UX safety hardening only; no net-new feature scope expansion.
 8. Milestone closure gate remains unchanged:
    - synchronized physical Android+iOS evidence is still required to close `R-WS12-29-02` and paired convergence residuals (`R-WS12-04/05/06`).
+
+## Transport Failure Triage + 10-Fix Reliability Sweep Addendum (WS12.34, 2026-03-04 HST)
+
+1. Live iOS+Android transport failure diagnosed from device logs after WiFi/BLE/cell connection toggling:
+   - Rust core `receive_message` errors invisible on mobile due to swallowed `tracing` output.
+   - iOS relay flapping threshold (6 events/60s) was self-triggering under normal 2-relay dial patterns.
+   - Messages expired/dropped despite intended "never fail delivery" philosophy.
+2. 10 targeted fixes applied across Rust core, iOS, and Android:
+   - `eprintln!` error visibility at all `receive_message` failure points (Rust core).
+   - `relayEnabled` nil-safety on both platforms (defaulting to `true` when settings nil).
+   - Retry throttle increased 500→2000ms (iOS), relay diagnostic throttle (iOS).
+   - Messages NEVER expire: removed attempt limits and age-based expiry (both platforms).
+   - Progressive backoff: `min(2^attempt, 60)` seconds, capping at 300s (both platforms).
+   - WiFi recovery triggers immediate outbox flush (both platforms).
+   - BLE 15s GATT connection timeout for stale connections (Android).
+   - Dial candidate cap at 6 per peer, prioritizing LAN→relay→public (both platforms).
+3. Core philosophy enforcement: messages never expire, retry indefinitely with progressive backoff until delivered.
+4. Validation in this pass:
+   - `cargo check --workspace` (pass)
+   - `cd android && ./gradlew :app:compileDebugKotlin` (pass)
+5. Scope classification:
+   - reliability hardening only; no net-new feature scope expansion.
+6. Milestone closure gate remains unchanged:
+   - deploy + observe `eprintln!` output on mobile to diagnose any remaining `receive_message` failures.
+   - synchronized physical Android+iOS evidence still required to close paired convergence residuals.
 
 ---
 

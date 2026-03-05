@@ -169,7 +169,9 @@ enum IdentityAction {
         #[arg(short = 'i', long)]
         input: Option<String>,
     },
-    SetName { name: String },
+    SetName {
+        name: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -367,7 +369,9 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
             println!();
             println!(
                 "{}",
-                "⚠️  WARNING: backup payload contains private key material.".bright_red().bold()
+                "⚠️  WARNING: backup payload contains private key material."
+                    .bright_red()
+                    .bold()
             );
             println!("Identity ID: {}", info.identity_id.unwrap_or_default());
             println!("Public Key:  {}", info.public_key_hex.unwrap_or_default());
@@ -1526,6 +1530,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         "  Peer ID:      {}",
         local_peer_id.to_string().bright_cyan()
     );
+    println!("=== OWN_IDENTITY: {} ===", local_peer_id);
     println!(
         "  Public Key:   {}",
         "(headless/identity-agnostic)".bright_yellow()

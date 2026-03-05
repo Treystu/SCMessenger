@@ -32,7 +32,20 @@ final class CoreDelegateImpl: CoreDelegate {
 
     // MARK: - CoreDelegate Protocol (called FROM Rust)
 
+    // P1: Dedup discover events — Rust fires one per substream (5+ in 14ms).
+    // Only process one discovery per peer per 1-second window.
+    private var discoveryDedupCache: [String: Date] = [:]
+    private let discoveryDedupInterval: TimeInterval = 1.0
+
     func onPeerDiscovered(peerId: String) {
+        let trimmed = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let now = Date()
+        if let lastDiscovery = discoveryDedupCache[trimmed],
+           now.timeIntervalSince(lastDiscovery) < discoveryDedupInterval {
+            return // Already processed this discovery within the window
+        }
+        discoveryDedupCache[trimmed] = now
+
         logger.info("Peer discovered: \(peerId)")
         let repo = meshRepository
         DispatchQueue.main.async {
@@ -44,7 +57,19 @@ final class CoreDelegateImpl: CoreDelegate {
         }
     }
 
+    // P1: Dedup connect events — Rust fires one per substream.
+    private var connectDedupCache: [String: Date] = [:]
+    private let connectDedupInterval: TimeInterval = 2.0
+
     func onPeerConnected(peerId: String) {
+        let trimmed = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let now = Date()
+        if let last = connectDedupCache[trimmed],
+           now.timeIntervalSince(last) < connectDedupInterval {
+            return
+        }
+        connectDedupCache[trimmed] = now
+
         logger.info("Peer connected: \(peerId)")
         DispatchQueue.main.async {
             self.eventBus.peerEvents.send(.connected(peerId: peerId))
@@ -69,7 +94,19 @@ final class CoreDelegateImpl: CoreDelegate {
         }
     }
 
+    // P1: Dedup identify events — Rust fires one per substream.
+    private var identifyDedupCache: [String: Date] = [:]
+    private let identifyDedupInterval: TimeInterval = 2.0
+
     func onPeerIdentified(peerId: String, agentVersion: String, listenAddrs: [String]) {
+        let trimmed = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let now = Date()
+        if let last = identifyDedupCache[trimmed],
+           now.timeIntervalSince(last) < identifyDedupInterval {
+            return
+        }
+        identifyDedupCache[trimmed] = now
+
         logger.info("Peer identified: \(peerId) (agent: \(agentVersion)) with \(listenAddrs.count) addresses")
         let repo = meshRepository
         DispatchQueue.main.async {

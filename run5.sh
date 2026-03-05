@@ -76,9 +76,8 @@ pid_alive() { kill -0 "$1" 2>/dev/null; }
 # Android: pin to a specific serial to avoid "more than one device" errors
 ADB_SERIAL=""
 if adb devices 2>/dev/null | grep -q "device$"; then
-  # Prefer USB transport; fall back to first available
-  ADB_SERIAL=$(adb devices -l 2>/dev/null | awk '/\tusb:.*device\b/{print $1; exit}')
-  [ -z "$ADB_SERIAL" ] && ADB_SERIAL=$(adb devices 2>/dev/null | awk '/\tdevice/{print $1; exit}')
+  # Use a simpler, more robust selection that handles both TCP and USB
+  ADB_SERIAL=$(adb devices -l | tail -n +2 | awk '$2=="device"{print $1; exit}')
 fi
 ANDROID_AVAILABLE=0
 [ -n "$ADB_SERIAL" ] && ANDROID_AVAILABLE=1
@@ -181,8 +180,15 @@ if [ "$ANDROID_AVAILABLE" = "1" ]; then
     echo "✅ running  (serial: $ADB_SERIAL)"
     ANDROID_RUNNING=1
   else
-    ANDROID_STATE=$(adb -s "$ADB_SERIAL" shell pm list packages 2>/dev/null | grep -c "com.scmessenger.android" || echo 0)
-    [ "$ANDROID_STATE" -gt 0 ] && echo "⚠️  installed, NOT running  (serial: $ADB_SERIAL)" || echo "❌ not installed"
+    # Improved check: avoid output capture issues that cause integer expression errors
+    ANDROID_STATE=$(adb -s "$ADB_SERIAL" shell pm list packages com.scmessenger.android 2>/dev/null | grep -c "com.scmessenger.android" || echo 0)
+    # Ensure it's a valid integer
+    [[ "$ANDROID_STATE" =~ ^[0-9]+$ ]] || ANDROID_STATE=0
+    if [ "$ANDROID_STATE" -gt 0 ]; then
+       echo "⚠️  installed, NOT running  (serial: $ADB_SERIAL)"
+    else
+       echo "❌ not installed"
+    fi
   fi
 else
   echo "⚠️  no device  (adb: none found)"
@@ -344,13 +350,13 @@ echo ""
   if ! gcloud compute ssh "$GCP_HOST" --zone="$GCP_ZONE" \
       --ssh-flag="-o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3" \
       --command="CID=\$(sudo docker ps --filter status=running -q | head -n1); \
-                 [ -n \"\$CID\" ] && sudo docker logs -f \"\$CID\" 2>&1 \
+                 [ -n \"\$CID\" ] && sudo docker logs --tail 200 -f \"\$CID\" 2>&1 \
                  || echo 'ERROR: No running GCP container'" 2>&1; then
     if ! gcloud compute ssh "$GCP_HOST" --zone="$GCP_ZONE" \
         --tunnel-through-iap \
         --ssh-flag="-o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3" \
         --command="CID=\$(sudo docker ps --filter status=running -q | head -n1); \
-                   [ -n \"\$CID\" ] && sudo docker logs -f \"\$CID\" 2>&1 \
+                   [ -n \"\$CID\" ] && sudo docker logs --tail 200 -f \"\$CID\" 2>&1 \
                    || echo 'ERROR: No running GCP container'" 2>&1; then
       echo "ERROR: GCP SSH unreachable via direct and IAP tunnel"
     fi
@@ -417,6 +423,8 @@ if [ -n "$IOS_DEVICE_UDID" ]; then
 
   # System log stream: BLE + MPC subsystems (these appear in the host log)
   # Use `log stream` with predicate targeted at the device process name
+  # System log stream: BLE + MPC subsystems
+  # We try to exclude the Simulator specifically by sender path
   log stream \
     --style compact \
     --level info \
@@ -608,15 +616,27 @@ logs = {
 NODE_TYPES = {'gcp':'Headless','osx':'Headless','android':'Full','ios_dev':'Full','ios_sim':'Full'}
 PAT = re.compile(r"(12D3KooW[1-9A-HJ-NP-Za-km-z]{44,})")
 OWN_ID_PATTERNS = [
+    re.compile(r'===\s*OWN_IDENTITY:\s*(12D3KooW[a-zA-Z0-9]{44,})\s*==='),
     re.compile(r'local_peer_id\s*=\s*(12D3KooW[a-zA-Z0-9]{44,})'),
     re.compile(r'Starting Swarm with PeerID:\s*(12D3KooW[a-zA-Z0-9]{44,})'),
     re.compile(r'SwarmBridge with peer id:?\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+    re.compile(r'Initialized core for peer id:?\s*(12D3KooW[a-zA-Z0-9]{44,})'),
     # relay agent string pattern: relay/<peerid> — only valid for headless nodes
     re.compile(r'agent: scmessenger/[^/]+/headless/relay/(12D3KooW[a-zA-Z0-9]{44,})'),
+    # Android logcat: identity info from MeshRepository/IronCore
+    re.compile(r'Mesh service started.*?libp2pPeerId=\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+    re.compile(r'"libp2p_peer_id"\s*:\s*"(12D3KooW[a-zA-Z0-9]{44,})"'),
+    # Android: own identity emission
+    re.compile(r'Emitted IdentityDiscovered.*?peerId=(12D3KooW[a-zA-Z0-9]{44,})'),
+    # Android logcat with tag prefix: "D/Rust  ( 1234): Starting Swarm with PeerID: ..."
+    re.compile(r'Rust\s*:\s*Starting Swarm with PeerID:\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+    re.compile(r'SCMessengerCore\s*:\s*.*?peer.?id[:\s]+(12D3KooW[a-zA-Z0-9]{44,})', re.I),
 ]
 CONNECT_PAT = re.compile(r'(connected|PeerConnected|peer.*connect)', re.I)
 ERROR_PAT   = re.compile(r'(Failed to negotiate|connection error|ERR)', re.I)
-RELAY_PAT   = re.compile(r'Relay circuit reservation')
+RELAY_PAT   = re.compile(r'(Relay circuit reservation|Relaying message)', re.I)
+SENT_PAT    = re.compile(r'(✓ Direct delivery ACK|outcome=success|sent message)', re.I)
+RECV_PAT    = re.compile(r'(✓ Received message|msg_rx_processed|receive_message)', re.I)
 NAT_PAT     = re.compile(r'AutoNAT.*?(Public|Private|Unknown)', re.I)
 
 def read(path):
@@ -653,24 +673,46 @@ for name, content in contents.items():
     for m in re.finditer(r'agent: scmessenger/[^/]+/[^/]+/identity/(12D3KooW[a-zA-Z0-9]{44,})', content):
         relay_agent_ids.add(m.group(1))
 
+# Un-assign any full node that incorrectly grabbed a headless node's ID
+for name in list(file_to_id.keys()):
+    if NODE_TYPES.get(name) == 'Full' and file_to_id[name] in relay_agent_ids:
+        del file_to_id[name]
+
+# Fallback for nodes (especially Android/iOS) whose startup logs might be truncated.
+# The most frequently appearing peer ID that isn't a known relay node or already taken is likely their own.
+taken_ids = set(file_to_id.values()) | relay_agent_ids
+for name, content in contents.items():
+    if name not in file_to_id:
+        all_ids = PAT.findall(content)
+        freq = {}
+        for pid in all_ids:
+            if pid not in taken_ids:
+                freq[pid] = freq.get(pid, 0) + 1
+        if freq:
+            best_id = sorted(freq.items(), key=lambda x: x[1], reverse=True)[0][0]
+            file_to_id[name] = best_id
+            taken_ids.add(best_id)
+
 matrix = {name: set(PAT.findall(c)) for name, c in contents.items()}
 
 # Header
-print(f"  {'Node':<10} {'Own ID':<26} {'Lines':>6} {'Relays':>6} {'NAT':<9} {'Connects':>9} {'Errors':>7}")
-print("  " + "─" * 82)
+print(f"  {'Node':<10} {'Own ID':<26} {'Sent':>5} {'Recv':>5} {'Relay':>6} {'Conns':>6} {'NAT':<9} {'Errors':>7}")
+print("  " + "─" * 88)
 for name in logs:
     c   = contents[name]
     pid = file_to_id.get(name, 'unknown')
     pid_d = (pid[:22] + '..') if len(pid) > 22 else pid
     lines  = c.count('\n')
+    sent   = len(SENT_PAT.findall(c))
+    recv   = len(RECV_PAT.findall(c))
     relays = len(RELAY_PAT.findall(c))
     nat_m  = NAT_PAT.findall(c)
     nat    = nat_m[-1].lower() if nat_m else '?'
     conns  = len(CONNECT_PAT.findall(c))
     errs   = len(ERROR_PAT.findall(c))
     has_content = lines > 2
-    icon = '✅' if (pid != 'unknown' and has_content) else ('⏳' if has_content else '❌')
-    print(f"  {icon} {name:<8} {pid_d:<26} {lines:>6} {relays:>6} {nat:<9} {conns:>9} {errs:>7}")
+    icon = '✅' if (pid != 'unknown' or has_content) else '❌'
+    print(f"  {icon} {name:<8} {pid_d:<26} {sent:>5} {recv:>5} {relays:>6} {conns:>6} {nat:<9} {errs:>7}")
 
 print()
 print("  Visibility Matrix (did node X see node Y's peer ID?):")

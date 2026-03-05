@@ -36,7 +36,8 @@ fun ChatScreen(
 ) {
     val messages by viewModel.messages.collectAsState()
     val chatMessages = remember(messages, conversationId) {
-        messages.filter { it.peerId == conversationId }.sortedBy { it.timestamp }
+        // MSG-ORDER-001: Sort strictly by sender-assigned timestamp to ensure consistent ordering across platforms
+        messages.filter { it.peerId == conversationId }.sortedBy { it.senderTimestamp }
     }
     val nowEpochSec = System.currentTimeMillis() / 1000
 

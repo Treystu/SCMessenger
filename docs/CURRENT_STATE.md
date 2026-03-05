@@ -1,7 +1,7 @@
 # SCMessenger Current State (Verified)
 
 Status: Active  
-Last updated: 2026-03-03
+Last updated: 2026-03-04
 
 Last verified: **2026-03-03** (local workspace checks on this machine)
 
@@ -300,6 +300,36 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - `bash ./iOS/verify-test.sh` — **pass** (`10 warnings`, non-fatal policy)
 - Remaining closure gate:
   - synchronized physical Android+iOS evidence is still required to retire `R-WS12-29-02` and paired-delivery residuals (`R-WS12-04/05/06`).
+
+### WS12.34 Transport Failure Triage + 10-Fix Reliability Sweep (2026-03-04 HST)
+
+- Field issue intake addressed in this pass:
+  - iOS and Android messaging stopped working after toggling WiFi/BLE/cell connections.
+  - Rust core `receive_message` failures were invisible on mobile due to swallowed `tracing` output.
+  - iOS relay flapping threshold was self-triggering, permanently blocking relay circuit path.
+  - Stale routing data caused infinite retry loops against unreachable peers.
+  - Messages were being expired/dropped despite "never fail delivery" philosophy.
+- Fixes applied (10 total across Rust core, iOS, Android):
+  1. **`eprintln!` error visibility** (Rust core) — `receive_message` errors now visible on mobile platforms via stderr.
+  2. **`relayEnabled` nil-safety** (iOS + Android) — relay toggle checks no longer produce nil, preventing silent message drops.
+  3. **Retry throttle 500→2000ms** (iOS) — reduces main thread pressure during outbox flush.
+  4. **Relay diagnostic throttle** (iOS) — 90% reduction in relay-state logging when flapping.
+  5. **Messages NEVER expire** (iOS + Android) — removed attempt limits and age-based expiry from outbox.
+  6. **Progressive backoff** (iOS + Android) — retry delay: `min(2^attempt, 60)` seconds, capping at 5 minutes for long-lived items.
+  7. **WiFi recovery → immediate outbox flush** (iOS) — network path change triggers immediate pending message delivery.
+  8. **WiFi recovery → immediate outbox flush** (Android) — `notifyNetworkRecovered()` triggers flush on WiFi restoration.
+  9. **BLE 15s connection timeout** (Android) — stale GATT connections auto-cleaned after 15 seconds.
+  10. **Dial candidate cap (6 max)** (iOS + Android) — prioritizes LAN → relay → public IPs, reduces stale-address dial spam.
+- Core philosophy enforcement:
+  - Messages NEVER expire. No attempt limit, no age limit, no TTL.
+  - All messages retry indefinitely with progressive backoff until delivered.
+  - Network recovery triggers immediate delivery attempts.
+- Verification in this pass:
+  - `cargo check --workspace` — **pass**
+  - Rust core compiles with `eprintln!` diagnostics active.
+- Remaining closure gate:
+  - Deploy Rust core + both mobile apps and observe `eprintln!` output to diagnose any remaining `receive_message` failures.
+  - Confirm end-to-end message delivery across all transport layers post-fix.
 
 ### WS12 Verification Snapshot (2026-03-03)
 

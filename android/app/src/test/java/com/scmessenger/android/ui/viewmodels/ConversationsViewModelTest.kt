@@ -70,6 +70,7 @@ class ConversationsViewModelTest {
             peerId = "peer1",
             content = "Hello",
             timestamp = 1000uL,
+            senderTimestamp = 1000uL,
             delivered = true
         )
         every { mockMeshRepository.getRecentMessages(any(), any()) } returns listOf(testMessage)

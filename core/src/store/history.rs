@@ -20,23 +20,36 @@ pub struct MessageRecord {
     pub peer_id: String,
     pub content: String,
     pub timestamp: u64,
+    #[serde(default)]
+    pub sender_timestamp: u64,
     pub delivered: bool,
+}
+
+impl MessageRecord {
+    fn adjust_legacy_timestamps(mut self) -> Self {
+        if self.sender_timestamp == 0 {
+            self.sender_timestamp = self.timestamp;
+        }
+        self
+    }
 }
 
 impl MessageRecord {
     pub fn new_sent(peer_id: String, content: String) -> Self {
         let id = uuid::Uuid::new_v4().to_string();
+        let ts = current_timestamp();
         Self {
             id,
             direction: MessageDirection::Sent,
             peer_id,
             content,
-            timestamp: current_timestamp(),
+            timestamp: ts,
+            sender_timestamp: ts,
             delivered: false,
         }
     }
 
-    pub fn new_received(peer_id: String, content: String) -> Self {
+    pub fn new_received(peer_id: String, content: String, sender_timestamp: u64) -> Self {
         let id = uuid::Uuid::new_v4().to_string();
         Self {
             id,
@@ -44,6 +57,7 @@ impl MessageRecord {
             peer_id,
             content,
             timestamp: current_timestamp(),
+            sender_timestamp,
             delivered: true,
         }
     }
@@ -92,7 +106,7 @@ impl HistoryManager {
         {
             let record: MessageRecord =
                 serde_json::from_slice(&data).map_err(|_| IronCoreError::Internal)?;
-            Ok(Some(record))
+            Ok(Some(record.adjust_legacy_timestamps()))
         } else {
             Ok(None)
         }
@@ -112,6 +126,7 @@ impl HistoryManager {
         for (_, value) in all {
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| IronCoreError::Internal)?;
+            let record = record.adjust_legacy_timestamps();
 
             if let Some(ref peer) = peer_filter {
                 if &record.peer_id == peer {
@@ -151,6 +166,7 @@ impl HistoryManager {
         for (_, value) in all {
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| IronCoreError::Internal)?;
+            let record = record.adjust_legacy_timestamps();
             if record.content.to_lowercase().contains(&query_lower) {
                 records.push(record);
             }
@@ -173,6 +189,7 @@ impl HistoryManager {
         for (key, value) in all {
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| IronCoreError::Internal)?;
+            let record = record.adjust_legacy_timestamps();
 
             if record.peer_id == peer_id {
                 self.backend
@@ -224,6 +241,7 @@ impl HistoryManager {
         for (_, value) in all {
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| IronCoreError::Internal)?;
+            let record = record.adjust_legacy_timestamps();
             stats.total_messages += 1;
             match record.direction {
                 MessageDirection::Sent => {

@@ -375,6 +375,7 @@ dictionary MessageRecord {
     string peer_id;
     string content;
     u64 timestamp;
+    u64 sender_timestamp;
     boolean delivered;
 };
 

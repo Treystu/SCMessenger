@@ -431,6 +431,10 @@ impl MeshService {
             "Starting Swarm with PeerID: {}",
             libp2p_keys.public().to_peer_id()
         );
+        eprintln!(
+            "=== OWN_IDENTITY: {} ===",
+            libp2p_keys.public().to_peer_id()
+        );
 
         let listen_multiaddr: Option<libp2p::Multiaddr> = if listen_addr.is_empty() {
             None
@@ -522,18 +526,42 @@ impl MeshService {
                                             } => {
                                                 let core_guard = core.lock();
                                                 if let Some(core_ref) = core_guard.as_ref() {
-                                                    match core_ref.receive_message(envelope_data) {
-                                                        Ok(msg) => tracing::info!(
-                                                            "Received message {} from {}",
-                                                            msg.id,
-                                                            peer_id
-                                                        ),
-                                                        Err(e) => tracing::warn!(
-                                                            "receive_message error from {}: {:?}",
-                                                            peer_id,
-                                                            e
-                                                        ),
+                                                    match core_ref.receive_message(envelope_data.clone()) {
+                                                        Ok(msg) => {
+                                                            tracing::info!(
+                                                                "Received message {} from {}",
+                                                                msg.id,
+                                                                peer_id
+                                                            );
+                                                            eprintln!(
+                                                                "[IronCore] ✓ Received message {} from {} (type={:?})",
+                                                                msg.id,
+                                                                peer_id,
+                                                                msg.message_type
+                                                            );
+                                                        }
+                                                        Err(e) => {
+                                                            let err_detail = format!("{:?}", e);
+                                                            tracing::warn!(
+                                                                "receive_message error from {}: {}",
+                                                                peer_id,
+                                                                err_detail
+                                                            );
+                                                            // CRITICAL: eprintln! is the ONLY way to surface
+                                                            // errors on mobile — tracing goes to /dev/null.
+                                                            eprintln!(
+                                                                "[IronCore] ✗ receive_message FAILED from {}: {} (envelope_len={})",
+                                                                peer_id,
+                                                                err_detail,
+                                                                envelope_data.len()
+                                                            );
+                                                        }
                                                     }
+                                                } else {
+                                                    eprintln!(
+                                                        "[IronCore] ✗ receive_message SKIPPED from {}: core not initialized",
+                                                        peer_id
+                                                    );
                                                 }
                                             }
                                             crate::transport::SwarmEvent::PeerDiscovered(
@@ -818,17 +846,35 @@ impl MeshService {
         stats.bytes_transferred += data.len() as u64;
         drop(stats);
 
+        eprintln!(
+            "[IronCore] on_data_received from {} ({} bytes)",
+            peer_id,
+            data.len()
+        );
         if let Some(core) = self.get_core() {
             match core.receive_message(data) {
                 Ok(msg) => {
                     tracing::info!("Message received from {}: {:?}", peer_id, msg.id);
+                    eprintln!(
+                        "[IronCore] ✓ BLE message received from {}: {}",
+                        peer_id, msg.id
+                    );
                     let mut stats = self.stats.lock();
                     stats.messages_relayed += 1;
                 }
                 Err(e) => {
                     tracing::error!("Failed to process received message: {:?}", e);
+                    eprintln!(
+                        "[IronCore] ✗ BLE receive_message FAILED from {}: {:?}",
+                        peer_id, e
+                    );
                 }
             }
+        } else {
+            eprintln!(
+                "[IronCore] ✗ on_data_received SKIPPED from {}: core not initialized",
+                peer_id
+            );
         }
     }
 
@@ -1215,7 +1261,18 @@ pub struct MessageRecord {
     pub peer_id: String,
     pub content: String,
     pub timestamp: u64,
+    #[serde(default)]
+    pub sender_timestamp: u64,
     pub delivered: bool,
+}
+
+impl MessageRecord {
+    fn adjust_legacy_timestamps(mut self) -> Self {
+        if self.sender_timestamp == 0 {
+            self.sender_timestamp = self.timestamp;
+        }
+        self
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1257,7 +1314,7 @@ impl HistoryManager {
         {
             let record: MessageRecord =
                 serde_json::from_slice(&data).map_err(|_| crate::IronCoreError::Internal)?;
-            Ok(Some(record))
+            Ok(Some(record.adjust_legacy_timestamps()))
         } else {
             Ok(None)
         }
@@ -1275,6 +1332,7 @@ impl HistoryManager {
             let (_, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
+            let record = record.adjust_legacy_timestamps();
 
             if let Some(ref peer) = peer_filter {
                 if &record.peer_id == peer {
@@ -1311,6 +1369,7 @@ impl HistoryManager {
             let (key, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
+            let record = record.adjust_legacy_timestamps();
 
             if record.peer_id == peer_id {
                 keys_to_remove.push(key);
@@ -1342,6 +1401,7 @@ impl HistoryManager {
             let (_, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
+            let record = record.adjust_legacy_timestamps();
 
             if record.content.to_lowercase().contains(&query_lower) {
                 results.push(record);
@@ -1373,6 +1433,7 @@ impl HistoryManager {
             let (key, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
+            let record = record.adjust_legacy_timestamps();
             if record.peer_id == peer_id {
                 to_delete.push(key.to_vec());
             }
@@ -1394,6 +1455,7 @@ impl HistoryManager {
             let (_, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
+            let record = record.adjust_legacy_timestamps();
 
             stats.total_messages += 1;
             match record.direction {
@@ -2218,6 +2280,7 @@ mod tests {
                     peer_id: "peer-one".to_string(),
                     content: "hello".to_string(),
                     timestamp: 1_777_000_000,
+                    sender_timestamp: 1_777_000_000,
                     delivered: false,
                 })
                 .unwrap();
@@ -2247,6 +2310,7 @@ mod tests {
                 peer_id: "peer-a".to_string(),
                 content: "old".to_string(),
                 timestamp: 100,
+                sender_timestamp: 100,
                 delivered: false,
             })
             .unwrap();
@@ -2257,6 +2321,7 @@ mod tests {
                 peer_id: "peer-a".to_string(),
                 content: "new".to_string(),
                 timestamp: 200,
+                sender_timestamp: 200,
                 delivered: false,
             })
             .unwrap();
@@ -2267,6 +2332,7 @@ mod tests {
                 peer_id: "peer-b".to_string(),
                 content: "other".to_string(),
                 timestamp: 300,
+                sender_timestamp: 300,
                 delivered: true,
             })
             .unwrap();

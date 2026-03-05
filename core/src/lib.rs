@@ -922,12 +922,17 @@ impl IronCore {
 
         // Auto-save to history (Outgoing)
         let history = self.history.write();
+        let local_ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
         let _ = history.add(store::MessageRecord {
             id: message_id.clone(),
             direction: store::MessageDirection::Sent,
             peer_id: recipient_key_trimmed.clone(),
             content: text.clone(),
-            timestamp: msg.timestamp,
+            timestamp: local_ts,
+            sender_timestamp: msg.timestamp,
             delivered: false,
         });
 
@@ -1043,18 +1048,46 @@ impl IronCore {
     /// Decrypt a received envelope and return the plaintext message.
     pub fn receive_message(&self, envelope_bytes: Vec<u8>) -> Result<Message, IronCoreError> {
         let identity = self.identity.read();
-        let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
+        let keys = identity.keys().ok_or_else(|| {
+            eprintln!("[IronCore] receive_message FAILED: identity keys not initialized");
+            IronCoreError::NotInitialized
+        })?;
 
         // Deserialize envelope
-        let envelope =
-            message::decode_envelope(&envelope_bytes).map_err(|_| IronCoreError::Internal)?;
+        let envelope = message::decode_envelope(&envelope_bytes).map_err(|e| {
+            let err_msg = format!(
+                "[IronCore] receive_message FAILED: envelope decode error (len={}, err={:?})\n",
+                envelope_bytes.len(),
+                e
+            );
+            let _ = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/scm_debug.log")
+                .map(|mut f| {
+                    use std::io::Write;
+                    f.write_all(err_msg.as_bytes())
+                });
+            eprintln!("{}", err_msg);
+            IronCoreError::Internal
+        })?;
 
         // Decrypt
         let plaintext = crypto::decrypt_message(&keys.signing_key, &envelope)
-            .map_err(|_| IronCoreError::CryptoError)?;
+            .map_err(|e| {
+                let err_msg = format!("[IronCore] receive_message FAILED: decrypt error — sender_key={}, local_key={}, err={:?}\n", hex::encode(&envelope.sender_public_key), hex::encode(keys.signing_key.verifying_key().to_bytes()), e);
+                let _ = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/scm_debug.log").map(|mut f| { use std::io::Write; f.write_all(err_msg.as_bytes()) });
+                eprintln!("{}", err_msg);
+                IronCoreError::CryptoError
+            })?;
 
         // Deserialize message
-        let msg = message::decode_message(&plaintext).map_err(|_| IronCoreError::Internal)?;
+        let msg = message::decode_message(&plaintext).map_err(|e| {
+            let err_msg = format!("[IronCore] receive_message FAILED: message decode error (plaintext_len={}, err={:?})\n", plaintext.len(), e);
+            let _ = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/scm_debug.log").map(|mut f| { use std::io::Write; f.write_all(err_msg.as_bytes()) });
+            eprintln!("{}", err_msg);
+            IronCoreError::Internal
+        })?;
 
         // Dedup check
         let mut inbox = self.inbox.write();
@@ -1073,12 +1106,17 @@ impl IronCore {
         // Auto-save to history (Incoming)
         if is_new && msg.message_type == message::MessageType::Text {
             if let Some(text) = msg.text_content() {
+                let local_ts = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
                 let _ = self.history.read().add(store::MessageRecord {
                     id: msg.id.clone(),
                     direction: store::MessageDirection::Received,
                     peer_id: msg.sender_id.clone(),
                     content: text,
-                    timestamp: msg.timestamp,
+                    timestamp: local_ts,
+                    sender_timestamp: msg.timestamp,
                     delivered: true,
                 });
             }
@@ -1092,32 +1130,51 @@ impl IronCore {
             receipt_handled = true;
             if let Ok(receipt) = bincode::deserialize::<message::Receipt>(&msg.payload) {
                 let local_public_key_hex = hex::encode(keys.signing_key.verifying_key().to_bytes());
-                let expected_sender_identity = hex::encode(blake3::hash(&envelope.sender_public_key).as_bytes());
+                let expected_sender_identity =
+                    hex::encode(blake3::hash(&envelope.sender_public_key).as_bytes());
                 let outbound_match = self
                     .history
                     .read()
                     .get(receipt.message_id.clone())
                     .ok()
                     .flatten()
-                    .filter(|record| {
-                        record.direction == store::MessageDirection::Sent
-                            && record.peer_id.eq_ignore_ascii_case(&sender_pub_key_hex)
-                    });
+                    .filter(|record| record.direction == store::MessageDirection::Sent);
                 if outbound_match.is_none() {
-                    eprintln!(
-                        "[IronCore] ignoring receipt for message {}: sender key does not match outbound recipient",
-                        receipt.message_id
-                    );
+                    let err_msg = format!("[IronCore] ignoring receipt for message {}: message not found or is not outbound\n", receipt.message_id);
+                    let _ = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open("/tmp/scm_debug.log")
+                        .map(|mut f| {
+                            use std::io::Write;
+                            f.write_all(err_msg.as_bytes())
+                        });
+                    eprintln!("{}", err_msg);
                 } else if !msg.recipient_id.eq_ignore_ascii_case(&local_public_key_hex) {
-                    eprintln!(
-                        "[IronCore] ignoring receipt for message {}: recipient mismatch (msg recipient != local key)",
-                        receipt.message_id
-                    );
-                } else if !msg.sender_id.eq_ignore_ascii_case(&expected_sender_identity) {
-                    eprintln!(
-                        "[IronCore] ignoring receipt for message {}: sender identity does not match envelope sender key",
-                        receipt.message_id
-                    );
+                    let err_msg = format!("[IronCore] ignoring receipt for message {}: recipient mismatch (msg recipient != local key)\n", receipt.message_id);
+                    let _ = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open("/tmp/scm_debug.log")
+                        .map(|mut f| {
+                            use std::io::Write;
+                            f.write_all(err_msg.as_bytes())
+                        });
+                    eprintln!("{}", err_msg);
+                } else if !msg
+                    .sender_id
+                    .eq_ignore_ascii_case(&expected_sender_identity)
+                {
+                    let err_msg = format!("[IronCore] ignoring receipt for message {}: sender identity does not match envelope sender key\n", receipt.message_id);
+                    let _ = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open("/tmp/scm_debug.log")
+                        .map(|mut f| {
+                            use std::io::Write;
+                            f.write_all(err_msg.as_bytes())
+                        });
+                    eprintln!("{}", err_msg);
                 } else {
                     if matches!(receipt.status, message::DeliveryStatus::Delivered) {
                         let _ = self.mark_message_sent(receipt.message_id.clone());

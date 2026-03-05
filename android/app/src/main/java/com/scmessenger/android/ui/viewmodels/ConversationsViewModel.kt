@@ -33,9 +33,10 @@ class ConversationsViewModel @Inject constructor(
     val conversations = messages.map { messageList ->
         messageList
             .groupBy { it.peerId }
-            .mapValues { (_, msgs) -> msgs.sortedByDescending { it.timestamp } }
+            // MSG-ORDER-001: Sort strictly by sender-assigned timestamp to ensure consistent ordering across platforms
+            .mapValues { (_, msgs) -> msgs.sortedByDescending { it.senderTimestamp } }
             .toList()
-            .sortedByDescending { (_, msgs) -> msgs.firstOrNull()?.timestamp ?: 0u }
+            .sortedByDescending { (_, msgs) -> msgs.firstOrNull()?.senderTimestamp ?: 0u }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),

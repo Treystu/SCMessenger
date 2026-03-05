@@ -163,8 +163,13 @@ struct ConversationListView: View {
                     ? local
                     : (contact.nickname ?? String(contact.peerId.prefix(8)) + "...")
                 let recentMsgs = (try? repository.getConversation(peerId: contact.peerId, limit: 25)) ?? []
-                let lastMsg = recentMsgs.max(by: { $0.timestamp < $1.timestamp })
-                let lastTime = lastMsg.map { Date(timeIntervalSince1970: Double($0.timestamp)) }
+                let lastMsg = recentMsgs.max(by: {
+                    let t0 = $0.senderTimestamp > 0 ? $0.senderTimestamp : $0.timestamp
+                    let t1 = $1.senderTimestamp > 0 ? $1.senderTimestamp : $1.timestamp
+                    if t0 == t1 { return $0.timestamp < $1.timestamp }
+                    return t0 < t1
+                })
+                let lastTime = lastMsg.map { Date(timeIntervalSince1970: Double($0.senderTimestamp > 0 ? $0.senderTimestamp : $0.timestamp)) }
                 return Conversation(
                     peerId: contact.peerId, 
                     peerNickname: displayName,
@@ -274,6 +279,8 @@ struct ChatView: View {
     let conversation: Conversation
     @State private var viewModel: ChatViewModel?
     @State private var scrollProxy: ScrollViewProxy?
+    @State private var isAtBottom = true
+    @State private var lastMessageId: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -297,6 +304,7 @@ struct ChatView: View {
                             .id("bottom")
                     }
                 }
+                .scrollDismissesKeyboard(.interactively)
                 .onAppear {
                     scrollProxy = proxy
                     // Scroll to bottom when first opened
@@ -304,10 +312,17 @@ struct ChatView: View {
                         proxy.scrollTo("bottom", anchor: .bottom)
                     }
                 }
-                .onChange(of: viewModel?.messages.count ?? 0) { _ in
-                    // Auto-scroll when new messages arrive
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
+                .onChange(of: viewModel?.messages.count) { newCount in
+                    // Only auto-scroll when a *new* message arrives (count increases),
+                    // NOT on delivery-state updates which keep the same count.
+                    guard let newCount, newCount > 0 else { return }
+                    let newLastId = viewModel?.messages.last?.id
+                    guard newLastId != lastMessageId else { return }
+                    lastMessageId = newLastId
+                    if isAtBottom {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            proxy.scrollTo("bottom", anchor: .bottom)
+                        }
                     }
                 }
             }

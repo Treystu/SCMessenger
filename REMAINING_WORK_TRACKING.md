@@ -1,7 +1,7 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active  
-Last updated: 2026-03-03
+Last updated: 2026-03-04
 
 This is the active implementation backlog based on repository state verified on **2026-03-03**.
 
@@ -266,7 +266,7 @@ Still open after this pass:
 3. [ ] Close Android stale-route and stale-BLE-target retry loops with post-fix evidence tied to active conversation peer IDs.
 4. [ ] Close cross-device continuity gate (`Android <-> iOS`) with synchronized bidirectional delivered-state evidence.
 5. [ ] Harden/document reliable iOS large-diagnostics extraction workflow for repeatable RCA.
-6. [x] Add iOS confirmation prompt before contact deletion and capture validation evidence.  <!-- user-requested todo -->
+6. [x] Add iOS confirmation prompt before contact deletion and capture validation evidence. <!-- user-requested todo -->
    - Implemented in `iOS/SCMessenger/SCMessenger/Views/Contacts/ContactsListView.swift` via explicit destructive-action alert.
    - Verification: `bash ./iOS/verify-test.sh` (pass).
 
@@ -317,6 +317,37 @@ Still open after this pass:
 
 1. [ ] Validate WS12.31 stale-route/BLE-target behavior with synchronized physical Android+iOS artifacts tied to active conversation peer IDs.
 2. [ ] Close `R-WS12-29-02` only after post-WS12.31 logs show deterministic route refresh/convergence (no persistent stale-target loops).
+
+## WS12.34 Transport Failure Triage + 10-Fix Reliability Sweep (2026-03-04 HST)
+
+Completed in this pass:
+
+1. [x] Diagnosed iOS+Android transport failures from live device logs after WiFi/BLE/cell toggling:
+   - Rust `receive_message` errors invisible on mobile (swallowed `tracing` output).
+   - iOS relay flapping threshold self-triggering, permanently blocking relay circuit path.
+   - Messages being expired/dropped despite "never fail delivery" philosophy.
+   - Stale routing data causing infinite retry loops.
+2. [x] Implemented 10 fixes across Rust core, iOS, Android:
+   - `eprintln!` error visibility in Rust core `receive_message` path.
+   - `relayEnabled` nil-safety on both iOS and Android.
+   - Retry throttle 500→2000ms (iOS).
+   - Relay diagnostic throttle — 90% reduction when flapping (iOS).
+   - Messages NEVER expire — removed attempt limits and age-based expiry.
+   - Progressive backoff: `min(2^attempt, 60)` seconds, capping at 5 min.
+   - WiFi recovery → immediate outbox flush (iOS + Android).
+   - BLE 15s connection timeout for stale GATT connections (Android).
+   - Dial candidate cap at 6 max per peer (iOS + Android).
+3. [x] Enforced core philosophy: messages NEVER expire, retry indefinitely with progressive backoff.
+4. [x] Revalidated Rust core compilation:
+   - `cargo check --workspace` (pass).
+5. [x] Fixed Android build failure: `appendDiagnostic` → `Timber.i()` in `notifyNetworkRecovered()`:
+   - `cd android && ./gradlew :app:compileDebugKotlin` (pass).
+
+Still open after this pass:
+
+1. [ ] Deploy Rust core + both mobile apps and observe `eprintln!` output to diagnose any remaining `receive_message` failures.
+2. [ ] Confirm end-to-end message delivery across all transport layers post-fix.
+3. [ ] Validate WiFi recovery → outbox flush behavior on physical devices.
 
 ### WS12.25 Mega-Update Consolidated Next Steps (Open + Deferred)
 
@@ -455,7 +486,7 @@ This is the current "burn-down" slate combining all active deferred/runtime clos
       - **Outbox persistence/Retry gap:** iOS now explicitly re-hydrates stuck messages (`delivered: false`, `direction: .sent`) via `historyManager.recent()` on startup inside `startPendingOutboxRetryLoop`. Resurrects them into the `sendMessage` pipeline with new routable identifiers.
       - **Duplicate-safe redelivery:** `HistoryManager.add(record:)` remains idempotent on `id` over stable UUID generation path in `ironCore`.
 
-13. [x] Message timestamp parity (iOS align to Android)
+14. [x] Message timestamp parity (iOS align to Android)
 
 - Requirement: Messages must display the **time they were sent**, not the time they were received or rendered.
 - Android: already correctly associates each message with its sent timestamp from the message envelope.
@@ -926,18 +957,18 @@ Not feasible for `v0.2.0` without expanding release scope:
 1. `WS13` Tight Pairing (single active device lifecycle).
 2. `WS14` direct-message/direct-request notifications.
 
-1. **Automatic Environment Detection and Unified Hydration**
+3. **Automatic Environment Detection and Unified Hydration**
    - Requirement: The app must automatically detect if a previous identity, message history, contacts, or user preferences exist in local storage/backups and utilize them immediately on startup without user intervention.
    - Target: Unified "detect-and-resume" logic that covers all persisted data types across Android, iOS, and Web.
    - Scope: Identity (Keychain/SharedPreferences), Message History (history.db), Contacts (contacts.db), and Privacy Toggles.
 
-2. **Manual Data Management (Reset/Refresh/Delete)**
+4. **Manual Data Management (Reset/Refresh/Delete)**
    - Requirement: Provide a secure, user-facing way to clear or reset all application data.
    - Target: A "Delete All Data" or "Reset Application" button in the Settings view.
    - Action: Securely wipe identity, message history, contacts, and all local preferences from the device.
    - Scope: Android (`SettingsScreen`), iOS (`SettingsView`), and Web.
 
-3. **WS13 (v0.2.1): Single Active Device per Identity (Tight Pairing)**
+5. **WS13 (v0.2.1): Single Active Device per Identity (Tight Pairing)**
    - Requirement: enforce one active `(identity_public_key, device_id)` destination binding to prevent stale/recycled identity misrouting and multi-device active collisions.
    - Target: cryptographically signed registration/deregistration protocol + relay-side registration state machine + custody enforcement.
    - Scope:
@@ -951,7 +982,7 @@ Not feasible for `v0.2.0` without expanding release scope:
    - Canonical plan: `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md`.
    - Kickoff prompt: `docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md` section `WS13 Kickoff (v0.2.1) - Tight Pairing start`.
 
-4. **WS13.x (v0.2.1): GitHub release/version synchronization and release-note publishing flow**
+6. **WS13.x (v0.2.1): GitHub release/version synchronization and release-note publishing flow**
    - Requirement: normalize repository/app version metadata and GitHub release artifacts so release tags, release notes, and workspace versions remain consistent.
    - Target:
      - align workspace/package versions for the intended release cut,
@@ -971,7 +1002,7 @@ Not feasible for `v0.2.0` without expanding release scope:
    - Progress: repo-local release planning/note artifacts now exist under `docs/releases/` so WS13.x no longer depends on workstation-specific `~/Downloads` paths.
    - Execution note: queue this after current WS12 in-flight session and after WS12/WS12.5 closure evidence is captured.
 
-5. **WS14 (v0.2.1): Direct Message + Direct Message Request Notifications (iOS/Android/WASM)**
+7. **WS14 (v0.2.1): Direct Message + Direct Message Request Notifications (iOS/Android/WASM)**
    - Requirement: notification parity for direct messages and direct message requests across iOS, Android, and WASM.
    - Delivery model: hybrid.
      - Local notifications are fully shipped in WS14.

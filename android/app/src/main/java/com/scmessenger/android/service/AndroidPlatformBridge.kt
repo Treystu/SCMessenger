@@ -262,6 +262,8 @@ class AndroidPlatformBridge @Inject constructor(
     }
 
     override fun onNetworkChanged(hasWifi: Boolean, hasCellular: Boolean) {
+        val previousWifi = this.hasWifi
+
         // Recompute and apply adjustment
         val deviceProfile = uniffi.api.DeviceProfile(
             batteryPct = currentBatteryPct,
@@ -279,6 +281,12 @@ class AndroidPlatformBridge @Inject constructor(
         val relayAdjustment = meshRepository.computeRelayAdjustment(profile)
 
         applyAdjustments(bleAdjustment, relayAdjustment)
+
+        // 3. When WiFi comes back, immediately flush pending messages
+        if (hasWifi && !previousWifi) {
+            Timber.i("WiFi recovered — triggering immediate outbox flush")
+            meshRepository.notifyNetworkRecovered()
+        }
     }
 
     override fun onMotionChanged(motion: uniffi.api.MotionState) {

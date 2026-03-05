@@ -248,6 +248,19 @@ class BleGattClient(
             activeConnections[deviceAddress] = gatt
             connectInitiated.incrementAndGet()
             Timber.d("Connecting to $deviceAddress")
+
+            // Timeout: if still CONNECTING after 15s, close the stale connection.
+            // This prevents stale BLE MACs from consuming a connection slot
+            // indefinitely (e.g., iOS MAC rotation leaves old MACs unresponsive).
+            scope.launch {
+                delay(15_000)
+                val currentState = connectionStates[deviceAddress]
+                if (currentState == ConnectionState.CONNECTING || currentState == ConnectionState.DISCOVERING_SERVICES) {
+                    Timber.w("BLE connection timeout for $deviceAddress (stuck in ${currentState}), disconnecting")
+                    disconnect(deviceAddress)
+                }
+            }
+
             true
         } catch (e: SecurityException) {
             Timber.e(e, "Security exception connecting to $deviceAddress")
