@@ -1,7 +1,7 @@
 # SCMessenger Document Status Index
 
 Status: Active  
-Last updated: 2026-03-04
+Last updated: 2026-03-06
 
 Purpose: classify documentation by lifecycle state so execution decisions use authoritative files and historical content remains discoverable without causing drift.
 
@@ -123,3 +123,4 @@ These documents may contain both current and historical sections; verify section
 27. WS12.29 (2026-03-03 HST) known-issues consolidation + clean remediation-plan updates are reflected in active docs (`docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`, `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`), including field iOS send-crash evidence, Android stale-route diagnostics, and the then-open iOS contact-delete confirmation TODO (closed in WS12.31).
 28. WS12.30 (2026-03-03 HST) live verification feedback-loop orchestration updates are reflected in active docs (`scripts/README.md`, `docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`, `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`) plus new active harness script (`scripts/run5-live-feedback.sh`) for strict sequential phase gates and all-node-pairing validation.
 29. WS12.31 (2026-03-04 HST) stale-target convergence hardening + transport-priority clarification updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`, and `DOCUMENTATION.md`), including discovered-route-first candidate preference, strict route-key validation fallback to runtime evidence, failed-route de-persistence, connected-BLE-target preference, and iOS contact-delete confirmation prompt implementation.
+30. WS12.35 (2026-03-06 UTC) non-device reliability reconciliation updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`, and `DOCUMENTATION.md`), including wasm sender-timestamp compile drift closure, iOS MainActor isolation hardening in Multipeer transport, Android mesh-participation semantics test alignment, deterministic delivery-state monotonicity gate canonicalization, and iOS diagnostics pull stability safeguards in `scripts/run5-live-feedback.sh`.

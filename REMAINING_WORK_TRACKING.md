@@ -1,7 +1,7 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active  
-Last updated: 2026-03-04
+Last updated: 2026-03-06
 
 This is the active implementation backlog based on repository state verified on **2026-03-03**.
 
@@ -139,8 +139,8 @@ Planned in this pass:
 2. [ ] Close iOS -> Android sender-state convergence gap end-to-end.
    - Validate Android receipt/ack emission, iOS receipt ingest, and message-ID correlation in iOS history-state updates.
    - Acceptance: iOS sender state transitions to `delivered` in-session and does not regress back to `stored` for that message.
-3. [ ] Add deterministic regression gate for recipient-ingest vs sender-state mismatch.
-   - Extend receipt convergence verification to fail when recipient ingest is proven but sender remains non-delivered.
+3. [x] Add deterministic regression gate for recipient-ingest vs sender-state mismatch.
+   - Outcome (2026-03-06 UTC): Canonical closure flow now includes both `verify_receipt_convergence.sh` and `verify_delivery_state_monotonicity.sh` in `scripts/run5-live-feedback.sh` deterministic gates, so recipient-ingest proof cannot pass with sender-state regression.
 4. [x] Align conversation deletion UX to swipe parity (iOS + Android).
    - Outcome (2026-03-03 HST): Android conversation rows now support end-to-start swipe-to-delete with confirmation dialog, matching existing iOS swipe-delete behavior.
 5. [ ] Validate swipe delete flow with platform evidence and tests.
@@ -265,7 +265,8 @@ Still open after this pass:
 2. [ ] Prove iOS watchdog (`cpu_resource_fatal`) non-repro under retry-heavy send scenarios.
 3. [ ] Close Android stale-route and stale-BLE-target retry loops with post-fix evidence tied to active conversation peer IDs.
 4. [ ] Close cross-device continuity gate (`Android <-> iOS`) with synchronized bidirectional delivered-state evidence.
-5. [ ] Harden/document reliable iOS large-diagnostics extraction workflow for repeatable RCA.
+5. [x] Harden/document reliable iOS large-diagnostics extraction workflow for repeatable RCA.
+   - Outcome (2026-03-06 UTC): `scripts/run5-live-feedback.sh` iOS diagnostics pull now retries `xcrun devicectl device copy`, requires near-stable file-size confirmation across attempts, and fail-fast rejects captures that cannot prove non-truncated stability.
 6. [x] Add iOS confirmation prompt before contact deletion and capture validation evidence. <!-- user-requested todo -->
    - Implemented in `iOS/SCMessenger/SCMessenger/Views/Contacts/ContactsListView.swift` via explicit destructive-action alert.
    - Verification: `bash ./iOS/verify-test.sh` (pass).
@@ -282,7 +283,7 @@ Completed in this pass:
    - log-health gate,
    - directed pair-matrix gate for all node pairings,
    - crash/fatal marker gate,
-   - deterministic verifier gate set (`verify_relay_flap_regression`, `verify_ble_only_pairing`, `verify_receipt_convergence`).
+   - deterministic verifier gate set (`verify_relay_flap_regression`, `verify_ble_only_pairing`, `verify_receipt_convergence`, `verify_delivery_state_monotonicity`).
 3. [x] Added per-attempt evidence packaging under:
    - `logs/live-verify/<step>_<timestamp>/attempt_*`
 4. [x] Updated scripts operations guide and known-issues execution plan with exact usage/runbook.
@@ -348,6 +349,32 @@ Still open after this pass:
 1. [ ] Deploy Rust core + both mobile apps and observe `eprintln!` output to diagnose any remaining `receive_message` failures.
 2. [ ] Confirm end-to-end message delivery across all transport layers post-fix.
 3. [ ] Validate WiFi recovery → outbox flush behavior on physical devices.
+
+## WS12.35 Non-Device Reliability Reconciliation (2026-03-06 UTC)
+
+Completed in this pass:
+
+1. [x] Correlated baseline + CI blockers against latest failed non-`action_required` run (`22706811148`, workflow `CI`).
+2. [x] Closed workspace compile drift preventing deterministic verification:
+   - `wasm/src/lib.rs` test `MessageRecord` initializers now include `sender_timestamp`.
+   - `cargo test --workspace --no-run` now passes in this environment.
+3. [x] Closed iOS MainActor isolation drift for Multipeer diagnostics/identity helpers:
+   - `MultipeerTransport` now routes `getIdentitySnippet` + `appendDiagnostic` through MainActor-safe helper methods.
+   - `ChatViewModel` and `SettingsViewModel` are explicitly `@MainActor` for UI-bound repository calls.
+4. [x] Aligned Android mesh-participation tests to runtime default semantics:
+   - `MeshRepositoryTest` null-settings expectations now match `isMeshParticipationEnabled(settings ?: true)` behavior.
+5. [x] Restored receipt validation safety while preserving delivery convergence:
+   - Core now rejects receipt envelopes when sender identity cannot be correlated to the outbound recipient (`test_mismatched_sender_receipt_is_ignored` + `test_delivery_receipt_marks_history_and_outbox_delivered` both pass).
+6. [x] Added/adjusted non-device swipe-delete verification tests where infrastructure is available:
+   - Android `ConversationsViewModelTest` now verifies `clearConversation(peerId)` delegates to repository and refreshes list state.
+   - iOS `verify-role-mode.sh` now enforces conversation swipe-action + confirmation + `clearConversation` source guardrails.
+7. [x] Hardened iOS diagnostics extraction workflow in existing WS12.30 harness:
+   - `scripts/run5-live-feedback.sh` now retries iOS diagnostics pulls and requires stable-size confirmation across attempts to guard against truncated copies.
+
+Still open after this pass:
+
+1. [ ] Android/iOS physical synchronized evidence gates remain open (unchanged): device-runtime artifact requirements for `R-WS12-04/05/06`, `R-WS12-29-01`, and `R-WS12-29-02`.
+2. [ ] Host prerequisites remain environment-gated (unchanged): Docker runtime provisioning (`WS12.15.3`) and wireless ADB persistence (`WS12.8.5`).
 
 ### WS12.25 Mega-Update Consolidated Next Steps (Open + Deferred)
 

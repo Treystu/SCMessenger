@@ -1,7 +1,7 @@
 # SCMessenger Documentation Hub
 
 Status: Active  
-Last updated: 2026-03-04
+Last updated: 2026-03-06
 
 This is the primary documentation entrypoint.
 
@@ -203,6 +203,12 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
   - `docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`
+- WS12.35 non-device reliability reconciliation (2026-03-06 UTC, baseline CI drift fixes + deterministic sender-state gate reconciliation + iOS diagnostics pull hardening) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+  - `docs/DOCUMENT_STATUS_INDEX.md`
 - Global viability audit + 10-action-item implementation cheatsheet (2026-03-04 HST, comprehensive audit of what works / what's broken / what's missing for global viability) is tracked in:
   - `docs/global_viability_audit.md`
   - `docs/implementation_cheatsheet_3.4.2026.md`

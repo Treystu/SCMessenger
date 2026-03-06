@@ -8,6 +8,7 @@
 import Foundation
 import Combine
 
+@MainActor
 @Observable
 final class ChatViewModel {
     private weak var repository: MeshRepository?

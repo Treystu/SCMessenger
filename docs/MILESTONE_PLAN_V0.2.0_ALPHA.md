@@ -1,7 +1,7 @@
 # SCMessenger v0.2.0 Alpha Milestone Plan
 
-Status: Active (execution complete through WS12.34 transport failure triage + reliability sweep)  
-Date: 2026-03-04  
+Status: Active (execution complete through WS12.35 non-device reliability reconciliation)  
+Date: 2026-03-06  
 Scope: Core + Android + iOS + Desktop GUI + Relay topology
 
 ---
@@ -218,6 +218,23 @@ Scope: Core + Android + iOS + Desktop GUI + Relay topology
 6. Milestone closure gate remains unchanged:
    - deploy + observe `eprintln!` output on mobile to diagnose any remaining `receive_message` failures.
    - synchronized physical Android+iOS evidence still required to close paired convergence residuals.
+
+## Non-Device Reliability Reconciliation Addendum (WS12.35, 2026-03-06 UTC)
+
+1. Baseline reliability blockers were reconciled with minimal scope changes:
+   - WASM `MessageRecord` desktop test fixtures now include `sender_timestamp`, restoring `cargo test --workspace --no-run` determinism.
+   - Core receipt validation now requires outbound-recipient correlation for sender identity, closing forged third-party receipt acceptance while preserving valid recipient delivery receipts.
+   - iOS MainActor isolation violations in Multipeer diagnostics/identity helper calls were closed with MainActor-safe bridging in `MultipeerTransport`.
+   - Android `MeshRepositoryTest` null-settings assertions were aligned to canonical runtime semantics (`relayEnabled` defaults to `true` when settings are unavailable).
+2. WS12.24 deterministic closure gates were canonicalized:
+   - the WS12.30 harness verifier set now explicitly includes both `verify_receipt_convergence.sh` and `verify_delivery_state_monotonicity.sh`.
+3. WS12.29 diagnostics extraction reliability was hardened without changing closure criteria:
+   - `scripts/run5-live-feedback.sh` now retries iOS diagnostics pulls and requires near-stable file-size confirmation before accepting artifacts.
+4. Scope classification:
+   - reliability/test-orchestration hardening only; no net-new feature scope expansion.
+5. Milestone closure gates remain unchanged:
+   - synchronized physical Android+iOS evidence is still mandatory for `R-WS12-04/05/06`, `R-WS12-29-01`, and `R-WS12-29-02`.
+   - Docker and wireless-ADB prerequisites remain environment-gated.
 
 ---
 

@@ -86,4 +86,17 @@ class ConversationsViewModelTest {
         assertEquals(1, viewModel.messages.value.size)
         assertEquals("Hello", viewModel.messages.value[0].content)
     }
+
+    @Test
+    fun `clearConversation delegates to repository and refreshes list`() = runTest {
+        testDispatcher.scheduler.advanceUntilIdle()
+        clearMocks(mockMeshRepository, answers = false)
+        every { mockMeshRepository.getRecentMessages(any(), any()) } returns emptyList()
+
+        viewModel.clearConversation("peer-delete")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify(exactly = 1) { mockMeshRepository.clearConversation("peer-delete") }
+        verify(exactly = 1) { mockMeshRepository.getRecentMessages(any(), any()) }
+    }
 }

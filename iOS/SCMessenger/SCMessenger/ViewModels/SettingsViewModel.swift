@@ -8,6 +8,7 @@
 
 import Foundation
 
+@MainActor
 @Observable
 final class SettingsViewModel {
     private weak var repository: MeshRepository?

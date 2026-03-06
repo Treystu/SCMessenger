@@ -1,7 +1,7 @@
 # SCMessenger Current State (Verified)
 
 Status: Active  
-Last updated: 2026-03-04
+Last updated: 2026-03-06
 
 Last verified: **2026-03-03** (local workspace checks on this machine)
 
@@ -269,7 +269,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
     - log-health gate (all five node logs),
     - directed pair-matrix gate (all node pairings),
     - crash/fatal marker gate,
-    - deterministic verifiers (`relay_flap`, `ble_only`, `receipt_convergence`).
+    - deterministic verifiers (`relay_flap`, `ble_only`, `receipt_convergence`, `delivery_state_monotonicity`).
 - Evidence packaging:
   - each attempt writes a self-contained bundle under `logs/live-verify/<step>_<timestamp>/attempt_*`.
 - Recommended command per fix:
@@ -330,6 +330,31 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - Remaining closure gate:
   - Deploy Rust core + both mobile apps and observe `eprintln!` output to diagnose any remaining `receive_message` failures.
   - Confirm end-to-end message delivery across all transport layers post-fix.
+
+### WS12.35 Non-Device Reliability Reconciliation (2026-03-06 UTC)
+
+- Baseline/CI correlation in this pass:
+  - `cargo check --workspace` — **pass**
+  - `cargo test --workspace --no-run` — **initial fail** (WASM `MessageRecord` test initializers missing `sender_timestamp`), then **pass** after fix.
+  - `./scripts/docs_sync_check.sh` — **pass**
+  - Latest failed non-`action_required` CI run inspected (`22706811148`, `CI`): blocker set matched local drift (`scmessenger-wasm` E0063 + iOS MainActor isolation in `MultipeerTransport` + Android `MeshRepositoryTest` null-settings expectations).
+- Minimal reliability fixes applied:
+  - WASM tests updated to include `sender_timestamp` in all `MessageRecord` initializers touched by desktop role/parity suites.
+  - Core receipt verification now requires outbound-recipient correlation for receipt sender identity (accepting canonical recipient identity/public-key forms) so forged third-party receipts are ignored without regressing valid delivery receipts.
+  - iOS `MultipeerTransport` now bridges repository diagnostics/identity snippet calls through MainActor-safe helpers to avoid synchronous nonisolated actor violations.
+  - iOS `ChatViewModel` + `SettingsViewModel` explicitly annotated `@MainActor` for Swift concurrency correctness in UI-bound repository calls.
+  - Android `MeshRepositoryTest` now matches canonical runtime semantics (`relayEnabled` defaults to enabled when settings are unavailable).
+- WS12.24 deterministic gate reconciliation in this pass:
+  - `scripts/run5-live-feedback.sh` already enforces `verify_delivery_state_monotonicity.sh` alongside `verify_receipt_convergence.sh`; this gate is now treated as canonical closure flow.
+- Receipt guard regression tests in this pass:
+  - `cargo test -p scmessenger-core test_delivery_receipt_marks_history_and_outbox_delivered -- --nocapture` — **pass**
+  - `cargo test -p scmessenger-core test_mismatched_sender_receipt_is_ignored -- --nocapture` — **pass**
+- WS12.29 diagnostics workflow hardening in this pass:
+  - `scripts/run5-live-feedback.sh` iOS diagnostics pull now retries `devicectl copy` and requires near-stable file-size confirmation across pulls before accepting capture, failing fast when non-truncation cannot be confirmed.
+  - Follow-up hardening: one-shot mode (`IOS_DIAG_PULL_ATTEMPTS=1`) now accepts a valid non-empty pull, and failed stability runs remove the untrusted output file before returning non-zero.
+- Environment limitations observed:
+  - Android Gradle unit-test run in this environment failed before tests due blocked dependency fetch from `dl.google.com` (host/network prerequisite).
+  - `bash ./iOS/verify-test.sh` could not execute here (`xcodebuild` unavailable on this host), so iOS physical/simulator runtime closure gates remain unchanged.
 
 ### WS12 Verification Snapshot (2026-03-03)
 
