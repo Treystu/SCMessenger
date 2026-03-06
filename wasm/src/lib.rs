@@ -1236,6 +1236,7 @@ mod tests {
             peer_id: "12D3KooWEfZ2fJ8AcGvVfEUi2wFQPo6z8kZVr5TsgP7JQF2B9kS1".to_string(),
             content: "hello from desktop".to_string(),
             timestamp: 2,
+            sender_timestamp: 2,
             delivered: false,
         };
         history.add(outbound).unwrap();
@@ -1259,6 +1260,7 @@ mod tests {
             peer_id: "peer-a".to_string(),
             content: "pending".to_string(),
             timestamp: 10,
+            sender_timestamp: 10,
             delivered: false,
         };
         let received = MessageRecord {
@@ -1267,6 +1269,7 @@ mod tests {
             peer_id: "peer-b".to_string(),
             content: "ack".to_string(),
             timestamp: 11,
+            sender_timestamp: 11,
             delivered: true,
         };
 

@@ -15,6 +15,8 @@ DEPLOY_MOBILE=1
 TAIL_LINES=60
 MIN_LOG_LINES=20
 DIAG_TAIL_LINES=6000
+IOS_DIAG_PULL_ATTEMPTS=3
+IOS_DIAG_STABILITY_MAX_DELTA_BYTES=256
 REQUIRE_RECEIPT_GATE=0
 ANDROID_DIAG_SOURCE=""
 IOS_DIAG_SOURCE=""
@@ -240,24 +242,60 @@ PY
   fi
 
   rm -f "$out_file"
-  if xcrun devicectl device copy from \
-      --device "$device_id" \
-      --domain-type appDataContainer \
-      --domain-identifier SovereignCommunications.SCMessenger \
-      --source Documents/mesh_diagnostics.log \
-      --destination "$out_file" >>"$stderr_file" 2>&1; then
+  local previous_size=0
+  local stable_size=0
+  local attempts="${IOS_DIAG_PULL_ATTEMPTS:-3}"
+  local max_delta="${IOS_DIAG_STABILITY_MAX_DELTA_BYTES:-256}"
+
+  for attempt in $(seq 1 "$attempts"); do
+    local attempt_file="${out_file}.attempt${attempt}"
+    rm -f "$attempt_file"
+
+    if xcrun devicectl device copy from \
+        --device "$device_id" \
+        --domain-type appDataContainer \
+        --domain-identifier SovereignCommunications.SCMessenger \
+        --source Documents/mesh_diagnostics.log \
+        --destination "$attempt_file" >>"$stderr_file" 2>&1; then
+      :
+    fi
+
+    if [ ! -s "$attempt_file" ]; then
+      echo "iOS diagnostics pull attempt ${attempt}/${attempts} produced no bytes" >> "$stderr_file"
+      continue
+    fi
+
+    local current_size
+    current_size="$(wc -c < "$attempt_file" | tr -d ' ')"
+    echo "iOS diagnostics pull attempt ${attempt}/${attempts} size=${current_size}" >> "$stderr_file"
+
+    if [ "$previous_size" -gt 0 ]; then
+      local delta
+      delta=$(( current_size > previous_size ? current_size - previous_size : previous_size - current_size ))
+      if [ "$delta" -le "$max_delta" ]; then
+        stable_size="$current_size"
+        mv "$attempt_file" "$out_file"
+        rm -f "${out_file}.attempt"*
+        echo "iOS diagnostics pull stabilized across retries (size delta=${delta} bytes)" >> "$stderr_file"
+        return 0
+      fi
+      echo "iOS diagnostics pull attempt ${attempt} size delta=${delta} bytes (waiting for stable capture)" >> "$stderr_file"
+    fi
+
+    previous_size="$current_size"
+    mv "$attempt_file" "$out_file"
+    sleep 1
+  done
+
+  # Fail-fast if we could not get two near-identical pulls to avoid treating truncated copies as valid.
+  if [ "$stable_size" -eq 0 ]; then
     if [ -s "$out_file" ]; then
-      return 0
+      echo "iOS diagnostics pull could not confirm non-truncated stability after ${attempts} attempts" >> "$stderr_file"
+    else
+      echo "iOS diagnostics pull failed for device $device_id" >> "$stderr_file"
     fi
   fi
-
-  # Some devicectl failures still leave a partial/complete destination file.
-  if [ -s "$out_file" ]; then
-    echo "iOS diagnostics copy returned non-zero but produced output; proceeding" >> "$stderr_file"
-    return 0
-  fi
-
-  echo "iOS diagnostics pull failed for device $device_id" >> "$stderr_file"
+  rm -f "${out_file}.attempt"*
   return 1
 }
 

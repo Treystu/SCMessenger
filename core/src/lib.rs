@@ -1130,16 +1130,17 @@ impl IronCore {
             receipt_handled = true;
             if let Ok(receipt) = bincode::deserialize::<message::Receipt>(&msg.payload) {
                 let local_public_key_hex = hex::encode(keys.signing_key.verifying_key().to_bytes());
+                let expected_sender_public_key_hex = hex::encode(&envelope.sender_public_key);
                 let expected_sender_identity =
                     hex::encode(blake3::hash(&envelope.sender_public_key).as_bytes());
-                let outbound_match = self
+                let outbound_record = self
                     .history
                     .read()
                     .get(receipt.message_id.clone())
                     .ok()
                     .flatten()
                     .filter(|record| record.direction == store::MessageDirection::Sent);
-                if outbound_match.is_none() {
+                if outbound_record.is_none() {
                     let err_msg = format!("[IronCore] ignoring receipt for message {}: message not found or is not outbound\n", receipt.message_id);
                     let _ = std::fs::OpenOptions::new()
                         .create(true)
@@ -1166,6 +1167,29 @@ impl IronCore {
                     .eq_ignore_ascii_case(&expected_sender_identity)
                 {
                     let err_msg = format!("[IronCore] ignoring receipt for message {}: sender identity does not match envelope sender key\n", receipt.message_id);
+                    let _ = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open("/tmp/scm_debug.log")
+                        .map(|mut f| {
+                            use std::io::Write;
+                            f.write_all(err_msg.as_bytes())
+                        });
+                    eprintln!("{}", err_msg);
+                } else if outbound_record.as_ref().is_some_and(|record| {
+                    let matches_expected_sender = record
+                        .peer_id
+                        .eq_ignore_ascii_case(&expected_sender_identity)
+                        || record
+                            .peer_id
+                            .eq_ignore_ascii_case(&expected_sender_public_key_hex)
+                        || record.peer_id.eq_ignore_ascii_case(&msg.sender_id);
+                    !matches_expected_sender
+                }) {
+                    let err_msg = format!(
+                        "[IronCore] ignoring receipt for message {}: sender identity does not match outbound recipient\n",
+                        receipt.message_id
+                    );
                     let _ = std::fs::OpenOptions::new()
                         .create(true)
                         .append(true)

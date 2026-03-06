@@ -1,7 +1,7 @@
 # SCMessenger Scripts Guide
 
 Status: Active  
-Last updated: 2026-03-03
+Last updated: 2026-03-06
 
 This guide covers active launch/debug/verification scripts, with a focus on AI-assisted debugging workflows.
 
@@ -33,7 +33,8 @@ Primary scripts used during 5-node and relay continuity investigations:
      - 5-node update/capture run,
      - log-health gate,
      - all-node pair matrix gate (directed visibility),
-     - deterministic verifier gates (`relay_flap`, `ble_only`, `receipt_convergence`).
+     - deterministic verifier gates (`relay_flap`, `ble_only`, `receipt_convergence`, `delivery_state_monotonicity`).
+    - iOS diagnostics pull now requires retry-stable capture sizing before accepting `mesh_diagnostics.log` artifacts, reducing truncated-copy false positives.
    - Produces per-attempt evidence bundles under `logs/live-verify/`.
 2. `scripts/verify_ws12_matrix.sh`
    - Canonical multi-surface verification gate (Rust + Android + iOS parity checks).

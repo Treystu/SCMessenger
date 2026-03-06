@@ -64,12 +64,30 @@ final class MultipeerTransport: NSObject {
         setupPeerID()
         setupSession()
     }
+
+    private func identitySnippetForDisplayName() -> String {
+        if Thread.isMainThread {
+            return meshRepository?.getIdentitySnippet() ?? "SCMesh"
+        }
+
+        var displayName = "SCMesh"
+        DispatchQueue.main.sync { [weak meshRepository] in
+            displayName = meshRepository?.getIdentitySnippet() ?? "SCMesh"
+        }
+        return displayName
+    }
+
+    private func appendRepositoryDiagnostic(_ message: String) {
+        Task { @MainActor [weak meshRepository] in
+            meshRepository?.appendDiagnostic(message)
+        }
+    }
     
     // MARK: - Setup
     
     private func setupPeerID() {
         // Use identity snippet as display name
-        let displayName = meshRepository?.getIdentitySnippet() ?? "SCMesh"
+        let displayName = identitySnippetForDisplayName()
         peerID = MCPeerID(displayName: displayName)
         logger.info("Multipeer peer ID: \(displayName)")
     }
@@ -131,30 +149,30 @@ final class MultipeerTransport: NSObject {
 
         guard browser != nil else { return }
         guard !connectedPeers.contains(peer) else {
-            meshRepository?.appendDiagnostic("multipeer_invite_skipped id=\(name) source=\(source) reason=already_connected")
+            appendRepositoryDiagnostic("multipeer_invite_skipped id=\(name) source=\(source) reason=already_connected")
             return
         }
         guard !connectingPeerNames.contains(name) else {
-            meshRepository?.appendDiagnostic("multipeer_invite_skipped id=\(name) source=\(source) reason=already_connecting")
+            appendRepositoryDiagnostic("multipeer_invite_skipped id=\(name) source=\(source) reason=already_connecting")
             return
         }
         guard !inviteInFlight.contains(name) else {
-            meshRepository?.appendDiagnostic("multipeer_invite_skipped id=\(name) source=\(source) reason=in_flight")
+            appendRepositoryDiagnostic("multipeer_invite_skipped id=\(name) source=\(source) reason=in_flight")
             return
         }
         guard inviteInFlight.count < maxConcurrentInvites else {
-            meshRepository?.appendDiagnostic("multipeer_invite_skipped id=\(name) source=\(source) reason=concurrency_limit in_flight=\(inviteInFlight.count)")
+            appendRepositoryDiagnostic("multipeer_invite_skipped id=\(name) source=\(source) reason=concurrency_limit in_flight=\(inviteInFlight.count)")
             return
         }
         if let last = lastInviteAttemptAt[name], now.timeIntervalSince(last) < inviteDebounceSeconds {
-            meshRepository?.appendDiagnostic("multipeer_invite_debounced id=\(name) source=\(source)")
+            appendRepositoryDiagnostic("multipeer_invite_debounced id=\(name) source=\(source)")
             return
         }
 
         lastInviteAttemptAt[name] = now
         inviteInFlight.insert(name)
         browser?.invitePeer(peer, to: session, withContext: nil, timeout: 10)
-        meshRepository?.appendDiagnostic("multipeer_invite_sent id=\(name) source=\(source) in_flight=\(inviteInFlight.count)")
+        appendRepositoryDiagnostic("multipeer_invite_sent id=\(name) source=\(source) in_flight=\(inviteInFlight.count)")
 
         inviteTimeoutWorkItems[name]?.cancel()
         let timeoutWork = DispatchWorkItem { [weak self] in
@@ -162,7 +180,7 @@ final class MultipeerTransport: NSObject {
             guard self.inviteInFlight.contains(name) else { return }
             self.inviteTimeoutCount += 1
             self.clearInviteTracking(for: name)
-            self.meshRepository?.appendDiagnostic("multipeer_invite_timeout id=\(name) source=\(source) timeouts=\(self.inviteTimeoutCount)")
+            self.appendRepositoryDiagnostic("multipeer_invite_timeout id=\(name) source=\(source) timeouts=\(self.inviteTimeoutCount)")
         }
         inviteTimeoutWorkItems[name] = timeoutWork
         DispatchQueue.main.asyncAfter(deadline: .now() + inviteTimeoutSeconds, execute: timeoutWork)
@@ -291,7 +309,7 @@ extension MultipeerTransport: MCSessionDelegate {
             connectedPeers.insert(peerID)
             connectingPeerNames.remove(peerName)
             clearInviteTracking(for: peerName)
-            meshRepository?.appendDiagnostic("multipeer_connected id=\(peerID.displayName)")
+            appendRepositoryDiagnostic("multipeer_connected id=\(peerID.displayName)")
             // Clear any pending reconnect counter — peer is healthy again
             reconnectAttempts.removeValue(forKey: peerID.displayName)
             DispatchQueue.main.async {
@@ -301,17 +319,17 @@ extension MultipeerTransport: MCSessionDelegate {
         case .connecting:
             connectingPeerNames.insert(peerName)
             logger.debug("Connecting to \(peerID.displayName)")
-            meshRepository?.appendDiagnostic("multipeer_connecting id=\(peerID.displayName)")
+            appendRepositoryDiagnostic("multipeer_connecting id=\(peerID.displayName)")
 
         case .notConnected:
             connectedPeers.remove(peerID)
             connectingPeerNames.remove(peerName)
             if inviteInFlight.contains(peerName) {
                 inviteDeclineCount += 1
-                meshRepository?.appendDiagnostic("multipeer_invite_not_connected id=\(peerName) declines=\(inviteDeclineCount)")
+                appendRepositoryDiagnostic("multipeer_invite_not_connected id=\(peerName) declines=\(inviteDeclineCount)")
             }
             clearInviteTracking(for: peerName)
-            meshRepository?.appendDiagnostic("multipeer_disconnected id=\(peerID.displayName)")
+            appendRepositoryDiagnostic("multipeer_disconnected id=\(peerID.displayName)")
             DispatchQueue.main.async {
                 MeshEventBus.shared.peerEvents.send(.disconnected(peerId: peerID.displayName))
             }
@@ -370,7 +388,7 @@ extension MultipeerTransport: MCNearbyServiceBrowserDelegate {
 
         // Auto-invite with debounce/in-flight guardrails to prevent invitation storms.
         invitePeerIfAllowed(peerID, source: "discovery")
-        meshRepository?.appendDiagnostic("multipeer_discovered id=\(peerID.displayName)")
+        appendRepositoryDiagnostic("multipeer_discovered id=\(peerID.displayName)")
         
         DispatchQueue.main.async {
             MeshEventBus.shared.peerEvents.send(.discovered(peerId: peerID.displayName))

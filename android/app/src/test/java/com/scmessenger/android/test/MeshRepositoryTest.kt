@@ -35,8 +35,8 @@ class MeshRepositoryTest {
     }
 
     @Test
-    fun `isMeshParticipationEnabled false when settings null`() {
-        assertFalse(MeshRepository.isMeshParticipationEnabled(null))
+    fun `isMeshParticipationEnabled true when settings null`() {
+        assertTrue(MeshRepository.isMeshParticipationEnabled(null))
     }
 
     @Test
@@ -49,8 +49,8 @@ class MeshRepositoryTest {
         MeshRepository.requireMeshParticipationEnabled(meshSettings(false))
     }
 
-    @Test(expected = IllegalStateException::class)
-    fun `requireMeshParticipationEnabled throws for null settings`() {
+    @Test
+    fun `requireMeshParticipationEnabled allows null settings by default`() {
         MeshRepository.requireMeshParticipationEnabled(null)
     }
 
@@ -75,12 +75,12 @@ class MeshRepositoryTest {
     }
 
     @Test
-    fun `require helper throws consistently across repeated calls`() {
+    fun `require helper allows null settings consistently across repeated calls`() {
         repeat(3) {
-            val thrown = kotlin.runCatching {
+            val result = kotlin.runCatching {
                 MeshRepository.requireMeshParticipationEnabled(null)
-            }.exceptionOrNull()
-            assertTrue(thrown is IllegalStateException)
+            }
+            assertTrue(result.isSuccess)
         }
     }
 
@@ -95,7 +95,7 @@ class MeshRepositoryTest {
     @Test
     fun `error message for disabled participation is descriptive`() {
         val err = kotlin.runCatching {
-            MeshRepository.requireMeshParticipationEnabled(null)
+            MeshRepository.requireMeshParticipationEnabled(meshSettings(false))
         }.exceptionOrNull()
 
         assertTrue(err is IllegalStateException)

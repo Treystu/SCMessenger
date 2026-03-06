@@ -19,5 +19,11 @@ require_pattern "Label\\(\"Contacts\"" "Contacts tab declaration is missing"
 require_pattern "if !identityInitialized && \\(selectedTab == \\.messages \\|\\| selectedTab == \\.contacts\\)" \
   "relay-only tab reset guard is missing"
 require_pattern "selectedTab = \\.mesh" "relay-only fallback to Mesh tab is missing"
+require_pattern "\\.swipeActions\\(edge: \\.trailing, allowsFullSwipe: false\\)" \
+  "conversation swipe-delete action is missing"
+require_pattern "showingDeleteConfirmation = true" \
+  "conversation delete confirmation toggle is missing"
+require_pattern "try repository\\.clearConversation\\(peerId: conversation\\.peerId\\)" \
+  "conversation clear path is missing"
 
 echo "PASS: iOS role-mode parity checks"
