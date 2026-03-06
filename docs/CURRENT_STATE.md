@@ -351,6 +351,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - `cargo test -p scmessenger-core test_mismatched_sender_receipt_is_ignored -- --nocapture` — **pass**
 - WS12.29 diagnostics workflow hardening in this pass:
   - `scripts/run5-live-feedback.sh` iOS diagnostics pull now retries `devicectl copy` and requires near-stable file-size confirmation across pulls before accepting capture, failing fast when non-truncation cannot be confirmed.
+  - Follow-up hardening: one-shot mode (`IOS_DIAG_PULL_ATTEMPTS=1`) now accepts a valid non-empty pull, and failed stability runs remove the untrusted output file before returning non-zero.
 - Environment limitations observed:
   - Android Gradle unit-test run in this environment failed before tests due blocked dependency fetch from `dl.google.com` (host/network prerequisite).
   - `bash ./iOS/verify-test.sh` could not execute here (`xcodebuild` unavailable on this host), so iOS physical/simulator runtime closure gates remain unchanged.

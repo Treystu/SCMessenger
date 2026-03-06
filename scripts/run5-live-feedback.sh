@@ -246,6 +246,10 @@ PY
   local stable_size=0
   local attempts="${IOS_DIAG_PULL_ATTEMPTS:-3}"
   local max_delta="${IOS_DIAG_STABILITY_MAX_DELTA_BYTES:-256}"
+  if ! [[ "$attempts" =~ ^[0-9]+$ ]] || [ "$attempts" -le 0 ]; then
+    echo "Invalid IOS_DIAG_PULL_ATTEMPTS='$attempts'; defaulting to one-shot mode (1)" >> "$stderr_file"
+    attempts=1
+  fi
 
   for attempt in $(seq 1 "$attempts"); do
     local attempt_file="${out_file}.attempt${attempt}"
@@ -268,6 +272,18 @@ PY
     local current_size
     current_size="$(wc -c < "$attempt_file" | tr -d ' ')"
     echo "iOS diagnostics pull attempt ${attempt}/${attempts} size=${current_size}" >> "$stderr_file"
+
+    if [ "$attempts" -eq 1 ]; then
+      if [ "$current_size" -gt 0 ]; then
+        mv "$attempt_file" "$out_file"
+        rm -f "${out_file}.attempt"*
+        echo "iOS diagnostics pull accepted in one-shot mode (attempts=1)" >> "$stderr_file"
+        return 0
+      fi
+      echo "iOS diagnostics pull one-shot mode rejected empty output" >> "$stderr_file"
+      rm -f "$out_file" "${out_file}.attempt"*
+      return 1
+    fi
 
     if [ "$previous_size" -gt 0 ]; then
       local delta
@@ -295,6 +311,8 @@ PY
       echo "iOS diagnostics pull failed for device $device_id" >> "$stderr_file"
     fi
   fi
+  # Ensure callers do not consume an untrusted/truncated capture on failed stability.
+  rm -f "$out_file"
   rm -f "${out_file}.attempt"*
   return 1
 }

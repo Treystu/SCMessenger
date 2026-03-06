@@ -1129,6 +1129,21 @@ impl IronCore {
         if msg.message_type == message::MessageType::Receipt {
             receipt_handled = true;
             if let Ok(receipt) = bincode::deserialize::<message::Receipt>(&msg.payload) {
+                let log_receipt_ignore = |message_id: &str, reason: &str| {
+                    let err_msg = format!(
+                        "[IronCore] ignoring receipt for message {}: {}\n",
+                        message_id, reason
+                    );
+                    let _ = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open("/tmp/scm_debug.log")
+                        .map(|mut f| {
+                            use std::io::Write;
+                            f.write_all(err_msg.as_bytes())
+                        });
+                    eprintln!("{}", err_msg);
+                };
                 let local_public_key_hex = hex::encode(keys.signing_key.verifying_key().to_bytes());
                 let expected_sender_public_key_hex = hex::encode(&envelope.sender_public_key);
                 let expected_sender_identity =
@@ -1141,41 +1156,20 @@ impl IronCore {
                     .flatten()
                     .filter(|record| record.direction == store::MessageDirection::Sent);
                 if outbound_record.is_none() {
-                    let err_msg = format!("[IronCore] ignoring receipt for message {}: message not found or is not outbound\n", receipt.message_id);
-                    let _ = std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open("/tmp/scm_debug.log")
-                        .map(|mut f| {
-                            use std::io::Write;
-                            f.write_all(err_msg.as_bytes())
-                        });
-                    eprintln!("{}", err_msg);
+                    log_receipt_ignore(&receipt.message_id, "message not found or is not outbound");
                 } else if !msg.recipient_id.eq_ignore_ascii_case(&local_public_key_hex) {
-                    let err_msg = format!("[IronCore] ignoring receipt for message {}: recipient mismatch (msg recipient != local key)\n", receipt.message_id);
-                    let _ = std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open("/tmp/scm_debug.log")
-                        .map(|mut f| {
-                            use std::io::Write;
-                            f.write_all(err_msg.as_bytes())
-                        });
-                    eprintln!("{}", err_msg);
+                    log_receipt_ignore(
+                        &receipt.message_id,
+                        "recipient mismatch (msg recipient != local key)",
+                    );
                 } else if !msg
                     .sender_id
                     .eq_ignore_ascii_case(&expected_sender_identity)
                 {
-                    let err_msg = format!("[IronCore] ignoring receipt for message {}: sender identity does not match envelope sender key\n", receipt.message_id);
-                    let _ = std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open("/tmp/scm_debug.log")
-                        .map(|mut f| {
-                            use std::io::Write;
-                            f.write_all(err_msg.as_bytes())
-                        });
-                    eprintln!("{}", err_msg);
+                    log_receipt_ignore(
+                        &receipt.message_id,
+                        "sender identity does not match envelope sender key",
+                    );
                 } else if outbound_record.as_ref().is_some_and(|record| {
                     let matches_expected_sender = record
                         .peer_id
@@ -1186,19 +1180,10 @@ impl IronCore {
                         || record.peer_id.eq_ignore_ascii_case(&msg.sender_id);
                     !matches_expected_sender
                 }) {
-                    let err_msg = format!(
-                        "[IronCore] ignoring receipt for message {}: sender identity does not match outbound recipient\n",
-                        receipt.message_id
+                    log_receipt_ignore(
+                        &receipt.message_id,
+                        "sender identity does not match outbound recipient",
                     );
-                    let _ = std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open("/tmp/scm_debug.log")
-                        .map(|mut f| {
-                            use std::io::Write;
-                            f.write_all(err_msg.as_bytes())
-                        });
-                    eprintln!("{}", err_msg);
                 } else {
                     if matches!(receipt.status, message::DeliveryStatus::Delivered) {
                         let _ = self.mark_message_sent(receipt.message_id.clone());

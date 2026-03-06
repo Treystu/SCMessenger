@@ -35,6 +35,7 @@ Primary scripts used during 5-node and relay continuity investigations:
      - all-node pair matrix gate (directed visibility),
      - deterministic verifier gates (`relay_flap`, `ble_only`, `receipt_convergence`, `delivery_state_monotonicity`).
     - iOS diagnostics pull now requires retry-stable capture sizing before accepting `mesh_diagnostics.log` artifacts, reducing truncated-copy false positives.
+    - When `IOS_DIAG_PULL_ATTEMPTS=1`, a non-empty one-shot pull is accepted; when stability checks fail, the untrusted output file is removed before returning failure.
    - Produces per-attempt evidence bundles under `logs/live-verify/`.
 2. `scripts/verify_ws12_matrix.sh`
    - Canonical multi-surface verification gate (Rust + Android + iOS parity checks).
