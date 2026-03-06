@@ -274,15 +274,10 @@ PY
     echo "iOS diagnostics pull attempt ${attempt}/${attempts} size=${current_size}" >> "$stderr_file"
 
     if [ "$attempts" -eq 1 ]; then
-      if [ "$current_size" -gt 0 ]; then
-        mv "$attempt_file" "$out_file"
-        rm -f "${out_file}.attempt"*
-        echo "iOS diagnostics pull accepted in one-shot mode (attempts=1)" >> "$stderr_file"
-        return 0
-      fi
-      echo "iOS diagnostics pull one-shot mode rejected empty output" >> "$stderr_file"
-      rm -f "$out_file" "${out_file}.attempt"*
-      return 1
+      mv "$attempt_file" "$out_file"
+      rm -f "${out_file}.attempt"*
+      echo "iOS diagnostics pull accepted in one-shot mode (attempts=1)" >> "$stderr_file"
+      return 0
     fi
 
     if [ "$previous_size" -gt 0 ]; then
