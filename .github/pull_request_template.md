@@ -1,44 +1,33 @@
-## Description
-Brief description of the changes in this PR.
+## Summary
+Briefly describe the change.
 
-## Type of Change
-- [ ] Bug fix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] Documentation update
-- [ ] Refactoring (no functional changes)
-- [ ] Performance improvement
-- [ ] Test additions/updates
+## Why
+What problem does this PR solve? Link the issue, or explain why no issue exists.
 
-## Motivation and Context
-Why is this change required? What problem does it solve?
+## Release Scope
+- [ ] This change is part of the active `v0.2.0` alpha baseline
+- [ ] This change is deferred/follow-up scope for `v0.2.1` (`WS13` / `WS14` or later)
+- [ ] This change is repo-governance / documentation / tooling work
 
-## Testing
-- [ ] All existing tests pass (`cargo test --workspace`)
-- [ ] New tests added for new functionality
-- [ ] Manual testing performed
-- [ ] Formatting checked (`cargo fmt --all -- --check`)
-- [ ] Linting passed (`cargo clippy --workspace`)
+## Documentation Impact
+- [ ] Canonical docs updated
+- [ ] Supporting docs updated
+- [ ] No docs update needed, because:
+
+## Validation
+- [ ] `cargo fmt --all -- --check`
+- [ ] `cargo clippy --workspace`
+- [ ] `cargo build --workspace`
+- [ ] `cargo test --workspace`
+- [ ] `./scripts/docs_sync_check.sh`
+- [ ] Targeted platform/manual validation:
+
+## Risk / Security Notes
+- [ ] No new security-sensitive behavior introduced
+- [ ] Risk notes documented below
 
 ## Checklist
-- [ ] My code follows the project's code style and conventions
-- [ ] I have updated documentation as needed
-- [ ] `./scripts/docs_sync_check.sh` passes
-- [ ] I have added tests that prove my fix is effective or that my feature works
-- [ ] All new and existing tests passed
-- [ ] My changes generate no new warnings
-- [ ] I have checked my code for security vulnerabilities
-
-## Philosophy Alignment
-How does this change align with SCMessenger's core principles?
-- [ ] Maintains relay = messaging coupling
-- [ ] Preserves decentralization (no third-party dependencies)
-- [ ] Internet as transport, not dependency
-- [ ] Maintains privacy, infrastructure independence, and identity ownership
-- [ ] Keeps UX accessible
-
-## Screenshots (if applicable)
-Add screenshots to show visual changes.
-
-## Additional Notes
-Any additional information that reviewers should know.
+- [ ] Changes are focused and minimal
+- [ ] Tests were added or updated when needed
+- [ ] Existing behavior was revalidated for the changed area
+- [ ] Docs/reporting surfaces stay aligned with the change

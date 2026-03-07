@@ -19,6 +19,18 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - Treat this as a repository-operating-model problem (approval/permissions/workflow trigger policy), not a code-breakage signal.
 - Planning blueprint for follow-up execution is now captured in `docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md`.
 
+## 2026-03-07 GitHub Contributor-Surface Alignment
+
+- GitHub-facing contributor/community surfaces now explicitly align to the current release line:
+  - `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, and new `SUPPORT.md` all treat `v0.2.0` as the active alpha baseline.
+  - `WS13` / `WS14` are explicitly called out as `v0.2.1` planning scope rather than unfinished `v0.2.0` alpha work.
+- GitHub repo-intake/config surfaces added or tightened:
+  - `.github/CODEOWNERS`
+  - `.github/ISSUE_TEMPLATE/config.yml`
+  - rewritten `.github/pull_request_template.md`
+  - updated issue templates with release-scope prompts
+- Release-process docs now reflect that the workspace is already on `0.2.0`, while GitHub release/tag cleanup is still pending maintainer execution.
+
 ## Verified Commands and Results
 
 ### Rust Workspace

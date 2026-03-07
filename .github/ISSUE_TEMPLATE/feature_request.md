@@ -15,6 +15,10 @@ What problem does this feature address? Is your feature request related to a pro
 ## Proposed Solution
 Describe the solution you'd like to see implemented.
 
+## Release Scope
+- Is this needed for the active `v0.2.0` alpha baseline? [yes/no]
+- If this belongs to deferred `v0.2.1` work (for example `WS13` or `WS14`), note that here:
+
 ## Alternatives Considered
 Describe any alternative solutions or features you've considered.
 

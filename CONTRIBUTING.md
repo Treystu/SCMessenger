@@ -2,6 +2,8 @@
 
 Thank you for considering contributing to SCMessenger! This document provides guidelines and instructions for contributing.
 
+Current release line: **v0.2.0 is the active alpha baseline** for repository work and bug reporting. Planned follow-on workstreams `WS13` and `WS14` are tracked as **v0.2.1** scope and should not be treated as part of the current alpha closeout unless maintainers explicitly retarget them.
+
 ## Philosophy
 
 SCMessenger is the world's first truly sovereign messenger — works everywhere, owned by no one, unstoppable by design. Our core principles guide all development:
@@ -64,7 +66,7 @@ git checkout -b feature/your-feature-name
 
 ### 3. Code Style
 
-**All new code is Rust. No TypeScript, no JavaScript.**
+Rust is the primary implementation language for shared/core logic, but this repository also contains active Android (Kotlin), iOS (Swift), and GitHub/doc surfaces that should be updated when a task requires them.
 
 #### Key Conventions
 
@@ -125,7 +127,7 @@ cargo test -p scmessenger-core
 RUST_LOG=debug cargo test --workspace -- --nocapture
 ```
 
-All tests must pass before submitting a PR. We currently have ~638 tests across all modules.
+All tests relevant to your change must pass before submitting a PR. For the current verified workspace snapshot, see `docs/CURRENT_STATE.md`.
 
 ### 6. Documentation
 
@@ -149,6 +151,7 @@ git push origin feature/your-feature-name
 - Reference any related issues
 - Add tests for new functionality
 - Update documentation as needed
+- Run `./scripts/docs_sync_check.sh` when documentation or GitHub-facing contributor surfaces change
 
 ## Project Structure
 
@@ -204,11 +207,11 @@ docs/        —                   Architecture and design docs
 
 If you discover a security vulnerability, please follow our [Security Policy](SECURITY.md). Do NOT open a public issue.
 
-## Questions?
+## Questions and Support
 
-- Open a [GitHub Discussion](https://github.com/Treystu/SCMessenger/discussions)
+- Use [SUPPORT.md](SUPPORT.md) for the current routing path (bugs vs docs vs security vs general questions)
 - Check existing [Issues](https://github.com/Treystu/SCMessenger/issues)
-- Review the [Documentation](docs/)
+- Review the canonical docs starting at [DOCUMENTATION.md](DOCUMENTATION.md)
 
 ## License
 

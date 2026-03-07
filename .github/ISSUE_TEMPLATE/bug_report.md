@@ -23,8 +23,12 @@ What actually happened.
 ## Environment
 - OS: [e.g. Ubuntu 22.04, macOS 14.0, Windows 11]
 - Rust Version: [output of `rustc --version`]
-- SCMessenger Version/Commit: [e.g. main branch @ abc1234]
+- SCMessenger Version/Commit: [e.g. v0.2.0 alpha / main @ abc1234]
 - Build Command: [e.g. `cargo build --release`]
+
+## Scope Check
+- Is this affecting the active `v0.2.0` alpha baseline? [yes/no]
+- If this is really planned future scope (`WS13` / `WS14`, `v0.2.1`), note that here:
 
 ## Logs
 ```

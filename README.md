@@ -5,6 +5,8 @@
 
 Decentralized, end-to-end encrypted messaging built on Rust + libp2p with mobile and WASM targets.
 
+Current release line: **v0.2.0 is the active alpha baseline** for this repository. Deferred follow-on workstreams `WS13` and `WS14` are planned for **v0.2.1** and are not part of the current alpha closeout scope.
+
 ## Start Here
 
 - Documentation hub: `DOCUMENTATION.md`
@@ -65,16 +67,16 @@ docs/      Documentation        Architecture, protocol, testing, platform notes
 | Encryption | XChaCha20-Poly1305 |
 | Envelope auth | Ed25519 signatures + AAD binding |
 
-## Verified Test Snapshot (2026-02-23)
+## Verified Test Snapshot (2026-03-07)
 
 From `cargo test --workspace`:
 
-- CLI: 17 passed
-- Core unit: 227 passed, 7 ignored
-- Core integration: 52 passed
+- CLI: 13 passed
+- Core unit: 265 passed, 7 ignored
+- Core integration: 52 passed, 10 ignored
 - Mobile crate: 4 passed
-- WASM crate (native test mode): 24 passed
-- Total: **324 passed, 0 failed, 7 ignored**
+- WASM crate (native/non-browser tests): 33 passed
+- Total: **367 passed, 0 failed, 17 ignored**
 
 See `docs/TESTING_GUIDE.md` for exact commands and constraints.
 

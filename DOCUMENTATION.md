@@ -42,6 +42,12 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 - [Release Notes Draft (v0.2.0)](docs/releases/RELEASE_NOTES_V0.2.0_DRAFT.md)
 - [GitHub Release Notes Draft (v0.1.2)](docs/releases/RELEASE_NOTES_V0.1.2_GH.md)
 
+## Contributor and Community Health
+
+- [Contributing Guide](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
+- [Support Routing](SUPPORT.md)
+
 ## Component and Platform Docs
 
 - [Core Crate](core/README.md)
@@ -215,6 +221,17 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `docs/DOCUMENT_STATUS_INDEX.md`
 - GitHub + repo realignment first-pass planning audit (2026-03-07 UTC, comprehensive GitHub/repo hygiene and execution sequencing blueprint) is tracked in:
   - `docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md`
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+  - `docs/DOCUMENT_STATUS_INDEX.md`
+- GitHub-facing contributor-surface alignment (2026-03-07 UTC, support routing + issue config + PR template + active alpha version signaling) is tracked in:
+  - `README.md`
+  - `CONTRIBUTING.md`
+  - `SECURITY.md`
+  - `SUPPORT.md`
+  - `docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md`
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`

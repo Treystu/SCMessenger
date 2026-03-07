@@ -41,6 +41,21 @@ Execution follow-ups opened by this audit:
 5. [ ] Rewrite contributor/security/agent guidance to remove stale claims and duplicated instructions.
 6. [ ] Clean up stale branches after open-PR/open-issue decisions are made.
 
+Progress update in this pass:
+
+1. [x] Added first-pass GitHub contributor routing/config surfaces:
+   - `SUPPORT.md`
+   - `.github/CODEOWNERS`
+   - `.github/ISSUE_TEMPLATE/config.yml`
+2. [x] Rewrote GitHub-facing contributor/security entrypoints to match current alpha reality:
+   - `README.md`
+   - `CONTRIBUTING.md`
+   - `SECURITY.md`
+   - `.github/pull_request_template.md`
+3. [x] Made repository GitHub-facing docs/config explicitly treat `v0.2.0` as the active alpha baseline, with `WS13` / `WS14` deferred to `v0.2.1`.
+4. [ ] Remaining follow-up from item 3: add Dependabot and a concise `.github/copilot-instructions.md`.
+5. [ ] Remaining follow-up from item 2: convert Markdown issue templates to the fuller taxonomy/forms model if maintainers still want the stricter intake reset.
+
 ## WS12.18 Alpha Readiness Closure Follow-ups (2026-03-03 HST)
 
 Completed in this pass:

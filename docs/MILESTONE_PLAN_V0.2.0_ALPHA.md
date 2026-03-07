@@ -20,6 +20,23 @@ Scope: Core + Android + iOS + Desktop GUI + Relay topology
    - repair workflow topology and required PR checks,
    - consolidate agent-context guidance and clean stale branches/issues.
 
+## GitHub Alpha-Line Alignment Addendum (WS12.36 follow-up, 2026-03-07 UTC)
+
+1. GitHub-facing contributor surfaces now explicitly treat `v0.2.0` as the active alpha baseline:
+   - `README.md`
+   - `CONTRIBUTING.md`
+   - `SECURITY.md`
+   - `SUPPORT.md`
+   - `.github/ISSUE_TEMPLATE/config.yml`
+   - `.github/pull_request_template.md`
+2. Scope guardrail reaffirmed:
+   - `WS13` and `WS14` remain planned `v0.2.1` follow-up work,
+   - they should not be presented in GitHub intake/docs as unfinished `v0.2.0` alpha requirements.
+3. Remaining repo-governance follow-up still open:
+   - issue taxonomy/label reset,
+   - Dependabot/Copilot instructions,
+   - branch protection and CI topology cleanup.
+
 ## Hotfix Addendum (WS12.9, 2026-03-03)
 
 1. iOS dashboard node-count accuracy hotfix completed:
