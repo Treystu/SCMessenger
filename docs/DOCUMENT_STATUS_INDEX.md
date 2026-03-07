@@ -44,7 +44,7 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 
 ---
 
-## 2.1) Active supporting audits and execution plans
+## 3) Active supporting audits and execution plans
 
 | Document                                            | Status | Purpose                                                                  |
 | --------------------------------------------------- | ------ | ------------------------------------------------------------------------ |
@@ -54,7 +54,7 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 
 ---
 
-## 3) Active planned docs (future scope)
+## 4) Active planned docs (future scope)
 
 | Document                                              | Status  | Notes                                                                                    |
 | ----------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------- |
@@ -63,7 +63,7 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 
 ---
 
-## 4) Mixed-status docs (use with caution)
+## 5) Mixed-status docs (use with caution)
 
 These documents may contain both current and historical sections; verify section markers before acting on them.
 
@@ -77,7 +77,7 @@ These documents may contain both current and historical sections; verify section
 
 ---
 
-## 5) Historical and superseded docs
+## 6) Historical and superseded docs
 
 1. `docs/historical/*` is `Historical` by default.
 2. Root-level audit/status snapshots (for example old rollout/audit reports) are `Superseded` unless explicitly re-linked into the active chain.
@@ -85,7 +85,7 @@ These documents may contain both current and historical sections; verify section
 
 ---
 
-## 6) Update rules
+## 7) Update rules
 
 1. Any document used as execution truth must include `Status:` and `Last updated:` headers.
 2. When superseding a doc:
@@ -100,7 +100,7 @@ These documents may contain both current and historical sections; verify section
    5. `docs/REPO_CONTEXT.md` (architecture context).
 4. `./scripts/docs_sync_check.sh` should pass before finalizing implementation work or documentation-only changes.
 
-## 7) Recent Canonical Sync
+## 8) Recent Canonical Sync
 
 1. WS11 (2026-03-03) public beta readiness surface updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
 2. WS12 (2026-03-03) test-matrix/parity-lock updates are reflected in active docs (`docs/TESTING_GUIDE.md`, `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
