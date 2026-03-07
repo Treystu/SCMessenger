@@ -41,6 +41,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - issue-template contact routing in `.github/ISSUE_TEMPLATE/config.yml`
 - Docs and validation guardrails were tightened:
   - `scripts/docs_sync_check.sh` now checks a broader canonical-doc set and rejects machine-local paths in active docs.
+  - `scripts/docs_sync_check.sh` now also requires nested-doc markdown links to resolve correctly relative to the source file and actively validates `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`.
   - `docs/REPO_CONTEXT.md`, `docs/ARCHITECTURE.md`, and release/process docs were refreshed to remove stale metadata or local-path drift.
 - Workflow topology was made more honest/less noisy from the repo side:
   - `docker-publish.yml` no longer runs on pull requests.

@@ -59,6 +59,7 @@ Progress update in this pass:
    - issue forms under `.github/ISSUE_TEMPLATE/*.yml`
 5. [x] Tightened repo-controlled workflow/docs hygiene:
    - `scripts/docs_sync_check.sh` now checks a broader canonical-doc surface and rejects machine-local paths.
+   - `scripts/docs_sync_check.sh` no longer masks broken nested-doc relative links via repo-root fallback and now validates `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md` link integrity directly.
    - `docker-publish.yml` no longer runs on pull requests.
    - `docker-test-suite.yml` is now main/scheduled/manual only.
    - `release.yml` is now explicitly CLI-scoped.
