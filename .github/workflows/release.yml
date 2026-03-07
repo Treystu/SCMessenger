@@ -1,4 +1,4 @@
-name: Release Binaries
+name: Release CLI Binaries
 
 on:
   push:

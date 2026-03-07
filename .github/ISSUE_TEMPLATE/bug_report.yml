@@ -1,0 +1,88 @@
+name: Bug report
+description: Report a defect in the active SCMessenger release line
+title: "[bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        `v0.2.0` is the active alpha baseline for this repository. If your report is really about planned `WS13` / `WS14` work, select the `v0.2.1` scope option below.
+  - type: dropdown
+    id: release_scope
+    attributes:
+      label: Release scope
+      description: Which release line does this issue affect?
+      options:
+        - v0.2.0 alpha (active baseline)
+        - v0.2.1 / WS13 / WS14 planned scope
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - core
+        - android
+        - ios
+        - wasm-web
+        - cli
+        - docs
+        - github/actions
+        - release
+        - not sure
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug description
+      description: What is broken?
+      placeholder: A clear and concise description of the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to...
+        2. Run...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: SCMessenger version or commit
+      placeholder: "v0.2.0 alpha / main @ abc1234"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        OS:
+        Rust version:
+        Build command:
+        Device/emulator details:
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, screenshots, or artifacts
+      render: shell

@@ -1,7 +1,7 @@
 # SCMessenger Release Synchronization Plan (v0.1.2 -> v0.2.0)
 
 Status: Active (workspace/version metadata aligned to v0.2.0; GitHub release/tag cleanup still pending maintainer execution)  
-Last updated: 2026-03-03
+Last updated: 2026-03-07
 
 This plan outlines the steps to synchronize the SCMessenger versions between the codebase and GitHub releases.
 

@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest a new feature or planned follow-up
+title: "[feature] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for new work proposals. Requests that really belong to `WS13` / `WS14` should be marked as `v0.2.1` scope so they do not get mixed into `v0.2.0` alpha closeout.
+  - type: dropdown
+    id: release_scope
+    attributes:
+      label: Requested release scope
+      options:
+        - v0.2.0 alpha closeout
+        - v0.2.1 / WS13 / WS14 follow-up
+        - Later / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem it solves
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      placeholder: |
+        Users:
+        Developers:
+        Performance/privacy:

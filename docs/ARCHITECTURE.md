@@ -1,6 +1,9 @@
 # Architecture
 
-This document describes the current implemented architecture as verified on **2026-02-23**.
+Status: Active
+Last updated: 2026-03-07
+
+This document describes the current implemented architecture as a supporting reference. For the latest verified release/build/test baseline, use `docs/CURRENT_STATE.md`.
 
 For the cross-component repository map (core + CLI + mobile + WASM + Android + iOS), see `docs/REPO_CONTEXT.md`.
 
@@ -78,6 +81,6 @@ Primary modules:
 
 Latest verified workspace run:
 
-- `cargo test --workspace` -> 324 passed, 0 failed, 7 ignored
+- `cargo test --workspace` -> 367 passed, 0 failed, 17 ignored
 
 See `docs/TESTING_GUIDE.md` and `docs/CURRENT_STATE.md` for exact test breakdown.

@@ -1,6 +1,7 @@
 # SCMessenger Repository Context
 
-Last reviewed: **2026-02-23**
+Status: Active
+Last updated: 2026-03-07
 
 This is the canonical "how everything fits together" document for the repository.
 

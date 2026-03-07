@@ -6,12 +6,15 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   check-path-governance:
-    name: Enforce iOS Path Case
+    name: Repo Hygiene / Path Governance
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -56,7 +59,7 @@ jobs:
           fi
 
   check-doc-sync:
-    name: Documentation Sync Guard
+    name: Repo Hygiene / Docs Sync
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,7 +81,7 @@ jobs:
           DOC_SYNC_REQUIRE_DOC_UPDATES=1 DOC_SYNC_BASE_REF="$BASE_REF" ./scripts/docs_sync_check.sh
 
   check-core:
-    name: Build & Test Core (${{ matrix.os }})
+    name: Rust Core (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -117,7 +120,7 @@ jobs:
           cargo test -p scmessenger-core --test integration_relay_custody -- --include-ignored
 
   check-wasm:
-    name: Test Web/WASM
+    name: WASM / Web
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -142,7 +145,7 @@ jobs:
           cargo test -p scmessenger-wasm test_desktop_relay_only_flow_blocks_outbound_message_prepare
 
   check-android:
-    name: Build Android App
+    name: Android
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -185,7 +188,7 @@ jobs:
             --tests com.scmessenger.android.data.MeshRepositoryTest
 
   check-ios:
-    name: Build iOS App
+    name: iOS
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
