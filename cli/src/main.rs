@@ -1270,6 +1270,11 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                         print!("> ");
                                         let _ = std::io::Write::flush(&mut std::io::stdout());
                                         tracing::debug!("Delivery ACK received from {}: msg_id={}", peer_id, receipt.message_id);
+                                        
+                                        // Mark the message as delivered in history
+                                        if let Err(e) = history_rx.mark_delivered(receipt.message_id.clone()) {
+                                            tracing::warn!("Failed to mark message {} as delivered: {}", receipt.message_id, e);
+                                        }
                                     }
                                 }
                             }

@@ -202,9 +202,16 @@ impl HistoryManager {
     }
 
     pub fn mark_delivered(&self, id: String) -> Result<(), IronCoreError> {
-        if let Some(mut record) = self.get(id)? {
+        tracing::info!("Attempting to mark message {} as delivered", id);
+        if let Some(mut record) = self.get(id.clone())? {
             record.delivered = true;
             self.add(record)?;
+            tracing::info!("Successfully marked message {} as delivered", id);
+        } else {
+            tracing::warn!(
+                "Message {} not found in history, could not mark as delivered",
+                id
+            );
         }
         Ok(())
     }

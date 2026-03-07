@@ -24,6 +24,8 @@ Residual risks from completed v0.2.0 phases (currently through WS12.5 burndown a
 
 Do not start the next v0.2.0 phase without checking the corresponding entry gate in that register.
 
+1. [ ] Ensure message history is not cleared on app startup. Messages should persist across app restarts.
+
 ## WS12.36 Repo/GitHub Operating-Model Planning Audit (2026-03-07 UTC)
 
 Completed in this pass:
