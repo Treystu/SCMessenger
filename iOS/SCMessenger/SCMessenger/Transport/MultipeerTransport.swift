@@ -67,12 +67,12 @@ final class MultipeerTransport: NSObject {
 
     private func identitySnippetForDisplayName() -> String {
         if Thread.isMainThread {
-            return meshRepository?.getIdentitySnippet() ?? "SCMesh"
+            return MainActor.assumeIsolated { meshRepository?.getIdentitySnippet() ?? "SCMesh" }
         }
 
         var displayName = "SCMesh"
         DispatchQueue.main.sync { [weak meshRepository] in
-            displayName = meshRepository?.getIdentitySnippet() ?? "SCMesh"
+            displayName = MainActor.assumeIsolated { meshRepository?.getIdentitySnippet() ?? "SCMesh" }
         }
         return displayName
     }

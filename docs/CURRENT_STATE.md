@@ -401,6 +401,21 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - Android Gradle unit-test run in this environment failed before tests due blocked dependency fetch from `dl.google.com` (host/network prerequisite).
   - `bash ./iOS/verify-test.sh` could not execute here (`xcodebuild` unavailable on this host), so iOS physical/simulator runtime closure gates remain unchanged.
 
+### WS12.36 PR CI Failure Closure (2026-03-07 UTC)
+
+- Latest failing PR CI run inspected (`22790198922`, `CI`):
+  - Android failure was workflow ordering drift: `.github/workflows/ci.yml` ran `android/verify-build-setup.sh` before installing `cargo-ndk`.
+  - iOS failure extended to `BLECentralManager` in addition to `MultipeerTransport`; transport-layer delegate paths were still calling `@MainActor` repository helpers synchronously.
+  - Rust Core macOS failure came from a transient sled database lock while reopening the same test path in `identity::store::tests::test_store_persistence_across_instances`.
+- Minimal fixes applied:
+  - `check-android` now installs `cargo-ndk` before Android preflight verification.
+  - `BLECentralManager` now routes repository diagnostics through a MainActor-safe helper.
+  - `MultipeerTransport.identitySnippetForDisplayName()` now uses MainActor-safe synchronous bridging for repository snippet lookup.
+  - `test_store_persistence_across_instances` now briefly retries reopening the sled backend when the prior lock is still being released by the OS.
+- Local validation in this pass:
+  - `cargo fmt --all -- --check` — **pass**
+  - `cargo test -p scmessenger-core identity::store::tests::test_store_persistence_across_instances` — **pass**
+
 ### WS12 Verification Snapshot (2026-03-03)
 
 - `cargo test --workspace --no-run` — **pass**

@@ -421,6 +421,21 @@ Still open after this pass:
 1. [ ] Android/iOS physical synchronized evidence gates remain open (unchanged): device-runtime artifact requirements for `R-WS12-04/05/06`, `R-WS12-29-01`, and `R-WS12-29-02`.
 2. [ ] Host prerequisites remain environment-gated (unchanged): Docker runtime provisioning (`WS12.15.3`) and wireless ADB persistence (`WS12.8.5`).
 
+## WS12.36 PR CI Failure Closure (2026-03-07 UTC)
+
+Completed in this pass:
+
+1. [x] Correlated the currently failing PR CI run (`22790198922`, workflow `CI`) to concrete Android, iOS, and Rust Core blockers.
+2. [x] Fixed Android CI step ordering so `cargo-ndk` is installed before `android/verify-build-setup.sh`.
+3. [x] Closed remaining iOS MainActor isolation drift in transport-layer repository helper calls:
+   - `BLECentralManager` now routes diagnostics through a MainActor-safe helper.
+   - `MultipeerTransport.identitySnippetForDisplayName()` now uses MainActor-safe synchronous bridging.
+4. [x] Hardened the flaky macOS sled persistence test:
+   - `identity::store::tests::test_store_persistence_across_instances` now tolerates brief post-drop lock-release delay before reopening the DB.
+5. [x] Revalidated the Rust-side blocker locally:
+   - `cargo fmt --all -- --check` — pass
+   - `cargo test -p scmessenger-core identity::store::tests::test_store_persistence_across_instances` — pass
+
 ### WS12.25 Mega-Update Consolidated Next Steps (Open + Deferred)
 
 This is the current "burn-down" slate combining all active deferred/runtime closures still gating full reliability signoff:
