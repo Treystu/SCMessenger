@@ -1,7 +1,7 @@
 # SCMessenger Documentation Hub
 
 Status: Active  
-Last updated: 2026-03-06
+Last updated: 2026-03-07
 
 This is the primary documentation entrypoint.
 
@@ -24,13 +24,17 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 - [Protocol Specification](docs/PROTOCOL.md)
 - [Testing Guide](docs/TESTING_GUIDE.md)
 - [Edge-Case Readiness Matrix](docs/EDGE_CASE_READINESS_MATRIX.md)
-- [Global Viability Audit](docs/global_viability_audit.md)
-- [Implementation Cheat Sheet (2026-03-04)](docs/implementation_cheatsheet_3.4.2026.md)
 
 ## Planned Docs (Future Scope)
 
 - [v0.2.1 Tight Pair / WS13 Plan](docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md)
 - [v0.2.1 Notifications / WS14 Plan](docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md)
+
+## Active Supporting Audits and Execution Plans
+
+- [GitHub + Repo Realignment Audit (First Pass)](docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md)
+- [Global Viability Audit](docs/global_viability_audit.md)
+- [Implementation Cheat Sheet (2026-03-04)](docs/implementation_cheatsheet_3.4.2026.md)
 
 ## Release Docs
 
@@ -209,6 +213,14 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
   - `docs/DOCUMENT_STATUS_INDEX.md`
+- GitHub + repo realignment first-pass planning audit (2026-03-07 UTC, comprehensive GitHub/repo hygiene and execution sequencing blueprint) is tracked in:
+  - `docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md`
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+  - `docs/DOCUMENT_STATUS_INDEX.md`
+
 - Global viability audit + 10-action-item implementation cheatsheet (2026-03-04 HST, comprehensive audit of what works / what's broken / what's missing for global viability) is tracked in:
   - `docs/global_viability_audit.md`
   - `docs/implementation_cheatsheet_3.4.2026.md`

@@ -1,7 +1,7 @@
 # SCMessenger Document Status Index
 
 Status: Active  
-Last updated: 2026-03-06
+Last updated: 2026-03-07
 
 Purpose: classify documentation by lifecycle state so execution decisions use authoritative files and historical content remains discoverable without causing drift.
 
@@ -41,12 +41,20 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 | `docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md` | Active | Release synchronization and tagging checklist                  |
 | `docs/releases/RELEASE_NOTES_V0.2.0_DRAFT.md`         | Active | v0.2.0 draft release notes                                     |
 | `docs/releases/RELEASE_NOTES_V0.1.2_GH.md`            | Active | v0.1.2 GitHub release notes draft                              |
-| `docs/global_viability_audit.md`                      | Active | Global viability audit + gap map vs desired end state          |
-| `docs/implementation_cheatsheet_3.4.2026.md`          | Active | 10-action-item implementation reference with exact code plans  |
 
 ---
 
-## 3) Active planned docs (future scope)
+## 3) Active supporting audits and execution plans
+
+| Document                                            | Status | Purpose                                                                  |
+| --------------------------------------------------- | ------ | ------------------------------------------------------------------------ |
+| `docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md` | Active | Planning-only GitHub/repo operating-model audit and execution blueprint |
+| `docs/global_viability_audit.md`                    | Active | Supporting viability audit; context for execution, not canonical truth   |
+| `docs/implementation_cheatsheet_3.4.2026.md`        | Active | Supporting implementation reference derived from audit findings          |
+
+---
+
+## 4) Active planned docs (future scope)
 
 | Document                                              | Status  | Notes                                                                                    |
 | ----------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------- |
@@ -55,7 +63,7 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 
 ---
 
-## 4) Mixed-status docs (use with caution)
+## 5) Mixed-status docs (use with caution)
 
 These documents may contain both current and historical sections; verify section markers before acting on them.
 
@@ -69,7 +77,7 @@ These documents may contain both current and historical sections; verify section
 
 ---
 
-## 5) Historical and superseded docs
+## 6) Historical and superseded docs
 
 1. `docs/historical/*` is `Historical` by default.
 2. Root-level audit/status snapshots (for example old rollout/audit reports) are `Superseded` unless explicitly re-linked into the active chain.
@@ -77,7 +85,7 @@ These documents may contain both current and historical sections; verify section
 
 ---
 
-## 6) Update rules
+## 7) Update rules
 
 1. Any document used as execution truth must include `Status:` and `Last updated:` headers.
 2. When superseding a doc:
@@ -92,7 +100,7 @@ These documents may contain both current and historical sections; verify section
    5. `docs/REPO_CONTEXT.md` (architecture context).
 4. `./scripts/docs_sync_check.sh` should pass before finalizing implementation work or documentation-only changes.
 
-## 7) Recent Canonical Sync
+## 8) Recent Canonical Sync
 
 1. WS11 (2026-03-03) public beta readiness surface updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
 2. WS12 (2026-03-03) test-matrix/parity-lock updates are reflected in active docs (`docs/TESTING_GUIDE.md`, `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
@@ -124,3 +132,4 @@ These documents may contain both current and historical sections; verify section
 28. WS12.30 (2026-03-03 HST) live verification feedback-loop orchestration updates are reflected in active docs (`scripts/README.md`, `docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`, `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`) plus new active harness script (`scripts/run5-live-feedback.sh`) for strict sequential phase gates and all-node-pairing validation.
 29. WS12.31 (2026-03-04 HST) stale-target convergence hardening + transport-priority clarification updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`, and `DOCUMENTATION.md`), including discovered-route-first candidate preference, strict route-key validation fallback to runtime evidence, failed-route de-persistence, connected-BLE-target preference, and iOS contact-delete confirmation prompt implementation.
 30. WS12.35 (2026-03-06 UTC) non-device reliability reconciliation updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`, and `DOCUMENTATION.md`), including wasm sender-timestamp compile drift closure, iOS MainActor isolation hardening in Multipeer transport, Android mesh-participation semantics test alignment, deterministic delivery-state monotonicity gate canonicalization, and iOS diagnostics pull stability safeguards in `scripts/run5-live-feedback.sh`.
+31. WS12.36 (2026-03-07 UTC) repo/GitHub operating-model planning-audit updates are reflected in active docs (`DOCUMENTATION.md`, `docs/DOCUMENT_STATUS_INDEX.md`, `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`) plus new supporting audit blueprint (`docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md`).

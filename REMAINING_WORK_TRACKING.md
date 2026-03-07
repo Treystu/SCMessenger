@@ -1,7 +1,7 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active  
-Last updated: 2026-03-06
+Last updated: 2026-03-07
 
 This is the active implementation backlog based on repository state verified on **2026-03-03**.
 
@@ -23,6 +23,23 @@ Residual risks from completed v0.2.0 phases (currently through WS12.5 burndown a
 - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 
 Do not start the next v0.2.0 phase without checking the corresponding entry gate in that register.
+
+## WS12.36 Repo/GitHub Operating-Model Planning Audit (2026-03-07 UTC)
+
+Completed in this pass:
+
+1. [x] Performed a planning-only audit of repo documentation, GitHub features, issue tracker state, Actions topology, contributor workflow, and agent-context surfaces.
+2. [x] Captured the first-pass execution blueprint in `docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md`.
+3. [x] Revalidated local baseline commands before planning follow-up work (`cargo fmt --all -- --check`, `cargo build --workspace`, `cargo test --workspace`, `./scripts/docs_sync_check.sh`).
+
+Execution follow-ups opened by this audit:
+
+1. [ ] Tighten the canonical documentation chain and demote audit/history artifacts out of current-state navigation.
+2. [ ] Reset GitHub Issues around a fresh taxonomy, labels, milestones, and clean issue intake forms.
+3. [ ] Add missing GitHub repo health/configuration surfaces (`CODEOWNERS`, support policy, Dependabot, issue config, Copilot instructions).
+4. [ ] Repair CI/workflow operating model so required PR checks are explicit and PR runs do not stall in `action_required`.
+5. [ ] Rewrite contributor/security/agent guidance to remove stale claims and duplicated instructions.
+6. [ ] Clean up stale branches after open-PR/open-issue decisions are made.
 
 ## WS12.18 Alpha Readiness Closure Follow-ups (2026-03-03 HST)
 
