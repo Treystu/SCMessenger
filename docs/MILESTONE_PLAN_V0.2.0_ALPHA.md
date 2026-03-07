@@ -1,10 +1,24 @@
 # SCMessenger v0.2.0 Alpha Milestone Plan
 
 Status: Active (execution complete through WS12.35 non-device reliability reconciliation)  
-Date: 2026-03-06  
+Date: 2026-03-07  
 Scope: Core + Android + iOS + Desktop GUI + Relay topology
 
 ---
+
+## Repo/GitHub Operating-Model Planning Addendum (WS12.36, 2026-03-07 UTC)
+
+1. A planning-only audit of repository docs, GitHub features, issue tracker state, branch hygiene, and CI topology is now captured in `docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md`.
+2. Scope classification:
+   - this is a repo-governance and release-readiness hardening track,
+   - not a product feature expansion beyond v0.2.0.
+3. Milestone implication:
+   - execution confidence for v0.2.0 closeout depends on cleaning up the repo operating model so docs, issues, CI, and release signals match current reality.
+4. Immediate execution sequence from the audit:
+   - tighten canonical docs + contributor health surfaces,
+   - reset issue taxonomy/templates/labels/milestones,
+   - repair workflow topology and required PR checks,
+   - consolidate agent-context guidance and clean stale branches/issues.
 
 ## Hotfix Addendum (WS12.9, 2026-03-03)
 

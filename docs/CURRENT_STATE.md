@@ -1,11 +1,23 @@
 # SCMessenger Current State (Verified)
 
 Status: Active  
-Last updated: 2026-03-06
+Last updated: 2026-03-07
 
-Last verified: **2026-03-03** (local workspace checks on this machine)
+Last verified: **2026-03-07** (local workspace checks on this machine)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
+
+## 2026-03-07 Repository Governance Baseline
+
+- Local baseline revalidation on this branch:
+  - `cargo fmt --all -- --check` — **pass**
+  - `cargo build --workspace` — **pass**
+  - `cargo test --workspace` — **pass**
+  - `./scripts/docs_sync_check.sh` — **pass**
+- GitHub Actions evidence requiring follow-up:
+  - PR-triggered runs `22787446333` (`CI`) and `22787446353` (`Docker Build & Push`) concluded `action_required` before jobs were exposed via the Actions API.
+  - Treat this as a repository-operating-model problem (approval/permissions/workflow trigger policy), not a code-breakage signal.
+- Planning blueprint for follow-up execution is now captured in `docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md`.
 
 ## Verified Commands and Results
 
