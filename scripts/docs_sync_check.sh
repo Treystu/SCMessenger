@@ -52,9 +52,6 @@ check_links_in_file() {
       resolved="$ROOT_DIR$cleaned"
     else
       resolved="$dir/$cleaned"
-      if [[ ! -e "$resolved" ]]; then
-        resolved="$ROOT_DIR/$cleaned"
-      fi
     fi
 
     if [[ ! -e "$resolved" ]]; then
@@ -99,6 +96,7 @@ LINK_CHECK_FILES=(
   "docs/CURRENT_STATE.md"
   "docs/TESTING_GUIDE.md"
   "docs/ARCHITECTURE.md"
+  "docs/V0.2.0_RESIDUAL_RISK_REGISTER.md"
   ".github/copilot-instructions.md"
   "docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md"
 )
