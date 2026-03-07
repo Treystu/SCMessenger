@@ -42,6 +42,17 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 - [Release Notes Draft (v0.2.0)](docs/releases/RELEASE_NOTES_V0.2.0_DRAFT.md)
 - [GitHub Release Notes Draft (v0.1.2)](docs/releases/RELEASE_NOTES_V0.1.2_GH.md)
 
+## Contributor and Community Health
+
+- [Contributing Guide](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
+- [Support Routing](SUPPORT.md)
+
+## Repo Automation and Agent Guidance
+
+- [Repository Agent Policy](AGENTS.md)
+- [GitHub Copilot Instructions](.github/copilot-instructions.md)
+
 ## Component and Platform Docs
 
 - [Core Crate](core/README.md)
@@ -220,6 +231,30 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
   - `docs/DOCUMENT_STATUS_INDEX.md`
+- GitHub-facing contributor-surface alignment (2026-03-07 UTC, support routing + issue config + PR template + active alpha version signaling) is tracked in:
+  - `README.md`
+  - `CONTRIBUTING.md`
+  - `SECURITY.md`
+  - `SUPPORT.md`
+  - `docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md`
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+  - `docs/DOCUMENT_STATUS_INDEX.md`
+- Repo-side GitHub operating-model completion pass (2026-03-07 UTC, issue forms + Dependabot + Copilot instructions + docs sync hardening + workflow trigger cleanup) is tracked in:
+  - `.github/ISSUE_TEMPLATE/`
+  - `.github/dependabot.yml`
+  - `.github/copilot-instructions.md`
+  - `.github/workflows/ci.yml`
+  - `.github/workflows/docker-publish.yml`
+  - `.github/workflows/docker-test-suite.yml`
+  - `.github/workflows/release.yml`
+  - `docs/TESTING_GUIDE.md`
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 
 - Global viability audit + 10-action-item implementation cheatsheet (2026-03-04 HST, comprehensive audit of what works / what's broken / what's missing for global viability) is tracked in:
   - `docs/global_viability_audit.md`

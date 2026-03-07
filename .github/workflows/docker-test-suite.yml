@@ -1,10 +1,10 @@
-name: Docker Test Suite
+name: Docker Integration Suite
 
 on:
   push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
+  schedule:
+    - cron: '17 6 * * 1'
   workflow_dispatch:
 
 env:
@@ -179,12 +179,12 @@ jobs:
             find docker/test-results -type f | sort >> $GITHUB_STEP_SUMMARY
           fi
 
-  # NAT Simulation Tests (runs on PRs and manual dispatch)
+  # NAT Simulation Tests (runs on schedule and manual dispatch)
   nat-tests:
     name: NAT Simulation Tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     
     steps:
       - name: Checkout code

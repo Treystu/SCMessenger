@@ -71,11 +71,11 @@ final class BLECentralManager: NSObject {
                 // Scanning will begin automatically when centralManagerDidUpdateState fires with .poweredOn.
                 return
             }
-            meshRepository?.appendDiagnostic("ble_central_start_deferred state=\(self.centralManager.state.rawValue)")
+            appendRepositoryDiagnostic("ble_central_start_deferred state=\(self.centralManager.state.rawValue)")
             return
         }
         pendingScanOnReady = false
-        meshRepository?.appendDiagnostic("ble_central_scan_start")
+        appendRepositoryDiagnostic("ble_central_scan_start")
         scheduleDutyCycle()
     }
 
@@ -104,7 +104,7 @@ final class BLECentralManager: NSObject {
             if let discovered = discoveredPeripherals[peripheralId] {
                 logger.warning("Cannot send: peripheral \(peripheralId) not connected, reconnecting")
                 centralManager.connect(discovered, options: nil)
-                meshRepository?.appendDiagnostic("ble_central_reconnect_requested id=\(peripheralId)")
+                appendRepositoryDiagnostic("ble_central_reconnect_requested id=\(peripheralId)")
             } else {
                 logger.error("Cannot send: peripheral \(peripheralId) not connected and not discovered")
             }
@@ -119,7 +119,7 @@ final class BLECentralManager: NSObject {
         let mtu = peripheral.maximumWriteValueLength(for: .withResponse)
         let fragments = fragmentData(data, mtu: mtu)
         
-        meshRepository?.appendDiagnostic("ble_central_tx_start fragments=\(fragments.count) to=\(peripheralId.uuidString.prefix(8))")
+        appendRepositoryDiagnostic("ble_central_tx_start fragments=\(fragments.count) to=\(peripheralId.uuidString.prefix(8))")
         for fragment in fragments {
             enqueueFragment(fragment, for: peripheralId)
         }
@@ -128,6 +128,13 @@ final class BLECentralManager: NSObject {
 
     func connectedPeripheralIds() -> [String] {
         connectedPeripherals.keys.map(\.uuidString)
+    }
+
+    private func appendRepositoryDiagnostic(_ message: String) {
+        let meshRepository = self.meshRepository
+        Task { @MainActor in
+            meshRepository?.appendDiagnostic(message)
+        }
     }
 
     private func enqueueFragment(_ fragment: Data, for peripheralId: UUID) {
@@ -250,7 +257,7 @@ extension BLECentralManager: CBCentralManagerDelegate {
             if pendingScanOnReady {
                 logger.info("BLE now powered on — starting deferred scan")
                 pendingScanOnReady = false
-                meshRepository?.appendDiagnostic("ble_central_scan_start_deferred")
+                appendRepositoryDiagnostic("ble_central_scan_start_deferred")
                 scheduleDutyCycle()
             }
         }
@@ -274,7 +281,7 @@ extension BLECentralManager: CBCentralManagerDelegate {
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         logger.info("Connected to \(peripheral.identifier)")
-        meshRepository?.appendDiagnostic("ble_central_connected id=\(peripheral.identifier)")
+        appendRepositoryDiagnostic("ble_central_connected id=\(peripheral.identifier)")
         connectedPeripherals[peripheral.identifier] = peripheral
         // Request maximum write size (negotiate higher MTU) before discovering services.
         // iOS will use this hint when negotiating the connection's ATT MTU.
@@ -284,12 +291,12 @@ extension BLECentralManager: CBCentralManagerDelegate {
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         logger.error("Failed to connect to \(peripheral.identifier): \(error?.localizedDescription ?? "unknown")")
-        meshRepository?.appendDiagnostic("ble_central_connect_fail id=\(peripheral.identifier) err=\(error?.localizedDescription ?? "none")")
+        appendRepositoryDiagnostic("ble_central_connect_fail id=\(peripheral.identifier) err=\(error?.localizedDescription ?? "none")")
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         logger.info("Disconnected from \(peripheral.identifier)")
-        meshRepository?.appendDiagnostic("ble_central_disconnected id=\(peripheral.identifier) err=\(error?.localizedDescription ?? "none")")
+        appendRepositoryDiagnostic("ble_central_disconnected id=\(peripheral.identifier) err=\(error?.localizedDescription ?? "none")")
         connectedPeripherals.removeValue(forKey: peripheral.identifier)
         messageCharacteristics.removeValue(forKey: peripheral.identifier)
         syncCharacteristics.removeValue(forKey: peripheral.identifier)
@@ -320,17 +327,17 @@ extension BLECentralManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         if let error = error {
             logger.error("Failed to discover services for \(peripheral.identifier): \(error.localizedDescription)")
-            meshRepository?.appendDiagnostic("ble_central_discover_services_fail id=\(peripheral.identifier) err=\(error.localizedDescription)")
+            appendRepositoryDiagnostic("ble_central_discover_services_fail id=\(peripheral.identifier) err=\(error.localizedDescription)")
             return
         }
 
         guard let services = peripheral.services, !services.isEmpty else {
             logger.warning("No services found for \(peripheral.identifier)")
-            meshRepository?.appendDiagnostic("ble_central_no_services id=\(peripheral.identifier)")
+            appendRepositoryDiagnostic("ble_central_no_services id=\(peripheral.identifier)")
             return
         }
 
-        meshRepository?.appendDiagnostic("ble_central_services_discovered id=\(peripheral.identifier) count=\(services.count)")
+        appendRepositoryDiagnostic("ble_central_services_discovered id=\(peripheral.identifier) count=\(services.count)")
 
         for service in services where service.uuid == MeshBLEConstants.serviceUUID {
             peripheral.discoverCharacteristics([
@@ -344,28 +351,28 @@ extension BLECentralManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         if let error = error {
             logger.error("Failed to discover characteristics for \(peripheral.identifier): \(error.localizedDescription)")
-            meshRepository?.appendDiagnostic("ble_central_discover_chars_fail id=\(peripheral.identifier) err=\(error.localizedDescription)")
+            appendRepositoryDiagnostic("ble_central_discover_chars_fail id=\(peripheral.identifier) err=\(error.localizedDescription)")
             return
         }
 
         guard let characteristics = service.characteristics else {
-            meshRepository?.appendDiagnostic("ble_central_no_chars id=\(peripheral.identifier)")
+            appendRepositoryDiagnostic("ble_central_no_chars id=\(peripheral.identifier)")
             return
         }
 
-        meshRepository?.appendDiagnostic("ble_central_chars_discovered id=\(peripheral.identifier) count=\(characteristics.count)")
+        appendRepositoryDiagnostic("ble_central_chars_discovered id=\(peripheral.identifier) count=\(characteristics.count)")
 
         for characteristic in characteristics {
             switch characteristic.uuid {
             case MeshBLEConstants.messageCharUUID:
                 messageCharacteristics[peripheral.identifier] = characteristic
                 peripheral.setNotifyValue(true, for: characteristic)
-                meshRepository?.appendDiagnostic("ble_central_subscribed_message id=\(peripheral.identifier)")
+                appendRepositoryDiagnostic("ble_central_subscribed_message id=\(peripheral.identifier)")
             case MeshBLEConstants.syncCharUUID:
                 syncCharacteristics[peripheral.identifier] = characteristic
-                meshRepository?.appendDiagnostic("ble_central_found_sync id=\(peripheral.identifier)")
+                appendRepositoryDiagnostic("ble_central_found_sync id=\(peripheral.identifier)")
             case MeshBLEConstants.identityCharUUID:
-                meshRepository?.appendDiagnostic("ble_central_reading_identity id=\(peripheral.identifier)")
+                appendRepositoryDiagnostic("ble_central_reading_identity id=\(peripheral.identifier)")
                 peripheral.readValue(for: characteristic)
                 // Schedule retry reads at T+900ms and T+2200ms (mirrors Android
                 // IDENTITY_REFRESH_DELAYS_MS) for peripherals whose GATT server
@@ -425,7 +432,7 @@ extension BLECentralManager: CBPeripheralDelegate {
             if fragIndex == 0 {
                 reassemblyBuffers[peripheralID] = [0: payload]
                 if totalFrags > 1 {
-                    meshRepository?.appendDiagnostic("ble_central_rx_start total=\(totalFrags) from=\(peripheralID.uuidString.prefix(8))")
+                    appendRepositoryDiagnostic("ble_central_rx_start total=\(totalFrags) from=\(peripheralID.uuidString.prefix(8))")
                 }
             } else {
                 var buffer = reassemblyBuffers[peripheralID] ?? [:]
@@ -448,7 +455,7 @@ extension BLECentralManager: CBPeripheralDelegate {
                 reassemblyBuffers.removeValue(forKey: peripheralID)
 
                 logger.info("Reassembled complete message (\(completeData.count) bytes) from \(peripheralID)")
-                meshRepository?.appendDiagnostic("ble_central_rx_complete size=\(completeData.count)")
+                appendRepositoryDiagnostic("ble_central_rx_complete size=\(completeData.count)")
                 DispatchQueue.main.async { [weak self] in
                     self?.meshRepository?.onBleDataReceived(peerId: peripheralID.uuidString, data: completeData)
                 }
@@ -459,7 +466,7 @@ extension BLECentralManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
         if let error = error {
             logger.error("Write error for \(peripheral.identifier): \(error.localizedDescription)")
-            meshRepository?.appendDiagnostic("ble_central_write_fail id=\(peripheral.identifier) err=\(error.localizedDescription)")
+            appendRepositoryDiagnostic("ble_central_write_fail id=\(peripheral.identifier) err=\(error.localizedDescription)")
             // Clear current write state to allow retry/next
             writeInProgress[peripheral.identifier] = false
             return

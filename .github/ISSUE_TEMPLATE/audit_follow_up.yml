@@ -1,0 +1,40 @@
+name: Audit follow-up
+description: Track a concrete follow-up from an audit or realignment review
+title: "[audit] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for follow-up items from `docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md` or similar audit artifacts when the work is still current and actionable.
+  - type: input
+    id: source_doc
+    attributes:
+      label: Source document/section
+      placeholder: "docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md §10"
+    validations:
+      required: true
+  - type: textarea
+    id: action
+    attributes:
+      label: Action to take
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why this still matters
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - repo hygiene / docs
+        - github configuration
+        - ci / workflows
+        - release process
+        - security / privacy
+        - other
+    validations:
+      required: true

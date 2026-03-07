@@ -81,6 +81,6 @@ Function-level interoperability and adapter-consumption evidence is tracked in:
 2. `cargo fmt --all -- --check`
 3. `cargo clippy --workspace`
 4. `cargo clippy --workspace --lib --bins --examples -- -D warnings`
-5. `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:compileDebugKotlin :app:lintDebug`
+5. `cd android && ANDROID_HOME=/path/to/android/sdk ./gradlew :app:compileDebugKotlin :app:lintDebug`
 6. `bash ./iOS/verify-test.sh`
 7. `cd wasm && wasm-pack build`

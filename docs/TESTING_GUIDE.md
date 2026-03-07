@@ -1,7 +1,19 @@
 # SCMessenger Testing Guide
 
 Status: Active  
-Last updated: 2026-03-03
+Last updated: 2026-03-07
+
+Current release line: `v0.2.0` is the active alpha baseline. Planned workstreams `WS13` and `WS14` remain `v0.2.1` follow-up scope.
+
+## Standard Local Validation Ladder
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments
+cargo build --workspace
+cargo test --workspace
+./scripts/docs_sync_check.sh
+```
 
 ## WS12 Reproducible Validation Command
 
@@ -81,9 +93,21 @@ WS12.6 closeout validation (2026-03-03):
 
 ## CI Enforcement
 
-Primary CI gates for WS12 parity lock:
+Current GitHub Actions map for repository-controlled validation:
 
-1. `.github/workflows/ci.yml` `check-core`: deterministic offline/partition matrix tests.
-2. `.github/workflows/ci.yml` `check-wasm`: browser-executed `wasm-pack test --headless --firefox` plus desktop role-mode parity tests.
-3. `.github/workflows/ci.yml` `check-android`: Android SDK/`ANDROID_HOME` preflight (`android/verify-build-setup.sh`) plus Android role/fallback parity tests.
-4. `.github/workflows/ci.yml` `check-ios`: `iOS/verify-test.sh` now runs both local transport and role-mode parity checks.
+1. `.github/workflows/ci.yml`
+   - repo hygiene/path governance
+   - docs sync guard
+   - Rust fmt/clippy/build/tests
+   - deterministic core integration suites
+   - WASM checks
+   - Android targeted validation
+   - iOS verification
+2. `.github/workflows/docker-test-suite.yml`
+   - heavy containerized validation
+   - manual/scheduled + `main` push only
+3. `.github/workflows/docker-publish.yml`
+   - Docker image publish flow
+   - `main` push + manual dispatch only
+4. `.github/workflows/release.yml`
+   - CLI-only release artifacts on tags/manual dispatch

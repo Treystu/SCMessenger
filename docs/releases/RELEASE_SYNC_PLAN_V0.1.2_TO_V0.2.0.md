@@ -1,9 +1,15 @@
 # SCMessenger Release Synchronization Plan (v0.1.2 -> v0.2.0)
 
-Status: Active (in-repo prep complete; tag/publish actions pending maintainer execution)  
-Last updated: 2026-03-03
+Status: Active (workspace/version metadata aligned to v0.2.0; GitHub release/tag cleanup still pending maintainer execution)  
+Last updated: 2026-03-07
 
-This plan outlines the steps to synchronize the SCMessenger versions between the codebase and GitHub releases, and prepare for the upcoming v0.2.0 release.
+This plan outlines the steps to synchronize the SCMessenger versions between the codebase and GitHub releases.
+
+Current repository reality:
+
+1. `v0.2.0` is the active alpha baseline in the codebase and contributor-facing docs.
+2. Public GitHub releases/tags still only expose `v0.1.0` and `v0.1.1`.
+3. Planned follow-on workstreams `WS13` and `WS14` are currently tracked as `v0.2.1`, not as part of the active `v0.2.0` alpha closeout.
 
 ## Execution Snapshot (2026-03-03)
 
@@ -18,22 +24,11 @@ Pending maintainer-run release ops:
 1. Create/push git tags (`v0.1.2`, `v0.2.0`) per release policy.
 2. Draft/publish GitHub releases using `docs/releases/RELEASE_NOTES_V0.1.2_GH.md` and `docs/releases/RELEASE_NOTES_V0.2.0_DRAFT.md`.
 
-## User Review Required
+## Current GitHub-facing alignment tasks
 
-> [!IMPORTANT]
-> This plan involves bumping the project version to `0.2.0` across the workspace. Please confirm if this matches the intended release cadence.
-
-## Proposed Changes
-
-### Versioning and Releases
-
-#### [MODIFY] `Cargo.toml`
-#### [MODIFY] `core/Cargo.toml`
-#### [MODIFY] `cli/Cargo.toml`
-#### [MODIFY] `wasm/Cargo.toml`
-#### [MODIFY] `mobile/Cargo.toml`
-
-- Bump version from `0.1.2` to `0.2.0` in the root workspace and all sub-packages.
+1. Keep repository/docs/support/issue surfaces explicitly aligned to `v0.2.0` as the active alpha line.
+2. Avoid presenting `WS13` / `WS14` as unfinished `v0.2.0` work; they are currently `v0.2.1` planning scope.
+3. When maintainers cut the GitHub release, ensure the tag/release naming matches the already-shipped `0.2.0` workspace metadata.
 
 ---
 
@@ -44,10 +39,10 @@ Pending maintainer-run release ops:
 2. **Draft Release**: Use `docs/releases/RELEASE_NOTES_V0.1.2_GH.md` to create the release on GitHub.
 3. **Publish**: Finalize as a "Prerelease" or "Release" based on stability confidence.
 
-#### v0.2.0 (Future)
-1. **Complete Release Sweep**: Execute the Post-WS12 Residual Risk Closure Sweep.
-2. **Bump Versions**: Update all `Cargo.toml` files to `0.2.0`.
-3. **Commit and Tag**: Commit the version bump and tag as `v0.2.0`.
+#### v0.2.0 (Active alpha line; GitHub release still pending)
+1. **Complete Release Sweep**: Execute the Post-WS12 residual-risk and repo-alignment closeout work.
+2. **Confirm GitHub surfaces**: Ensure README, support routing, issue intake, and release notes all treat `v0.2.0` as the active alpha line.
+3. **Commit and Tag**: Tag the already-versioned codebase as `v0.2.0`.
 4. **Draft Release**: Use `docs/releases/RELEASE_NOTES_V0.2.0_DRAFT.md`.
 5. **CI Assets**: Ensure GitHub Actions successfully builds and attaches binaries/artifacts for all platforms.
 

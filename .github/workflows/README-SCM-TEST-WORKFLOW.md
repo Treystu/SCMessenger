@@ -1,5 +1,10 @@
 # SCMessenger Test-Diagnose-Fix Workflow
 
+Status: Historical/Disabled support runbook
+Last updated: 2026-03-07
+
+This workflow is currently disabled and is not part of the repository's active contributor or PR-validation operating model. Treat this file as internal historical automation context only.
+
 ## Prerequisites
 
 Before using this workflow, ensure the following:

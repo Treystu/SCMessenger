@@ -1,7 +1,7 @@
 # SCMessenger v0.2.0 Alpha Milestone Plan
 
-Status: Active (execution complete through WS12.35 non-device reliability reconciliation)  
-Date: 2026-03-07  
+Status: Active (execution complete through WS12.35 non-device reliability reconciliation)
+Last updated: 2026-03-07
 Scope: Core + Android + iOS + Desktop GUI + Relay topology
 
 ---
@@ -19,6 +19,39 @@ Scope: Core + Android + iOS + Desktop GUI + Relay topology
    - reset issue taxonomy/templates/labels/milestones,
    - repair workflow topology and required PR checks,
    - consolidate agent-context guidance and clean stale branches/issues.
+
+## GitHub Alpha-Line Alignment Addendum (WS12.36 follow-up, 2026-03-07 UTC)
+
+1. GitHub-facing contributor surfaces now explicitly treat `v0.2.0` as the active alpha baseline:
+   - `README.md`
+   - `CONTRIBUTING.md`
+   - `SECURITY.md`
+   - `SUPPORT.md`
+   - `.github/ISSUE_TEMPLATE/config.yml`
+   - `.github/pull_request_template.md`
+2. Scope guardrail reaffirmed:
+   - `WS13` and `WS14` remain planned `v0.2.1` follow-up work,
+   - they should not be presented in GitHub intake/docs as unfinished `v0.2.0` alpha requirements.
+3. Remaining repo-governance follow-up still open:
+   - issue taxonomy/label reset,
+   - branch protection and CI topology cleanup.
+
+## Repo-side GitHub Operating-Model Completion Addendum (WS12.36 completion, 2026-03-07 UTC)
+
+1. Repo-controlled governance/config work from the audit is now in place:
+   - `SUPPORT.md`, `SECURITY.md`, and `CONTRIBUTING.md` rewritten/aligned
+   - `.github/CODEOWNERS`, `.github/dependabot.yml`, `.github/copilot-instructions.md`
+   - issue forms/config under `.github/ISSUE_TEMPLATE/`
+   - expanded `scripts/docs_sync_check.sh`
+2. Repo-controlled workflow cleanup is now in place:
+   - Docker publish removed from PR triggers
+   - Docker integration suite shifted to `main`/scheduled/manual use
+   - release workflow renamed to `Release CLI Binaries`
+3. Remaining GitHub-hosted follow-up is now explicitly outside the repo-file layer:
+   - branch protection / required-check policy on `main`
+   - label and milestone creation/reset
+   - stale issue triage / recreation
+   - approval-policy cleanup for `action_required` runs
 
 ## Hotfix Addendum (WS12.9, 2026-03-03)
 

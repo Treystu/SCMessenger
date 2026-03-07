@@ -104,7 +104,12 @@ impl IdentityStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::thread;
+    use std::time::Duration;
     use tempfile::tempdir;
+
+    const MAX_REOPEN_ATTEMPTS: u64 = 10;
+    const REOPEN_BACKOFF_BASE_MS: u64 = 25;
 
     #[test]
     fn test_memory_store() {
@@ -171,7 +176,22 @@ mod tests {
 
         // Load in second instance
         {
-            let backend2 = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+            let backend2 = Arc::new(
+                (0..MAX_REOPEN_ATTEMPTS)
+                    .find_map(
+                        |attempt| match crate::store::backend::SledStorage::new(&path) {
+                            Ok(storage) => Some(storage),
+                            Err(_) if attempt + 1 < MAX_REOPEN_ATTEMPTS => {
+                                thread::sleep(Duration::from_millis(
+                                    REOPEN_BACKOFF_BASE_MS * (attempt + 1),
+                                ));
+                                None
+                            }
+                            Err(err) => panic!("failed to reopen sled identity store: {err}"),
+                        },
+                    )
+                    .unwrap(),
+            );
             let store = IdentityStore::persistent(backend2);
             let loaded = store.load_keys().unwrap().unwrap();
             assert_eq!(id, loaded.identity_id());

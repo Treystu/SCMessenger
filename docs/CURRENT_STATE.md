@@ -19,6 +19,39 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - Treat this as a repository-operating-model problem (approval/permissions/workflow trigger policy), not a code-breakage signal.
 - Planning blueprint for follow-up execution is now captured in `docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md`.
 
+## 2026-03-07 GitHub Contributor-Surface Alignment
+
+- GitHub-facing contributor/community surfaces now explicitly align to the current release line:
+  - `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, and new `SUPPORT.md` all treat `v0.2.0` as the active alpha baseline.
+  - `WS13` / `WS14` are explicitly called out as `v0.2.1` planning scope rather than unfinished `v0.2.0` alpha work.
+- GitHub repo-intake/config surfaces added or tightened:
+  - `.github/CODEOWNERS`
+  - `.github/ISSUE_TEMPLATE/config.yml`
+  - rewritten `.github/pull_request_template.md`
+  - updated issue templates with release-scope prompts
+- Release-process docs now reflect that the workspace is already on `0.2.0`, while GitHub release/tag cleanup is still pending maintainer execution.
+
+## 2026-03-07 Repo-side GitHub Operating-Model Completion
+
+- Missing repo-controlled GitHub surfaces from the audit are now present:
+  - `.github/CODEOWNERS`
+  - `.github/dependabot.yml`
+  - `.github/copilot-instructions.md`
+  - issue forms under `.github/ISSUE_TEMPLATE/*.yml`
+  - issue-template contact routing in `.github/ISSUE_TEMPLATE/config.yml`
+- Docs and validation guardrails were tightened:
+  - `scripts/docs_sync_check.sh` now checks a broader canonical-doc set and rejects machine-local paths in active docs.
+  - `scripts/docs_sync_check.sh` now also requires nested-doc markdown links to resolve correctly relative to the source file and actively validates `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`.
+  - `docs/REPO_CONTEXT.md`, `docs/ARCHITECTURE.md`, and release/process docs were refreshed to remove stale metadata or local-path drift.
+- Workflow topology was made more honest/less noisy from the repo side:
+  - `docker-publish.yml` no longer runs on pull requests.
+  - `docker-test-suite.yml` is now treated as heavy `main`/scheduled/manual validation instead of a default PR workflow.
+  - `release.yml` is renamed to `Release CLI Binaries` to match its actual output scope.
+- Remaining non-repo work still requires maintainer action in GitHub settings/UI:
+  - branch protection / required-check enforcement on `main`
+  - labels, milestones, and issue migration/triage
+  - resolving the `action_required` approval/policy condition for certain PR workflow runs
+
 ## Verified Commands and Results
 
 ### Rust Workspace
@@ -43,8 +76,8 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - `cargo clippy --workspace` — **pass**
   - `cargo clippy --workspace --lib --bins --examples -- -D warnings` — **pass**
 - Android quality/build gates:
-  - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:compileDebugKotlin` — **pass**
-  - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:lintDebug` — **pass** (all prior 21 lint errors remediated; warnings remain)
+  - `cd android && ANDROID_HOME=/path/to/android/sdk ./gradlew :app:compileDebugKotlin` — **pass**
+  - `cd android && ANDROID_HOME=/path/to/android/sdk ./gradlew :app:lintDebug` — **pass** (all prior 21 lint errors remediated; warnings remain)
 - iOS/WASM gates:
   - `bash ./iOS/verify-test.sh` — **pass**
   - `cd wasm && wasm-pack build` — **pass**
@@ -164,7 +197,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - Conversation-delete UX parity update in this pass:
   - Android conversation list now supports end-to-start swipe-to-delete with confirmation dialog, matching iOS swipe-delete behavior and reusing existing `clearConversation(peerId)` data path.
 - Verification in this pass:
-  - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:compileDebugKotlin` - **pass**
+  - `cd android && ANDROID_HOME=/path/to/android/sdk ./gradlew :app:compileDebugKotlin` - **pass**
 
 ### WS12.25 Mega-Update Intake: Pending-Sync RCA + Node-Role Unification (2026-03-03 HST)
 
@@ -368,6 +401,21 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - Android Gradle unit-test run in this environment failed before tests due blocked dependency fetch from `dl.google.com` (host/network prerequisite).
   - `bash ./iOS/verify-test.sh` could not execute here (`xcodebuild` unavailable on this host), so iOS physical/simulator runtime closure gates remain unchanged.
 
+### WS12.36 PR CI Failure Closure (2026-03-07 UTC)
+
+- Latest failing PR CI run inspected (`22790198922`, `CI`):
+  - Android failure was workflow ordering drift: `.github/workflows/ci.yml` ran `android/verify-build-setup.sh` before installing `cargo-ndk`.
+  - iOS failure extended to `BLECentralManager` in addition to `MultipeerTransport`; transport-layer delegate paths were still calling `@MainActor` repository helpers synchronously.
+  - Rust Core macOS failure came from a transient sled database lock while reopening the same test path in `identity::store::tests::test_store_persistence_across_instances`.
+- Minimal fixes applied:
+  - `check-android` now installs `cargo-ndk` before Android preflight verification.
+  - `BLECentralManager` now routes repository diagnostics through a MainActor-safe helper.
+  - `MultipeerTransport.identitySnippetForDisplayName()` now uses MainActor-safe synchronous bridging for repository snippet lookup.
+  - `test_store_persistence_across_instances` now briefly retries reopening the sled backend when the prior lock is still being released by the OS.
+- Local validation in this pass:
+  - `cargo fmt --all -- --check` — **pass**
+  - `cargo test -p scmessenger-core identity::store::tests::test_store_persistence_across_instances` — **pass**
+
 ### WS12 Verification Snapshot (2026-03-03)
 
 - `cargo test --workspace --no-run` — **pass**
@@ -378,9 +426,9 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - `cargo test -p scmessenger-core --test integration_relay_custody -- --include-ignored` — **pass**
 - `cargo test -p scmessenger-wasm test_desktop_role_resolution_defaults_to_relay_only_without_identity` — **pass**
 - `cargo test -p scmessenger-wasm test_desktop_relay_only_flow_blocks_outbound_message_prepare` — **pass**
-- `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:testDebugUnitTest --tests com.scmessenger.android.test.RoleNavigationPolicyTest --tests com.scmessenger.android.data.MeshRepositoryTest` — **pass**
+- `cd android && ANDROID_HOME=/path/to/android/sdk ./gradlew :app:testDebugUnitTest --tests com.scmessenger.android.test.RoleNavigationPolicyTest --tests com.scmessenger.android.data.MeshRepositoryTest` — **pass**
 - `bash ./iOS/verify-test.sh` — **pass** (21 warnings, non-fatal policy; includes local transport fallback + role-mode parity checks)
-- `ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./scripts/verify_ws12_matrix.sh` — **pass**
+- `ANDROID_HOME=/path/to/android/sdk ./scripts/verify_ws12_matrix.sh` — **pass**
 
 ### WS12.5 Burndown Audit Snapshot (2026-03-03)
 
@@ -458,7 +506,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 ### WS12.10 Runtime Re-baseline + Action Roundup (2026-03-03 HST)
 
 - Live verification commands:
-  - `ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./scripts/verify_ws12_matrix.sh` — **pass**
+  - `ANDROID_HOME=/path/to/android/sdk ./scripts/verify_ws12_matrix.sh` — **pass**
   - `cargo test -p scmessenger-core --test integration_relay_custody offline_recipient_receives_after_reconnect_without_sender_resend -- --include-ignored --exact` (3 consecutive runs) — **pass/pass/pass**
   - `adb kill-server && adb start-server && adb mdns services && adb devices -l`
   - `adb logcat -d | rg "MeshRepository|delivery_state|relay|custody|swarm"`
@@ -478,9 +526,9 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 
 - Validation/debt reconciliation commands:
   - `cargo check --workspace` — **pass**
-  - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:generateUniFFIBindings` — **pass**
+  - `cd android && ANDROID_HOME=/path/to/android/sdk ./gradlew :app:generateUniFFIBindings` — **pass**
   - `bash iOS/copy-bindings.sh` — **pass**
-  - `ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk bash ./verify_integration.sh` — **pass**
+  - `ANDROID_HOME=/path/to/android/sdk bash ./verify_integration.sh` — **pass**
   - `bash ./verify_simulation.sh` — **expected fail-fast** (Docker unavailable in this environment)
   - `cd wasm && wasm-pack build` — **pass** (with release `wasm-opt` disabled in `wasm/Cargo.toml` for host compatibility)
 - Tooling adjustments in this wave:
@@ -543,7 +591,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 ### WS12.16 Wave-2 Runtime Hardening Pass (2026-03-03 HST)
 
 - Verification commands:
-  - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:compileDebugKotlin` — **pass**
+  - `cd android && ANDROID_HOME=/path/to/android/sdk ./gradlew :app:compileDebugKotlin` — **pass**
   - `bash ./iOS/verify-test.sh` — **pass**
   - `cargo check --workspace` — **pass**
 - Fixes delivered:
@@ -577,7 +625,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - `./scripts/verify_receipt_convergence.sh android_mesh_diagnostics_device.log ios_diagnostics_latest.log` — no message IDs in sampled historical artifacts.
   - `./scripts/verify_ble_only_pairing.sh android_logcat_latest.txt ios_diagnostics_latest.log` — no strict BLE-only markers in sampled historical artifacts.
 - Validation commands:
-  - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:compileDebugKotlin` — **pass**
+  - `cd android && ANDROID_HOME=/path/to/android/sdk ./gradlew :app:compileDebugKotlin` — **pass**
   - `cd wasm && wasm-pack build` — **pass**
 - Documentation/backlog governance outcomes:
   - Historical open-checkbox sources were triaged with explicit status tags in `docs/historical/*` and are no longer active checklist noise.
@@ -598,8 +646,8 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 
 - `cargo test --workspace --no-run` — **pass**
 - `cargo test --workspace` — **pass**
-- `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew testDebugUnitTest` — **pass** (includes WS11 delivery-state + diagnostics formatter tests)
-- `ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./android/verify-build-setup.sh` — **pass**
+- `cd android && ANDROID_HOME=/path/to/android/sdk ./gradlew testDebugUnitTest` — **pass** (includes WS11 delivery-state + diagnostics formatter tests)
+- `ANDROID_HOME=/path/to/android/sdk ./android/verify-build-setup.sh` — **pass**
 - `bash ./iOS/verify-test.sh` — **pass** (26 warnings, non-fatal per script policy)
 - WS11 surface outcomes:
   - Android+iOS chat now expose explicit tester-facing delivery states: `pending`, `stored`, `forwarding`, `delivered`.
@@ -631,7 +679,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 ### Platform Build Readiness Scripts
 
 - `./android/verify-build-setup.sh`
-  - Result: **pass** (with `ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk`)
+  - Result: **pass** (with `ANDROID_HOME=/path/to/android/sdk`)
 - `./iOS/verify-test.sh`
   - Result: **pass**
   - Confirmed simulator build plus local transport fallback and role-mode parity checks
@@ -639,7 +687,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 ### Platform App Builds
 
 - Android:
-  - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew assembleDebug`
+  - `cd android && ANDROID_HOME=/path/to/android/sdk ./gradlew assembleDebug`
   - Result: **pass**
   - `./android/install-clean.sh`
   - Result: **pass** (fresh install on connected Pixel 6a: Gradle `clean` + `:app:installDebug` + runtime permission grant pass for Bluetooth/Location/Nearby WiFi/Notifications)

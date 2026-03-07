@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: SCMessenger support and routing
+    url: https://github.com/Treystu/SCMessenger/blob/main/SUPPORT.md
+    about: Start here for the active v0.2.0 alpha support path and reporting guidance.
+  - name: Security vulnerability reporting
+    url: https://github.com/Treystu/SCMessenger/security
+    about: Please use GitHub's private security reporting flow instead of filing a public issue.
+  - name: Current project state and scope
+    url: https://github.com/Treystu/SCMessenger/blob/main/docs/CURRENT_STATE.md
+    about: Check the active v0.2.0 alpha baseline and current repository status before filing an issue.

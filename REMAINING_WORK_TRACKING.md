@@ -34,12 +34,40 @@ Completed in this pass:
 
 Execution follow-ups opened by this audit:
 
-1. [ ] Tighten the canonical documentation chain and demote audit/history artifacts out of current-state navigation.
+1. [x] Tighten the canonical documentation chain and remove high-value stale/current-state drift from active entrypoints.
 2. [ ] Reset GitHub Issues around a fresh taxonomy, labels, milestones, and clean issue intake forms.
-3. [ ] Add missing GitHub repo health/configuration surfaces (`CODEOWNERS`, support policy, Dependabot, issue config, Copilot instructions).
-4. [ ] Repair CI/workflow operating model so required PR checks are explicit and PR runs do not stall in `action_required`.
-5. [ ] Rewrite contributor/security/agent guidance to remove stale claims and duplicated instructions.
+3. [x] Add missing GitHub repo health/configuration surfaces (`CODEOWNERS`, support policy, Dependabot, issue config/forms, Copilot instructions).
+4. [x] Repair the repo-controlled CI/workflow operating model so required checks are clearer and PR-noisy workflows are removed from the default PR path.
+5. [x] Rewrite contributor/security/agent guidance to remove stale claims and duplicated instructions.
 6. [ ] Clean up stale branches after open-PR/open-issue decisions are made.
+
+Progress update in this pass:
+
+1. [x] Added first-pass GitHub contributor routing/config surfaces:
+   - `SUPPORT.md`
+   - `.github/CODEOWNERS`
+   - `.github/ISSUE_TEMPLATE/config.yml`
+2. [x] Rewrote GitHub-facing contributor/security entrypoints to match current alpha reality:
+   - `README.md`
+   - `CONTRIBUTING.md`
+   - `SECURITY.md`
+   - `.github/pull_request_template.md`
+3. [x] Made repository GitHub-facing docs/config explicitly treat `v0.2.0` as the active alpha baseline, with `WS13` / `WS14` deferred to `v0.2.1`.
+4. [x] Added missing repo-controlled GitHub health/configuration surfaces:
+   - `.github/dependabot.yml`
+   - `.github/copilot-instructions.md`
+   - issue forms under `.github/ISSUE_TEMPLATE/*.yml`
+5. [x] Tightened repo-controlled workflow/docs hygiene:
+   - `scripts/docs_sync_check.sh` now checks a broader canonical-doc surface and rejects machine-local paths.
+   - `scripts/docs_sync_check.sh` no longer masks broken nested-doc relative links via repo-root fallback and now validates `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md` link integrity directly.
+   - `docker-publish.yml` no longer runs on pull requests.
+   - `docker-test-suite.yml` is now main/scheduled/manual only.
+   - `release.yml` is now explicitly CLI-scoped.
+6. [ ] Remaining GitHub-hosted follow-up from item 2:
+   - create/normalize labels and milestones in GitHub,
+   - close/recreate stale automation issues,
+   - apply branch protection and required-check policy on `main`,
+   - resolve the repository approval/policy setting behind `action_required` PR runs.
 
 ## WS12.18 Alpha Readiness Closure Follow-ups (2026-03-03 HST)
 
@@ -393,6 +421,21 @@ Still open after this pass:
 1. [ ] Android/iOS physical synchronized evidence gates remain open (unchanged): device-runtime artifact requirements for `R-WS12-04/05/06`, `R-WS12-29-01`, and `R-WS12-29-02`.
 2. [ ] Host prerequisites remain environment-gated (unchanged): Docker runtime provisioning (`WS12.15.3`) and wireless ADB persistence (`WS12.8.5`).
 
+## WS12.36 PR CI Failure Closure (2026-03-07 UTC)
+
+Completed in this pass:
+
+1. [x] Correlated the currently failing PR CI run (`22790198922`, workflow `CI`) to concrete Android, iOS, and Rust Core blockers.
+2. [x] Fixed Android CI step ordering so `cargo-ndk` is installed before `android/verify-build-setup.sh`.
+3. [x] Closed remaining iOS MainActor isolation drift in transport-layer repository helper calls:
+   - `BLECentralManager` now routes diagnostics through a MainActor-safe helper.
+   - `MultipeerTransport.identitySnippetForDisplayName()` now uses MainActor-safe synchronous bridging.
+4. [x] Hardened the flaky macOS sled persistence test:
+   - `identity::store::tests::test_store_persistence_across_instances` now tolerates brief post-drop lock-release delay before reopening the DB.
+5. [x] Revalidated the Rust-side blocker locally:
+   - `cargo fmt --all -- --check` — pass
+   - `cargo test -p scmessenger-core identity::store::tests::test_store_persistence_across_instances` — pass
+
 ### WS12.25 Mega-Update Consolidated Next Steps (Open + Deferred)
 
 This is the current "burn-down" slate combining all active deferred/runtime closures still gating full reliability signoff:
@@ -627,7 +670,7 @@ This is the current "burn-down" slate combining all active deferred/runtime clos
 3. [x] Investigate relay-circuit reservation failure post-redeploy using new debug error detail emitted from `core/src/transport/swarm.rs`.
    - Outcome (2026-03-03 HST): Fresh CLI runtime probe did not reproduce `Could not register relay circuit reservation`; relay reservation failure signal is not currently reproducible in this environment.
 4. [x] Resolve failing live custody integration gate: `cargo test -p scmessenger-core --test integration_relay_custody -- --include-ignored` (timeout waiting for reconnect delivery).
-   - Outcome (2026-03-03 HST): `ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./scripts/verify_ws12_matrix.sh` now passes, and `integration_relay_custody` passed 3/3 consecutive reruns (stable-pass classification).
+   - Outcome (2026-03-03 HST): `ANDROID_HOME=/path/to/android/sdk ./scripts/verify_ws12_matrix.sh` now passes, and `integration_relay_custody` passed 3/3 consecutive reruns (stable-pass classification).
 5. [ ] Stabilize Android wireless ADB endpoint persistence across reconnect cycles (`adb devices` may drop back to empty after daemon restart despite prior successful discovery).
 
 ### WS12.10 Repo-Wide Action Roundup (2026-03-03 HST)
@@ -688,9 +731,9 @@ Inventory from repo-wide checklist scan (`rg -P "^\s*(?:[-*]|\d+\.)\s+\[ \]" --g
 2. `docs/TRANSPORT_ARCHITECTURE.md` future enhancements were migrated to explicit roadmap lines with status, owner, milestone, gate command, and acceptance criteria.
 3. Validation/debt reconciliation executed:
    - `cargo check --workspace` — pass
-   - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:generateUniFFIBindings` — pass
+   - `cd android && ANDROID_HOME=/path/to/android/sdk ./gradlew :app:generateUniFFIBindings` — pass
    - `bash iOS/copy-bindings.sh` — pass
-   - `ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk bash ./verify_integration.sh` — pass (now delegates to canonical WS12 matrix)
+   - `ANDROID_HOME=/path/to/android/sdk bash ./verify_integration.sh` — pass (now delegates to canonical WS12 matrix)
    - `bash ./verify_simulation.sh` — fail-fast as designed when Docker is unavailable (no auto-install side effects)
    - `cd wasm && wasm-pack build` — pass (after installing `wasm-pack` and disabling release `wasm-opt` in `wasm/Cargo.toml` for host compatibility)
 4. Script hygiene updates:
@@ -751,7 +794,7 @@ Inventory from repo-wide checklist scan (`rg -P "^\s*(?:[-*]|\d+\.)\s+\[ \]" --g
    - iOS relay timeline instrumentation + debounce/availability-state export.
    - iOS Multipeer invitation storm guardrails + timeout/decline diagnostics counters.
 2. Verification commands:
-   - `cd android && ANDROID_HOME=/Users/christymaxwell/Library/Android/sdk ./gradlew :app:compileDebugKotlin` — pass.
+   - `cd android && ANDROID_HOME=/path/to/android/sdk ./gradlew :app:compileDebugKotlin` — pass.
    - `bash ./iOS/verify-test.sh` — pass.
    - `cargo check --workspace` — pass.
 3. Updated checklist inventory after WS12.16:
@@ -1037,13 +1080,13 @@ Not feasible for `v0.2.0` without expanding release scope:
      - release note doc finalization for GitHub paste/publish flow,
      - release workflow checklist alignment with residual-risk closure evidence,
      - promote external planning artifacts into repo-local docs before execution (to avoid workstation-specific paths).
-   - Source inputs (planning artifacts provided by user):
-     - `/Users/christymaxwell/Downloads/implementation_plan.md.resolved`
-     - `/Users/christymaxwell/Downloads/RELEASE_NOTES_V0.1.2_GH.md.resolved`
-     - `/Users/christymaxwell/Downloads/RELEASE_NOTES_V0.2.0_DRAFT.md.resolved`
-   - Canonicalization target (during WS13.x execution):
-     - `docs/releases/` with links updated in tracking/docs.
-   - Progress: repo-local release planning/note artifacts now exist under `docs/releases/` so WS13.x no longer depends on workstation-specific `~/Downloads` paths.
+    - Source inputs now canonicalized in-repo:
+      - `docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md`
+      - `docs/releases/RELEASE_NOTES_V0.1.2_GH.md`
+      - `docs/releases/RELEASE_NOTES_V0.2.0_DRAFT.md`
+    - Canonicalization target (during WS13.x execution):
+      - keep `docs/releases/` as the only release-notes/checklist source of truth.
+    - Progress: repo-local release planning/note artifacts now exist under `docs/releases/`, so WS13.x no longer depends on workstation-specific external files.
    - Execution note: queue this after current WS12 in-flight session and after WS12/WS12.5 closure evidence is captured.
 
 7. **WS14 (v0.2.1): Direct Message + Direct Message Request Notifications (iOS/Android/WASM)**

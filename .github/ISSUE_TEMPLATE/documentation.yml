@@ -1,0 +1,41 @@
+name: Documentation issue
+description: Report stale, missing, or unclear documentation
+title: "[docs] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for canonical docs, supporting docs, or GitHub-facing contributor surfaces. If the issue changes release expectations, specify whether it affects the active `v0.2.0` alpha baseline or deferred `v0.2.1` planning.
+  - type: dropdown
+    id: release_scope
+    attributes:
+      label: Release scope
+      options:
+        - v0.2.0 alpha (active baseline)
+        - v0.2.1 / WS13 / WS14 planned scope
+        - Not release-specific
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: Documentation location
+      placeholder: "README.md, docs/CURRENT_STATE.md, SECURITY.md, issue template, etc."
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong or missing?
+    validations:
+      required: true
+  - type: textarea
+    id: suggested_fix
+    attributes:
+      label: Suggested improvement
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
