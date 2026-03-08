@@ -177,6 +177,8 @@ class MeshRepository(private val context: Context) {
     private val receiptAwaitSeconds: Long = 8L
     private val pendingOutboxMaxAttempts: Int = 720
     private val pendingOutboxMaxAgeSeconds: Long = 7L * 24L * 60L * 60L
+    private val historySyncSentPeers = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val HISTORY_SYNC_COOLDOWN_MS = 60_000L
     private val identitySyncSentPeers = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private val deliveredReceiptCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val deliveredReceiptCacheTtlMs = 2L * 60L * 60L * 1000L
@@ -621,6 +623,10 @@ class MeshRepository(private val context: Context) {
                                 routePeerId = peerId,
                                 knownPublicKey = transportIdentity?.publicKey
                             )
+                            sendHistorySyncIfNeeded(
+                                routePeerId = peerId,
+                                knownPublicKey = transportIdentity?.publicKey
+                            )
 	                    }
 
                         // Identified implies an active session exists; avoid immediate re-dial loops.
@@ -921,6 +927,39 @@ class MeshRepository(private val context: Context) {
                             return
                         }
 
+                        if (messageKind == "history_sync") {
+                            Timber.d("Processed history sync request from $canonicalPeerId")
+                            sendHistorySyncDataIfNeeded(canonicalPeerId, routePeerId, senderPublicKeyHex, hintedDialCandidates, routeWifiPeerId)
+                            sendDeliveryReceiptAsync(senderPublicKeyHex, messageId, canonicalPeerId, routePeerId, routeWifiPeerId, preferredListenerHints = hintedDialCandidates)
+                            return
+                        }
+                        if (messageKind == "history_sync_data") {
+                            Timber.d("Processed history sync data from $canonicalPeerId")
+                            try {
+                                val arr = org.json.JSONArray(decodedPayload.text)
+                                for (i in 0 until arr.length()) {
+                                    val obj = arr.getJSONObject(i)
+                                    val msgId = obj.getString("id")
+                                    if (historyManager?.get(msgId) == null) {
+                                        val record = uniffi.api.MessageRecord(
+                                            id = msgId,
+                                            direction = if (obj.getString("dir") == "sent") uniffi.api.MessageDirection.RECEIVED else uniffi.api.MessageDirection.SENT,
+                                            peerId = canonicalPeerId,
+                                            content = obj.getString("txt"),
+                                            timestamp = obj.getLong("ts").toULong(),
+                                            senderTimestamp = obj.getLong("sts").toULong(),
+                                            delivered = obj.getBoolean("del")
+                                        )
+                                        historyManager?.add(record)
+                                        repoScope.launch { _messageUpdates.emit(record) }
+                                    }
+                                }
+                                historyManager?.flush()
+                            } catch (e: Exception) { Timber.e(e, "Failed to parse history_sync_data") }
+                            sendDeliveryReceiptAsync(senderPublicKeyHex, messageId, canonicalPeerId, routePeerId, routeWifiPeerId, preferredListenerHints = hintedDialCandidates)
+                            return
+                        }
+
                         val existingRecord = try {
                             historyManager?.get(messageId)
                         } catch (_: Exception) {
@@ -1184,7 +1223,7 @@ class MeshRepository(private val context: Context) {
 
     private fun sendIdentitySyncIfNeeded(routePeerId: String, knownPublicKey: String? = null) {
         val normalizedRoute = routePeerId.trim()
-        if (normalizedRoute.isEmpty() || !isLibp2pPeerId(normalizedRoute) || isBootstrapRelayPeer(normalizedRoute)) return
+        if (normalizedRoute.isEmpty() || isBootstrapRelayPeer(normalizedRoute)) return
         val shouldSend = identitySyncSentPeers.add(normalizedRoute)
         if (!shouldSend) return
 
@@ -1209,10 +1248,10 @@ class MeshRepository(private val context: Context) {
                     identitySyncSentPeers.remove(normalizedRoute)
                     return@launch
                 }
-                
+
                 // Use targeted delivery (swarm + BLE fallback) for identity sync
-                val contact = contactManager?.list()?.firstOrNull { 
-                    it.peerId == normalizedRoute || parseRoutingHints(it.notes).libp2pPeerId == normalizedRoute 
+                val contact = contactManager?.list()?.firstOrNull {
+                    it.peerId == normalizedRoute || parseRoutingHints(it.notes).libp2pPeerId == normalizedRoute
                 }
                 val hints = parseRoutingHints(contact?.notes)
                 val routeCandidates = buildRoutePeerCandidates(
@@ -1236,6 +1275,112 @@ class MeshRepository(private val context: Context) {
         }
     }
 
+
+    private fun sendHistorySyncIfNeeded(routePeerId: String, knownPublicKey: String? = null) {
+        val normalizedRoute = routePeerId.trim()
+        Timber.w("sendHistorySyncIfNeeded called for $normalizedRoute")
+        if (normalizedRoute.isEmpty() || isBootstrapRelayPeer(normalizedRoute)) return
+        val now = System.currentTimeMillis()
+        val lastSent = historySyncSentPeers[normalizedRoute] ?: 0L
+        val shouldSend = (now - lastSent) > HISTORY_SYNC_COOLDOWN_MS
+        Timber.w("sendHistorySyncIfNeeded shouldSend=$shouldSend for $normalizedRoute (age=${now - lastSent}ms)")
+        if (!shouldSend) return
+        historySyncSentPeers[normalizedRoute] = now
+
+        repoScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val extractedPublicKey = try { ironCore?.extractPublicKeyFromPeerId(normalizedRoute) } catch (_: Exception) { null }
+                val recipientPublicKey = normalizePublicKey(knownPublicKey) ?: normalizePublicKey(extractedPublicKey)
+                if (recipientPublicKey == null) {
+                    Timber.e("sendHistorySyncIfNeeded: missing recipientPublicKey for $normalizedRoute (known=$knownPublicKey, extracted=$extractedPublicKey)")
+                    historySyncSentPeers.remove(normalizedRoute)
+                    return@launch
+                }
+
+                val payload = encodeMeshMessagePayload(content = "", kind = "history_sync")
+                val prepared = try { ironCore?.prepareMessageWithId(recipientPublicKey, payload) } catch (e: Exception) { Timber.e(e, "prepareMessageWithId failed in history_sync"); null }
+                if (prepared == null) {
+                    Timber.e("sendHistorySyncIfNeeded: prepared is null for $normalizedRoute")
+                    historySyncSentPeers.remove(normalizedRoute)
+                    return@launch
+                }
+
+                val contact = contactManager?.list()?.firstOrNull { it.peerId == normalizedRoute || parseRoutingHints(it.notes).libp2pPeerId == normalizedRoute }
+                val hints = parseRoutingHints(contact?.notes)
+                val routeCandidates = buildRoutePeerCandidates(contact?.peerId ?: normalizedRoute, normalizedRoute, contact?.notes, recipientPublicKey)
+
+                attemptDirectSwarmDelivery(routeCandidates, hints.listeners, prepared.envelopeData, hints.wifiPeerId, hints.blePeerId)
+                Timber.w("History sync request sent to $normalizedRoute")
+            } catch (e: Exception) {
+                Timber.e(e, "History sync error for $normalizedRoute")
+                historySyncSentPeers.remove(normalizedRoute)
+            }
+        }
+    }
+
+    private val historySyncDataInProgress = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+    private fun sendHistorySyncDataIfNeeded(canonicalPeerId: String, routePeerId: String?, recipientPublicKey: String, listeners: List<String>, wifiPeerId: String?) {
+        if (historySyncDataInProgress.putIfAbsent(canonicalPeerId, true) != null) {
+            Timber.d("sendHistorySyncDataIfNeeded: already in progress for $canonicalPeerId")
+            return
+        }
+        repoScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val recentMsgs = historyManager?.conversation(canonicalPeerId, 400u)?.sortedBy { it.timestamp } ?: emptyList()
+                if (recentMsgs.isEmpty()) {
+                    Timber.w("sendHistorySyncDataIfNeeded: no recent msgs for $canonicalPeerId")
+                    return@launch
+                }
+                Timber.w("sendHistorySyncDataIfNeeded: compiling ${recentMsgs.size} msgs for $canonicalPeerId")
+
+                val hints = parseRoutingHints(contactManager?.get(canonicalPeerId)?.notes)
+                val routeCandidates = buildRoutePeerCandidates(canonicalPeerId, routePeerId ?: hints.libp2pPeerId, contactManager?.get(canonicalPeerId)?.notes, recipientPublicKey)
+                val allListeners = (listeners + hints.listeners).distinct()
+
+                // Chunk into batches of 20 to stay within encryption payload limits
+                val batchSize = 20
+                val batches = recentMsgs.chunked(batchSize)
+                var sentBatches = 0
+
+                for ((batchIndex, batch) in batches.withIndex()) {
+                    val arr = org.json.JSONArray()
+                    batch.forEach { msg ->
+                        val obj = org.json.JSONObject()
+                        obj.put("id", msg.id)
+                        obj.put("dir", if (msg.direction == uniffi.api.MessageDirection.SENT) "sent" else "recv")
+                        obj.put("pid", msg.peerId)
+                        obj.put("txt", msg.content)
+                        obj.put("ts", msg.timestamp.toLong())
+                        obj.put("sts", msg.senderTimestamp.toLong())
+                        obj.put("del", msg.delivered)
+                        arr.put(obj)
+                    }
+                    val payload = encodeMeshMessagePayload(content = arr.toString(), kind = "history_sync_data")
+                    val prepared = try { ironCore?.prepareMessageWithId(recipientPublicKey, payload) } catch (e: Exception) {
+                        Timber.e(e, "prepareMessage failed in sync_data batch $batchIndex (${batch.size} msgs)")
+                        null
+                    }
+                    if (prepared == null) {
+                        Timber.e("sendHistorySyncDataIfNeeded: prepared is null for batch $batchIndex of $canonicalPeerId")
+                        continue
+                    }
+
+                    attemptDirectSwarmDelivery(routeCandidates, allListeners, prepared.envelopeData, wifiPeerId ?: hints.wifiPeerId, hints.blePeerId)
+                    sentBatches++
+                    // Small delay between batches to avoid overwhelming BLE
+                    if (batchIndex < batches.size - 1) {
+                        kotlinx.coroutines.delay(200)
+                    }
+                }
+                Timber.w("History sync data sent to $canonicalPeerId ($sentBatches/${batches.size} batches, ${recentMsgs.size} items total)")
+            } catch (e: Exception) {
+                Timber.e(e, "sendHistorySyncDataIfNeeded error for $canonicalPeerId")
+            } finally {
+                historySyncDataInProgress.remove(canonicalPeerId)
+            }
+        }
+    }
     private fun initializeAndStartBle() {
         val settings = loadSettings()
         if (!settings.bleEnabled) {
@@ -1337,7 +1482,7 @@ class MeshRepository(private val context: Context) {
             var resolvedListeners = normalizeOutboundListenerHints(listeners).take(2)
             var resolvedExternal = normalizeExternalAddressHints(getExternalAddresses()).take(2)
             val nickname = (identity.nickname ?: "").take(32)
-            
+
             fun buildBeacon(): org.json.JSONObject {
                 val connectionHints = (resolvedListeners + resolvedExternal).distinct()
                 return org.json.JSONObject()
@@ -1532,6 +1677,12 @@ class MeshRepository(private val context: Context) {
                 nickname = discoveredNickname
             )
             Timber.i("Emitted IdentityDiscovered for $blePeerId: ${publicKeyHex.take(8)}...")
+            // Trigger history sync over BLE when we discover a peer's identity
+            if (!routePeerId.isNullOrEmpty()) {
+                sendHistorySyncIfNeeded(routePeerId, publicKeyHex)
+            } else {
+                sendHistorySyncIfNeeded(identityId, publicKeyHex)
+            }
             // Update lastSeen if already a saved contact
             try { contactManager?.updateLastSeen(blePeerId) } catch (_: Exception) { }
             try { contactManager?.updateLastSeen(identityId) } catch (_: Exception) { }
@@ -1762,6 +1913,7 @@ class MeshRepository(private val context: Context) {
         kotlin.runCatching { meshService?.stop() }
             .onFailure { Timber.w(it, "Failed to stop Rust mesh service") }
         identitySyncSentPeers.clear()
+        historySyncSentPeers.clear()
         identityEmissionCache.clear()
         connectedEmissionCache.clear()
 
@@ -1855,13 +2007,13 @@ class MeshRepository(private val context: Context) {
                 } else {
                     stats
                 }
-                
+
                 // We use a custom stats object or just update the one from core
                 // For now, let's keep the core one but maybe log the detailed count
                 Timber.d("Mesh Stats: ${normalizedStats.peersDiscovered} peers (Core), $fullCount full, $headlessCount headless (Repo)")
-                
+
                 _serviceStats.value = normalizedStats
-                
+
                 // Emit event for UI
                 repoScope.launch {
                     com.scmessenger.android.service.MeshEventBus.emitStatusEvent(
@@ -1954,6 +2106,7 @@ class MeshRepository(private val context: Context) {
         initializeAndStartSwarm()
         updateBleIdentityBeacon()
         identitySyncSentPeers.clear()
+        historySyncSentPeers.clear()
         val connectedPeers = try {
             swarmBridge?.getPeers().orEmpty()
         } catch (e: Exception) {
@@ -2788,7 +2941,7 @@ class MeshRepository(private val context: Context) {
                 try {
                     // Proactively ensure we stay connected to relays
                     primeRelayBootstrapConnections()
-                    
+
                     flushPendingOutbox("periodic")
                     kotlinx.coroutines.delay(8000)
                 } catch (e: kotlinx.coroutines.CancellationException) {
@@ -3973,14 +4126,14 @@ class MeshRepository(private val context: Context) {
             )
             return
         }
-       
+
         // If we found them by key but they have a different PeerID now,
         // we should merge them to prevent duplicates.
         if (existingByKey != null && existingById != null && existingByKey.peerId != existingById.peerId) {
             Timber.i("Merging duplicate identities for key ${normalizedKey.take(8)}...: ${existingById.peerId} -> ${existingByKey.peerId}")
             try { contactManager?.remove(existingById.peerId) } catch (_: Exception) {}
         }
-       
+
         val existing = existingByKey ?: existingById
         if (existing == null && !createIfMissing) {
             return
@@ -4419,8 +4572,8 @@ class MeshRepository(private val context: Context) {
         }
 
         // 2. Dynamic Discovered Relays
-        _discoveredPeers.value.entries.filter { 
-            it.value.isRelay && !it.value.isFull && it.key != targetPeerId 
+        _discoveredPeers.value.entries.filter {
+            it.value.isRelay && !it.value.isFull && it.key != targetPeerId
         }.forEach { entry ->
             val relayPeerId = entry.key
             if (isLibp2pPeerId(relayPeerId)) {
@@ -4711,10 +4864,10 @@ class MeshRepository(private val context: Context) {
         return try {
             val logFile = File(getDiagnosticsLogPath())
             if (!logFile.exists()) return "No diagnostics recorded yet."
-            
+
             val lines = logFile.readLines()
             if (lines.isEmpty()) return "No diagnostics recorded yet."
-            
+
             lines.takeLast(limit).joinToString("\n")
         } catch (e: Exception) {
             "Error reading diagnostics: ${e.message}"

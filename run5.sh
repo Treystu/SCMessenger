@@ -391,12 +391,7 @@ fi
 # ── Android: pinned to serial, buffer starts NOW (-T 1) ──────────────────────
 if [ "$ANDROID_AVAILABLE" = "1" ]; then
   printf "\n%s\n" "$SYNC_MARKER" > "$LOGDIR/android.log"
-  adb -s "$ADB_SERIAL" logcat -v threadtime -T 1 \
-    MeshRepository:V SwarmBridge:V IronCore:V CoreDelegateImpl:V \
-    MainViewModel:V DashboardViewModel:V BleScanner:V BleGattClient:V \
-    BleGattServer:V BleAdvertiser:V MeshService:V ContactsViewModel:V \
-    Rust:V SCMessengerCore:V rust_logger:V \
-    "*:S" \
+  adb -s "$ADB_SERIAL" logcat -v threadtime -T 1 --pid="$(adb -s "$ADB_SERIAL" shell pidof com.scmessenger.android | tr -d '\r\n')" \
     >> "$LOGDIR/android.log" 2>&1 &
   ANDROID_LOGCAT_PID=$!
   echo "  [3/5] Android logcat      PID=$ANDROID_LOGCAT_PID → $(basename $LOGDIR)/android.log  (serial: $ADB_SERIAL)"

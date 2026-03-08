@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Status: Active  
-Last updated: 2026-03-02
+Last updated: 2026-03-07
 
 Repository-scoped instructions for Codex agents.
 
@@ -14,6 +14,10 @@ This includes:
 1. Fixing inconsistencies discovered during implementation, even if not explicitly requested.
 2. Updating canonical docs before finalizing task output.
 3. Keeping historical/superseded references out of active doc chains.
+
+## Core rule: Mandatory Build Verification
+
+**You MUST verify all edited builds before completing any session.** If you push code updates or patches for a given build (e.g. Android Kotlin or iOS Swift), you MUST run the appropriate compiler/builder to prove that the edits compile successfully before concluding the conversation with the user.
 
 ## Required docs touchpoints (review each run)
 

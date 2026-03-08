@@ -61,7 +61,7 @@ class BleGattClient(
         // Re-read shortly after connect to surface nickname promptly in Nearby UI.
         private val IDENTITY_REFRESH_DELAYS_MS = listOf(900L, 2200L)
         private const val ADDRESS_TYPE_MISMATCH_BACKOFF_MS = 30_000L
-        private const val WRITE_INIT_TIMEOUT_MS = 2_000L
+        private const val WRITE_INIT_TIMEOUT_MS = 15_000L
         private const val MAX_SERVICE_DISCOVERY_RETRIES = 2
     }
 
@@ -812,12 +812,14 @@ class BleGattClient(
                 if (descriptor != null) {
                     descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                     if (!gatt.writeDescriptor(descriptor)) {
+                        Timber.e("CLIENT_CONFIG writeDescriptor returned false for ${gatt.device.address}!")
                         releaseGattOp(gatt.device.address, gatt)
                     } else {
-                        Timber.d("Enabling notifications for ${gatt.device.address}")
+                        Timber.w("ENABLE NOTIFICATIONS DESCRIPTOR WRITE INITIATED for ${gatt.device.address}!")
                     }
                     // else: semaphore released in onDescriptorWrite
                 } else {
+                    Timber.e("CLIENT_CONFIG DESCRIPTOR IS NULL on ${gatt.device.address}! Cannot enable notifications!")
                     releaseGattOp(gatt.device.address, gatt)
                 }
             } catch (e: SecurityException) {

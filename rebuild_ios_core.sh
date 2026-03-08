@@ -29,4 +29,19 @@ cp core/target/generated-sources/uniffi/swift/api.swift iOS/SCMessenger/SCMessen
 cp core/target/generated-sources/uniffi/swift/apiFFI.h iOS/SCMessenger/SCMessenger/Generated/apiFFI.h
 cp core/target/generated-sources/uniffi/swift/apiFFI.modulemap iOS/SCMessenger/SCMessenger/Generated/apiFFI.modulemap || true
 
+echo "Patching api.swift to remove nonisolated(unsafe) to fix Swift concurrency compilation errors..."
+python3 -c "
+import sys
+path = 'iOS/SCMessenger/SCMessenger/Generated/api.swift'
+with open(path, 'r') as f:
+    code = f.read()
+
+# Replace nonisolated(unsafe) with static func to avoid Swift 6 concurrency errors
+code = code.replace('nonisolated(unsafe) static func', 'static func')
+code = code.replace('public nonisolated(unsafe) static func', 'public static func')
+
+with open(path, 'w') as f:
+    f.write(code)
+"
+
 echo "Done!"

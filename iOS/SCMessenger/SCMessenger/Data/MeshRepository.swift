@@ -116,6 +116,8 @@ final class MeshRepository {
     private let receiptAwaitSeconds: UInt64 = 8
     private let pendingOutboxMaxAttempts: UInt32 = 120
     private let pendingOutboxMaxAgeSeconds: UInt64 = 7 * 24 * 60 * 60
+    private var historySyncSentPeers: [String: Date] = [:]
+    private let historySyncCooldown: TimeInterval = 60
     private var identitySyncSentPeers: Set<String> = []
     private var deliveredReceiptCache: [String: Date] = [:]
     private let deliveredReceiptCacheTtl: TimeInterval = 2 * 60 * 60
@@ -222,7 +224,7 @@ final class MeshRepository {
         let libp2pPeerId: String?
         let blePeerId: String?
     }
-    
+
     // Device state for auto-adjustment
     private var currentBatteryPct: UInt8 = 100
     private var currentIsCharging: Bool = true
@@ -289,7 +291,7 @@ final class MeshRepository {
     }
 
     // MARK: - Event Streams
-    
+
     /// Stream of ALL message updates (sent and received)
     let messageUpdates = PassthroughSubject<MessageRecord, Never>()
 
@@ -335,7 +337,7 @@ final class MeshRepository {
         // since private keys are already protected in iOS Keychain.
 
         reconcileInstallScopedIdentityState()
-        
+
         appendDiagnostic("repo_init storage=\(self.storagePath)")
         startHeartbeat()
     }
@@ -611,6 +613,7 @@ final class MeshRepository {
         pendingReceiptSendTasks.values.forEach { $0.cancel() }
         pendingReceiptSendTasks.removeAll()
         identitySyncSentPeers.removeAll()
+        historySyncSentPeers.removeAll()
         identityEmissionCache.removeAll()
         connectedEmissionCache.removeAll()
 
@@ -1194,6 +1197,42 @@ final class MeshRepository {
             return
         }
 
+        if messageKind == "history_sync" {
+            logger.debug("Processed history sync request from \(canonicalPeerId)")
+            appendDiagnostic("processed_history_sync_request_from peer=\(canonicalPeerId)")
+            sendHistorySyncDataIfNeeded(canonicalPeerId: canonicalPeerId, routePeerId: routePeerId, recipientPublicKey: senderPublicKeyHex, listeners: hintedDialCandidates, wifiPeerId: nil)
+            sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId, senderId: canonicalPeerId, preferredRoutePeerId: routePeerId, preferredListenerHints: hintedDialCandidates)
+            return
+        }
+        if messageKind == "history_sync_data" {
+            logger.debug("Processed history sync data from \(canonicalPeerId)")
+            appendDiagnostic("processed_history_sync_data_from peer=\(canonicalPeerId)")
+            if let data = decodedPayload.text.data(using: .utf8),
+               let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                for obj in arr {
+                    guard let msgId = obj["id"] as? String else { continue }
+                    if (try? historyManager?.get(id: msgId)) != nil { continue }
+
+                    let dirStr = obj["dir"] as? String
+                    let record = MessageRecord(
+                        id: msgId,
+                        direction: dirStr == "sent" ? .received : .sent,
+                        peerId: canonicalPeerId,
+                        content: obj["txt"] as? String ?? "",
+                        timestamp: UInt64(obj["ts"] as? Int64 ?? 0),
+                        senderTimestamp: UInt64(obj["sts"] as? Int64 ?? 0),
+                        delivered: obj["del"] as? Bool ?? false
+                    )
+                    try? historyManager?.add(record: record)
+                    messageUpdates.send(record)
+                }
+                historyManager?.flush()
+            }
+            sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId, senderId: canonicalPeerId, preferredRoutePeerId: routePeerId, preferredListenerHints: hintedDialCandidates)
+            return
+        }
+
+
         // Process message
         let content = decodedPayload.text
 
@@ -1367,7 +1406,6 @@ final class MeshRepository {
     private func sendIdentitySyncIfNeeded(routePeerId: String, knownPublicKey: String? = nil) {
         let normalizedRoute = routePeerId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedRoute.isEmpty,
-              isLibp2pPeerId(normalizedRoute),
               !isBootstrapRelayPeer(normalizedRoute) else {
             return
         }
@@ -1397,9 +1435,9 @@ final class MeshRepository {
                     identitySyncSentPeers.remove(normalizedRoute)
                     return
                 }
-                
-                let contact = (try? contactManager?.list())?.first(where: { 
-                    $0.peerId == normalizedRoute || parseRoutingHintsFromNotes($0.notes).libp2pPeerId == normalizedRoute 
+
+                let contact = (try? contactManager?.list())?.first(where: {
+                    $0.peerId == normalizedRoute || parseRoutingHintsFromNotes($0.notes).libp2pPeerId == normalizedRoute
                 })
                 let hints = parseRoutingHintsFromNotes(contact?.notes)
                 let routeCandidates = buildRoutePeerCandidates(
@@ -1428,6 +1466,138 @@ final class MeshRepository {
     /// Canonicalization prefers one stable contact per public key.
     /// Exact sender ID matches still win, then a unique public-key match wins.
     /// Routing hints are used only as fallback when key-based matching is ambiguous.
+
+    private func sendHistorySyncIfNeeded(routePeerId: String, knownPublicKey: String? = nil) {
+        let normalizedRoute = routePeerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        appendDiagnostic("sending_history_sync_request_consider route=\(normalizedRoute)")
+        logger.warning("sendHistorySyncIfNeeded called for \(normalizedRoute)")
+        guard !normalizedRoute.isEmpty, !isBootstrapRelayPeer(normalizedRoute) else { return }
+        let now = Date()
+        let lastSent = historySyncSentPeers[normalizedRoute]
+        let shouldSend = lastSent == nil || now.timeIntervalSince(lastSent!) > historySyncCooldown
+        logger.warning("sendHistorySyncIfNeeded shouldSend=\(shouldSend) for \(normalizedRoute) (age=\(lastSent.map { now.timeIntervalSince($0) } ?? 999)s)")
+        guard shouldSend else { return }
+        historySyncSentPeers[normalizedRoute] = now
+        logger.warning("sendHistorySyncIfNeeded inserting for \(normalizedRoute)")
+
+        Task {
+            let extractedPublicKey = try? ironCore?.extractPublicKeyFromPeerId(peerId: normalizedRoute)
+            guard let recipientPublicKey = normalizePublicKey(knownPublicKey) ?? normalizePublicKey(extractedPublicKey) else {
+                historySyncSentPeers.removeValue(forKey: normalizedRoute)
+                appendDiagnostic("history_sync_request_failed_no_pubkey route=\(normalizedRoute)")
+                logger.error("historySync failed: missing recipientPublicKey for \(normalizedRoute)")
+                return
+            }
+
+            do {
+                let payload = encodeMeshMessagePayload(content: "", kind: "history_sync")
+                guard let prepared = try? ironCore?.prepareMessageWithId(recipientPublicKeyHex: recipientPublicKey, text: payload) else {
+                    historySyncSentPeers.removeValue(forKey: normalizedRoute)
+                    appendDiagnostic("history_sync_request_failed_prepare route=\(normalizedRoute)")
+                    logger.error("historySync request failed to prepare message")
+                    return
+                }
+
+                let contact = (try? contactManager?.list())?.first(where: {
+                    $0.peerId == normalizedRoute || parseRoutingHintsFromNotes($0.notes).libp2pPeerId == normalizedRoute
+                })
+                let hints = parseRoutingHintsFromNotes(contact?.notes)
+                let routeCandidates = buildRoutePeerCandidates(
+                    peerId: contact?.peerId ?? normalizedRoute,
+                    cachedRoutePeerId: normalizedRoute,
+                    notes: contact?.notes,
+                    recipientPublicKey: recipientPublicKey
+                )
+
+                _ = await self.attemptDirectSwarmDelivery(
+                    routePeerCandidates: routeCandidates,
+                    addresses: hints.listeners,
+                    envelopeData: Data(prepared.envelopeData),
+                    blePeerId: hints.blePeerId
+                )
+                self.logger.warning("History sync request sent to \(normalizedRoute)")
+            } catch {
+                self.logger.error("History sync request exception: \(error.localizedDescription)")
+                self.historySyncSentPeers.removeValue(forKey: normalizedRoute)
+            }
+        }
+    }
+
+    private var historySyncDataInProgress: Set<String> = []
+
+    private func sendHistorySyncDataIfNeeded(canonicalPeerId: String, routePeerId: String?, recipientPublicKey: String, listeners: [String], wifiPeerId: String?) {
+        guard !historySyncDataInProgress.contains(canonicalPeerId) else {
+            logger.debug("sendHistorySyncDataIfNeeded: already in progress for \(canonicalPeerId)")
+            return
+        }
+        historySyncDataInProgress.insert(canonicalPeerId)
+
+        Task {
+            defer { DispatchQueue.main.async { self.historySyncDataInProgress.remove(canonicalPeerId) } }
+            do {
+                self.logger.warning("sendHistorySyncDataIfNeeded started for \(canonicalPeerId)")
+                guard let manager = historyManager,
+                      let fetchedMsgs = try? manager.conversation(peerId: canonicalPeerId, limit: 400),
+                      !fetchedMsgs.isEmpty else {
+                    self.logger.warning("sendHistorySyncDataIfNeeded: no recent msgs for \(canonicalPeerId)")
+                    return
+                }
+                self.logger.warning("sendHistorySyncDataIfNeeded: compiling \(fetchedMsgs.count) msgs for \(canonicalPeerId)")
+                let recentMsgs = fetchedMsgs.sorted { $0.timestamp < $1.timestamp }
+
+                let hints = parseRoutingHintsFromNotes((try? contactManager?.get(peerId: canonicalPeerId))?.notes)
+                let routeCandidates = buildRoutePeerCandidates(peerId: canonicalPeerId, cachedRoutePeerId: routePeerId ?? hints.libp2pPeerId, notes: nil, recipientPublicKey: recipientPublicKey)
+                let allListeners = Array(Set(listeners + hints.listeners))
+
+                // Chunk into batches of 20 to stay within encryption payload limits
+                let batchSize = 20
+                let batches = stride(from: 0, to: recentMsgs.count, by: batchSize).map {
+                    Array(recentMsgs[$0..<min($0 + batchSize, recentMsgs.count)])
+                }
+                var sentBatches = 0
+
+                for (batchIndex, batch) in batches.enumerated() {
+                    var arr: [[String: Any]] = []
+                    for msg in batch {
+                        arr.append([
+                            "id": msg.id,
+                            "dir": msg.direction == .sent ? "sent" : "recv",
+                            "pid": msg.peerId,
+                            "txt": msg.content,
+                            "ts": Int64(msg.timestamp),
+                            "sts": Int64(msg.senderTimestamp),
+                            "del": msg.delivered
+                        ])
+                    }
+                    guard let data = try? JSONSerialization.data(withJSONObject: arr), let jsonStr = String(data: data, encoding: .utf8) else {
+                        self.logger.error("sendHistorySyncData json serialization failed for batch \(batchIndex)")
+                        continue
+                    }
+
+                    let payload = encodeMeshMessagePayload(content: jsonStr, kind: "history_sync_data")
+                    guard let prepared = try? ironCore?.prepareMessageWithId(recipientPublicKeyHex: recipientPublicKey, text: payload) else {
+                        self.logger.error("sendHistorySyncData prepareMessageWithId failed for batch \(batchIndex) (\(batch.count) msgs)")
+                        continue
+                    }
+
+                    _ = await self.attemptDirectSwarmDelivery(
+                        routePeerCandidates: routeCandidates,
+                        addresses: allListeners,
+                        envelopeData: Data(prepared.envelopeData),
+                        blePeerId: hints.blePeerId
+                    )
+                    sentBatches += 1
+                    // Small delay between batches to avoid overwhelming BLE
+                    if batchIndex < batches.count - 1 {
+                        try? await Task.sleep(nanoseconds: 200_000_000)
+                    }
+                }
+                self.logger.warning("History sync data sent to \(canonicalPeerId) (\(sentBatches)/\(batches.count) batches, \(recentMsgs.count) items total)")
+            } catch {
+                self.logger.error("Failed sending history sync data: \(error)")
+            }
+        }
+    }
     private func resolveCanonicalPeerId(senderId: String, senderPublicKeyHex: String) -> String {
         guard let normalizedIncomingKey = normalizePublicKey(senderPublicKeyHex),
               let contacts = try? contactManager?.list() else {
@@ -2483,7 +2653,7 @@ final class MeshRepository {
         }
 
         let isRelay = isBootstrapRelayPeer(peerId)
-        
+
         if let transportIdentity = resolveTransportIdentity(libp2pPeerId: peerId) {
             let discoveredNickname = prepopulateDiscoveryNickname(
                 nickname: transportIdentity.nickname,
@@ -2551,7 +2721,7 @@ final class MeshRepository {
             )
             updateDiscoveredPeer(peerId, info: discoveryInfo)
         }
-        
+
         // Ensure UI (and dashboard) sees the discovery immediately
         MeshEventBus.shared.peerEvents.send(.discovered(peerId: peerId))
     }
@@ -2689,6 +2859,7 @@ final class MeshRepository {
                 )
             }
             sendIdentitySyncIfNeeded(routePeerId: peerId, knownPublicKey: transportIdentity?.publicKey)
+            sendHistorySyncIfNeeded(routePeerId: peerId, knownPublicKey: transportIdentity?.publicKey)
         }
 
         // Identified implies an active session already exists; avoid re-dial loops here.
@@ -2730,15 +2901,16 @@ final class MeshRepository {
 
         var accepted = false
         for target in sendTargets {
-            if let uuid = UUID(uuidString: target), bleCentralManager?.sendData(to: uuid, data: data) == true {
-                accepted = true
-                break
-            }
-            guard let blePeripheralManager = blePeripheralManager, !blePeripheralManager.subscribedCentralIds().isEmpty else {
+            if let blePeripheralManager = blePeripheralManager, !blePeripheralManager.subscribedCentralIds().isEmpty {
+                if blePeripheralManager.sendDataToConnectedCentral(peerId: target, data: data) == true {
+                    accepted = true
+                    break
+                }
+            } else {
                 appendDiagnostic("ble_peripheral_send_skip_no_subscribers")
-                continue
             }
-            if blePeripheralManager.sendDataToConnectedCentral(peerId: target, data: data) == true {
+
+            if let uuid = UUID(uuidString: target), bleCentralManager?.sendData(to: uuid, data: data) == true {
                 accepted = true
                 break
             }
@@ -2861,6 +3033,12 @@ final class MeshRepository {
             nickname: discoveredNickname
         )
         logger.info("Emitted identityDiscovered for \(blePeerId.prefix(8)) key: \(normalizedKey.prefix(8))...")
+        // Trigger history sync over BLE when we discover a peer's identity
+        if let nonEmptyLibp2p {
+            sendHistorySyncIfNeeded(routePeerId: nonEmptyLibp2p, knownPublicKey: normalizedKey)
+        } else {
+            sendHistorySyncIfNeeded(routePeerId: identityId, knownPublicKey: normalizedKey)
+        }
         // Update lastSeen if already a saved contact
         try? contactManager?.updateLastSeen(peerId: blePeerId)
         try? contactManager?.updateLastSeen(peerId: identityId)
@@ -3158,7 +3336,7 @@ final class MeshRepository {
             while !Task.isCancelled {
                 // Proactively ensure we stay connected to relays
                 self?.primeRelayBootstrapConnections()
-                
+
                 await self?.flushPendingOutbox(reason: "periodic")
                 try? await Task.sleep(nanoseconds: 8_000_000_000) // 8s loop
             }
@@ -3305,6 +3483,23 @@ final class MeshRepository {
 
                 var lastFailureReason = "no_target_attempted"
                 for target in sendTargets {
+                    // Prefer Peripheral path first (notifications to subscribed Android central)
+                    // This is the ONLY reliable iOS→Android path when WiFi is off
+                    if let peripheral = blePeripheralManager {
+                        if peripheral.sendDataToConnectedCentral(peerId: target, data: envelopeData) {
+                            logDeliveryAttempt(
+                                messageId: traceMessageId,
+                                medium: "ble",
+                                phase: "local_fallback",
+                                outcome: "accepted",
+                                detail: "ctx=\(attemptContext) role=peripheral requested_target=\(bleAddr) target=\(target)"
+                            )
+                            return true
+                        }
+                        lastFailureReason = "peripheral_send_false:\(target)"
+                    }
+
+                    // Fallback: Central path (write to Android's GATT server)
                     if let central = bleCentralManager {
                         if let uuid = UUID(uuidString: target) {
                             if central.sendData(to: uuid, data: envelopeData) {
@@ -3322,20 +3517,6 @@ final class MeshRepository {
                         } else {
                             lastFailureReason = "central_invalid_uuid:\(target)"
                         }
-                    }
-
-                    if let peripheral = blePeripheralManager {
-                        if peripheral.sendDataToConnectedCentral(peerId: target, data: envelopeData) {
-                            logDeliveryAttempt(
-                                messageId: traceMessageId,
-                                medium: "ble",
-                                phase: "local_fallback",
-                                outcome: "accepted",
-                                detail: "ctx=\(attemptContext) role=peripheral requested_target=\(bleAddr) target=\(target)"
-                            )
-                            return true
-                        }
-                        lastFailureReason = "peripheral_send_false:\(target)"
                     }
                 }
 
@@ -3371,14 +3552,14 @@ final class MeshRepository {
             )
             return DeliveryAttemptResult(acked: localAcked, routePeerId: routePeerFallback)
         }
-        
+
         let sanitizedCandidates = routePeerCandidates
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty && isLibp2pPeerId($0) && !isBootstrapRelayPeer($0) }
             .reduce(into: [String]()) { acc, peer in
                 if !acc.contains(peer) { acc.append(peer) }
             }
-        
+
         guard !sanitizedCandidates.isEmpty else {
             logDeliveryAttempt(
                 messageId: traceMessageId,
@@ -3544,7 +3725,7 @@ final class MeshRepository {
 
         // Ensure relay backbone is reachable whenever we check outbox
         primeRelayBootstrapConnections()
-        
+
         let now = UInt64(Date().timeIntervalSince1970)
         let queue = loadPendingOutbox()
         if queue.isEmpty { return }
@@ -3973,13 +4154,13 @@ final class MeshRepository {
 
     private func relayCircuitAddresses(for targetPeerId: String) -> [String] {
         guard isLibp2pPeerId(targetPeerId) else { return [] }
-        
+
         // 1. System default bootstrap nodes
         var relays: [String] = Self.defaultBootstrapNodes.compactMap { bootstrap in
             guard let relay = Self.parseBootstrapRelay(from: bootstrap) else { return nil }
             return "\(relay.transportAddr)/p2p/\(relay.relayPeerId)/p2p-circuit/p2p/\(targetPeerId)"
         }
-        
+
         // 2. Dynamically discovered headless/relay nodes
         let dynamicRelays = discoveredPeerMap.filter { $0.value.isRelay && !$0.value.isFull && $0.key != targetPeerId }
         for (relayPeerId, _) in dynamicRelays {
@@ -3992,7 +4173,7 @@ final class MeshRepository {
                 }
             }
         }
-        
+
         return relays
     }
 
@@ -4526,19 +4707,19 @@ final class MeshRepository {
     func appendDiagnostic(_ message: String) {
         let ts = Self.diagnosticDateFormatter.string(from: Date())
         let line = "\(ts) \(message)"
-        
+
         // 1. Update memory buffer
         diagnosticsBuffer.append(line)
         if diagnosticsBuffer.count > diagnosticsMaxLines {
             diagnosticsBuffer.removeFirst(diagnosticsBuffer.count - diagnosticsMaxLines)
         }
-        
+
         // 2. Write to System Console — throttled to avoid flooding
         diagnosticLogCounter += 1
         if diagnosticLogCounter % diagnosticLogThrottle == 0 {
             logger.info("DIAG: \(message)")
         }
-        
+
         // 3. Persist to Disk (Append only)
         persistDiagnosticLine(line)
     }
@@ -4613,6 +4794,7 @@ final class MeshRepository {
         identityEmissionCache.removeAll()
         connectedEmissionCache.removeAll()
         identitySyncSentPeers.removeAll()
+        historySyncSentPeers.removeAll()
         discoveredPeerMap.removeAll()
 
         // 4. Delete Keychain backup (persisted identity)
@@ -4808,9 +4990,11 @@ final class MeshRepository {
         initializeAndStartSwarm()
         broadcastIdentityBeacon()
         identitySyncSentPeers.removeAll()
+        historySyncSentPeers.removeAll()
         let connectedPeers = swarmBridge?.getPeers() ?? []
         for routePeerId in connectedPeers {
             sendIdentitySyncIfNeeded(routePeerId: routePeerId)
+            sendHistorySyncIfNeeded(routePeerId: routePeerId)
         }
     }
 }

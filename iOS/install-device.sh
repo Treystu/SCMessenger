@@ -5,8 +5,6 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT_PATH="$ROOT_DIR/iOS/SCMessenger/SCMessenger.xcodeproj"
 SCHEME="SCMessenger"
 
-APPLE_TEAM_ID="${APPLE_TEAM_ID:-}"
-DEVICE_UDID="${DEVICE_UDID:-}"
 BUNDLE_ID="${BUNDLE_ID:-SovereignCommunications.SCMessenger}"
 CONFIGURATION="${CONFIGURATION:-Debug}"
 LAUNCH_AFTER_INSTALL="${LAUNCH_AFTER_INSTALL:-1}"
@@ -15,17 +13,34 @@ APP_PATH="$DERIVED_DATA_PATH/Build/Products/${CONFIGURATION}-iphoneos/SCMessenge
 CLEAN_BUILD="${CLEAN_BUILD:-1}"
 UNINSTALL_FIRST="${UNINSTALL_FIRST:-0}"
 
+# ── Auto-detect APPLE_TEAM_ID from .xcodeproj if not provided ──────────────
+APPLE_TEAM_ID="${APPLE_TEAM_ID:-}"
 if [ -z "$APPLE_TEAM_ID" ]; then
-  echo "error: APPLE_TEAM_ID is required."
-  echo "usage: APPLE_TEAM_ID=<YOUR_TEAM_ID> DEVICE_UDID=<YOUR_DEVICE_UDID> ./iOS/install-device.sh"
-  exit 1
+  APPLE_TEAM_ID=$(grep -m1 'DEVELOPMENT_TEAM' "$PROJECT_PATH/project.pbxproj" 2>/dev/null \
+    | sed -E 's/.*= *([A-Z0-9]+).*/\1/' || true)
+  if [ -n "$APPLE_TEAM_ID" ]; then
+    echo "Auto-detected APPLE_TEAM_ID from project: $APPLE_TEAM_ID"
+  else
+    echo "error: APPLE_TEAM_ID could not be auto-detected and was not provided."
+    echo "usage: APPLE_TEAM_ID=<YOUR_TEAM_ID> ./iOS/install-device.sh"
+    exit 1
+  fi
 fi
 
+# ── Auto-detect DEVICE_UDID from first connected iOS device if not provided ─
+DEVICE_UDID="${DEVICE_UDID:-}"
 if [ -z "$DEVICE_UDID" ]; then
-  echo "error: DEVICE_UDID is required."
-  echo "hint: run 'xcrun xcdevice list' (Xcode ID) or 'xcrun devicectl list devices' (CoreDevice ID)."
-  echo "usage: APPLE_TEAM_ID=<YOUR_TEAM_ID> DEVICE_UDID=<YOUR_DEVICE_UDID> ./iOS/install-device.sh"
-  exit 1
+  DEVICE_UDID=$(xcrun devicectl list devices \
+    --hide-default-columns --columns Identifier --columns State --hide-headers 2>/dev/null | \
+    awk '$2 ~ /(available|connected)/ {print $1; exit}')
+  if [ -n "$DEVICE_UDID" ]; then
+    echo "Auto-detected DEVICE_UDID from connected device: $DEVICE_UDID"
+  else
+    echo "error: DEVICE_UDID could not be auto-detected (no connected iOS device found)."
+    echo "hint: run 'xcrun devicectl list devices' to see available devices."
+    echo "usage: DEVICE_UDID=<YOUR_DEVICE_UDID> ./iOS/install-device.sh"
+    exit 1
+  fi
 fi
 
 if ! command -v jq >/dev/null 2>&1; then

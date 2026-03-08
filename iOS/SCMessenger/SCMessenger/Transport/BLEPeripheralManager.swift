@@ -252,7 +252,7 @@ final class BLEPeripheralManager: NSObject {
             type: MeshBLEConstants.messageCharUUID,
             properties: [.write, .writeWithoutResponse, .notify],
             value: nil,
-            permissions: .writeable
+            permissions: [.writeable, .readable]
         )
 
         syncCharacteristic = CBMutableCharacteristic(
@@ -462,7 +462,11 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
-        logger.info("Central \(central.identifier) subscribed to \(characteristic.uuid.shortUUID)")
+        logger.info("Central \(central.identifier.uuidString) subscribed to \(characteristic.uuid.shortUUID)")
+        // Ensure we only record subscription for the message sync characteristic (or both)
+        if characteristic.uuid == MeshBLEConstants.messageCharUUID {
+            logger.info("==> ANDROID CENTRAL \(central.identifier.uuidString) IS NOW SUBSCRIBED TO MESSAGE CHAR! This gives us the target to send data back over!")
+        }
         meshRepository?.appendDiagnostic("ble_peripheral_subscribed central=\(central.identifier)")
         if !subscribedCentrals.contains(where: { $0.identifier == central.identifier }) {
             subscribedCentrals.append(central)
