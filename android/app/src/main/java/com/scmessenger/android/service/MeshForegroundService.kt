@@ -48,7 +48,7 @@ class MeshForegroundService : Service() {
     lateinit var platformBridge: AndroidPlatformBridge
 
     private var isRunning = false
-    private var peerCount = 0
+    private val connectedPeers = mutableSetOf<String>()  // Track unique connected peers
     private var messagesRelayed = 0
 
     // WakeLock for BLE scan windows
@@ -141,11 +141,11 @@ class MeshForegroundService : Service() {
                 MeshEventBus.peerEvents.collect { event ->
                     when (event) {
                         is PeerEvent.Connected -> {
-                            peerCount++
+                            connectedPeers.add(event.peerId)
                             updateNotification()
                         }
                         is PeerEvent.Disconnected -> {
-                            peerCount = maxOf(0, peerCount - 1)
+                            connectedPeers.remove(event.peerId)
                             updateNotification()
                         }
                         else -> {}
@@ -261,7 +261,7 @@ class MeshForegroundService : Service() {
             .onFailure { Timber.e(it, "Error while stopping mesh repository") }
 
         isRunning = false
-        peerCount = 0
+        connectedPeers.clear()
         messagesRelayed = 0
 
         // Clean up
@@ -315,8 +315,8 @@ class MeshForegroundService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val contentText = if (peerCount > 0) {
-            "Connected to $peerCount peers • $messagesRelayed relayed"
+        val contentText = if (connectedPeers.isNotEmpty()) {
+            "Connected to ${connectedPeers.size} peers • $messagesRelayed relayed"
         } else {
             getString(R.string.mesh_service_notification_text)
         }

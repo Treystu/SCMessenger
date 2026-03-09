@@ -101,3 +101,33 @@ To ensure consistent feature rollout and prevent regressions:
 - Is the feature flag/setting persisted correctly?
 - Does the UI handle empty/null states (e.g., no relay connected)?
 - Are mobile-specific constraints (background execution, battery) respected?
+
+---
+
+## [Current] 2026-03-09 Contacts Feature Parity Gap
+
+### Issue Identified
+Android contacts screen lacks feature parity with iOS for:
+1. Swipe-to-delete gesture
+2. Nickname editing after contact creation
+3. Long-press context menu
+
+### iOS Implementation (Reference)
+- **Swipe-to-Delete**: `.onDelete` modifier on ForEach in List
+- **Nickname Editing**: TextField in add contact sheet, can edit anytime
+- **Display Priority**: localNickname > federated nickname > peerId
+
+### Android Current State
+- **Delete**: Delete button only (no swipe)
+- **Nickname**: Can set on add, cannot edit later
+- **Display**: Correctly shows localNickname > nickname > peerId
+
+### Implementation Required
+1. Add `SwipeToDismissBox` to ContactItem for swipe-to-delete
+2. Add long-press detection with dropdown menu
+3. Add "Edit Nickname" dialog
+4. Wire to `setLocalNickname` core API
+
+### Priority
+P1 - Core UX parity required for alpha
+

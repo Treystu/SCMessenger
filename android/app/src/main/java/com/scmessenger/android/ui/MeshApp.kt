@@ -69,7 +69,7 @@ fun MeshApp() {
                     navController = navController,
                     hasIdentity = hasIdentity,
                     onIdentityChanged = { mainViewModel.refreshIdentityState() },
-                    modifier = Modifier.padding(paddingValues)
+                    bottomPadding = paddingValues
                 )
             }
         }
@@ -81,12 +81,11 @@ fun MeshNavHost(
     navController: NavHostController,
     hasIdentity: Boolean,
     onIdentityChanged: () -> Unit,
-    modifier: Modifier = Modifier
+    bottomPadding: PaddingValues = PaddingValues()
 ) {
     NavHost(
         navController = navController,
-        startDestination = startDestinationForRole(hasIdentity),
-        modifier = modifier
+        startDestination = startDestinationForRole(hasIdentity)
     ) {
         if (hasIdentity) {
             composable(Screen.Conversations.route) {
@@ -111,14 +110,16 @@ fun MeshNavHost(
         }
 
         composable(Screen.Settings.route) {
-            SettingsScreen(
-                onNavigateToIdentity = {
-                    navController.navigate(Screen.Identity.route)
-                },
-                onNavigateToDiagnostics = {
-                    navController.navigate(Screen.Diagnostics.route)
-                }
-            )
+            Box(modifier = Modifier.padding(bottomPadding)) {
+                SettingsScreen(
+                    onNavigateToIdentity = {
+                        navController.navigate(Screen.Identity.route)
+                    },
+                    onNavigateToDiagnostics = {
+                        navController.navigate(Screen.Diagnostics.route)
+                    }
+                )
+            }
         }
 
         composable(Screen.Identity.route) {

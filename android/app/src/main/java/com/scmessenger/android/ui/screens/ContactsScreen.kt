@@ -1,5 +1,6 @@
 package com.scmessenger.android.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,6 +10,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Sensors
@@ -16,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -207,7 +210,10 @@ fun ContactsScreen(
                         ContactItem(
                             contact = contact,
                             onClick = { onNavigateToChat(contact.peerId) },
-                            onDelete = { viewModel.removeContact(contact.peerId) }
+                            onDelete = { viewModel.removeContact(contact.peerId) },
+                            onEditNickname = { nickname ->
+                                viewModel.setLocalNickname(contact.peerId, nickname.ifBlank { null })
+                            }
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -254,62 +260,160 @@ fun ContactsScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactItem(
     contact: uniffi.api.Contact,
     onClick: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onEditNickname: (String) -> Unit = {}
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showEditNicknameDialog by remember { mutableStateOf(false) }
+    
+    val dismissState = rememberDismissState(
+        confirmValueChange = { dismissValue ->
+            if (dismissValue == DismissValue.DismissedToEnd || dismissValue == DismissValue.DismissedToStart) {
+                showDeleteDialog = true
+            }
+            false  // Don't auto-dismiss, show dialog first
+        }
+    )
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-    ) {
-        Row(
+    SwipeToDismiss(
+        state = dismissState,
+        background = {
+            val color = when (dismissState.targetValue) {
+                DismissValue.DismissedToEnd, DismissValue.DismissedToStart -> MaterialTheme.colorScheme.error
+                else -> Color.Transparent
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(color)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                if (dismissState.targetValue != DismissValue.Default) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+        },
+        dismissContent = {
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .clickable(onClick = onClick)
         ) {
-            Column(
-                modifier = Modifier.weight(1f)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = contact.localNickname ?: contact.nickname ?: contact.peerId.take(16) + "...",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                if (contact.localNickname != null && contact.nickname != null) {
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
                     Text(
-                        text = "@${contact.nickname}",
+                        text = contact.localNickname ?: contact.nickname ?: contact.peerId.take(16) + "...",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    if (contact.localNickname != null && contact.nickname != null) {
+                        Text(
+                            text = "@${contact.nickname}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = "ID: ${contact.peerId.take(16)}...",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    contact.lastSeen?.let { lastSeen ->
+                        Text(
+                            text = "Last seen: ${formatTimestamp(lastSeen)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-                Text(
-                    text = "ID: ${contact.peerId.take(16)}...",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                contact.lastSeen?.let { lastSeen ->
-                    Text(
-                        text = "Last seen: ${formatTimestamp(lastSeen)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
 
-            IconButton(onClick = { showDeleteDialog = true }) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete Contact",
-                    tint = MaterialTheme.colorScheme.error
-                )
+                Row {
+                    IconButton(onClick = { showEditNicknameDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit Nickname",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    IconButton(onClick = { showDeleteDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete Contact",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
             }
         }
+        }
+    )
+
+    // Edit nickname dialog
+    if (showEditNicknameDialog) {
+        var newNickname by remember { mutableStateOf(contact.localNickname ?: contact.nickname ?: "") }
+        
+        AlertDialog(
+            onDismissRequest = { showEditNicknameDialog = false },
+            title = { Text("Edit Nickname") },
+            text = {
+                Column {
+                    Text(
+                        text = "Set a local nickname for ${contact.peerId.take(16)}...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newNickname,
+                        onValueChange = { newNickname = it },
+                        label = { Text("Nickname") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (contact.nickname != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Federated nickname: @${contact.nickname}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onEditNickname(newNickname.trim())
+                        showEditNicknameDialog = false
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditNicknameDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     // Confirm delete dialog

@@ -55,7 +55,6 @@ fun ChatScreen(
     }
 
     Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),  // Let content handle its own insets
         topBar = {
             TopAppBar(
                 title = {
