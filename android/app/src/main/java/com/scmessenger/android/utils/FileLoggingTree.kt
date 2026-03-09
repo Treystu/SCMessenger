@@ -31,7 +31,7 @@ class FileLoggingTree(context: Context) : Timber.Tree() {
             }
 
             val logLine = "$timestamp $priorityStr/${tag ?: "App"}: $message\n"
-            
+
             FileWriter(logFile, true).use { writer ->
                 writer.write(logLine)
                 t?.let {
@@ -40,7 +40,7 @@ class FileLoggingTree(context: Context) : Timber.Tree() {
                     pw.flush()
                 }
             }
-            
+
             // Limit file size to ~1MB by truncating if it gets too large
             if (logFile.length() > 1024 * 1024) {
                 truncateLogFile()
@@ -52,12 +52,22 @@ class FileLoggingTree(context: Context) : Timber.Tree() {
 
     private fun truncateLogFile() {
         try {
-            val lines = logFile.readLines()
-            val maxLines = 10000
-            if (lines.size > maxLines) {
-                val keptLines = lines.takeLast(maxLines)
-                logFile.writeText(keptLines.joinToString("\n") + "\n")
+            Timber.d("Truncating log file: $logFile")
+            // Consolidate logs: .4 -> .5, .3 -> .4, etc.
+            for (i in 4 downTo 1) {
+                val current = File(logFile.parent, "${logFile.name}.$i")
+                val next = File(logFile.parent, "${logFile.name}.${i + 1}")
+                if (current.exists()) {
+                    if (next.exists()) next.delete()
+                    current.renameTo(next)
+                }
             }
+            // Move current to .1
+            val firstHistory = File(logFile.parent, "${logFile.name}.1")
+            if (firstHistory.exists()) firstHistory.delete()
+            logFile.renameTo(firstHistory)
+
+            // Re-create logFile if needed or it will be created on next write
         } catch (e: Exception) {
             android.util.Log.e("FileLoggingTree", "Error truncating log file", e)
         }

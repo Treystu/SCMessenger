@@ -55,6 +55,7 @@ fun ChatScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),  // Let content handle its own insets
         topBar = {
             TopAppBar(
                 title = {
@@ -107,6 +108,7 @@ fun ChatScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .imePadding()  // Add IME (keyboard) padding
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {

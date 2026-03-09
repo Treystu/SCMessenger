@@ -626,6 +626,9 @@ impl MeshService {
                                                 tracing::info!("🔭 NAT status updated: {}", status);
                                                 *nat_status.lock() = status;
                                             }
+                                            crate::transport::SwarmEvent::PortMapping(status) => {
+                                                tracing::info!("🌐 Port mapping updated: {}", status);
+                                            }
                                             other => {
                                                 tracing::debug!("Swarm event: {:?}", other);
                                             }
@@ -1290,7 +1293,12 @@ pub struct HistoryManager {
 impl HistoryManager {
     pub fn new(storage_path: String) -> Result<Self, crate::IronCoreError> {
         let path = std::path::PathBuf::from(storage_path).join("history.db");
-        let db = sled::open(path).map_err(|_| crate::IronCoreError::StorageError)?;
+        let db = sled::Config::default()
+            .path(path)
+            .mode(sled::Mode::LowSpace)
+            .use_compression(false)
+            .open()
+            .map_err(|_| crate::IronCoreError::StorageError)?;
 
         Ok(Self {
             db: std::sync::Arc::new(std::sync::Mutex::new(db)),

@@ -218,10 +218,15 @@ The following active canonical docs were updated or verified current as of this 
 
 ### Code / Ops
 
-1. [ ] **Android**: generate `bundleRelease` AAB and confirm signing
+1. [ ] **Android**: generate `bundleRelease` AAB and confirm signing (✅ Done 2026-03-08)
 2. [ ] **iOS**: create Archive build and upload to App Store Connect
 3. [ ] **Both**: increment version numbers (`versionCode` Android, `CFBundleVersion` iOS)
 4. [ ] **Both**: deploy to internal testers first (Play Internal Testing / TestFlight internal)
+
+### Play Store Specific (API 35 & Native Symbols)
+
+1. [ ] **API 35 Regression Test Plan**: Since `targetSdk` was bumped to 35 to satisfy Play Console requirements, we must test for Android 15 behavior changes (e.g., Foreground Service limits, Edge-to-Edge display defaults) to ensure no regressions occur before pushing to external beta.
+2. [ ] **Native Debug Symbols**: The `bundleRelease` generates native code (`libuniffi_api.so`). To satisfy the Play Console warning, we need to extract the unstripped debug symbols from the `cargo-ndk` output and upload the native debug symbol `.zip` alongside the `.aab` (or wire AGP to package them automatically) so crashes can be symbolized.
 
 ### Legal / Business
 

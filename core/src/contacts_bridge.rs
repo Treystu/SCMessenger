@@ -60,7 +60,11 @@ impl ContactManager {
     /// Create or open contact database at the given path
     pub fn new(storage_path: String) -> Result<Self, crate::IronCoreError> {
         let path = PathBuf::from(storage_path).join("contacts.db");
-        let db = sled::open(path)
+        let db = sled::Config::default()
+            .path(path)
+            .mode(sled::Mode::LowSpace)
+            .use_compression(false)
+            .open()
             .context("Failed to open contacts database")
             .map_err(|_| crate::IronCoreError::StorageError)?;
 

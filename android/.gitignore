@@ -18,6 +18,7 @@
 # Keystore files
 *.jks
 *.keystore
+keystore.properties
 
 # Android Studio
 *.iml

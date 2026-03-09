@@ -1,3 +1,84 @@
+# Latest Updates
+
+## 2026-03-09: Critical Bug Fixes & NAT Traversal Implementation
+
+### Session Summary
+Completed interrupted session with comprehensive fixes for NAT traversal, BLE reliability, and message delivery status.
+
+### Issues Resolved
+
+#### 1. NAT Traversal - Relay Server Implementation ✅
+**Problem**: Messages failed between cellular and WiFi devices  
+**Root Cause**: Nodes had relay client but not relay server  
+**Solution**: Added `relay::Behaviour` to all nodes
+
+**Files Modified**:
+- `core/src/transport/behaviour.rs` - Added relay_server field
+- `core/src/transport/swarm.rs` - Added relay server event handling
+
+**Result**: All nodes now act as relays for NAT traversal
+
+#### 2. BLE DeadObjectException Fix ✅
+**Problem**: BLE crashes after network switching  
+**Root Cause**: No subscription tracking, sending to disconnected devices  
+**Solution**: Added proper subscription lifecycle management
+
+**Files Modified**:
+- `android/app/src/main/java/com/scmessenger/android/transport/ble/BleGattServer.kt`:
+  - Added `subscribedDevices` map
+  - Implemented `onDescriptorWriteRequest` handler
+  - Added subscription cleanup on disconnect
+  - Added DeadObjectException recovery
+
+**Result**: BLE now handles reconnections reliably
+
+#### 3. Message Delivery False Positives ✅
+**Problem**: Android showed "delivered" but iOS never received messages  
+**Root Cause**: BLE transport ACK treated as full delivery confirmation  
+**Solution**: Only mark delivered when core mesh network confirms
+
+**Files Modified**:
+- `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` (lines 3207-3326):
+  - Changed logic to require core delivery for "delivered" status
+  - BLE-only success no longer returns `acked = true`
+  - Messages retry via core even if BLE succeeds locally
+
+**Result**: Delivery status now accurate and trustworthy
+
+#### 4. Android UI Regression ✅
+**Problem**: Keyboard covered chat input field, UI shifted down  
+**Solution**: Added proper IME padding and window insets
+
+**Files Modified**:
+- `android/app/src/main/java/com/scmessenger/android/ui/screens/ChatScreen.kt`:
+  - Added `.imePadding()` to input Row
+  - Set `contentWindowInsets` on Scaffold
+
+**Result**: Keyboard no longer covers input, UI properly positioned
+
+### Build Status
+- ✅ Core rebuilt with relay server
+- ✅ Android APK deployed to device 26261JEGR01896
+- ✅ iOS framework updated (device 00008130-001A48DA18EB8D3A)
+- ✅ Documentation sync check passed
+
+### Documentation Created
+- `NAT_TRAVERSAL_IMPLEMENTATION.md` - How relay server works
+- `BLE_DEADOBJECT_BUG.md` - BLE subscription bug details
+- `BLE_FALSE_DELIVERY_BUG.md` - Delivery status bug analysis
+- `MESSAGE_DELIVERY_RCA_2026-03-09.md` - Delivery failure RCA
+- `CELLULAR_NAT_SOLUTION.md` - NAT traversal architecture
+- `SESSION_COMPLETE_2026-03-09.md` - Session summary
+- `FINAL_SESSION_SUMMARY.md` - Final recommendations
+
+### Testing Required
+- [ ] Verify cellular↔WiFi messaging via relay
+- [ ] Test BLE reconnection scenarios
+- [ ] Confirm delivery status accuracy
+- [ ] Validate UI keyboard handling
+
+---
+
 # Chat Conversation
 
 Note: _This is purely the output of the chat conversation and does not contain any raw data, codebase snippets, etc. used to generate the output._

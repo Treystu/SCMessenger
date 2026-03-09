@@ -15,6 +15,9 @@ class MeshApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // Storage health and maintenance (Clean non-critical, rotate logs)
+        com.scmessenger.android.utils.StorageManager.performStartupMaintenance(this)
+
         // Initialize Timber logging
         timber.log.Timber.plant(timber.log.Timber.DebugTree())
         

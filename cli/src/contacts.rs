@@ -60,7 +60,12 @@ pub struct ContactList {
 impl ContactList {
     /// Open or create contact list database
     pub fn open(path: PathBuf) -> Result<Self> {
-        let db = sled::open(path).context("Failed to open contacts database")?;
+        let db = sled::Config::default()
+            .path(path)
+            .mode(sled::Mode::LowSpace)
+            .use_compression(false)
+            .open()
+            .context("Failed to open contacts database")?;
         Ok(Self { db })
     }
 

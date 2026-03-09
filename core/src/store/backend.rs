@@ -87,7 +87,12 @@ pub struct SledStorage {
 #[cfg(not(target_arch = "wasm32"))]
 impl SledStorage {
     pub fn new(path: &str) -> std::result::Result<Self, String> {
-        let db = sled::open(path).map_err(|e| e.to_string())?;
+        let db = sled::Config::default()
+            .path(path)
+            .mode(sled::Mode::LowSpace)
+            .use_compression(false)
+            .open()
+            .map_err(|e| e.to_string())?;
         Ok(Self { db })
     }
 }

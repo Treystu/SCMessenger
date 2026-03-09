@@ -22,7 +22,8 @@ import com.scmessenger.android.ui.viewmodels.MainViewModel
 @Composable
 fun OnboardingScreen(
     onOnboardingComplete: () -> Unit,
-    viewModel: MainViewModel = hiltViewModel()
+    viewModel: MainViewModel = hiltViewModel(),
+    modifier: Modifier = Modifier
 ) {
     val permissionsToRequest = remember {
         val list = mutableListOf(
@@ -94,7 +95,7 @@ fun OnboardingScreen(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(24.dp),
         contentAlignment = Alignment.Center

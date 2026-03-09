@@ -83,7 +83,12 @@ pub struct MessageHistory {
 impl MessageHistory {
     /// Open or create message history database
     pub fn open(path: PathBuf) -> Result<Self> {
-        let db = sled::open(path).context("Failed to open message history database")?;
+        let db = sled::Config::default()
+            .path(path)
+            .mode(sled::Mode::LowSpace)
+            .use_compression(false)
+            .open()
+            .context("Failed to open message history database")?;
         Ok(Self { db })
     }
 

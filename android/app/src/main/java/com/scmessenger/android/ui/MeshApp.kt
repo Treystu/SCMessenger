@@ -31,6 +31,8 @@ fun MeshApp() {
     val mainViewModel: MainViewModel = hiltViewModel()
     val hasIdentity by mainViewModel.hasIdentity.collectAsState()
     val showOnboarding by mainViewModel.showOnboarding.collectAsState()
+    val isStorageLow by mainViewModel.isStorageLow.collectAsState()
+    val availableStorageMB by mainViewModel.availableStorageMB.collectAsState()
     val navController = rememberNavController()
 
     LaunchedEffect(Unit) {
@@ -47,21 +49,29 @@ fun MeshApp() {
         }
     }
 
-    if (showOnboarding) {
-        OnboardingScreen(
-            onOnboardingComplete = { mainViewModel.refreshIdentityState() },
-            viewModel = mainViewModel
-        )
-    } else {
-        Scaffold(
-            bottomBar = { MeshBottomBar(navController = navController, hasIdentity = hasIdentity) }
-        ) { paddingValues ->
-            MeshNavHost(
-                navController = navController,
-                hasIdentity = hasIdentity,
-                onIdentityChanged = { mainViewModel.refreshIdentityState() },
-                modifier = Modifier.padding(paddingValues)
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (isStorageLow) {
+            com.scmessenger.android.ui.components.StorageWarningBanner(availableMB = availableStorageMB)
+        }
+
+        if (showOnboarding) {
+            OnboardingScreen(
+                onOnboardingComplete = { mainViewModel.refreshIdentityState() },
+                viewModel = mainViewModel,
+                modifier = Modifier.weight(1f)
             )
+        } else {
+            Scaffold(
+                modifier = Modifier.weight(1f),
+                bottomBar = { MeshBottomBar(navController = navController, hasIdentity = hasIdentity) }
+            ) { paddingValues ->
+                MeshNavHost(
+                    navController = navController,
+                    hasIdentity = hasIdentity,
+                    onIdentityChanged = { mainViewModel.refreshIdentityState() },
+                    modifier = Modifier.padding(paddingValues)
+                )
+            }
         }
     }
 }

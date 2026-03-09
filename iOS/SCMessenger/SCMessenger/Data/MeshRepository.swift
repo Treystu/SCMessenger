@@ -1211,7 +1211,18 @@ final class MeshRepository {
                let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
                 for obj in arr {
                     guard let msgId = obj["id"] as? String else { continue }
-                    if (try? historyManager?.get(id: msgId)) != nil { continue }
+                    if let existing = try? historyManager?.get(id: msgId) {
+                        let dirStr = obj["dir"] as? String
+                        let isPeerReflectingRecv = dirStr == "recv"
+                        if existing.direction == .sent && !existing.delivered && isPeerReflectingRecv {
+                            try? historyManager?.markDelivered(id: msgId)
+                            if let updated = try? historyManager?.get(id: msgId) {
+                                messageUpdates.send(updated)
+                                MeshEventBus.shared.messageEvents.send(.delivered(messageId: msgId))
+                            }
+                        }
+                        continue
+                    }
 
                     let dirStr = obj["dir"] as? String
                     let record = MessageRecord(

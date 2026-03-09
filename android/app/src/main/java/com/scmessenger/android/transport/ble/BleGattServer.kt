@@ -33,6 +33,9 @@ class BleGattServer(
 
     // Track connected devices
     private val connectedDevices = ConcurrentHashMap<String, BluetoothDevice>()
+    
+    // Track subscribed devices and their subscribed characteristics
+    private val subscribedDevices = ConcurrentHashMap<String, MutableSet<UUID>>()
 
     // Pending reassembly buffers per device
     private val reassemblyBuffers = ConcurrentHashMap<String, MutableMap<Int, ByteArray>>()
@@ -171,6 +174,13 @@ class BleGattServer(
             return false
         }
 
+        // Check if device is subscribed to MESSAGE characteristic
+        val isSubscribed = subscribedDevices[deviceAddress]?.contains(MESSAGE_CHAR_UUID) == true
+        if (!isSubscribed) {
+            Timber.w("Device $deviceAddress not subscribed to MESSAGE characteristic")
+            return false
+        }
+
         return try {
             val service = gattServer?.getService(SERVICE_UUID)
             val characteristic = service?.getCharacteristic(MESSAGE_CHAR_UUID)
@@ -189,6 +199,14 @@ class BleGattServer(
                 characteristic.value = data
                 notifyCharacteristicChangedSafe(device, characteristic)
             }
+        } catch (e: android.os.DeadObjectException) {
+            Timber.e("GATT connection dead for $deviceAddress, cleaning up")
+            // Force cleanup stale connection
+            connectedDevices.remove(deviceAddress)
+            subscribedDevices.remove(deviceAddress)
+            reassemblyBuffers.remove(deviceAddress)
+            expectedFragments.remove(deviceAddress)
+            false
         } catch (e: SecurityException) {
             Timber.e(e, "Security exception sending data")
             false
@@ -255,6 +273,7 @@ class BleGattServer(
 
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     connectedDevices.remove(device.address)
+                    subscribedDevices.remove(device.address)  // Clear subscription state
                     reassemblyBuffers.remove(device.address)
                     expectedFragments.remove(device.address)
                     Timber.d("GATT client disconnected: ${device.address}")
@@ -356,6 +375,49 @@ class BleGattServer(
                     if (responseNeeded) {
                         sendResponseSafe(device, requestId, BluetoothGatt.GATT_FAILURE, offset, null)
                     }
+                }
+            }
+        }
+
+        override fun onDescriptorWriteRequest(
+            device: BluetoothDevice,
+            requestId: Int,
+            descriptor: BluetoothGattDescriptor,
+            preparedWrite: Boolean,
+            responseNeeded: Boolean,
+            offset: Int,
+            value: ByteArray?
+        ) {
+            super.onDescriptorWriteRequest(device, requestId, descriptor, preparedWrite, responseNeeded, offset, value)
+
+            if (value == null) {
+                if (responseNeeded) {
+                    sendResponseSafe(device, requestId, BluetoothGatt.GATT_FAILURE, offset, null)
+                }
+                return
+            }
+
+            if (descriptor.uuid == CLIENT_CHARACTERISTIC_CONFIG_UUID) {
+                val characteristic = descriptor.characteristic
+                val isSubscribing = value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                
+                if (isSubscribing) {
+                    // Track subscription
+                    subscribedDevices.getOrPut(device.address) { ConcurrentHashMap.newKeySet() }
+                        .add(characteristic.uuid)
+                    Timber.d("BLE GATT: Device ${device.address} subscribed to ${characteristic.uuid}")
+                } else {
+                    // Remove subscription
+                    subscribedDevices[device.address]?.remove(characteristic.uuid)
+                    Timber.d("BLE GATT: Device ${device.address} unsubscribed from ${characteristic.uuid}")
+                }
+                
+                if (responseNeeded) {
+                    sendResponseSafe(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                }
+            } else {
+                if (responseNeeded) {
+                    sendResponseSafe(device, requestId, BluetoothGatt.GATT_FAILURE, offset, null)
                 }
             }
         }
@@ -476,6 +538,9 @@ class BleGattServer(
         val IDENTITY_CHAR_UUID: UUID = UUID.fromString("0000df02-0000-1000-8000-00805f9b34fb")
         val MESSAGE_CHAR_UUID: UUID = UUID.fromString("0000df03-0000-1000-8000-00805f9b34fb")
         val SYNC_CHAR_UUID: UUID = UUID.fromString("0000df04-0000-1000-8000-00805f9b34fb")
+
+        // Client Characteristic Configuration Descriptor (for enabling notifications)
+        val CLIENT_CHARACTERISTIC_CONFIG_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
         // Client Configuration Descriptor
         val CLIENT_CONFIG_DESCRIPTOR_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")

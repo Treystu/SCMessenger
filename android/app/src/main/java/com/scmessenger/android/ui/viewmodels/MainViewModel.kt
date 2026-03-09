@@ -7,8 +7,10 @@ import com.scmessenger.android.data.PreferencesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import com.scmessenger.android.utils.StorageManager
 import javax.inject.Inject
 
 @HiltViewModel
@@ -19,13 +21,25 @@ class MainViewModel @Inject constructor(
 
     private val _isReady = MutableStateFlow(false)
     val isReady = _isReady.asStateFlow()
-    val hasIdentity = isReady
+    val hasIdentity = _isReady.asStateFlow()
+
     private val _onboardingCompleted = MutableStateFlow(false)
     val onboardingCompleted = _onboardingCompleted.asStateFlow()
+
     private val _installChoiceCompleted = MutableStateFlow(false)
     val installChoiceCompleted = _installChoiceCompleted.asStateFlow()
-    private val _showOnboarding = MutableStateFlow(false)
-    val showOnboarding = _showOnboarding.asStateFlow()
+
+    // showOnboarding is true if NOT ready AND NOT install choice completed
+    val showOnboarding = combine(
+        _isReady,
+        _installChoiceCompleted
+    ) { ready, choiceCompleted ->
+        !ready && !choiceCompleted
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = false
+    )
 
     private val _isCreatingIdentity = MutableStateFlow(false)
     val isCreatingIdentity = _isCreatingIdentity.asStateFlow()
@@ -42,36 +56,61 @@ class MainViewModel @Inject constructor(
     val identityInfo: uniffi.api.IdentityInfo?
         get() = meshRepository.getIdentityInfo()
 
+    private val _isStorageLow = MutableStateFlow(false)
+    val isStorageLow = _isStorageLow.asStateFlow()
+
+    private val _availableStorageMB = MutableStateFlow(0L)
+    val availableStorageMB = _availableStorageMB.asStateFlow()
+
     init {
+        Timber.d("MainViewModel init")
+        refreshStorageStatus()
+
+        // Observe preferences
         viewModelScope.launch {
             preferencesRepository.onboardingCompleted.collect { completed ->
+                Timber.d("Preference onboardingCompleted: $completed")
                 _onboardingCompleted.value = completed
-                updateOnboardingState()
             }
         }
         viewModelScope.launch {
             preferencesRepository.installChoiceCompleted.collect { completed ->
+                Timber.d("Preference installChoiceCompleted: $completed")
                 _installChoiceCompleted.value = completed
-                updateOnboardingState()
             }
         }
+
+        // Auto-refresh identity state when service state changes (important for lazy start)
+        viewModelScope.launch {
+            meshRepository.serviceState.collect { state ->
+                Timber.d("MeshRepository service state: $state")
+                if (state == uniffi.api.ServiceState.RUNNING) {
+                    refreshIdentityState()
+                }
+            }
+        }
+
         refreshIdentityState()
     }
 
     fun refreshIdentityState() {
         viewModelScope.launch {
+            Timber.d("refreshIdentityState() called")
             val initialized = meshRepository.isIdentityInitialized()
+            Timber.d("Identity initialized state: $initialized")
             _identityError.value = null
             _isReady.value = initialized
-            if (initialized && !_installChoiceCompleted.value) {
-                preferencesRepository.setInstallChoiceCompleted(true)
-                _installChoiceCompleted.value = true
+
+            if (initialized) {
+                if (!_installChoiceCompleted.value) {
+                    Timber.d("Identity is initialized but install choice not completed, fixing preference...")
+                    preferencesRepository.setInstallChoiceCompleted(true)
+                }
+                if (!_onboardingCompleted.value) {
+                    Timber.d("Identity is initialized but onboarding not completed, fixing preference...")
+                    preferencesRepository.setOnboardingCompleted(true)
+                }
             }
-            if (initialized && !_onboardingCompleted.value) {
-                preferencesRepository.setOnboardingCompleted(true)
-                _onboardingCompleted.value = true
-            }
-            updateOnboardingState()
         }
     }
 
@@ -87,21 +126,21 @@ class MainViewModel @Inject constructor(
                     _isReady.value = false
                     return@launch
                 }
+                Timber.i("Creating identity for nickname: $trimmedNickname")
                 meshRepository.createIdentity()
                 meshRepository.setNickname(trimmedNickname)
-                _isReady.value = meshRepository.isIdentityInitialized()
+
+                val initialized = meshRepository.isIdentityInitialized()
+                Timber.i("Identity creation result initialized: $initialized")
+                _isReady.value = initialized
                 if (_isReady.value) {
                     preferencesRepository.setOnboardingCompleted(true)
                     preferencesRepository.setInstallChoiceCompleted(true)
-                    _onboardingCompleted.value = true
-                    _installChoiceCompleted.value = true
                 }
-                updateOnboardingState()
             } catch (e: Exception) {
                 Timber.e(e, "Failed to create identity")
                 _identityError.value = e.message ?: "Failed to create identity"
                 _isReady.value = false
-                updateOnboardingState()
             } finally {
                 _isCreatingIdentity.value = false
             }
@@ -110,6 +149,15 @@ class MainViewModel @Inject constructor(
 
     fun clearIdentityError() {
         _identityError.value = null
+    }
+
+    fun refreshStorageStatus() {
+        viewModelScope.launch {
+            val available = meshRepository.getAvailableStorageMB()
+            _availableStorageMB.value = available
+            _isStorageLow.value = available < StorageManager.CRITICAL_STORAGE_THRESHOLD_MB
+            Timber.d("Storage refreshed: $available MB available (Low=${_isStorageLow.value})")
+        }
     }
 
     fun importContact(jsonString: String) {
@@ -165,15 +213,9 @@ class MainViewModel @Inject constructor(
 
     fun skipOnboardingForRelayOnlyInstall() {
         viewModelScope.launch {
-            preferencesRepository.setOnboardingCompleted(true)
+            Timber.i("Skipping onboarding for relay-only install")
             preferencesRepository.setInstallChoiceCompleted(true)
-            _onboardingCompleted.value = true
-            _installChoiceCompleted.value = true
-            updateOnboardingState()
+            preferencesRepository.setOnboardingCompleted(true)
         }
-    }
-
-    private fun updateOnboardingState() {
-        _showOnboarding.value = !_isReady.value && !_installChoiceCompleted.value
     }
 }

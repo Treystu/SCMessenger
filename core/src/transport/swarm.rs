@@ -856,6 +856,8 @@ pub enum SwarmEvent2 {
     /// NAT status changed (from AutoNAT probe)
     /// Value is one of: "public:<addr>", "private", "unknown"
     NatStatusChanged(String),
+    /// Port mapping event (UPnP).
+    PortMapping(String),
 }
 
 /// Handle to communicate with the running swarm task
@@ -1662,6 +1664,13 @@ pub async fn start_swarm_with_config(
 
                                             if let Some(primary) = address_observer.primary_external_address() {
                                                 tracing::info!("Consensus external address: {}", primary);
+                                                // Convert SocketAddr to Multiaddr and add to swarm
+                                                let (ip, port) = (primary.ip(), primary.port());
+                                                let maddr: Multiaddr = match ip {
+                                                    std::net::IpAddr::V4(ip4) => format!("/ip4/{}/tcp/{}", ip4, port).parse().unwrap(),
+                                                    std::net::IpAddr::V6(ip6) => format!("/ip6/{}/tcp/{}", ip6, port).parse().unwrap(),
+                                                };
+                                                swarm.add_external_address(maddr);
                                             }
                                         }
 
@@ -2170,6 +2179,42 @@ pub async fn start_swarm_with_config(
                                 }
                             }
 
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::RelayServer(event)) => {
+                                use libp2p::relay::Event as RelayServerEvent;
+                                match event {
+                                    RelayServerEvent::ReservationReqAccepted { src_peer_id, .. } => {
+                                        tracing::info!(
+                                            "✅ Relay server: accepted reservation from {} — acting as relay for this peer",
+                                            src_peer_id
+                                        );
+                                    }
+                                    RelayServerEvent::CircuitReqAccepted { src_peer_id, dst_peer_id } => {
+                                        tracing::info!(
+                                            "🔌 Relay server: circuit established {} -> {} — relaying traffic",
+                                            src_peer_id,
+                                            dst_peer_id
+                                        );
+                                    }
+                                    RelayServerEvent::CircuitClosed { src_peer_id, dst_peer_id, .. } => {
+                                        tracing::debug!(
+                                            "Circuit closed: {} -> {}",
+                                            src_peer_id,
+                                            dst_peer_id
+                                        );
+                                    }
+                                    RelayServerEvent::ReservationReqDenied { .. } |
+                                    RelayServerEvent::ReservationTimedOut { .. } |
+                                    RelayServerEvent::CircuitReqDenied { .. } |
+                                    RelayServerEvent::CircuitReqOutboundConnectFailed { .. } |
+                                    RelayServerEvent::ReservationReqAcceptFailed { .. } |
+                                    RelayServerEvent::ReservationReqDenyFailed { .. } |
+                                    RelayServerEvent::CircuitReqDenyFailed { .. } |
+                                    RelayServerEvent::CircuitReqAcceptFailed { .. } => {
+                                        // These are logged at debug level by libp2p already
+                                    }
+                                }
+                            }
+
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Ping(event)) => {
                                 tracing::trace!("Ping event: {:?}", event);
                             }
@@ -2225,6 +2270,16 @@ pub async fn start_swarm_with_config(
                                         peer_id,
                                         observed_addr
                                     );
+
+                                    if let Some(primary) = address_observer.primary_external_address() {
+                                        // Convert SocketAddr to Multiaddr and add to swarm
+                                        let (ip, port) = (primary.ip(), primary.port());
+                                        let maddr: Multiaddr = match ip {
+                                            std::net::IpAddr::V4(ip4) => format!("/ip4/{}/tcp/{}", ip4, port).parse().unwrap(),
+                                            std::net::IpAddr::V6(ip6) => format!("/ip6/{}/tcp/{}", ip6, port).parse().unwrap(),
+                                        };
+                                        swarm.add_external_address(maddr);
+                                    }
                                 } else {
                                     tracing::trace!(
                                         "Identify observed_addr not socket-like: {}",
@@ -2309,6 +2364,27 @@ pub async fn start_swarm_with_config(
                                     listen_addrs: info.listen_addrs.clone(),
                                     protocols: info.protocols.iter().map(|p| p.to_string()).collect(),
                                 }).await;
+                            }
+
+                            SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Upnp(event)) => {
+                                use libp2p::upnp;
+                                match event {
+                                    upnp::Event::NewExternalAddr(addr) => {
+                                        tracing::info!("🌐 UPnP: successfully mapped external address {}", addr);
+                                        swarm.add_external_address(addr.clone());
+                                        let _ = event_tx.send(SwarmEvent2::PortMapping(format!("mapped:{}", addr))).await;
+                                    }
+                                    upnp::Event::GatewayNotFound => {
+                                        tracing::debug!("🌐 UPnP: no compatible gateway found");
+                                    }
+                                    upnp::Event::NonRoutableGateway => {
+                                        tracing::debug!("🌐 UPnP: gateway is not a routing device");
+                                    }
+                                    upnp::Event::ExpiredExternalAddr(addr) => {
+                                        tracing::info!("🌐 UPnP: external address mapping expired: {}", addr);
+                                        let _ = event_tx.send(SwarmEvent2::PortMapping(format!("expired:{}", addr))).await;
+                                    }
+                                }
                             }
 
                             SwarmEvent::NewListenAddr { address, .. } => {

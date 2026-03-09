@@ -1,9 +1,9 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active  
-Last updated: 2026-03-07
+Last updated: 2026-03-09
 
-This is the active implementation backlog based on repository state verified on **2026-03-03**.
+This is the active implementation backlog based on repository state verified on **2026-03-09**.
 
 Primary delivery target: **one unified Android + iOS + Web app**.
 
@@ -16,6 +16,21 @@ Owner policy constraints (2026-02-23):
 - Anti-abuse controls are required before beta release.
 - Critical UX controls must stay in Android+iOS+Web parity with no temporary lead platform.
 
+## v0.2.0 Critical Bug Fixes (2026-03-09)
+
+Completed in this pass:
+
+1. [x] **NAT Traversal**: Added relay server behavior to all nodes for cellular↔WiFi messaging
+2. [x] **BLE Reliability**: Fixed DeadObjectException with proper subscription tracking
+3. [x] **Delivery Status**: Eliminated false positives where BLE ACK was treated as full delivery
+4. [x] **Android UI**: Fixed keyboard covering chat input with proper IME padding
+
+Outstanding items:
+
+1. [ ] Verify stuck messages now deliver via relay circuits
+2. [ ] Test BLE reconnection scenarios end-to-end
+3. [ ] Monitor delivery status accuracy in production use
+
 ## v0.2.0 Execution Residual Register
 
 Residual risks from completed v0.2.0 phases (currently through WS12.5 burndown audit) are tracked in:
@@ -25,6 +40,19 @@ Residual risks from completed v0.2.0 phases (currently through WS12.5 burndown a
 Do not start the next v0.2.0 phase without checking the corresponding entry gate in that register.
 
 1. [ ] Ensure message history is not cleared on app startup. Messages should persist across app restarts.
+
+## WS12.38 Cross-Platform Status Sync Convergence (2026-03-09 HST)
+
+Completed in this pass:
+
+1. [x] Diagnosed "pending status" hang on iOS for messages received by Android.
+2. [x] Fixed `history_sync_data` handler on iOS/Swift and Android/Kotlin to update `delivered` status for existing `sent` records instead of skipping them.
+3. [x] Ensured that history sync acts as a reliable eventual-consistency fallback when point-to-point delivery receipts are lost.
+4. [x] Verified Android compilation with corrected coroutine scope for EventBus emissions.
+
+Still open:
+
+1. [ ] Monitor real-world convergence on physical devices to confirm "stuck pending" messages resolve on next sync trigger.
 
 ## WS12.36 Repo/GitHub Operating-Model Planning Audit (2026-03-07 UTC)
 
@@ -1082,13 +1110,13 @@ Not feasible for `v0.2.0` without expanding release scope:
      - release note doc finalization for GitHub paste/publish flow,
      - release workflow checklist alignment with residual-risk closure evidence,
      - promote external planning artifacts into repo-local docs before execution (to avoid workstation-specific paths).
-    - Source inputs now canonicalized in-repo:
-      - `docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md`
-      - `docs/releases/RELEASE_NOTES_V0.1.2_GH.md`
-      - `docs/releases/RELEASE_NOTES_V0.2.0_DRAFT.md`
-    - Canonicalization target (during WS13.x execution):
-      - keep `docs/releases/` as the only release-notes/checklist source of truth.
-    - Progress: repo-local release planning/note artifacts now exist under `docs/releases/`, so WS13.x no longer depends on workstation-specific external files.
+   - Source inputs now canonicalized in-repo:
+     - `docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md`
+     - `docs/releases/RELEASE_NOTES_V0.1.2_GH.md`
+     - `docs/releases/RELEASE_NOTES_V0.2.0_DRAFT.md`
+   - Canonicalization target (during WS13.x execution):
+     - keep `docs/releases/` as the only release-notes/checklist source of truth.
+   - Progress: repo-local release planning/note artifacts now exist under `docs/releases/`, so WS13.x no longer depends on workstation-specific external files.
    - Execution note: queue this after current WS12 in-flight session and after WS12/WS12.5 closure evidence is captured.
 
 7. **WS14 (v0.2.1): Direct Message + Direct Message Request Notifications (iOS/Android/WASM)**

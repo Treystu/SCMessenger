@@ -9,12 +9,12 @@ buildscript {
         coroutines_version = '1.7.3'
         
         // SDK versions
-        compileSdk = 34
+        compileSdk = 35
         minSdk = 26  // Required for WiFi Aware
-        targetSdk = 34
+        targetSdk = 35
         
         // Application
-        versionCode = 4
+        versionCode = 5
         versionName = '0.2.0'
     }
     

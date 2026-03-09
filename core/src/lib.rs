@@ -262,10 +262,19 @@ fn migrate_legacy_root_store(base: &Path) -> Result<(), IronCoreError> {
         return Ok(());
     }
 
-    let legacy = sled::open(base).map_err(|_| IronCoreError::StorageError)?;
-    let identity_db = sled::open(base.join("identity")).map_err(|_| IronCoreError::StorageError)?;
-    let outbox_db = sled::open(base.join("outbox")).map_err(|_| IronCoreError::StorageError)?;
-    let inbox_db = sled::open(base.join("inbox")).map_err(|_| IronCoreError::StorageError)?;
+    let open_db = |p: &Path| -> Result<sled::Db, IronCoreError> {
+        sled::Config::default()
+            .path(p)
+            .mode(sled::Mode::LowSpace)
+            .use_compression(false)
+            .open()
+            .map_err(|_| IronCoreError::StorageError)
+    };
+
+    let legacy = open_db(base)?;
+    let identity_db = open_db(&base.join("identity"))?;
+    let outbox_db = open_db(&base.join("outbox"))?;
+    let inbox_db = open_db(&base.join("inbox"))?;
 
     let mut copied_keys = 0usize;
     copied_keys += usize::from(copy_missing_key(

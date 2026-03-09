@@ -131,6 +131,11 @@ class MeshRepository(private val context: Context) {
         }
     }
 
+    /** Available internal storage in MB. used for low-storage warnings. */
+    fun getAvailableStorageMB(): Long {
+        return com.scmessenger.android.utils.StorageManager.getAvailableStorageMB(context)
+    }
+
     private val storagePath: String = context.filesDir.absolutePath
     private val identityBackupPrefs: SharedPreferences by lazy {
         context.getSharedPreferences(IDENTITY_BACKUP_PREFS, Context.MODE_PRIVATE)
@@ -940,7 +945,8 @@ class MeshRepository(private val context: Context) {
                                 for (i in 0 until arr.length()) {
                                     val obj = arr.getJSONObject(i)
                                     val msgId = obj.getString("id")
-                                    if (historyManager?.get(msgId) == null) {
+                                    val existing = historyManager?.get(msgId)
+                                    if (existing == null) {
                                         val record = uniffi.api.MessageRecord(
                                             id = msgId,
                                             direction = if (obj.getString("dir") == "sent") uniffi.api.MessageDirection.RECEIVED else uniffi.api.MessageDirection.SENT,
@@ -952,6 +958,21 @@ class MeshRepository(private val context: Context) {
                                         )
                                         historyManager?.add(record)
                                         repoScope.launch { _messageUpdates.emit(record) }
+                                    } else {
+                                        val dirStr = obj.optString("dir")
+                                        val isPeerReflectingRecv = dirStr == "recv"
+                                        if (existing.direction == uniffi.api.MessageDirection.SENT && !existing.delivered && isPeerReflectingRecv) {
+                                            historyManager?.markDelivered(msgId)
+                                            val updated = historyManager?.get(msgId)
+                                            if (updated != null) {
+                                                repoScope.launch { _messageUpdates.emit(updated) }
+                                                repoScope.launch {
+                                                    com.scmessenger.android.service.MeshEventBus.emitMessageEvent(
+                                                        com.scmessenger.android.service.MessageEvent.Delivered(msgId)
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                                 historyManager?.flush()
@@ -3185,6 +3206,7 @@ class MeshRepository(private val context: Context) {
                 outcome = if (localAcked) "accepted" else "failed",
                 detail = "ctx=$attemptContext route_fallback=$routePeerFallback"
             )
+            // BLE-only mode: accept local ACK as delivery
             return DeliveryAttemptResult(acked = localAcked, routePeerId = routePeerFallback)
         }
 
@@ -3193,10 +3215,11 @@ class MeshRepository(private val context: Context) {
                 messageId = traceMessageId,
                 medium = "core",
                 phase = "direct",
-                outcome = if (localAcked) "skipped_local_accepted" else "failed",
-                detail = "ctx=$attemptContext reason=swarm_bridge_unavailable route_fallback=$routePeerFallback"
+                outcome = "failed",
+                detail = "ctx=$attemptContext reason=swarm_bridge_unavailable route_fallback=$routePeerFallback ble_only=${localAcked}"
             )
-            return DeliveryAttemptResult(acked = localAcked, routePeerId = routePeerFallback)
+            // Core unavailable - don't mark as delivered even if BLE succeeded
+            return DeliveryAttemptResult(acked = false, routePeerId = routePeerFallback)
         }
         val sanitizedCandidates = routePeerCandidates
             .map { it.trim() }
@@ -3208,10 +3231,11 @@ class MeshRepository(private val context: Context) {
                 messageId = traceMessageId,
                 medium = "core",
                 phase = "direct",
-                outcome = if (localAcked) "skipped_local_accepted" else "failed",
-                detail = "ctx=$attemptContext reason=no_route_candidates route_fallback=$routePeerFallback"
+                outcome = "failed",
+                detail = "ctx=$attemptContext reason=no_route_candidates route_fallback=$routePeerFallback ble_only=${localAcked}"
             )
-            return DeliveryAttemptResult(acked = localAcked, routePeerId = routePeerFallback)
+            // No core routes - don't mark as delivered even if BLE succeeded
+            return DeliveryAttemptResult(acked = false, routePeerId = routePeerFallback)
         }
 
         primeRelayBootstrapConnections()
@@ -3295,10 +3319,12 @@ class MeshRepository(private val context: Context) {
             messageId = traceMessageId,
             medium = "final",
             phase = "aggregate",
-            outcome = if (localAcked) "local_accepted_no_core_ack" else "failed",
-            detail = "ctx=$attemptContext route_fallback=${sanitizedCandidates.firstOrNull() ?: routePeerFallback}"
+            outcome = "failed",
+            detail = "ctx=$attemptContext route_fallback=${sanitizedCandidates.firstOrNull() ?: routePeerFallback} ble_only=${localAcked}"
         )
-        return DeliveryAttemptResult(acked = localAcked, routePeerId = null)
+        // Core delivery failed - don't mark as delivered even if BLE succeeded
+        // Message will be retried later
+        return DeliveryAttemptResult(acked = false, routePeerId = null)
     }
 
     private suspend fun awaitPeerConnection(peerId: String, timeoutMs: Long = 1200L): Boolean {

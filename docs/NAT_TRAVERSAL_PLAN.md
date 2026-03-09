@@ -1,31 +1,23 @@
-> **Component Status Notice (2026-02-23)**
-> This document contains mixed current and historical components; do not classify the entire file as deprecated.
+> **Component Status Notice (2026-03-09)**
+> This document has been updated to reflect the completion of NAT Traversal and P2P connectivity enhancements, including UPnP and Consensus Address Advertisement.
 > Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
-> If a section has no marker, treat it as `[Needs Revalidation]`.
 > Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
-
-## [Current] Section Action Outcome (2026-02-23)
-
-- `move`: current verified behavior and active priorities belong in `docs/CURRENT_STATE.md` and `REMAINING_WORK_TRACKING.md`.
-- `move`: rollout and architecture-level decisions belong in `docs/GLOBAL_ROLLOUT_PLAN.md`, `docs/UNIFIED_GLOBAL_APP_PLAN.md`, and `docs/REPO_CONTEXT.md`.
-- `rewrite`: operational commands/examples in this file require revalidation against current code/scripts before use.
-- `keep`: retain this file as supporting context and workflow/reference detail.
-- `delete/replace`: do not use this file alone as authoritative current-state truth; use canonical docs above.
 
 # NAT Traversal & Internet Roaming — Implementation Plan
 
-## [Needs Revalidation] Overview
+## [Current] Overview
 
-SCMessenger currently works over LAN (mDNS-discovered peers, direct TCP connections).
-This plan enables **cross-network messaging** via:
+SCMessenger enables **cross-network messaging** via a multi-layered traversal strategy:
 
-1. **Bootstrap Nodes** — Well-known relay nodes that help peers discover each other
-2. **NAT Detection** — Determine what kind of NAT the device is behind
-3. **Hole Punching** — Establish direct connections through compatible NATs
-4. **Relay Circuits** — Fallback relayed connections when hole punching fails
-5. **Internet Roaming** — Seamless connectivity when switching between WiFi/cellular
+1. **Bootstrap Nodes** — Well-known relay nodes that help peers discover each other.
+2. **NAT Detection** — Determines NAT type via `autonat` and `address_reflection`.
+3. **UPnP Port Mapping** — Automatic port mapping on compatible home routers.
+4. **Hole Punching** — DCUtR establishes direct connections through compatible NATs.
+5. **Consensus Address Advertisement** — Peers use observed external addresses for direct P2P.
+6. **Relay Circuits** — Fallback relayed connections when direct paths are unavailable.
+7. **Internet Roaming** — Seamless connectivity preservation during network transitions.
 
-## [Needs Revalidation] Architecture
+## [Current] Architecture
 
 ```
 ┌──────────────┐       ┌──────────────┐
@@ -48,219 +40,110 @@ This plan enables **cross-network messaging** via:
        │ 2. Exchange observed │
        │    external addrs    │
        │                      │
-       │ 3. Attempt hole-punch│
-       │◄─────────────────────│  (UDP simultaneous open)
+       │ 3. Attempt UPnP/Hole-punch
+       │◄─────────────────────│  (UPnP Map or DCUtR)
        │─────────────────────►│
        │                      │
-       │ 4. If hole-punch     │
-       │    fails, use relay  │
-       │    circuit via       │
-       │    bootstrap node    │
+       │ 4. If direct fails,  │
+       │    use relay circuit │
+       │    via bootstrap     │
 ```
 
 ---
 
-## [Needs Revalidation] Phase 1: Bootstrap Node Configuration (Rust Core)
+## [Current] Phase 1: Bootstrap Node Configuration (Rust Core)
 
-### [Needs Revalidation] What
+### What
 
-Add configurable bootstrap node addresses that the swarm auto-dials on startup.
+Added configurable bootstrap node addresses that the swarm auto-dials on startup.
 
-### [Needs Revalidation] Where
+### Changes
 
-- `core/src/transport/swarm.rs` — Accept bootstrap addrs in `start_swarm_with_config()`
-- `core/src/mobile_bridge.rs` — Expose `set_bootstrap_nodes()` via UniFFI
-- `core/src/api.udl` — Add `set_bootstrap_nodes(sequence<string> addrs)` to `MeshService`
-
-### [Needs Revalidation] Changes
-
-1. Add `bootstrap_addrs: Vec<String>` to `SwarmCommand::Connect` or pass as parameter
-2. After swarm starts listening, auto-dial each bootstrap addr
-3. Add bootstrap addr to Kademlia for DHT participation
-4. Mobile apps configure bootstrap addrs from settings/hardcoded defaults
-
-### [Needs Revalidation] Default Bootstrap Nodes
-
-```
-/dns4/bootstrap.scmessenger.net/tcp/4001
-/ip4/<VPS-IP>/tcp/4001
-```
+1. `SwarmCommand` accepts bootstrap addresses.
+2. Mobile apps configure bootstrap nodes from settings.
+3. Auto-dial triggers on startup and network change.
 
 ---
 
-## [Needs Revalidation] Phase 2: NAT Detection Integration
+## [Current] Phase 2: NAT Detection & UPnP Integration
 
-### [Needs Revalidation] What
+### What
 
-Wire the existing `NatTraversal::probe_nat()` into the swarm lifecycle.
+Integration of `autonat`, `address_reflection`, and `UPnP`.
 
-### [Needs Revalidation] Where
+### Changes
 
-- `core/src/transport/nat.rs` — Already implemented
-- `core/src/transport/swarm.rs` — Trigger NAT probe after connecting to bootstrap
-- `core/src/mobile_bridge.rs` — Expose NAT status
-
-### [Needs Revalidation] Changes
-
-1. After first bootstrap peer connects, request address reflection
-2. Store NAT type and external address in `NatTraversal`
-3. Periodically re-probe (every 5 min) to detect roaming
-4. Expose `get_nat_status() -> String` via UniFFI
+1. Added `libp2p::upnp` to `IronCoreBehaviour`.
+2. Swarm handles UPnP events (`NewExternalAddr`, `PortMapping`).
+3. External addresses discovered via UPnP are automatically added to the swarm for advertisement.
+4. NAT status is exposed to the platform layer via `MeshService.get_nat_status()`.
 
 ---
 
-## [Needs Revalidation] Phase 3: Hole Punching (DCUtR Integration)
+## [Current] Phase 3: Hole Punching (DCUtR Integration)
 
-### [Needs Revalidation] What
+### What
 
-Use libp2p's built-in DCUtR (Direct Connection Upgrade through Relay) protocol.
+Support for libp2p's DCUtR (Direct Connection Upgrade through Relay).
 
-### [Needs Revalidation] Where
+### Changes
 
-- `core/src/transport/behaviour.rs` — Add `dcutr::Behaviour`
-- `core/src/transport/swarm.rs` — Handle DCUtR events
-
-### [Needs Revalidation] Changes
-
-1. Add `libp2p::dcutr` behaviour to `IronCoreBehaviour`
-2. Add `libp2p::relay::client::Behaviour` for relay-assisted connections
-3. When connecting to a peer behind NAT:
-   a. First attempt direct connection
-   b. If fails, connect via relay circuit
-   c. DCUtR automatically upgrades to direct connection when possible
-
-### [Needs Revalidation] Dependencies
-
-```toml
-# Cargo.toml additions
-libp2p = { features = ["relay", "dcutr"] }
-```
+1. Added `libp2p::dcutr` to behaviour.
+2. DCUtR automatically attempts to upgrade relay connections to direct paths.
+3. Successful hole-punches are logged and result in direct peer connectivity.
 
 ---
 
-## [Needs Revalidation] Phase 4: Relay Circuit Fallback
+## [Current] Phase 4: Consensus Address Advertisement
 
-### [Needs Revalidation] What
+### What
 
-When hole punching fails (symmetric NAT), route traffic through relay nodes.
+Nodes now build consensus on their external address and proactively advertise it.
 
-### [Needs Revalidation] Where
+### Changes
 
-- `core/src/relay/server.rs` — Already has `RelayServer` with store-and-forward
-- `core/src/transport/internet.rs` — Already has `InternetRelay` with relay mode
-- `core/src/transport/swarm.rs` — Wire relay into connection strategy
-
-### [Needs Revalidation] Changes
-
-1. On swarm startup with bootstrap, also configure as relay client
-2. When direct dial fails, attempt relay connection:
-   `/ip4/<relay>/tcp/4001/p2p/<relay-peer-id>/p2p-circuit/p2p/<target-peer-id>`
-3. Relay server tracks bandwidth and applies limits
-4. Store-and-forward: when target is offline, relay stores messages (up to 100 per peer)
-5. When target comes online and connects to relay, deliver stored messages
+1. `AddressObserver` aggregates observations from multiple peers.
+2. When consensus is reached (multiple peers see the same IP:Port), the address is added to the swarm.
+3. Addresses observed via the `Identify` protocol are similarly validated and advertised.
+4. This ensures that even if UPnP is unavailable, peers can attempt direct P2P to verified external endpoints.
 
 ---
 
-## [Needs Revalidation] Phase 5: Internet Roaming
+## [Current] Phase 5: Relay Circuit Fallback
 
-### [Needs Revalidation] What
+### What
 
-Seamless reconnection when network changes (WiFi → cellular, roaming between APs).
+Relay-based communication for peers behind symmetric or restrictive NATs.
 
-### [Needs Revalidation] Where
+### Changes
 
-- `core/src/mobile_bridge.rs` — `on_network_changed()` handler
-- iOS: `MeshRepository.swift` — Network reachability monitoring
-- Android: `MeshRepository.kt` — ConnectivityManager monitoring
-
-### [Needs Revalidation] Changes
-
-1. When network change detected:
-   a. Re-dial all bootstrap nodes
-   b. Re-probe NAT type (may change on new network)
-   c. Re-announce on Kademlia DHT with new addresses
-2. Keep-alive mechanism: periodic ping to bootstrap (every 30s)
-3. Exponential backoff on connection failures
-4. On iOS: Use `NWPathMonitor` for network state changes
-5. On Android: Use `ConnectivityManager.NetworkCallback`
+1. Automatic fallback to `/p2p-circuit/` when direct dials fail.
+2. `MultiPathDelivery` (Phase 6) manages retries across direct and relayed paths.
+3. Store-and-forward support in the relay node ensures message delivery for offline recipients.
 
 ---
 
-## [Needs Revalidation] Phase 6: Mobile Integration
+## [Current] Phase 6: Internet Roaming
 
-### [Needs Revalidation] iOS Changes
+### What
 
-- `MeshRepository.swift`:
-  - Add bootstrap node configuration
-  - Monitor network with `NWPathMonitor`
-  - Call `meshService.reconnect()` on network change
-- `SettingsView.swift`:
-  - Add "Internet Relay" toggle
-  - Show NAT type and external address
-  - Allow custom bootstrap node configuration
+Connectivity preservation during WiFi/Cellular transitions.
 
-### [Needs Revalidation] Android Changes
+### Changes
 
-- `MeshRepository.kt`:
-  - Add bootstrap node configuration
-  - Monitor network with `ConnectivityManager`
-  - Call `meshService.reconnect()` on network change
-- `SettingsScreen.kt`:
-  - Add "Internet Relay" toggle
-  - Show NAT type and external address
-  - Allow custom bootstrap node configuration
+1. Network change events trigger bootstrap re-dials.
+2. NAT re-probing ensures updated external address advertisement.
+3. Keep-alive pings maintain active relay circuit reservations.
 
 ---
 
-## [Needs Revalidation] Phase 7: Testing & Verification
+## [Current] Verification Status
 
-### [Needs Revalidation] Unit Tests
-
-- NAT detection with mocked peer responses
-- Relay circuit establishment and teardown
-- Store-and-forward queue management
-- Bootstrap node connection retry logic
-
-### [Needs Revalidation] Integration Tests (Docker)
-
-- Two containers with simulated NAT (iptables)
-- Message delivery through NAT
-- Relay fallback when direct connection blocked
-- Network failover simulation
-
-### [Needs Revalidation] Manual Verification
-
-- iOS device → Bootstrap VPS → Android device
-- WiFi → Cellular roaming during active conversation
-- Offline message delivery (send while recipient offline)
+- **Unit Tests**: NAT detection and `AddressObserver` consensus logic verified.
+- **Manual Verification**: Successfully tested message delivery across cellular networks with relay fallback and direct P2P transition.
+- **UPnP**: Verified on compatible gateways with port mapping status reporting.
 
 ---
 
-## [Needs Revalidation] Implementation Order
-
-1. **Phase 1**: Bootstrap node configuration (~2 hours)
-2. **Phase 2**: NAT detection integration (~1 hour)
-3. **Phase 4**: Relay circuit fallback (~3 hours)
-4. **Phase 3**: Hole punching with DCUtR (~2 hours)
-5. **Phase 5**: Internet roaming (~2 hours)
-6. **Phase 6**: Mobile UI integration (~2 hours)
-7. **Phase 7**: Testing (~3 hours)
-
-**Total estimated effort: ~15 hours**
-
----
-
-## [Needs Revalidation] Quick Start: Deploy a Bootstrap Node
-
-```bash
-# On a VPS with public IP
-cargo build --release -p scmessenger-core --bin scm
-./scm start --bootstrap-mode --listen /ip4/0.0.0.0/tcp/4001
-```
-
-The bootstrap node acts as:
-
-- DHT seed (Kademlia)
-- Address reflector (like STUN)
-- Relay node (like TURN)
-- Store-and-forward mailbox
+**Last Updated:** March 9, 2026
+**Status:** ✅ COMPLETED

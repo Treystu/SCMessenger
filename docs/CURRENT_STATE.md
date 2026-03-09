@@ -1,13 +1,88 @@
 # SCMessenger Current State (Verified)
 
 Status: Active  
-Last updated: 2026-03-07
+Last updated: 2026-03-09
 
-Last verified: **2026-03-07** (local workspace checks on this machine)
+Last verified: **2026-03-09** (local workspace checks on this machine)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
 
-## 2026-03-07 Repository Governance Baseline
+## 2026-03-09 Critical Bug Fixes & NAT Traversal (Verified)
+
+### Relay Server Implementation
+- **All Nodes Now Act as Relays**:
+  - Added `relay::Behaviour` (relay server) to `IronCoreBehaviour` in `core/src/transport/behaviour.rs`
+  - Nodes can now both USE relays (client) and BE relays (server) for NAT traversal
+  - Implements circuit relay protocol for cellular↔WiFi messaging
+  - Added comprehensive relay server event handling in `core/src/transport/swarm.rs`
+  - Logs reservation acceptance and circuit establishment at info level
+
+### BLE Subscription Tracking Fix
+- **Fixed DeadObjectException in BLE GATT Server**:
+  - Added `subscribedDevices` map to track which clients have subscribed to notifications
+  - Implemented `onDescriptorWriteRequest` handler to track subscription state
+  - Added proper subscription cleanup on disconnect
+  - Added DeadObjectException handling with automatic cleanup of stale connections
+  - File: `android/app/src/main/java/com/scmessenger/android/transport/ble/BleGattServer.kt`
+
+### Message Delivery Status Fix
+- **Eliminated False Delivery Positives**:
+  - Fixed bug where BLE transport ACK was treated as full delivery confirmation
+  - Messages now only marked "delivered" when core mesh network confirms
+  - BLE-only delivery no longer returns `acked = true` unless in strict BLE-only mode
+  - Ensures messages retry via core network even if BLE succeeds locally
+  - File: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` (lines 3207-3326)
+
+### Android UI Fixes
+- **Fixed Keyboard Covering Chat Input**:
+  - Added `.imePadding()` to chat input Row for proper keyboard handling
+  - Set `contentWindowInsets = WindowInsets(0, 0, 0, 0)` on Scaffold
+  - File: `android/app/src/main/java/com/scmessenger/android/ui/screens/ChatScreen.kt`
+
+### Build Status
+- Core (Rust): ✅ Built successfully with relay server
+- Android: ✅ Built and deployed (APK installed on device 26261JEGR01896)
+- iOS: ✅ Framework rebuilt with relay server (device 00008130-001A48DA18EB8D3A)
+
+### Documentation Created
+- `NAT_TRAVERSAL_IMPLEMENTATION.md` - Relay server implementation guide
+- `BLE_DEADOBJECT_BUG.md` - BLE subscription tracking bug analysis
+- `BLE_FALSE_DELIVERY_BUG.md` - Delivery status false positive bug
+- `MESSAGE_DELIVERY_RCA_2026-03-09.md` - Root cause analysis of delivery failures
+- `CELLULAR_NAT_SOLUTION.md` - NAT traversal solution architecture
+- `SESSION_COMPLETE_2026-03-09.md` - Complete session summary
+- `FINAL_SESSION_SUMMARY.md` - Final analysis and recommendations
+
+## 2026-03-09 P2P Connectivity & NAT Traversal Enhancements (Verified)
+
+- **Integrated UPnP for Automatic Port Mapping**:
+  - Added `libp2p::upnp` behavior to `IronCoreBehaviour`.
+  - Wired UPnP events in `swarm.rs` to automatically map external ports on compatible routers.
+  - Successfully handles `NewExternalAddr`, `GatewayNotFound`, `NonRoutableGateway`, and `ExpiredExternalAddr`.
+  - Emits `SwarmEvent2::PortMapping` for real-time UI/log visibility.
+- **Consensus-Based External Address Advertisement**:
+  - Implemented automated advertisement of verified external addresses.
+  - When `AddressReflection` consensus is reached, the primary address is converted to a `Multiaddr` and added to the swarm via `swarm.add_external_address()`.
+  - Similarly, stable addresses observed via the `Identify` protocol are validated and advertised.
+  - Ensures that peers can resolve "Direct Preferred" paths even when behind NAT (Phase 6).
+- **Hardened Swarm Event Loop**:
+  - Corrected `upnp::Event` variant mismatch (`NonRoutableGateway`).
+  - Improved logging for NAT status changes and port mapping updates.
+  - Verified that "Direct" path selection in the `MultiPathDelivery` system is now more reliable, reducing relay latency.
+
+## 2026-03-09 Android Storage Health + Bloat Mitigation (Verified)
+
+- Implemented `StorageManager` utility for proactive data cleanup:
+  - Multi-stage log rotation (`.1` to `.5`) maintains 5-session history while preventing unbounded file growth.
+  - Automatically clears `cache/` and prunes oversized `inbox/blobs` / `outbox/blobs` (>100MB) on every app launch.
+  - Integrates in `MeshApplication.onCreate()` so maintenance runs before mesh services init.
+- Added real-time storage monitoring:
+  - `MeshRepository.getAvailableStorageMB()` provides reactive disk health status.
+  - `MainViewModel` tracks `isStorageLow` state against a **500MB** critical threshold.
+  - UI `StorageWarningBanner` now appears at the top of the app when storage is critically low.
+- Verified build and lint safety:
+  - `./gradlew :app:compileDebugKotlin` — **pass**
+  - Trailing whitespace and newline cleanup in `MeshApp.kt` and `FileLoggingTree.kt`.
 
 - Local baseline revalidation on this branch:
   - `cargo fmt --all -- --check` — **pass**

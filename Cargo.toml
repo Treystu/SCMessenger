@@ -30,6 +30,7 @@ libp2p = { version = "0.53", features = [
   "relay",
   "identify",
   "ping",
+  "upnp",
   "macros",
   "request-response",
   "cbor",

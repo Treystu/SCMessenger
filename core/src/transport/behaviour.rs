@@ -19,7 +19,7 @@ use libp2p::{
     autonat, dcutr, gossipsub, identify, kad, ping, relay,
     request_response::{self, ProtocolSupport},
     swarm::{behaviour::toggle::Toggle, NetworkBehaviour},
-    StreamProtocol,
+    upnp, StreamProtocol,
 };
 use std::time::Duration;
 
@@ -28,6 +28,8 @@ use std::time::Duration;
 pub struct IronCoreBehaviour {
     /// Circuit Relay v2 client for relay reservations and relayed dials.
     pub relay_client: relay::client::Behaviour,
+    /// Circuit Relay v2 server - all nodes act as relays for NAT traversal.
+    pub relay_server: relay::Behaviour,
     /// Direct connection upgrade through relay (hole punching).
     pub dcutr: dcutr::Behaviour,
     /// NAT status probing via observed reachability.
@@ -54,6 +56,8 @@ pub struct IronCoreBehaviour {
     pub mdns: Toggle<mdns::tokio::Behaviour>,
     /// Peer identification — advertises relay capability
     pub identify: identify::Behaviour,
+    /// UPnP port mapping
+    pub upnp: upnp::tokio::Behaviour,
 }
 
 /// A message request sent to a peer
@@ -268,9 +272,14 @@ impl IronCoreBehaviour {
                     peer_id
                 )),
         );
+        let upnp = upnp::tokio::Behaviour::default();
+
+        // Relay server - all nodes act as relays for NAT traversal
+        let relay_server = relay::Behaviour::new(peer_id, relay::Config::default());
 
         Ok(Self {
             relay_client,
+            relay_server,
             dcutr,
             autonat,
             ping,
@@ -283,6 +292,7 @@ impl IronCoreBehaviour {
             #[cfg(not(target_arch = "wasm32"))]
             mdns,
             identify,
+            upnp,
         })
     }
 }
