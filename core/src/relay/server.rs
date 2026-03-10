@@ -183,9 +183,7 @@ impl RelayServer {
             .as_secs();
 
         let mut storage = self.storage.write();
-        let peer_queue = storage
-            .entry(target_peer_id.to_string())
-            .or_default();
+        let peer_queue = storage.entry(target_peer_id.to_string()).or_default();
 
         let mut accepted = 0u32;
         let mut rejected = 0u32;

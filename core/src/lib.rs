@@ -904,10 +904,8 @@ impl IronCore {
             if let Ok(bytes) = hex::decode(trimmed) {
                 if bytes.len() == 32 {
                     // Valid format - check if it's a real public key by trying to use it
-                    if ed25519_dalek::VerifyingKey::from_bytes(
-                        bytes.as_slice().try_into().unwrap(),
-                    )
-                    .is_ok()
+                    if ed25519_dalek::VerifyingKey::from_bytes(bytes.as_slice().try_into().unwrap())
+                        .is_ok()
                     {
                         // It's a valid Ed25519 public key
                         return Ok(trimmed.to_lowercase());
