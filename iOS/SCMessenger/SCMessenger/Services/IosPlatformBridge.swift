@@ -28,6 +28,17 @@ final class IosPlatformBridge: PlatformBridge {
     
     private var batteryObserver: NSObjectProtocol?
     private var chargingObserver: NSObjectProtocol?
+
+    private func withMeshRepositoryOnMain(_ body: @escaping @MainActor (MeshRepository) -> Void) {
+        let meshRepository = self.meshRepository
+        Task { @MainActor in
+            guard let meshRepository else { return }
+            // PlatformBridge callbacks are one-way notifications into MeshRepository.
+            // Intentionally fire-and-forget so non-main system callbacks don't synchronously
+            // block on MainActor hops or require callback-side error handling.
+            body(meshRepository)
+        }
+    }
     
     // MARK: - Configuration
     
@@ -59,7 +70,7 @@ final class IosPlatformBridge: PlatformBridge {
     func onBleDataReceived(peerId: String, data: Data) {
         logger.debug("BLE data received from \(peerId): \(data.count) bytes")
         // Forward BLE data to repository for processing
-        meshRepository?.onBleDataReceived(peerId: peerId, data: data)
+        withMeshRepositoryOnMain { $0.onBleDataReceived(peerId: peerId, data: data) }
     }
     
     func onEnteringBackground() {
@@ -75,7 +86,7 @@ final class IosPlatformBridge: PlatformBridge {
     func sendBlePacket(peerId: String, data: Data) {
         logger.debug("Rust requests BLE send to \(peerId): \(data.count) bytes")
         // Rust wants to send BLE data - forward to repository's BLE transport
-        meshRepository?.sendBlePacket(peerId: peerId, data: data)
+        withMeshRepositoryOnMain { $0.sendBlePacket(peerId: peerId, data: data) }
     }
     
     // MARK: - iOS System Monitoring
@@ -112,7 +123,7 @@ final class IosPlatformBridge: PlatformBridge {
                     || UIDevice.current.batteryState == .full
         
         logger.debug("Reporting battery: \(pct)% charging=\(charging)")
-        meshRepository?.reportBattery(pct: pct, charging: charging)
+        withMeshRepositoryOnMain { $0.reportBattery(pct: pct, charging: charging) }
     }
     
     private func startNetworkMonitoring() {
@@ -126,7 +137,7 @@ final class IosPlatformBridge: PlatformBridge {
             
             self.logger.debug("Network path updated: wifi=\(hasWifi) cellular=\(hasCellular) expensive=\(isExpensive) constrained=\(isConstrained)")
             
-            self.meshRepository?.reportNetwork(wifi: hasWifi, cellular: hasCellular)
+            self.withMeshRepositoryOnMain { $0.reportNetwork(wifi: hasWifi, cellular: hasCellular) }
         }
         
         pathMonitor.start(queue: DispatchQueue.global(qos: .utility))
@@ -155,7 +166,7 @@ final class IosPlatformBridge: PlatformBridge {
             }
             
             self.logger.debug("Motion state: \(String(describing: state))")
-            self.meshRepository?.reportMotion(state: state)
+            self.withMeshRepositoryOnMain { $0.reportMotion(state: state) }
         }
     }
     

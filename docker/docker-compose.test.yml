@@ -146,7 +146,7 @@ services:
         echo '=== Building Native Library for Host (Linux) ===' &&
         cargo build --manifest-path core/Cargo.toml --release &&
         mkdir -p core/target/android-libs/host &&
-        cp core/target/release/libscmessenger_core.so core/target/android-libs/host/libuniffi_api.so &&
+        cp target/release/libscmessenger_core.so core/target/android-libs/host/libuniffi_api.so &&
         echo '=== Running Android Unit Tests ===' &&
         cd android && ./gradlew test -Pkotlin.compiler.execution.strategy=\"out-process\" --info --stacktrace &&
         cd .. &&

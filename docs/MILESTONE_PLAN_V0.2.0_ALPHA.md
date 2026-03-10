@@ -15,6 +15,9 @@ Scope: Core + Android + iOS + Desktop GUI + Relay topology
    - explicitly deferred `v0.2.1` work (`WS13`, `WS14`) which remains out of scope for this burndown.
 2. Minimal local verification drift was reduced in this pass:
    - Rust formatting and workspace build/test baseline is green again after the CLI whitespace cleanup and WASM `SwarmEvent::PortMapping(_)` handling update.
+   - follow-up repo-readiness fixes now narrow the remaining non-device blockers to verification/rerun work:
+     - iOS MainActor-safe helper routing added in `BLEPeripheralManager`, `ContactsViewModel`, `TopicManager`, and `IosPlatformBridge`,
+     - Docker Android-unit-test host-library path now matches the workspace release artifact layout.
 3. Milestone implication:
    - `v0.2.0` is not yet ready to be treated as a fully trustworthy steady baseline until the non-device CI defects and GitHub-hosted hygiene actions above are also resolved,
    - `WS13` / `WS14` must remain planning-only until that stabilization work is closed or explicitly accepted as deferred follow-up.

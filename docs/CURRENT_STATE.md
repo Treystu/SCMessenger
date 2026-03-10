@@ -37,6 +37,11 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - GitHub issue taxonomy and branch-protection truth are still not clean,
   - physical-device closure evidence remains open for `R-WS12-29-01`, `R-WS12-29-02`, `R-WS12-04`, `R-WS12-05`, and `R-WS12-06`,
   - therefore the repository is **partially stabilized**, not yet a fully trustworthy steady baseline.
+- Follow-up repo-readiness fixes in this pass:
+  - `BLEPeripheralManager`, `ContactsViewModel`, `TopicManager`, and `IosPlatformBridge` now route `MeshRepository` calls through MainActor-safe helper paths instead of synchronous nonisolated access patterns.
+  - `docker/docker-compose.test.yml` now copies the host Linux UniFFI library from `target/release/libscmessenger_core.so`, matching the actual workspace release artifact location produced by `cargo build --manifest-path core/Cargo.toml --release`.
+  - `cargo build --manifest-path core/Cargo.toml --release` now confirms that `target/release/libscmessenger_core.so` exists for the Docker Android-unit-test handoff.
+  - local iOS verification remains **host-blocked** in this environment: `bash ./iOS/verify-test.sh` fails immediately because `xcodebuild` is not installed on this Linux host, so the iOS readiness fix still requires a macOS verification pass or CI rerun for final proof.
 
 ## 2026-03-09 Critical Bug Fixes & NAT Traversal (Verified)
 

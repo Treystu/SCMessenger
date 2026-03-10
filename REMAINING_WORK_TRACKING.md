@@ -66,8 +66,8 @@ Still open after this pass:
    - resolve the approval/policy setting behind `action_required` PR runs,
    - prune stale non-`main` branches after merge/closure decisions.
 2. [ ] Non-device CI cleanup still needed in-repo:
-   - fix the remaining iOS MainActor isolation errors reported in CI (`BLEPeripheralManager`, `ContactsViewModel`, `TopicManager`, `IosPlatformBridge`),
-   - fix Docker Android-unit-test host-library path drift in `docker/docker-compose.test.yml`.
+   - re-run iOS verification on a macOS host / CI now that MainActor-safe helper fixes are in place for `BLEPeripheralManager`, `ContactsViewModel`, `TopicManager`, and `IosPlatformBridge`,
+   - re-run Docker Integration Suite now that the Android-unit-test host-library copy path in `docker/docker-compose.test.yml` matches the workspace release artifact layout.
 3. [ ] Physical-device WS12 closure evidence is still required:
    - `R-WS12-29-01` iOS send-path crash non-repro on latest binary,
    - `R-WS12-29-02` stale-route / stale-BLE-target convergence,

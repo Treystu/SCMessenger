@@ -9,13 +9,14 @@ import Foundation
 import os
 
 /// Manages Gossipsub topic subscriptions and publishing
+@MainActor
 @Observable
 final class TopicManager {
     private let logger = Logger(subsystem: "com.scmessenger", category: "Topics")
     private weak var meshRepository: MeshRepository?
     
     private(set) var subscribedTopics: Set<String> = []
-    
+
     init(meshRepository: MeshRepository) {
         self.meshRepository = meshRepository
         self.subscribedTopics = Set(meshRepository.getTopics())
@@ -30,7 +31,6 @@ final class TopicManager {
         guard !topic.isEmpty else {
             throw TopicError.invalidTopic("Topic name cannot be empty")
         }
-        
         guard let meshRepository = meshRepository else {
             throw TopicError.publishFailed("Mesh repository unavailable")
         }
@@ -42,7 +42,6 @@ final class TopicManager {
     
     func unsubscribe(from topic: String) throws {
         logger.info("Unsubscribing from topic: \(topic)")
-        
         guard let meshRepository = meshRepository else {
             throw TopicError.publishFailed("Mesh repository unavailable")
         }
@@ -58,7 +57,6 @@ final class TopicManager {
         guard subscribedTopics.contains(topic) else {
             throw TopicError.notSubscribed("Not subscribed to topic: \(topic)")
         }
-        
         guard let meshRepository = meshRepository else {
             throw TopicError.publishFailed("Mesh repository unavailable")
         }
