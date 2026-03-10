@@ -41,11 +41,11 @@ Completed in this pass:
 
 Remaining WS13 queue:
 
-1. [ ] WS13.2 — Contact `last_known_device_id` + relay request `intended_device_id` plumbing.
-2. [ ] WS13.3 — Registration protocol + signature verification.
-3. [ ] WS13.4 — Relay registry state machine + custody enforcement.
-4. [ ] WS13.5 — Handover/abandon queue migration + sender-facing rejection UX.
-5. [ ] WS13.6 — Compatibility/migration matrix, runbook, and acceptance lock.
+1. [ ] WS13.2 — Contact `last_known_device_id` + relay request `intended_device_id` plumbing. **Blocked pending an API-widening design for `SwarmCommand::SendMessage` / `SwarmBridge::send_message` so relay requests can carry recipient identity + device intent instead of only `(peer_id, envelope_data)`.**
+2. [ ] WS13.3 — Registration protocol + signature verification. **Depends on the same transport/binding widening because registration must bind to the active device lifecycle consumed by WS13.4.**
+3. [ ] WS13.4 — Relay registry state machine + custody enforcement. **Blocked until relay requests carry recipient identity + intended-device metadata; the current relay path cannot enforce tight pairing against opaque envelopes alone.**
+4. [ ] WS13.5 — Handover/abandon queue migration + sender-facing rejection UX. **Blocked behind WS13.2-WS13.4 plus unavailable local Android/iOS verification tooling on this host (`ANDROID_HOME`, `cargo-ndk`, `xcodebuild`).**
+5. [ ] WS13.6 — Compatibility/migration matrix, runbook, and acceptance lock. **Do not start until the WS13.2 architectural/API blocker is cleared and platform verification is available.**
 
 ## v0.2.0 Critical Bug Fixes (2026-03-09)
 

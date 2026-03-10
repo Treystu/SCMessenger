@@ -7,6 +7,27 @@ Last verified: **2026-03-10** (local workspace checks on this machine)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
 
+## 2026-03-10 WS13 Full-Stream Execution Audit (Blocked at WS13.2)
+
+- Re-ran the required WS13 preflight on a clean working tree:
+  - `cargo fmt --all -- --check` — **pass**
+  - `cargo build --workspace` — **pass**
+  - `cargo test --workspace` — **pass**
+  - `./scripts/docs_sync_check.sh` — **pass**
+- Re-checked GitHub Actions using the Actions API before continuing WS13:
+  - branch run `22926889362` (`CI`) for `copilot/execute-ws13-implementation` concluded `action_required` with **zero jobs**, so it is a policy/approval blocker rather than a code regression,
+  - older run `22706811148` remains the latest inspected real failing `CI` run with failed jobs/logs, matching the already-documented non-WS13 drift on `main`.
+- Audited live WS13 code state against the canonical plan:
+  - **WS13.1** is implemented in code (`core/src/identity/*`, `core/src/lib.rs`, `core/src/api.udl`, `wasm/src/lib.rs`) and already matches its recorded acceptance evidence,
+  - **WS13.2** through **WS13.6** remain absent in live code: there is still no contact `last_known_device_id`, no relay `intended_device_id`, no `/sc/registration/1.0.0` protocol, and no relay registration registry/state machine.
+- Exact blocker discovered before trustworthy WS13.2 continuation:
+  - current swarm send path only carries `(peer_id, envelope_data)` via `SwarmCommand::SendMessage` / `SwarmBridge::send_message`,
+  - relay requests therefore do **not** carry recipient identity or installation-local device intent, so WS13.4 custody enforcement cannot be implemented correctly without widening the adapter/binding boundary,
+  - the required verification environment for that boundary is unavailable on this host: `xcodebuild` is missing, `ANDROID_HOME` is unset, `cargo-ndk` is missing, and no Android targets are installed.
+- Result:
+  - WS13 continuation is **blocked at WS13.2** on this Linux host for a combined architectural + environment-verification reason,
+  - no WS13.2+ code was landed in this pass because repo policy requires platform verification for edited adapter surfaces and the current send API cannot safely carry the required tight-pair metadata without touching those surfaces.
+
 ## 2026-03-10 WS13.1 Tight-Pair Kickoff (Verified)
 
 - Required WS13 kickoff docs were re-read in canonical order before coding, including:
