@@ -55,12 +55,17 @@ Completed in this pass:
 2. [x] **BLE Reliability**: Fixed DeadObjectException with proper subscription tracking
 3. [x] **Delivery Status**: Eliminated false positives where BLE ACK was treated as full delivery
 4. [x] **Android UI**: Fixed keyboard covering chat input with proper IME padding
+5. [x] **Transport Optimization** (2026-03-10): Faster BLE/WiFi switching with reduced timeouts, aggressive retry backoff, enhanced transport logging
+6. [x] **Android Mesh UI Scrolling** (2026-03-10): Converted DashboardScreen to LazyColumn for proper scrolling with large peer lists
+7. [x] **Android ID Normalization** (2026-03-10): Standardized peer ID handling to fix "Contact not found" messaging issues
 
 Outstanding items:
 
 1. [ ] Verify stuck messages now deliver via relay circuits
 2. [ ] Test BLE reconnection scenarios end-to-end
 3. [ ] Monitor delivery status accuracy in production use
+4. [ ] Verify parallel transport attempts reduce WiFi→BLE transition time to < 2s
+5. [ ] Test Mesh tab scrolling with 50+ discovered peers
 
 ## v0.2.0 Execution Residual Register
 

@@ -600,15 +600,19 @@ mod tests {
 
     #[test]
     fn test_invalid_listen_port() {
-        let mut config = InternetTransportConfig::default();
-        config.listen_port = 0;
+        let config = InternetTransportConfig {
+            listen_port: 0,
+            ..Default::default()
+        };
         assert!(InternetRelay::new(config).is_err());
     }
 
     #[test]
     fn test_invalid_max_connections() {
-        let mut config = InternetTransportConfig::default();
-        config.max_relay_connections = 0;
+        let config = InternetTransportConfig {
+            max_relay_connections: 0,
+            ..Default::default()
+        };
         assert!(InternetRelay::new(config).is_err());
     }
 
@@ -644,8 +648,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_max_relay_connections() {
-        let mut config = InternetTransportConfig::default();
-        config.max_relay_connections = 2;
+        let config = InternetTransportConfig {
+            max_relay_connections: 2,
+            ..Default::default()
+        };
 
         let relay = InternetRelay::new(config).expect("Failed to create relay");
 
@@ -718,8 +724,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_client_mode_relay_fails() {
-        let mut config = InternetTransportConfig::default();
-        config.relay_mode = RelayMode::Client;
+        let config = InternetTransportConfig {
+            relay_mode: RelayMode::Client,
+            ..Default::default()
+        };
 
         let relay = InternetRelay::new(config).expect("Failed to create relay");
 
@@ -770,8 +778,10 @@ mod tests {
 
     #[test]
     fn test_can_accept_relay() {
-        let mut config = InternetTransportConfig::default();
-        config.max_relay_connections = 1;
+        let config = InternetTransportConfig {
+            max_relay_connections: 1,
+            ..Default::default()
+        };
 
         let relay = InternetRelay::new(config).expect("Failed to create relay");
 
@@ -788,8 +798,10 @@ mod tests {
 
     #[test]
     fn test_cleanup_stale_relays() {
-        let mut config = InternetTransportConfig::default();
-        config.relay_timeout_secs = 1;
+        let config = InternetTransportConfig {
+            relay_timeout_secs: 1,
+            ..Default::default()
+        };
 
         let relay = InternetRelay::new(config).expect("Failed to create relay");
 

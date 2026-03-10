@@ -236,8 +236,10 @@ async fn test_nat_traversal_with_live_swarms() {
     let peer2_id = peers[1];
 
     // Create NAT traversal config with both reflectors
-    let mut config = NatConfig::default();
-    config.peer_reflectors = vec![peer1_id.to_string(), peer2_id.to_string()];
+    let config = NatConfig {
+        peer_reflectors: vec![peer1_id.to_string(), peer2_id.to_string()],
+        ..Default::default()
+    };
 
     let nat_traversal = NatTraversal::new(config).expect("Failed to create NatTraversal");
 

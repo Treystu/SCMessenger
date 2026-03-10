@@ -2181,6 +2181,7 @@ pub async fn start_swarm_with_config(
 
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::RelayServer(event)) => {
                                 use libp2p::relay::Event as RelayServerEvent;
+                                #[allow(deprecated)]
                                 match event {
                                     RelayServerEvent::ReservationReqAccepted { src_peer_id, .. } => {
                                         tracing::info!(
@@ -2210,7 +2211,7 @@ pub async fn start_swarm_with_config(
                                     RelayServerEvent::ReservationReqDenyFailed { .. } |
                                     RelayServerEvent::CircuitReqDenyFailed { .. } |
                                     RelayServerEvent::CircuitReqAcceptFailed { .. } => {
-                                        // These are logged at debug level by libp2p already
+                                        // Logged internally by libp2p
                                     }
                                 }
                             }

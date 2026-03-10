@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LogSankey Live Visualizer</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+    <style>
+      :root {
+        --bg-dark: #020617;
+        --primary: #00ced1;
+        --accent: #a855f7;
+        --text: #f1f5f9;
+        --glass: rgba(15, 23, 42, 0.6);
+        --glass-border: rgba(255, 255, 255, 0.1);
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        background: radial-gradient(
+          circle at 50% 50%,
+          #1e1b4b 0%,
+          #020617 100%
+        );
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+      }
+      header {
+        padding: 15px 30px;
+        background: var(--glass);
+        backdrop-filter: blur(20px);
+        border-bottom: 1px solid var(--glass-border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        z-index: 100;
+      }
+      #main-layout {
+        display: grid;
+        grid-template-columns: 1fr 350px;
+        flex: 1;
+        overflow: hidden;
+      }
+      #viz-container {
+        position: relative;
+        padding: 40px;
+        overflow: hidden;
+        background: rgba(0, 0, 0, 0.2);
+      }
+      #sidebar {
+        background: var(--glass);
+        backdrop-filter: blur(10px);
+        border-left: 1px solid var(--glass-border);
+        display: flex;
+        flex-direction: column;
+        padding: 20px;
+      }
+      #sankey-svg {
+        width: 100%;
+        height: 100%;
+      }
+      .node rect {
+        fill-opacity: 0.8;
+        rx: 4;
+        transition: fill-opacity 0.2s;
+      }
+      .node:hover rect {
+        fill-opacity: 1;
+      }
+      .node text {
+        font-size: 11px;
+        fill: #fff;
+        font-weight: 500;
+        pointer-events: none;
+        text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+      }
+      .link {
+        fill: none;
+        stroke: var(--primary);
+        stroke-opacity: 0.15;
+        transition: stroke-opacity 0.2s;
+      }
+      .link:hover {
+        stroke-opacity: 0.5 !important;
+      }
+      #status-badge {
+        font-size: 12px;
+        padding: 6px 14px;
+        border-radius: 99px;
+        background: rgba(16, 185, 129, 0.15);
+        color: #34d399;
+        border: 1px solid rgba(52, 211, 153, 0.3);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        background: #10b981;
+        border-radius: 50%;
+        box-shadow: 0 0 10px #10b981;
+        animation: blink 1.5s infinite;
+      }
+      @keyframes blink {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.3;
+        }
+      }
+
+      .history-title {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #94a3b8;
+        margin-bottom: 20px;
+        font-weight: 700;
+        display: flex;
+        justify-content: space-between;
+      }
+      .log-item {
+        padding: 12px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.03);
+        margin-bottom: 10px;
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+        font-size: 11px;
+        border: 1px solid transparent;
+        transition: all 0.2s;
+        line-height: 1.4;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .log-item:hover {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: var(--glass-border);
+      }
+      .log-source {
+        font-weight: 800;
+        color: var(--primary);
+        margin-right: 5px;
+      }
+      .log-tag {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .log-msg {
+        color: #cbd5e1;
+        display: block;
+        margin-top: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div style="display: flex; align-items: center; gap: 15px">
+        <div
+          style="
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 206, 209, 0.3);
+            display: grid;
+            place-items: center;
+            font-weight: bold;
+            color: #000;
+          "
+        >
+          LS
+        </div>
+        <div>
+          <h1 style="margin: 0; font-size: 1.3rem; letter-spacing: -0.01em">
+            LogSankey <span style="font-weight: 300; opacity: 0.6">Live</span>
+          </h1>
+        </div>
+      </div>
+      <div id="status-badge">
+        <div class="dot"></div>
+        Real-time Pipeline Active
+      </div>
+    </header>
+
+    <div id="main-layout">
+      <div id="viz-container">
+        <svg id="sankey-svg"></svg>
+      </div>
+      <div id="sidebar">
+        <div class="history-title">
+          <span>Log Stream</span>
+          <span
+            id="stat-rate"
+            style="color: var(--primary); font-variant-numeric: tabular-nums"
+            >0 l/s</span
+          >
+        </div>
+        <div
+          id="log-list"
+          style="flex: 1; overflow-y: auto; padding-right: 5px"
+        ></div>
+        <div
+          style="
+            margin-top: 24px;
+            padding: 18px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--glass-border);
+            border-radius: 14px;
+            font-size: 12px;
+            color: #94a3b8;
+          "
+        >
+          <div style="margin-bottom: 10px; color: #f1f5f9">
+            <b>Telemetry</b>
+          </div>
+          <div id="stat-nodes">Nodes: 0</div>
+          <div id="stat-links">Links: 0</div>
+          <div
+            style="
+              margin-top: 10px;
+              height: 2px;
+              background: rgba(255, 255, 255, 0.1);
+              border-radius: 1px;
+            "
+          >
+            <div
+              id="rate-bar"
+              style="
+                width: 0%;
+                height: 100%;
+                background: var(--primary);
+                transition: width 0.3s;
+              "
+            ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const svg = d3.select("#sankey-svg");
+      const container = document.getElementById("viz-container");
+      const logList = document.getElementById("log-list");
+
+      let nodes = [];
+      let links = [];
+      const nodeMap = new Map();
+      const linkMap = new Map();
+      let lineCount = 0;
+      let lastSecCount = 0;
+      let maxRate = 1;
+
+      const sankey = d3
+        .sankey()
+        .nodeWidth(14)
+        .nodePadding(14)
+        .nodeAlign(d3.sankeyJustify);
+
+      const colorScheme = {
+        Android: "#3de1ad",
+        iOS: "#3b82f6",
+        V: "#94a3b8",
+        D: "#38bdf8",
+        I: "#4ade80",
+        W: "#fbbf24",
+        E: "#f87171",
+      };
+
+      function getColor(id) {
+        const key = id.split(">")[0];
+        return colorScheme[key] || "#a855f7";
+      }
+
+      function updateViz() {
+        const width = container.clientWidth - 80;
+        const height = container.clientHeight - 80;
+        svg.attr("width", width).attr("height", height);
+
+        sankey.extent([
+          [40, 40],
+          [width - 40, height - 40],
+        ]);
+
+        const flowNodes = Array.from(nodeMap.values()).map((n) => ({ ...n }));
+        const flowLinks = Array.from(linkMap.values())
+          .filter((l) => l.value > 0.01)
+          .map((l) => ({
+            source: flowNodes.findIndex((n) => n.id === l.source),
+            target: flowNodes.findIndex((n) => n.id === l.target),
+            value: l.value,
+          }))
+          .filter((l) => l.source !== -1 && l.target !== -1);
+
+        if (flowNodes.length === 0 || flowLinks.length === 0) return;
+
+        let layout;
+        try {
+          layout = sankey({ nodes: flowNodes, links: flowLinks });
+        } catch (e) {
+          console.error("Layout engine failure", e);
+          return;
+        }
+
+        // Links
+        const link = svg
+          .selectAll(".link")
+          .data(layout.links, (d) => d.source.id + "->" + d.target.id);
+
+        link.exit().remove();
+
+        link
+          .enter()
+          .append("path")
+          .attr("class", "link")
+          .merge(link)
+          .transition()
+          .duration(800)
+          .attr("d", d3.sankeyLinkHorizontal())
+          .attr("stroke-width", (d) => Math.max(1.5, d.width))
+          .attr("stroke", (d) => d3.color(getColor(d.source.id)).brighter(0.5));
+
+        // Nodes
+        const node = svg.selectAll(".node").data(layout.nodes, (d) => d.id);
+
+        node.exit().remove();
+
+        const nodeEnter = node.enter().append("g").attr("class", "node");
+
+        nodeEnter.append("rect");
+        nodeEnter.append("text").attr("dy", "0.35em");
+
+        const nodeMerge = nodeEnter.merge(node);
+
+        nodeMerge
+          .transition()
+          .duration(800)
+          .attr("transform", (d) => `translate(${d.x0},${d.y0})`);
+
+        nodeMerge
+          .select("rect")
+          .attr("height", (d) => Math.max(4, d.y1 - d.y0))
+          .attr("width", (d) => d.x1 - d.x0)
+          .attr("fill", (d) => getColor(d.id))
+          .attr("stroke", (d) => d3.color(getColor(d.id)).darker(1))
+          .attr("stroke-width", 1);
+
+        nodeMerge
+          .select("text")
+          .attr("y", (d) => (d.y1 - d.y0) / 2)
+          .text((d) => d.name)
+          .attr("x", (d) => (d.x0 < width / 2 ? 10 + (d.x1 - d.x0) : -10))
+          .attr("text-anchor", (d) => (d.x0 < width / 2 ? "start" : "end"))
+          .style("opacity", (d) => (d.y1 - d.y0 > 10 ? 1 : 0));
+
+        document.getElementById("stat-nodes").innerText =
+          `Nodes: ${flowNodes.length}`;
+        document.getElementById("stat-links").innerText =
+          `Links: ${flowLinks.length}`;
+      }
+
+      setInterval(() => {
+        linkMap.forEach((l, id) => {
+          l.value *= 0.75;
+          if (l.value < 0.05) linkMap.delete(id);
+        });
+
+        const activeTargets = new Set();
+        const activeSources = new Set();
+        linkMap.forEach((l) => {
+          activeSources.add(l.source);
+          activeTargets.add(l.target);
+        });
+        nodeMap.forEach((n, id) => {
+          if (!activeSources.has(id) && !activeTargets.has(id))
+            nodeMap.delete(id);
+        });
+
+        document.getElementById("stat-rate").innerText = `${lastSecCount} l/s`;
+        if (lastSecCount > maxRate) maxRate = lastSecCount;
+        document.getElementById("rate-bar").style.width =
+          (lastSecCount / maxRate) * 100 + "%";
+
+        lastSecCount = 0;
+        updateViz();
+      }, 1000);
+
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${protocol}//${window.location.host}`);
+      ws.onmessage = (event) => {
+        const log = JSON.parse(event.data);
+        lastSecCount++;
+
+        const logItem = document.createElement("div");
+        logItem.className = "log-item";
+        logItem.innerHTML = `<div><span class="log-source">${log.source}</span><span class="log-tag">[${log.tag}]</span></div><span class="log-msg">${log.msg.substring(0, 150)}${log.msg.length > 150 ? "..." : ""}</span>`;
+        logList.prepend(logItem);
+        if (logList.childNodes.length > 30) logList.lastChild.remove();
+
+        // Flow Path: [Source, Level, Tag, ...KeyPairs]
+        let path = [log.source, log.level, log.tag];
+        const keys = Object.keys(log.keyPairs);
+        if (keys.length > 0) {
+          keys.slice(0, 3).forEach((k) => {
+            // Limit to first 3 keys to avoid massive explosion
+            path.push(k);
+            path.push(log.keyPairs[k]);
+          });
+        }
+
+        for (let i = 0; i < path.length - 1; i++) {
+          const srcId = path.slice(0, i + 1).join(">");
+          const tgtId = path.slice(0, i + 2).join(">");
+
+          if (!nodeMap.has(srcId))
+            nodeMap.set(srcId, { id: srcId, name: path[i] });
+          if (!nodeMap.has(tgtId))
+            nodeMap.set(tgtId, { id: tgtId, name: path[i + 1] });
+
+          const linkId = `${srcId}->${tgtId}`;
+          if (!linkMap.has(linkId)) {
+            linkMap.set(linkId, { source: srcId, target: tgtId, value: 0 });
+          }
+          linkMap.get(linkId).value += 1;
+        }
+      };
+
+      ws.onerror = (err) => console.error("WS Error", err);
+      ws.onclose = () =>
+        (document.getElementById("status-badge").innerHTML =
+          '<span style="color:#ef4444;">● Pipeline Offline</span>');
+    </script>
+  </body>
+</html>

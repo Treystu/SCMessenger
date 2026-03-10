@@ -8,10 +8,12 @@ import com.scmessenger.android.service.MessageEvent
 import com.scmessenger.android.ui.chat.DeliveryStateMapper
 import com.scmessenger.android.ui.chat.DeliveryStatePresentation
 import com.scmessenger.android.ui.chat.PendingDeliverySnapshot
+import com.scmessenger.android.utils.PeerIdValidator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -123,19 +125,24 @@ class ConversationsViewModel @Inject constructor(
     /**
      * Send a message to a peer.
      */
-    fun sendMessage(peerId: String, content: String) {
-        viewModelScope.launch(Dispatchers.IO) {
+    suspend fun sendMessage(peerId: String, content: String): Boolean {
+        return withContext(Dispatchers.IO) {
             try {
+                val normalizedPeerId = PeerIdValidator.normalize(peerId)
+                Timber.d("Sending message to peer: $normalizedPeerId")
+                
                 // Call repository to handle encryption and transmission
-                meshRepository.sendMessage(peerId, content)
+                meshRepository.sendMessage(normalizedPeerId, content)
 
                 // Reload messages to show the sent message
                 loadMessages()
 
-                Timber.i("Message sent to $peerId")
+                Timber.i("Message sent to $normalizedPeerId")
+                true
             } catch (e: Exception) {
                 _error.value = "Failed to send message: ${e.message}"
                 Timber.e(e, "Failed to send message")
+                false
             }
         }
     }
@@ -188,6 +195,30 @@ class ConversationsViewModel @Inject constructor(
                 _error.value = "Failed to clear history: ${e.message}"
                 Timber.e(e, "Failed to clear history")
             }
+        }
+    }
+
+    /**
+     * Check if a peer can be messaged (exists in contacts or discovered peers).
+     */
+    fun isPeerAvailable(peerId: String): Boolean {
+        val contact = getContactForPeer(peerId)
+        if (contact != null) return true
+        
+        // Check discovered peers
+        val discoveredPeers = meshRepository.discoveredPeers.value
+        return discoveredPeers[peerId]?.publicKey != null
+    }
+
+    /**
+     * Get peer info for adding to contacts quickly.
+     */
+    fun getPeerInfo(peerId: String): Pair<String, String>? {
+        // Check discovered peers for public key
+        val discovered = meshRepository.discoveredPeers.value[peerId]
+        return discovered?.publicKey?.let { pubKey ->
+            val nickname = discovered.nickname ?: peerId.take(8)
+            pubKey to nickname
         }
     }
 

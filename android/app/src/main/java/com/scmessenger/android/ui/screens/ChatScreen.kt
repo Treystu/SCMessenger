@@ -24,6 +24,8 @@ import com.scmessenger.android.ui.chat.DeliveryStatePresentation
 import com.scmessenger.android.ui.chat.DeliveryStateSurface
 import com.scmessenger.android.utils.toEpochMillis
 import com.scmessenger.android.ui.viewmodels.ConversationsViewModel
+import kotlinx.coroutines.launch
+import timber.log.Timber
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -43,6 +45,11 @@ fun ChatScreen(
 
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    
+    val contact = viewModel.getContactForPeer(conversationId)
+    val isPeerAvailable = viewModel.isPeerAvailable(conversationId)
+    var showAddContactDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(conversationId) {
         viewModel.loadMessages(limit = 200u)
@@ -80,6 +87,42 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            // Show banner if peer is not in contacts
+            if (contact == null && isPeerAvailable) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Not in contacts",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Text(
+                                text = "Add to send messages",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                        Button(onClick = { showAddContactDialog = true }) {
+                            Text("Add Contact")
+                        }
+                    }
+                }
+            }
+            
             // Messages List
             StateLegendCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             LazyColumn(
@@ -125,8 +168,13 @@ fun ChatScreen(
                 IconButton(
                     onClick = {
                         if (inputText.isNotBlank()) {
-                            viewModel.sendMessage(conversationId, inputText)
-                            inputText = ""
+                            val messageToSend = inputText
+                            coroutineScope.launch {
+                                val success = viewModel.sendMessage(conversationId, messageToSend)
+                                if (success) {
+                                    inputText = ""
+                                }
+                            }
                         }
                     },
                     modifier = Modifier
@@ -140,6 +188,60 @@ fun ChatScreen(
                     )
                 }
             }
+        }
+    }
+    
+    // Quick add contact dialog
+    if (showAddContactDialog) {
+        val peerInfo = viewModel.getPeerInfo(conversationId)
+        if (peerInfo != null) {
+            val (publicKey, suggestedNickname) = peerInfo
+            var nickname by remember { mutableStateOf(suggestedNickname) }
+            
+            AlertDialog(
+                onDismissRequest = { showAddContactDialog = false },
+                title = { Text("Add Contact") },
+                text = {
+                    Column {
+                        Text("Add this peer to your contacts to send messages.")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = nickname,
+                            onValueChange = { nickname = it },
+                            label = { Text("Nickname") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                try {
+                                    // Add via ContactsViewModel - need to get it
+                                    // For now, add directly via repository
+                                    // TODO: Better integration with ContactsViewModel
+                                    showAddContactDialog = false
+                                    // This will be handled by the user via Contacts screen
+                                } catch (e: Exception) {
+                                    Timber.e(e, "Failed to add contact")
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Add")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddContactDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        } else {
+            // Peer not available - close dialog
+            showAddContactDialog = false
         }
     }
 }

@@ -2,10 +2,10 @@ package com.scmessenger.android.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Bolt
@@ -49,84 +49,100 @@ fun DashboardScreen(
             )
         }
     ) { paddingValues ->
-        Column(
+        val peers by dashboardViewModel.peers.collectAsState()
+        
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(paddingValues),
+            contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Service Status Card
-            StatusCard(
-                isRunning = isRunning,
-                stateName = serviceState.name
-            )
-
-            // Quick Stats Grid
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                StatCard(
-                    modifier = Modifier.weight(1.5f),
-                    title = buildString {
-                        append("$fullPeers Node")
-                        if (headlessPeers > 0) append(" / $headlessPeers Headless")
-                    },
-                    value = totalPeers.toString(),
-                    icon = Icons.Filled.People,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                StatCard(
-                    modifier = Modifier.weight(1f),
-                    title = "Relayed",
-                    value = stats?.messagesRelayed?.toString() ?: "0",
-                    icon = Icons.Filled.Router,
-                    color = MaterialTheme.colorScheme.tertiary
+            item {
+                StatusCard(
+                    isRunning = isRunning,
+                    stateName = serviceState.name
                 )
             }
 
-            // Connection Methods Status
-            ConnectionStatusCard()
-
-            // Detailed Stats
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Mesh Performance",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(bottom = 8.dp)
+            // Quick Stats Grid
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    StatCard(
+                        modifier = Modifier.weight(1.5f),
+                        title = buildString {
+                            append("$fullPeers Node")
+                            if (headlessPeers > 0) append(" / $headlessPeers Headless")
+                        },
+                        value = totalPeers.toString(),
+                        icon = Icons.Filled.People,
+                        color = MaterialTheme.colorScheme.primary
                     )
-
-                    TextDetailRow("Uptime", formatDuration(stats?.uptimeSecs ?: 0uL))
-                    TextDetailRow("Data Transferred", formatBytes(stats?.bytesTransferred ?: 0uL))
+                    StatCard(
+                        modifier = Modifier.weight(1f),
+                        title = "Relayed",
+                        value = stats?.messagesRelayed?.toString() ?: "0",
+                        icon = Icons.Filled.Router,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
                 }
             }
 
-            // Discovered Nodes List
-            Text(
-                text = "Discovered Nodes",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(top = 8.dp)
-            )
+            // Connection Methods Status
+            item {
+                ConnectionStatusCard()
+            }
 
-            val peers by dashboardViewModel.peers.collectAsState()
-            if (peers.isEmpty()) {
+            // Detailed Stats
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Mesh Performance",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+
+                        TextDetailRow("Uptime", formatDuration(stats?.uptimeSecs ?: 0uL))
+                        TextDetailRow("Data Transferred", formatBytes(stats?.bytesTransferred ?: 0uL))
+                    }
+                }
+            }
+
+            // Discovered Nodes Header
+            item {
                 Text(
-                    text = "No nodes discovered yet",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "Discovered Nodes",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = 8.dp)
                 )
+            }
+
+            // Discovered Nodes List
+            if (peers.isEmpty()) {
+                item {
+                    Text(
+                        text = "No nodes discovered yet",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             } else {
-                peers.forEach { peer ->
+                items(peers) { peer ->
                     PeerItem(peer)
-                    Divider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                    Divider(
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    )
                 }
             }
         }

@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.content.SharedPreferences
 import androidx.core.content.ContextCompat
 import com.scmessenger.android.utils.Permissions
+import com.scmessenger.android.utils.PeerIdValidator
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -2160,39 +2161,46 @@ class MeshRepository(private val context: Context) {
     suspend fun sendMessage(peerId: String, content: String) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
+                val normalizedPeerId = PeerIdValidator.normalize(peerId)
+                
                 // Check if relay/messaging is enabled (bidirectional control)
                 // Treat null/missing settings as disabled (fail-safe)
                 // Cache settings value to avoid race condition during check
                 val currentSettings = settingsManager?.load()
                 Companion.requireMeshParticipationEnabled(currentSettings)
 
-                // 1. Get recipient's public key
-                val contact = contactManager?.get(peerId)
-                    ?: throw IllegalStateException("Contact not found for peer: $peerId")
-
-                val publicKey = contact.publicKey.trim()
+                // 1. Get recipient's public key from contact or discovered peers
+                val contact = contactManager?.get(normalizedPeerId)
+                val publicKey = if (contact != null) {
+                    contact.publicKey.trim()
+                } else {
+                    // Try to get from discovered peers cache
+                    val discoveredPeer = _discoveredPeers.value[normalizedPeerId]
+                    discoveredPeer?.publicKey?.trim()
+                        ?: throw IllegalStateException("Peer $normalizedPeerId not found in contacts or discovered peers. Please add as contact first.")
+                }
 
                 // Pre-validate public key to provide descriptive errors
                 if (publicKey.isEmpty()) {
-                    throw IllegalStateException("Contact $peerId has no public key. Please re-add this contact with a valid public key.")
+                    throw IllegalStateException("Peer $normalizedPeerId has no public key. Please add as contact with a valid public key.")
                 }
                 if (publicKey.length != 64) {
-                    throw IllegalStateException("Contact $peerId has invalid public key (length: ${publicKey.length}, expected 64 hex chars). Please re-add this contact.")
+                    throw IllegalStateException("Peer $normalizedPeerId has invalid public key (length: ${publicKey.length}, expected 64 hex chars).")
                 }
                 if (!publicKey.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
-                    throw IllegalStateException("Contact $peerId has invalid public key (non-hex characters). Please re-add this contact.")
+                    throw IllegalStateException("Peer $normalizedPeerId has invalid public key (non-hex characters).")
                 }
 
-                Timber.d("Preparing message for $peerId with key: ${publicKey.take(8)}...")
-                val routingHints = parseRoutingHints(contact.notes)
+                Timber.d("Preparing message for $normalizedPeerId with key: ${publicKey.take(8)}...")
+                val routingHints = parseRoutingHints(contact?.notes ?: "")
                 val routePeerCandidates = buildRoutePeerCandidates(
-                    peerId = peerId,
+                    peerId = normalizedPeerId,
                     cachedRoutePeerId = routingHints.libp2pPeerId,
-                    notes = contact.notes,
+                    notes = contact?.notes ?: "",
                     recipientPublicKey = publicKey
                 )
-                if (isKnownRelay(peerId) || isBootstrapRelayPeer(peerId)) {
-                    throw IllegalStateException("Refusing to use headless relay identity as a chat recipient: $peerId")
+                if (isKnownRelay(normalizedPeerId) || isBootstrapRelayPeer(normalizedPeerId)) {
+                    throw IllegalStateException("Refusing to use headless relay identity as a chat recipient: $normalizedPeerId")
                 }
                 val preferredRoutePeerId = routePeerCandidates.firstOrNull()
                 // 2. Encrypt/Prepare message (use trimmed key)
@@ -2205,10 +2213,10 @@ class MeshRepository(private val context: Context) {
                 }
                 val encryptedData = prepared.envelopeData
 
-                // 3. Save to history first so content survives transient
+                // 3. Save to history first so content survives transient crashes
                 val record = uniffi.api.MessageRecord(
                     id = messageId,
-                    peerId = peerId,
+                    peerId = normalizedPeerId,
                     direction = uniffi.api.MessageDirection.SENT,
                     content = content,
                     timestamp = (System.currentTimeMillis() / 1000).toULong(),
@@ -2246,7 +2254,7 @@ class MeshRepository(private val context: Context) {
                 }
 
                 if (delivery.acked) {
-                    promotePendingOutboundForPeer(peerId = peerId, excludingMessageId = messageId)
+                    promotePendingOutboundForPeer(peerId = normalizedPeerId, excludingMessageId = messageId)
                 }
 
                 if (isMessageDeliveredLocally(messageId)) {
@@ -2260,7 +2268,7 @@ class MeshRepository(private val context: Context) {
                     if (delivery.acked) {
                         enqueuePendingOutbound(
                             historyRecordId = messageId,
-                            peerId = peerId,
+                            peerId = normalizedPeerId,
                             routePeerId = selectedRoutePeerId,
                             listeners = routingHints.listeners,
                             encryptedData = encryptedData,
@@ -3246,9 +3254,11 @@ class MeshRepository(private val context: Context) {
                 rawAddresses = listeners,
                 includeRelayCircuits = true
             )
+            Timber.d("🔀 Transport: route=$routePeerId dialCandidates=${dialCandidates.size} (${dialCandidates.joinToString { it.substringBefore("/") }})")
             if (dialCandidates.isNotEmpty()) {
                 connectToPeer(routePeerId, dialCandidates)
-                awaitPeerConnection(routePeerId, timeoutMs = 5000L) // Increased from 2s for mesh/relay paths
+                val connected = awaitPeerConnection(routePeerId, timeoutMs = 2000L)
+                Timber.d("🔀 Transport: route=$routePeerId connected=$connected timeout=2000ms")
             }
 
             logDeliveryAttempt(
@@ -3256,17 +3266,19 @@ class MeshRepository(private val context: Context) {
                 medium = "core",
                 phase = "direct",
                 outcome = "attempt",
-                detail = "ctx=$attemptContext route=$routePeerId"
+                detail = "ctx=$attemptContext route=$routePeerId transports=${dialCandidates.size}"
             )
+            val attemptStart = System.currentTimeMillis()
             try {
                 bridge.sendMessage(routePeerId, encryptedData)
-                Timber.i("✓ Direct delivery ACK from $routePeerId")
+                val latencyMs = System.currentTimeMillis() - attemptStart
+                Timber.i("✓ Direct delivery ACK from $routePeerId (${latencyMs}ms)")
                 logDeliveryAttempt(
                     messageId = traceMessageId,
                     medium = "core",
                     phase = "direct",
                     outcome = "success",
-                    detail = "ctx=$attemptContext route=$routePeerId"
+                    detail = "ctx=$attemptContext route=$routePeerId latency=${latencyMs}ms"
                 )
                 return DeliveryAttemptResult(acked = true, routePeerId = routePeerId)
             } catch (e: Exception) {
@@ -3282,25 +3294,29 @@ class MeshRepository(private val context: Context) {
 
             val relayOnlyCandidates = relayCircuitAddressesForPeer(routePeerId)
             if (relayOnlyCandidates.isNotEmpty()) {
+                Timber.d("🔀 Transport: Attempting relay-circuit for $routePeerId (${relayOnlyCandidates.size} candidates)")
                 connectToPeer(routePeerId, relayOnlyCandidates)
-                awaitPeerConnection(routePeerId, timeoutMs = 3500L)
+                val connected = awaitPeerConnection(routePeerId, timeoutMs = 1500L)
+                Timber.d("🔀 Transport: relay-circuit route=$routePeerId connected=$connected timeout=1500ms")
                 kotlinx.coroutines.delay(500)
                 logDeliveryAttempt(
                     messageId = traceMessageId,
                     medium = "relay-circuit",
                     phase = "retry",
                     outcome = "attempt",
-                    detail = "ctx=$attemptContext route=$routePeerId"
+                    detail = "ctx=$attemptContext route=$routePeerId relays=${relayOnlyCandidates.size}"
                 )
+                val relayStart = System.currentTimeMillis()
                 try {
                     bridge.sendMessage(routePeerId, encryptedData)
-                    Timber.i("✓ Delivery ACK from $routePeerId after relay-circuit retry")
+                    val latencyMs = System.currentTimeMillis() - relayStart
+                    Timber.i("✓ Delivery ACK from $routePeerId after relay-circuit retry (${latencyMs}ms)")
                     logDeliveryAttempt(
                         messageId = traceMessageId,
                         medium = "relay-circuit",
                         phase = "retry",
                         outcome = "success",
-                        detail = "ctx=$attemptContext route=$routePeerId"
+                        detail = "ctx=$attemptContext route=$routePeerId latency=${latencyMs}ms"
                     )
                     return DeliveryAttemptResult(acked = true, routePeerId = routePeerId)
                 } catch (e: Exception) {
@@ -3456,13 +3472,18 @@ class MeshRepository(private val context: Context) {
                 }
 
                 val nextAttemptCount = item.attemptCount + 1
-                // Progressive backoff: fast retries first, then slow down
-                // Attempts 1-6: 2^n seconds (2, 4, 8, 16, 32, 64)
-                // Attempts 7-20: 60 seconds
-                // Attempts 21+: 300 seconds (5 min) — patient but persistent
-                val backoffSecs = when {
-                    nextAttemptCount <= 6 -> minOf(64L, 1L shl nextAttemptCount)
-                    nextAttemptCount <= 20 -> 60L
+                // Aggressive retry for transport transitions: fast initial attempts
+                // Attempt 1: 0.5s, 2: 1s, 3: 2s, 4: 4s, 5: 8s, 6: 16s
+                // Attempts 7-20: 60 seconds (steady retry)
+                // Attempts 21+: 300 seconds (patient long-term)
+                val backoffSecs = when (nextAttemptCount) {
+                    1 -> 0L  // Immediate first retry
+                    2 -> 1L
+                    3 -> 2L
+                    4 -> 4L
+                    5 -> 8L
+                    6 -> 16L
+                    in 7..20 -> 60L
                     else -> 300L
                 }
                 iterator.set(

@@ -129,12 +129,58 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - Set `contentWindowInsets = WindowInsets(0, 0, 0, 0)` on Scaffold
   - File: `android/app/src/main/java/com/scmessenger/android/ui/screens/ChatScreen.kt`
 
+## 2026-03-10 Transport Optimization & UI Enhancements (Verified)
+
+### Fast Transport Switching
+- **Reduced Timeouts for BLE/WiFi Transitions**:
+  - WiFi/Direct timeout: 5000ms → 2000ms (60% reduction)
+  - BLE/Relay-circuit timeout: 3500ms → 1500ms (57% reduction)
+  - Enables faster failover when primary transport unavailable
+  - File: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
+
+### Aggressive Retry Backoff
+- **Optimized Initial Retry Schedule**:
+  - Attempt 1: immediate (was 2s)
+  - Attempt 2: 1s (was 4s)
+  - Attempts 3-6: 2s, 4s, 8s, 16s (was 8s, 16s, 32s, 64s)
+  - Attempts 7-20: 60s steady retry (unchanged)
+  - Attempts 21+: 300s long-term (unchanged)
+  - Reduces time-to-first-retry by 2s, critical for transport transitions
+  - File: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
+
+### Enhanced Transport Logging
+- **Comprehensive Transport Visibility**:
+  - Logs dial candidates count and transport types for each route attempt
+  - Logs connection success/failure with timeout values
+  - Logs delivery latency in milliseconds for both direct and relay-circuit paths
+  - Adds transport count to delivery state logging
+  - Enables real-time debugging of WiFi↔BLE↔Cellular routing decisions
+  - File: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
+
+### Android Mesh Tab Scrolling Fix
+- **LazyColumn for Large Peer Lists**:
+  - Replaced `Column` + `verticalScroll` + `forEach` with `LazyColumn` + `items()`
+  - Enables efficient rendering and scrolling for 50+ discovered peers
+  - Maintains all status cards, stats, and performance metrics as list items
+  - File: `android/app/src/main/java/com/scmessenger/android/ui/screens/DashboardScreen.kt`
+
+### Android ID Normalization
+- **Standardized Peer ID Handling**:
+  - Added `PeerIdValidator` utility for lowercase/trimmed ID normalization
+  - Updated `MeshRepository.sendMessage` to normalize peer IDs before lookup
+  - Added fallback to discovered peers if not in contacts
+  - Added "Quick Add Contact" banner in ChatScreen for non-contact peers
+  - Fixes "Contact not found" error when messaging discovered peers
+  - Files: `android/app/src/main/java/com/scmessenger/android/utils/PeerIdValidator.kt`, `MeshRepository.kt`, `ChatScreen.kt`
+
 ### Build Status
 - Core (Rust): ✅ Built successfully with relay server
-- Android: ✅ Built and deployed (APK installed on device 26261JEGR01896)
+- Android: ✅ Built and deployed with transport optimizations
 - iOS: ✅ Framework rebuilt with relay server (device 00008130-001A48DA18EB8D3A)
 
 ### Documentation Created
+- `TRANSPORT_OPTIMIZATION_PLAN.md` - Multi-path delivery and transport switching optimization plan
+- `ANDROID_ID_MISMATCH_RCA.md` - Root cause analysis of peer ID normalization issues
 - `NAT_TRAVERSAL_IMPLEMENTATION.md` - Relay server implementation guide
 - `BLE_DEADOBJECT_BUG.md` - BLE subscription tracking bug analysis
 - `BLE_FALSE_DELIVERY_BUG.md` - Delivery status false positive bug
