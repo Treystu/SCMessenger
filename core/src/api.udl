@@ -49,6 +49,10 @@ interface IronCore {
     IdentityInfo get_identity_info();
     [Throws=IronCoreError]
     void set_nickname(string nickname);
+    /// Get device ID for this installation (WS13.1)
+    string? get_device_id();
+    /// Get seniority timestamp for this installation (WS13.1)
+    u64? get_seniority_timestamp();
     [Throws=IronCoreError]
     string export_identity_backup();
     [Throws=IronCoreError]
@@ -345,6 +349,7 @@ dictionary Contact {
     u64 added_at;
     u64? last_seen;
     string? notes;
+    string? last_known_device_id; // WS13.2: Last known device ID for tight pairing
 };
 
 interface ContactManager {
@@ -374,6 +379,10 @@ interface ContactManager {
 
     [Throws=IronCoreError]
     void update_last_seen(string peer_id);
+
+    /// Update the last known device ID for a contact (WS13.2)
+    [Throws=IronCoreError]
+    void update_device_id(string peer_id, string? device_id);
 
     u32 count();
     void flush();

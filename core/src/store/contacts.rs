@@ -16,6 +16,8 @@ pub struct Contact {
     pub added_at: u64,
     pub last_seen: Option<u64>,
     pub notes: Option<String>,
+    #[serde(default)]
+    pub last_known_device_id: Option<String>, // WS13: Device ID for tight pairing
 }
 
 impl Contact {
@@ -28,6 +30,7 @@ impl Contact {
             added_at: current_timestamp(),
             last_seen: None,
             notes: None,
+            last_known_device_id: None,
         }
     }
 
@@ -164,6 +167,21 @@ impl ContactManager {
             self.add(contact)?;
         }
         Ok(())
+    }
+
+    /// Update the last known device ID for a contact (WS13.2)
+    pub fn update_device_id(
+        &self,
+        peer_id: String,
+        device_id: Option<String>,
+    ) -> Result<(), IronCoreError> {
+        if let Some(mut contact) = self.get(peer_id)? {
+            contact.last_known_device_id = device_id;
+            self.add(contact)?;
+            Ok(())
+        } else {
+            Err(IronCoreError::InvalidInput)
+        }
     }
 
     pub fn count(&self) -> u32 {

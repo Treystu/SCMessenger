@@ -761,6 +761,16 @@ impl IronCore {
             .map_err(|_| IronCoreError::StorageError)
     }
 
+    /// Get device ID for this installation (WS13.1)
+    pub fn get_device_id(&self) -> Option<String> {
+        self.identity.read().device_id()
+    }
+
+    /// Get seniority timestamp for this installation (WS13.1)
+    pub fn get_seniority_timestamp(&self) -> Option<u64> {
+        self.identity.read().seniority_timestamp()
+    }
+
     /// Export identity key material for platform-secure backup.
     pub fn export_identity_backup(&self) -> Result<String, IronCoreError> {
         let identity = self.identity.read();
