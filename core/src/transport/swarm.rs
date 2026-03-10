@@ -510,6 +510,8 @@ fn dispatch_ranked_route(
     envelope_data: &[u8],
     request_to_message: &mut HashMap<libp2p::request_response::OutboundRequestId, String>,
     pending_relay_requests: &mut HashMap<libp2p::request_response::OutboundRequestId, String>,
+    recipient_identity_id: Option<&str>,
+    intended_device_id: Option<&str>,
 ) {
     if route.path.len() == 1 {
         let request_id = swarm.behaviour_mut().messaging.send_request(
@@ -525,6 +527,8 @@ fn dispatch_ranked_route(
             destination_peer: target_peer.to_bytes(),
             envelope_data: envelope_data.to_vec(),
             message_id: message_id.to_string(),
+            recipient_identity_id: recipient_identity_id.map(|s| s.to_string()),
+            intended_device_id: intended_device_id.map(|s| s.to_string()),
         };
         let request_id = swarm
             .behaviour_mut()
@@ -765,6 +769,10 @@ struct PendingMessage {
     dispatch_attempts: u32,
     pass_count: u32,
     retry_notified: bool,
+    /// WS13 tight-pair metadata: SCMessenger identity ID of the recipient.
+    recipient_identity_id: Option<String>,
+    /// WS13 tight-pair metadata: specific device UUID being targeted.
+    intended_device_id: Option<String>,
 }
 
 /// Commands that can be sent to the swarm task
@@ -774,6 +782,10 @@ pub enum SwarmCommand {
     SendMessage {
         peer_id: PeerId,
         envelope_data: Vec<u8>,
+        /// WS13 tight-pair: SCMessenger identity ID of the recipient (None for legacy callers).
+        recipient_identity_id: Option<String>,
+        /// WS13 tight-pair: device UUID being targeted (None if not known).
+        intended_device_id: Option<String>,
         reply: mpsc::Sender<Result<(), String>>,
     },
     /// Request address reflection from a peer
@@ -867,13 +879,25 @@ pub struct SwarmHandle {
 }
 
 impl SwarmHandle {
-    /// Send an encrypted envelope to a peer
-    pub async fn send_message(&self, peer_id: PeerId, envelope_data: Vec<u8>) -> Result<()> {
+    /// Send an encrypted envelope to a peer.
+    ///
+    /// `recipient_identity_id` and `intended_device_id` carry WS13 tight-pair metadata.
+    /// Legacy callers should pass `None` for both; relay nodes treat absent metadata as
+    /// compatibility mode and forward without device enforcement.
+    pub async fn send_message(
+        &self,
+        peer_id: PeerId,
+        envelope_data: Vec<u8>,
+        recipient_identity_id: Option<String>,
+        intended_device_id: Option<String>,
+    ) -> Result<()> {
         let (reply_tx, mut reply_rx) = mpsc::channel(1);
         self.command_tx
             .send(SwarmCommand::SendMessage {
                 peer_id,
                 envelope_data,
+                recipient_identity_id,
+                intended_device_id,
                 reply: reply_tx,
             })
             .await
@@ -1374,6 +1398,8 @@ pub async fn start_swarm_with_config(
                                     &pending.envelope_data,
                                     &mut request_to_message,
                                     &mut pending_relay_requests,
+                                    pending.recipient_identity_id.as_deref(),
+                                    pending.intended_device_id.as_deref(),
                                 );
 
                                 pending_messages.insert(msg_id, pending);
@@ -2599,7 +2625,7 @@ pub async fn start_swarm_with_config(
                     // Process commands from the application layer
                     Some(command) = command_rx.recv() => {
                         match command {
-                            SwarmCommand::SendMessage { peer_id, envelope_data, reply } => {
+                            SwarmCommand::SendMessage { peer_id, envelope_data, recipient_identity_id, intended_device_id, reply } => {
                                 // PHASE 6: Multi-path delivery with retry logic
                                 let message_id = format!("{}-{}", peer_id, SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis());
 
@@ -2631,6 +2657,8 @@ pub async fn start_swarm_with_config(
                                     &envelope_data,
                                     &mut request_to_message,
                                     &mut pending_relay_requests,
+                                    recipient_identity_id.as_deref(),
+                                    intended_device_id.as_deref(),
                                 );
 
                                 // Store pending message for retry handling
@@ -2643,6 +2671,8 @@ pub async fn start_swarm_with_config(
                                     dispatch_attempts: 1,
                                     pass_count: 0,
                                     retry_notified: false,
+                                    recipient_identity_id,
+                                    intended_device_id,
                                 });
                             }
 
@@ -2933,7 +2963,7 @@ pub async fn start_swarm_with_config(
                         };
 
                         match command {
-                            SwarmCommand::SendMessage { peer_id, envelope_data, reply } => {
+                            SwarmCommand::SendMessage { peer_id, envelope_data, reply, .. } => {
                                 let request_id = swarm.behaviour_mut().messaging.send_request(
                                     &peer_id,
                                     MessageRequest { envelope_data },

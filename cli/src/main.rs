@@ -1122,7 +1122,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
                              for msg in queued {
                                  let msg_id = msg.message_id.clone();
-                                 match swarm_handle.send_message(peer_id, msg.envelope_data.clone()).await {
+                                 match swarm_handle.send_message(peer_id, msg.envelope_data.clone(), None, None).await {
                                      Ok(()) => {
                                          tracing::info!(
                                              "Flushed queued message {} to {}",
@@ -1252,7 +1252,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                         match core_rx.prepare_receipt(pk_hex.clone(), msg.id.clone()) {
                                             Ok(ack_bytes) => {
                                                 tracing::debug!("Sending delivery ACK for {} to {}", msg.id, peer_id);
-                                                if let Err(e) = swarm_handle.send_message(peer_id, ack_bytes).await {
+                                                if let Err(e) = swarm_handle.send_message(peer_id, ack_bytes, None, None).await {
                                                     tracing::debug!("Failed to send delivery ACK to {}: {}", peer_id, e);
                                                 }
                                             }
@@ -1365,7 +1365,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                              if let Some(pk) = pk_opt {
                                  // prepare_message_with_id automatically saves outgoing history
                                  if let Ok(prep) = core_rx.prepare_message_with_id(pk, message) {
-                                     if swarm_handle.send_message(target, prep.envelope_data).await.is_ok() {
+                                     if swarm_handle.send_message(target, prep.envelope_data, None, None).await.is_ok() {
                                          let _ = ui_broadcast.send(server::UiEvent::MessageStatus {
                                              message_id: id.unwrap_or_default(),
                                              status: "sent".to_string()
@@ -1764,7 +1764,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
                             }
                             for msg in queued {
                                 let msg_id = msg.message_id.clone();
-                                if let Err(e) = swarm_handle.send_message(peer_id, msg.envelope_data.clone()).await {
+                                if let Err(e) = swarm_handle.send_message(peer_id, msg.envelope_data.clone(), None, None).await {
                                     tracing::warn!("Failed to flush queued message {} to {}: {}", msg_id, peer_id, e);
                                     let mut ob = outbox_rx.lock().await;
                                     let _ = ob.enqueue(msg);

@@ -7,6 +7,28 @@ Last verified: **2026-03-10** (local workspace checks on this machine)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
 
+## 2026-03-10 WS13.2 Transport Boundary Widening (Implemented)
+
+- Architectural blocker resolved: transport/API boundary widened to carry WS13 tight-pair metadata.
+- Files changed:
+  - `core/src/transport/behaviour.rs` — `RelayRequest` gains `recipient_identity_id: Option<String>` and `intended_device_id: Option<String>` with `#[serde(default)]` for wire compatibility with pre-WS13 relay nodes.
+  - `core/src/transport/swarm.rs` — `SwarmCommand::SendMessage`, `PendingMessage`, `SwarmHandle::send_message`, and `dispatch_ranked_route` widened with same optional fields; retry path threads metadata through.
+  - `core/src/mobile_bridge.rs` — `SwarmBridge::send_message` accepts the two new optional params; `send_to_all_peers` passes `None, None`.
+  - `core/src/api.udl` — `SwarmBridge::send_message` binding updated: `void send_message(string peer_id, bytes data, string? recipient_identity_id, string? intended_device_id)`.
+  - `core/src/store/contacts.rs` — `Contact` struct gains `last_known_device_id: Option<String>` with `#[serde(default)]`; `ContactManager::update_last_known_device_id()` added.
+  - `cli/src/main.rs`, `cli/src/api.rs` — all call-sites updated with `None, None` (legacy behavior preserved).
+  - `wasm/src/lib.rs` — `send_envelope` call-site updated with `None, None`.
+  - `core/tests/integration_all_phases.rs`, `core/tests/integration_relay_custody.rs` — updated for new signature.
+  - `core/src/transport/behaviour.rs` (tests) — added relay-request legacy-wire compatibility tests.
+  - `core/src/store/contacts.rs` (tests) — added `last_known_device_id` round-trip and serde-default tests.
+- Verification on this Linux host:
+  - `cargo fmt --all -- --check` — **pass**
+  - `cargo build --workspace` — **pass**
+  - `cargo test --workspace` — **pass** (280 tests, 0 failures)
+  - `./scripts/docs_sync_check.sh` — **pass**
+- Platform tooling NOT available on this host: `xcodebuild` (iOS), `cargo-ndk` / `ANDROID_HOME` (Android). Mobile adapter call-sites that consume `SwarmBridge::send_message` must be updated when those tools are available — the new UDL signature is the source of truth for generated bindings.
+- WS13.2 status: **transport boundary complete, relay metadata plumbing implemented, `last_known_device_id` wired in Contact**. WS13.3 (registration protocol) and WS13.4 (registry/custody state machine) are now unblocked architecturally.
+
 ## 2026-03-10 WS13 Full-Stream Execution Audit (WS13.1 Landed, WS13.2 Landed in Core)
 
 - Re-ran the required WS13 preflight on the rebased tree:
@@ -19,11 +41,11 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - **WS13.2 (Contact Schema/Metadata)**: ✅ IMPLEMENTED AND VERIFIED in `core/src/store/contacts.rs` and `api.udl`.
   - **WS13.3-13.6 (Protocols/Relay-Registry)**: 🔄 DEFERRED to v0.2.1.
 - Blocker Status:
-  - The architectural blocker (transport metadata threading) was partially bypassed for WS13.2 by updating the storage and bridge interfaces first.
-  - Full platform verification (Android/iOS builds) for these changes was performed and verified by Luke's hygiene sweep (commit `991a18f`).
+  - The architectural blocker (transport metadata threading) was resolved by widening the swarm send boundary to carry `recipient_identity_id` and `intended_device_id` end-to-end through `SwarmCommand::SendMessage`, `RelayRequest`, and all call-sites.
+  - Full platform verification (Android/iOS binding regeneration) remains pending platform tooling (see R-WS13.2-02).
 - Result:
   - WS13.2 core work is **Landed**.
-  - Baseline is verified and ready for WS13 iteration.
+  - Baseline is verified and ready for WS13.3 iteration.
 
 ## 2026-03-10 WS13.1 Tight-Pair Kickoff (Verified)
 

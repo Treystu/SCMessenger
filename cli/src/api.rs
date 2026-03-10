@@ -334,7 +334,7 @@ async fn handle_send_message(req: Request<Body>, ctx: Arc<ApiContext>) -> Result
         core.prepare_message_with_id(contact.public_key.clone(), request.message.clone())?;
 
     ctx.swarm_handle
-        .send_message(peer_id, prepared.envelope_data)
+        .send_message(peer_id, prepared.envelope_data, None, None)
         .await?;
 
     let response = SendMessageResponse {

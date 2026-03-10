@@ -16,8 +16,11 @@ pub struct Contact {
     pub added_at: u64,
     pub last_seen: Option<u64>,
     pub notes: Option<String>,
+    /// WS13 tight-pair: most-recently-observed device UUID for this contact.
+    /// Updated when an inbound message carries WS13 device metadata.
+    /// Used as `intended_device_id` when sending to this contact.
     #[serde(default)]
-    pub last_known_device_id: Option<String>, // WS13: Device ID for tight pairing
+    pub last_known_device_id: Option<String>,
 }
 
 impl Contact {
@@ -169,8 +172,12 @@ impl ContactManager {
         Ok(())
     }
 
-    /// Update the last known device ID for a contact (WS13.2)
-    pub fn update_device_id(
+    /// Update the most-recently-observed device ID for a contact (WS13 tight-pair).
+    ///
+    /// Called when an inbound message or ledger exchange reveals the sender's current device UUID.
+    /// The stored value is used as `intended_device_id` when routing future messages to this peer.
+    /// A `None` value clears any previously-stored device ID (e.g., after a factory reset signal).
+    pub fn update_last_known_device_id(
         &self,
         peer_id: String,
         device_id: Option<String>,
@@ -178,10 +185,8 @@ impl ContactManager {
         if let Some(mut contact) = self.get(peer_id)? {
             contact.last_known_device_id = device_id;
             self.add(contact)?;
-            Ok(())
-        } else {
-            Err(IronCoreError::InvalidInput)
         }
+        Ok(())
     }
 
     pub fn count(&self) -> u32 {
@@ -198,4 +203,65 @@ fn current_timestamp() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::store::backend::MemoryStorage;
+    use std::sync::Arc;
+
+    fn make_manager() -> ContactManager {
+        ContactManager::new(Arc::new(MemoryStorage::new()))
+    }
+
+    #[test]
+    fn contact_new_has_no_last_known_device_id() {
+        let c = Contact::new("peer-1".to_string(), "pubkey-hex".to_string());
+        assert!(c.last_known_device_id.is_none());
+    }
+
+    #[test]
+    fn update_last_known_device_id_persists_and_is_readable() {
+        let mgr = make_manager();
+        mgr.add(Contact::new("peer-1".to_string(), "pubkey".to_string()))
+            .unwrap();
+
+        mgr.update_last_known_device_id(
+            "peer-1".to_string(),
+            Some("550e8400-e29b-41d4-a716-446655440000".to_string()),
+        )
+        .unwrap();
+
+        let contact = mgr.get("peer-1".to_string()).unwrap().unwrap();
+        assert_eq!(
+            contact.last_known_device_id.as_deref(),
+            Some("550e8400-e29b-41d4-a716-446655440000")
+        );
+    }
+
+    #[test]
+    fn update_last_known_device_id_can_clear() {
+        let mgr = make_manager();
+        let mut c = Contact::new("peer-2".to_string(), "pubkey".to_string());
+        c.last_known_device_id = Some("old-device".to_string());
+        mgr.add(c).unwrap();
+
+        mgr.update_last_known_device_id("peer-2".to_string(), None)
+            .unwrap();
+
+        let contact = mgr.get("peer-2".to_string()).unwrap().unwrap();
+        assert!(contact.last_known_device_id.is_none());
+    }
+
+    #[test]
+    fn contact_roundtrips_through_serde_with_default_device_id() {
+        // Simulate a pre-WS13 contact record (no last_known_device_id field).
+        let json = r#"{"peer_id":"peer-old","nickname":null,"local_nickname":null,"public_key":"pk","added_at":0,"last_seen":null,"notes":null}"#;
+        let c: Contact = serde_json::from_str(json).unwrap();
+        assert!(
+            c.last_known_device_id.is_none(),
+            "legacy records must default to None"
+        );
+    }
 }
