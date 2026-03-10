@@ -1,8 +1,23 @@
 # SCMessenger v0.2.0 Alpha Milestone Plan
 
 Status: Active (execution complete through WS12.35 non-device reliability reconciliation)
-Last updated: 2026-03-07
+Last updated: 2026-03-10
 Scope: Core + Android + iOS + Desktop GUI + Relay topology
+
+---
+
+## Closeout Re-Baseline Addendum (WS12.39, 2026-03-10 UTC)
+
+1. WS12/v0.2.0 closeout truth is now explicitly split into four buckets:
+   - physical-device reliability evidence still required (`R-WS12-29-01`, `R-WS12-29-02`, `R-WS12-04`, `R-WS12-05`, `R-WS12-06`),
+   - non-device CI/build drift still requiring repo-side fixes (current iOS MainActor isolation failures and Docker Android-unit-test library-path drift),
+   - GitHub-hosted trust-signal cleanup still requiring maintainer action (issue taxonomy, labels/milestones, branch protection, `action_required` approval-policy cleanup, stale-branch cleanup),
+   - explicitly deferred `v0.2.1` work (`WS13`, `WS14`) which remains out of scope for this burndown.
+2. Minimal local verification drift was reduced in this pass:
+   - Rust formatting and workspace build/test baseline is green again after the CLI whitespace cleanup and WASM `SwarmEvent::PortMapping(_)` handling update.
+3. Milestone implication:
+   - `v0.2.0` is not yet ready to be treated as a fully trustworthy steady baseline until the non-device CI defects and GitHub-hosted hygiene actions above are also resolved,
+   - `WS13` / `WS14` must remain planning-only until that stabilization work is closed or explicitly accepted as deferred follow-up.
 
 ---
 

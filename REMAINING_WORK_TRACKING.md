@@ -1,9 +1,9 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active  
-Last updated: 2026-03-09
+Last updated: 2026-03-10
 
-This is the active implementation backlog based on repository state verified on **2026-03-09**.
+This is the active implementation backlog based on repository state verified on **2026-03-10**.
 
 Primary delivery target: **one unified Android + iOS + Web app**.
 
@@ -40,6 +40,38 @@ Residual risks from completed v0.2.0 phases (currently through WS12.5 burndown a
 Do not start the next v0.2.0 phase without checking the corresponding entry gate in that register.
 
 1. [ ] Ensure message history is not cleared on app startup. Messages should persist across app restarts.
+
+## WS12.39 Closeout Burndown Re-Baseline (2026-03-10 UTC)
+
+Completed in this pass:
+
+1. [x] Reconciled the canonical docs, open issues, workflow runs, and branch inventory into one current-state closeout view.
+2. [x] Restored the local Rust/WASM verification baseline:
+   - removed the CLI trailing-whitespace drift blocking `cargo fmt --all -- --check`,
+   - added `SwarmEvent::PortMapping(_)` handling in `wasm/src/lib.rs` so `cargo build --workspace` succeeds again.
+3. [x] Confirmed current GitHub issue-tracker truth:
+   - open issues are automation-only (`#38`, `#39`, `#40`, `#42`),
+   - no open issues currently represent canonical WS12/v0.2.0 closeout items,
+   - no open issues currently mix `WS13` / `WS14` into active v0.2.0 scope.
+4. [x] Confirmed current workflow-truth split:
+   - PR `CI` remains `action_required` because of GitHub approval/policy settings,
+   - `main` still has real CI failures (docs sync drift, Rust fmt drift, WASM event-match drift, iOS MainActor isolation, Docker Android-unit-test path drift).
+
+Still open after this pass:
+
+1. [ ] Maintainer GitHub cleanup:
+   - close/recreate automation-only issues (`#38`, `#39`, `#40`, `#42`) so the tracker reflects real v0.2.0 work,
+   - create/normalize labels and milestones for `v0.2.0 alpha baseline`, repo hygiene, and deferred `v0.2.1` planning,
+   - apply branch protection / required checks on `main`,
+   - resolve the approval/policy setting behind `action_required` PR runs,
+   - prune stale non-`main` branches after merge/closure decisions.
+2. [ ] Non-device CI cleanup still needed in-repo:
+   - fix the remaining iOS MainActor isolation errors reported in CI (`BLEPeripheralManager`, `ContactsViewModel`, `TopicManager`, `IosPlatformBridge`),
+   - fix Docker Android-unit-test host-library path drift in `docker/docker-compose.test.yml`.
+3. [ ] Physical-device WS12 closure evidence is still required:
+   - `R-WS12-29-01` iOS send-path crash non-repro on latest binary,
+   - `R-WS12-29-02` stale-route / stale-BLE-target convergence,
+   - `R-WS12-04`, `R-WS12-05`, `R-WS12-06` synchronized Android+iOS relay/delivery/BLE evidence.
 
 ## WS12.38 Cross-Platform Status Sync Convergence (2026-03-09 HST)
 

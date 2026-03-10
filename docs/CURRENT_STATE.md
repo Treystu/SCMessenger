@@ -1,11 +1,42 @@
 # SCMessenger Current State (Verified)
 
 Status: Active  
-Last updated: 2026-03-09
+Last updated: 2026-03-10
 
-Last verified: **2026-03-09** (local workspace checks on this machine)
+Last verified: **2026-03-10** (local workspace checks on this machine)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
+
+## 2026-03-10 WS12 Closeout Burndown Re-Baseline (Verified)
+
+- Local Rust/docs verification is back to a trustworthy baseline on this branch:
+  - `cargo fmt --all -- --check` — **pass**
+  - `cargo build --workspace` — **pass**
+  - `cargo test --workspace` — **pass** (`375 passed`, `0 failed`, `16 ignored`)
+  - `./scripts/docs_sync_check.sh` — **pass**
+- Minimal repo-code drift closed in this pass:
+  - removed trailing whitespace in `cli/src/main.rs`, restoring the Rust formatting gate that was failing on `main`,
+  - updated `wasm/src/lib.rs` to explicitly ignore the new `SwarmEvent::PortMapping(_)` status event, restoring workspace build coverage after the core swarm event expansion.
+- GitHub issue tracker reconciliation against canonical docs:
+  - open issues are currently automation-only (`#38`, `#39`, `#40`, `#42`); none of them are the canonical source of active WS12/v0.2.0 closeout work,
+  - there are currently **no** open repo issues explicitly tracking `WS13` or `WS14`, which is good for scope separation but leaves the v0.2.0 closeout slate underrepresented in GitHub Issues until maintainers curate it.
+- GitHub Actions truth after direct audit:
+  - PR run `22902069805` (`CI`) for this branch is still `action_required`, confirming the repository-settings/approval-policy problem remains a GitHub-hosted blocker rather than a code-signal.
+  - Latest failed `main` CI run `22879428848` split into distinct causes:
+    - docs-sync failure because 2026-03-09 code landed without matching canonical-doc updates,
+    - Rust formatting failure from the stray CLI whitespace now fixed in this branch,
+    - WASM build failure from missing `SwarmEvent::PortMapping(_)` handling, now fixed in this branch,
+    - iOS build failure still open due MainActor isolation violations in `BLEPeripheralManager`, `ContactsViewModel`, `TopicManager`, and `IosPlatformBridge`.
+  - Latest failed Docker Integration Suite run `22879428852` is also a real repo-side defect, not settings noise:
+    - Android Unit Tests container fails because `docker/docker-compose.test.yml` copies `core/target/release/libscmessenger_core.so`, but the workspace build emits the host library under the workspace target directory instead.
+- GitHub branch inventory remains noisy and unprotected:
+  - branch listing currently shows `main` plus 66 additional unprotected branches, largely agent/copilot/dependabot generated,
+  - stale-branch cleanup remains a maintainer-side trust-signal task before calling the repo steady.
+- v0.2.0 alpha status after this re-baseline:
+  - Rust/WASM/docs verification drift is reduced,
+  - GitHub issue taxonomy and branch-protection truth are still not clean,
+  - physical-device closure evidence remains open for `R-WS12-29-01`, `R-WS12-29-02`, `R-WS12-04`, `R-WS12-05`, and `R-WS12-06`,
+  - therefore the repository is **partially stabilized**, not yet a fully trustworthy steady baseline.
 
 ## 2026-03-09 Critical Bug Fixes & NAT Traversal (Verified)
 
