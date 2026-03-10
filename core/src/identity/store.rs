@@ -89,6 +89,7 @@ impl IdentityStore {
                     metadata.seniority_timestamp.to_string().as_bytes(),
                 )
                 .map_err(|e| anyhow::anyhow!(e))?;
+
                 db.flush().map_err(|e| anyhow::anyhow!(e))?;
                 Ok(())
             }
@@ -182,6 +183,42 @@ impl IdentityStore {
         }
     }
 
+    /// Load device ID from storage
+    pub fn load_device_id(&self) -> Result<Option<String>> {
+        match self {
+            Self::Memory => Ok(None),
+            Self::Persistent(db) => {
+                if let Some(bytes) = db.get(DEVICE_ID_KEY).map_err(|e| anyhow::anyhow!(e))? {
+                    Ok(Some(String::from_utf8(bytes)?))
+                } else {
+                    Ok(None)
+                }
+            }
+        }
+    }
+
+    /// Load seniority timestamp from storage
+    pub fn load_seniority_timestamp(&self) -> Result<Option<u64>> {
+        match self {
+            Self::Memory => Ok(None),
+            Self::Persistent(db) => {
+                if let Some(bytes) = db
+                    .get(SENIORITY_TIMESTAMP_KEY)
+                    .map_err(|e| anyhow::anyhow!(e))?
+                {
+                    if bytes.len() == 8 {
+                        let arr: [u8; 8] = bytes.try_into().unwrap();
+                        Ok(Some(u64::from_le_bytes(arr)))
+                    } else {
+                        Ok(None)
+                    }
+                } else {
+                    Ok(None)
+                }
+            }
+        }
+    }
+
     /// Clear stored keys
     pub fn clear(&self) -> Result<()> {
         match self {
@@ -192,6 +229,7 @@ impl IdentityStore {
                 db.remove(DEVICE_ID_KEY).map_err(|e| anyhow::anyhow!(e))?;
                 db.remove(SENIORITY_TIMESTAMP_KEY)
                     .map_err(|e| anyhow::anyhow!(e))?;
+
                 db.flush().map_err(|e| anyhow::anyhow!(e))?;
                 Ok(())
             }

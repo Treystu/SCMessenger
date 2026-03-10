@@ -36,6 +36,7 @@ impl IdentityManager {
             nickname: None,
             device_metadata: None,
         };
+
         // Load any previously-persisted identity material without generating
         // a new identity. Fresh installs remain uninitialized.
         manager.hydrate_from_store()?;
