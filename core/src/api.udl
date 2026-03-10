@@ -11,6 +11,8 @@ namespace api {
 dictionary IdentityInfo {
     string? identity_id;
     string? public_key_hex;
+    string? device_id;
+    u64? seniority_timestamp;
     boolean initialized;
     string? nickname;
     string? libp2p_peer_id;

@@ -4,9 +4,31 @@ use super::IdentityKeys;
 use crate::store::backend::StorageBackend;
 use anyhow::Result;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
 
 const IDENTITY_KEY: &[u8] = b"identity_keys";
 const NICKNAME_KEY: &[u8] = b"identity_nickname";
+const DEVICE_ID_KEY: &[u8] = b"identity_device_id";
+const SENIORITY_TIMESTAMP_KEY: &[u8] = b"identity_seniority_timestamp";
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeviceMetadata {
+    pub device_id: String,
+    pub seniority_timestamp: u64,
+}
+
+impl DeviceMetadata {
+    pub fn generate() -> Self {
+        Self {
+            device_id: Uuid::new_v4().to_string(),
+            seniority_timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        }
+    }
+}
 
 /// Storage backend for identity keys
 pub enum IdentityStore {
@@ -55,6 +77,24 @@ impl IdentityStore {
         }
     }
 
+    /// Save device metadata to storage
+    pub fn save_device_metadata(&self, metadata: &DeviceMetadata) -> Result<()> {
+        match self {
+            Self::Memory => Ok(()),
+            Self::Persistent(db) => {
+                db.put(DEVICE_ID_KEY, metadata.device_id.as_bytes())
+                    .map_err(|e| anyhow::anyhow!(e))?;
+                db.put(
+                    SENIORITY_TIMESTAMP_KEY,
+                    metadata.seniority_timestamp.to_string().as_bytes(),
+                )
+                .map_err(|e| anyhow::anyhow!(e))?;
+                db.flush().map_err(|e| anyhow::anyhow!(e))?;
+                Ok(())
+            }
+        }
+    }
+
     /// Load keys from storage
     pub fn load_keys(&self) -> Result<Option<IdentityKeys>> {
         match self {
@@ -71,6 +111,48 @@ impl IdentityStore {
                 }
             }
         }
+    }
+
+    /// Load persisted device metadata from storage.
+    pub fn load_device_metadata(&self) -> Result<Option<DeviceMetadata>> {
+        match self {
+            Self::Memory => Ok(None),
+            Self::Persistent(db) => {
+                let device_id = db.get(DEVICE_ID_KEY).map_err(|e| anyhow::anyhow!(e))?;
+                let seniority = db
+                    .get(SENIORITY_TIMESTAMP_KEY)
+                    .map_err(|e| anyhow::anyhow!(e))?;
+
+                match (device_id, seniority) {
+                    (None, None) => Ok(None),
+                    (Some(device_id), Some(seniority)) => {
+                        let device_id = String::from_utf8(device_id)?;
+                        let parsed_uuid = Uuid::parse_str(&device_id)
+                            .map_err(|e| anyhow::anyhow!("invalid stored device_id: {e}"))?;
+                        let seniority_timestamp =
+                            String::from_utf8(seniority)?.parse::<u64>().map_err(|e| {
+                                anyhow::anyhow!("invalid stored seniority_timestamp: {e}")
+                            })?;
+                        Ok(Some(DeviceMetadata {
+                            device_id: parsed_uuid.to_string(),
+                            seniority_timestamp,
+                        }))
+                    }
+                    _ => Ok(None),
+                }
+            }
+        }
+    }
+
+    /// Load device metadata or generate and persist a new installation-local value.
+    pub fn load_or_create_device_metadata(&self) -> Result<DeviceMetadata> {
+        if let Some(metadata) = self.load_device_metadata()? {
+            return Ok(metadata);
+        }
+
+        let metadata = DeviceMetadata::generate();
+        self.save_device_metadata(&metadata)?;
+        Ok(metadata)
     }
 
     /// Load nickname from storage
@@ -94,6 +176,9 @@ impl IdentityStore {
             Self::Persistent(db) => {
                 db.remove(IDENTITY_KEY).map_err(|e| anyhow::anyhow!(e))?;
                 db.remove(NICKNAME_KEY).map_err(|e| anyhow::anyhow!(e))?;
+                db.remove(DEVICE_ID_KEY).map_err(|e| anyhow::anyhow!(e))?;
+                db.remove(SENIORITY_TIMESTAMP_KEY)
+                    .map_err(|e| anyhow::anyhow!(e))?;
                 db.flush().map_err(|e| anyhow::anyhow!(e))?;
                 Ok(())
             }
@@ -196,5 +281,41 @@ mod tests {
             let loaded = store.load_keys().unwrap().unwrap();
             assert_eq!(id, loaded.identity_id());
         }
+    }
+
+    #[test]
+    fn test_device_metadata_persistence_across_instances() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test_store").to_str().unwrap().to_string();
+
+        let original = {
+            let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+            let store = IdentityStore::persistent(backend);
+            store.load_or_create_device_metadata().unwrap()
+        };
+
+        let backend2 = Arc::new(
+            (0..MAX_REOPEN_ATTEMPTS)
+                .find_map(
+                    |attempt| match crate::store::backend::SledStorage::new(&path) {
+                        Ok(storage) => Some(storage),
+                        Err(_) if attempt + 1 < MAX_REOPEN_ATTEMPTS => {
+                            thread::sleep(Duration::from_millis(
+                                REOPEN_BACKOFF_BASE_MS * (attempt + 1),
+                            ));
+                            None
+                        }
+                        Err(err) => panic!("failed to reopen sled identity store: {err}"),
+                    },
+                )
+                .unwrap(),
+        );
+        let store = IdentityStore::persistent(backend2);
+        let reloaded = store.load_or_create_device_metadata().unwrap();
+
+        assert_eq!(original, reloaded);
+        let parsed_uuid = Uuid::parse_str(&reloaded.device_id).unwrap();
+        assert_eq!(parsed_uuid.get_version_num(), 4);
+        assert!(reloaded.seniority_timestamp > 0);
     }
 }

@@ -7,6 +7,39 @@ Last verified: **2026-03-10** (local workspace checks on this machine)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
 
+## 2026-03-10 WS13.1 Tight-Pair Kickoff (Verified)
+
+- Required WS13 kickoff docs were re-read in canonical order before coding, including:
+  - `AGENTS.md`
+  - `DOCUMENTATION.md`
+  - `docs/DOCUMENT_STATUS_INDEX.md`
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+  - planned docs `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md` and `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`
+- Re-ran WS13 preflight baseline locally:
+  - `cargo fmt --all -- --check` — **pass**
+  - `cargo build --workspace` — **pass**
+  - `cargo test --workspace` — **pass**
+  - `./scripts/docs_sync_check.sh` — **pass**
+- GitHub Actions audit for this branch:
+  - PR run `22923791535` (`CI`) is still `action_required`, matching the previously documented GitHub approval/policy blocker rather than a WS13 code regression.
+- WS13 inventory and risk split are now explicit:
+  - `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md` now includes a WS13.1 -> WS13.6 execution inventory with file targets, test targets, migration implications, and acceptance gates.
+  - `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md` now tracks v0.2.1 residual risk separately from the v0.2.0 register.
+- WS13.1 implementation landed only in the core identity metadata surface:
+  - persisted installation-local `device_id` (UUIDv4) and `seniority_timestamp`,
+  - hydrate/initialize/import paths now backfill missing metadata without rotating existing key identity,
+  - identity backup remains portable key material only; a restored install generates fresh local device metadata.
+- Focused WS13.1 verification after implementation:
+  - `cargo test -p scmessenger-core --no-run` — **pass**
+  - `cargo test -p scmessenger-core test_identity -- --nocapture` — **pass**
+  - `cargo test -p scmessenger-wasm test_desktop_identity_flow_exposes_metadata_after_init -- --nocapture` — **pass**
+- Scope boundary preserved:
+  - no WS13.2+ transport/contact/custody enforcement work was started,
+  - no v0.2.0 physical-device closure debt or maintainer-only GitHub cleanup was pulled into this implementation.
+
 ## 2026-03-10 WS12 Closeout Burndown Re-Baseline (Verified)
 
 - Local Rust/docs verification is back to a trustworthy baseline on this branch:
