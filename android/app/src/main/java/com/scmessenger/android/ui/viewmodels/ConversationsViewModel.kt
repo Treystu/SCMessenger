@@ -128,8 +128,9 @@ class ConversationsViewModel @Inject constructor(
     suspend fun sendMessage(peerId: String, content: String): Boolean {
         return withContext(Dispatchers.IO) {
             try {
+                Timber.d("VIEWMODEL_SEND: peerId='$peerId', contentLen=${content.length}")
                 val normalizedPeerId = PeerIdValidator.normalize(peerId)
-                Timber.d("Sending message to peer: $normalizedPeerId")
+                Timber.d("VIEWMODEL_SEND: normalized='$normalizedPeerId'")
                 
                 // Call repository to handle encryption and transmission
                 meshRepository.sendMessage(normalizedPeerId, content)
@@ -214,11 +215,53 @@ class ConversationsViewModel @Inject constructor(
      * Get peer info for adding to contacts quickly.
      */
     fun getPeerInfo(peerId: String): Pair<String, String>? {
-        // Check discovered peers for public key
-        val discovered = meshRepository.discoveredPeers.value[peerId]
+        // Check discovered peers for public key (case-insensitive)
+        val discovered = meshRepository.discoveredPeers.value.entries.firstOrNull {
+            it.key.equals(peerId, ignoreCase = true)
+        }?.value
         return discovered?.publicKey?.let { pubKey ->
             val nickname = discovered.nickname ?: peerId.take(8)
             pubKey to nickname
+        }
+    }
+
+    /**
+     * Block a peer by ID
+     */
+    fun blockPeer(peerId: String, reason: String? = null) {
+        viewModelScope.launch {
+            try {
+                meshRepository.blockPeer(peerId, reason)
+                Timber.i("Blocked peer: $peerId")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to block peer: $peerId")
+            }
+        }
+    }
+
+    /**
+     * Unblock a peer by ID
+     */
+    fun unblockPeer(peerId: String) {
+        viewModelScope.launch {
+            try {
+                meshRepository.unblockPeer(peerId)
+                Timber.i("Unblocked peer: $peerId")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to unblock peer: $peerId")
+            }
+        }
+    }
+
+    /**
+     * Check if a peer is blocked
+     */
+    fun isBlocked(peerId: String): Boolean {
+        return try {
+            meshRepository.isBlocked(peerId)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to check if peer is blocked: $peerId")
+            false
         }
     }
 

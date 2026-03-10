@@ -908,20 +908,6 @@ async fn start_swarm_runtime(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let (event_tx, _event_rx) = tokio::sync::mpsc::channel(100);
-    let handle = scmessenger_core::transport::start_swarm_with_config(
-        libp2p_keys,
-        None,
-        event_tx,
-        None,
-        bootstrap_multiaddrs,
-        headless_mode,
-    )
-    .await
-    .map_err(|e| js_value_from_str(&format!("Failed to start swarm: {}", e)))?;
-
-    *swarm_handle.lock() = Some(handle);
-
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(100);
     let handle = scmessenger_core::transport::start_swarm_with_config(
         libp2p_keys,
@@ -982,7 +968,8 @@ async fn start_swarm_runtime(
                 | scmessenger_core::transport::SwarmEvent::PortMapping(_)
                 | scmessenger_core::transport::SwarmEvent::TopicDiscovered { .. }
                 | scmessenger_core::transport::SwarmEvent::LedgerReceived { .. }
-                | scmessenger_core::transport::SwarmEvent::NatStatusChanged(_) => {}
+                | scmessenger_core::transport::SwarmEvent::NatStatusChanged(_)
+                | scmessenger_core::transport::SwarmEvent::PortMapping(_) => {}
             }
         }
 

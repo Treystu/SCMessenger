@@ -2,195 +2,207 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LogSankey Live Visualizer</title>
+    <title>LogSankey Elite v4.0 Fuzzy</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://unpkg.com/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
     <style>
       :root {
-        --bg-dark: #020617;
+        --bg: #020617;
         --primary: #00ced1;
         --accent: #a855f7;
         --text: #f1f5f9;
-        --glass: rgba(15, 23, 42, 0.6);
+        --glass: rgba(15, 23, 42, 0.98);
         --glass-border: rgba(255, 255, 255, 0.1);
+        --header-h: 70px;
+      }
+      * {
+        box-sizing: border-box;
       }
       body {
         margin: 0;
         padding: 0;
-        background: radial-gradient(
-          circle at 50% 50%,
-          #1e1b4b 0%,
-          #020617 100%
-        );
+        background: var(--bg);
         color: var(--text);
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-          Arial, sans-serif;
+        font-family: "JetBrains Mono", monospace;
+        height: 100vh;
+        width: 100vw;
         overflow: hidden;
         display: flex;
         flex-direction: column;
-        height: 100vh;
       }
       header {
-        padding: 15px 30px;
+        height: var(--header-h);
+        padding: 0 30px;
         background: var(--glass);
-        backdrop-filter: blur(20px);
+        backdrop-filter: blur(40px);
         border-bottom: 1px solid var(--glass-border);
         display: flex;
         justify-content: space-between;
         align-items: center;
-        z-index: 100;
+        z-index: 1000;
+        flex-shrink: 0;
       }
       #main-layout {
-        display: grid;
-        grid-template-columns: 1fr 350px;
         flex: 1;
-        overflow: hidden;
+        display: grid;
+        grid-template-columns: 1fr 480px;
+        width: 100%;
+        min-height: 0;
       }
       #viz-container {
         position: relative;
-        padding: 40px;
-        overflow: hidden;
-        background: rgba(0, 0, 0, 0.2);
+        background: rgba(0, 0, 0, 0.5);
+        height: 100%;
+        width: 100%;
+        overflow: auto;
       }
       #sidebar {
         background: var(--glass);
-        backdrop-filter: blur(10px);
+        backdrop-filter: blur(30px);
         border-left: 1px solid var(--glass-border);
         display: flex;
         flex-direction: column;
-        padding: 20px;
+        padding: 24px;
+        height: 100%;
+        overflow: hidden;
       }
       #sankey-svg {
         width: 100%;
         height: 100%;
+        display: block;
       }
+      #tooltip {
+        position: fixed;
+        padding: 8px 16px;
+        background: var(--primary);
+        border-radius: 6px;
+        color: #000;
+        font-size: 13px;
+        font-weight: 1000;
+        pointer-events: none;
+        opacity: 0;
+        z-index: 2000;
+        box-shadow: 0 5px 25px rgba(0, 206, 209, 0.5);
+        text-transform: uppercase;
+      }
+
       .node rect {
-        fill-opacity: 0.8;
+        fill-opacity: 1 !important;
         rx: 4;
-        transition: fill-opacity 0.2s;
+        cursor: pointer;
+        transition: all 0.25s;
+        filter: saturate(1.8);
       }
       .node:hover rect {
-        fill-opacity: 1;
+        filter: brightness(1.5) saturate(2);
+        transform: scaleX(1.15);
       }
-      .node text {
-        font-size: 11px;
-        fill: #fff;
-        font-weight: 500;
-        pointer-events: none;
-        text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+      .node.selected rect {
+        stroke: #fff;
+        stroke-width: 4px;
+        filter: brightness(1.8) saturate(2);
       }
       .link {
         fill: none;
-        stroke: var(--primary);
-        stroke-opacity: 0.15;
-        transition: stroke-opacity 0.2s;
+        cursor: pointer;
+        transition: stroke-opacity 0.25s;
+        stroke-opacity: 0.18;
       }
       .link:hover {
-        stroke-opacity: 0.5 !important;
+        stroke-opacity: 0.95 !important;
       }
-      #status-badge {
-        font-size: 12px;
-        padding: 6px 14px;
-        border-radius: 99px;
-        background: rgba(16, 185, 129, 0.15);
-        color: #34d399;
-        border: 1px solid rgba(52, 211, 153, 0.3);
-        display: flex;
-        align-items: center;
-        gap: 8px;
+      .node text {
+        font-size: 8px;
+        fill: rgba(255, 255, 255, 0.7);
+        pointer-events: none;
+        text-shadow: 0 1px 3px #000;
+        font-weight: 950;
       }
-      .dot {
-        width: 8px;
-        height: 8px;
-        background: #10b981;
-        border-radius: 50%;
-        box-shadow: 0 0 10px #10b981;
-        animation: blink 1.5s infinite;
-      }
-      @keyframes blink {
-        0%,
-        100% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0.3;
-        }
-      }
-
-      .history-title {
-        font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        color: #94a3b8;
-        margin-bottom: 20px;
-        font-weight: 700;
-        display: flex;
-        justify-content: space-between;
+      #log-feed {
+        flex: 1;
+        overflow-y: auto;
+        padding-right: 12px;
       }
       .log-item {
-        padding: 12px;
-        border-radius: 10px;
-        background: rgba(255, 255, 255, 0.03);
-        margin-bottom: 10px;
-        font-family:
-          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-          "Liberation Mono", "Courier New", monospace;
-        font-size: 11px;
-        border: 1px solid transparent;
-        transition: all 0.2s;
-        line-height: 1.4;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        padding: 8px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.02);
+        margin-bottom: 8px;
+        font-size: 9px;
+        line-height: 1.5;
+        border: 1px solid rgba(255, 255, 255, 0.05);
       }
-      .log-item:hover {
-        background: rgba(255, 255, 255, 0.06);
-        border-color: var(--glass-border);
-      }
-      .log-source {
+
+      .btn {
+        padding: 10px 20px;
+        border-radius: 12px;
         font-weight: 800;
-        color: var(--primary);
-        margin-right: 5px;
+        font-size: 11px;
+        border: none;
+        cursor: pointer;
+        transition: 0.2s;
       }
-      .log-tag {
-        color: var(--accent);
-        font-weight: 600;
+      .btn-stop {
+        background: #ef4444;
+        color: white;
       }
-      .log-msg {
-        color: #cbd5e1;
-        display: block;
-        margin-top: 4px;
+      .btn-resume {
+        background: #10b981;
+        color: white;
+      }
+      .btn-reset {
+        background: rgba(255, 255, 255, 0.1);
+        color: #94a3b8;
+        margin-left: 10px;
       }
     </style>
   </head>
   <body>
+    <div id="tooltip"></div>
     <header>
-      <div style="display: flex; align-items: center; gap: 15px">
+      <div style="display: flex; align-items: center; gap: 12px">
         <div
           style="
-            width: 36px;
-            height: 36px;
+            width: 40px;
+            height: 40px;
             background: linear-gradient(135deg, var(--primary), var(--accent));
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0, 206, 209, 0.3);
+            border-radius: 12px;
             display: grid;
             place-items: center;
-            font-weight: bold;
+            font-weight: 950;
             color: #000;
+            font-size: 18px;
           "
         >
           LS
         </div>
         <div>
-          <h1 style="margin: 0; font-size: 1.3rem; letter-spacing: -0.01em">
-            LogSankey <span style="font-weight: 300; opacity: 0.6">Live</span>
+          <h1 style="margin: 0; font-size: 1.1rem; font-weight: 900">
+            LogSankey
+            <span style="font-weight: 200; opacity: 0.6"
+              >v5.0 Dynamic Analysis</span
+            >
           </h1>
         </div>
       </div>
-      <div id="status-badge">
-        <div class="dot"></div>
-        Real-time Pipeline Active
+      <div style="display: flex; align-items: center">
+        <input
+          type="text"
+          id="global-search"
+          style="
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--glass-border);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 12px;
+            width: 350px;
+            margin-right: 20px;
+            outline: none;
+          "
+          placeholder="Global semantic search..."
+        />
+        <button id="pause-btn" class="btn btn-stop">🛑 Stop</button>
+        <button id="reset-btn" class="btn btn-reset">Clear</button>
       </div>
     </header>
 
@@ -199,247 +211,295 @@
         <svg id="sankey-svg"></svg>
       </div>
       <div id="sidebar">
-        <div class="history-title">
-          <span>Log Stream</span>
-          <span
-            id="stat-rate"
-            style="color: var(--primary); font-variant-numeric: tabular-nums"
-            >0 l/s</span
-          >
-        </div>
-        <div
-          id="log-list"
-          style="flex: 1; overflow-y: auto; padding-right: 5px"
-        ></div>
         <div
           style="
-            margin-top: 24px;
-            padding: 18px;
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid var(--glass-border);
-            border-radius: 14px;
-            font-size: 12px;
+            font-size: 11px;
+            text-transform: uppercase;
             color: #94a3b8;
+            margin-bottom: 15px;
+            font-weight: 900;
+            display: flex;
+            justify-content: space-between;
           "
         >
-          <div style="margin-bottom: 10px; color: #f1f5f9">
-            <b>Telemetry</b>
-          </div>
-          <div id="stat-nodes">Nodes: 0</div>
-          <div id="stat-links">Links: 0</div>
-          <div
-            style="
-              margin-top: 10px;
-              height: 2px;
-              background: rgba(255, 255, 255, 0.1);
-              border-radius: 1px;
-            "
-          >
-            <div
-              id="rate-bar"
-              style="
-                width: 0%;
-                height: 100%;
-                background: var(--primary);
-                transition: width 0.3s;
-              "
-            ></div>
-          </div>
+          <span>Variant Feed</span
+          ><span id="focus-label" style="color: var(--primary)">ALL LOGS</span>
         </div>
+        <div id="log-feed"></div>
       </div>
     </div>
 
     <script>
-      const svg = d3.select("#sankey-svg");
-      const container = document.getElementById("viz-container");
-      const logList = document.getElementById("log-list");
-
-      let nodes = [];
-      let links = [];
-      const nodeMap = new Map();
-      const linkMap = new Map();
-      let lineCount = 0;
-      let lastSecCount = 0;
-      let maxRate = 1;
-
-      const sankey = d3
+      const svg = d3.select("#sankey-svg"),
+        container = document.getElementById("viz-container"),
+        logFeed = document.getElementById("log-feed"),
+        tooltip = document.getElementById("tooltip");
+      let nodeRegistry = new Map(),
+        linkRegistry = new Map(),
+        logsBuffer = [],
+        isPaused = false,
+        currentFocus = null;
+      const sankeyInstance = d3
         .sankey()
-        .nodeWidth(14)
-        .nodePadding(14)
+        .nodeWidth(3)
+        .nodePadding(4)
         .nodeAlign(d3.sankeyJustify);
-
-      const colorScheme = {
+      const colors = {
+        Error: "#f87171",
+        Warning: "#fbbf24",
+        Info: "#4ade80",
+        Debug: "#22d3ee",
         Android: "#3de1ad",
         iOS: "#3b82f6",
-        V: "#94a3b8",
-        D: "#38bdf8",
-        I: "#4ade80",
-        W: "#fbbf24",
-        E: "#f87171",
+        System: "#a855f7",
       };
 
       function getColor(id) {
-        const key = id.split(">")[0];
-        return colorScheme[key] || "#a855f7";
+        for (let k in colors) if (id.includes(k)) return colors[k];
+        return d3.interpolateWarm((id.length % 20) / 20);
       }
 
-      function updateViz() {
-        const width = container.clientWidth - 80;
-        const height = container.clientHeight - 80;
-        svg.attr("width", width).attr("height", height);
+      function render() {
+        const rect = container.getBoundingClientRect();
+        if (rect.width < 100 || rect.height < 100) return;
 
-        sankey.extent([
-          [40, 40],
-          [width - 40, height - 40],
+        let activeLinks = Array.from(linkRegistry.values());
+        const search = document
+          .getElementById("global-search")
+          .value.toLowerCase();
+
+        if (currentFocus) {
+          if (currentFocus.type === "node")
+            activeLinks = activeLinks.filter(
+              (l) =>
+                l.source.includes(currentFocus.id) ||
+                l.target.includes(currentFocus.id),
+            );
+          else
+            activeLinks = activeLinks.filter(
+              (l) =>
+                l.source === currentFocus.src && l.target === currentFocus.tgt,
+            );
+        } else if (search) {
+          activeLinks = activeLinks.filter(
+            (l) =>
+              l.source.toLowerCase().includes(search) ||
+              l.target.toLowerCase().includes(search),
+          );
+        }
+
+        const maxVal = d3.max(activeLinks, (l) => l.value) || 1;
+        // Precision pruning (Variant Heatmap)
+        if (activeLinks.length > 350 && !search && !currentFocus) {
+          activeLinks = activeLinks
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 350);
+        }
+
+        const nodeSet = new Set();
+        activeLinks.forEach((l) => {
+          nodeSet.add(l.source);
+          nodeSet.add(l.target);
+        });
+        const nodes = Array.from(nodeSet).map((id) => ({
+          id,
+          name: nodeRegistry.get(id).name,
+        }));
+
+        // Dynamic Scaling to Prevent Node Squish
+        // High-density vertical tightening (3.2px per node) and reduced margins to maximize screen utility
+        const svgHeight = Math.max(
+          rect.height,
+          Math.min(nodes.length * 3.2 + 40, 2500),
+        );
+        const svgWidth = rect.width;
+
+        svg.attr("width", svgWidth).attr("height", svgHeight);
+        sankeyInstance.extent([
+          [20, 20],
+          [svgWidth - 350, Math.max(svgHeight - 20, 20)],
         ]);
-
-        const flowNodes = Array.from(nodeMap.values()).map((n) => ({ ...n }));
-        const flowLinks = Array.from(linkMap.values())
-          .filter((l) => l.value > 0.01)
+        const links = activeLinks
           .map((l) => ({
-            source: flowNodes.findIndex((n) => n.id === l.source),
-            target: flowNodes.findIndex((n) => n.id === l.target),
+            source: nodes.findIndex((n) => n.id === l.source),
+            target: nodes.findIndex((n) => n.id === l.target),
             value: l.value,
           }))
           .filter((l) => l.source !== -1 && l.target !== -1);
 
-        if (flowNodes.length === 0 || flowLinks.length === 0) return;
-
-        let layout;
+        if (nodes.length < 2 || links.length === 0) {
+          svg.selectAll("*").remove();
+          return;
+        }
+        let graph;
         try {
-          layout = sankey({ nodes: flowNodes, links: flowLinks });
+          graph = sankeyInstance({
+            nodes: JSON.parse(JSON.stringify(nodes)),
+            links: JSON.parse(JSON.stringify(links)),
+          });
         } catch (e) {
-          console.error("Layout engine failure", e);
           return;
         }
 
-        // Links
         const link = svg
           .selectAll(".link")
-          .data(layout.links, (d) => d.source.id + "->" + d.target.id);
-
+          .data(graph.links, (d) => `${d.source.id}->${d.target.id}`);
         link.exit().remove();
-
-        link
-          .enter()
-          .append("path")
-          .attr("class", "link")
+        const linkEnter = link.enter().append("path").attr("class", "link");
+        linkEnter
           .merge(link)
           .transition()
-          .duration(800)
+          .duration(250)
           .attr("d", d3.sankeyLinkHorizontal())
-          .attr("stroke-width", (d) => Math.max(1.5, d.width))
-          .attr("stroke", (d) => d3.color(getColor(d.source.id)).brighter(0.5));
+          .attr("stroke-width", (d) => Math.max(1, d.width))
+          .attr("stroke", (d) => getColor(d.source.id))
+          .attr("stroke-opacity", (d) =>
+            Math.min(0.9, 0.15 + (d.value / maxVal) * 0.75),
+          );
+        linkEnter.on("click", (e, d) => {
+          e.stopPropagation();
+          currentFocus = {
+            type: "link",
+            src: d.source.id,
+            tgt: d.target.id,
+            name: d.source.name,
+          };
+          updateFeedUI();
+          render();
+        });
 
-        // Nodes
-        const node = svg.selectAll(".node").data(layout.nodes, (d) => d.id);
-
-        node.exit().remove();
-
-        const nodeEnter = node.enter().append("g").attr("class", "node");
-
+        const nodeG = svg.selectAll(".node").data(graph.nodes, (d) => d.id);
+        nodeG.exit().remove();
+        const nodeEnter = nodeG.enter().append("g").attr("class", "node");
         nodeEnter.append("rect");
         nodeEnter.append("text").attr("dy", "0.35em");
-
-        const nodeMerge = nodeEnter.merge(node);
-
-        nodeMerge
+        const nodeMerge = nodeEnter
+          .merge(nodeG)
           .transition()
-          .duration(800)
-          .attr("transform", (d) => `translate(${d.x0},${d.y0})`);
-
+          .duration(250)
+          .attr("transform", (d) => `translate(${d.x0},${d.y0})`)
+          .attr("class", (d) =>
+            currentFocus &&
+            currentFocus.type === "node" &&
+            d.id === currentFocus.id
+              ? "node selected"
+              : "node",
+          );
         nodeMerge
           .select("rect")
-          .attr("height", (d) => Math.max(4, d.y1 - d.y0))
+          .attr("height", (d) => Math.max(1, d.y1 - d.y0))
           .attr("width", (d) => d.x1 - d.x0)
-          .attr("fill", (d) => getColor(d.id))
-          .attr("stroke", (d) => d3.color(getColor(d.id)).darker(1))
-          .attr("stroke-width", 1);
-
+          .attr("fill", (d) => getColor(d.id));
         nodeMerge
           .select("text")
           .attr("y", (d) => (d.y1 - d.y0) / 2)
           .text((d) => d.name)
-          .attr("x", (d) => (d.x0 < width / 2 ? 10 + (d.x1 - d.x0) : -10))
-          .attr("text-anchor", (d) => (d.x0 < width / 2 ? "start" : "end"))
-          .style("opacity", (d) => (d.y1 - d.y0 > 10 ? 1 : 0));
-
-        document.getElementById("stat-nodes").innerText =
-          `Nodes: ${flowNodes.length}`;
-        document.getElementById("stat-links").innerText =
-          `Links: ${flowLinks.length}`;
+          .attr("x", (d) => 12 + (d.x1 - d.x0))
+          .attr("text-anchor", "start")
+          .style("opacity", (d) => (d.y1 - d.y0 > 8 ? 0.9 : 0));
+        nodeEnter
+          .on("mouseover", (e, d) => {
+            tooltip.style.opacity = 1;
+            tooltip.innerHTML = d.name;
+            tooltip.style.left = e.clientX + 10 + "px";
+            tooltip.style.top = e.clientY - 30 + "px";
+          })
+          .on("mouseout", () => (tooltip.style.opacity = 0))
+          .on("click", (e, d) => {
+            e.stopPropagation();
+            currentFocus = { type: "node", id: d.id, name: d.name };
+            document.getElementById("focus-label").innerText =
+              d.name.toUpperCase();
+            updateFeedUI();
+            render();
+          });
       }
 
+      function processLog(log) {
+        logsBuffer.push(log);
+        if (logsBuffer.length > 500) logsBuffer.shift();
+        const search = document
+          .getElementById("global-search")
+          .value.toLowerCase();
+        if (search && !JSON.stringify(log).toLowerCase().includes(search))
+          return;
+
+        // Extraction Guarantee: Platform -> Priority/Tag (Global Merge) -> Message Tree
+        const segments = log.segments || [];
+        if (segments.length < 2) return;
+
+        let pathIds = [];
+        for (let j = 0; j < segments.length; j++) {
+          pathIds.push(`L${j}_${segments[j]}`);
+        }
+
+        for (let i = 0; i < segments.length - 1; i++) {
+          const sId = pathIds[i];
+          const tId = pathIds[i + 1];
+          if (!nodeRegistry.has(sId))
+            nodeRegistry.set(sId, { name: segments[i] });
+          if (!nodeRegistry.has(tId))
+            nodeRegistry.set(tId, { name: segments[i + 1] });
+          const linkId = `${sId}->${tId}`;
+          if (!linkRegistry.has(linkId))
+            linkRegistry.set(linkId, { source: sId, target: tId, value: 0 });
+          linkRegistry.get(linkId).value++;
+        }
+        if (matchesFocus(log, currentFocus)) addLogToSidebar(log);
+      }
+
+      function matchesFocus(log, focus) {
+        if (!focus) return true;
+        return JSON.stringify(log)
+          .toLowerCase()
+          .includes(focus.name.toLowerCase());
+      }
+      function updateFeedUI() {
+        logFeed.innerHTML = "";
+        logsBuffer
+          .slice(-50)
+          .filter((l) => matchesFocus(l, currentFocus))
+          .forEach(addLogToSidebar);
+      }
+      function addLogToSidebar(log) {
+        const div = document.createElement("div");
+        div.className = "log-item";
+        div.innerHTML = `<span style="color:var(--primary); font-weight:950;">${log.levelTag || "L"}</span>: ${log.msg || "..."}`;
+        logFeed.prepend(div);
+        if (logFeed.childNodes.length > 50) logFeed.lastChild.remove();
+      }
       setInterval(() => {
-        linkMap.forEach((l, id) => {
-          l.value *= 0.75;
-          if (l.value < 0.05) linkMap.delete(id);
-        });
-
-        const activeTargets = new Set();
-        const activeSources = new Set();
-        linkMap.forEach((l) => {
-          activeSources.add(l.source);
-          activeTargets.add(l.target);
-        });
-        nodeMap.forEach((n, id) => {
-          if (!activeSources.has(id) && !activeTargets.has(id))
-            nodeMap.delete(id);
-        });
-
-        document.getElementById("stat-rate").innerText = `${lastSecCount} l/s`;
-        if (lastSecCount > maxRate) maxRate = lastSecCount;
-        document.getElementById("rate-bar").style.width =
-          (lastSecCount / maxRate) * 100 + "%";
-
-        lastSecCount = 0;
-        updateViz();
-      }, 1000);
-
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(`${protocol}//${window.location.host}`);
-      ws.onmessage = (event) => {
-        const log = JSON.parse(event.data);
-        lastSecCount++;
-
-        const logItem = document.createElement("div");
-        logItem.className = "log-item";
-        logItem.innerHTML = `<div><span class="log-source">${log.source}</span><span class="log-tag">[${log.tag}]</span></div><span class="log-msg">${log.msg.substring(0, 150)}${log.msg.length > 150 ? "..." : ""}</span>`;
-        logList.prepend(logItem);
-        if (logList.childNodes.length > 30) logList.lastChild.remove();
-
-        // Flow Path: [Source, Level, Tag, ...KeyPairs]
-        let path = [log.source, log.level, log.tag];
-        const keys = Object.keys(log.keyPairs);
-        if (keys.length > 0) {
-          keys.slice(0, 3).forEach((k) => {
-            // Limit to first 3 keys to avoid massive explosion
-            path.push(k);
-            path.push(log.keyPairs[k]);
-          });
-        }
-
-        for (let i = 0; i < path.length - 1; i++) {
-          const srcId = path.slice(0, i + 1).join(">");
-          const tgtId = path.slice(0, i + 2).join(">");
-
-          if (!nodeMap.has(srcId))
-            nodeMap.set(srcId, { id: srcId, name: path[i] });
-          if (!nodeMap.has(tgtId))
-            nodeMap.set(tgtId, { id: tgtId, name: path[i + 1] });
-
-          const linkId = `${srcId}->${tgtId}`;
-          if (!linkMap.has(linkId)) {
-            linkMap.set(linkId, { source: srcId, target: tgtId, value: 0 });
-          }
-          linkMap.get(linkId).value += 1;
-        }
+        if (!isPaused) render();
+      }, 1200);
+      document.getElementById("pause-btn").onclick = function () {
+        isPaused = !isPaused;
+        this.innerText = isPaused ? "▶️ Resume" : "🛑 Stop";
+        this.className = isPaused ? "btn btn-resume" : "btn btn-stop";
       };
-
-      ws.onerror = (err) => console.error("WS Error", err);
-      ws.onclose = () =>
-        (document.getElementById("status-badge").innerHTML =
-          '<span style="color:#ef4444;">● Pipeline Offline</span>');
+      document.getElementById("reset-btn").onclick = () => {
+        nodeRegistry.clear();
+        linkRegistry.clear();
+        logsBuffer = [];
+        currentFocus = null;
+        updateFeedUI();
+        render();
+      };
+      container.onclick = () => {
+        currentFocus = null;
+        document.getElementById("focus-label").innerText = "ALL LOGS";
+        updateFeedUI();
+        render();
+      };
+      const connect = () => {
+        const ws = new WebSocket(
+          `${location.protocol.replace("http", "ws")}//${location.host}`,
+        );
+        ws.onmessage = (e) => {
+          if (!isPaused) processLog(JSON.parse(e.data));
+        };
+        ws.onclose = () => setTimeout(connect, 3000);
+      };
+      connect();
     </script>
   </body>
 </html>

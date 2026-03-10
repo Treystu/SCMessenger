@@ -1,371 +1,202 @@
-# Complete Session Report - 2026-03-09 Final
-**Time**: 2026-03-09 14:00 - 21:30 UTC  
-**Status**: ✅ ALL CRITICAL BUGS FIXED, ✅ FEATURE PARITY ACHIEVED  
-**Quality**: Production Ready
+# Complete Debug Session Report
+**Date:** March 9-10, 2026
+**Duration:** Extended debug session (~2 hours)
+**Status:** PARTIAL - CRITICAL ISSUES REMAINING
 
----
+## Summary of Work
 
-## Session Summary
+### Phase 1: Android Case-Sensitivity Bug ✅ FIXED
+**Issue:** Message sending failed due to case-sensitive peer ID lookups
+**Fix:** Modified 5 locations to use case-insensitive matching
+**Status:** Fixed and verified working in earlier test
 
-### Major Accomplishments
-1. ✅ **NAT Traversal** - Relay server enabled
-2. ✅ **BLE Reliability** - Subscription tracking fixed
-3. ✅ **Delivery Accuracy** - False positives eliminated
-4. ✅ **Phantom Peers** - Unique peer tracking implemented
-5. ✅ **Feature Parity** - Swipe-to-delete & nickname editing added
-6. ✅ **UI Fixes** - Keyboard handling and spacing corrected
+**Files Modified:**
+- `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` (4 locations)
+- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt` (1 location)
 
----
+### Phase 2: iOS Crash Audit ✅ COMPLETED
+**Finding:** Last crash was March 7 in Apple's MultipeerConnectivity framework
+**Status:** Not an app bug - framework issue with existing workarounds
+**Current State:** iOS app stable, no crashes in 72+ hours
 
-## Critical Bugs Fixed
+### Phase 3: Android Delivery Issues ❌ CRITICAL - NOT RESOLVED
 
-### 1. Phantom Peers Bug ✅ **NEW**
-**Problem**: Notification showed 39-81 peers when only 5 existed  
-**Root Cause**: Simple counter incremented on every reconnect, no deduplication  
-**Fix**: Changed from `peerCount` counter to `connectedPeers` set
+## CRITICAL ISSUES IDENTIFIED
 
-**Impact**: Accurate peer counting, no more phantom peers
+### Issue 1: Send Button Unresponsive ❌
+**Status:** BLOCKING
+**Symptoms:**
+- User clicks send button 100+ times - no response
+- No log entries for button clicks detected
+- App running but UI not responding
 
-**File**: `MeshForegroundService.kt`
-```kotlin
-// Before
-private var peerCount = 0
-peerCount++  // On every connect
+**Likely Causes:**
+1. User not on ChatScreen (on different screen?)
+2. Text input field is empty (validation preventing send)
+3. App needs restart to pick up case-sensitivity fixes
+4. UI thread blocked or Compose state issue
 
-// After
-private val connectedPeers = mutableSetOf<String>()
-connectedPeers.add(event.peerId)  // Deduplicates automatically
+**Next Steps:**
+1. Confirm user is on ChatScreen with text typed
+2. Restart app and retry
+3. Check for ANR (App Not Responding) issues
+4. Add more defensive logging
+
+### Issue 2: Delivery State Broken ❌
+**Status:** HIGH PRIORITY
+**Symptoms:**
+- Messages show `msg=unknown` in delivery logs
+- Messages "disappear" from UI after sending
+- Excessive retry attempts (169 for one message)
+- Delivery state not propagating to UI
+
+**Evidence:**
+```
+delivery_attempt msg=unknown medium=core
+delivery_state msg=15496c61... attempt=169
 ```
 
-### 2. NAT Traversal - Relay Server ✅
-**Problem**: Cellular↔WiFi messaging failed  
-**Fix**: Added relay server behavior to all nodes  
-**Files**: `core/src/transport/behaviour.rs`, `swarm.rs`
+**Root Cause:** Message ID not being tracked through delivery pipeline
 
-### 3. BLE DeadObjectException ✅
-**Problem**: Crashes after network switching  
-**Fix**: Proper subscription lifecycle tracking  
-**File**: `BleGattServer.kt`
+**Impact:**
+- Users cannot see delivery status
+- Messages may be sent but appear to disappear
+- Retry logic broken
 
-### 4. False Delivery Status ✅
-**Problem**: BLE ACK treated as full delivery  
-**Fix**: Require core mesh confirmation  
-**File**: `MeshRepository.kt`
+**Required Fixes:**
+1. Ensure message ID propagates from send to delivery
+2. Update UI to show "pending" messages
+3. Implement max retry limit (cap at 10-20)
+4. Fix delivery state updates to trigger UI refresh
 
-### 5. UI Spacing Issues ✅
-**Problem**: Wasted space at top, keyboard covering input  
-**Fix**: Removed wrong `contentWindowInsets`, added `.imePadding()`  
-**File**: `ChatScreen.kt`
+### Issue 3: Network Connectivity ⚠️
+**Status:** MEDIUM - MAY BE ENVIRONMENTAL
+**Symptoms:**
+- All delivery attempts failing with "Network error"
+- Peer discovered but unreachable
+- Multiple transport methods failing
 
----
+**Possible Causes:**
+1. Target peer offline (most likely)
+2. Network connectivity issue
+3. Firewall blocking
+4. Relay nodes unavailable
 
-## Feature Parity Implemented ✅ **NEW**
+**Test Needed:** Try sending to a different peer (e.g., iOS device on same network)
 
-### Android Now Has iOS Feature Parity
+## Files Requiring Immediate Attention
 
-#### 1. Swipe-to-Delete Contacts ✅
-**iOS**: `.onDelete` modifier  
-**Android**: `SwipeToDismiss` with red background
+### Critical
+1. `android/app/src/main/java/com/scmessenger/android/ui/screens/ChatScreen.kt`
+   - Add logging before onClick to verify button is clickable
+   - Add state debugging for inputText
 
-**Implementation**:
-```kotlin
-SwipeToDismiss(
-    state = dismissState,
-    background = { /* Red delete background */ },
-    dismissContent = { /* Contact card */ }
-)
-```
+2. `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
+   - Fix `msg=unknown` issue in delivery logging
+   - Implement max retry limit
+   - Ensure message ID propagates correctly
 
-#### 2. Edit Nickname After Creation ✅
-**iOS**: Edit in contact detail view  
-**Android**: Edit button + dialog with TextField
+3. `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt`
+   - Verify sendMessage returns correct status
+   - Ensure UI state updates on send
 
-**Implementation**:
-- Edit icon button on each contact
-- AlertDialog with TextField
-- Wired to `setLocalNickname` API
-- Shows federated nickname for reference
+### High Priority
+4. `android/app/src/main/java/com/scmessenger/android/ui/chat/DeliveryStateSurface.kt`
+   - Review message filtering logic
+   - Ensure "pending" messages display
+   - Add delivery state indicators
 
-#### 3. Swipe Gesture UX ✅
-**Both Platforms**: Consistent swipe-to-delete experience
-- Swipe reveals red background with delete icon
-- Shows confirmation dialog before deleting
-- Cancel restores contact card
+## Documentation Created This Session
 
----
+1. `CASE_SENSITIVITY_AUDIT_2026-03-09.md` - Android case bug fix details
+2. `EXECUTIVE_SUMMARY_2026-03-09.md` - Initial session summary
+3. `IOS_CRASH_AUDIT_2026-03-10.md` - iOS crash analysis
+4. `FINAL_SESSION_REPORT_2026-03-09.md` - Mid-session comprehensive report
+5. `SESSION_COMPLETE_2026-03-09.md` - Phase 1-2 completion summary
+6. `ANDROID_DELIVERY_ISSUES_2026-03-10.md` - Phase 3 issue documentation
+7. `COMPLETE_SESSION_REPORT_2026-03-09.md` - This final report
 
-## Files Modified
+## Test Scripts Run
 
-### Core (Rust) - 2 files
-1. `core/src/transport/behaviour.rs` - Relay server added
-2. `core/src/transport/swarm.rs` - Event handling
+- `run5.sh` - 5-node mesh test harness ✅ VERIFIED WORKING
+  - All nodes launched successfully
+  - Peer discovery functional
+  - Log collection working
+  - iOS stable throughout test
 
-### Android - 3 files  
-1. `MeshForegroundService.kt` - Phantom peers fix
-2. `ContactsScreen.kt` - Swipe-to-delete, nickname editing
-3. `ChatScreen.kt` - UI spacing fixes
-4. `MeshRepository.kt` - Delivery status fix
-5. `BleGattServer.kt` - Subscription tracking
+## Outstanding Work Required
 
-### iOS - 1 file
-1. Framework rebuilt with relay server
+### Immediate (Next Session)
+1. **Fix send button responsiveness**
+   - Debug why clicks not being logged
+   - Verify user workflow (screen navigation, text input)
+   - Test with fresh app restart
 
----
+2. **Fix delivery state tracking**
+   - Trace message ID through send pipeline
+   - Fix `msg=unknown` logging
+   - Update UI to show pending messages
+   - Implement retry limits
 
-## Build Status
-
-### Core
-✅ Compiles cleanly  
-✅ All tests pass  
-✅ No warnings
-
-### Android
-✅ APK built successfully  
-✅ All features implemented  
-✅ Ready for deployment
-
-**APK**: `android/app/build/outputs/apk/debug/app-debug.apk`
-
-### iOS
-✅ Framework updated  
-✅ Ready for testing
-
----
-
-## Feature Comparison Matrix
-
-| Feature | iOS | Android (Before) | Android (After) |
-|---------|-----|------------------|-----------------|
-| Swipe-to-delete | ✅ | ❌ | ✅ |
-| Edit nickname | ✅ | ❌ | ✅ |
-| Delete button | ❌ | ✅ | ✅ |
-| Long-press menu | ✅ | ❌ | ⚠️ Future |
-| Accurate peer count | ✅ | ❌ | ✅ |
-| NAT traversal | ✅ | ✅ | ✅ |
-| BLE stability | ✅ | ❌ | ✅ |
-| Delivery accuracy | ✅ | ❌ | ✅ |
-
-**Parity Status**: 95% (long-press menu deferred)
-
----
-
-## Documentation
-
-### Created (16 new documents)
-1. `PHANTOM_PEERS_BUG.md` - Peer counting bug analysis
-2. `NAT_TRAVERSAL_IMPLEMENTATION.md`
-3. `BLE_DEADOBJECT_BUG.md`
-4. `BLE_FALSE_DELIVERY_BUG.md`
-5. `MESSAGE_DELIVERY_RCA_2026-03-09.md`
-6. `CELLULAR_NAT_SOLUTION.md`
-7. Plus 10 more session reports
-
-### Updated
-- `docs/CURRENT_STATE.md`
-- `Latest_Updates.md`
-- `REMAINING_WORK_TRACKING.md`
-- `FEATURE_PARITY.md`
-
-### Validation
-```bash
-./scripts/docs_sync_check.sh
-# Result: PASS ✅
-```
-
----
-
-## Testing Required
-
-### Critical (Must Test Before Release)
-- [ ] Verify peer count stays accurate over time
-- [ ] Test swipe-to-delete on contacts
-- [ ] Test nickname editing functionality
-- [ ] Verify cellular↔WiFi messaging via relay
-- [ ] Test BLE reconnection after network switch
-- [ ] Confirm delivery status accuracy
-- [ ] Check keyboard doesn't cover input
-- [ ] Validate UI spacing throughout app
-
-### Integration Tests
-- [ ] Phantom peers: Monitor count during reconnects
-- [ ] Swipe: Test left and right swipe
-- [ ] Nickname: Edit, clear, and restore
-- [ ] Relay: Test circuit establishment logs
-- [ ] BLE: Toggle Bluetooth on/off multiple times
-
----
-
-## Known Limitations
-
-### Still Requires Future Work
-1. **Long-press context menu** - Deferred to next iteration
-2. **QUIC/UDP transport** - For carrier-blocked ports
-3. **DCUtR hole-punching** - For direct upgrade
-4. **AutoNAT detection** - For NAT type awareness
-
-### Not Critical for Alpha
-- Relay resource monitoring
-- Bandwidth accounting
-- Geographic relay distribution
-- Advanced NAT techniques
-
----
-
-## Success Criteria
-
-### All Achieved ✅
-- ✅ NAT traversal working (relay server)
-- ✅ BLE handles reconnection (subscription tracking)
-- ✅ Delivery status accurate (core confirmation required)
-- ✅ Peer count accurate (unique tracking)
-- ✅ Feature parity with iOS (swipe, nickname)
-- ✅ UI properly spaced (keyboard handling)
-- ✅ Documentation complete (16 documents)
-- ✅ Builds successful (no errors)
-
----
-
-## Performance Impact
-
-### Before Session
-- ❌ Messages stuck cellular↔WiFi
-- ❌ BLE crashes on reconnection
-- ❌ False "delivered" status
-- ❌ Phantom peers (inflated 10-20x)
-- ❌ Missing swipe-to-delete
-- ❌ Can't edit nicknames
-- ❌ Keyboard covers input
-
-### After Session
-- ✅ Messages route via relay
-- ✅ BLE reconnects reliably
-- ✅ Delivery status trustworthy
-- ✅ Peer count accurate
-- ✅ Swipe-to-delete works
-- ✅ Nickname editing available
-- ✅ Keyboard properly handled
-
-**Improvement**: ~90% critical bug elimination + full feature parity
-
----
-
-## Next Steps
-
-### Immediate
-1. Install APK on Android device
-2. Verify peer count accuracy
-3. Test swipe-to-delete
-4. Test nickname editing
-5. Monitor relay circuit logs
+3. **Test message visibility**
+   - Verify messages persist in UI
+   - Check delivery state indicators
+   - Test with iOS peer on same network
 
 ### Short-term
-1. Add long-press context menu (P2)
-2. Implement QUIC/UDP transport
-3. Add relay metrics dashboard
+1. Add comprehensive logging to delivery pipeline
+2. Implement delivery state UI indicators
+3. Add max retry limits to prevent infinite loops
+4. Improve error messages for network failures
 
-### Long-term
-1. DCUtR hole-punching
-2. AutoNAT detection
-3. Geographic relay distribution
+### Documentation Debt
+1. Run docs verification script (per user request)
+2. Update repository documentation with fixes
+3. Document known issues and workarounds
+4. Create troubleshooting guide for delivery issues
 
----
+## Recommendations
 
-## Code Quality
+### For User (Immediate Testing)
+1. **Restart Android app** - ensures latest case-sensitivity fixes are active
+2. **Verify you're on ChatScreen** with a peer selected and text typed
+3. **Try sending to iOS device** on same network (not remote peer)
+4. **Check if messages appear** in your sent history
 
-### Metrics
-- **Lines Changed**: ~300
-- **Files Modified**: 8
-- **Bugs Fixed**: 5
-- **Features Added**: 3
-- **Documentation**: 16 docs
-- **Build Status**: ✅ Clean
-- **Test Coverage**: ⏳ Pending deployment
+### For Development (Next Priorities)
+1. **UI Responsiveness** - highest priority, users cannot send
+2. **Delivery State** - second priority, affects UX severely
+3. **Network Reliability** - may be environmental, test more
+4. **Documentation** - update per repository standards
 
-### Quality Gates
-- ✅ Compilation successful
-- ✅ No lint errors
-- ✅ Documentation synchronized
-- ✅ Feature parity achieved
-- ✅ Critical bugs eliminated
+## Known Working Features
 
----
+✅ Android build process
+✅ iOS build process  
+✅ Peer discovery (both platforms)
+✅ Case-insensitive peer lookups (Android)
+✅ Multi-platform test harness (run5.sh)
+✅ iOS stability (no recent crashes)
+✅ Basic mesh connectivity
 
-## Deployment Checklist
+## Known Broken Features
 
-### Pre-Deployment ✅
-- [x] Core compiled
-- [x] Android built
-- [x] iOS framework updated
-- [x] Documentation complete
-- [x] All critical bugs fixed
-- [x] Feature parity achieved
+❌ Android send button (unresponsive in current state)
+❌ Android delivery state tracking (msg=unknown)
+❌ Android message visibility (disappearing messages)
+❌ Message retry logic (excessive attempts)
 
-### Post-Deployment ⏳
-- [ ] Install on test devices
-- [ ] Verify peer count
-- [ ] Test swipe gestures
-- [ ] Test nickname editing
-- [ ] Monitor for 24 hours
-- [ ] Collect user feedback
+## Session Outcome
 
----
+**Partially Complete:**
+- Phase 1 (case-sensitivity) ✅ DONE
+- Phase 2 (iOS audit) ✅ DONE  
+- Phase 3 (Android delivery) ❌ IN PROGRESS - CRITICAL ISSUES REMAIN
 
-## Final Status
+**Critical Issues Identified But Not Resolved:**
+- Send button unresponsive (BLOCKING)
+- Delivery state broken (HIGH)
+- Message visibility broken (HIGH)
 
-**Critical Bugs**: ✅ FIXED (5/5)  
-**Feature Parity**: ✅ ACHIEVED (95%)  
-**Documentation**: ✅ COMPLETE  
-**Build Status**: ✅ SUCCESS  
-**Ready for**: Production deployment
-
-**Session Quality**: Production ready  
-**Recommendation**: Deploy immediately
-
----
-
-**Total Session Time**: ~7.5 hours  
-**Bugs Fixed**: 5 critical  
-**Features Added**: 3 major  
-**Documentation**: 16 documents  
-**Lines of Code**: ~300  
-**Quality Score**: 100%
-
----
-
-## Post-Session Update - iOS Provisioning Issue
-
-**Time**: 2026-03-09 23:01 UTC  
-**Issue**: iOS provisioning profile expired  
-**Status**: ⚠️ REQUIRES MANUAL FIX
-
-### Problem
-```
-Provisioning profile "iOS Team Provisioning Profile: SovereignCommunications.SCMessenger" 
-expired on Mar 9, 2026.
-```
-
-### Impact
-- ❌ iOS builds blocked until profile renewed
-- ✅ Android builds successful (not affected)
-- ✅ Core framework built (can be used once iOS profile renewed)
-
-### Fix Required
-See `iOS_PROVISIONING_FIX.md` for detailed instructions.
-
-**Quick Fix**:
-1. Open Xcode project
-2. Sign in to Apple ID (Xcode → Settings → Accounts)
-3. Enable "Automatically manage signing"
-4. Xcode will auto-renew profile
-5. Rebuild iOS app
-
-**Estimated Time**: 2-5 minutes
-
-### Updated Status
-- ✅ Android: Ready for deployment
-- ⏳ iOS: Pending profile renewal
-- ✅ All code fixes: Complete
-- ✅ Documentation: Complete
-
-**All session work complete - iOS just needs provisioning profile renewal before deployment.**
+**Recommendation:** Continue debug session in follow-up to resolve Android delivery issues. iOS is stable and ready for testing.
 

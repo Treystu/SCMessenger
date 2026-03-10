@@ -59,6 +59,10 @@ interface IronCore {
     boolean verify_signature(bytes data, bytes signature, string public_key_hex);
     [Throws=IronCoreError]
     string extract_public_key_from_peer_id(string peer_id);
+    /// Resolve any ID format (public_key_hex, identity_id, or libp2p_peer_id) to canonical public_key_hex.
+    /// This is the primary ID resolution function for cross-platform identity unification.
+    [Throws=IronCoreError]
+    string resolve_identity(string any_id);
 
     // Messaging
     [Throws=IronCoreError]
@@ -75,6 +79,18 @@ interface IronCore {
     u32 outbox_count();
     u32 inbox_count();
     boolean mark_message_sent(string message_id);
+
+    // Blocking
+    [Throws=IronCoreError]
+    void block_peer(string peer_id, string? reason);
+    [Throws=IronCoreError]
+    void unblock_peer(string peer_id);
+    [Throws=IronCoreError]
+    boolean is_peer_blocked(string peer_id);
+    [Throws=IronCoreError]
+    sequence<BlockedIdentity> list_blocked_peers();
+    [Throws=IronCoreError]
+    u32 blocked_count();
 
     // Delegate
     void set_delegate(CoreDelegate? delegate);
@@ -110,6 +126,7 @@ enum IronCoreError {
     "CryptoError",
     "NetworkError",
     "InvalidInput",
+    "Blocked",
     "Internal",
 };
 
@@ -505,4 +522,23 @@ interface SwarmBridge {
 
     [Throws=IronCoreError]
     void send_to_all_peers(bytes data);
+};
+
+// ============================================================================
+// BLOCKED IDENTITIES
+// ============================================================================
+
+dictionary BlockedIdentity {
+    string peer_id;
+    string? device_id;
+    u64 blocked_at;
+    string? reason;
+    string? notes;
+};
+
+namespace api {
+    BlockedIdentity blocked_identity_new(string peer_id);
+    BlockedIdentity blocked_identity_with_device_id(BlockedIdentity blocked, string device_id);
+    BlockedIdentity blocked_identity_with_reason(BlockedIdentity blocked, string reason);
+    BlockedIdentity blocked_identity_with_notes(BlockedIdentity blocked, string notes);
 };

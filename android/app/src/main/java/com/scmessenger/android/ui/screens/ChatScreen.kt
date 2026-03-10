@@ -9,6 +9,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -48,6 +50,15 @@ fun ChatScreen(
     val coroutineScope = rememberCoroutineScope()
     
     val contact = viewModel.getContactForPeer(conversationId)
+    val localNickname = contact?.localNickname?.trim().orEmpty()
+    val federatedNickname = contact?.nickname?.trim().orEmpty()
+    val displayName = when {
+        localNickname.isNotEmpty() -> localNickname
+        federatedNickname.isNotEmpty() -> federatedNickname
+        else -> conversationId.take(12) + "..."
+    }
+    
+    Timber.d("CHAT_SCREEN: conversationId=$conversationId, displayName=$displayName, localNick=$localNickname, fedNick=$federatedNickname")
     val isPeerAvailable = viewModel.isPeerAvailable(conversationId)
     var showAddContactDialog by remember { mutableStateOf(false) }
 
@@ -65,18 +76,32 @@ fun ChatScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(text = "Chat", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            text = conversationId.take(8) + "...",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(displayName)
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    // Block/Unblock button
+                    val isBlocked = viewModel.isBlocked(conversationId)
+                    IconButton(
+                        onClick = {
+                            if (isBlocked) {
+                                viewModel.unblockPeer(conversationId)
+                                Timber.i("Unblocked peer: $conversationId")
+                            } else {
+                                viewModel.blockPeer(conversationId, "Blocked from chat")
+                                Timber.i("Blocked peer: $conversationId")
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = if (isBlocked) Icons.Default.CheckCircle else Icons.Default.Block,
+                            contentDescription = if (isBlocked) "Unblock" else "Block",
+                            tint = if (isBlocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 }
             )
@@ -167,13 +192,14 @@ fun ChatScreen(
 
                 IconButton(
                     onClick = {
-                        if (inputText.isNotBlank()) {
-                            val messageToSend = inputText
+                        val messageToSend = inputText.trim()
+                        if (messageToSend.isNotEmpty()) {
+                            Timber.d("SEND: Clearing input immediately for instant feedback")
+                            inputText = ""
                             coroutineScope.launch {
                                 val success = viewModel.sendMessage(conversationId, messageToSend)
-                                if (success) {
-                                    inputText = ""
-                                }
+                                Timber.d("SEND: Message sent, success=$success")
+                                listState.animateScrollToItem(chatMessages.size)
                             }
                         }
                     },

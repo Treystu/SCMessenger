@@ -1616,7 +1616,7 @@ final class MeshRepository {
         }
 
         let exactMatch = contacts.contains {
-            $0.peerId == senderId && normalizePublicKey($0.publicKey) == normalizedIncomingKey
+            $0.peerId.lowercased() == senderId.lowercased() && normalizePublicKey($0.publicKey) == normalizedIncomingKey
         }
         if exactMatch { return senderId }
 
@@ -1633,10 +1633,10 @@ final class MeshRepository {
         if isLibp2pPeerId(senderId) {
             let linkedIdentityMatches = contacts.filter {
                 guard normalizePublicKey($0.publicKey) == normalizedIncomingKey else { return false }
-                guard $0.peerId != senderId else { return false }
+                guard $0.peerId.lowercased() != senderId.lowercased() else { return false }
                 guard let notes = $0.notes,
                       let routing = parseRoutingInfo(notes: notes) else { return false }
-                return routing.libp2pPeerId == senderId
+                return routing.libp2pPeerId.lowercased() == senderId.lowercased()
             }
 
             if linkedIdentityMatches.count == 1 {
@@ -3114,7 +3114,7 @@ final class MeshRepository {
         listeners: [String],
         blePeerId: String? = nil
     ) {
-        let canonicalPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let canonicalPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !canonicalPeerId.isEmpty,
               let normalizedKey = normalizePublicKey(publicKey) else {
             return
@@ -3122,7 +3122,7 @@ final class MeshRepository {
 
         let normalizedNickname = normalizeNickname(nickname)
         let normalizedRoute = {
-            let trimmed = libp2pPeerId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let trimmed = libp2pPeerId?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
             return trimmed.isEmpty ? nil : trimmed
         }()
         let normalizedBle = {

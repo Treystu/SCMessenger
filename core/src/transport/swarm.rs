@@ -1243,6 +1243,9 @@ pub async fn start_swarm_with_config(
         // Track peers we've already exchanged ledgers with (avoid spamming)
         let mut ledger_exchanged_peers: HashSet<PeerId> = HashSet::new();
 
+        // Track connected peers for relay peer discovery broadcasting
+        let mut peer_broadcaster = crate::transport::PeerBroadcaster::new();
+
         // Track relay peers and their publicly-routable addresses for circuit reservation.
         // When we identify a relay, we save its WAN addrs here and attempt
         // swarm.listen_on(<relay_addr>/p2p-circuit) to register a reservation,
@@ -1501,6 +1504,57 @@ pub async fn start_swarm_with_config(
                             )) => {
                                 match message {
                                     request_response::Message::Request { request, channel, .. } => {
+                                        // RELAY PEER DISCOVERY: Check if this is a peer discovery message
+                                        if let Ok(relay_msg) = crate::relay::protocol::RelayMessage::from_bytes(&request.envelope_data) {
+                                            match relay_msg {
+                                                crate::relay::protocol::RelayMessage::PeerJoined { peer_info } => {
+                                                    tracing::info!("📢 Received PeerJoined: {} with {} addresses", peer_info.peer_id, peer_info.addresses.len());
+                                                    for addr_str in &peer_info.addresses {
+                                                        if let Ok(addr) = addr_str.parse::<Multiaddr>() {
+                                                            if is_discoverable_multiaddr(&addr) {
+                                                                tracing::debug!("  Dialing announced peer at {}", addr);
+                                                                let _ = swarm.dial(addr);
+                                                            }
+                                                        }
+                                                    }
+                                                    let _ = swarm.behaviour_mut().messaging.send_response(
+                                                        channel,
+                                                        MessageResponse { accepted: true, error: None },
+                                                    );
+                                                    continue;
+                                                }
+                                                crate::relay::protocol::RelayMessage::PeerListResponse { peers } => {
+                                                    tracing::info!("📋 Received peer list: {} peers", peers.len());
+                                                    for peer_info in peers {
+                                                        tracing::debug!("  Peer: {} ({} addresses)", peer_info.peer_id, peer_info.addresses.len());
+                                                        for addr_str in &peer_info.addresses {
+                                                            if let Ok(addr) = addr_str.parse::<Multiaddr>() {
+                                                                if is_discoverable_multiaddr(&addr) {
+                                                                    let _ = swarm.dial(addr);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    let _ = swarm.behaviour_mut().messaging.send_response(
+                                                        channel,
+                                                        MessageResponse { accepted: true, error: None },
+                                                    );
+                                                    continue;
+                                                }
+                                                crate::relay::protocol::RelayMessage::PeerLeft { peer_id } => {
+                                                    tracing::info!("📢 Peer left: {}", peer_id);
+                                                    let _ = swarm.behaviour_mut().messaging.send_response(
+                                                        channel,
+                                                        MessageResponse { accepted: true, error: None },
+                                                    );
+                                                    continue;
+                                                }
+                                                _ => {
+                                                    // Other relay messages, fall through to normal handling
+                                                }
+                                            }
+                                        }
+                                        
                                         // Received a message from a peer
                                         let _ = event_tx.send(SwarmEvent2::MessageReceived {
                                             peer_id: peer,
@@ -2394,17 +2448,18 @@ pub async fn start_swarm_with_config(
                             }
 
                             SwarmEvent::ConnectionEstablished { peer_id, endpoint, connection_id, .. } => {
+                                let remote_addr = endpoint.get_remote_address().clone();
                                 tracing::info!(
                                     "🔗 Connected to {} via {} (promiscuous mode — any PeerID accepted)",
                                     peer_id,
-                                    endpoint.get_remote_address()
+                                    remote_addr
                                 );
                                 multi_path_delivery.record_recipient_seen_now(peer_id, peer_id);
 
                                 // Track this connection for address observation
                                 connection_tracker.add_connection(
                                     peer_id,
-                                    endpoint.get_remote_address().clone(),
+                                    remote_addr.clone(),
                                     match endpoint {
                                         libp2p::core::ConnectedPoint::Listener { local_addr, .. } => local_addr.clone(),
                                         libp2p::core::ConnectedPoint::Dialer { .. } => "/ip4/0.0.0.0/tcp/0".parse().unwrap(),
@@ -2424,6 +2479,34 @@ pub async fn start_swarm_with_config(
                                     RELAY_MAX_INFLIGHT_DISPATCHES,
                                     "peer_reconnect",
                                 );
+
+                                // RELAY PEER DISCOVERY: Track peer and broadcast to others
+                                let addresses = vec![remote_addr.to_string()];
+                                peer_broadcaster.peer_connected(peer_id, addresses.clone());
+                                
+                                // Broadcast PeerJoined to all other connected peers
+                                if let Some(join_msg) = peer_broadcaster.create_peer_joined_message(&peer_id) {
+                                    if let Ok(join_bytes) = join_msg.to_bytes() {
+                                        for other_peer in peer_broadcaster.get_peers_except(&peer_id) {
+                                            let envelope_data = join_bytes.clone();
+                                            let _request_id = swarm.behaviour_mut().messaging.send_request(
+                                                &other_peer,
+                                                MessageRequest { envelope_data },
+                                            );
+                                            tracing::debug!("📢 Broadcast PeerJoined({}) to {}", peer_id, other_peer);
+                                        }
+                                    }
+                                }
+                                
+                                // Send full peer list to newly connected peer
+                                let list_msg = peer_broadcaster.create_peer_list_response();
+                                if let Ok(list_bytes) = list_msg.to_bytes() {
+                                    let _request_id = swarm.behaviour_mut().messaging.send_request(
+                                        &peer_id,
+                                        MessageRequest { envelope_data: list_bytes },
+                                    );
+                                    tracing::info!("📋 Sent peer list ({} peers) to {}", peer_broadcaster.peer_count(), peer_id);
+                                }
 
                                 let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
 
@@ -2459,6 +2542,19 @@ pub async fn start_swarm_with_config(
                                         );
                                     }
                                 }
+
+                                // RELAY PEER DISCOVERY: Broadcast PeerLeft to remaining peers
+                                let left_msg = crate::transport::PeerBroadcaster::create_peer_left_message(&peer_id);
+                                if let Ok(left_bytes) = left_msg.to_bytes() {
+                                    for other_peer in peer_broadcaster.get_peers_except(&peer_id) {
+                                        let _request_id = swarm.behaviour_mut().messaging.send_request(
+                                            &other_peer,
+                                            MessageRequest { envelope_data: left_bytes.clone() },
+                                        );
+                                        tracing::debug!("📢 Broadcast PeerLeft({}) to {}", peer_id, other_peer);
+                                    }
+                                }
+                                peer_broadcaster.peer_disconnected(&peer_id);
 
                                 // P0.11: If this was a known relay, schedule a reconnect with backoff.
                                 // Also clear from relay_peer_addrs so that when reconnection succeeds,

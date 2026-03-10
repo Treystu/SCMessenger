@@ -10,10 +10,13 @@ pub mod crypto;
 pub mod identity;
 pub mod message;
 pub mod privacy;
+pub mod relay;
 pub mod store;
 pub mod transport;
 
 // Mobile bridge modules
+#[cfg(not(target_arch = "wasm32"))]
+pub mod blocked_bridge;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod contacts_bridge;
 #[cfg(not(target_arch = "wasm32"))]
@@ -30,6 +33,12 @@ pub use identity::IdentityManager;
 pub use message::{DeliveryStatus, Envelope, Message, MessageType, Receipt};
 
 // Mobile bridge exports for UniFFI
+#[cfg(not(target_arch = "wasm32"))]
+pub use blocked_bridge::{
+    blocked_identity_new, blocked_identity_with_device_id,
+    blocked_identity_with_notes, blocked_identity_with_reason,
+    BlockedIdentity, BlockedManager,
+};
 #[cfg(not(target_arch = "wasm32"))]
 pub use contacts_bridge::{Contact, ContactManager};
 #[cfg(not(target_arch = "wasm32"))]
@@ -57,6 +66,8 @@ pub enum IronCoreError {
     NetworkError,
     #[error("Invalid input")]
     InvalidInput,
+    #[error("Peer is blocked")]
+    Blocked,
     #[error("Internal error")]
     Internal,
 }
@@ -866,6 +877,61 @@ impl IronCore {
         }
     }
 
+    /// Resolve any ID format to canonical public_key_hex (64 hex chars).
+    ///
+    /// Accepts:
+    /// - `public_key_hex` (64 hex chars) - returns as-is
+    /// - `identity_id` (64 hex chars, Blake3 hash) - looks up in contacts
+    /// - `libp2p_peer_id` (base58, starts with "12D3Koo") - extracts public key
+    ///
+    /// This provides a single resolution point for ID unification across platforms.
+    pub fn resolve_identity(&self, any_id: String) -> Result<String, IronCoreError> {
+        let trimmed = any_id.trim();
+        
+        // Check if it's already a valid 64-char hex public key
+        if trimmed.len() == 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
+            // Could be public_key_hex OR identity_id (both 64 hex chars)
+            // Try to verify if it's a valid Ed25519 public key
+            if let Ok(bytes) = hex::decode(trimmed) {
+                if bytes.len() == 32 {
+                    // Valid format - check if it's a real public key by trying to use it
+                    if let Ok(_) = ed25519_dalek::VerifyingKey::from_bytes(
+                        bytes.as_slice().try_into().unwrap()
+                    ) {
+                        // It's a valid Ed25519 public key
+                        return Ok(trimmed.to_lowercase());
+                    }
+                }
+            }
+            
+            // Not a valid public key, might be identity_id - search contacts
+            let contacts = self.contacts.read();
+            if let Ok(all_contacts) = contacts.list() {
+                for contact in all_contacts {
+                    // Check if this identity_id matches by hashing the contact's public key
+                    if let Ok(pub_bytes) = hex::decode(&contact.public_key) {
+                        let hash = blake3::hash(&pub_bytes);
+                        let computed_identity_id = hex::encode(hash.as_bytes());
+                        if computed_identity_id.eq_ignore_ascii_case(trimmed) {
+                            return Ok(contact.public_key.to_lowercase());
+                        }
+                    }
+                }
+            }
+            
+            // Assume it's a public key if we can't find a matching identity_id
+            return Ok(trimmed.to_lowercase());
+        }
+        
+        // Check if it's a libp2p peer ID (base58, typically starts with "12D3Koo")
+        if trimmed.starts_with("1") && trimmed.len() > 40 {
+            return self.extract_public_key_from_peer_id(trimmed.to_string())
+                .map(|pk| pk.to_lowercase());
+        }
+        
+        Err(IronCoreError::InvalidInput)
+    }
+
     // ------------------------------------------------------------------------
     // MESSAGING
     // ------------------------------------------------------------------------
@@ -1288,6 +1354,56 @@ impl IronCore {
 
     pub fn history_store_manager(&self) -> store::HistoryManager {
         self.history.read().clone()
+    }
+
+    // ========================================================================
+    // BLOCKING
+    // ========================================================================
+
+    /// Block a peer by ID
+    pub fn block_peer(&self, peer_id: String, reason: Option<String>) -> Result<(), IronCoreError> {
+        use crate::store::blocked::{BlockedIdentity, BlockedManager};
+        // Create a new MemoryStorage backend for blocking - in production this should use persistent storage
+        let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+        let manager = BlockedManager::new(backend);
+        let mut blocked = BlockedIdentity::new(peer_id);
+        if let Some(r) = reason {
+            blocked.reason = Some(r);
+        }
+        manager.block(blocked)
+    }
+
+    /// Unblock a peer
+    pub fn unblock_peer(&self, peer_id: String) -> Result<(), IronCoreError> {
+        use crate::store::blocked::BlockedManager;
+        let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+        let manager = BlockedManager::new(backend);
+        manager.unblock(peer_id, None)
+    }
+
+    /// Check if a peer is blocked
+    pub fn is_peer_blocked(&self, peer_id: String) -> Result<bool, IronCoreError> {
+        use crate::store::blocked::BlockedManager;
+        let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+        let manager = BlockedManager::new(backend);
+        manager.is_blocked(&peer_id, None)
+    }
+
+    /// List all blocked peers
+    pub fn list_blocked_peers(&self) -> Result<Vec<crate::blocked_bridge::BlockedIdentity>, IronCoreError> {
+        use crate::store::blocked::BlockedManager;
+        let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+        let manager = BlockedManager::new(backend);
+        let core_list = manager.list()?;
+        Ok(core_list.into_iter().map(crate::blocked_bridge::BlockedIdentity::from).collect())
+    }
+
+    /// Get count of blocked peers
+    pub fn blocked_count(&self) -> Result<u32, IronCoreError> {
+        use crate::store::blocked::BlockedManager;
+        let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+        let manager = BlockedManager::new(backend);
+        manager.count().map(|c| c as u32)
     }
 
     /// Notify the delegate that a peer was discovered on the network.

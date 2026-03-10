@@ -61,6 +61,81 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - no WS13.2+ transport/contact/custody enforcement work was started,
   - no v0.2.0 physical-device closure debt or maintainer-only GitHub cleanup was pulled into this implementation.
 
+## 2026-03-10 Relay Peer Discovery & Identity Blocking (Verified)
+
+### Relay Peer Discovery Implementation
+
+- **Active Relay Broadcasting**:
+  - All nodes now broadcast peer join/leave events
+  - Relay nodes share full peer lists with newly connected clients
+  - Enables cross-network peer discovery (cellular ↔ WiFi)
+  - Added 4 new protocol messages: `PeerJoined`, `PeerLeft`, `PeerListRequest`, `PeerListResponse`
+  - File: `core/src/relay/protocol.rs` (lines 103-120)
+
+- **Peer Broadcaster Module**:
+  - Tracks all connected peers with metadata
+  - Generates peer announcement messages
+  - Manages peer join/leave broadcasting
+  - File: `core/src/transport/peer_broadcast.rs` (NEW - 148 lines)
+
+- **Swarm Integration**:
+  - Broadcasts peer joined to all connected peers on connection (line ~2430)
+  - Broadcasts peer left to remaining peers on disconnect (line ~2491)
+  - Handles incoming peer discovery messages (lines ~1507-1560)
+  - Automatically dials announced peers for direct P2P connections
+  - File: `core/src/transport/swarm.rs`
+
+### Identity Blocking System
+
+- **Blocked Identities Module**:
+  - Block peer IDs (identities) with optional device-specific granularity
+  - Stores block reason, notes, and timestamp
+  - Includes TODO for device ID pairing infrastructure
+  - File: `core/src/store/blocked.rs` (NEW - 227 lines)
+
+- **Blocking API**:
+  - `block(identity)` - Block a peer ID
+  - `unblock(peer_id, device_id)` - Unblock identity or device
+  - `is_blocked(peer_id, device_id)` - Check if blocked
+  - `list()` - Get all blocked identities
+  - Storage backend agnostic (Sled/IndexedDB/Memory)
+
+- **TODO: Device ID Pairing**:
+  - Device ID generation and secure storage
+  - Identity-device mapping in handshake protocol
+  - Multi-device blocking (block one device, allow others)
+  - Marked with TODO comments throughout code
+
+### Android Bug Fixes
+
+- **Case-Sensitivity Fixes** (5 locations):
+  - Peer ID lookups now case-insensitive
+  - Fixed peer resolution failures
+  - Files: `MeshRepository.kt` (4 fixes), `ConversationsViewModel.kt` (1 fix)
+
+- **Initialization Race Condition** (2 fixes):
+  - Added initialization checks in `sendHistorySyncIfNeeded()` and `sendIdentitySyncIfNeeded()`
+  - Eliminated "Not initialized" errors
+  - Fixed "pre-loaded identity" bug
+  - Fixed `msg=unknown` delivery state issues
+  - File: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
+
+### Build Status
+
+- Core (Rust): ✅ Built successfully with peer discovery + blocking
+- Android: ✅ Deployed with bug fixes
+- iOS Framework: ✅ Rebuilt with peer discovery (2m 25s)
+
+### Documentation Created
+
+- `RELAY_PEER_DISCOVERY_IMPLEMENTATION.md` - Complete implementation report
+- `IDENTITY_BLOCKING_IMPLEMENTATION.md` - Blocking system documentation
+- `CASE_SENSITIVITY_AUDIT_2026-03-09.md` - Case bug fixes
+- `ANDROID_ID_MISMATCH_RCA.md` - Root cause analysis
+- `PEER_ID_RESOLUTION_FIX.md` - Initialization fix details
+- `IOS_CRASH_AUDIT_2026-03-10.md` - iOS stability analysis
+- `FINAL_SESSION_REPORT_2026-03-09.md` - Comprehensive session report
+
 ## 2026-03-10 WS12 Closeout Burndown Re-Baseline (Verified)
 
 - Local Rust/docs verification is back to a trustworthy baseline on this branch:
@@ -100,6 +175,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 ## 2026-03-09 Critical Bug Fixes & NAT Traversal (Verified)
 
 ### Relay Server Implementation
+
 - **All Nodes Now Act as Relays**:
   - Added `relay::Behaviour` (relay server) to `IronCoreBehaviour` in `core/src/transport/behaviour.rs`
   - Nodes can now both USE relays (client) and BE relays (server) for NAT traversal
@@ -108,6 +184,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - Logs reservation acceptance and circuit establishment at info level
 
 ### BLE Subscription Tracking Fix
+
 - **Fixed DeadObjectException in BLE GATT Server**:
   - Added `subscribedDevices` map to track which clients have subscribed to notifications
   - Implemented `onDescriptorWriteRequest` handler to track subscription state
@@ -116,6 +193,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - File: `android/app/src/main/java/com/scmessenger/android/transport/ble/BleGattServer.kt`
 
 ### Message Delivery Status Fix
+
 - **Eliminated False Delivery Positives**:
   - Fixed bug where BLE transport ACK was treated as full delivery confirmation
   - Messages now only marked "delivered" when core mesh network confirms
@@ -124,6 +202,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - File: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` (lines 3207-3326)
 
 ### Android UI Fixes
+
 - **Fixed Keyboard Covering Chat Input**:
   - Added `.imePadding()` to chat input Row for proper keyboard handling
   - Set `contentWindowInsets = WindowInsets(0, 0, 0, 0)` on Scaffold
@@ -132,6 +211,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 ## 2026-03-10 Transport Optimization & UI Enhancements (Verified)
 
 ### Fast Transport Switching
+
 - **Reduced Timeouts for BLE/WiFi Transitions**:
   - WiFi/Direct timeout: 5000ms → 2000ms (60% reduction)
   - BLE/Relay-circuit timeout: 3500ms → 1500ms (57% reduction)
@@ -139,6 +219,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - File: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
 
 ### Aggressive Retry Backoff
+
 - **Optimized Initial Retry Schedule**:
   - Attempt 1: immediate (was 2s)
   - Attempt 2: 1s (was 4s)
@@ -149,6 +230,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - File: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
 
 ### Enhanced Transport Logging
+
 - **Comprehensive Transport Visibility**:
   - Logs dial candidates count and transport types for each route attempt
   - Logs connection success/failure with timeout values
@@ -158,6 +240,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - File: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
 
 ### Android Mesh Tab Scrolling Fix
+
 - **LazyColumn for Large Peer Lists**:
   - Replaced `Column` + `verticalScroll` + `forEach` with `LazyColumn` + `items()`
   - Enables efficient rendering and scrolling for 50+ discovered peers
@@ -165,6 +248,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - File: `android/app/src/main/java/com/scmessenger/android/ui/screens/DashboardScreen.kt`
 
 ### Android ID Normalization
+
 - **Standardized Peer ID Handling**:
   - Added `PeerIdValidator` utility for lowercase/trimmed ID normalization
   - Updated `MeshRepository.sendMessage` to normalize peer IDs before lookup
@@ -174,11 +258,13 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - Files: `android/app/src/main/java/com/scmessenger/android/utils/PeerIdValidator.kt`, `MeshRepository.kt`, `ChatScreen.kt`
 
 ### Build Status
+
 - Core (Rust): ✅ Built successfully with relay server
 - Android: ✅ Built and deployed with transport optimizations
 - iOS: ✅ Framework rebuilt with relay server (device 00008130-001A48DA18EB8D3A)
 
 ### Documentation Created
+
 - `TRANSPORT_OPTIMIZATION_PLAN.md` - Multi-path delivery and transport switching optimization plan
 - `ANDROID_ID_MISMATCH_RCA.md` - Root cause analysis of peer ID normalization issues
 - `NAT_TRAVERSAL_IMPLEMENTATION.md` - Relay server implementation guide
