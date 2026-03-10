@@ -83,10 +83,26 @@ class ChatViewModel @Inject constructor(
             try {
                 val currentPeer = _peerId.value ?: return@launch
                 val messageList = meshRepository.getConversation(currentPeer, limit = _conversationLimit.value)
+                
+                // MSG-PERSIST-001: Merge with existing optimistic messages, don't replace
+                val currentMessages = _messages.value
+                val mergedMessages = mutableListOf<uniffi.api.MessageRecord>()
+                
+                // Add all messages from history
+                mergedMessages.addAll(messageList)
+                
+                // Add optimistic messages that aren't in history yet
+                for (optimistic in currentMessages) {
+                    if (mergedMessages.none { it.id == optimistic.id }) {
+                        // Keep optimistic message if not confirmed yet
+                        mergedMessages.add(optimistic)
+                    }
+                }
+                
                 // MSG-ORDER-001: Sort strictly by sender-assigned timestamp to ensure consistent ordering across platforms
-                _messages.value = messageList.sortedBy { it.senderTimestamp }
+                _messages.value = mergedMessages.sortedBy { it.senderTimestamp }
 
-                Timber.d("Loaded ${messageList.size} messages for $currentPeer")
+                Timber.d("Loaded ${messageList.size} messages for $currentPeer (merged with ${currentMessages.size} existing)")
             } catch (e: Exception) {
                 _error.value = "Failed to load messages: ${e.message}"
                 Timber.e(e, "Failed to load messages")
