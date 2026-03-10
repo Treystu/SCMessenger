@@ -96,6 +96,10 @@ pub struct IdentityInfo {
     pub identity_id: Option<String>,
     /// Hex-encoded Ed25519 public key — **CANONICAL identity** for all platforms.
     pub public_key_hex: Option<String>,
+    /// Installation-local UUIDv4 used by WS13 tight-pair routing.
+    pub device_id: Option<String>,
+    /// Activation timestamp (unix seconds) for this installation instance.
+    pub seniority_timestamp: Option<u64>,
     pub initialized: bool,
     pub nickname: Option<String>,
     /// libp2p PeerId — transport-layer routing identifier. Derived from the Ed25519 keypair.
@@ -725,6 +729,8 @@ impl IronCore {
         IdentityInfo {
             identity_id: identity.identity_id(),
             public_key_hex: identity.public_key_hex(),
+            device_id: identity.device_id(),
+            seniority_timestamp: identity.seniority_timestamp(),
             initialized: identity.keys().is_some(),
             nickname: identity.nickname(),
             libp2p_peer_id,
@@ -1349,9 +1355,20 @@ mod tests {
         assert!(info_after.initialized);
         assert!(info_after.identity_id.is_some());
         assert!(info_after.public_key_hex.is_some());
+        assert!(info_after.device_id.is_some());
+        assert!(info_after.seniority_timestamp.is_some());
 
         // Public key should be 64 hex chars (32 bytes)
         assert_eq!(info_after.public_key_hex.unwrap().len(), 64);
+        let parsed_uuid = uuid::Uuid::parse_str(info_after.device_id.as_deref().unwrap()).unwrap();
+        assert_eq!(parsed_uuid.get_version_num(), 4);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let seniority = info_after.seniority_timestamp.unwrap();
+        assert!(seniority > 0);
+        assert!(seniority <= now);
     }
 
     #[test]
@@ -1485,14 +1502,19 @@ mod tests {
         let first = IronCore::with_storage(path.clone());
         first.initialize_identity().unwrap();
         first.set_nickname("persisted-hydrate".to_string()).unwrap();
-        let original_identity = first.get_identity_info().identity_id;
+        let original_info = first.get_identity_info();
         drop(first);
 
         let second = IronCore::with_storage(path);
         let reloaded = second.get_identity_info();
         assert!(reloaded.initialized);
         assert_eq!(reloaded.nickname.as_deref(), Some("persisted-hydrate"));
-        assert_eq!(reloaded.identity_id, original_identity);
+        assert_eq!(reloaded.identity_id, original_info.identity_id);
+        assert_eq!(reloaded.device_id, original_info.device_id);
+        assert_eq!(
+            reloaded.seniority_timestamp,
+            original_info.seniority_timestamp
+        );
     }
 
     #[test]
@@ -1520,6 +1542,8 @@ mod tests {
             Some(legacy_keys.public_key_hex().as_str())
         );
         assert_eq!(info.nickname.as_deref(), Some("legacy-nick"));
+        assert!(info.device_id.is_some());
+        assert!(info.seniority_timestamp.is_some());
 
         let schema =
             std::fs::read_to_string(std::path::Path::new(&path).join("SCHEMA_VERSION")).unwrap();
@@ -1600,6 +1624,8 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&backup).unwrap();
         assert_eq!(parsed["version"], 1);
         assert!(parsed["secret_key_hex"].is_string());
+        assert!(parsed.get("device_id").is_none());
+        assert!(parsed.get("seniority_timestamp").is_none());
 
         // Import into a fresh core and verify identity is restored
         let core2 = IronCore::new();
@@ -1611,6 +1637,11 @@ mod tests {
             orig.public_key_hex, restored.public_key_hex,
             "public key must be identical after import"
         );
+        assert_ne!(
+            orig.device_id, restored.device_id,
+            "device metadata should remain installation-local across restore"
+        );
+        assert!(restored.seniority_timestamp.is_some());
     }
 
     #[test]

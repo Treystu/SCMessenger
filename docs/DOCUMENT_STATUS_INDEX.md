@@ -61,6 +61,7 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 | Document                                              | Status  | Notes                                                                                    |
 | ----------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------- |
 | `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md` | Planned | WS13 workstream for v0.2.1, not in v0.2.0 scope                                          |
+| `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`               | Active  | Residual-risk source of truth for WS13/WS14 execution once v0.2.1 implementation begins |
 | `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`                | Planned | WS14 workstream for v0.2.1 DM + DM Request notifications (iOS/Android/WASM, hybrid mode) |
 
 ---

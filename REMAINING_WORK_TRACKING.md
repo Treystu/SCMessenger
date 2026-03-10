@@ -16,6 +16,37 @@ Owner policy constraints (2026-02-23):
 - Anti-abuse controls are required before beta release.
 - Critical UX controls must stay in Android+iOS+Web parity with no temporary lead platform.
 
+## WS13.1 Tight-Pair Kickoff (2026-03-10 UTC)
+
+Completed in this pass:
+
+1. [x] Re-read the required canonical + planned docs before coding.
+2. [x] Re-ran WS13 preflight baseline locally:
+   - `cargo fmt --all -- --check`
+   - `cargo build --workspace`
+   - `cargo test --workspace`
+   - `./scripts/docs_sync_check.sh`
+3. [x] Audited current branch GitHub Actions state:
+   - PR `CI` run `22923791535` is `action_required`, confirming the still-open approval/policy blocker is external to WS13 code.
+4. [x] Added a WS13.1 -> WS13.6 execution inventory to `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md` with:
+   - file targets,
+   - test targets,
+   - migration implications,
+   - acceptance gates.
+5. [x] Created `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md` so v0.2.1 carry-forward and WS13-specific risks stay separate from the v0.2.0 residual register.
+6. [x] Implemented WS13.1 only:
+   - installation-local `device_id` + `seniority_timestamp` persistence,
+   - hydrate/initialize/import backfill behavior for pre-WS13 identities,
+   - targeted core/wasm identity-surface tests.
+
+Remaining WS13 queue:
+
+1. [ ] WS13.2 — Contact `last_known_device_id` + relay request `intended_device_id` plumbing.
+2. [ ] WS13.3 — Registration protocol + signature verification.
+3. [ ] WS13.4 — Relay registry state machine + custody enforcement.
+4. [ ] WS13.5 — Handover/abandon queue migration + sender-facing rejection UX.
+5. [ ] WS13.6 — Compatibility/migration matrix, runbook, and acceptance lock.
+
 ## v0.2.0 Critical Bug Fixes (2026-03-09)
 
 Completed in this pass:

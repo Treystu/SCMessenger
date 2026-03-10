@@ -1001,6 +1001,8 @@ fn resolve_swarm_keypair_and_mode(
 struct WasmIdentityInfo {
     identity_id: Option<String>,
     public_key_hex: Option<String>,
+    device_id: Option<String>,
+    seniority_timestamp: Option<u64>,
     initialized: bool,
     nickname: Option<String>,
     libp2p_peer_id: Option<String>,
@@ -1011,6 +1013,8 @@ impl From<IdentityInfo> for WasmIdentityInfo {
         Self {
             identity_id: info.identity_id,
             public_key_hex: info.public_key_hex,
+            device_id: info.device_id,
+            seniority_timestamp: info.seniority_timestamp,
             initialized: info.initialized,
             nickname: info.nickname,
             libp2p_peer_id: info.libp2p_peer_id,
@@ -1152,6 +1156,14 @@ mod tests {
         assert!(
             info.public_key_hex.is_some(),
             "initialized identity should expose public key"
+        );
+        assert!(
+            info.device_id.is_some(),
+            "identity should expose local device_id"
+        );
+        assert!(
+            info.seniority_timestamp.is_some(),
+            "identity should expose local seniority timestamp"
         );
         assert_eq!(
             info.nickname.as_deref(),

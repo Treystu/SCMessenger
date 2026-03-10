@@ -4,7 +4,7 @@ mod keys;
 mod store;
 
 pub use keys::{IdentityKeys, KeyPair};
-pub use store::IdentityStore;
+pub use store::{DeviceMetadata, IdentityStore};
 
 use crate::store::backend::StorageBackend;
 use anyhow::Result;
@@ -14,6 +14,7 @@ pub struct IdentityManager {
     store: IdentityStore,
     keys: Option<IdentityKeys>,
     nickname: Option<String>,
+    device_metadata: Option<DeviceMetadata>,
 }
 
 impl IdentityManager {
@@ -23,6 +24,7 @@ impl IdentityManager {
             store: IdentityStore::memory(),
             keys: None,
             nickname: None,
+            device_metadata: None,
         }
     }
 
@@ -32,6 +34,7 @@ impl IdentityManager {
             store: IdentityStore::persistent(backend),
             keys: None,
             nickname: None,
+            device_metadata: None,
         };
         // Load any previously-persisted identity material without generating
         // a new identity. Fresh installs remain uninitialized.
@@ -45,6 +48,15 @@ impl IdentityManager {
         }
         if let Some(keys) = self.store.load_keys()? {
             self.keys = Some(keys);
+        }
+        self.device_metadata = self.store.load_device_metadata()?;
+        self.ensure_device_metadata()?;
+        Ok(())
+    }
+
+    fn ensure_device_metadata(&mut self) -> Result<()> {
+        if self.keys.is_some() && self.device_metadata.is_none() {
+            self.device_metadata = Some(self.store.load_or_create_device_metadata()?);
         }
         Ok(())
     }
@@ -62,6 +74,8 @@ impl IdentityManager {
             self.store.save_keys(&keys)?;
             self.keys = Some(keys);
         }
+
+        self.ensure_device_metadata()?;
 
         Ok(())
     }
@@ -106,6 +120,20 @@ impl IdentityManager {
         self.nickname.clone()
     }
 
+    /// Get installation-local device metadata for tight-pair routing.
+    pub fn device_id(&self) -> Option<String> {
+        self.device_metadata
+            .as_ref()
+            .map(|metadata| metadata.device_id.clone())
+    }
+
+    /// Get the activation timestamp for this installation instance.
+    pub fn seniority_timestamp(&self) -> Option<u64> {
+        self.device_metadata
+            .as_ref()
+            .map(|metadata| metadata.seniority_timestamp)
+    }
+
     /// Export raw identity key bytes for secure platform backup.
     pub fn export_key_bytes(&self) -> Option<Vec<u8>> {
         self.keys.as_ref().map(|keys| keys.to_bytes())
@@ -116,6 +144,7 @@ impl IdentityManager {
         let keys = IdentityKeys::from_bytes(bytes)?;
         self.store.save_keys(&keys)?;
         self.keys = Some(keys);
+        self.ensure_device_metadata()?;
         Ok(())
     }
 }
@@ -144,6 +173,10 @@ mod tests {
         assert!(manager.keys().is_some());
         assert!(manager.public_key_hex().is_some());
         assert!(manager.identity_id().is_some());
+        let device_id = manager.device_id().unwrap();
+        let parsed_uuid = uuid::Uuid::parse_str(&device_id).unwrap();
+        assert_eq!(parsed_uuid.get_version_num(), 4);
+        assert!(manager.seniority_timestamp().unwrap() > 0);
     }
 
     #[test]
@@ -195,6 +228,8 @@ mod tests {
         manager1.initialize().unwrap();
         manager1.set_nickname("Alice".to_string()).unwrap();
         let id1 = manager1.identity_id().unwrap();
+        let device_id1 = manager1.device_id();
+        let seniority1 = manager1.seniority_timestamp();
 
         drop(manager1);
 
@@ -203,9 +238,13 @@ mod tests {
         manager2.initialize().unwrap();
         let id2 = manager2.identity_id().unwrap();
         let nick2 = manager2.nickname();
+        let device_id2 = manager2.device_id();
+        let seniority2 = manager2.seniority_timestamp();
 
         assert_eq!(id1, id2);
         assert_eq!(nick2, Some("Alice".to_string()));
+        assert_eq!(device_id2, device_id1);
+        assert_eq!(seniority2, seniority1);
     }
 
     #[test]
@@ -215,12 +254,15 @@ mod tests {
         let exported = manager1.export_key_bytes().unwrap();
         let original_id = manager1.identity_id();
         let original_pub = manager1.public_key_hex();
+        let original_device_id = manager1.device_id();
 
         let mut manager2 = IdentityManager::new();
         manager2.import_key_bytes(&exported).unwrap();
 
         assert_eq!(manager2.identity_id(), original_id);
         assert_eq!(manager2.public_key_hex(), original_pub);
+        assert_ne!(manager2.device_id(), original_device_id);
+        assert!(manager2.seniority_timestamp().is_some());
     }
 
     #[test]
@@ -246,5 +288,7 @@ mod tests {
         let manager = IdentityManager::with_backend(backend2).unwrap();
         assert!(manager.keys().is_some());
         assert_eq!(manager.nickname(), Some("PersistedNick".to_string()));
+        assert!(manager.device_id().is_some());
+        assert!(manager.seniority_timestamp().is_some());
     }
 }
