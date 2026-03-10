@@ -55,11 +55,9 @@ impl IdentityManager {
     }
 
     fn ensure_device_metadata(&mut self) -> Result<()> {
-        if self.keys.is_none() || self.device_metadata.is_some() {
-            return Ok(());
+        if self.keys.is_some() && self.device_metadata.is_none() {
+            self.device_metadata = Some(self.store.load_or_create_device_metadata()?);
         }
-
-        self.device_metadata = Some(self.store.load_or_create_device_metadata()?);
         Ok(())
     }
 

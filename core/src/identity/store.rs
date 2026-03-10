@@ -124,21 +124,34 @@ impl IdentityStore {
                     .map_err(|e| anyhow::anyhow!(e))?;
 
                 match (device_id, seniority) {
-                    (None, None) => Ok(None),
+                    (None, None) => {
+                        tracing::debug!("identity device metadata not yet present in store");
+                        Ok(None)
+                    }
                     (Some(device_id), Some(seniority)) => {
                         let device_id = String::from_utf8(device_id)?;
                         let parsed_uuid = Uuid::parse_str(&device_id)
                             .map_err(|e| anyhow::anyhow!("invalid stored device_id: {e}"))?;
+                        if parsed_uuid.get_version_num() != 4 {
+                            return Err(anyhow::anyhow!(
+                                "invalid stored device_id version: expected UUIDv4"
+                            ));
+                        }
                         let seniority_timestamp =
                             String::from_utf8(seniority)?.parse::<u64>().map_err(|e| {
                                 anyhow::anyhow!("invalid stored seniority_timestamp: {e}")
                             })?;
                         Ok(Some(DeviceMetadata {
-                            device_id: parsed_uuid.to_string(),
+                            device_id,
                             seniority_timestamp,
                         }))
                     }
-                    _ => Ok(None),
+                    _ => {
+                        tracing::warn!(
+                            "identity device metadata is partially present; regenerating missing WS13.1 local metadata"
+                        );
+                        Ok(None)
+                    }
                 }
             }
         }

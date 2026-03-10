@@ -1362,6 +1362,13 @@ mod tests {
         assert_eq!(info_after.public_key_hex.unwrap().len(), 64);
         let parsed_uuid = uuid::Uuid::parse_str(info_after.device_id.as_deref().unwrap()).unwrap();
         assert_eq!(parsed_uuid.get_version_num(), 4);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let seniority = info_after.seniority_timestamp.unwrap();
+        assert!(seniority > 0);
+        assert!(seniority <= now);
     }
 
     #[test]
