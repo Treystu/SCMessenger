@@ -93,11 +93,16 @@ impl BlockedManager {
     }
 
     /// Check if a peer ID is blocked
-    pub fn is_blocked(&self, peer_id: &str, device_id: Option<&str>) -> Result<bool, IronCoreError> {
+    pub fn is_blocked(
+        &self,
+        peer_id: &str,
+        device_id: Option<&str>,
+    ) -> Result<bool, IronCoreError> {
         // Check for device-specific block first
         if let Some(device_id) = device_id {
             let key = format!("blocked:{}:{}", peer_id, device_id);
-            if self.backend
+            if self
+                .backend
                 .get(key.as_bytes())
                 .map_err(|_| IronCoreError::StorageError)?
                 .is_some()
@@ -108,7 +113,8 @@ impl BlockedManager {
 
         // Check for peer-level block
         let key = format!("blocked:{}", peer_id);
-        let blocked = self.backend
+        let blocked = self
+            .backend
             .get(key.as_bytes())
             .map_err(|_| IronCoreError::StorageError)?
             .is_some();
@@ -116,18 +122,23 @@ impl BlockedManager {
     }
 
     /// Get blocked identity details
-    pub fn get(&self, peer_id: &str, device_id: Option<&str>) -> Result<Option<BlockedIdentity>, IronCoreError> {
+    pub fn get(
+        &self,
+        peer_id: &str,
+        device_id: Option<&str>,
+    ) -> Result<Option<BlockedIdentity>, IronCoreError> {
         let key = match device_id {
             Some(device_id) => format!("blocked:{}:{}", peer_id, device_id),
             None => format!("blocked:{}", peer_id),
         };
-        
-        if let Some(data) = self.backend
+
+        if let Some(data) = self
+            .backend
             .get(key.as_bytes())
             .map_err(|_| IronCoreError::StorageError)?
         {
-            let blocked: BlockedIdentity = serde_json::from_slice(&data)
-                .map_err(|_| IronCoreError::Internal)?;
+            let blocked: BlockedIdentity =
+                serde_json::from_slice(&data).map_err(|_| IronCoreError::Internal)?;
             Ok(Some(blocked))
         } else {
             Ok(None)
@@ -136,14 +147,15 @@ impl BlockedManager {
 
     /// List all blocked identities
     pub fn list(&self) -> Result<Vec<BlockedIdentity>, IronCoreError> {
-        let all = self.backend
+        let all = self
+            .backend
             .scan_prefix(b"blocked:")
             .map_err(|_| IronCoreError::StorageError)?;
 
         let mut blocked_list = Vec::new();
         for (_, value) in all {
-            let blocked: BlockedIdentity = serde_json::from_slice(&value)
-                .map_err(|_| IronCoreError::Internal)?;
+            let blocked: BlockedIdentity =
+                serde_json::from_slice(&value).map_err(|_| IronCoreError::Internal)?;
             blocked_list.push(blocked);
         }
 
@@ -175,13 +187,12 @@ mod tests {
         let manager = BlockedManager::new(backend);
 
         let peer_id = "12D3KooWTest123";
-        
+
         // Initially not blocked
         assert!(!manager.is_blocked(peer_id, None).unwrap());
 
         // Block the peer
-        let blocked = BlockedIdentity::new(peer_id.to_string())
-            .with_reason("Spam".to_string());
+        let blocked = BlockedIdentity::new(peer_id.to_string()).with_reason("Spam".to_string());
         manager.block(blocked).unwrap();
 
         // Now blocked
@@ -201,8 +212,8 @@ mod tests {
         let device_id = "device-abc-123";
 
         // Block specific device
-        let blocked = BlockedIdentity::new(peer_id.to_string())
-            .with_device_id(device_id.to_string());
+        let blocked =
+            BlockedIdentity::new(peer_id.to_string()).with_device_id(device_id.to_string());
         manager.block(blocked).unwrap();
 
         // Device-specific check
@@ -216,8 +227,12 @@ mod tests {
         let backend = Arc::new(MemoryStorage::new());
         let manager = BlockedManager::new(backend);
 
-        manager.block(BlockedIdentity::new("peer1".to_string())).unwrap();
-        manager.block(BlockedIdentity::new("peer2".to_string())).unwrap();
+        manager
+            .block(BlockedIdentity::new("peer1".to_string()))
+            .unwrap();
+        manager
+            .block(BlockedIdentity::new("peer2".to_string()))
+            .unwrap();
 
         let list = manager.list().unwrap();
         assert_eq!(list.len(), 2);

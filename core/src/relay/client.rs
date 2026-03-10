@@ -158,7 +158,10 @@ impl RelayClient {
     }
 
     /// Connect to a specific relay
-    pub async fn connect(&self, relay_address: String) -> Result<RelayConnection, RelayClientError> {
+    pub async fn connect(
+        &self,
+        relay_address: String,
+    ) -> Result<RelayConnection, RelayClientError> {
         let mut connection = RelayConnection::new(relay_address.clone());
         connection.set_state(ConnectionState::Connecting);
         let dial_addr = relay_address
@@ -258,7 +261,10 @@ impl RelayClient {
     }
 
     /// Pull stored envelopes from relays
-    pub async fn pull_envelopes(&self, since_timestamp: u64) -> Result<Vec<Vec<u8>>, RelayClientError> {
+    pub async fn pull_envelopes(
+        &self,
+        since_timestamp: u64,
+    ) -> Result<Vec<Vec<u8>>, RelayClientError> {
         let connections = self.connections.read().await;
 
         // Find a connected relay
@@ -337,7 +343,10 @@ impl RelayClient {
 
         for connection in connections.iter().filter(|c| c.is_connected()) {
             if let Some(socket) = self.sockets.read().await.get(&connection.address).cloned() {
-                match self.send_and_receive_raw(&socket, RelayMessage::Ping).await? {
+                match self
+                    .send_and_receive_raw(&socket, RelayMessage::Ping)
+                    .await?
+                {
                     RelayMessage::Pong => {}
                     other => {
                         return Err(RelayClientError::MessageError(format!(
@@ -391,7 +400,8 @@ impl RelayClient {
         let response_len = timeout(t, stream.read_u32())
             .await
             .map_err(|_| RelayClientError::IoTimeout(t))?
-            .map_err(|e| RelayClientError::ConnectionFailed(e.to_string()))? as usize;
+            .map_err(|e| RelayClientError::ConnectionFailed(e.to_string()))?
+            as usize;
         if response_len == 0 || response_len > (16 * 1024 * 1024) {
             return Err(RelayClientError::MessageError(
                 "Invalid response frame length".to_string(),
@@ -416,10 +426,7 @@ mod tests {
     use super::*;
 
     fn test_client() -> RelayClient {
-        RelayClient::new(
-            "test_peer_id".to_string(),
-            RelayClientConfig::default(),
-        )
+        RelayClient::new("test_peer_id".to_string(), RelayClientConfig::default())
     }
 
     #[test]
@@ -687,7 +694,10 @@ mod tests {
     #[test]
     fn test_get_relay_addresses() {
         let config = RelayClientConfig {
-            known_relays: vec!["relay1.example.com".to_string(), "relay2.example.com".to_string()],
+            known_relays: vec![
+                "relay1.example.com".to_string(),
+                "relay2.example.com".to_string(),
+            ],
             ..Default::default()
         };
         let client = RelayClient::new("peer1".to_string(), config);

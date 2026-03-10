@@ -1084,7 +1084,8 @@ final class MeshRepository {
                     publicKey: normalizedSenderKey,
                     addedAt: UInt64(Date().timeIntervalSince1970),
                     lastSeen: UInt64(Date().timeIntervalSince1970),
-                    notes: routeNotes
+                    notes: routeNotes,
+                    lastKnownDeviceId: nil
                 )
                 do {
                     try contactManager?.add(contact: autoContact)
@@ -1105,7 +1106,8 @@ final class MeshRepository {
                     publicKey: existingContact.publicKey,
                     addedAt: existingContact.addedAt,
                     lastSeen: existingContact.lastSeen,
-                    notes: existingContact.notes
+                    notes: existingContact.notes,
+                    lastKnownDeviceId: nil
                 )
                 try? contactManager?.add(contact: updatedContact)
                 contactManager?.flush()
@@ -1131,7 +1133,8 @@ final class MeshRepository {
                     publicKey: existingContact.publicKey,
                     addedAt: existingContact.addedAt,
                     lastSeen: existingContact.lastSeen,
-                    notes: updatedNotesWithListeners
+                    notes: updatedNotesWithListeners,
+                    lastKnownDeviceId: nil
                 )
                 try? contactManager?.add(contact: updatedContact)
                 contactManager?.flush()
@@ -2987,7 +2990,8 @@ final class MeshRepository {
                     publicKey: contact.publicKey,
                     addedAt: contact.addedAt,
                     lastSeen: UInt64(Date().timeIntervalSince1970),
-                    notes: updatedNotes
+                    notes: updatedNotes,
+                    lastKnownDeviceId: nil
                 )
                 try? contactManager?.add(contact: updatedContact)
                 contactManager?.flush()
@@ -4334,7 +4338,8 @@ final class MeshRepository {
                 publicKey: contact.publicKey,
                 addedAt: contact.addedAt,
                 lastSeen: contact.lastSeen,
-                notes: withListeners
+                notes: withListeners,
+                lastKnownDeviceId: nil
             )
             try? contactManager?.add(contact: updated)
             contactManager?.flush()
@@ -4402,7 +4407,8 @@ final class MeshRepository {
             publicKey: resolvedPublicKey,
             addedAt: existing?.addedAt ?? now,
             lastSeen: now,
-            notes: notes
+            notes: notes,
+            lastKnownDeviceId: nil
         )
         try? contactManager?.add(contact: updated)
         contactManager?.flush()

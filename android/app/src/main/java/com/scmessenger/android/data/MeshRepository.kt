@@ -382,7 +382,8 @@ class MeshRepository(private val context: Context) {
                         publicKey = contact.publicKey,
                         addedAt = contact.addedAt,
                         lastSeen = contact.lastSeen,
-                        notes = updatedNotes
+                        notes = updatedNotes,
+                        lastKnownDeviceId = null
                     ))
                     cleaned++
                 }
@@ -783,7 +784,8 @@ class MeshRepository(private val context: Context) {
                                 publicKey = normalizedSenderKey,
                                 addedAt = (System.currentTimeMillis() / 1000).toULong(),
                                 lastSeen = (System.currentTimeMillis() / 1000).toULong(),
-                                notes = routeNotes
+                                notes = routeNotes,
+                                lastKnownDeviceId = null
                             )
                             try {
                                 contactManager?.add(autoContact)
@@ -805,7 +807,8 @@ class MeshRepository(private val context: Context) {
                                     addedAt = existingContact.addedAt,
                                     lastSeen = existingContact.lastSeen,
                                     notes = existingContact.notes
-                                )
+                                ,
+                                lastKnownDeviceId = null)
                                 try {
                                     contactManager?.add(updatedContact)
                                 } catch (e: Exception) {
@@ -837,7 +840,8 @@ class MeshRepository(private val context: Context) {
                                     addedAt = existingContact.addedAt,
                                     lastSeen = existingContact.lastSeen,
                                     notes = updatedNotesWithListeners
-                                )
+                                ,
+                                lastKnownDeviceId = null)
                                 try {
                                     contactManager?.add(updatedContact)
                                 } catch (e: Exception) {
@@ -863,7 +867,8 @@ class MeshRepository(private val context: Context) {
                                     addedAt = existingContact.addedAt,
                                     lastSeen = existingContact.lastSeen,
                                     notes = updatedNotesWithListeners
-                                )
+                                ,
+                                lastKnownDeviceId = null)
                                 try {
                                     contactManager?.add(updatedContact)
                                 } catch (e: Exception) {
@@ -4329,7 +4334,8 @@ class MeshRepository(private val context: Context) {
                 addedAt = contact.addedAt,
                 lastSeen = contact.lastSeen,
                 notes = withListeners
-            )
+            ,
+                                lastKnownDeviceId = null)
             try {
                 contactManager?.add(updated)
             } catch (e: Exception) {
@@ -4416,7 +4422,8 @@ class MeshRepository(private val context: Context) {
             addedAt = existing?.addedAt ?: now,
             lastSeen = now,
             notes = notes
-        )
+        ,
+                                lastKnownDeviceId = null)
 
         try {
             contactManager?.add(updated)

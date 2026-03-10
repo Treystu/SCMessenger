@@ -1554,7 +1554,7 @@ pub async fn start_swarm_with_config(
                                                 }
                                             }
                                         }
-                                        
+
                                         // Received a message from a peer
                                         let _ = event_tx.send(SwarmEvent2::MessageReceived {
                                             peer_id: peer,
@@ -2483,7 +2483,7 @@ pub async fn start_swarm_with_config(
                                 // RELAY PEER DISCOVERY: Track peer and broadcast to others
                                 let addresses = vec![remote_addr.to_string()];
                                 peer_broadcaster.peer_connected(peer_id, addresses.clone());
-                                
+
                                 // Broadcast PeerJoined to all other connected peers
                                 if let Some(join_msg) = peer_broadcaster.create_peer_joined_message(&peer_id) {
                                     if let Ok(join_bytes) = join_msg.to_bytes() {
@@ -2497,7 +2497,7 @@ pub async fn start_swarm_with_config(
                                         }
                                     }
                                 }
-                                
+
                                 // Send full peer list to newly connected peer
                                 let list_msg = peer_broadcaster.create_peer_list_response();
                                 if let Ok(list_bytes) = list_msg.to_bytes() {

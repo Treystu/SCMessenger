@@ -359,15 +359,21 @@ mod tests {
         history.add(record2.clone()).unwrap();
 
         // Query with uppercase - should find both
-        let results = history.conversation("12D3KOOWTEST123".to_string(), 10).unwrap();
+        let results = history
+            .conversation("12D3KOOWTEST123".to_string(), 10)
+            .unwrap();
         assert_eq!(results.len(), 2, "Should find messages regardless of case");
 
         // Query with lowercase - should find both
-        let results = history.conversation("12d3koowtest123".to_string(), 10).unwrap();
+        let results = history
+            .conversation("12d3koowtest123".to_string(), 10)
+            .unwrap();
         assert_eq!(results.len(), 2, "Should find messages regardless of case");
 
         // Query with original mixed case - should find both
-        let results = history.conversation("12D3KooWTEST123".to_string(), 10).unwrap();
+        let results = history
+            .conversation("12D3KooWTEST123".to_string(), 10)
+            .unwrap();
         assert_eq!(results.len(), 2, "Should find messages regardless of case");
     }
 
@@ -400,10 +406,18 @@ mod tests {
         history.add(record2).unwrap();
 
         // Remove with mixed case
-        history.remove_conversation("LowerCase123".to_string()).unwrap();
+        history
+            .remove_conversation("LowerCase123".to_string())
+            .unwrap();
 
         // Verify both were removed
-        let results = history.conversation("lowercase123".to_string(), 10).unwrap();
-        assert_eq!(results.len(), 0, "All messages should be removed regardless of case");
+        let results = history
+            .conversation("lowercase123".to_string(), 10)
+            .unwrap();
+        assert_eq!(
+            results.len(),
+            0,
+            "All messages should be removed regardless of case"
+        );
     }
 }

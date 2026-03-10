@@ -185,7 +185,7 @@ impl RelayServer {
         let mut storage = self.storage.write();
         let peer_queue = storage
             .entry(target_peer_id.to_string())
-            .or_insert_with(VecDeque::new);
+            .or_default();
 
         let mut accepted = 0u32;
         let mut rejected = 0u32;
@@ -205,10 +205,7 @@ impl RelayServer {
 
         // Update stats
         let mut stats = self.stats.write();
-        stats.envelopes_stored = storage
-            .values()
-            .map(|q| q.len())
-            .sum();
+        stats.envelopes_stored = storage.values().map(|q| q.len()).sum();
 
         Ok((accepted, rejected))
     }
@@ -234,10 +231,7 @@ impl RelayServer {
             // Update stats
             let mut stats = self.stats.write();
             stats.envelopes_delivered += envelopes.len() as u64;
-            stats.envelopes_stored = storage
-                .values()
-                .map(|q| q.len())
-                .sum();
+            stats.envelopes_stored = storage.values().map(|q| q.len()).sum();
 
             Ok(envelopes)
         } else {
@@ -273,10 +267,7 @@ impl RelayServer {
 
         // Update stats
         let mut stats = self.stats.write();
-        stats.envelopes_stored = storage
-            .values()
-            .map(|q| q.len())
-            .sum();
+        stats.envelopes_stored = storage.values().map(|q| q.len()).sum();
     }
 
     /// Get current server statistics
@@ -287,7 +278,9 @@ impl RelayServer {
     /// Check if a peer is connected
     pub fn is_peer_connected(&self, peer_id: &str) -> bool {
         let peers = self.peers.read();
-        peers.get(peer_id).map_or(false, |s| s.state == ConnectionState::Connected)
+        peers
+            .get(peer_id)
+            .is_some_and(|s| s.state == ConnectionState::Connected)
     }
 
     /// Get the number of stored envelopes for a peer
@@ -343,11 +336,7 @@ mod tests {
         let server = test_server();
         let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
 
-        let result = server.register_peer(
-            "peer1".to_string(),
-            addr,
-            RelayCapability::full_relay(),
-        );
+        let result = server.register_peer("peer1".to_string(), addr, RelayCapability::full_relay());
 
         assert!(result.is_ok());
         let stats = server.get_stats();

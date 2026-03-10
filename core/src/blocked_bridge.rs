@@ -2,7 +2,9 @@
 //
 // Exposes BlockedManager through UniFFI for cross-platform blocking functionality.
 
-use crate::store::blocked::{BlockedIdentity as CoreBlockedIdentity, BlockedManager as CoreBlockedManager};
+use crate::store::blocked::{
+    BlockedIdentity as CoreBlockedIdentity, BlockedManager as CoreBlockedManager,
+};
 use crate::IronCoreError;
 use std::sync::Arc;
 
@@ -45,6 +47,12 @@ pub struct BlockedManager {
     inner: CoreBlockedManager,
 }
 
+impl Default for BlockedManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BlockedManager {
     pub fn new() -> Self {
         // Use in-memory storage for mobile - will persist through IronCore later
@@ -65,12 +73,20 @@ impl BlockedManager {
     }
 
     /// Check if a peer is blocked
-    pub fn is_blocked(&self, peer_id: String, device_id: Option<String>) -> Result<bool, IronCoreError> {
+    pub fn is_blocked(
+        &self,
+        peer_id: String,
+        device_id: Option<String>,
+    ) -> Result<bool, IronCoreError> {
         self.inner.is_blocked(&peer_id, device_id.as_deref())
     }
 
     /// Get blocked identity details
-    pub fn get(&self, peer_id: String, device_id: Option<String>) -> Result<Option<BlockedIdentity>, IronCoreError> {
+    pub fn get(
+        &self,
+        peer_id: String,
+        device_id: Option<String>,
+    ) -> Result<Option<BlockedIdentity>, IronCoreError> {
         match self.inner.get(&peer_id, device_id.as_deref())? {
             Some(core_blocked) => Ok(Some(BlockedIdentity::from(core_blocked))),
             None => Ok(None),
@@ -94,7 +110,10 @@ pub fn blocked_identity_new(peer_id: String) -> BlockedIdentity {
     CoreBlockedIdentity::new(peer_id).into()
 }
 
-pub fn blocked_identity_with_device_id(blocked: BlockedIdentity, device_id: String) -> BlockedIdentity {
+pub fn blocked_identity_with_device_id(
+    blocked: BlockedIdentity,
+    device_id: String,
+) -> BlockedIdentity {
     let mut b: CoreBlockedIdentity = blocked.into();
     b.device_id = Some(device_id);
     b.into()

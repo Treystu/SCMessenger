@@ -35,9 +35,8 @@ pub use message::{DeliveryStatus, Envelope, Message, MessageType, Receipt};
 // Mobile bridge exports for UniFFI
 #[cfg(not(target_arch = "wasm32"))]
 pub use blocked_bridge::{
-    blocked_identity_new, blocked_identity_with_device_id,
-    blocked_identity_with_notes, blocked_identity_with_reason,
-    BlockedIdentity, BlockedManager,
+    blocked_identity_new, blocked_identity_with_device_id, blocked_identity_with_notes,
+    blocked_identity_with_reason, BlockedIdentity, BlockedManager,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use contacts_bridge::{Contact, ContactManager};
@@ -897,7 +896,7 @@ impl IronCore {
     /// This provides a single resolution point for ID unification across platforms.
     pub fn resolve_identity(&self, any_id: String) -> Result<String, IronCoreError> {
         let trimmed = any_id.trim();
-        
+
         // Check if it's already a valid 64-char hex public key
         if trimmed.len() == 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
             // Could be public_key_hex OR identity_id (both 64 hex chars)
@@ -905,15 +904,17 @@ impl IronCore {
             if let Ok(bytes) = hex::decode(trimmed) {
                 if bytes.len() == 32 {
                     // Valid format - check if it's a real public key by trying to use it
-                    if let Ok(_) = ed25519_dalek::VerifyingKey::from_bytes(
-                        bytes.as_slice().try_into().unwrap()
-                    ) {
+                    if ed25519_dalek::VerifyingKey::from_bytes(
+                        bytes.as_slice().try_into().unwrap(),
+                    )
+                    .is_ok()
+                    {
                         // It's a valid Ed25519 public key
                         return Ok(trimmed.to_lowercase());
                     }
                 }
             }
-            
+
             // Not a valid public key, might be identity_id - search contacts
             let contacts = self.contacts.read();
             if let Ok(all_contacts) = contacts.list() {
@@ -928,17 +929,18 @@ impl IronCore {
                     }
                 }
             }
-            
+
             // Assume it's a public key if we can't find a matching identity_id
             return Ok(trimmed.to_lowercase());
         }
-        
+
         // Check if it's a libp2p peer ID (base58, typically starts with "12D3Koo")
         if trimmed.starts_with("1") && trimmed.len() > 40 {
-            return self.extract_public_key_from_peer_id(trimmed.to_string())
+            return self
+                .extract_public_key_from_peer_id(trimmed.to_string())
                 .map(|pk| pk.to_lowercase());
         }
-        
+
         Err(IronCoreError::InvalidInput)
     }
 
@@ -1400,12 +1402,17 @@ impl IronCore {
     }
 
     /// List all blocked peers
-    pub fn list_blocked_peers(&self) -> Result<Vec<crate::blocked_bridge::BlockedIdentity>, IronCoreError> {
+    pub fn list_blocked_peers(
+        &self,
+    ) -> Result<Vec<crate::blocked_bridge::BlockedIdentity>, IronCoreError> {
         use crate::store::blocked::BlockedManager;
         let backend = Arc::new(crate::store::backend::MemoryStorage::new());
         let manager = BlockedManager::new(backend);
         let core_list = manager.list()?;
-        Ok(core_list.into_iter().map(crate::blocked_bridge::BlockedIdentity::from).collect())
+        Ok(core_list
+            .into_iter()
+            .map(crate::blocked_bridge::BlockedIdentity::from)
+            .collect())
     }
 
     /// Get count of blocked peers

@@ -221,7 +221,8 @@ struct ContactsListView: View {
             publicKey: publicKey,
             addedAt: UInt64(Date().timeIntervalSince1970),
             lastSeen: nil,
-            notes: notesParts.isEmpty ? nil : notesParts.joined(separator: ";")
+            notes: notesParts.isEmpty ? nil : notesParts.joined(separator: ";"),
+            lastKnownDeviceId: nil
         )
 
         do {
@@ -494,7 +495,8 @@ struct AddContactView: View {
             publicKey: finalPublicKey,
             addedAt: UInt64(Date().timeIntervalSince1970),
             lastSeen: nil,
-            notes: notesValue
+            notes: notesValue,
+            lastKnownDeviceId: nil
         )
 
         do {

@@ -158,21 +158,21 @@ fileprivate protocol FfiConverter {
     associatedtype FfiType
     associatedtype SwiftType
 
-    static func lift(_ value: FfiType) throws -> SwiftType
-    static func lower(_ value: SwiftType) -> FfiType
-    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType
-    static func write(_ value: SwiftType, into buf: inout [UInt8])
+    nonisolated(unsafe) static func lift(_ value: FfiType) throws -> SwiftType
+    nonisolated(unsafe) static func lower(_ value: SwiftType) -> FfiType
+    nonisolated(unsafe) static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType
+    nonisolated(unsafe) static func write(_ value: SwiftType, into buf: inout [UInt8])
 }
 
 // Types conforming to `Primitive` pass themselves directly over the FFI.
 fileprivate protocol FfiConverterPrimitive: FfiConverter where FfiType == SwiftType { }
 
 extension FfiConverterPrimitive {
-    public static func lift(_ value: FfiType) throws -> SwiftType {
+    public nonisolated(unsafe) static func lift(_ value: FfiType) throws -> SwiftType {
         return value
     }
 
-    public static func lower(_ value: SwiftType) -> FfiType {
+    public nonisolated(unsafe) static func lower(_ value: SwiftType) -> FfiType {
         return value
     }
 }
@@ -182,7 +182,7 @@ extension FfiConverterPrimitive {
 fileprivate protocol FfiConverterRustBuffer: FfiConverter where FfiType == RustBuffer {}
 
 extension FfiConverterRustBuffer {
-    public static func lift(_ buf: RustBuffer) throws -> SwiftType {
+    public nonisolated(unsafe) static func lift(_ buf: RustBuffer) throws -> SwiftType {
         var reader = createReader(data: Data(rustBuffer: buf))
         let value = try read(from: &reader)
         if hasRemaining(reader) {
@@ -192,7 +192,7 @@ extension FfiConverterRustBuffer {
         return value
     }
 
-    public static func lower(_ value: SwiftType) -> RustBuffer {
+    public nonisolated(unsafe) static func lower(_ value: SwiftType) -> RustBuffer {
           var writer = createWriter()
           write(value, into: &writer)
           return RustBuffer(bytes: writer)
@@ -821,6 +821,11 @@ public protocol ContactManagerProtocol : AnyObject {
     
     func setNickname(peerId: String, nickname: String?) throws 
     
+    /**
+     * Update the last known device ID for a contact (WS13.2)
+     */
+    func updateDeviceId(peerId: String, deviceId: String?) throws 
+    
     func updateLastSeen(peerId: String) throws 
     
 }
@@ -936,6 +941,17 @@ open func setNickname(peerId: String, nickname: String?)throws  {try rustCallWit
     uniffi_scmessenger_core_fn_method_contactmanager_set_nickname(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),
         FfiConverterOptionString.lower(nickname),$0
+    )
+}
+}
+    
+    /**
+     * Update the last known device ID for a contact (WS13.2)
+     */
+open func updateDeviceId(peerId: String, deviceId: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_contactmanager_update_device_id(self.uniffiClonePointer(),
+        FfiConverterString.lower(peerId),
+        FfiConverterOptionString.lower(deviceId),$0
     )
 }
 }
@@ -1256,13 +1272,27 @@ public func FfiConverterTypeHistoryManager_lower(_ value: HistoryManager) -> Uns
 
 public protocol IronCoreProtocol : AnyObject {
     
+    func blockPeer(peerId: String, reason: String?) throws 
+    
+    func blockedCount() throws  -> UInt32
+    
     func contactsManager()  -> ContactManager
     
     func exportIdentityBackup() throws  -> String
     
     func extractPublicKeyFromPeerId(peerId: String) throws  -> String
     
+    /**
+     * Get device ID for this installation (WS13.1)
+     */
+    func getDeviceId()  -> String?
+    
     func getIdentityInfo()  -> IdentityInfo
+    
+    /**
+     * Get seniority timestamp for this installation (WS13.1)
+     */
+    func getSeniorityTimestamp()  -> UInt64?
     
     func historyManager()  -> HistoryManager
     
@@ -1272,7 +1302,11 @@ public protocol IronCoreProtocol : AnyObject {
     
     func initializeIdentity() throws 
     
+    func isPeerBlocked(peerId: String) throws  -> Bool
+    
     func isRunning()  -> Bool
+    
+    func listBlockedPeers() throws  -> [BlockedIdentity]
     
     func markMessageSent(messageId: String)  -> Bool
     
@@ -1291,6 +1325,12 @@ public protocol IronCoreProtocol : AnyObject {
     
     func prepareReceipt(recipientPublicKeyHex: String, messageId: String) throws  -> Data
     
+    /**
+     * Resolve any ID format (public_key_hex, identity_id, or libp2p_peer_id) to canonical public_key_hex.
+     * This is the primary ID resolution function for cross-platform identity unification.
+     */
+    func resolveIdentity(anyId: String) throws  -> String
+    
     func setDelegate(delegate: CoreDelegate?) 
     
     func setNickname(nickname: String) throws 
@@ -1300,6 +1340,8 @@ public protocol IronCoreProtocol : AnyObject {
     func start() throws 
     
     func stop() 
+    
+    func unblockPeer(peerId: String) throws 
     
     func verifySignature(data: Data, signature: Data, publicKeyHex: String) throws  -> Bool
     
@@ -1361,6 +1403,21 @@ public static func withStorage(storagePath: String) -> IronCore {
     
 
     
+open func blockPeer(peerId: String, reason: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_block_peer(self.uniffiClonePointer(),
+        FfiConverterString.lower(peerId),
+        FfiConverterOptionString.lower(reason),$0
+    )
+}
+}
+    
+open func blockedCount()throws  -> UInt32 {
+    return try  FfiConverterUInt32.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_blocked_count(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func contactsManager() -> ContactManager {
     return try!  FfiConverterTypeContactManager.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_contacts_manager(self.uniffiClonePointer(),$0
@@ -1383,9 +1440,29 @@ open func extractPublicKeyFromPeerId(peerId: String)throws  -> String {
 })
 }
     
+    /**
+     * Get device ID for this installation (WS13.1)
+     */
+open func getDeviceId() -> String? {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_ironcore_get_device_id(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func getIdentityInfo() -> IdentityInfo {
     return try!  FfiConverterTypeIdentityInfo.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_get_identity_info(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get seniority timestamp for this installation (WS13.1)
+     */
+open func getSeniorityTimestamp() -> UInt64? {
+    return try!  FfiConverterOptionUInt64.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_ironcore_get_seniority_timestamp(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -1417,9 +1494,24 @@ open func initializeIdentity()throws  {try rustCallWithError(FfiConverterTypeIro
 }
 }
     
+open func isPeerBlocked(peerId: String)throws  -> Bool {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_is_peer_blocked(self.uniffiClonePointer(),
+        FfiConverterString.lower(peerId),$0
+    )
+})
+}
+    
 open func isRunning() -> Bool {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_is_running(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func listBlockedPeers()throws  -> [BlockedIdentity] {
+    return try  FfiConverterSequenceTypeBlockedIdentity.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_list_blocked_peers(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -1479,6 +1571,18 @@ open func prepareReceipt(recipientPublicKeyHex: String, messageId: String)throws
 })
 }
     
+    /**
+     * Resolve any ID format (public_key_hex, identity_id, or libp2p_peer_id) to canonical public_key_hex.
+     * This is the primary ID resolution function for cross-platform identity unification.
+     */
+open func resolveIdentity(anyId: String)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_resolve_identity(self.uniffiClonePointer(),
+        FfiConverterString.lower(anyId),$0
+    )
+})
+}
+    
 open func setDelegate(delegate: CoreDelegate?) {try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_set_delegate(self.uniffiClonePointer(),
         FfiConverterOptionCallbackInterfaceCoreDelegate.lower(delegate),$0
@@ -1509,6 +1613,13 @@ open func start()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.li
     
 open func stop() {try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_stop(self.uniffiClonePointer(),$0
+    )
+}
+}
+    
+open func unblockPeer(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_unblock_peer(self.uniffiClonePointer(),
+        FfiConverterString.lower(peerId),$0
     )
 }
 }
@@ -2464,6 +2575,87 @@ public func FfiConverterTypeBleAdjustment_lower(_ value: BleAdjustment) -> RustB
 }
 
 
+public struct BlockedIdentity {
+    public var peerId: String
+    public var deviceId: String?
+    public var blockedAt: UInt64
+    public var reason: String?
+    public var notes: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(peerId: String, deviceId: String?, blockedAt: UInt64, reason: String?, notes: String?) {
+        self.peerId = peerId
+        self.deviceId = deviceId
+        self.blockedAt = blockedAt
+        self.reason = reason
+        self.notes = notes
+    }
+}
+
+
+
+extension BlockedIdentity: Equatable, Hashable {
+    public static func ==(lhs: BlockedIdentity, rhs: BlockedIdentity) -> Bool {
+        if lhs.peerId != rhs.peerId {
+            return false
+        }
+        if lhs.deviceId != rhs.deviceId {
+            return false
+        }
+        if lhs.blockedAt != rhs.blockedAt {
+            return false
+        }
+        if lhs.reason != rhs.reason {
+            return false
+        }
+        if lhs.notes != rhs.notes {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(peerId)
+        hasher.combine(deviceId)
+        hasher.combine(blockedAt)
+        hasher.combine(reason)
+        hasher.combine(notes)
+    }
+}
+
+
+public struct FfiConverterTypeBlockedIdentity: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlockedIdentity {
+        return
+            try BlockedIdentity(
+                peerId: FfiConverterString.read(from: &buf), 
+                deviceId: FfiConverterOptionString.read(from: &buf), 
+                blockedAt: FfiConverterUInt64.read(from: &buf), 
+                reason: FfiConverterOptionString.read(from: &buf), 
+                notes: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BlockedIdentity, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.peerId, into: &buf)
+        FfiConverterOptionString.write(value.deviceId, into: &buf)
+        FfiConverterUInt64.write(value.blockedAt, into: &buf)
+        FfiConverterOptionString.write(value.reason, into: &buf)
+        FfiConverterOptionString.write(value.notes, into: &buf)
+    }
+}
+
+
+public func FfiConverterTypeBlockedIdentity_lift(_ buf: RustBuffer) throws -> BlockedIdentity {
+    return try FfiConverterTypeBlockedIdentity.lift(buf)
+}
+
+public func FfiConverterTypeBlockedIdentity_lower(_ value: BlockedIdentity) -> RustBuffer {
+    return FfiConverterTypeBlockedIdentity.lower(value)
+}
+
+
 public struct BootstrapConfig {
     public var staticNodes: [String]
     public var remoteUrl: String?
@@ -2545,10 +2737,11 @@ public struct Contact {
     public var addedAt: UInt64
     public var lastSeen: UInt64?
     public var notes: String?
+    public var lastKnownDeviceId: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(peerId: String, nickname: String?, localNickname: String?, publicKey: String, addedAt: UInt64, lastSeen: UInt64?, notes: String?) {
+    public init(peerId: String, nickname: String?, localNickname: String?, publicKey: String, addedAt: UInt64, lastSeen: UInt64?, notes: String?, lastKnownDeviceId: String?) {
         self.peerId = peerId
         self.nickname = nickname
         self.localNickname = localNickname
@@ -2556,6 +2749,7 @@ public struct Contact {
         self.addedAt = addedAt
         self.lastSeen = lastSeen
         self.notes = notes
+        self.lastKnownDeviceId = lastKnownDeviceId
     }
 }
 
@@ -2584,6 +2778,9 @@ extension Contact: Equatable, Hashable {
         if lhs.notes != rhs.notes {
             return false
         }
+        if lhs.lastKnownDeviceId != rhs.lastKnownDeviceId {
+            return false
+        }
         return true
     }
 
@@ -2595,6 +2792,7 @@ extension Contact: Equatable, Hashable {
         hasher.combine(addedAt)
         hasher.combine(lastSeen)
         hasher.combine(notes)
+        hasher.combine(lastKnownDeviceId)
     }
 }
 
@@ -2609,7 +2807,8 @@ public struct FfiConverterTypeContact: FfiConverterRustBuffer {
                 publicKey: FfiConverterString.read(from: &buf), 
                 addedAt: FfiConverterUInt64.read(from: &buf), 
                 lastSeen: FfiConverterOptionUInt64.read(from: &buf), 
-                notes: FfiConverterOptionString.read(from: &buf)
+                notes: FfiConverterOptionString.read(from: &buf), 
+                lastKnownDeviceId: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -2621,6 +2820,7 @@ public struct FfiConverterTypeContact: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.addedAt, into: &buf)
         FfiConverterOptionUInt64.write(value.lastSeen, into: &buf)
         FfiConverterOptionString.write(value.notes, into: &buf)
+        FfiConverterOptionString.write(value.lastKnownDeviceId, into: &buf)
     }
 }
 
@@ -3742,6 +3942,8 @@ public enum IronCoreError {
     
     case InvalidInput(message: String)
     
+    case Blocked(message: String)
+    
     case Internal(message: String)
     
 }
@@ -3781,7 +3983,11 @@ public struct FfiConverterTypeIronCoreError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 7: return .Internal(
+        case 7: return .Blocked(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 8: return .Internal(
             message: try FfiConverterString.read(from: &buf)
         )
         
@@ -3808,8 +4014,10 @@ public struct FfiConverterTypeIronCoreError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(5))
         case .InvalidInput(_ /* message is ignored*/):
             writeInt(&buf, Int32(6))
-        case .Internal(_ /* message is ignored*/):
+        case .Blocked(_ /* message is ignored*/):
             writeInt(&buf, Int32(7))
+        case .Internal(_ /* message is ignored*/):
+            writeInt(&buf, Int32(8))
 
         
         }
@@ -4636,6 +4844,28 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     }
 }
 
+fileprivate struct FfiConverterSequenceTypeBlockedIdentity: FfiConverterRustBuffer {
+    typealias SwiftType = [BlockedIdentity]
+
+    public static func write(_ value: [BlockedIdentity], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBlockedIdentity.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BlockedIdentity] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BlockedIdentity]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBlockedIdentity.read(from: &buf))
+        }
+        return seq
+    }
+}
+
 fileprivate struct FfiConverterSequenceTypeContact: FfiConverterRustBuffer {
     typealias SwiftType = [Contact]
 
@@ -4701,6 +4931,37 @@ fileprivate struct FfiConverterSequenceTypeMessageRecord: FfiConverterRustBuffer
         return seq
     }
 }
+public func blockedIdentityNew(peerId: String) -> BlockedIdentity {
+    return try!  FfiConverterTypeBlockedIdentity.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_func_blocked_identity_new(
+        FfiConverterString.lower(peerId),$0
+    )
+})
+}
+public func blockedIdentityWithDeviceId(blocked: BlockedIdentity, deviceId: String) -> BlockedIdentity {
+    return try!  FfiConverterTypeBlockedIdentity.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_func_blocked_identity_with_device_id(
+        FfiConverterTypeBlockedIdentity.lower(blocked),
+        FfiConverterString.lower(deviceId),$0
+    )
+})
+}
+public func blockedIdentityWithNotes(blocked: BlockedIdentity, notes: String) -> BlockedIdentity {
+    return try!  FfiConverterTypeBlockedIdentity.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_func_blocked_identity_with_notes(
+        FfiConverterTypeBlockedIdentity.lower(blocked),
+        FfiConverterString.lower(notes),$0
+    )
+})
+}
+public func blockedIdentityWithReason(blocked: BlockedIdentity, reason: String) -> BlockedIdentity {
+    return try!  FfiConverterTypeBlockedIdentity.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_func_blocked_identity_with_reason(
+        FfiConverterTypeBlockedIdentity.lower(blocked),
+        FfiConverterString.lower(reason),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -4716,6 +4977,18 @@ private var initializationResult: InitializationResult {
     let scaffolding_contract_version = ffi_scmessenger_core_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_func_blocked_identity_new() != 3157) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_func_blocked_identity_with_device_id() != 33179) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_func_blocked_identity_with_notes() != 26177) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_func_blocked_identity_with_reason() != 63741) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_autoadjustengine_clear_overrides() != 5093) {
         return InitializationResult.apiChecksumMismatch
@@ -4768,6 +5041,9 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_contactmanager_set_nickname() != 37981) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_contactmanager_update_device_id() != 60104) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_contactmanager_update_last_seen() != 8449) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4816,6 +5092,12 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_historymanager_stats() != 45938) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_block_peer() != 17263) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_blocked_count() != 34648) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_contacts_manager() != 24902) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4825,7 +5107,13 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_ironcore_extract_public_key_from_peer_id() != 39145) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_get_device_id() != 35850) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_get_identity_info() != 10640) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_get_seniority_timestamp() != 57590) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_history_manager() != 59889) {
@@ -4840,7 +5128,13 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_ironcore_initialize_identity() != 61190) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_is_peer_blocked() != 51358) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_is_running() != 48214) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_list_blocked_peers() != 57424) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_mark_message_sent() != 1211) {
@@ -4861,6 +5155,9 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_ironcore_prepare_receipt() != 37483) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_resolve_identity() != 25110) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_set_delegate() != 56502) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4874,6 +5171,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_stop() != 28908) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_unblock_peer() != 16500) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_verify_signature() != 26914) {

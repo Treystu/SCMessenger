@@ -229,7 +229,6 @@ impl IdentityStore {
                 db.remove(DEVICE_ID_KEY).map_err(|e| anyhow::anyhow!(e))?;
                 db.remove(SENIORITY_TIMESTAMP_KEY)
                     .map_err(|e| anyhow::anyhow!(e))?;
-
                 db.flush().map_err(|e| anyhow::anyhow!(e))?;
                 Ok(())
             }

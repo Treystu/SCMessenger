@@ -1,5 +1,5 @@
 //! Peer Discovery Broadcasting
-//! 
+//!
 //! This module implements active relay functionality where relay nodes
 //! broadcast peer join/leave events to all connected clients.
 
@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // Import from local relay module
-use crate::relay::protocol::{RelayMessage, RelayPeerInfoMessage, RelayCapability};
+use crate::relay::protocol::{RelayCapability, RelayMessage, RelayPeerInfoMessage};
 
 /// Tracks connected peers and handles broadcasting
 pub struct PeerBroadcaster {
@@ -24,6 +24,12 @@ struct PeerInfo {
     _connected_at: u64,
     /// Peer's capabilities (if known)
     capabilities: Option<RelayCapability>,
+}
+
+impl Default for PeerBroadcaster {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PeerBroadcaster {
@@ -132,7 +138,7 @@ mod tests {
         // Add peers
         broadcaster.peer_connected(peer1, vec!["/ip4/1.2.3.4/tcp/1234".to_string()]);
         broadcaster.peer_connected(peer2, vec!["/ip4/5.6.7.8/tcp/5678".to_string()]);
-        
+
         assert_eq!(broadcaster.peer_count(), 2);
 
         // Test peer list
