@@ -482,7 +482,7 @@ interface SwarmBridge {
     constructor();
 
     [Throws=IronCoreError]
-    void send_message(string peer_id, bytes data);
+    void send_message(string peer_id, bytes data, string? recipient_identity_id, string? intended_device_id);
 
     [Throws=IronCoreError]
     void dial(string multiaddr);
