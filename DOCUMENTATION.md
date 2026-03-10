@@ -1,7 +1,7 @@
 # SCMessenger Documentation Hub
 
 Status: Active  
-Last updated: 2026-03-07
+Last updated: 2026-03-10
 
 This is the primary documentation entrypoint.
 
@@ -86,6 +86,12 @@ Historical audit artifacts currently live under `docs/historical/`.
 
 ## Recent Execution Notes
 
+- WS12.39 closeout burndown re-baseline (2026-03-10 UTC, Rust/WASM baseline restoration + issue/workflow/branch reconciliation for steady v0.2.0 alpha truth) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+  - `docs/DOCUMENT_STATUS_INDEX.md`
 - WS11 (2026-03-03) delivery-state UX and diagnostics/tester-readiness updates are tracked in:
   - `docs/CURRENT_STATE.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`

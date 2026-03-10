@@ -42,6 +42,7 @@ struct NearbyPeer: Identifiable, Equatable {
     static func == (lhs: NearbyPeer, rhs: NearbyPeer) -> Bool { lhs.peerId == rhs.peerId }
 }
 
+@MainActor
 @Observable
 final class ContactsViewModel {
     private weak var repository: MeshRepository?
@@ -218,17 +219,19 @@ final class ContactsViewModel {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in
                 guard let self else { return }
-                switch event {
-                case .identityDiscovered(let peerId, let publicKey, let nickname, let libp2pPeerId, let listeners, let blePeerId):
-                    self.handleIdentityDiscovered(peerId: peerId, publicKey: publicKey,
-                                                   nickname: nickname, libp2pPeerId: libp2pPeerId,
-                                                   listeners: listeners, blePeerId: blePeerId)
-                case .discovered(let peerId):
-                    self.handleDiscovered(peerId: peerId)
-                case .disconnected(let peerId):
-                    self.handleDisconnected(peerId: peerId)
-                default:
-                    break
+                Task { @MainActor in
+                    switch event {
+                    case .identityDiscovered(let peerId, let publicKey, let nickname, let libp2pPeerId, let listeners, let blePeerId):
+                        self.handleIdentityDiscovered(peerId: peerId, publicKey: publicKey,
+                                                       nickname: nickname, libp2pPeerId: libp2pPeerId,
+                                                       listeners: listeners, blePeerId: blePeerId)
+                    case .discovered(let peerId):
+                        self.handleDiscovered(peerId: peerId)
+                    case .disconnected(let peerId):
+                        self.handleDisconnected(peerId: peerId)
+                    default:
+                        break
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -360,10 +363,12 @@ final class ContactsViewModel {
         cancelPendingNearbyRemoval(peerId: peerId)
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            self.nearbyPeers.removeAll {
-                ($0.peerId == peerId || $0.libp2pPeerId == peerId) && !$0.isOnline
+            Task { @MainActor in
+                self.nearbyPeers.removeAll {
+                    ($0.peerId == peerId || $0.libp2pPeerId == peerId) && !$0.isOnline
+                }
+                self.pendingNearbyRemoval.removeValue(forKey: peerId)
             }
-            self.pendingNearbyRemoval.removeValue(forKey: peerId)
         }
         pendingNearbyRemoval[peerId] = work
         DispatchQueue.main.asyncAfter(deadline: .now() + nearbyDisconnectGraceSec, execute: work)

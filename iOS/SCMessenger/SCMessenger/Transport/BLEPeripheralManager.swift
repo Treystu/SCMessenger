@@ -156,6 +156,15 @@ final class BLEPeripheralManager: NSObject {
         return subscribedCentrals.map { $0.identifier.uuidString }
     }
 
+    private func appendRepositoryDiagnostic(_ message: String) {
+        let meshRepository = self.meshRepository
+        Task { @MainActor in
+            // Diagnostics are best-effort and intentionally dispatched asynchronously so
+            // BLE delegate paths never synchronously touch MainActor-isolated repository state.
+            meshRepository?.appendDiagnostic(message)
+        }
+    }
+
     @discardableResult
     private func sendDataToCentral(_ central: CBCentral, data: Data) -> Bool {
         if !Thread.isMainThread {
@@ -197,7 +206,7 @@ final class BLEPeripheralManager: NSObject {
             let success = peripheralManager.updateValue(fragment, for: messageCharacteristic, onSubscribedCentrals: [central])
             if !success {
                 logger.warning("Failed to send fragment, buffering")
-                meshRepository?.appendDiagnostic("ble_tx_buffer fragment to=\(central.identifier.uuidString.prefix(8))")
+                appendRepositoryDiagnostic("ble_tx_buffer fragment to=\(central.identifier.uuidString.prefix(8))")
                 pendingNotifications.append((central: central, data: fragment))
                 // Buffered notifications are still tied to an active subscribed central.
                 accepted = true
@@ -206,7 +215,7 @@ final class BLEPeripheralManager: NSObject {
             }
         }
         if fragments.count > 1 {
-            meshRepository?.appendDiagnostic("ble_tx_start fragments=\(fragments.count) to=\(central.identifier.uuidString.prefix(8))")
+            appendRepositoryDiagnostic("ble_tx_start fragments=\(fragments.count) to=\(central.identifier.uuidString.prefix(8))")
         }
         return accepted
     }
@@ -274,7 +283,7 @@ final class BLEPeripheralManager: NSObject {
               let syncCharacteristic,
               let identityCharacteristic else {
             logger.error("setupService: failed to initialize mesh characteristics")
-            meshRepository?.appendDiagnostic("ble_peripheral_setup_fail reason=missing_characteristics")
+            appendRepositoryDiagnostic("ble_peripheral_setup_fail reason=missing_characteristics")
             return
         }
         let service = CBMutableService(type: MeshBLEConstants.serviceUUID, primary: true)
@@ -347,11 +356,11 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     func peripheralManager(_ peripheral: CBPeripheralManager, didAdd service: CBService, error: Error?) {
         if let error = error {
             logger.error("Failed to add service: \(error.localizedDescription)")
-            meshRepository?.appendDiagnostic("ble_peripheral_add_service_fail err=\(error.localizedDescription)")
+            appendRepositoryDiagnostic("ble_peripheral_add_service_fail err=\(error.localizedDescription)")
             return
         }
         logger.info("Service added successfully")
-        meshRepository?.appendDiagnostic("ble_peripheral_service_added")
+        appendRepositoryDiagnostic("ble_peripheral_service_added")
         beginAdvertising()
     }
     
@@ -360,18 +369,18 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
             let nsError = error as NSError
             if nsError.domain == CBErrorDomain && nsError.code == 12 /* CBError.alreadyAdvertising */ {
                 logger.warning("Advertising already active, syncing state")
-                meshRepository?.appendDiagnostic("ble_peripheral_adv_already_active")
+                appendRepositoryDiagnostic("ble_peripheral_adv_already_active")
                 isAdvertising = true
                 return
             }
             logger.error("Failed to start advertising: \(error.localizedDescription)")
-            meshRepository?.appendDiagnostic("ble_peripheral_adv_fail err=\(error.localizedDescription)")
+            appendRepositoryDiagnostic("ble_peripheral_adv_fail err=\(error.localizedDescription)")
             isAdvertising = false
             return
         }
         logger.info("Advertising started successfully")
         isAdvertising = true
-        meshRepository?.appendDiagnostic("ble_peripheral_adv_start")
+        appendRepositoryDiagnostic("ble_peripheral_adv_start")
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
@@ -409,7 +418,7 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
             // New message starting - clear any stale fragments from previous failed attempts
             reassemblyBuffers[centralId] = [0: payload]
             if totalFrags > 1 {
-                meshRepository?.appendDiagnostic("ble_rx_start total=\(totalFrags) from=\(centralId.uuidString.prefix(8))")
+                appendRepositoryDiagnostic("ble_rx_start total=\(totalFrags) from=\(centralId.uuidString.prefix(8))")
             }
         } else {
             var buffer = reassemblyBuffers[centralId] ?? [:]
@@ -432,7 +441,7 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
             reassemblyBuffers.removeValue(forKey: centralId)
 
             logger.info("Reassembled complete \(isSync ? "sync" : "message") (\(completeData.count) bytes) from \(centralId)")
-            meshRepository?.appendDiagnostic("ble_rx_complete size=\(completeData.count) type=\(isSync ? "sync" : "msg")")
+            appendRepositoryDiagnostic("ble_rx_complete size=\(completeData.count) type=\(isSync ? "sync" : "msg")")
             DispatchQueue.main.async { [weak self] in
                 self?.meshRepository?.onBleDataReceived(peerId: centralId.uuidString, data: completeData)
             }
@@ -467,7 +476,7 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
         if characteristic.uuid == MeshBLEConstants.messageCharUUID {
             logger.info("==> ANDROID CENTRAL \(central.identifier.uuidString) IS NOW SUBSCRIBED TO MESSAGE CHAR! This gives us the target to send data back over!")
         }
-        meshRepository?.appendDiagnostic("ble_peripheral_subscribed central=\(central.identifier)")
+        appendRepositoryDiagnostic("ble_peripheral_subscribed central=\(central.identifier)")
         if !subscribedCentrals.contains(where: { $0.identifier == central.identifier }) {
             subscribedCentrals.append(central)
         }
