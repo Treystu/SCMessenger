@@ -13,6 +13,7 @@
 // - ledger_exchange: automatic peer list sharing for aggressive discovery
 
 use super::reflection::{AddressReflectionRequest, AddressReflectionResponse};
+use crate::identity::IdentityKeys;
 #[cfg(not(target_arch = "wasm32"))]
 use libp2p::mdns;
 use libp2p::{
@@ -22,6 +23,7 @@ use libp2p::{
     upnp, StreamProtocol,
 };
 use std::time::Duration;
+use uuid::Uuid;
 
 /// The Iron Core network behaviour combining all protocols.
 #[derive(NetworkBehaviour)]
@@ -43,6 +45,8 @@ pub struct IronCoreBehaviour {
         request_response::cbor::Behaviour<AddressReflectionRequest, AddressReflectionResponse>,
     /// Relay protocol for mesh routing (Phase 3)
     pub relay: request_response::cbor::Behaviour<RelayRequest, RelayResponse>,
+    /// Signed registration/deregistration protocol for WS13.3.
+    pub registration: request_response::cbor::Behaviour<RegistrationMessage, RegistrationResponse>,
     /// Ledger exchange — peers share their known peer lists on connect
     pub ledger_exchange:
         request_response::cbor::Behaviour<LedgerExchangeRequest, LedgerExchangeResponse>,
@@ -104,6 +108,206 @@ pub struct RelayResponse {
     pub error: Option<String>,
     /// Message ID being acknowledged
     pub message_id: String,
+}
+
+/// Canonically signed registration payload for WS13.3.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RegistrationPayload {
+    pub identity_id: String,
+    pub device_id: String,
+    pub seniority_ts: u64,
+}
+
+impl RegistrationPayload {
+    pub fn canonical_bytes(&self) -> Result<Vec<u8>, &'static str> {
+        bincode::serialize(self).map_err(|_| "registration_payload_serialize_failed")
+    }
+
+    fn validate_fields(&self) -> Result<(), &'static str> {
+        validate_identity_id(&self.identity_id, "registration_identity_id_invalid")?;
+        validate_uuid_v4(&self.device_id, "registration_device_id_invalid")?;
+        if self.seniority_ts == 0 {
+            return Err("registration_seniority_invalid");
+        }
+        Ok(())
+    }
+}
+
+/// Signed registration request.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RegistrationRequest {
+    pub payload: RegistrationPayload,
+    pub signature: Vec<u8>,
+}
+
+impl RegistrationRequest {
+    pub fn new_signed(
+        keys: &IdentityKeys,
+        device_id: String,
+        seniority_ts: u64,
+    ) -> Result<Self, &'static str> {
+        let payload = RegistrationPayload {
+            identity_id: keys.identity_id(),
+            device_id,
+            seniority_ts,
+        };
+        payload.validate_fields()?;
+        let signature = keys
+            .sign(&payload.canonical_bytes()?)
+            .map_err(|_| "registration_signature_generation_failed")?;
+        Ok(Self { payload, signature })
+    }
+
+    pub fn verify_for_public_key(&self, public_key: &[u8]) -> Result<(), &'static str> {
+        self.payload.validate_fields()?;
+        validate_signature_bytes(&self.signature, "registration_signature_invalid")?;
+        validate_identity_owner(
+            public_key,
+            &self.payload.identity_id,
+            "registration_identity_mismatch",
+        )?;
+        let valid = IdentityKeys::verify(
+            &self.payload.canonical_bytes()?,
+            &self.signature,
+            public_key,
+        )
+        .map_err(|_| "registration_signature_invalid")?;
+        if !valid {
+            return Err("registration_signature_invalid");
+        }
+        Ok(())
+    }
+}
+
+/// Canonically signed deregistration payload for WS13.3.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct DeregistrationPayload {
+    pub identity_id: String,
+    pub from_device_id: String,
+    #[serde(default)]
+    pub target_device_id: Option<String>,
+}
+
+impl DeregistrationPayload {
+    pub fn canonical_bytes(&self) -> Result<Vec<u8>, &'static str> {
+        bincode::serialize(self).map_err(|_| "deregistration_payload_serialize_failed")
+    }
+
+    fn validate_fields(&self) -> Result<(), &'static str> {
+        validate_identity_id(&self.identity_id, "deregistration_identity_id_invalid")?;
+        validate_uuid_v4(
+            &self.from_device_id,
+            "deregistration_from_device_id_invalid",
+        )?;
+        if let Some(target_device_id) = self.target_device_id.as_deref() {
+            validate_uuid_v4(target_device_id, "deregistration_target_device_id_invalid")?;
+            let from_uuid = Uuid::parse_str(&self.from_device_id).map_err(|_| "deregistration_from_device_id_invalid")?;
+            let target_uuid = Uuid::parse_str(target_device_id).map_err(|_| "deregistration_target_device_id_invalid")?;
+            if target_uuid == from_uuid {
+                return Err("deregistration_target_matches_source");
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Signed deregistration request.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct DeregistrationRequest {
+    pub payload: DeregistrationPayload,
+    pub signature: Vec<u8>,
+}
+
+impl DeregistrationRequest {
+    pub fn new_signed(
+        keys: &IdentityKeys,
+        from_device_id: String,
+        target_device_id: Option<String>,
+    ) -> Result<Self, &'static str> {
+        let payload = DeregistrationPayload {
+            identity_id: keys.identity_id(),
+            from_device_id,
+            target_device_id,
+        };
+        payload.validate_fields()?;
+        let signature = keys
+            .sign(&payload.canonical_bytes()?)
+            .map_err(|_| "deregistration_signature_generation_failed")?;
+        Ok(Self { payload, signature })
+    }
+
+    pub fn verify_for_public_key(&self, public_key: &[u8]) -> Result<(), &'static str> {
+        self.payload.validate_fields()?;
+        validate_signature_bytes(&self.signature, "deregistration_signature_invalid")?;
+        validate_identity_owner(
+            public_key,
+            &self.payload.identity_id,
+            "deregistration_identity_mismatch",
+        )?;
+        let valid = IdentityKeys::verify(
+            &self.payload.canonical_bytes()?,
+            &self.signature,
+            public_key,
+        )
+        .map_err(|_| "deregistration_signature_invalid")?;
+        if !valid {
+            return Err("deregistration_signature_invalid");
+        }
+        Ok(())
+    }
+}
+
+/// Protocol wrapper for `/sc/registration/1.0.0`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum RegistrationMessage {
+    Register(RegistrationRequest),
+    Deregister(DeregistrationRequest),
+}
+
+/// Response to a registration/deregistration request.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RegistrationResponse {
+    pub accepted: bool,
+    pub error: Option<String>,
+}
+
+fn validate_identity_id(identity_id: &str, error: &'static str) -> Result<(), &'static str> {
+    if identity_id.len() != 64
+        || !identity_id
+            .as_bytes()
+            .iter()
+            .all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn validate_uuid_v4(value: &str, error: &'static str) -> Result<(), &'static str> {
+    let uuid = Uuid::parse_str(value).map_err(|_| error)?;
+    if uuid.get_version_num() != 4 {
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn validate_signature_bytes(signature: &[u8], error: &'static str) -> Result<(), &'static str> {
+    if signature.len() != 64 {
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn validate_identity_owner(
+    public_key: &[u8],
+    claimed_identity_id: &str,
+    mismatch_error: &'static str,
+) -> Result<(), &'static str> {
+    let derived_identity_id = hex::encode(blake3::hash(public_key).as_bytes());
+    if !derived_identity_id.eq_ignore_ascii_case(claimed_identity_id) {
+        return Err(mismatch_error);
+    }
+    Ok(())
 }
 
 /// A shared peer entry for ledger exchange.
@@ -192,6 +396,14 @@ impl IronCoreBehaviour {
                 ProtocolSupport::Full,
             )],
             request_response::Config::default().with_request_timeout(Duration::from_secs(60)), // Generous timeout for relay
+        );
+
+        let registration = request_response::cbor::Behaviour::new(
+            [(
+                StreamProtocol::new("/sc/registration/1.0.0"),
+                ProtocolSupport::Full,
+            )],
+            request_response::Config::default().with_request_timeout(Duration::from_secs(30)),
         );
 
         // Ledger exchange — automatic peer list sharing
@@ -294,6 +506,7 @@ impl IronCoreBehaviour {
             messaging,
             address_reflection,
             relay,
+            registration,
             ledger_exchange,
             gossipsub,
             kademlia,
@@ -308,6 +521,7 @@ impl IronCoreBehaviour {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::identity::IdentityKeys;
 
     #[test]
     fn relay_request_carries_ws13_metadata_when_set() {
@@ -340,5 +554,95 @@ mod tests {
             req.intended_device_id.is_none(),
             "missing intended_device_id must default to None"
         );
+    }
+
+    #[test]
+    fn registration_payload_canonical_bytes_are_stable() {
+        let payload = RegistrationPayload {
+            identity_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                .to_string(),
+            device_id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            seniority_ts: 1_731_000_000,
+        };
+
+        let first = payload.canonical_bytes().unwrap();
+        let second = payload.canonical_bytes().unwrap();
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn signed_registration_request_verifies_against_matching_public_key() {
+        let keys = IdentityKeys::generate();
+        let request = RegistrationRequest::new_signed(
+            &keys,
+            "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            1_731_000_000,
+        )
+        .unwrap();
+
+        let public_key = keys.signing_key.verifying_key().to_bytes();
+        assert!(request.verify_for_public_key(&public_key).is_ok());
+    }
+
+    #[test]
+    fn signed_registration_request_rejects_tampered_payload() {
+        let keys = IdentityKeys::generate();
+        let mut request = RegistrationRequest::new_signed(
+            &keys,
+            "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            1_731_000_000,
+        )
+        .unwrap();
+        request.payload.device_id = "550e8400-e29b-41d4-a716-446655440001".to_string();
+
+        let public_key = keys.signing_key.verifying_key().to_bytes();
+        assert_eq!(
+            request.verify_for_public_key(&public_key),
+            Err("registration_signature_invalid")
+        );
+    }
+
+    #[test]
+    fn signed_registration_request_rejects_malformed_identity_id() {
+        let keys = IdentityKeys::generate();
+        let mut request = RegistrationRequest::new_signed(
+            &keys,
+            "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            1_731_000_000,
+        )
+        .unwrap();
+        request.payload.identity_id = "not-hex".to_string();
+
+        let public_key = keys.signing_key.verifying_key().to_bytes();
+        assert_eq!(
+            request.verify_for_public_key(&public_key),
+            Err("registration_identity_id_invalid")
+        );
+    }
+
+    #[test]
+    fn signed_deregistration_request_verifies_against_matching_public_key() {
+        let keys = IdentityKeys::generate();
+        let request = DeregistrationRequest::new_signed(
+            &keys,
+            "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            Some("550e8400-e29b-41d4-a716-446655440001".to_string()),
+        )
+        .unwrap();
+
+        let public_key = keys.signing_key.verifying_key().to_bytes();
+        assert!(request.verify_for_public_key(&public_key).is_ok());
+    }
+
+    #[test]
+    fn signed_deregistration_request_rejects_same_source_and_target_device() {
+        let keys = IdentityKeys::generate();
+        let result = DeregistrationRequest::new_signed(
+            &keys,
+            "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            Some("550e8400-e29b-41d4-a716-446655440000".to_string()),
+        );
+
+        assert_eq!(result, Err("deregistration_target_matches_source"));
     }
 }
