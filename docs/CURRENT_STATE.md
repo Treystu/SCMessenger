@@ -19,7 +19,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - Verification on this Linux host:
   - `cargo fmt --all -- --check` — **pass**
   - `cargo build --workspace` — **pass**
-  - `cargo test --workspace` — **pass** (pre-change baseline)
+  - `cargo test --workspace` — **pass**
   - `cargo test -p scmessenger-core transport::behaviour -- --nocapture` — **pass**
   - `cargo test -p scmessenger-core --test integration_registration_protocol -- --nocapture` — **pass**
 - Scope boundary preserved:
