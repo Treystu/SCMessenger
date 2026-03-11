@@ -30,6 +30,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - WS13.2 status: **transport boundary complete, relay metadata plumbing implemented, `last_known_device_id` wired in Contact**. WS13.3 (registration protocol) and WS13.4 (registry/custody state machine) are now unblocked architecturally.
 
 ## 2026-03-10 WS13 Full-Stream Execution Audit (WS13.1 Landed, WS13.2 Landed in Core)
+
 - Re-ran the required WS13 preflight on the rebased tree:
   - `cargo fmt --all -- --check` — **pass**
   - `cargo build --workspace` — **pass**
