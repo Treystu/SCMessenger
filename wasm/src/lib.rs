@@ -346,7 +346,7 @@ impl IronCore {
             .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
 
         handle
-            .send_message(peer_id, envelope_bytes)
+            .send_message(peer_id, envelope_bytes, None, None)
             .await
             .map_err(|e| js_value_from_str(&format!("Failed to send envelope: {}", e)))
     }

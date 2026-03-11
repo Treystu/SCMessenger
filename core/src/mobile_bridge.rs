@@ -1800,7 +1800,16 @@ impl SwarmBridge {
     }
 
     /// Send an encrypted message envelope to a peer.
-    pub fn send_message(&self, peer_id: String, data: Vec<u8>) -> Result<(), crate::IronCoreError> {
+    ///
+    /// `recipient_identity_id` and `intended_device_id` are WS13 tight-pair metadata.
+    /// Pass `None` for both if the caller has no device record for the recipient.
+    pub fn send_message(
+        &self,
+        peer_id: String,
+        data: Vec<u8>,
+        recipient_identity_id: Option<String>,
+        intended_device_id: Option<String>,
+    ) -> Result<(), crate::IronCoreError> {
         let handle_guard = self.handle.lock();
         let handle = handle_guard
             .as_ref()
@@ -1811,7 +1820,7 @@ impl SwarmBridge {
 
         // Block on async operation
         let rt = self.get_runtime_handle();
-        rt.block_on(handle.send_message(peer_id, data))
+        rt.block_on(handle.send_message(peer_id, data, recipient_identity_id, intended_device_id))
             .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
@@ -1834,7 +1843,7 @@ impl SwarmBridge {
 
         let mut sent = 0usize;
         for peer_id in peers {
-            match rt.block_on(handle.send_message(peer_id, data.clone())) {
+            match rt.block_on(handle.send_message(peer_id, data.clone(), None, None)) {
                 Ok(()) => sent += 1,
                 Err(e) => {
                     tracing::warn!("send_to_all_peers: failed to send to {}: {:?}", peer_id, e)

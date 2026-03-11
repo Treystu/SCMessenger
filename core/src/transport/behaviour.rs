@@ -85,6 +85,14 @@ pub struct RelayRequest {
     pub envelope_data: Vec<u8>,
     /// Unique message ID for tracking
     pub message_id: String,
+    /// SCMessenger identity ID of the intended recipient (WS13 tight-pair metadata).
+    /// None for legacy senders that have not yet upgraded.
+    #[serde(default)]
+    pub recipient_identity_id: Option<String>,
+    /// Device UUID (UUIDv4) of the specific device the sender is targeting (WS13).
+    /// None for legacy senders or when the sender has no device record for the recipient.
+    #[serde(default)]
+    pub intended_device_id: Option<String>,
 }
 
 /// Response to a relay request
@@ -294,5 +302,43 @@ impl IronCoreBehaviour {
             identify,
             upnp,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relay_request_carries_ws13_metadata_when_set() {
+        let req = RelayRequest {
+            destination_peer: vec![0xAB],
+            envelope_data: vec![0xCD],
+            message_id: "msg-2".to_string(),
+            recipient_identity_id: Some("identity-abc".to_string()),
+            intended_device_id: Some("550e8400-e29b-41d4-a716-446655440000".to_string()),
+        };
+        assert_eq!(req.recipient_identity_id.as_deref(), Some("identity-abc"));
+        assert_eq!(
+            req.intended_device_id.as_deref(),
+            Some("550e8400-e29b-41d4-a716-446655440000")
+        );
+    }
+
+    #[test]
+    fn relay_request_missing_ws13_fields_deserialize_with_defaults() {
+        // Verify generic serde defaulting when optional WS13 fields are absent.
+        let json =
+            r#"{"destination_peer":[1,2,3],"envelope_data":[4,5,6],"message_id":"msg-legacy"}"#;
+        let req: RelayRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.message_id, "msg-legacy");
+        assert!(
+            req.recipient_identity_id.is_none(),
+            "missing recipient_identity_id must default to None"
+        );
+        assert!(
+            req.intended_device_id.is_none(),
+            "missing intended_device_id must default to None"
+        );
     }
 }

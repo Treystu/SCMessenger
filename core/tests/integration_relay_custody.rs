@@ -109,7 +109,7 @@ async fn offline_recipient_receives_after_reconnect_without_sender_resend() {
     // rejecting purely because the destination is disconnected.
     let send_result = timeout(
         Duration::from_secs(25),
-        sender_handle.send_message(recipient_peer_id, payload.clone()),
+        sender_handle.send_message(recipient_peer_id, payload.clone(), None, None),
     )
     .await
     .expect("sender send timed out");

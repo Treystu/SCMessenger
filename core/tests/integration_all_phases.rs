@@ -185,7 +185,7 @@ async fn test_all_six_phases_integrated() {
     let test_message = b"Hello from Alice!";
     match timeout(
         Duration::from_secs(10),
-        alice_handle.send_message(bob_peer_id, test_message.to_vec()),
+        alice_handle.send_message(bob_peer_id, test_message.to_vec(), None, None),
     )
     .await
     {
@@ -291,7 +291,7 @@ async fn test_message_retry_on_failure() {
     // This should fail and trigger retries
     match timeout(
         Duration::from_secs(15), // Give time for several retry attempts
-        alice_handle.send_message(bob_peer_id, test_message.to_vec()),
+        alice_handle.send_message(bob_peer_id, test_message.to_vec(), None, None),
     )
     .await
     {
@@ -447,7 +447,7 @@ async fn test_relay_protocol() {
 
     match timeout(
         Duration::from_secs(10),
-        alice_handle.send_message(charlie_peer_id, test_message.to_vec()),
+        alice_handle.send_message(charlie_peer_id, test_message.to_vec(), None, None),
     )
     .await
     {
