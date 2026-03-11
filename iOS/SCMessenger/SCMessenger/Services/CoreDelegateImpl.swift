@@ -38,7 +38,7 @@ final class CoreDelegateImpl: CoreDelegate {
     private let discoveryDedupInterval: TimeInterval = 1.0
 
     func onPeerDiscovered(peerId: String) {
-        let trimmed = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = PeerIdValidator.normalize(peerId)
         let now = Date()
         if let lastDiscovery = discoveryDedupCache[trimmed],
            now.timeIntervalSince(lastDiscovery) < discoveryDedupInterval {
@@ -62,7 +62,7 @@ final class CoreDelegateImpl: CoreDelegate {
     private let connectDedupInterval: TimeInterval = 2.0
 
     func onPeerConnected(peerId: String) {
-        let trimmed = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = PeerIdValidator.normalize(peerId)
         let now = Date()
         if let last = connectDedupCache[trimmed],
            now.timeIntervalSince(last) < connectDedupInterval {
@@ -78,7 +78,7 @@ final class CoreDelegateImpl: CoreDelegate {
 
     func onPeerDisconnected(peerId: String) {
         // P1: Deduplicate disconnect events at callback layer
-        let trimmed = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = PeerIdValidator.normalize(peerId)
         let now = Date()
         if let lastDisconnect = disconnectDedupCache[trimmed],
            now.timeIntervalSince(lastDisconnect) < disconnectDedupInterval {
@@ -99,7 +99,7 @@ final class CoreDelegateImpl: CoreDelegate {
     private let identifyDedupInterval: TimeInterval = 2.0
 
     func onPeerIdentified(peerId: String, agentVersion: String, listenAddrs: [String]) {
-        let trimmed = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = PeerIdValidator.normalize(peerId)
         let now = Date()
         if let last = identifyDedupCache[trimmed],
            now.timeIntervalSince(last) < identifyDedupInterval {

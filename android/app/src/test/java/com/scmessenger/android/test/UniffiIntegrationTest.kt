@@ -65,7 +65,8 @@ class UniffiIntegrationTest {
             publicKey = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
             addedAt = (System.currentTimeMillis() / 1000).toULong(),
             lastSeen = null,
-            notes = "Integration test contact"
+            notes = "Integration test contact",
+            lastKnownDeviceId = null
         )
 
         manager.add(contact)

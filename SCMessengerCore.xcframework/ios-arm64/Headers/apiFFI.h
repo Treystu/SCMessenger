@@ -1021,7 +1021,7 @@ void uniffi_scmessenger_core_fn_method_swarmbridge_publish_topic(void*_Nonnull p
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_SEND_MESSAGE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_SEND_MESSAGE
-void uniffi_scmessenger_core_fn_method_swarmbridge_send_message(void*_Nonnull ptr, RustBuffer peer_id, RustBuffer data, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_swarmbridge_send_message(void*_Nonnull ptr, RustBuffer peer_id, RustBuffer data, RustBuffer recipient_identity_id, RustBuffer intended_device_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_SEND_TO_ALL_PEERS

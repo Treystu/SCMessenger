@@ -52,7 +52,7 @@ class FileLoggingTree(context: Context) : Timber.Tree() {
 
     private fun truncateLogFile() {
         try {
-            Timber.d("Truncating log file: $logFile")
+            android.util.Log.d("FileLoggingTree", "Truncating log file: $logFile")
             // Consolidate logs: .4 -> .5, .3 -> .4, etc.
             for (i in 4 downTo 1) {
                 val current = File(logFile.parent, "${logFile.name}.$i")

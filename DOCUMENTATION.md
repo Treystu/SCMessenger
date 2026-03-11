@@ -1,7 +1,7 @@
 # SCMessenger Documentation Hub
 
 Status: Active  
-Last updated: 2026-03-10
+Last updated: 2026-03-11 (POST-ID-NORMALIZATION-FIX)
 
 This is the primary documentation entrypoint.
 
@@ -90,9 +90,12 @@ Historical audit artifacts currently live under `docs/historical/`.
 - WS12.39 closeout burndown re-baseline (2026-03-10 UTC, Rust/WASM baseline restoration + issue/workflow/branch reconciliation for steady v0.2.0 alpha truth) is tracked in:
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`
-  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
-  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
   - `docs/DOCUMENT_STATUS_INDEX.md`
+- iOS ID Normalization & Case-Sensitivity (2026-03-11, centralized `PeerIdValidator` + exhaustive normalization in repository and viewmodels to fix iOS cross-platform ID mismatches) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift`
+  - `iOS/SCMessenger/SCMessenger/ViewModels/ContactsViewModel.swift`
 - WS11 (2026-03-03) delivery-state UX and diagnostics/tester-readiness updates are tracked in:
   - `docs/CURRENT_STATE.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`

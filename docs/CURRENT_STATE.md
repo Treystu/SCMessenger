@@ -1,9 +1,67 @@
 # SCMessenger Current State (Verified)
 
 Status: Active  
-Last updated: 2026-03-10
+Last updated: 2026-03-11
 
-Last verified: **2026-03-10** (local workspace checks on this machine)
+Last verified: **2026-03-11** (local workspace checks on this machine)
+
+## 2026-03-11 Android Logcat & Stability Fixes (Verified)
+
+- **Root Cause Resolution**: Resolved recurring `java.lang.StackOverflowError` in `FileLoggingTree.truncateLogFile()`.
+  - **Issue**: Timber.d calls inside the custom LoggingTree were recursively triggering the same tree's log method, leading to a stack overflow when rotating files.
+  - **Fix**: Changed internal FileLoggingTree diagnostic logs to use `android.util.Log.d` directly, bypassing the Timber forest and breaking the recursion.
+- **Unit Test Stabilization**: Resolved `io.mockk.MockKException` in `MeshServiceViewModelTest`.
+  - **Issue**: `mockk-android` was incorrectly included in `testImplementation`, interfering with JVM-based unit tests.
+  - **Fix**: Moved `mockk-android` to `androidTestImplementation` and improved explicit type inference in `mockk<T>` calls.
+- **Verification on this host**:
+  - `cd android && ./gradlew assembleDebug` — **pass**
+  - `cd android && ./gradlew testDebugUnitTest` — **pass** (62 tests, 0 failures)
+  - **Runtime Observation**: App successfully installed via USB. Logcat confirms `FileLoggingTree` is operating correctly without recursion loops during startup maintenance.
+
+## 2026-03-11 Peer ID Normalization & Case-Sensitivity Fix (Verified)
+
+- **Root Cause Resolution**: Resolved persistent "Contact not found" and ID mismatch issues on iOS and Android.
+  - **Normalization Logic**: Implemented `normalizePeerId` to handle different ID types correctly.
+    - Identity IDs (64-char hex) are normalized to **lowercase**.
+    - libp2p Peer IDs (Base58) are **preserved exactly** (case-sensitive).
+  - **iOS Implementation**: Added `normalizePeerId` and `isSamePeerId` helpers to `MeshRepository.swift`. Updated `resolveCanonicalPeerId`, `resolveCanonicalPeerIdFromMessageHints`, and `emitIdentityDiscoveredIfChanged` to use these helpers.
+  - **Android Implementation**: Updated `MeshRepository.kt` and `PeerIdValidator.kt` to ensure consistent normalization. Fixed `resolveCanonicalPeerId` and `resolveCanonicalPeerIdFromMessageHints` to use normalized IDs for fallback and comparisons.
+  - **Identity Hints**: Ensured that hinted Peer IDs in message envelopes are normalized before resolution to prevent case mismatches.
+- **Verification on this host**:
+  - `cd android && ./gradlew :app:assembleDebug -x test` — **pass**
+  - `xcodebuild -project SCMessenger.xcodeproj -scheme SCMessenger -destination 'generic/platform=iOS Simulator' build` — **pass**
+
+## 2026-03-11 iOS API and Log Visualization Fix (Verified)
+
+- **Root Cause Resolution**: Resolved `SCMessenger/api.swift:1454: Fatal error: ... UniffiInternalError.incompleteData`.
+  - **Issue**: The Rust library (`libscmessenger_mobile.a`) was out of sync with the generated Swift code, causing a mismatch in the `IdentityInfo` struct during FFI calls.
+  - **Fix**: Rebuilt the mobile core for both iOS and iOS Simulator targets using `./rebuild_ios_core.sh`. Verified that the library and Swift bindings are now synchronized.
+- **Log Visualization Improvements**:
+  - **Single Pane of Glass**: The Log Sankey visualizer now processes logs from Android, iOS, and OSX simultaneously.
+  - **Interactive Controls**: Added sliders for density and depth to manage visual clutter.
+  - **Normalization**: Improved regex-based parsing specifically for SCMessenger logs to group operational noise and focus on key mesh events.
+  - **Auto-Loading**: Set initial density to 0 to ensure logs appear immediately on load.
+- **Verification on this host**:
+  - `./rebuild_ios_core.sh` — **pass**
+  - `npm start` in `log-visualizer` — **pass** (server running on port 3001)
+  - `ls -l` verification of library vs swift timestamps — **pass** (synchronized)
+
+## 2026-03-11 Android Unit Test Fixes (Verified)
+
+- All Android unit tests (62 total) are now passing.
+- **Compilation Errors Resolved**:
+  - `ContactsViewModelTest.kt` and `UniffiIntegrationTest.kt` updated to include missing `lastKnownDeviceId` in `Contact` initializers.
+- **Logic Errors Fixed**:
+  - `DeliveryStateMapper.resolve` fixed to prioritize `delivered` status over `pending` retry metadata, ensuring correct UI delivery state.
+- **Mocking & Coroutine Stability**:
+  - `MeshRepository` and `PreferencesRepository` (and key `val` properties) marked as `open` to allow reliable MockK stubbing on the JVM.
+  - `ChatViewModelTest` setup hardened with explicit stubs for `messageUpdates` flow to prevent `KotlinNothingValueException` during ViewModel initialization.
+- **Verification on this host**:
+  - `cd android && ./gradlew testDebugUnitTest` — **pass** (62 tests, 0 failures)
+  - `cargo fmt --all -- --check` — **pass**
+  - `cargo build --workspace` — **pass**
+  - `cargo test --workspace` — **pass**
+  - `./scripts/docs_sync_check.sh` — **pass**
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
 

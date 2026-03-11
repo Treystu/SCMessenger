@@ -6,6 +6,19 @@ Scope: Core + Android + iOS + Desktop GUI + Relay topology
 
 ---
 
+## iOS Build and Binding Stability Addendum (WS12.40, 2026-03-11 UTC)
+
+1. Resolved critical iOS runtime crash (`UniffiInternalError.incompleteData`) caused by stale UniFFI bindings.
+2. Restored iOS buildability after the WS13.2 transport boundary widening by updating all `MeshRepository` call sites.
+3. Hardened the development loop for cross-platform bindings:
+   - Automated Swift field verification against UDL source of truth.
+   - Automated patching of generated Swift code for concurrency compatibility.
+4. Milestone implication:
+   - iOS is now back to a buildable and theoretically stable state for Phase 2 physical device testing.
+   - The risk of binding-drift-induced crashes is significantly reduced by the new verification tooling.
+
+---
+
 ## Closeout Re-Baseline Addendum (WS12.39, 2026-03-10 UTC)
 
 1. WS12/v0.2.0 closeout truth is now explicitly split into four buckets:

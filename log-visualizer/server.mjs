@@ -19,140 +19,143 @@ const wss = new WebSocketServer({ server });
 
 const LOG_MAPPINGS = [
   {
-    // I/BugleRcsEngine: handleMessage processing message:[NOTIFY_UPTIME...] with...
-    match: /handleMessage processing message:\[(.*?)\]\s*(.*)/,
-    map: (m) => ["processing", m[1], m[2]],
+    // Error/Success High-Level Intent
+    match: /(failed to|error|exception|unexpected|succesful|successfully|completed)/i,
+    map: (m) => [m[1].toUpperCase().includes("FAIL") ? "!!! FAILURE !!!" : "SUCCESS", m[0]],
   },
   {
     // MeshRepository: delivery_attempt msg=unknown medium=core phase=direct...
     match: /delivery_attempt\s+(.*)/,
-    map: (m) => ["delivery_attempt", ...m[1].split(/\s+(?=\w+=)/)],
+    map: (m) => ["DELIVERY", "ATTEMPT", ...m[1].split(/\s+(?=\w+=)/)],
   },
   {
-    // MeshRepository: Transport: route=... connected=...
-    match:
-      /(?:^|[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDF00-\uDFFF]|\uD83D[\uDC00-\uDE4F]|\uD83D[\uDE80-\uDEFF]|[\u2011-\u26FF])*\s*Transport:\s+(.*)/,
-    map: (m) => ["Transport", ...m[1].split(/\s+(?=\w+=)/)],
+    // Transport routing/flow
+    match: /Transport:\s+(.*)/,
+    map: (m) => ["TRANSPORT", ...m[1].split(/\s+(?=\w+=)/)],
   },
   {
-    // SCMessenger: Peer identified: 12D3K... with 13 addresses
-    match: /Peer identified:\s+([\w\d]+)\s+with\s+(.*)/,
-    map: (m) => ["Peer identified", m[1] + "...", "with " + m[2]],
+    // Peer/Identity Flow
+    match: /Peer (identified|discovered|connected|disconnected):\s+([\w\d]+)/i,
+    map: (m) => ["PEER_EVENT", m[1].toUpperCase(), "PEER_ID"],
   },
   {
-    // BLE Identity Beacon
-    match: /BLE identity beacon set:\s*([a-f0-9]+)\.\.\.\s*\((.*?)\)/,
-    map: (m) => ["BLE identity beacon set", m[1], m[2]],
+    // BLE Logic
+    match: /BLE (identity beacon set|characteristic write successful|scanning|discovered):\s*(.*)/i,
+    map: (m) => ["BLE_OPS", m[1].toUpperCase(), m[2].includes(":") ? "MAC_ADDR" : "DETAIL"],
   },
   {
-    // WiFi creating message
-    match: /Creating message to (.*?);\s*iface\s*=\s*(\d+)/,
-    map: (m) => ["Creating message", m[1], `iface=${m[2]}`],
+    // Sync Operations
+    match: /Processed (identity|history) sync (request|data)?/i,
+    map: (m) => ["SYNC_OPS", m[1].toUpperCase(), m[2] ? m[2].toUpperCase() : "SYNC"],
   },
   {
-    // Finsky Memory trim
-    match: /Memory trim requested to level (\d+)/,
-    map: (m) => ["Memory trim requested", `level ${m[1]}`],
-  },
-  {
-    // Bluetooth Address mismatch
-    match: /Address type mismatch for (.*?),\s*new type:\s*(\d+)/,
-    map: (m) => ["Address type mismatch", m[1], `new type=${m[2]}`],
-  },
-  {
-    // Mesh Receipt
-    match: /Receipt for (.*?):\s*(.*)/,
-    map: (m) => ["Receipt", m[1], m[2]],
-  },
-  {
-    // MeshRepository: Dialing /ip4/104.28.216.43/tcp/9010/p2p/12D3K...
+    // Dialing/Connection
     match: /Dialing\s+(.*)/,
-    map: (m) => {
-      const path = m[1];
-      if (path.includes("/p2p/")) {
-        const parts = path.split("/p2p/");
-        return [
-          "Dialing",
-          parts[0] + "/p2p/",
-          parts[1].substring(0, 8) + "...",
-        ];
-      }
-      return ["Dialing", path];
-    },
-  },
-  {
-    // Nickname generation
-    match: /Generated default nickname '(.*?)' for peer (.*)/,
-    map: (m) => ["Nickname Generated", m[1], m[2].substring(0, 8) + "..."],
-  },
-  {
-    // BLE Characteristic Write
-    match: /Characteristic write successful to (.*)/,
-    map: (m) => ["BLE Write", "Successful", m[1]],
-  },
-  {
-    // Raw Peer ID catcher
-    match: /^(12D3K[a-zA-Z0-9]{30,})$/,
-    map: (m) => ["Peer ID", m[1].substring(0, 10) + "..."],
+    map: (m) => ["NETWORK", "DIALING", "PATH"],
   },
 ];
 
-function extractDynamicSections(msg) {
-  // 1. Check known explicit mappings
+/**
+ * Recursive Exploratory Extraction
+ * Iteratively unpeels layers based on logical delineators to avoid static depth limits.
+ */
+function extractDynamicSections(text, depth = 0) {
+  if (depth > 6 || !text || text.length < 2) return [];
+
+  // 1. High-Value Mapping Priority
   for (const rule of LOG_MAPPINGS) {
-    const m = msg.match(rule.match);
+    const m = text.match(rule.match);
     if (m) {
-      return rule
-        .map(m)
-        .map((s) => s.trim())
-        .filter((s) => s);
+      const parts = rule.map(m).map(cleanSegment);
+      // We take the mapped parts as the definitive extraction for this branch
+      return parts;
     }
   }
 
-  // 2. Generic KV Extractor (Action key=val key2=val2)
-  if (msg.includes("=")) {
-    const parts = msg.split(/\s+(?=\w+=)/);
-    if (parts.length > 1) {
-      return parts.map((p) => p.trim()).filter((s) => s);
+  // 2. Delineator Identification (Colon, Verb, KV-bound, Punctuation)
+  // We pivot on the FIRST structural break found
+  const delims = [
+    { regex: /:\s+/, weight: 1 },
+    { regex: /\s+(?=\w+=)/, weight: 2 }, // KV boundary: "key=val"
+    { regex: /\b(processing|handling|attempting|failed|success|sending|receiving|dialing|connected|disconnected)\b/i, weight: 0.5 },
+    { regex: /[,;]\s+/, weight: 3 },
+  ];
+
+  let best = null;
+  for (const d of delims) {
+    const match = text.match(d.regex);
+    if (match && (best === null || match.index < best.index)) {
+      best = { index: match.index, length: match[0].length, content: match[0] };
     }
   }
 
-  // 3. Status/Colon Breakout Extractor
-  if (msg.includes(": ")) {
-    const parts = msg.split(/:\s+/);
-    if (parts.length > 1 && parts[0].length < 40) {
-      // Keep the first part as the pivot, the rest as the detail
-      return [parts[0].trim(), parts.slice(1).join(": ").trim()].filter(
-        (s) => s,
-      );
-    }
+  if (best) {
+    const head = text.substring(0, best.index).trim();
+    const tail = text.substring(best.index + best.length).trim();
+    const results = [];
+    if (head && head.length < 50) results.push(cleanSegment(head));
+    return [...results, ...extractDynamicSections(tail, depth + 1)];
   }
 
-  // 4. Fallback: Split by punctuation (, or ;)
-  const chunks = msg.split(/[,;]\s+/);
-  if (chunks.length > 1) {
-    return chunks.map((c) => c.trim()).filter((s) => s);
+  // 3. Leaf Node Processing (Clean variables)
+  return [cleanSegment(text)];
+}
+
+function cleanSegment(s) {
+  let cleaned = s.trim();
+  
+  // 1. Structural Normalization
+  cleaned = cleaned.replace(/^\[|\]$/g, ""); // Strip brackets
+  
+  // 2. Variable Scrubbing (Aggressive)
+  cleaned = cleaned.replace(/12D3KooW[a-zA-Z0-9]{32,}/g, "PEER_ID"); // Full PeerIDs
+  cleaned = cleaned.replace(/[a-f0-9]{32,}/gi, "HASH"); // UUIDs/Hashes
+  cleaned = cleaned.replace(/\b[0-9a-f]{8,}\b/gi, "HEX"); // Short Hex
+  cleaned = cleaned.replace(/\b\d{4,}\b/g, "NUM"); // Any 4+ digit variable
+  cleaned = cleaned.replace(/\d{2}:\d{2}:\d{2}(\.\d{3})?/, "TIME"); // Internal timestamps
+  
+  // 3. Network/Path Normalization
+  cleaned = cleaned.replace(/\/ip[46]\/[\d\.]+/g, "/ipX/ADDR"); // IP addresses
+  
+  // 4. Semantic Short-circuit (Pull intent to front)
+  const intentMap = [
+    { match: /error|fail|err_|exception/i, label: "!!! ERROR !!!" },
+    { match: /success|ok|completed|finished/i, label: "SUCCESS" },
+    { match: /retry|retrying|backoff/i, label: "RETRY_FLOW" },
+    { match: /timeout|timed out/i, label: "TIMEOUT" }
+  ];
+  for (const i of intentMap) {
+    if (i.match.test(cleaned)) return i.label;
   }
 
-  // 5. Raw string default
-  return [msg.trim()];
+  return cleaned.substring(0, 50); // Hard cap on label bloat
 }
 
 function processLine(rawLine, platform) {
   try {
-    let line = rawLine.trim().replace(/^System:\s*/i, "");
+    // Global Noise Stripper
+    let line = rawLine
+      .trim()
+      .replace(/^(\d{2}-\d{2}\s+)?\d{2}:\d{2}:\d{2}(\.\d{3})?\s+/, "")
+      .replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, "")
+      .replace(/^System:\s*/i, "");
+
     let tag = "General";
     let msg = line;
 
-    // Pattern extraction mapping
-    const adbMatch = line.match(
-      /\b[VDIWEAF]\/([^\s\(:]+)\s*(?:\(\s*\d+\))?:\s*(.*)/,
-    );
+    // Source Separation
+    const adbMatch = line.match(/\b[VDIWEAF]\/([^\s\(:]+)\s*(?:\(\s*\d+\))?:\s*(.*)/);
     const scmMatch = line.match(/\(([^)]+)\)\s*\[([^\]]+)\]\s*(.*)/);
-
+    const harnessStatMatch = line.match(/^\s*(GCP|OSX|Android|iOS Dev|iOS Sim):\s*(\d+)/i);
     if (scmMatch) {
       tag = scmMatch[2].split(":").pop().trim();
       msg = scmMatch[3].trim();
+    } else if (harnessStatMatch) {
+      tag = "Metrics";
+      msg = `Status: ${harnessStatMatch[1]}`; // Group all "GCP: 123 lines" into "Metrics -> Status: GCP"
+    } else if (platform === "Harness") {
+      tag = "Harness";
+      msg = line;
     } else if (adbMatch) {
       tag = adbMatch[1].trim();
       msg = adbMatch[2].trim();
@@ -233,8 +236,28 @@ wss.on("connection", (ws) => {
     });
   };
 
+  const streamMesh = () => {
+    const meshDir = path.join(__dirname, "..", "logs", "5mesh", "latest");
+    // Check for common harness logs and stream them if they exist
+    const sources = [
+      { name: "GCP", file: "gcp.log" },
+      { name: "OSX", file: "osx.log" },
+      { name: "Harness", file: "harness.log" },
+      { name: "Sim", file: "ios-sim.log" },
+      { name: "iOS-Dev", file: "ios-device.log" },
+      { name: "Android-Mesh", file: "android.log" },
+    ];
+
+    sources.forEach((src) => {
+      const fullPath = path.join(meshDir, src.file);
+      // Use tail -F to safely wait for file creation or rotation
+      stream(src.name, "tail", ["-F", "-n", "100", fullPath]);
+    });
+  };
+
+  streamMesh();
   streamAndroid();
-  stream("iOS", "log", [
+  stream("iOS-Direct", "log", [
     "stream",
     "--level",
     "debug",

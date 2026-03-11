@@ -155,54 +155,153 @@
         color: #94a3b8;
         margin-left: 10px;
       }
+      .slider-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: rgba(255, 255, 255, 0.05);
+        padding: 5px 12px;
+        border-radius: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .slider-group label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .slider-group span {
+        font-size: 0.75rem;
+        min-width: 25px;
+        color: var(--accent);
+        font-family: 'JetBrains Mono', monospace;
+      }
+      input[type="range"] {
+        width: 80px;
+        height: 4px;
+        border-radius: 2px;
+        appearance: none;
+        background: rgba(255, 255, 255, 0.1);
+        cursor: pointer;
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        appearance: none;
+        width: 12px;
+        height: 12px;
+        background: var(--accent);
+        border-radius: 50%;
+        box-shadow: 0 0 10px var(--accent);
+      }
+      .header-controls {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+      }
+      .header-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .logo {
+        width: 40px;
+        height: 40px;
+        background: linear-gradient(135deg, var(--primary), var(--accent));
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        font-weight: 950;
+        color: #000;
+        font-size: 18px;
+      }
+      .title-group h1 {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 900;
+      }
+      .title-group .version {
+        font-weight: 200;
+        opacity: 0.6;
+      }
+      .search-box {
+        position: relative;
+        display: flex;
+        align-items: center;
+      }
+      .search-box .search-icon {
+        position: absolute;
+        left: 12px;
+        color: var(--text-dim);
+        font-size: 0.8rem;
+      }
+      .search-box input {
+        background: rgba(0, 0, 0, 0.5);
+        border: 1px solid var(--glass-border);
+        color: white;
+        padding: 10px 12px 10px 35px; /* Adjusted padding for icon */
+        border-radius: 12px;
+        width: 200px;
+        outline: none;
+        font-size: 0.85rem;
+      }
+      .primary-btn {
+        background: var(--primary);
+        color: #000;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-weight: 700;
+        font-size: 0.85rem;
+        border: none;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .primary-btn:hover {
+        background: #00b3b6;
+      }
+      .secondary-btn {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text-dim);
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-weight: 700;
+        font-size: 0.85rem;
+        border: none;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .secondary-btn:hover {
+        background: rgba(255, 255, 255, 0.15);
+      }
     </style>
   </head>
   <body>
     <div id="tooltip"></div>
     <header>
-      <div style="display: flex; align-items: center; gap: 12px">
-        <div
-          style="
-            width: 40px;
-            height: 40px;
-            background: linear-gradient(135deg, var(--primary), var(--accent));
-            border-radius: 12px;
-            display: grid;
-            place-items: center;
-            font-weight: 950;
-            color: #000;
-            font-size: 18px;
-          "
-        >
-          LS
-        </div>
-        <div>
-          <h1 style="margin: 0; font-size: 1.1rem; font-weight: 900">
-            LogSankey
-            <span style="font-weight: 200; opacity: 0.6"
-              >v5.0 Dynamic Analysis</span
-            >
-          </h1>
+      <div class="header-left">
+        <div class="logo">LS</div>
+        <div class="title-group">
+          <h1>LogSankey</h1>
+          <span class="version">v8.0 Interactive Drilldown</span>
         </div>
       </div>
-      <div style="display: flex; align-items: center">
-        <input
-          type="text"
-          id="global-search"
-          style="
-            background: rgba(0, 0, 0, 0.5);
-            border: 1px solid var(--glass-border);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 12px;
-            width: 350px;
-            margin-right: 20px;
-            outline: none;
-          "
-          placeholder="Global semantic search..."
-        />
-        <button id="pause-btn" class="btn btn-stop">🛑 Stop</button>
-        <button id="reset-btn" class="btn btn-reset">Clear</button>
+      <div class="header-controls">
+        <div class="slider-group">
+          <label>Density</label>
+          <input type="range" id="densitySlider" min="0" max="10" step="0.5" value="0">
+          <span id="densityVal">0.0</span>
+        </div>
+        <div class="slider-group">
+          <label>Vertical</label>
+          <input type="range" id="depthSlider" min="1" max="10" step="0.5" value="3.2">
+          <span id="depthVal">3.2</span>
+        </div>
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="searchInput" placeholder="Search logs..." />
+        </div>
+        <button id="pauseBtn" class="secondary-btn">Pause</button>
+        <button id="clearBtn" class="secondary-btn">Clear</button>
+        <button id="resetBtn" class="primary-btn">Reset Graph</button>
       </div>
     </header>
 
@@ -251,6 +350,10 @@
         Debug: "#22d3ee",
         Android: "#3de1ad",
         iOS: "#3b82f6",
+        GCP: "#facc15",
+        Sim: "#f472b6",
+        OSX: "#94a3b8",
+        Harness: "#fb923c",
         System: "#a855f7",
       };
 
@@ -263,69 +366,66 @@
         const rect = container.getBoundingClientRect();
         if (rect.width < 100 || rect.height < 100) return;
 
-        let activeLinks = Array.from(linkRegistry.values());
-        const search = document
-          .getElementById("global-search")
-          .value.toLowerCase();
+        const search = document.getElementById("searchInput").value.toLowerCase();
+        const densityThreshold = +d3.select("#densitySlider").property("value");
+        const verticalScale = +d3.select("#depthSlider").property("value");
+        
+        d3.select("#densityVal").text(densityThreshold.toFixed(1));
+        d3.select("#depthVal").text(verticalScale.toFixed(1));
 
+        // 1. Base Set: All valid links
+        let activeLinks = Array.from(linkRegistry.values()).filter(l => l.value > 0);
+
+        // 2. Search/Focus Filter
         if (currentFocus) {
           if (currentFocus.type === "node")
             activeLinks = activeLinks.filter(
-              (l) =>
-                l.source.includes(currentFocus.id) ||
-                l.target.includes(currentFocus.id),
+              (l) => l.source.includes(currentFocus.id) || l.target.includes(currentFocus.id)
             );
           else
             activeLinks = activeLinks.filter(
-              (l) =>
-                l.source === currentFocus.src && l.target === currentFocus.tgt,
+              (l) => l.source === currentFocus.src && l.target === currentFocus.tgt
             );
         } else if (search) {
           activeLinks = activeLinks.filter(
-            (l) =>
-              l.source.toLowerCase().includes(search) ||
-              l.target.toLowerCase().includes(search),
+            (l) => l.source.toLowerCase().includes(search) || l.target.toLowerCase().includes(search)
           );
         }
 
-        const maxVal = d3.max(activeLinks, (l) => l.value) || 1;
-        // Precision pruning (Variant Heatmap)
-        if (activeLinks.length > 350 && !search && !currentFocus) {
-          activeLinks = activeLinks
-            .sort((a, b) => b.value - a.value)
-            .slice(0, 350);
-        }
+        // 3. Density Pruning (Dynamic)
+        activeLinks = activeLinks
+          .sort((a, b) => b.value - a.value)
+          .filter((l, i) => {
+            if (i < 30) return true; // Keep backbone
+            return l.value >= densityThreshold;
+          });
 
-        const nodeSet = new Set();
-        activeLinks.forEach((l) => {
-          nodeSet.add(l.source);
-          nodeSet.add(l.target);
-        });
-        const nodes = Array.from(nodeSet).map((id) => ({
+        if (activeLinks.length > 500) activeLinks = activeLinks.slice(0, 500);
+
+        const maxVal = d3.max(activeLinks, (l) => l.value) || 1;
+
+        // 4. Build Node Set from active links ONLY
+        const activeNodeIds = new Set();
+        activeLinks.forEach((l) => { activeNodeIds.add(l.source); activeNodeIds.add(l.target); });
+        
+        const nodes = Array.from(activeNodeIds).map((id) => ({
           id,
           name: nodeRegistry.get(id).name,
         }));
 
-        // Dynamic Scaling to Prevent Node Squish
-        // High-density vertical tightening (3.2px per node) and reduced margins to maximize screen utility
-        const svgHeight = Math.max(
-          rect.height,
-          Math.min(nodes.length * 3.2 + 40, 2500),
-        );
+        const svgHeight = Math.max(rect.height, activeLinks.length * verticalScale + 100);
         const svgWidth = rect.width;
-
         svg.attr("width", svgWidth).attr("height", svgHeight);
-        sankeyInstance.extent([
-          [20, 20],
-          [svgWidth - 350, Math.max(svgHeight - 20, 20)],
-        ]);
-        const links = activeLinks
-          .map((l) => ({
-            source: nodes.findIndex((n) => n.id === l.source),
-            target: nodes.findIndex((n) => n.id === l.target),
-            value: l.value,
-          }))
-          .filter((l) => l.source !== -1 && l.target !== -1);
+        
+        sankeyInstance.extent([[5, 5], [rect.width - 120, svgHeight - 20]]);
+        
+        const links = activeLinks.map((l) => ({
+          source: nodes.findIndex((n) => n.id === l.source),
+          target: nodes.findIndex((n) => n.id === l.target),
+          value: l.value,
+          srcId: l.source,
+          tgtId: l.target
+        })).filter((l) => l.source !== -1 && l.target !== -1);
 
         if (nodes.length < 2 || links.length === 0) {
           svg.selectAll("*").remove();
@@ -418,9 +518,7 @@
       function processLog(log) {
         logsBuffer.push(log);
         if (logsBuffer.length > 500) logsBuffer.shift();
-        const search = document
-          .getElementById("global-search")
-          .value.toLowerCase();
+        const search = document.getElementById("searchInput").value.toLowerCase();
         if (search && !JSON.stringify(log).toLowerCase().includes(search))
           return;
 
@@ -471,12 +569,22 @@
       setInterval(() => {
         if (!isPaused) render();
       }, 1200);
-      document.getElementById("pause-btn").onclick = function () {
+      document.getElementById("densitySlider").oninput = render;
+      document.getElementById("depthSlider").oninput = render;
+      document.getElementById("searchInput").oninput = render;
+
+      document.getElementById("pauseBtn").onclick = function () {
         isPaused = !isPaused;
-        this.innerText = isPaused ? "▶️ Resume" : "🛑 Stop";
-        this.className = isPaused ? "btn btn-resume" : "btn btn-stop";
+        this.innerText = isPaused ? "Resume" : "Pause";
+        this.className = isPaused ? "primary-btn" : "secondary-btn";
       };
-      document.getElementById("reset-btn").onclick = () => {
+
+      document.getElementById("clearBtn").onclick = () => {
+        logFeed.innerHTML = "";
+        logsBuffer = [];
+      };
+
+      document.getElementById("resetBtn").onclick = () => {
         nodeRegistry.clear();
         linkRegistry.clear();
         logsBuffer = [];

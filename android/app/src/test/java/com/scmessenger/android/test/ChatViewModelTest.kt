@@ -52,6 +52,7 @@ class ChatViewModelTest {
         Dispatchers.setMain(testDispatcher)
         repository = mockk(relaxed = true)
         every { repository.incomingMessages } returns incoming
+        every { repository.messageUpdates } returns MutableSharedFlow()
         every { repository.getConversation(any(), any()) } returns listOf(message("m1", "peer1"))
         every { repository.getContact(any()) } returns null
         coEvery { repository.sendMessage(any(), any()) } returns Unit

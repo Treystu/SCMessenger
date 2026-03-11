@@ -32,7 +32,7 @@ import java.io.File
  * All UniFFI objects are initialized lazily and managed here to ensure
  * proper lifecycle and resource cleanup.
  */
-class MeshRepository(private val context: Context) {
+open class MeshRepository(private val context: Context) {
 
     companion object {
         private const val IDENTITY_BACKUP_PREFS = "identity_backup_prefs"
@@ -162,15 +162,15 @@ class MeshRepository(private val context: Context) {
 
     // Service state
     private val _serviceState = MutableStateFlow(uniffi.api.ServiceState.STOPPED)
-    val serviceState: StateFlow<uniffi.api.ServiceState> = _serviceState.asStateFlow()
+    open val serviceState: StateFlow<uniffi.api.ServiceState> = _serviceState.asStateFlow()
 
     // Service stats
     private val _serviceStats = MutableStateFlow<uniffi.api.ServiceStats?>(null)
-    val serviceStats: StateFlow<uniffi.api.ServiceStats?> = _serviceStats.asStateFlow()
+    open val serviceStats: StateFlow<uniffi.api.ServiceStats?> = _serviceStats.asStateFlow()
 
     // Message updates flow (both sent and received) used for UI updates
-    private val _messageUpdates = kotlinx.coroutines.flow.MutableSharedFlow<uniffi.api.MessageRecord>(replay = 0)
-    val messageUpdates = _messageUpdates.asSharedFlow()
+    private val _messageUpdates = kotlinx.coroutines.flow.MutableSharedFlow<uniffi.api.MessageRecord>(replay = 1)
+    open val messageUpdates = _messageUpdates.asSharedFlow()
 
     // Compatibility for notifications (incoming only)
     val incomingMessages = messageUpdates.filter { it.direction == uniffi.api.MessageDirection.RECEIVED }
@@ -2279,8 +2279,8 @@ class MeshRepository(private val context: Context) {
                 }
 
                 // Fallback: Try contact manager
+                val contact = contactManager?.get(normalizedPeerId)
                 if (publicKey == null) {
-                    val contact = contactManager?.get(normalizedPeerId)
                     if (contact != null && !contact.publicKey.isNullOrEmpty()) {
                         publicKey = contact.publicKey.trim()
                         Timber.d("SEND_MSG: Resolved from contact: key=${publicKey?.take(8)}")
@@ -3335,15 +3335,12 @@ class MeshRepository(private val context: Context) {
                         }
                     }
                 }
-        val localAcked = if (!blePeerId.isNullOrBlank()) {
-            val bleSuccess = bleGattServer?.sendMessage(blePeerId, encryptedData) ?: false
-            if (bleSuccess) {
-                Timber.i("✓ BLE delivery ACK from $blePeerId")
-                true
-            } else false
-        } else false
+                false
+            }
+        )
+        val localAcked = localFallback.acked
 
-        if (strictBleOnlyOverride) {
+        if (strictBleOnly) {
             logDeliveryAttempt(
                 messageId = traceMessageId,
                 medium = "ble-only",
@@ -3782,11 +3779,10 @@ class MeshRepository(private val context: Context) {
             return senderId
         }
 
-        // Never rewrite an exact sender match.
-        val exactMatch = contacts.any {
+        val exactMatch = contacts.firstOrNull {
             PeerIdValidator.isSame(it.peerId, senderId) && normalizePublicKey(it.publicKey) == normalizedIncomingKey
         }
-        if (exactMatch) return senderId
+        if (exactMatch != null) return exactMatch.peerId
 
         // Prefer one stable canonical identity per public key whenever unique.
         val keyedContacts = contacts.filter {
@@ -3812,12 +3808,13 @@ class MeshRepository(private val context: Context) {
 
             return when (linkedIdentityContacts.size) {
                 1 -> linkedIdentityContacts.first().peerId
-                0 -> senderId
                 else -> {
-                    Timber.w(
-                        "Ambiguous canonical sender mapping for $senderId (matched ${linkedIdentityContacts.size} contacts); keeping raw sender ID"
-                    )
-                    senderId
+                    if (linkedIdentityContacts.size > 1) {
+                        Timber.w(
+                            "Ambiguous canonical sender mapping for $senderId (matched ${linkedIdentityContacts.size} contacts); keeping raw sender ID"
+                        )
+                    }
+                    PeerIdValidator.normalize(senderId)
                 }
             }
         }
@@ -3835,12 +3832,13 @@ class MeshRepository(private val context: Context) {
         }
         return when (keyedRoutedContacts.size) {
             1 -> keyedRoutedContacts.first().peerId
-            0 -> senderId
             else -> {
-                Timber.w(
-                    "Ambiguous identity sender mapping for $senderId (matched ${keyedRoutedContacts.size} contacts); keeping raw sender ID"
-                )
-                senderId
+                if (keyedRoutedContacts.size > 1) {
+                    Timber.w(
+                        "Ambiguous identity sender mapping for $senderId (matched ${keyedRoutedContacts.size} contacts); keeping raw sender ID"
+                    )
+                }
+                PeerIdValidator.normalize(senderId)
             }
         }
     }
@@ -3851,8 +3849,10 @@ class MeshRepository(private val context: Context) {
         senderPublicKeyHex: String,
         hintedIdentityId: String?
     ): String {
-        val normalizedHint = hintedIdentityId?.trim()?.takeIf { PeerIdValidator.isIdentityId(it) } ?: return resolvedCanonicalPeerId
-        if (normalizedHint == resolvedCanonicalPeerId) return resolvedCanonicalPeerId
+        val hint = hintedIdentityId?.trim() ?: return resolvedCanonicalPeerId
+        val normalizedHint = PeerIdValidator.normalize(hint)
+        if (!PeerIdValidator.isIdentityId(normalizedHint)) return resolvedCanonicalPeerId
+        if (PeerIdValidator.isSame(normalizedHint, resolvedCanonicalPeerId)) return resolvedCanonicalPeerId
         if (isBootstrapRelayPeer(normalizedHint)) return resolvedCanonicalPeerId
 
         val normalizedSenderKey = normalizePublicKey(senderPublicKeyHex)
@@ -3863,9 +3863,9 @@ class MeshRepository(private val context: Context) {
         }
 
         if (normalizedSenderKey != null) {
-            val hintedContact = contacts.firstOrNull { it.peerId == normalizedHint }
+            val hintedContact = contacts.firstOrNull { PeerIdValidator.isSame(it.peerId, normalizedHint) }
             if (hintedContact != null && normalizePublicKey(hintedContact.publicKey) == normalizedSenderKey) {
-                return normalizedHint
+                return hintedContact.peerId
             }
 
             val keyMatches = contacts.filter { normalizePublicKey(it.publicKey) == normalizedSenderKey }
@@ -3873,7 +3873,7 @@ class MeshRepository(private val context: Context) {
             if (keyMatches.isNotEmpty()) return resolvedCanonicalPeerId
         }
 
-        return if (resolvedCanonicalPeerId == senderId || PeerIdValidator.isLibp2pPeerId(resolvedCanonicalPeerId)) {
+        return if (PeerIdValidator.isSame(resolvedCanonicalPeerId, senderId) || PeerIdValidator.isLibp2pPeerId(resolvedCanonicalPeerId)) {
             normalizedHint
         } else {
             resolvedCanonicalPeerId
