@@ -1,11 +1,33 @@
 # SCMessenger Current State (Verified)
 
 Status: Active  
-Last updated: 2026-03-10
+Last updated: 2026-03-11
 
-Last verified: **2026-03-10** (local workspace checks on this machine)
+Last verified: **2026-03-11** (local workspace checks on this machine)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
+
+## 2026-03-11 WS13.3 Registration Protocol + Signature Verification (Implemented)
+
+- WS13.3 landed as an additive transport protocol on top of current `main`.
+- Files changed:
+  - `core/src/transport/behaviour.rs` — added `/sc/registration/1.0.0` request/response behaviour plus canonical `RegistrationPayload`, `RegistrationRequest`, `DeregistrationPayload`, `DeregistrationRequest`, and `RegistrationResponse` types.
+  - `core/src/transport/swarm.rs` — added `SwarmCommand::{RegisterIdentity,DeregisterIdentity}` and `SwarmHandle::{register_identity,deregister_identity}`; incoming registration messages now fail closed on malformed identity IDs, malformed UUIDv4 device IDs, peer/identity mismatches, invalid signatures, and invalid deregistration state (`target_device_id == from_device_id`).
+  - `core/src/transport/mod.rs` — re-exported the new WS13.3 transport request/response types.
+  - `core/tests/integration_registration_protocol.rs` — added end-to-end swarm tests for successful registration plus malformed/tampered rejection paths.
+  - `core/src/transport/behaviour.rs`, `core/src/transport/swarm.rs` (tests) — added canonical serialization, signature pass/fail, peer/public-key extraction, and identity-mismatch coverage.
+- Verification on this Linux host:
+  - `cargo fmt --all -- --check` — **pass**
+  - `cargo build --workspace` — **pass**
+  - `cargo test --workspace` — **pass** (pre-change baseline)
+  - `cargo test -p scmessenger-core transport::behaviour -- --nocapture` — **pass**
+  - `cargo test -p scmessenger-core --test integration_registration_protocol -- --nocapture` — **pass**
+- Scope boundary preserved:
+  - no relay-registry mutation or custody enforcement was added yet; valid registration/deregistration requests are verified and acknowledged only,
+  - mobile UniFFI / adapter surfaces were intentionally left unchanged in this phase because WS13.3 is transport-internal and this Linux host still lacks Android/iOS regeneration tooling.
+- Residual follow-up:
+  - WS13.4 still owns persisted registry state, collision policy, and custody enforcement.
+  - Anti-replay / monotonic registration-state protection remains open until registry state exists (tracked in `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`).
 
 ## 2026-03-10 WS13.2 Transport Boundary Widening (Implemented)
 

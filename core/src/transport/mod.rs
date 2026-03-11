@@ -11,8 +11,10 @@ pub mod reflection;
 pub mod swarm;
 
 pub use behaviour::{
-    IronCoreBehaviour, LedgerExchangeRequest, LedgerExchangeResponse, MessageRequest,
-    MessageResponse, RelayRequest, RelayResponse, SharedPeerEntry,
+    DeregistrationPayload, DeregistrationRequest, IronCoreBehaviour, LedgerExchangeRequest,
+    LedgerExchangeResponse, MessageRequest, MessageResponse, RegistrationMessage,
+    RegistrationPayload, RegistrationRequest, RegistrationResponse, RelayRequest, RelayResponse,
+    SharedPeerEntry,
 };
 pub use mesh_routing::{
     BootstrapCapability, DeliveryAttempt, MultiPathDelivery, RelayReputation, RelayStats,

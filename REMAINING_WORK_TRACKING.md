@@ -1,7 +1,7 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active  
-Last updated: 2026-03-10
+Last updated: 2026-03-11
 
 This is the active implementation backlog based on repository state verified on **2026-03-10**.
 
@@ -42,8 +42,8 @@ Completed in this pass:
 Remaining WS13 queue:
 
 1. [x] WS13.2 — Transport/API boundary widened: `SwarmCommand::SendMessage`, `SwarmHandle::send_message`, `SwarmBridge::send_message`, `RelayRequest`, and `Contact` all now carry `recipient_identity_id`/`intended_device_id`/`last_known_device_id` as `Option<String>`. All existing callers updated with `None, None`; `#[serde(default)]` ensures pre-WS13 relay nodes continue to interoperate. Mobile adapter call-sites (Android/iOS Kotlin/Swift consumers generated from `api.udl`) must be regenerated — use `void send_message(string peer_id, bytes data, string? recipient_identity_id, string? intended_device_id)` as the source of truth.
-2. [ ] WS13.3 — Registration protocol (`/sc/registration/1.0.0`) + signature verification. Transport boundary blocker is cleared; architecturally unblocked.
-3. [ ] WS13.4 — Relay registry state machine + custody enforcement. Architecturally unblocked now that relay requests carry identity + device metadata.
+2. [x] WS13.3 — Registration protocol (`/sc/registration/1.0.0`) + signature verification. `IronCoreBehaviour` now exposes an additive registration request/response protocol with canonical payload serialization, signed registration/deregistration helpers, `SwarmHandle::{register_identity,deregister_identity}` wiring, and fail-closed validation for malformed identity IDs, malformed UUIDv4 device IDs, peer/identity mismatches, invalid signatures, and invalid deregistration state. Targeted unit + integration tests cover success and rejection paths. Residual: no registry mutation/anti-replay enforcement yet; WS13.4 owns persisted active-device state.
+3. [ ] WS13.4 — Relay registry state machine + custody enforcement. Architecturally unblocked now that relay requests carry identity + device metadata and registration messages can be signed/verified.
 4. [ ] WS13.5 — Handover/abandon queue migration + sender-facing rejection UX. Blocked behind WS13.3–WS13.4 plus unavailable local Android/iOS verification tooling on this host (`ANDROID_HOME`, `cargo-ndk`, `xcodebuild`).
 5. [ ] WS13.6 — Compatibility/migration matrix, runbook, and acceptance lock. Unblocked after WS13.3–WS13.5 complete.
 
