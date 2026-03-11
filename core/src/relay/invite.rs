@@ -41,11 +41,7 @@ pub struct InviteToken {
 
 impl InviteToken {
     /// Create a new unsigned invite token
-    pub fn new(
-        inviter_id: String,
-        inviter_public_key: Vec<u8>,
-        invitee_id: String,
-    ) -> Self {
+    pub fn new(inviter_id: String, inviter_public_key: Vec<u8>, invitee_id: String) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -102,8 +98,7 @@ impl InviteToken {
             metadata: self.metadata.clone(),
         };
 
-        bincode::serialize(&temp)
-            .map_err(|e| InviteError::SerializationError(e.to_string()))
+        bincode::serialize(&temp).map_err(|e| InviteError::SerializationError(e.to_string()))
     }
 
     /// Serialize to bytes
@@ -139,12 +134,13 @@ impl InviteChain {
             .unwrap_or_default()
             .as_secs();
 
-        self.invites.insert(invite_id, (inviter_id, invitee_id, now));
+        self.invites
+            .insert(invite_id, (inviter_id, invitee_id, now));
     }
 
     /// Get who invited a specific person
     pub fn get_inviter(&self, invitee_id: &str) -> Option<String> {
-        for (_, (inviter_id, invited_id, _)) in &self.invites {
+        for (inviter_id, invited_id, _) in self.invites.values() {
             if invited_id == invitee_id {
                 return Some(inviter_id.clone());
             }
@@ -237,11 +233,7 @@ impl InviteSystem {
 
     /// Create an invite token for another peer
     pub fn create_invite_token(&self, invitee_id: String) -> InviteToken {
-        InviteToken::new(
-            self.our_id.clone(),
-            self.our_public_key.clone(),
-            invitee_id,
-        )
+        InviteToken::new(self.our_id.clone(), self.our_public_key.clone(), invitee_id)
     }
 
     /// Record that we invited someone
@@ -268,7 +260,9 @@ impl InviteSystem {
 
     /// Check if we're directly connected to a peer in the trust graph
     pub fn is_direct_connection(&self, peer_id: &str) -> bool {
-        self.chain.get_invitees(&self.our_id).contains(&peer_id.to_string())
+        self.chain
+            .get_invitees(&self.our_id)
+            .contains(&peer_id.to_string())
             || self.chain.get_inviter(&self.our_id).as_deref() == Some(peer_id)
     }
 
@@ -293,11 +287,7 @@ mod tests {
     use super::*;
 
     fn test_token() -> InviteToken {
-        InviteToken::new(
-            "alice".to_string(),
-            vec![1, 2, 3, 4, 5],
-            "bob".to_string(),
-        )
+        InviteToken::new("alice".to_string(), vec![1, 2, 3, 4, 5], "bob".to_string())
     }
 
     #[test]
@@ -331,9 +321,7 @@ mod tests {
 
     #[test]
     fn test_invite_token_expiry_check() {
-        let token = test_token()
-            .with_signature(vec![1, 2, 3])
-            .with_expiry(0);
+        let token = test_token().with_signature(vec![1, 2, 3]).with_expiry(0);
 
         std::thread::sleep(std::time::Duration::from_millis(10));
         assert!(!token.is_valid());
@@ -369,7 +357,11 @@ mod tests {
     fn test_get_invitees() {
         let mut chain = InviteChain::new();
         chain.record_invite("inv1".to_string(), "alice".to_string(), "bob".to_string());
-        chain.record_invite("inv2".to_string(), "alice".to_string(), "charlie".to_string());
+        chain.record_invite(
+            "inv2".to_string(),
+            "alice".to_string(),
+            "charlie".to_string(),
+        );
 
         let invitees = chain.get_invitees("alice");
         assert_eq!(invitees.len(), 2);
@@ -394,7 +386,11 @@ mod tests {
         let mut chain = InviteChain::new();
         chain.record_invite("inv1".to_string(), "alice".to_string(), "bob".to_string());
         chain.record_invite("inv2".to_string(), "bob".to_string(), "charlie".to_string());
-        chain.record_invite("inv3".to_string(), "charlie".to_string(), "diana".to_string());
+        chain.record_invite(
+            "inv3".to_string(),
+            "charlie".to_string(),
+            "diana".to_string(),
+        );
 
         assert_eq!(chain.distance_from_root("alice"), 0);
         assert_eq!(chain.distance_from_root("bob"), 1);
@@ -406,7 +402,11 @@ mod tests {
     fn test_get_direct_invitations() {
         let mut chain = InviteChain::new();
         chain.record_invite("inv1".to_string(), "alice".to_string(), "bob".to_string());
-        chain.record_invite("inv2".to_string(), "alice".to_string(), "charlie".to_string());
+        chain.record_invite(
+            "inv2".to_string(),
+            "alice".to_string(),
+            "charlie".to_string(),
+        );
 
         let direct = chain.get_direct_invitations("alice");
         assert_eq!(direct.len(), 2);
@@ -475,8 +475,12 @@ mod tests {
     #[test]
     fn test_get_trust_chain_via_system() {
         let mut system = InviteSystem::new("alice".to_string(), vec![1, 2, 3]);
-        system.chain.record_invite("inv1".to_string(), "alice".to_string(), "bob".to_string());
-        system.chain.record_invite("inv2".to_string(), "bob".to_string(), "charlie".to_string());
+        system
+            .chain
+            .record_invite("inv1".to_string(), "alice".to_string(), "bob".to_string());
+        system
+            .chain
+            .record_invite("inv2".to_string(), "bob".to_string(), "charlie".to_string());
 
         let trust_chain = system.get_trust_chain("charlie");
         assert_eq!(trust_chain.len(), 3);

@@ -1,0 +1,22 @@
+{
+  "name": "log-visualizer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "d3": "^7.9.0",
+    "d3-sankey": "^0.12.3",
+    "express": "^5.2.1",
+    "lucide-react": "^0.577.0",
+    "ws": "^8.19.0"
+  }
+}

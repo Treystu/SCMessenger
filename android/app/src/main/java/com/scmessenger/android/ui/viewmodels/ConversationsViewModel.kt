@@ -8,10 +8,12 @@ import com.scmessenger.android.service.MessageEvent
 import com.scmessenger.android.ui.chat.DeliveryStateMapper
 import com.scmessenger.android.ui.chat.DeliveryStatePresentation
 import com.scmessenger.android.ui.chat.PendingDeliverySnapshot
+import com.scmessenger.android.utils.PeerIdValidator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -123,19 +125,25 @@ class ConversationsViewModel @Inject constructor(
     /**
      * Send a message to a peer.
      */
-    fun sendMessage(peerId: String, content: String) {
-        viewModelScope.launch(Dispatchers.IO) {
+    suspend fun sendMessage(peerId: String, content: String): Boolean {
+        return withContext(Dispatchers.IO) {
             try {
+                Timber.d("VIEWMODEL_SEND: peerId='$peerId', contentLen=${content.length}")
+                val normalizedPeerId = PeerIdValidator.normalize(peerId)
+                Timber.d("VIEWMODEL_SEND: normalized='$normalizedPeerId'")
+                
                 // Call repository to handle encryption and transmission
-                meshRepository.sendMessage(peerId, content)
+                meshRepository.sendMessage(normalizedPeerId, content)
 
                 // Reload messages to show the sent message
                 loadMessages()
 
-                Timber.i("Message sent to $peerId")
+                Timber.i("Message sent to $normalizedPeerId")
+                true
             } catch (e: Exception) {
                 _error.value = "Failed to send message: ${e.message}"
                 Timber.e(e, "Failed to send message")
+                false
             }
         }
     }
@@ -188,6 +196,72 @@ class ConversationsViewModel @Inject constructor(
                 _error.value = "Failed to clear history: ${e.message}"
                 Timber.e(e, "Failed to clear history")
             }
+        }
+    }
+
+    /**
+     * Check if a peer can be messaged (exists in contacts or discovered peers).
+     */
+    fun isPeerAvailable(peerId: String): Boolean {
+        val contact = getContactForPeer(peerId)
+        if (contact != null) return true
+        
+        // Check discovered peers
+        val discoveredPeers = meshRepository.discoveredPeers.value
+        return discoveredPeers[peerId]?.publicKey != null
+    }
+
+    /**
+     * Get peer info for adding to contacts quickly.
+     */
+    fun getPeerInfo(peerId: String): Pair<String, String>? {
+        // Check discovered peers for public key (case-insensitive)
+        val discovered = meshRepository.discoveredPeers.value.entries.firstOrNull {
+            it.key.equals(peerId, ignoreCase = true)
+        }?.value
+        return discovered?.publicKey?.let { pubKey ->
+            val nickname = discovered.nickname ?: peerId.take(8)
+            pubKey to nickname
+        }
+    }
+
+    /**
+     * Block a peer by ID
+     */
+    fun blockPeer(peerId: String, reason: String? = null) {
+        viewModelScope.launch {
+            try {
+                meshRepository.blockPeer(peerId, reason)
+                Timber.i("Blocked peer: $peerId")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to block peer: $peerId")
+            }
+        }
+    }
+
+    /**
+     * Unblock a peer by ID
+     */
+    fun unblockPeer(peerId: String) {
+        viewModelScope.launch {
+            try {
+                meshRepository.unblockPeer(peerId)
+                Timber.i("Unblocked peer: $peerId")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to unblock peer: $peerId")
+            }
+        }
+    }
+
+    /**
+     * Check if a peer is blocked
+     */
+    fun isBlocked(peerId: String): Boolean {
+        return try {
+            meshRepository.isBlocked(peerId)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to check if peer is blocked: $peerId")
+            false
         }
     }
 

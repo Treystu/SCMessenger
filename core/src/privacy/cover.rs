@@ -491,7 +491,7 @@ mod tests {
 
         assert_eq!(deserialized.rate_per_minute, 15);
         assert_eq!(deserialized.message_size, 2048);
-        assert_eq!(deserialized.enabled, true);
+        assert!(deserialized.enabled);
     }
 
     #[test]
@@ -508,7 +508,7 @@ mod tests {
 
         assert_eq!(deserialized.recipient_hint, msg.recipient_hint);
         assert_eq!(deserialized.encrypted_payload, msg.encrypted_payload);
-        assert_eq!(deserialized.is_cover, true);
+        assert!(deserialized.is_cover);
     }
 
     #[test]

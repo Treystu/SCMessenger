@@ -147,7 +147,11 @@ impl PeerExchangeManager {
     /// Get peers sorted by reliability (highest first)
     pub fn get_peers_by_reliability(&self) -> Vec<RelayPeerInfo> {
         let mut peers = self.peers.values().cloned().collect::<Vec<_>>();
-        peers.sort_by(|a, b| b.reliability_score.partial_cmp(&a.reliability_score).unwrap_or(std::cmp::Ordering::Equal));
+        peers.sort_by(|a, b| {
+            b.reliability_score
+                .partial_cmp(&a.reliability_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         peers
     }
 
@@ -165,7 +169,8 @@ impl PeerExchangeManager {
             .unwrap_or_default()
             .as_secs();
 
-        self.peers.retain(|_, peer| now - peer.last_seen < self.peer_ttl_secs);
+        self.peers
+            .retain(|_, peer| now - peer.last_seen < self.peer_ttl_secs);
     }
 
     /// Record a successful connection to a peer

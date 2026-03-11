@@ -75,11 +75,7 @@ pub struct InvitePayload {
 
 impl InvitePayload {
     /// Create a new invite payload
-    pub fn new(
-        peer_id: String,
-        addresses: Vec<String>,
-        inviter_public_key: Vec<u8>,
-    ) -> Self {
+    pub fn new(peer_id: String, addresses: Vec<String>, inviter_public_key: Vec<u8>) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -119,26 +115,22 @@ impl InvitePayload {
 
     /// Serialize to bytes (for QR codes)
     pub fn to_bytes(&self) -> Result<Vec<u8>, BootstrapError> {
-        bincode::serialize(self)
-            .map_err(|e| BootstrapError::SerializationError(e.to_string()))
+        bincode::serialize(self).map_err(|e| BootstrapError::SerializationError(e.to_string()))
     }
 
     /// Deserialize from bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, BootstrapError> {
-        bincode::deserialize(bytes)
-            .map_err(|e| BootstrapError::SerializationError(e.to_string()))
+        bincode::deserialize(bytes).map_err(|e| BootstrapError::SerializationError(e.to_string()))
     }
 
     /// Serialize to JSON (for links)
     pub fn to_json(&self) -> Result<String, BootstrapError> {
-        serde_json::to_string(self)
-            .map_err(|e| BootstrapError::SerializationError(e.to_string()))
+        serde_json::to_string(self).map_err(|e| BootstrapError::SerializationError(e.to_string()))
     }
 
     /// Deserialize from JSON
     pub fn from_json(json: &str) -> Result<Self, BootstrapError> {
-        serde_json::from_str(json)
-            .map_err(|e| BootstrapError::SerializationError(e.to_string()))
+        serde_json::from_str(json).map_err(|e| BootstrapError::SerializationError(e.to_string()))
     }
 }
 
@@ -156,11 +148,7 @@ pub struct BootstrapManager {
 
 impl BootstrapManager {
     /// Create a new bootstrap manager
-    pub fn new(
-        peer_id: String,
-        public_key: Vec<u8>,
-        addresses: Vec<String>,
-    ) -> Self {
+    pub fn new(peer_id: String, public_key: Vec<u8>, addresses: Vec<String>) -> Self {
         Self {
             our_peer_id: peer_id,
             our_public_key: public_key,
@@ -199,7 +187,10 @@ impl BootstrapManager {
     }
 
     /// Accept an invite and get the inviter's info
-    pub fn accept_invite(&self, invite_payload: InvitePayload) -> Result<InvitePayload, BootstrapError> {
+    pub fn accept_invite(
+        &self,
+        invite_payload: InvitePayload,
+    ) -> Result<InvitePayload, BootstrapError> {
         // Verify invite is still valid
         if !invite_payload.is_valid() {
             return Err(BootstrapError::InviteExpired);
@@ -376,7 +367,9 @@ mod tests {
     #[test]
     fn test_generate_invite() {
         let manager = test_bootstrap_manager();
-        let invite = manager.generate_invite().expect("Failed to generate invite");
+        let invite = manager
+            .generate_invite()
+            .expect("Failed to generate invite");
 
         assert_eq!(invite.peer_id, "peer1");
         assert_eq!(invite.addresses.len(), 1);
@@ -386,7 +379,9 @@ mod tests {
     #[test]
     fn test_generate_qr_data() {
         let manager = test_bootstrap_manager();
-        let data = manager.generate_qr_data().expect("Failed to generate QR data");
+        let data = manager
+            .generate_qr_data()
+            .expect("Failed to generate QR data");
 
         assert!(!data.is_empty());
 
@@ -398,9 +393,13 @@ mod tests {
     #[test]
     fn test_parse_qr_data() {
         let manager = test_bootstrap_manager();
-        let data = manager.generate_qr_data().expect("Failed to generate QR data");
+        let data = manager
+            .generate_qr_data()
+            .expect("Failed to generate QR data");
 
-        let invite = manager.parse_qr_data(&data).expect("Failed to parse QR data");
+        let invite = manager
+            .parse_qr_data(&data)
+            .expect("Failed to parse QR data");
         assert_eq!(invite.peer_id, "peer1");
     }
 

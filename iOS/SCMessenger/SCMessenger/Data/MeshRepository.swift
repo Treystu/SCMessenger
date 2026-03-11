@@ -1084,7 +1084,8 @@ final class MeshRepository {
                     publicKey: normalizedSenderKey,
                     addedAt: UInt64(Date().timeIntervalSince1970),
                     lastSeen: UInt64(Date().timeIntervalSince1970),
-                    notes: routeNotes
+                    notes: routeNotes,
+                    lastKnownDeviceId: nil
                 )
                 do {
                     try contactManager?.add(contact: autoContact)
@@ -1105,7 +1106,8 @@ final class MeshRepository {
                     publicKey: existingContact.publicKey,
                     addedAt: existingContact.addedAt,
                     lastSeen: existingContact.lastSeen,
-                    notes: existingContact.notes
+                    notes: existingContact.notes,
+                    lastKnownDeviceId: nil
                 )
                 try? contactManager?.add(contact: updatedContact)
                 contactManager?.flush()
@@ -1131,7 +1133,8 @@ final class MeshRepository {
                     publicKey: existingContact.publicKey,
                     addedAt: existingContact.addedAt,
                     lastSeen: existingContact.lastSeen,
-                    notes: updatedNotesWithListeners
+                    notes: updatedNotesWithListeners,
+                    lastKnownDeviceId: nil
                 )
                 try? contactManager?.add(contact: updatedContact)
                 contactManager?.flush()
@@ -1616,7 +1619,7 @@ final class MeshRepository {
         }
 
         let exactMatch = contacts.contains {
-            $0.peerId == senderId && normalizePublicKey($0.publicKey) == normalizedIncomingKey
+            $0.peerId.lowercased() == senderId.lowercased() && normalizePublicKey($0.publicKey) == normalizedIncomingKey
         }
         if exactMatch { return senderId }
 
@@ -1633,10 +1636,10 @@ final class MeshRepository {
         if isLibp2pPeerId(senderId) {
             let linkedIdentityMatches = contacts.filter {
                 guard normalizePublicKey($0.publicKey) == normalizedIncomingKey else { return false }
-                guard $0.peerId != senderId else { return false }
+                guard $0.peerId.lowercased() != senderId.lowercased() else { return false }
                 guard let notes = $0.notes,
                       let routing = parseRoutingInfo(notes: notes) else { return false }
-                return routing.libp2pPeerId == senderId
+                return routing.libp2pPeerId.lowercased() == senderId.lowercased()
             }
 
             if linkedIdentityMatches.count == 1 {
@@ -2987,7 +2990,8 @@ final class MeshRepository {
                     publicKey: contact.publicKey,
                     addedAt: contact.addedAt,
                     lastSeen: UInt64(Date().timeIntervalSince1970),
-                    notes: updatedNotes
+                    notes: updatedNotes,
+                    lastKnownDeviceId: nil
                 )
                 try? contactManager?.add(contact: updatedContact)
                 contactManager?.flush()
@@ -3114,7 +3118,7 @@ final class MeshRepository {
         listeners: [String],
         blePeerId: String? = nil
     ) {
-        let canonicalPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let canonicalPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !canonicalPeerId.isEmpty,
               let normalizedKey = normalizePublicKey(publicKey) else {
             return
@@ -3122,7 +3126,7 @@ final class MeshRepository {
 
         let normalizedNickname = normalizeNickname(nickname)
         let normalizedRoute = {
-            let trimmed = libp2pPeerId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let trimmed = libp2pPeerId?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
             return trimmed.isEmpty ? nil : trimmed
         }()
         let normalizedBle = {
@@ -4334,7 +4338,8 @@ final class MeshRepository {
                 publicKey: contact.publicKey,
                 addedAt: contact.addedAt,
                 lastSeen: contact.lastSeen,
-                notes: withListeners
+                notes: withListeners,
+                lastKnownDeviceId: nil
             )
             try? contactManager?.add(contact: updated)
             contactManager?.flush()
@@ -4402,7 +4407,8 @@ final class MeshRepository {
             publicKey: resolvedPublicKey,
             addedAt: existing?.addedAt ?? now,
             lastSeen: now,
-            notes: notes
+            notes: notes,
+            lastKnownDeviceId: nil
         )
         try? contactManager?.add(contact: updated)
         contactManager?.flush()

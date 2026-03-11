@@ -345,21 +345,12 @@ fun ContactItem(
                     }
                 }
 
-                Row {
-                    IconButton(onClick = { showEditNicknameDialog = true }) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit Nickname",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    IconButton(onClick = { showDeleteDialog = true }) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete Contact",
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
+                IconButton(onClick = { showEditNicknameDialog = true }) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit Nickname",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }

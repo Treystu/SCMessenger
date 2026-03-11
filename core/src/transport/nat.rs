@@ -665,8 +665,10 @@ mod tests {
 
     #[test]
     fn test_nat_traversal_invalid_config() {
-        let mut config = NatConfig::default();
-        config.max_attempts = 0;
+        let config = NatConfig {
+            max_attempts: 0,
+            ..Default::default()
+        };
         assert!(NatTraversal::new(config).is_err());
     }
 
@@ -718,8 +720,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_relay_fallback_disabled() {
-        let mut config = NatConfig::default();
-        config.enable_relay_fallback = false;
+        let config = NatConfig {
+            enable_relay_fallback: false,
+            ..Default::default()
+        };
 
         let traversal = NatTraversal::new(config).expect("Failed to create");
 

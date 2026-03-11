@@ -19,6 +19,8 @@ struct ContactsListView: View {
     @State private var quickConnectError: String? = nil
     @State private var pendingDeletePeerId: String? = nil
     @State private var pendingDeleteDisplayName: String = ""
+    @State private var editingContact: Contact? = nil
+    @State private var editNickname: String = ""
 
     var body: some View {
         List {
@@ -52,6 +54,21 @@ struct ContactsListView: View {
                         )
                     ) {
                         ContactRow(contact: contact)
+                    }
+                    .contextMenu {
+                        Button {
+                            editingContact = contact
+                            editNickname = contact.localNickname ?? contact.nickname ?? ""
+                        } label: {
+                            Label("Edit Nickname", systemImage: "pencil")
+                        }
+                        
+                        Button(role: .destructive) {
+                            pendingDeletePeerId = contact.peerId
+                            pendingDeleteDisplayName = conversationDisplayName(for: contact)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
                     }
                 }
                 .onDelete { offsets in
@@ -142,6 +159,37 @@ struct ContactsListView: View {
                 Text("Remove \(pendingDeleteDisplayName) from contacts?")
             }
         )
+        .alert(
+            "Edit Nickname",
+            isPresented: Binding(
+                get: { editingContact != nil },
+                set: { if !$0 { editingContact = nil } }
+            ),
+            actions: {
+                TextField("Nickname", text: $editNickname)
+                Button("Save") {
+                    guard let contact = editingContact else { return }
+                    let trimmed = editNickname.trimmingCharacters(in: .whitespacesAndNewlines)
+                    try? viewModel?.setLocalNickname(peerId: contact.peerId, nickname: trimmed.isEmpty ? nil : trimmed)
+                    viewModel?.loadContacts()
+                    editingContact = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    editingContact = nil
+                }
+            },
+            message: {
+                if let contact = editingContact {
+                    if let federatedNick = contact.nickname, !federatedNick.isEmpty {
+                        Text("Set local nickname (federated: @\(federatedNick))")
+                    } else {
+                        Text("Set local nickname for \(contact.peerId.prefix(16))...")
+                    }
+                } else {
+                    Text("Set local nickname")
+                }
+            }
+        )
     }
 
     private func quickConnect(_ peer: NearbyPeer) {
@@ -173,7 +221,8 @@ struct ContactsListView: View {
             publicKey: publicKey,
             addedAt: UInt64(Date().timeIntervalSince1970),
             lastSeen: nil,
-            notes: notesParts.isEmpty ? nil : notesParts.joined(separator: ";")
+            notes: notesParts.isEmpty ? nil : notesParts.joined(separator: ";"),
+            lastKnownDeviceId: nil
         )
 
         do {
@@ -446,7 +495,8 @@ struct AddContactView: View {
             publicKey: finalPublicKey,
             addedAt: UInt64(Date().timeIntervalSince1970),
             lastSeen: nil,
-            notes: notesValue
+            notes: notesValue,
+            lastKnownDeviceId: nil
         )
 
         do {

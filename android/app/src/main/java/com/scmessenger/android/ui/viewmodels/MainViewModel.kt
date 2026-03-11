@@ -191,7 +191,8 @@ class MainViewModel @Inject constructor(
                     publicKey = publicKey,
                     addedAt = (System.currentTimeMillis() / 1000).toULong(),
                     lastSeen = null,
-                    notes = notes
+                    notes = notes,
+                    lastKnownDeviceId = null
                 )
                 meshRepository.addContact(contact)
                 Timber.i("Contact imported: ${identityId.take(8)}...")

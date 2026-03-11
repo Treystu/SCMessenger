@@ -104,6 +104,23 @@ pub enum RelayMessage {
         /// List of known relay peers
         known_relays: Vec<RelayPeerInfoMessage>,
     },
+    /// Peer announcement: relay broadcasts when new peer joins
+    PeerJoined {
+        /// Peer that just joined
+        peer_info: RelayPeerInfoMessage,
+    },
+    /// Peer departure: relay broadcasts when peer leaves
+    PeerLeft {
+        /// Peer ID that left
+        peer_id: String,
+    },
+    /// Peer list request: client requests full list of connected peers
+    PeerListRequest,
+    /// Peer list response: relay sends list of all connected peers
+    PeerListResponse {
+        /// All currently connected peers
+        peers: Vec<RelayPeerInfoMessage>,
+    },
     /// Keep-alive ping
     Ping,
     /// Ping response
@@ -166,6 +183,10 @@ impl RelayMessage {
             RelayMessage::PullRequest { .. } => "PullRequest",
             RelayMessage::PullResponse { .. } => "PullResponse",
             RelayMessage::PeerExchange { .. } => "PeerExchange",
+            RelayMessage::PeerJoined { .. } => "PeerJoined",
+            RelayMessage::PeerLeft { .. } => "PeerLeft",
+            RelayMessage::PeerListRequest => "PeerListRequest",
+            RelayMessage::PeerListResponse { .. } => "PeerListResponse",
             RelayMessage::Ping => "Ping",
             RelayMessage::Pong => "Pong",
             RelayMessage::Disconnect { .. } => "Disconnect",

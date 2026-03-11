@@ -129,7 +129,7 @@ impl HistoryManager {
             let record = record.adjust_legacy_timestamps();
 
             if let Some(ref peer) = peer_filter {
-                if &record.peer_id == peer {
+                if record.peer_id.eq_ignore_ascii_case(peer) {
                     records.push(record);
                 }
             } else {
@@ -191,7 +191,7 @@ impl HistoryManager {
                 serde_json::from_slice(&value).map_err(|_| IronCoreError::Internal)?;
             let record = record.adjust_legacy_timestamps();
 
-            if record.peer_id == peer_id {
+            if record.peer_id.eq_ignore_ascii_case(&peer_id) {
                 self.backend
                     .remove(&key)
                     .map_err(|_| IronCoreError::StorageError)?;
@@ -321,5 +321,103 @@ impl HistoryManager {
 
     pub fn flush(&self) {
         let _ = self.backend.flush();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::store::backend::MemoryStorage;
+
+    #[test]
+    fn test_case_insensitive_peer_id_matching() {
+        let backend = Arc::new(MemoryStorage::new());
+        let history = HistoryManager::new(backend);
+
+        // Add message with lowercase peer ID
+        let record1 = MessageRecord {
+            id: "msg1".to_string(),
+            peer_id: "12d3koowtest123".to_string(),
+            direction: MessageDirection::Sent,
+            content: "test message 1".to_string(),
+            timestamp: 1000,
+            sender_timestamp: 1000,
+            delivered: false,
+        };
+        history.add(record1.clone()).unwrap();
+
+        // Add message with mixed case peer ID
+        let record2 = MessageRecord {
+            id: "msg2".to_string(),
+            peer_id: "12D3KooWTEST123".to_string(),
+            direction: MessageDirection::Received,
+            content: "test message 2".to_string(),
+            timestamp: 2000,
+            sender_timestamp: 2000,
+            delivered: true,
+        };
+        history.add(record2.clone()).unwrap();
+
+        // Query with uppercase - should find both
+        let results = history
+            .conversation("12D3KOOWTEST123".to_string(), 10)
+            .unwrap();
+        assert_eq!(results.len(), 2, "Should find messages regardless of case");
+
+        // Query with lowercase - should find both
+        let results = history
+            .conversation("12d3koowtest123".to_string(), 10)
+            .unwrap();
+        assert_eq!(results.len(), 2, "Should find messages regardless of case");
+
+        // Query with original mixed case - should find both
+        let results = history
+            .conversation("12D3KooWTEST123".to_string(), 10)
+            .unwrap();
+        assert_eq!(results.len(), 2, "Should find messages regardless of case");
+    }
+
+    #[test]
+    fn test_remove_conversation_case_insensitive() {
+        let backend = Arc::new(MemoryStorage::new());
+        let history = HistoryManager::new(backend);
+
+        // Add messages with different case variants
+        let record1 = MessageRecord {
+            id: "msg1".to_string(),
+            peer_id: "lowercase123".to_string(),
+            direction: MessageDirection::Sent,
+            content: "test 1".to_string(),
+            timestamp: 1000,
+            sender_timestamp: 1000,
+            delivered: false,
+        };
+        history.add(record1).unwrap();
+
+        let record2 = MessageRecord {
+            id: "msg2".to_string(),
+            peer_id: "LOWERCASE123".to_string(),
+            direction: MessageDirection::Sent,
+            content: "test 2".to_string(),
+            timestamp: 2000,
+            sender_timestamp: 2000,
+            delivered: false,
+        };
+        history.add(record2).unwrap();
+
+        // Remove with mixed case
+        history
+            .remove_conversation("LowerCase123".to_string())
+            .unwrap();
+
+        // Verify both were removed
+        let results = history
+            .conversation("lowercase123".to_string(), 10)
+            .unwrap();
+        assert_eq!(
+            results.len(),
+            0,
+            "All messages should be removed regardless of case"
+        );
     }
 }

@@ -102,7 +102,11 @@ pub fn encode_wakeup(payload: &WakeUpPayload, key: &[u8; 32]) -> Result<Vec<u8>,
     let mut output = vec![0u8; 22];
 
     // Byte 0: Message available flag (MSB) + first byte of recipient hint (7 bits)
-    let msg_flag = if payload.message_available { 0x80 } else { 0x00 };
+    let msg_flag = if payload.message_available {
+        0x80
+    } else {
+        0x00
+    };
     output[0] = msg_flag | (payload.recipient_hint[0] & 0x7F);
 
     // Bytes 1-3: recipient_hint[1..4]
@@ -125,7 +129,7 @@ pub fn encode_wakeup(payload: &WakeUpPayload, key: &[u8; 32]) -> Result<Vec<u8>,
     // Bytes 8-20: Encrypted payload (13 bytes of zeros for basic beacon)
     // In a fuller implementation, this would contain actual message data
     for i in 0..13 {
-        output[8 + i] = 0x00 ^ keystream[(i + 4) % 32];
+        output[8 + i] = keystream[(i + 4) % 32];
     }
 
     // Bytes 21: unused (for alignment)
@@ -219,10 +223,7 @@ impl FindMyBeaconManager {
         relay_hint: [u8; 4],
         message_available: bool,
     ) -> Result<Vec<u8>, FindMyError> {
-        let key = self
-            .config
-            .payload_key
-            .ok_or(FindMyError::MissingKey)?;
+        let key = self.config.payload_key.ok_or(FindMyError::MissingKey)?;
 
         let payload = WakeUpPayload {
             recipient_hint,
@@ -234,14 +235,8 @@ impl FindMyBeaconManager {
     }
 
     /// Process an incoming beacon
-    pub fn process_beacon(
-        &self,
-        beacon_data: &[u8],
-    ) -> Result<Option<WakeUpPayload>, FindMyError> {
-        let key = self
-            .config
-            .payload_key
-            .ok_or(FindMyError::MissingKey)?;
+    pub fn process_beacon(&self, beacon_data: &[u8]) -> Result<Option<WakeUpPayload>, FindMyError> {
+        let key = self.config.payload_key.ok_or(FindMyError::MissingKey)?;
 
         match decode_wakeup(beacon_data, &key) {
             Ok(payload) => Ok(Some(payload)),
@@ -256,10 +251,7 @@ impl FindMyBeaconManager {
         beacon_data: &[u8],
         our_hint: &[u8; 4],
     ) -> Result<bool, FindMyError> {
-        let key = self
-            .config
-            .payload_key
-            .ok_or(FindMyError::MissingKey)?;
+        let key = self.config.payload_key.ok_or(FindMyError::MissingKey)?;
 
         is_our_wakeup(beacon_data, our_hint, &key)
     }
@@ -441,9 +433,7 @@ mod tests {
     #[test]
     fn test_find_my_config_builder() {
         let key = test_key();
-        let config = FindMyConfig::new(true)
-            .with_key(key)
-            .with_interval(300);
+        let config = FindMyConfig::new(true).with_key(key).with_interval(300);
 
         assert!(config.enabled);
         assert_eq!(config.broadcast_interval_secs, 300);

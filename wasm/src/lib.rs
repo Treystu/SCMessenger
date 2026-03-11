@@ -968,7 +968,8 @@ async fn start_swarm_runtime(
                 | scmessenger_core::transport::SwarmEvent::PortMapping(_)
                 | scmessenger_core::transport::SwarmEvent::TopicDiscovered { .. }
                 | scmessenger_core::transport::SwarmEvent::LedgerReceived { .. }
-                | scmessenger_core::transport::SwarmEvent::NatStatusChanged(_) => {}
+                | scmessenger_core::transport::SwarmEvent::NatStatusChanged(_)
+                | scmessenger_core::transport::SwarmEvent::PortMapping(_) => {}
             }
         }
 

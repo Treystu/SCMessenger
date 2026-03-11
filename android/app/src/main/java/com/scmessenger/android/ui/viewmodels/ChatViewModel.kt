@@ -61,6 +61,7 @@ class ChatViewModel @Inject constructor(
     init {
         observeMessageEvents()
         observeIncomingMessages()
+        observeMessageUpdates()
         observePeerEvents()
     }
 
@@ -82,10 +83,26 @@ class ChatViewModel @Inject constructor(
             try {
                 val currentPeer = _peerId.value ?: return@launch
                 val messageList = meshRepository.getConversation(currentPeer, limit = _conversationLimit.value)
+                
+                // MSG-PERSIST-001: Merge with existing optimistic messages, don't replace
+                val currentMessages = _messages.value
+                val mergedMessages = mutableListOf<uniffi.api.MessageRecord>()
+                
+                // Add all messages from history
+                mergedMessages.addAll(messageList)
+                
+                // Add optimistic messages that aren't in history yet
+                for (optimistic in currentMessages) {
+                    if (mergedMessages.none { it.id == optimistic.id }) {
+                        // Keep optimistic message if not confirmed yet
+                        mergedMessages.add(optimistic)
+                    }
+                }
+                
                 // MSG-ORDER-001: Sort strictly by sender-assigned timestamp to ensure consistent ordering across platforms
-                _messages.value = messageList.sortedBy { it.senderTimestamp }
+                _messages.value = mergedMessages.sortedBy { it.senderTimestamp }
 
-                Timber.d("Loaded ${messageList.size} messages for $currentPeer")
+                Timber.d("Loaded ${messageList.size} messages for $currentPeer (merged with ${currentMessages.size} existing)")
             } catch (e: Exception) {
                 _error.value = "Failed to load messages: ${e.message}"
                 Timber.e(e, "Failed to load messages")
@@ -133,19 +150,36 @@ class ChatViewModel @Inject constructor(
                 _isSending.value = true
                 _error.value = null
 
+                // Optimistically add message to UI immediately with temporary ID
+                val tempMessage = uniffi.api.MessageRecord(
+                    id = java.util.UUID.randomUUID().toString(),
+                    peerId = currentPeer,
+                    direction = uniffi.api.MessageDirection.SENT,
+                    content = content,
+                    timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                    senderTimestamp = (System.currentTimeMillis() / 1000).toULong(),
+                    delivered = false
+                )
+                
+                // Add to UI immediately
+                val currentMessages = _messages.value.toMutableList()
+                currentMessages.add(tempMessage)
+                _messages.value = currentMessages.sortedBy { it.senderTimestamp }
+
                 meshRepository.sendMessage(currentPeer, content)
 
                 // Clear input on success
                 _inputText.value = ""
                 _isTyping.value = false
 
-                // Reload messages to show the sent message
-                loadMessages()
+                // Message persistence is guaranteed - it's in history and UI
 
                 Timber.i("Message sent to $currentPeer")
             } catch (e: Exception) {
                 _error.value = "Failed to send message: ${e.message}"
                 Timber.e(e, "Failed to send message")
+                // On error, reload to get accurate state
+                loadMessages()
             } finally {
                 _isSending.value = false
             }
@@ -191,8 +225,8 @@ class ChatViewModel @Inject constructor(
             MeshEventBus.messageEvents.collect { event ->
                 when (event) {
                     is MessageEvent.Received -> {
-                        // Reload if message is for current peer
-                        if (event.messageRecord.peerId == _peerId.value) {
+                        // Reload if message is for current peer (case-insensitive)
+                        if (event.messageRecord.peerId.equals(_peerId.value, ignoreCase = true)) {
                             loadMessages()
                         }
                     }
@@ -217,8 +251,48 @@ class ChatViewModel @Inject constructor(
     private fun observeIncomingMessages() {
         viewModelScope.launch {
             meshRepository.incomingMessages.collect { message ->
-                if (message.peerId == _peerId.value) {
+                if (message.peerId.equals(_peerId.value, ignoreCase = true)) {
                     loadMessages()
+                }
+            }
+        }
+    }
+
+    /**
+     * Observe message updates (sent messages).
+     */
+    private fun observeMessageUpdates() {
+        viewModelScope.launch {
+            meshRepository.messageUpdates.collect { message ->
+                if (message.peerId.equals(_peerId.value, ignoreCase = true)) {
+                    // Replace or add the message
+                    val currentMessages = _messages.value.toMutableList()
+                    
+                    // Find and replace if exists, otherwise add
+                    val existingIndex = currentMessages.indexOfFirst { it.id == message.id }
+                    if (existingIndex >= 0) {
+                        currentMessages[existingIndex] = message
+                        Timber.d("Updated message ${message.id.take(8)} in UI")
+                    } else {
+                        // Check if we have a duplicate by content and timestamp (optimistic message)
+                        val duplicateIndex = currentMessages.indexOfFirst { existing ->
+                            existing.content == message.content &&
+                            existing.direction == message.direction &&
+                            Math.abs(existing.senderTimestamp.toLong() - message.senderTimestamp.toLong()) < 2
+                        }
+                        
+                        if (duplicateIndex >= 0) {
+                            // Replace optimistic message with real one
+                            currentMessages[duplicateIndex] = message
+                            Timber.d("Replaced optimistic message with real message ${message.id.take(8)}")
+                        } else {
+                            // New message, add it
+                            currentMessages.add(message)
+                            Timber.d("Added sent message ${message.id.take(8)} to UI")
+                        }
+                    }
+                    
+                    _messages.value = currentMessages.sortedBy { it.senderTimestamp }
                 }
             }
         }

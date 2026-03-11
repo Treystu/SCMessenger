@@ -30,7 +30,6 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - WS13.2 status: **transport boundary complete, relay metadata plumbing implemented, `last_known_device_id` wired in Contact**. WS13.3 (registration protocol) and WS13.4 (registry/custody state machine) are now unblocked architecturally.
 
 ## 2026-03-10 WS13 Full-Stream Execution Audit (WS13.1 Landed, WS13.2 Landed in Core)
-
 - Re-ran the required WS13 preflight on the rebased tree:
   - `cargo fmt --all -- --check` — **pass**
   - `cargo build --workspace` — **pass**
@@ -194,6 +193,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 ## 2026-03-09 Critical Bug Fixes & NAT Traversal (Verified)
 
 ### Relay Server Implementation
+
 - **All Nodes Now Act as Relays**:
   - Added `relay::Behaviour` (relay server) to `IronCoreBehaviour` in `core/src/transport/behaviour.rs`
   - Nodes can now both USE relays (client) and BE relays (server) for NAT traversal
@@ -202,6 +202,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - Logs reservation acceptance and circuit establishment at info level
 
 ### BLE Subscription Tracking Fix
+
 - **Fixed DeadObjectException in BLE GATT Server**:
   - Added `subscribedDevices` map to track which clients have subscribed to notifications
   - Implemented `onDescriptorWriteRequest` handler to track subscription state
@@ -210,6 +211,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - File: `android/app/src/main/java/com/scmessenger/android/transport/ble/BleGattServer.kt`
 
 ### Message Delivery Status Fix
+
 - **Eliminated False Delivery Positives**:
   - Fixed bug where BLE transport ACK was treated as full delivery confirmation
   - Messages now only marked "delivered" when core mesh network confirms
@@ -218,17 +220,71 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - File: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` (lines 3207-3326)
 
 ### Android UI Fixes
+
 - **Fixed Keyboard Covering Chat Input**:
   - Added `.imePadding()` to chat input Row for proper keyboard handling
   - Set `contentWindowInsets = WindowInsets(0, 0, 0, 0)` on Scaffold
   - File: `android/app/src/main/java/com/scmessenger/android/ui/screens/ChatScreen.kt`
 
+## 2026-03-10 Transport Optimization & UI Enhancements (Verified)
+
+### Fast Transport Switching
+
+- **Reduced Timeouts for BLE/WiFi Transitions**:
+  - WiFi/Direct timeout: 5000ms → 2000ms (60% reduction)
+  - BLE/Relay-circuit timeout: 3500ms → 1500ms (57% reduction)
+  - Enables faster failover when primary transport unavailable
+  - File: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
+
+### Aggressive Retry Backoff
+
+- **Optimized Initial Retry Schedule**:
+  - Attempt 1: immediate (was 2s)
+  - Attempt 2: 1s (was 4s)
+  - Attempts 3-6: 2s, 4s, 8s, 16s (was 8s, 16s, 32s, 64s)
+  - Attempts 7-20: 60s steady retry (unchanged)
+  - Attempts 21+: 300s long-term (unchanged)
+  - Reduces time-to-first-retry by 2s, critical for transport transitions
+  - File: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
+
+### Enhanced Transport Logging
+
+- **Comprehensive Transport Visibility**:
+  - Logs dial candidates count and transport types for each route attempt
+  - Logs connection success/failure with timeout values
+  - Logs delivery latency in milliseconds for both direct and relay-circuit paths
+  - Adds transport count to delivery state logging
+  - Enables real-time debugging of WiFi↔BLE↔Cellular routing decisions
+  - File: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
+
+### Android Mesh Tab Scrolling Fix
+
+- **LazyColumn for Large Peer Lists**:
+  - Replaced `Column` + `verticalScroll` + `forEach` with `LazyColumn` + `items()`
+  - Enables efficient rendering and scrolling for 50+ discovered peers
+  - Maintains all status cards, stats, and performance metrics as list items
+  - File: `android/app/src/main/java/com/scmessenger/android/ui/screens/DashboardScreen.kt`
+
+### Android ID Normalization
+
+- **Standardized Peer ID Handling**:
+  - Added `PeerIdValidator` utility for lowercase/trimmed ID normalization
+  - Updated `MeshRepository.sendMessage` to normalize peer IDs before lookup
+  - Added fallback to discovered peers if not in contacts
+  - Added "Quick Add Contact" banner in ChatScreen for non-contact peers
+  - Fixes "Contact not found" error when messaging discovered peers
+  - Files: `android/app/src/main/java/com/scmessenger/android/utils/PeerIdValidator.kt`, `MeshRepository.kt`, `ChatScreen.kt`
+
 ### Build Status
+
 - Core (Rust): ✅ Built successfully with relay server
-- Android: ✅ Built and deployed (APK installed on device 26261JEGR01896)
+- Android: ✅ Built and deployed with transport optimizations
 - iOS: ✅ Framework rebuilt with relay server (device 00008130-001A48DA18EB8D3A)
 
 ### Documentation Created
+
+- `TRANSPORT_OPTIMIZATION_PLAN.md` - Multi-path delivery and transport switching optimization plan
+- `ANDROID_ID_MISMATCH_RCA.md` - Root cause analysis of peer ID normalization issues
 - `NAT_TRAVERSAL_IMPLEMENTATION.md` - Relay server implementation guide
 - `BLE_DEADOBJECT_BUG.md` - BLE subscription tracking bug analysis
 - `BLE_FALSE_DELIVERY_BUG.md` - Delivery status false positive bug
