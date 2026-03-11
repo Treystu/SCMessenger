@@ -459,6 +459,9 @@ fn should_apply_delivery_convergence_marker(
 
 fn extract_ed25519_public_key_from_peer_id(peer_id: &PeerId) -> Result<[u8; 32], &'static str> {
     let bytes = peer_id.to_bytes();
+    // Inline Ed25519 PeerIds use the protobuf-encoded public key bytes:
+    // 0x00(identity multihash), 0x24(total len 36), 0x08(field 1), 0x01(Ed25519),
+    // 0x12(field 2), 0x20(32-byte key), followed by the raw 32-byte public key.
     if bytes.len() == 38
         && bytes[0] == 0x00
         && bytes[1] == 0x24
@@ -1852,9 +1855,9 @@ pub async fn start_swarm_with_config(
                                             peer_id: peer,
                                             observed_address: response.observed_address,
                                         }).await;
+                                    }
+                                }
                             }
-                        }
-                    }
 
                             SwarmEvent::Behaviour(
                                 super::behaviour::IronCoreBehaviourEvent::Registration(
@@ -1863,8 +1866,7 @@ pub async fn start_swarm_with_config(
                             ) => {
                                 match message {
                                     request_response::Message::Request { request, channel, .. } => {
-                                        let response = match verify_registration_message(&peer, &request)
-                                        {
+                                        let response = match verify_registration_message(&peer, &request) {
                                             Ok(()) => {
                                                 match &request {
                                                     RegistrationMessage::Register(request) => {
@@ -1881,11 +1883,7 @@ pub async fn start_swarm_with_config(
                                                             peer,
                                                             request.payload.identity_id,
                                                             request.payload.from_device_id,
-                                                            request
-                                                                .payload
-                                                                .target_device_id
-                                                                .as_deref()
-                                                                .unwrap_or("none")
+                                                            request.payload.target_device_id.as_deref().unwrap_or("none")
                                                         );
                                                     }
                                                 }

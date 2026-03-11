@@ -270,7 +270,12 @@ pub struct RegistrationResponse {
 }
 
 fn validate_identity_id(identity_id: &str, error: &'static str) -> Result<(), &'static str> {
-    if identity_id.len() != 64 || !identity_id.chars().all(|c| c.is_ascii_hexdigit()) {
+    if identity_id.len() != 64
+        || !identity_id
+            .as_bytes()
+            .iter()
+            .all(|byte| byte.is_ascii_hexdigit())
+    {
         return Err(error);
     }
     Ok(())
