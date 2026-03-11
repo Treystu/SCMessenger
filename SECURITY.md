@@ -1,6 +1,6 @@
 # Security Policy
 
-Status: Active  
+Status: Active
 Last updated: 2026-03-07
 
 SCMessenger is in active pre-release development. Please **do not** report security issues in public GitHub issues.

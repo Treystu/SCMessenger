@@ -1,6 +1,6 @@
 # SCMessenger Copilot Instructions
 
-Status: Active  
+Status: Active
 Last updated: 2026-03-07
 
 Use these repository sources in order:

@@ -73,38 +73,38 @@ import uniffi.api.*
 
 class MeshRepository(context: Context) {
     private var swarmBridge: SwarmBridge? = null
-    
+
     fun startNetwork() {
         // SwarmBridge is created via UniFFI
         swarmBridge = SwarmBridge()
-        
+
         // In Rust code, you would wire this to an actual SwarmHandle
         // For now, mobile platforms need to trigger Rust-side wiring
     }
-    
-    suspend fun sendMessage(peerId: String, data: ByteArray) = 
+
+    suspend fun sendMessage(peerId: String, data: ByteArray) =
         withContext(Dispatchers.IO) {
             swarmBridge?.sendMessage(peerId, data)
         }
-    
-    suspend fun dialPeer(multiaddr: String) = 
+
+    suspend fun dialPeer(multiaddr: String) =
         withContext(Dispatchers.IO) {
             swarmBridge?.dial(multiaddr)
         }
-    
+
     fun getConnectedPeers(): List<String> {
         return swarmBridge?.getPeers() ?: emptyList()
     }
-    
+
     fun getSubscribedTopics(): List<String> {
         return swarmBridge?.getTopics() ?: emptyList()
     }
-    
-    suspend fun subscribeToTopic(topic: String) = 
+
+    suspend fun subscribeToTopic(topic: String) =
         withContext(Dispatchers.IO) {
             swarmBridge?.subscribeTopic(topic)
         }
-    
+
     fun shutdown() {
         swarmBridge?.shutdown()
     }
@@ -118,32 +118,32 @@ import scmessenger_mobile
 
 class MeshService {
     private var swarmBridge: SwarmBridge?
-    
+
     func startNetwork() {
         swarmBridge = SwarmBridge()
         // In Rust code, you would wire this to an actual SwarmHandle
     }
-    
+
     func sendMessage(peerId: String, data: Data) throws {
         try swarmBridge?.sendMessage(peerId: peerId, data: Array(data))
     }
-    
+
     func dialPeer(multiaddr: String) throws {
         try swarmBridge?.dial(multiaddr: multiaddr)
     }
-    
+
     func getConnectedPeers() -> [String] {
         return swarmBridge?.getPeers() ?? []
     }
-    
+
     func getSubscribedTopics() -> [String] {
         return swarmBridge?.getTopics() ?? []
     }
-    
+
     func subscribeToTopic(topic: String) throws {
         try swarmBridge?.subscribeTopic(topic: topic)
     }
-    
+
     func shutdown() {
         swarmBridge?.shutdown()
     }
@@ -160,10 +160,10 @@ SwarmBridge uses `tokio::runtime::Handle::block_on()` to bridge synchronous UniF
 pub fn send_message(&self, peer_id: String, data: Vec<u8>) -> Result<(), IronCoreError> {
     let handle = self.handle.lock().as_ref()
         .ok_or(IronCoreError::NetworkError)?;
-    
+
     let peer_id = PeerId::from_str(&peer_id)
         .map_err(|_| IronCoreError::InvalidInput)?;
-    
+
     if let Some(rt) = &self.runtime_handle {
         rt.block_on(handle.send_message(peer_id, data))
             .map_err(|_| IronCoreError::NetworkError)
@@ -250,11 +250,11 @@ Example:
 async fn test_swarm_bridge_integration() {
     let keypair = Keypair::generate_ed25519();
     let (tx, _rx) = mpsc::channel(10);
-    
+
     let handle = start_swarm(keypair, None, tx).await.unwrap();
     let bridge = SwarmBridge::new();
     bridge.set_handle(handle);
-    
+
     // Now bridge methods should work
     let peers = bridge.get_peers();
     assert_eq!(peers.len(), 0); // No peers connected yet

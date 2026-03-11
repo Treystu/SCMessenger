@@ -121,7 +121,7 @@ fun SettingsScreen(
             contactCount = settingsViewModel.getContactCount(),
             messageCount = settingsViewModel.getMessageCount()
         )
-        
+
         Spacer(modifier = Modifier.height(24.dp))
 
         // Advanced / Diagnostics Section

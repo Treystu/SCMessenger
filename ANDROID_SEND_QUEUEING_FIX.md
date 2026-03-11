@@ -1,5 +1,5 @@
 # Android Send Issues & Queueing Fix
-**Date:** 2026-03-10  
+**Date:** 2026-03-10
 **Status:** RESOLVED
 
 ## Problem Summary
@@ -47,7 +47,7 @@ if (publicKey == null) {
     )
     historyManager?.add(record)
     historyManager?.flush()
-    
+
     // Queue with placeholder (will encrypt when peer discovered)
     enqueuePendingOutbound(
         historyRecordId = pendingMessageId,
@@ -59,7 +59,7 @@ if (publicKey == null) {
         initialDelaySec = 5, // Retry in 5 seconds
         strictBleOnlyMode = false
     )
-    
+
     return@withContext // Don't throw, message is queued
 }
 ```
@@ -249,12 +249,12 @@ adb logcat | grep "pending_outbox" | grep "size"
 
 ## Conclusion
 
-✅ **Send queueing now works correctly**  
-✅ **Blocking UI functional on Android**  
+✅ **Send queueing now works correctly**
+✅ **Blocking UI functional on Android**
 ✅ **ID unification plan documented**
 
 Messages will queue reliably regardless of network state, and users can now block unwanted contacts directly from the chat interface.
 
-**Build:** ✅ SUCCESS  
-**Install:** Ready for testing  
+**Build:** ✅ SUCCESS
+**Install:** Ready for testing
 **Status:** READY FOR DEPLOYMENT

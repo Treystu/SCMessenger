@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Status: Active  
+Status: Active
 Last updated: 2026-03-07
 
 Repository-scoped instructions for Codex agents.

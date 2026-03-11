@@ -1,6 +1,6 @@
 # WS12 Validation Checklist - v0.2.0 Baseline
-**Date**: 2026-03-09 23:32 UTC  
-**Purpose**: Establish baseline before v0.2.1 work  
+**Date**: 2026-03-09 23:32 UTC
+**Purpose**: Establish baseline before v0.2.1 work
 **Status**: In Progress
 
 ---
@@ -182,7 +182,7 @@ cd android && ./gradlew :app:lintDebug
 4. Turn Bluetooth ON again
 5. Send another message
 **Expected**: No crash, message sends
-**Logs**: 
+**Logs**:
 - Android: `adb logcat | grep BLE`
 - iOS: Xcode Console filtered to "BLE"
 

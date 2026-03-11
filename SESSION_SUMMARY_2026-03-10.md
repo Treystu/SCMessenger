@@ -45,7 +45,7 @@
 
 ### MeshRepository.kt
 1. Line ~2187: Case-insensitive discovered peer lookup
-2. Line ~2204: Case-insensitive canonical peer lookup  
+2. Line ~2204: Case-insensitive canonical peer lookup
 3. Line ~4477: Case-insensitive dial candidate filtering
 4. Line ~4674: Case-insensitive relay check
 5. Line ~1246: Initialization check in `sendIdentitySyncIfNeeded()`

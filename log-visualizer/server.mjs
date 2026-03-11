@@ -8,20 +8,25 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(express.static(path.join(__dirname, "public")));
 const server = app.listen(3001, () =>
-  console.log("LogSankey Server v5.0 Dynamic Analysis @ http://localhost:3001"),
+  console.log("LogSankey Server v10.0 High-Precision @ http://localhost:3001"),
 );
 const wss = new WebSocketServer({ server });
 
 /**
- * v5.0 Dynamic Section Analysis
+ * v10.0 High-Precision Section Analysis
  * Replaces static 7-level extraction with infinite-depth logical delineators.
  */
 
 const LOG_MAPPINGS = [
   {
-    // Error/Success High-Level Intent
-    match: /(failed to|error|exception|unexpected|succesful|successfully|completed)/i,
-    map: (m) => [m[1].toUpperCase().includes("FAIL") ? "!!! FAILURE !!!" : "SUCCESS", m[0]],
+    // Android StackTrace / Exception
+    match: /(java\.lang\.[a-zA-Z]+Exception|java\.lang\.Error|java\.lang\.StackOverflowError):\s*(.*)/i,
+    map: (m) => ["!!! CRASH !!!", m[1].toUpperCase(), m[2]],
+  },
+  {
+    // Rust Core Internal Failure
+    match: /scmessenger_core.*(Failed|Error|regressed|dropped|rejected|invalid):\s*(.*)/i,
+    map: (m) => ["!!! CORE_FAIL !!!", m[1].toUpperCase(), m[2]],
   },
   {
     // MeshRepository: delivery_attempt msg=unknown medium=core phase=direct...
@@ -37,6 +42,11 @@ const LOG_MAPPINGS = [
     // Peer/Identity Flow
     match: /Peer (identified|discovered|connected|disconnected):\s+([\w\d]+)/i,
     map: (m) => ["PEER_EVENT", m[1].toUpperCase(), "PEER_ID"],
+  },
+  {
+    // Connection Failure (Common across all logs)
+    match: /(Connection failed to|dialing failed|failed to connect to)\s+(\S+)/i,
+    map: (m) => ["!!! CONN_FAIL !!!", "FAIL", m[2]],
   },
   {
     // BLE Logic
@@ -119,10 +129,12 @@ function cleanSegment(s) {
   
   // 4. Semantic Short-circuit (Pull intent to front)
   const intentMap = [
+    { match: /stack\s?overflow|fatal|panic|crash/i, label: "!!! CRASH !!!" },
+    { match: /invalid|rejected|dropped|leaked/i, label: "!!! VULN/INTEG !!!" },
     { match: /error|fail|err_|exception/i, label: "!!! ERROR !!!" },
     { match: /success|ok|completed|finished/i, label: "SUCCESS" },
     { match: /retry|retrying|backoff/i, label: "RETRY_FLOW" },
-    { match: /timeout|timed out/i, label: "TIMEOUT" }
+    { match: /timeout|timed out/i, label: "TIMEOUT" },
   ];
   for (const i of intentMap) {
     if (i.match.test(cleaned)) return i.label;
@@ -164,6 +176,13 @@ function processLine(rawLine, platform) {
       if (genericMatch && genericMatch[1].length < 32) {
         tag = genericMatch[1].trim();
         msg = genericMatch[2].trim();
+      } else {
+        // Final fallback: if no "tag: msg" pattern, use first word as tag
+        const wordMatch = line.match(/^(\w+)\s+(.*)/);
+        if (wordMatch) {
+          tag = wordMatch[1];
+          msg = wordMatch[2];
+        }
       }
     }
 

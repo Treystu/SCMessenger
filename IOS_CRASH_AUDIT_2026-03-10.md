@@ -12,7 +12,7 @@
 ### Crash from March 7, 2026 06:24
 
 **Type:** `EXC_GUARD` (Guard Exception)
-**Subtype:** `GUARD_TYPE_USER`  
+**Subtype:** `GUARD_TYPE_USER`
 **Namespace:** 18 (User-space guard)
 **Reason Code:** 0x0000000000000002
 **Termination:** Application Triggered Fault
@@ -32,7 +32,7 @@
 ```
 ✅ iOS Sim connecting to peers successfully
 ✅ Peer identification working
-✅ BLE identity beacon updates working  
+✅ BLE identity beacon updates working
 ✅ No errors in past 2 hours
 ✅ Repeated peer connect/disconnect cycles handled correctly
 ```

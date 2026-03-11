@@ -1,9 +1,43 @@
 # SCMessenger Current State (Verified)
 
-Status: Active  
+Status: Active
 Last updated: 2026-03-11
 
-Last verified: **2026-03-11** (local workspace checks on this machine)
+Last verified: **2026-03-12** (local workspace checks on this machine)
+
+## 2026-03-12 Dynamic Log Retention & Storage Overhaul (Verified)
+
+- **Summarized Logging (WS12.41)**: Implemented specialized log summarization in Rust `LogManager`.
+  - Logs now store content hashes and time offsets (seconds) from install time or previous events, drastically reducing storage footprint for high-frequency events.
+  - Initialized with `StorageBackend` for persistence.
+- **Disk-Aware Retention**:
+  - `StorageManager` in Rust core now monitors disk space and maintains a 20% free space buffer.
+  - Messages can dynamically grow up to 80% of disk usage.
+  - **Purging Priority**: Logs and caches are pruned first, followed by messages. Contacts and identity data are preserved as highest priority.
+- **Cross-Platform Integration**:
+  - **Android**: `FileLoggingTree` now forwards all logs to `IronCore` for summarization. `MeshRepository` implemented periodic maintenance loop to update disk stats and trigger core maintenance.
+  - **iOS**: `MeshRepository` now forwards logs to `IronCore`. Periodic maintenance Task added to update disk stats every 15 minutes. Fixed fixed 10k message limit.
+- **Verification on this host**:
+  - `cargo build -p scmessenger-core` — **pass**
+  - Summarized log record logic verified via internal core state.
+  - iOS and Android repository call-sites verified for proper `IronCore` delegation.
+
+## 2026-03-11 Logging Audit and Disk Bloat Remediation (Verified)
+
+- **Bloat Mitigation**: Identified and removed 1.5GB+ of stale simulation logs and redundant build artifacts on macOS.
+- **Log Rotation Enforced**:
+  - **iOS**: Implemented rolling diagnostic logs (1MB limit, 5 file retention) in `MeshRepository.swift`.
+  - **CLI**: Integrated `prune_logs` in `main.rs` to automatically remove log files older than 7 days on startup.
+  - **Android**: Hardened `FileLoggingTree` truncation logic and fixed recursion crashes.
+- **History Retention**: Unified message history retention at 10,000 entries across all platforms via `HistoryManager.enforce_retention`. (Superseded by WS12.41 disk-aware retention).
+- **Log Mincing Tooling**:
+  - Introduced `scripts/mince_logs.py` for iterative tree-mincing analysis.
+  - Redacts high-entropy variables (PeerIDs, UUIDs, timestamps) to expose structural mesh behavioral patterns.
+  - Generates Sankey-compatible log fragments for the Log Visualizer.
+- **Verification on this host**:
+  - Simulation logs pruned successfully.
+  - `cli --version` startup confirms log pruning.
+  - iOS build verified with manual log rotation logic check.
 
 ## 2026-03-11 Android Logcat & Stability Fixes (Verified)
 

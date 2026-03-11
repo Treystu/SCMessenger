@@ -131,7 +131,7 @@ For each diagnosed issue:
    - Number of tests run, passed, failed per domain
    - List of fixes applied across all domains (file, line, domain, description)
    - List of remaining issues that couldn't be auto-fixed across all domains
-2. **If fixes were applied across any domains**: 
+2. **If fixes were applied across any domains**:
    - Create a SINGLE consolidated pull request with:
      - Title: `[SCM-Fix] Multi-domain: <brief summary of affected domains>`
      - Body: Detailed breakdown by domain with root cause analysis, what was fixed, test results before/after

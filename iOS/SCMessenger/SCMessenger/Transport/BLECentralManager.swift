@@ -118,7 +118,7 @@ final class BLECentralManager: NSObject {
 
         let mtu = peripheral.maximumWriteValueLength(for: .withResponse)
         let fragments = fragmentData(data, mtu: mtu)
-        
+
         appendRepositoryDiagnostic("ble_central_tx_start fragments=\(fragments.count) to=\(peripheralId.uuidString.prefix(8))")
         for fragment in fragments {
             enqueueFragment(fragment, for: peripheralId)

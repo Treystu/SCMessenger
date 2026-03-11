@@ -5,7 +5,7 @@
 
 User reported:
 1. Android fresh install had "pre-loaded identity" (fail)
-2. Send button not working / messages disappearing  
+2. Send button not working / messages disappearing
 3. ID mismatches needing unification
 4. Delivery states broken (`msg=unknown`)
 
@@ -41,7 +41,7 @@ if (ironCore == null) {
 
 **Function 2:** `sendIdentitySyncIfNeeded()` (line ~1246)
 ```kotlin
-// Check if core is initialized before attempting identity sync  
+// Check if core is initialized before attempting identity sync
 if (ironCore == null) {
     Timber.d("sendIdentitySyncIfNeeded: IronCore not initialized, skipping...")
     return

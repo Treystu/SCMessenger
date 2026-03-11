@@ -309,8 +309,8 @@ These system logs typically indicate that Android is attempting an RFCOMM/L2CAP 
 - I've repeatedly tried using `xcrun devicectl device copy from` to pull `/Documents/diagnostics.txt` off the device to my isolated environment, but the connection keeps dropping with `NSPOSIXErrorDomain error 60 (socket was closed unexpectedly)`. This is a known flakiness issue with `devicectl` file transfers over the local network tunnel.
 
 ### Immediate Action Plan
-1. **Pull iOS Logs Manually:** Could you please pull the `diagnostics.txt` file manually through Xcode? 
-   *(Window > Devices and Simulators > iPhone > Installed Apps > SCMessenger > ⚙️ settings gear > Download Container)* 
+1. **Pull iOS Logs Manually:** Could you please pull the `diagnostics.txt` file manually through Xcode?
+   *(Window > Devices and Simulators > iPhone > Installed Apps > SCMessenger > ⚙️ settings gear > Download Container)*
    You can place it somewhere like the Desktop and let me know the path, and I'll analyze it immediately to see what iOS is doing during the Bluetooth failure.
 2. If BLE is failing silently on Android, you might try quickly toggling BLE completely off and on inside the SCMessenger app settings or device settings to cycle the GATT server state during these timeouts.
 
@@ -393,7 +393,7 @@ nevermind, you did it!
 
 ### Planner Response
 
-I'm glad we got that 21 MB file off the device! I just saved a markdown note on exactly how to do that natively over the network via `xcrun devicectl` with an extended timeout so it doesn't drop the socket midway for future reference ([/tmp/ios_log_pull.md](cci:7://file:///tmp/ios_log_pull.md:0:0-0:0)). 
+I'm glad we got that 21 MB file off the device! I just saved a markdown note on exactly how to do that natively over the network via `xcrun devicectl` with an extended timeout so it doesn't drop the socket midway for future reference ([/tmp/ios_log_pull.md](cci:7://file:///tmp/ios_log_pull.md:0:0-0:0)).
 
 Here is what the **iOS Diagnostics** logs indicate around the `20:25` to `20:34` mark (which corresponds to `06:25Z` - `06:34Z` UTC on the device):
 
@@ -406,8 +406,8 @@ Here is what the **iOS Diagnostics** logs indicate around the `20:25` to `20:34`
 - It had the hardware RFCOMM socket timeout errors earlier.
 - Currently it's printing `W/App: Not connected to 44:A5:95:05:6A:76` on a loop periodically.
 
-**Summary:** 
-The BLE connection between the devices seems fundamentally stalled at the native Bluetooth stack layer (likely a stale connection cache hanging onto the GATT services or RFCOMM slots). 
+**Summary:**
+The BLE connection between the devices seems fundamentally stalled at the native Bluetooth stack layer (likely a stale connection cache hanging onto the GATT services or RFCOMM slots).
 
 Would you mind aggressively toggling Bluetooth off and on inside the Settings app of *both* the iOS and Android devices? This generally clears the system's internal caching and resets the peripheral advertising states that are preventing the socket handshakes from establishing.
 
@@ -593,7 +593,7 @@ Android is still USB, but nothing it coming through to iOS via bluetooth (I have
 
 ### Planner Response
 
-This issue appears to be caused by how BLE addresses are stored and updated when transferring data to and from the local device contact database. 
+This issue appears to be caused by how BLE addresses are stored and updated when transferring data to and from the local device contact database.
 
 I checked the [MeshRepository](cci:2://file:///Users/christymaxwell/Desktop/Luke_Stuff/GitHub/SCMessenger/android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:33:0-3739:1) on both platforms, and when it successfully executes the [tryBleDelivery](cci:1://file:///Users/christymaxwell/Desktop/Luke_Stuff/GitHub/SCMessenger/android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:2380:8-2402:9) routing function, it is supposed to log "✓ Delivery via BLE (target=...)". Since `grep` could not find this output in our log, it indicates [tryBleDelivery](cci:1://file:///Users/christymaxwell/Desktop/Luke_Stuff/GitHub/SCMessenger/android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:2380:8-2402:9) isn't actually executing the BLE send payload!
 
@@ -602,7 +602,7 @@ I went ahead and added additional, verbose logging directly inside [tryBleDelive
 2. If it is, is the [blePeerId](cci:1://file:///Users/christymaxwell/Desktop/Luke_Stuff/GitHub/SCMessenger/android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt:137:4-156:5)/[bleAddr](cci:1://file:///Users/christymaxwell/Desktop/Luke_Stuff/GitHub/SCMessenger/android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:3406:4-3419:5) correctly getting fetched from the local Contact dictionary?
 3. If the address is present, does the GATT client or Central Manager return an error rather than send the data?
 
-**I've deployed clean builds of both Android and iOS with these logging changes.** 
+**I've deployed clean builds of both Android and iOS with these logging changes.**
 
 So that we can see what's happening at the moment of failure, please do the following:
 1. Turn off Wi-Fi/Cellular on the Android phone. Wait around 10 seconds for BLE to settle.
@@ -826,7 +826,7 @@ I have successfully pulled and analyzed the logs from both Android and iOS follo
     *   I resolved the iOS file-pulling issue by using a more robust network tunnel configuration, allowing me to verify the [mesh_diagnostics.log](cci:7://file:///Users/christymaxwell/Desktop/Luke_Stuff/GitHub/SCMessenger/mesh_diagnostics.log:0:0-0:0) state.
 
 ### **Important Note for Your Airport Trip:**
-Ensure that you have **each other added as Contacts** (hit the "Add" button in the "Nearby" section). 
+Ensure that you have **each other added as Contacts** (hit the "Add" button in the "Nearby" section).
 *   **Why?** The app uses this manual initial "handshake" to securely link your Bluetooth MAC address to your cryptographic Identity ID. Once that link is established in the Contact notes, the "Direct delivery via BLE" path will stay active automatically in the background, even if you lose Wi-Fi and Cellular entirely!
 
 You are all set for a successful, stable trip to the airport. Safe travels!

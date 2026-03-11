@@ -108,6 +108,7 @@ final class MeshRepository {
     private var coreDelegateImpl: CoreDelegateImpl?
     private var pendingOutboxRetryTask: Task<Void, Never>?
     private var coverTrafficTask: Task<Void, Never>?
+    private var storageMaintenanceTask: Task<Void, Never>?
     private var lastRelayBootstrapDialAt: Date = .distantPast
     private var relayBootstrapDialInProgress = false
     private var dialThrottleState: [String: (attempts: Int, nextAllowedAt: Date)] = [:]
@@ -372,6 +373,8 @@ final class MeshRepository {
                 }
             }
             historyManager = try HistoryManager(storagePath: storagePath)
+            // WS12.41: Removed fixed 10k limit. Retention is now disk-percent aware.
+            // _ = try? historyManager?.enforceRetention(maxMessages: 10000)
             contactManager = try ContactManager(storagePath: storagePath)
             ledgerManager = LedgerManager(storagePath: storagePath)
             autoAdjustEngine = AutoAdjustEngine()
@@ -583,6 +586,9 @@ final class MeshRepository {
                     appendDiagnostic("reinstall_recovery_beacon_sent")
                 }
             }
+
+            // WS12.41: Start storage maintenance loop
+            startStorageMaintenance()
 
             logger.info("✓ Mesh service started successfully")
             appendDiagnostic("service_start success")
@@ -4799,7 +4805,10 @@ final class MeshRepository {
             logger.info("DIAG: \(message)")
         }
 
-        // 3. Persist to Disk (Append only)
+        // WS12.41: Send to IronCore for summarized storage
+        ironCore?.recordLog(line: line)
+
+        // 3. Persist to Disk (Append only) - keep as fallback with smaller limit
         persistDiagnosticLine(line)
     }
 
@@ -4811,6 +4820,13 @@ final class MeshRepository {
         diagnosticsIOQueue.async {
             let parent = url.deletingLastPathComponent()
             try? FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+
+            // Limit file size to ~100KB (much smaller now that we have summarizer)
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+               let size = attrs[.size] as? UInt64,
+               size > 100 * 1024 {
+                self.rotateDiagnosticFiles()
+            }
 
             if !FileManager.default.fileExists(atPath: url.path) {
                 try? data.write(to: url)
@@ -4827,9 +4843,61 @@ final class MeshRepository {
             }
         }
     }
+
+    private func rotateDiagnosticFiles() {
+        let url = diagnosticsLogURL
+        let parent = url.deletingLastPathComponent()
+        let name = url.lastPathComponent
+
+        // Consolidate logs: .4 -> .5, .3 -> .4, etc.
+        for i in (1...4).reversed() {
+            let current = parent.appendingPathComponent("\(name).\(i)")
+            let next = parent.appendingPathComponent("\(name).\(i+1)")
+            if FileManager.default.fileExists(atPath: current.path) {
+                try? FileManager.default.removeItem(atPath: next.path)
+                try? FileManager.default.moveItem(at: current, to: next)
+            }
+        }
+        // Move current to .1
+        let firstHistory = parent.appendingPathComponent("\(name).1")
+        try? FileManager.default.removeItem(atPath: firstHistory.path)
+        try? FileManager.default.moveItem(at: url, to: firstHistory)
+    }
+
     func clearDiagnostics() {
         diagnosticsBuffer = []
-        try? FileManager.default.removeItem(at: diagnosticsLogURL)
+        let url = diagnosticsLogURL
+        let parent = url.deletingLastPathComponent()
+        let name = url.lastPathComponent
+
+        try? FileManager.default.removeItem(at: url)
+        for i in 1...5 {
+            let history = parent.appendingPathComponent("\(name).\(i)")
+            try? FileManager.default.removeItem(at: history)
+        }
+    }
+
+    private func startStorageMaintenance() {
+        storageMaintenanceTask?.cancel()
+        storageMaintenanceTask = Task { @MainActor in
+            while !Task.isCancelled {
+                do {
+                    let path = NSHomeDirectory()
+                    let attributes = try FileManager.default.attributesOfFileSystem(forPath: path)
+                    let total = attributes[.systemSize] as? UInt64 ?? 0
+                    let free = attributes[.systemFreeSize] as? UInt64 ?? 0
+                    
+                    ironCore?.updateDiskStats(totalBytes: total, freeBytes: free)
+                    try ironCore?.performMaintenance()
+                    
+                    appendDiagnostic("storage_pulse free=\(free / 1024 / 1024)MB total=\(total / 1024 / 1024)MB")
+                } catch {
+                    logger.warning("Storage maintenance loop error: \(error.localizedDescription)")
+                }
+                
+                try? await Task.sleep(nanoseconds: 15 * 60 * 1_000_000_000) // 15 minutes
+            }
+        }
     }
 
     // MARK: - Factory Reset

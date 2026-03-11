@@ -185,6 +185,10 @@ pub struct IronCore {
     contacts: Arc<RwLock<store::ContactManager>>,
     /// Unified message history
     history: Arc<RwLock<store::HistoryManager>>,
+    /// Storage management (retention/pruning)
+    storage_manager: Arc<store::storage::StorageManager>,
+    /// Log summarization/management
+    log_manager: Arc<store::logs::LogManager>,
     /// UniFFI-facing contacts manager (non-wasm builds only)
     #[cfg(not(target_arch = "wasm32"))]
     contacts_bridge_manager: Arc<crate::contacts_bridge::ContactManager>,
@@ -536,7 +540,6 @@ impl IronCore {
             store::ContactManager::new(Arc::new(store::backend::MemoryStorage::new()))
         };
 
-        #[allow(unused_variables)]
         let history = if let Some(path) = &storage_path {
             if !storage_ready {
                 store::HistoryManager::new(Arc::new(store::backend::MemoryStorage::new()))
@@ -557,6 +560,28 @@ impl IronCore {
             store::HistoryManager::new(Arc::new(store::backend::MemoryStorage::new()))
         };
 
+        let history_arc = Arc::new(RwLock::new(history));
+
+        // Root backend for logs and storage metadata
+        let root_backend: Arc<dyn store::backend::StorageBackend> = if let Some(path) = &storage_path {
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                Arc::new(crate::store::backend::SledStorage::new(
+                    Path::new(path).join("root").to_string_lossy().as_ref(),
+                ).unwrap())
+            }
+            #[cfg(target_arch = "wasm32")]
+            Arc::new(store::backend::MemoryStorage::new())
+        } else {
+            Arc::new(store::backend::MemoryStorage::new())
+        };
+
+        let log_manager = Arc::new(store::logs::LogManager::new(root_backend.clone()));
+        let storage_manager = Arc::new(store::storage::StorageManager::new(
+            history_arc.read().clone().into(),
+            log_manager.clone(),
+        ));
+
         #[cfg(not(target_arch = "wasm32"))]
         let contacts_bridge_manager = init_uniffi_contacts_manager(storage_path.as_deref());
         #[cfg(not(target_arch = "wasm32"))]
@@ -567,7 +592,9 @@ impl IronCore {
             outbox: Arc::new(RwLock::new(outbox)),
             inbox: Arc::new(RwLock::new(inbox)),
             contacts: Arc::new(RwLock::new(contacts)),
-            history: Arc::new(RwLock::new(history)),
+            history: history_arc,
+            storage_manager,
+            log_manager,
             #[cfg(not(target_arch = "wasm32"))]
             contacts_bridge_manager,
             #[cfg(not(target_arch = "wasm32"))]
@@ -1364,6 +1391,22 @@ impl IronCore {
 
     pub fn history_store_manager(&self) -> store::HistoryManager {
         self.history.read().clone()
+    }
+
+    pub fn update_disk_stats(&self, total_bytes: u64, free_bytes: u64) {
+        self.storage_manager.update_disk_stats(total_bytes, free_bytes);
+    }
+
+    pub fn perform_maintenance(&self) -> Result<(), IronCoreError> {
+        self.storage_manager.perform_maintenance()
+    }
+
+    pub fn record_log(&self, line: String) {
+        self.log_manager.record_log(line);
+    }
+
+    pub fn export_logs(&self) -> Result<String, IronCoreError> {
+        self.log_manager.export_all()
     }
 
     // ========================================================================

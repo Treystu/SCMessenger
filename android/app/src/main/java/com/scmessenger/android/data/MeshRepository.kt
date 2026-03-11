@@ -335,6 +335,8 @@ open class MeshRepository(private val context: Context) {
             // Initialize Data Managers
             settingsManager = uniffi.api.MeshSettingsManager(storagePath)
             historyManager = uniffi.api.HistoryManager(storagePath)
+            // WS12.41: Removed fixed 10k limit. Retention is now disk-percent aware.
+            // historyManager?.enforceRetention(10000u) 
             contactManager = uniffi.api.ContactManager(storagePath)
             ledgerManager = uniffi.api.LedgerManager(storagePath)
             autoAdjustEngine = uniffi.api.AutoAdjustEngine()
@@ -432,6 +434,17 @@ open class MeshRepository(private val context: Context) {
             if (ironCore == null) {
                 throw IllegalStateException("IronCore instance is null after service start")
             }
+
+            // WS12.41: Inject IronCore into FileLoggingTree for summarized logging
+            timber.log.Timber.forest().forEach { tree ->
+                if (tree is com.scmessenger.android.utils.FileLoggingTree) {
+                    tree.setIronCore(ironCore)
+                }
+            }
+
+            // WS12.41: Start storage maintenance loop
+            startStorageMaintenance()
+
             ensureLocalIdentityFederation()
 
             // 3. Wire up CoreDelegate (Rust -> Android Events)
@@ -4882,6 +4895,26 @@ open class MeshRepository(private val context: Context) {
     fun getPreferredRelay(): String? {
         val relays = ledgerManager?.getPreferredRelays(1u)
         return relays?.firstOrNull()?.peerId
+    }
+
+    private fun startStorageMaintenance() {
+        repoScope.launch {
+            while (isActive) {
+                try {
+                    val stat = android.os.StatFs(context.filesDir.path)
+                    val total = stat.blockCountLong * stat.blockSizeLong
+                    val free = stat.availableBlocksLong * stat.blockSizeLong
+                    
+                    ironCore?.updateDiskStats(total.toULong(), free.toULong())
+                    ironCore?.performMaintenance()
+                    
+                    Timber.d("Storage maintenance check: free=${free / 1024 / 1024}MB / total=${total / 1024 / 1024}MB")
+                } catch (e: Exception) {
+                    Timber.w("Storage maintenance loop error: ${e.message}")
+                }
+                kotlinx.coroutines.delay(15 * 60 * 1000) // Every 15 minutes
+            }
+        }
     }
 
     /**

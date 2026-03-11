@@ -1,6 +1,6 @@
 # SCMessenger Remaining Work Tracking
 
-Status: Active  
+Status: Active
 Last updated: 2026-03-11 (POST-LOGCAT-STABILITY-FIX)
 
 This is the active implementation backlog based on repository state verified on **2026-03-11**.
@@ -138,7 +138,12 @@ Completed in this pass:
 
 Still open:
 
-1. [ ] Monitor real-world convergence on physical devices to confirm "stuck pending" messages resolve on next sync trigger.
+1. [x] Monitor real-world convergence on physical devices to confirm "stuck pending" messages resolve on next sync trigger.
+2. [x] Audit for bloat (2+GB consumption) and enforce rotation/cache-clearing across all platforms. (WS12.41)
+   - Implemented dynamic log retention and disk-aware maintenance (80/20 split).
+   - Summarized logging implemented in Core to minimize log footprint.
+   - Periodic maintenance loop added to Android and iOS.
+   - PURGE PRIORITY: Logs > Cache > Messages > Contacts/Identity.
 
 ## WS12.36 Repo/GitHub Operating-Model Planning Audit (2026-03-07 UTC)
 

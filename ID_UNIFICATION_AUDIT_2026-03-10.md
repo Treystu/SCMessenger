@@ -1,7 +1,7 @@
 # ID Unification Audit - 2026-03-10
 
-**Status:** IN PROGRESS  
-**Priority:** CRITICAL  
+**Status:** IN PROGRESS
+**Priority:** CRITICAL
 **Blocking:** Message persistence, contact resolution, delivery tracking
 
 ## Problem Statement
@@ -15,9 +15,9 @@ Multiple ID formats are used across different transports and layers, causing con
 ## Current ID Formats in Use
 
 ### 1. Identity ID (Blake3 Hash)
-**Format:** 64-character hex string  
-**Example:** `f77690efd3e66f6b4551aa3c25cec073e787657e99af4ef5b451bb2eca9315a2`  
-**Source:** Blake3 hash of Ed25519 public key  
+**Format:** 64-character hex string
+**Example:** `f77690efd3e66f6b4551aa3c25cec073e787657e99af4ef5b451bb2eca9315a2`
+**Source:** Blake3 hash of Ed25519 public key
 **Used For:**
 - Canonical user identity
 - Contact storage primary key
@@ -31,9 +31,9 @@ Multiple ID formats are used across different transports and layers, causing con
 - Not bound to transport
 
 ### 2. LibP2P Peer ID
-**Format:** Multibase encoded (typically base58btc with "12D3" prefix)  
-**Example:** `12D3KooWMDrHwP6CiVdHWSwD2RNJNM9VDBTeX8vKTqn9YZxAX198`  
-**Source:** Derived from LibP2P keypair  
+**Format:** Multibase encoded (typically base58btc with "12D3" prefix)
+**Example:** `12D3KooWMDrHwP6CiVdHWSwD2RNJNM9VDBTeX8vKTqn9YZxAX198`
+**Source:** Derived from LibP2P keypair
 **Used For:**
 - Network layer routing
 - Swarm connections
@@ -47,9 +47,9 @@ Multiple ID formats are used across different transports and layers, causing con
 - Not stable across app reinstalls if keys not persisted
 
 ### 3. Public Key (Ed25519 Hex)
-**Format:** 64-character hex string  
-**Example:** `357bed7e9c40b619af83bcef754ed06bb701155a20e79e8c3c5aeadd185e70a3`  
-**Source:** Raw Ed25519 public key  
+**Format:** 64-character hex string
+**Example:** `357bed7e9c40b619af83bcef754ed06bb701155a20e79e8c3c5aeadd185e70a3`
+**Source:** Raw Ed25519 public key
 **Used For:**
 - Message encryption/decryption
 - Signature verification
@@ -62,9 +62,9 @@ Multiple ID formats are used across different transports and layers, causing con
 - Should be source of truth
 
 ### 4. BLE Peripheral Address
-**Format:** MAC address  
-**Example:** `6C:5E:E4:9E:6C:00`  
-**Source:** Bluetooth hardware/OS  
+**Format:** MAC address
+**Example:** `6C:5E:E4:9E:6C:00`
+**Source:** Bluetooth hardware/OS
 **Used For:**
 - BLE discovery
 - Local transport routing
@@ -77,7 +77,7 @@ Multiple ID formats are used across different transports and layers, causing con
 - Not cryptographically bound
 
 ### 5. Shortened Display IDs
-**Format:** Various shortened formats  
+**Format:** Various shortened formats
 **Examples:**
 - `peer-YZxAX198` (from LibP2P)
 - `peer-f77690ef` (from Identity ID)
@@ -182,7 +182,7 @@ BLE Address (MAC)  ← Discovery only
 
 **All storage operations use Identity ID:**
 - Message history: `peer_id` = Identity ID
-- Contacts: `peer_id` = Identity ID  
+- Contacts: `peer_id` = Identity ID
 - Delivery tracking: keyed by Identity ID
 - Conversation queries: by Identity ID
 

@@ -1,6 +1,6 @@
 # iOS Build Fix - Provisioning Profile Expired
-**Date**: 2026-03-09  
-**Issue**: Provisioning profile expired, authentication required  
+**Date**: 2026-03-09
+**Issue**: Provisioning profile expired, authentication required
 **Status**: ⚠️ REQUIRES MANUAL INTERVENTION
 
 ---
@@ -176,9 +176,9 @@ After renewing provisioning profile:
 
 ## Status
 
-**Current**: ⚠️ Provisioning profile expired  
-**Action Required**: Renew profile via Xcode  
-**Estimated Time**: 2-5 minutes  
+**Current**: ⚠️ Provisioning profile expired
+**Action Required**: Renew profile via Xcode
+**Estimated Time**: 2-5 minutes
 **Impact**: Blocks iOS builds until renewed
 
 ---
