@@ -24,7 +24,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - Verification on this Linux host:
   - `cargo fmt --all -- --check` — **pass**
   - `cargo build --workspace` — **pass**
-  - `cargo test --workspace` — **pass** (280 tests, 0 failures)
+  - `cargo test --workspace` — **pass**
   - `./scripts/docs_sync_check.sh` — **pass**
 - Platform tooling NOT available on this host: `xcodebuild` (iOS), `cargo-ndk` / `ANDROID_HOME` (Android). Mobile adapter call-sites that consume `SwarmBridge::send_message` must be updated when those tools are available — the new UDL signature is the source of truth for generated bindings.
 - WS13.2 status: **transport boundary complete, relay metadata plumbing implemented, `last_known_device_id` wired in Contact**. WS13.3 (registration protocol) and WS13.4 (registry/custody state machine) are now unblocked architecturally.

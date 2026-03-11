@@ -310,20 +310,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn relay_request_new_fields_default_to_none() {
-        // Simulate receiving a legacy RelayRequest (no WS13 fields) via bincode/serde.
-        let legacy = RelayRequest {
-            destination_peer: vec![1, 2, 3],
-            envelope_data: vec![4, 5, 6],
-            message_id: "msg-1".to_string(),
-            recipient_identity_id: None,
-            intended_device_id: None,
-        };
-        assert!(legacy.recipient_identity_id.is_none());
-        assert!(legacy.intended_device_id.is_none());
-    }
-
-    #[test]
     fn relay_request_carries_ws13_metadata_when_set() {
         let req = RelayRequest {
             destination_peer: vec![0xAB],
@@ -340,20 +326,19 @@ mod tests {
     }
 
     #[test]
-    fn relay_request_legacy_json_deserializes_with_defaults() {
-        // A relay request serialized by a pre-WS13 node omits the new fields.
-        // Verify #[serde(default)] ensures clean deserialization.
+    fn relay_request_missing_ws13_fields_deserialize_with_defaults() {
+        // Verify generic serde defaulting when optional WS13 fields are absent.
         let json =
             r#"{"destination_peer":[1,2,3],"envelope_data":[4,5,6],"message_id":"msg-legacy"}"#;
         let req: RelayRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.message_id, "msg-legacy");
         assert!(
             req.recipient_identity_id.is_none(),
-            "legacy wire must default to None"
+            "missing recipient_identity_id must default to None"
         );
         assert!(
             req.intended_device_id.is_none(),
-            "legacy wire must default to None"
+            "missing intended_device_id must default to None"
         );
     }
 }
