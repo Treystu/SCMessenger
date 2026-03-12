@@ -563,18 +563,28 @@ impl IronCore {
         let history_arc = Arc::new(RwLock::new(history));
 
         // Root backend for logs and storage metadata
-        let root_backend: Arc<dyn store::backend::StorageBackend> = if let Some(path) = &storage_path {
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                Arc::new(crate::store::backend::SledStorage::new(
-                    Path::new(path).join("root").to_string_lossy().as_ref(),
-                ).unwrap())
-            }
-            #[cfg(target_arch = "wasm32")]
-            Arc::new(store::backend::MemoryStorage::new())
-        } else {
-            Arc::new(store::backend::MemoryStorage::new())
-        };
+        let root_backend: Arc<dyn store::backend::StorageBackend> =
+            if let Some(path) = &storage_path {
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    match crate::store::backend::SledStorage::new(
+                        Path::new(path).join("root").to_string_lossy().as_ref(),
+                    ) {
+                        Ok(sled) => Arc::new(sled),
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to open root sled backend, falling back to memory: {}",
+                                e
+                            );
+                            Arc::new(store::backend::MemoryStorage::new())
+                        }
+                    }
+                }
+                #[cfg(target_arch = "wasm32")]
+                Arc::new(store::backend::MemoryStorage::new())
+            } else {
+                Arc::new(store::backend::MemoryStorage::new())
+            };
 
         let log_manager = Arc::new(store::logs::LogManager::new(root_backend.clone()));
         let storage_manager = Arc::new(store::storage::StorageManager::new(
@@ -1394,7 +1404,8 @@ impl IronCore {
     }
 
     pub fn update_disk_stats(&self, total_bytes: u64, free_bytes: u64) {
-        self.storage_manager.update_disk_stats(total_bytes, free_bytes);
+        self.storage_manager
+            .update_disk_stats(total_bytes, free_bytes);
     }
 
     pub fn perform_maintenance(&self) -> Result<(), IronCoreError> {

@@ -42,7 +42,7 @@ impl LogManager {
     fn init_install_time(backend: &dyn StorageBackend) -> u64 {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
         let _ = backend.put(b"metadata_install_time", now.to_string().as_bytes());
         now
@@ -51,7 +51,7 @@ impl LogManager {
     pub fn record_log(&self, line: String) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
         // Use a simple hash for the line content
@@ -93,7 +93,7 @@ impl LogManager {
 
         // Limit deltas per log type to avoid memory bloat before flush
         if entry.deltas.len() > 1000 {
-            // Maybe flush specific entry? For now just keep it simple.
+            entry.deltas.drain(..500);
         }
     }
 
@@ -106,7 +106,9 @@ impl LogManager {
                 .put(key.as_bytes(), &value)
                 .map_err(|_| IronCoreError::StorageError)?;
         }
-        let _ = self.backend.flush();
+        if let Err(e) = self.backend.flush() {
+            tracing::warn!("Log backend flush failed: {:?}", e);
+        }
         Ok(())
     }
 

@@ -41,7 +41,6 @@ impl StorageManager {
         }
 
         let buffer_threshold = (stats.total_bytes as f64 * 0.2) as u64;
-        let _message_max_threshold = (stats.total_bytes as f64 * 0.8) as u64;
 
         // Current free space is below 20% buffer
         if stats.free_bytes < buffer_threshold {
