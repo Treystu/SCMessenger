@@ -108,6 +108,7 @@ final class MeshRepository {
     private var coreDelegateImpl: CoreDelegateImpl?
     private var pendingOutboxRetryTask: Task<Void, Never>?
     private var coverTrafficTask: Task<Void, Never>?
+    private var storageMaintenanceTask: Task<Void, Never>?
     private var lastRelayBootstrapDialAt: Date = .distantPast
     private var relayBootstrapDialInProgress = false
     private var dialThrottleState: [String: (attempts: Int, nextAllowedAt: Date)] = [:]
@@ -170,6 +171,8 @@ final class MeshRepository {
         let attemptCount: UInt32
         let nextAttemptAtEpochSec: UInt64
         let strictBleOnlyMode: Bool?
+        let recipientIdentityId: String?
+        let intendedDeviceId: String?
     }
 
     struct DeliveryStatePresentation {
@@ -180,6 +183,7 @@ final class MeshRepository {
     private struct MessageIdentityHints {
         let identityId: String?
         let publicKey: String?
+        let deviceId: String?
         let nickname: String?
         let libp2pPeerId: String?
         let listeners: [String]
@@ -369,6 +373,8 @@ final class MeshRepository {
                 }
             }
             historyManager = try HistoryManager(storagePath: storagePath)
+            // WS12.41: Removed fixed 10k limit. Retention is now disk-percent aware.
+            // _ = try? historyManager?.enforceRetention(maxMessages: 10000)
             contactManager = try ContactManager(storagePath: storagePath)
             ledgerManager = LedgerManager(storagePath: storagePath)
             autoAdjustEngine = AutoAdjustEngine()
@@ -580,6 +586,9 @@ final class MeshRepository {
                     appendDiagnostic("reinstall_recovery_beacon_sent")
                 }
             }
+
+            // WS12.41: Start storage maintenance loop
+            startStorageMaintenance()
 
             logger.info("✓ Mesh service started successfully")
             appendDiagnostic("service_start success")
@@ -948,7 +957,9 @@ final class MeshRepository {
             multipeerPeerId: multipeerPeerId,
             blePeerId: routing.blePeerId,
             traceMessageId: messageId,
-            attemptContext: "initial_send"
+            attemptContext: "initial_send",
+            recipientIdentityId: trimmedKey,
+            intendedDeviceId: contact?.lastKnownDeviceId
         )
         let selectedRoutePeerId = delivery.acked
             ? (delivery.routePeerId ?? preferredRoutePeerId)
@@ -971,7 +982,9 @@ final class MeshRepository {
                     envelopeData: envelopeData,
                     initialAttemptCount: 1,
                     initialDelaySec: receiptAwaitSeconds,
-                    strictBleOnlyMode: strictBleOnlyValidation
+                    strictBleOnlyMode: strictBleOnlyValidation,
+                    recipientIdentityId: trimmedKey,
+                    intendedDeviceId: contact?.lastKnownDeviceId
                 )
             } else {
                 enqueuePendingOutbound(
@@ -982,7 +995,9 @@ final class MeshRepository {
                     envelopeData: envelopeData,
                     initialAttemptCount: 1,
                     initialDelaySec: 0,
-                    strictBleOnlyMode: strictBleOnlyValidation
+                    strictBleOnlyMode: strictBleOnlyValidation,
+                    recipientIdentityId: trimmedKey,
+                    intendedDeviceId: contact?.lastKnownDeviceId
                 )
             }
         }
@@ -1085,7 +1100,7 @@ final class MeshRepository {
                     addedAt: UInt64(Date().timeIntervalSince1970),
                     lastSeen: UInt64(Date().timeIntervalSince1970),
                     notes: routeNotes,
-                    lastKnownDeviceId: nil
+                    lastKnownDeviceId: verifiedHints?.deviceId
                 )
                 do {
                     try contactManager?.add(contact: autoContact)
@@ -1107,7 +1122,7 @@ final class MeshRepository {
                     addedAt: existingContact.addedAt,
                     lastSeen: existingContact.lastSeen,
                     notes: existingContact.notes,
-                    lastKnownDeviceId: nil
+                    lastKnownDeviceId: verifiedHints?.deviceId ?? existingContact.lastKnownDeviceId
                 )
                 try? contactManager?.add(contact: updatedContact)
                 contactManager?.flush()
@@ -1134,7 +1149,7 @@ final class MeshRepository {
                     addedAt: existingContact.addedAt,
                     lastSeen: existingContact.lastSeen,
                     notes: updatedNotesWithListeners,
-                    lastKnownDeviceId: nil
+                    lastKnownDeviceId: verifiedHints?.deviceId ?? existingContact.lastKnownDeviceId
                 )
                 try? contactManager?.add(contact: updatedContact)
                 contactManager?.flush()
@@ -1148,6 +1163,7 @@ final class MeshRepository {
                 nickname: knownNickname,
                 libp2pPeerId: routePeerId,
                 listeners: hintedDialCandidates,
+                deviceId: verifiedHints?.deviceId,
                 createIfMissing: false
             )
             let discoveredNickname = prepopulateDiscoveryNickname(
@@ -1383,7 +1399,9 @@ final class MeshRepository {
                         multipeerPeerId: preferredMultipeerPeerId ?? hints.multipeerPeerId,
                         blePeerId: preferredBlePeerId ?? hints.blePeerId,
                         traceMessageId: normalizedMessageId,
-                        attemptContext: "receipt_send"
+                        attemptContext: "receipt_send",
+                        recipientIdentityId: senderPublicKeyHex,
+                        intendedDeviceId: contact?.lastKnownDeviceId
                     )
                     if delivery.acked {
                         self.appendDiagnostic("receipt_send msg=\(normalizedMessageId) state=acked sender=\(senderId) attempt=\(attempt)")
@@ -1465,7 +1483,8 @@ final class MeshRepository {
                     routePeerCandidates: routeCandidates,
                     addresses: hints.listeners,
                     envelopeData: Data(prepared.envelopeData),
-                    blePeerId: hints.blePeerId
+                    blePeerId: hints.blePeerId,
+                    recipientIdentityId: recipientPublicKey
                 )
                 self.logger.debug("Identity sync sent to \(normalizedRoute)")
             } catch {
@@ -1527,7 +1546,8 @@ final class MeshRepository {
                     routePeerCandidates: routeCandidates,
                     addresses: hints.listeners,
                     envelopeData: Data(prepared.envelopeData),
-                    blePeerId: hints.blePeerId
+                    blePeerId: hints.blePeerId,
+                    recipientIdentityId: recipientPublicKey
                 )
                 self.logger.warning("History sync request sent to \(normalizedRoute)")
             } catch {
@@ -1598,7 +1618,9 @@ final class MeshRepository {
                         routePeerCandidates: routeCandidates,
                         addresses: allListeners,
                         envelopeData: Data(prepared.envelopeData),
-                        blePeerId: hints.blePeerId
+                        multipeerPeerId: hints.multipeerPeerId,
+                        blePeerId: hints.blePeerId,
+                        recipientIdentityId: recipientPublicKey
                     )
                     sentBatches += 1
                     // Small delay between batches to avoid overwhelming BLE
@@ -1618,10 +1640,10 @@ final class MeshRepository {
             return senderId
         }
 
-        let exactMatch = contacts.contains {
-            $0.peerId.lowercased() == senderId.lowercased() && normalizePublicKey($0.publicKey) == normalizedIncomingKey
+        let exactMatch = contacts.first {
+            isSamePeerId($0.peerId, id2: senderId) && normalizePublicKey($0.publicKey) == normalizedIncomingKey
         }
-        if exactMatch { return senderId }
+        if let match = exactMatch { return match.peerId }
 
         let keyedMatches = contacts.filter {
             normalizePublicKey($0.publicKey) == normalizedIncomingKey
@@ -1636,10 +1658,14 @@ final class MeshRepository {
         if isLibp2pPeerId(senderId) {
             let linkedIdentityMatches = contacts.filter {
                 guard normalizePublicKey($0.publicKey) == normalizedIncomingKey else { return false }
-                guard $0.peerId.lowercased() != senderId.lowercased() else { return false }
+                guard !isSamePeerId($0.peerId, id2: senderId) else { return false }
                 guard let notes = $0.notes,
                       let routing = parseRoutingInfo(notes: notes) else { return false }
-                return routing.libp2pPeerId.lowercased() == senderId.lowercased()
+
+                if !routing.libp2pPeerId.isEmpty {
+                    return isSamePeerId(routing.libp2pPeerId, id2: senderId)
+                }
+                return false
             }
 
             if linkedIdentityMatches.count == 1 {
@@ -1648,10 +1674,10 @@ final class MeshRepository {
             if linkedIdentityMatches.count > 1 {
                 logger.warning("Ambiguous canonical sender mapping for \(senderId); keeping raw sender ID")
             }
-            return senderId
+            return normalizePeerId(senderId)
         }
 
-        guard isIdentityId(senderId) else { return senderId }
+        guard isIdentityId(senderId) else { return normalizePeerId(senderId) }
         let keyedRoutedMatches = contacts.filter {
             guard normalizePublicKey($0.publicKey) == normalizedIncomingKey else { return false }
             guard $0.peerId != senderId else { return false }
@@ -1663,7 +1689,8 @@ final class MeshRepository {
         if keyedRoutedMatches.count > 1 {
             logger.warning("Ambiguous identity sender mapping for \(senderId); keeping raw sender ID")
         }
-        return senderId
+
+        return normalizePeerId(senderId)
     }
 
     private func resolveCanonicalPeerIdFromMessageHints(
@@ -1672,22 +1699,24 @@ final class MeshRepository {
         senderPublicKeyHex: String,
         hintedIdentityId: String?
     ) -> String {
-        guard let normalizedHint = hintedIdentityId?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nilIfEmpty,
-              isIdentityId(normalizedHint) else {
+        guard let hint = hintedIdentityId,
+              !hint.isEmpty else {
             return resolvedCanonicalPeerId
         }
-        if normalizedHint == resolvedCanonicalPeerId { return resolvedCanonicalPeerId }
+        let normalizedHint = normalizePeerId(hint)
+        guard isIdentityId(normalizedHint) else {
+            return resolvedCanonicalPeerId
+        }
+        if isSamePeerId(normalizedHint, id2: resolvedCanonicalPeerId) { return resolvedCanonicalPeerId }
         if isBootstrapRelayPeer(normalizedHint) { return resolvedCanonicalPeerId }
 
         let normalizedSenderKey = normalizePublicKey(senderPublicKeyHex)
         let contacts = (try? contactManager?.list()) ?? []
 
         if let normalizedSenderKey {
-            if let hintedContact = contacts.first(where: { $0.peerId == normalizedHint }),
+            if let hintedContact = contacts.first(where: { isSamePeerId($0.peerId, id2: normalizedHint) }),
                normalizePublicKey(hintedContact.publicKey) == normalizedSenderKey {
-                return normalizedHint
+                return hintedContact.peerId
             }
 
             let keyMatches = contacts.filter { normalizePublicKey($0.publicKey) == normalizedSenderKey }
@@ -1699,7 +1728,7 @@ final class MeshRepository {
             }
         }
 
-        if resolvedCanonicalPeerId == senderId || isLibp2pPeerId(resolvedCanonicalPeerId) {
+        if isSamePeerId(resolvedCanonicalPeerId, id2: senderId) || isLibp2pPeerId(resolvedCanonicalPeerId) {
             return normalizedHint
         }
         return resolvedCanonicalPeerId
@@ -1728,6 +1757,7 @@ final class MeshRepository {
         let sender: [String: Any] = [
             "identity_id": info.identityId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             "public_key": publicKeyHex,
+            "device_id": info.deviceId ?? "",
             "nickname": String((normalizeNickname(info.nickname) ?? "").prefix(64)),
             "libp2p_peer_id": info.libp2pPeerId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             "listeners": listeners,
@@ -1771,6 +1801,9 @@ final class MeshRepository {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .nilIfEmpty,
             publicKey: normalizePublicKey(sender?["public_key"] as? String),
+            deviceId: (sender?["device_id"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty,
             nickname: normalizeNickname(sender?["nickname"] as? String),
             libp2pPeerId: validatedLibp2p,
             listeners: parseStringArray(sender?["listeners"]),
@@ -1926,7 +1959,8 @@ final class MeshRepository {
     }
 
     private func updateDiscoveredPeer(_ key: String, info: PeerDiscoveryInfo) {
-        let existing = discoveredPeerMap[key]
+        let normalizedKey = PeerIdValidator.normalize(key)
+        let existing = discoveredPeerMap[normalizedKey]
         if let existing,
            existing.publicKey != nil,
            info.publicKey == nil,
@@ -1952,9 +1986,11 @@ final class MeshRepository {
             merged = info
         }
 
-        let canonicalPeerId = merged.canonicalPeerId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? key.trimmingCharacters(in: .whitespacesAndNewlines)
-            : merged.canonicalPeerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let canonicalPeerId = PeerIdValidator.normalize(
+            merged.canonicalPeerId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? key
+                : merged.canonicalPeerId
+        )
         let canonicalPublicKey = normalizePublicKey(merged.publicKey)
 
         discoveredPeerMap[canonicalPeerId] = merged
@@ -1968,7 +2004,7 @@ final class MeshRepository {
     }
 
     private func pruneDisconnectedPeer(_ peerId: String) {
-        let normalizedPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedPeerId = PeerIdValidator.normalize(peerId)
         guard !normalizedPeerId.isEmpty else { return }
 
         let disconnectedPublicKey = normalizePublicKey(discoveredPeerMap[normalizedPeerId]?.publicKey)
@@ -2659,6 +2695,7 @@ final class MeshRepository {
     /// Handle libp2p transport identity updates from the Rust core.
     /// Transport peer IDs are route hints, not user/contact identities.
     func handleTransportPeerDiscovered(peerId: String) {
+        let trimmed = PeerIdValidator.normalize(peerId)
         let selfLibp2p = ironCore?.getIdentityInfo().libp2pPeerId?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if let selfLibp2p, !selfLibp2p.isEmpty, selfLibp2p == peerId {
@@ -2742,7 +2779,7 @@ final class MeshRepository {
 
     func handleTransportPeerDisconnected(peerId: String) {
         // P1: Deduplicate disconnect events — Rust core fires one per substream
-        let trimmedId = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedId = PeerIdValidator.normalize(peerId)
         let now = Date()
         if let lastDisconnect = peerDisconnectDedupCache[trimmedId],
            now.timeIntervalSince(lastDisconnect) < peerDisconnectDedupInterval {
@@ -2760,7 +2797,7 @@ final class MeshRepository {
     func handleTransportPeerIdentified(peerId: String, agentVersion: String, listenAddrs: [String]) {
         // P0: Deduplicate peer-identified events — Rust core fires one per substream,
         // producing 34K+ duplicate events. Skip if same peer identified within 30s.
-        let trimmedPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPeerId = PeerIdValidator.normalize(peerId)
         let now = Date()
         if let lastIdentified = peerIdentifiedDedupCache[trimmedPeerId],
            now.timeIntervalSince(lastIdentified) < peerIdentifiedDedupInterval {
@@ -2991,7 +3028,7 @@ final class MeshRepository {
                     addedAt: contact.addedAt,
                     lastSeen: UInt64(Date().timeIntervalSince1970),
                     notes: updatedNotes,
-                    lastKnownDeviceId: nil
+                    lastKnownDeviceId: contact.lastKnownDeviceId
                 )
                 try? contactManager?.add(contact: updatedContact)
                 contactManager?.flush()
@@ -3118,16 +3155,17 @@ final class MeshRepository {
         listeners: [String],
         blePeerId: String? = nil
     ) {
-        let canonicalPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let canonicalPeerId = normalizePeerId(peerId)
         guard !canonicalPeerId.isEmpty,
               let normalizedKey = normalizePublicKey(publicKey) else {
             return
         }
 
         let normalizedNickname = normalizeNickname(nickname)
-        let normalizedRoute = {
-            let trimmed = libp2pPeerId?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
-            return trimmed.isEmpty ? nil : trimmed
+        let normalizedRoute: String? = {
+            guard let routeId = libp2pPeerId else { return nil }
+            let normalized = normalizePeerId(routeId)
+            return normalized.isEmpty ? nil : normalized
         }()
         let normalizedBle = {
             let trimmed = blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -3168,7 +3206,7 @@ final class MeshRepository {
     }
 
     private func emitConnectedIfChanged(peerId: String) {
-        let normalizedPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedPeerId = PeerIdValidator.normalize(peerId)
         guard !normalizedPeerId.isEmpty else { return }
 
         let now = Date()
@@ -3335,14 +3373,19 @@ final class MeshRepository {
     }
 
     private func isLibp2pPeerId(_ value: String) -> Bool {
-        value.hasPrefix("12D3Koo") || value.hasPrefix("Qm")
+        return PeerIdValidator.isLibp2pPeerId(value)
+    }
+
+    private func normalizePeerId(_ id: String) -> String {
+        return PeerIdValidator.normalize(id)
+    }
+
+    private func isSamePeerId(_ id1: String, id2: String) -> Bool {
+        return PeerIdValidator.isSame(id1, id2)
     }
 
     private func isIdentityId(_ value: String) -> Bool {
-        guard value.count == 64 else { return false }
-        return value.unicodeScalars.allSatisfy { scalar in
-            CharacterSet(charactersIn: "0123456789abcdefABCDEF").contains(scalar)
-        }
+        return PeerIdValidator.isIdentityId(value)
     }
 
     private func startPendingOutboxRetryLoop() {
@@ -3386,8 +3429,10 @@ final class MeshRepository {
         multipeerPeerId: String? = nil,
         blePeerId: String? = nil,
         traceMessageId: String? = nil,
-        attemptContext: String = "send",
-        strictBleOnlyOverride: Bool? = nil
+        attemptContext: String? = nil,
+        strictBleOnlyOverride: Bool? = nil,
+        recipientIdentityId: String? = nil,
+        intendedDeviceId: String? = nil
     ) async -> DeliveryAttemptResult {
         let strictBleOnly = strictBleOnlyOverride ?? strictBleOnlyValidation
         let routePeerFallback = routePeerCandidates.first ?? "unknown_route_\(Date().timeIntervalSince1970)"
@@ -3607,7 +3652,12 @@ final class MeshRepository {
                 detail: "ctx=\(attemptContext) route=\(routePeerId)"
             )
             do {
-                try swarmBridge.sendMessage(peerId: routePeerId, data: envelopeData)
+                try swarmBridge.sendMessage(
+                    peerId: routePeerId,
+                    data: envelopeData,
+                    recipientIdentityId: recipientIdentityId,
+                    intendedDeviceId: intendedDeviceId
+                )
                 logger.info("✓ Direct delivery ACK from \(routePeerId)")
                 logDeliveryAttempt(
                     messageId: traceMessageId,
@@ -3641,7 +3691,12 @@ final class MeshRepository {
                     detail: "ctx=\(attemptContext) route=\(routePeerId)"
                 )
                 do {
-                    try swarmBridge.sendMessage(peerId: routePeerId, data: envelopeData)
+                    try swarmBridge.sendMessage(
+                        peerId: routePeerId,
+                        data: envelopeData,
+                        recipientIdentityId: recipientIdentityId,
+                        intendedDeviceId: intendedDeviceId
+                    )
                     logger.info("✓ Delivery ACK from \(routePeerId) after relay-circuit retry")
                     logDeliveryAttempt(
                         messageId: traceMessageId,
@@ -3694,7 +3749,9 @@ final class MeshRepository {
         envelopeData: Data,
         initialAttemptCount: UInt32 = 0,
         initialDelaySec: UInt64 = 0,
-        strictBleOnlyMode: Bool = false
+        strictBleOnlyMode: Bool = false,
+        recipientIdentityId: String? = nil,
+        intendedDeviceId: String? = nil
     ) {
         if isMessageDeliveredLocally(historyRecordId) {
             appendDiagnostic("delivery_state msg=\(historyRecordId) state=delivered detail=skip_enqueue_already_delivered")
@@ -3713,7 +3770,9 @@ final class MeshRepository {
                 createdAtEpochSec: now,
                 attemptCount: initialAttemptCount,
                 nextAttemptAtEpochSec: now + initialDelaySec,
-                strictBleOnlyMode: strictBleOnlyMode
+                strictBleOnlyMode: strictBleOnlyMode,
+                recipientIdentityId: recipientIdentityId,
+                intendedDeviceId: intendedDeviceId
             )
         )
         savePendingOutbox(queue)
@@ -3799,7 +3858,9 @@ final class MeshRepository {
                 blePeerId: latestRouting.blePeerId,
                 traceMessageId: item.historyRecordId,
                 attemptContext: "outbox_retry",
-                strictBleOnlyOverride: item.strictBleOnlyMode
+                strictBleOnlyOverride: item.strictBleOnlyMode,
+                recipientIdentityId: item.recipientIdentityId,
+                intendedDeviceId: item.intendedDeviceId
             )
             let selectedRoutePeerId = delivery.acked
                 ? (delivery.routePeerId ?? resolvedRoutePeerId)
@@ -3833,7 +3894,9 @@ final class MeshRepository {
                         createdAtEpochSec: item.createdAtEpochSec,
                         attemptCount: item.attemptCount + 1,
                         nextAttemptAtEpochSec: now + adaptiveReceiptWait,
-                        strictBleOnlyMode: item.strictBleOnlyMode
+                        strictBleOnlyMode: item.strictBleOnlyMode,
+                        recipientIdentityId: item.recipientIdentityId,
+                        intendedDeviceId: item.intendedDeviceId
                     )
                 )
                 appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=stored detail=awaiting_receipt_delay_sec=\(adaptiveReceiptWait)")
@@ -3864,8 +3927,10 @@ final class MeshRepository {
                         createdAtEpochSec: item.createdAtEpochSec,
                         attemptCount: nextAttemptCount,
                         nextAttemptAtEpochSec: now + backoff,
-                        strictBleOnlyMode: item.strictBleOnlyMode
-                )
+                        strictBleOnlyMode: item.strictBleOnlyMode,
+                        recipientIdentityId: item.recipientIdentityId,
+                        intendedDeviceId: item.intendedDeviceId
+                    )
             )
             appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=stored detail=retry_backoff_sec=\(backoff) attempt=\(nextAttemptCount)")
         }
@@ -3953,7 +4018,9 @@ final class MeshRepository {
                 createdAtEpochSec: item.createdAtEpochSec,
                 attemptCount: item.attemptCount,
                 nextAttemptAtEpochSec: now,
-                strictBleOnlyMode: item.strictBleOnlyMode
+                strictBleOnlyMode: item.strictBleOnlyMode,
+                recipientIdentityId: item.recipientIdentityId,
+                intendedDeviceId: item.intendedDeviceId
             )
         }
         guard changed else { return }
@@ -4339,7 +4406,7 @@ final class MeshRepository {
                 addedAt: contact.addedAt,
                 lastSeen: contact.lastSeen,
                 notes: withListeners,
-                lastKnownDeviceId: nil
+                lastKnownDeviceId: contact.lastKnownDeviceId
             )
             try? contactManager?.add(contact: updated)
             contactManager?.flush()
@@ -4353,6 +4420,7 @@ final class MeshRepository {
         libp2pPeerId: String?,
         listeners: [String],
         blePeerId: String? = nil,
+        deviceId: String? = nil,
         createIfMissing: Bool = true
     ) {
         let normalizedPeerId = canonicalPeerId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -4408,7 +4476,7 @@ final class MeshRepository {
             addedAt: existing?.addedAt ?? now,
             lastSeen: now,
             notes: notes,
-            lastKnownDeviceId: nil
+            lastKnownDeviceId: deviceId ?? existing?.lastKnownDeviceId
         )
         try? contactManager?.add(contact: updated)
         contactManager?.flush()
@@ -4737,7 +4805,10 @@ final class MeshRepository {
             logger.info("DIAG: \(message)")
         }
 
-        // 3. Persist to Disk (Append only)
+        // WS12.41: Send to IronCore for summarized storage
+        ironCore?.recordLog(line: line)
+
+        // 3. Persist to Disk (Append only) - keep as fallback with smaller limit
         persistDiagnosticLine(line)
     }
 
@@ -4749,6 +4820,13 @@ final class MeshRepository {
         diagnosticsIOQueue.async {
             let parent = url.deletingLastPathComponent()
             try? FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+
+            // Limit file size to ~100KB (much smaller now that we have summarizer)
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+               let size = attrs[.size] as? UInt64,
+               size > 100 * 1024 {
+                self.rotateDiagnosticFiles()
+            }
 
             if !FileManager.default.fileExists(atPath: url.path) {
                 try? data.write(to: url)
@@ -4765,9 +4843,61 @@ final class MeshRepository {
             }
         }
     }
+
+    private func rotateDiagnosticFiles() {
+        let url = diagnosticsLogURL
+        let parent = url.deletingLastPathComponent()
+        let name = url.lastPathComponent
+
+        // Consolidate logs: .4 -> .5, .3 -> .4, etc.
+        for i in (1...4).reversed() {
+            let current = parent.appendingPathComponent("\(name).\(i)")
+            let next = parent.appendingPathComponent("\(name).\(i+1)")
+            if FileManager.default.fileExists(atPath: current.path) {
+                try? FileManager.default.removeItem(atPath: next.path)
+                try? FileManager.default.moveItem(at: current, to: next)
+            }
+        }
+        // Move current to .1
+        let firstHistory = parent.appendingPathComponent("\(name).1")
+        try? FileManager.default.removeItem(atPath: firstHistory.path)
+        try? FileManager.default.moveItem(at: url, to: firstHistory)
+    }
+
     func clearDiagnostics() {
         diagnosticsBuffer = []
-        try? FileManager.default.removeItem(at: diagnosticsLogURL)
+        let url = diagnosticsLogURL
+        let parent = url.deletingLastPathComponent()
+        let name = url.lastPathComponent
+
+        try? FileManager.default.removeItem(at: url)
+        for i in 1...5 {
+            let history = parent.appendingPathComponent("\(name).\(i)")
+            try? FileManager.default.removeItem(at: history)
+        }
+    }
+
+    private func startStorageMaintenance() {
+        storageMaintenanceTask?.cancel()
+        storageMaintenanceTask = Task { @MainActor in
+            while !Task.isCancelled {
+                do {
+                    let path = NSHomeDirectory()
+                    let attributes = try FileManager.default.attributesOfFileSystem(forPath: path)
+                    let total = attributes[.systemSize] as? UInt64 ?? 0
+                    let free = attributes[.systemFreeSize] as? UInt64 ?? 0
+                    
+                    ironCore?.updateDiskStats(totalBytes: total, freeBytes: free)
+                    try ironCore?.performMaintenance()
+                    
+                    appendDiagnostic("storage_pulse free=\(free / 1024 / 1024)MB total=\(total / 1024 / 1024)MB")
+                } catch {
+                    logger.warning("Storage maintenance loop error: \(error.localizedDescription)")
+                }
+                
+                try? await Task.sleep(nanoseconds: 15 * 60 * 1_000_000_000) // 15 minutes
+            }
+        }
     }
 
     // MARK: - Factory Reset
@@ -5039,5 +5169,38 @@ enum MeshError: LocalizedError {
 private extension String {
     var nilIfEmpty: String? {
         isEmpty ? nil : self
+    }
+}
+
+// MARK: - Peer ID Validation & Normalization
+
+struct PeerIdValidator {
+    /// Normalizes a Peer ID based on its type.
+    /// - Identity IDs (64-char hex) are converted to lowercase.
+    /// - libp2p Peer IDs (Base58) are preserved as-is (they are case-sensitive).
+    static func normalize(_ id: String) -> String {
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isIdentityId(trimmed) {
+            return trimmed.lowercased()
+        }
+        return trimmed
+    }
+
+    /// Checks if the given string is a 64-character hex identity ID.
+    static func isIdentityId(_ id: String) -> Bool {
+        guard id.count == 64 else { return false }
+        return id.unicodeScalars.allSatisfy { scalar in
+            CharacterSet(charactersIn: "0123456789abcdefABCDEF").contains(scalar)
+        }
+    }
+
+    /// Checks if the given string starts with common libp2p Peer ID prefixes.
+    static func isLibp2pPeerId(_ id: String) -> Bool {
+        return id.hasPrefix("12D3Koo") || id.hasPrefix("Qm")
+    }
+
+    /// Performs a case-sensitive comparison after normalization.
+    static func isSame(_ id1: String, _ id2: String) -> Bool {
+        return normalize(id1) == normalize(id2)
     }
 }

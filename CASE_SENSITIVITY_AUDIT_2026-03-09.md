@@ -17,8 +17,8 @@ The `_discoveredPeers` map in Android is keyed by the original case-sensitive pe
 val discoveredPeer = _discoveredPeers.value[normalizedPeerId]
 
 // After:
-val discoveredPeer = _discoveredPeers.value.entries.firstOrNull { 
-    it.key.equals(normalizedPeerId, ignoreCase = true) 
+val discoveredPeer = _discoveredPeers.value.entries.firstOrNull {
+    it.key.equals(normalizedPeerId, ignoreCase = true)
 }?.value
 ```
 
@@ -143,7 +143,7 @@ I delivery_state msg=921b6660-6d31-456e-8b43-fcf064bf22e2 state=delivered
 3. Verified message sending works end-to-end
 4. All discovered peers map accesses now case-insensitive
 
-### ✅ iOS  
+### ✅ iOS
 1. Built successfully with latest code
 2. Installed and launched on simulator
 3. App running without immediate crashes
@@ -165,7 +165,7 @@ I delivery_state msg=921b6660-6d31-456e-8b43-fcf064bf22e2 state=delivered
 
 ### Immediate Actions (User Testing)
 1. ✅ Android message sending - READY TO TEST
-2. ✅ iOS app stability - READY TO TEST  
+2. ✅ iOS app stability - READY TO TEST
 3. Test both platforms sending messages to each other
 4. Report any specific UI issues or crashes
 

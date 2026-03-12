@@ -62,7 +62,7 @@ struct ContactsListView: View {
                         } label: {
                             Label("Edit Nickname", systemImage: "pencil")
                         }
-                        
+
                         Button(role: .destructive) {
                             pendingDeletePeerId = contact.peerId
                             pendingDeleteDisplayName = conversationDisplayName(for: contact)

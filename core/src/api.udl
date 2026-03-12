@@ -102,6 +102,16 @@ interface IronCore {
     // Metadata Accessors
     ContactManager contacts_manager();
     HistoryManager history_manager();
+
+    // Storage & Clean-up (WS12.41 overhaul)
+    void update_disk_stats(u64 total_bytes, u64 free_bytes);
+    [Throws=IronCoreError]
+    void perform_maintenance();
+
+    // Log Summarization (WS12.41 overhaul)
+    void record_log(string line);
+    [Throws=IronCoreError]
+    string export_logs();
 };
 
 // ============================================================================

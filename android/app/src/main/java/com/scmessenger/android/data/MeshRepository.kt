@@ -32,7 +32,7 @@ import java.io.File
  * All UniFFI objects are initialized lazily and managed here to ensure
  * proper lifecycle and resource cleanup.
  */
-class MeshRepository(private val context: Context) {
+open class MeshRepository(private val context: Context) {
 
     companion object {
         private const val IDENTITY_BACKUP_PREFS = "identity_backup_prefs"
@@ -162,15 +162,15 @@ class MeshRepository(private val context: Context) {
 
     // Service state
     private val _serviceState = MutableStateFlow(uniffi.api.ServiceState.STOPPED)
-    val serviceState: StateFlow<uniffi.api.ServiceState> = _serviceState.asStateFlow()
+    open val serviceState: StateFlow<uniffi.api.ServiceState> = _serviceState.asStateFlow()
 
     // Service stats
     private val _serviceStats = MutableStateFlow<uniffi.api.ServiceStats?>(null)
-    val serviceStats: StateFlow<uniffi.api.ServiceStats?> = _serviceStats.asStateFlow()
+    open val serviceStats: StateFlow<uniffi.api.ServiceStats?> = _serviceStats.asStateFlow()
 
     // Message updates flow (both sent and received) used for UI updates
-    private val _messageUpdates = kotlinx.coroutines.flow.MutableSharedFlow<uniffi.api.MessageRecord>(replay = 0)
-    val messageUpdates = _messageUpdates.asSharedFlow()
+    private val _messageUpdates = kotlinx.coroutines.flow.MutableSharedFlow<uniffi.api.MessageRecord>(replay = 0, extraBufferCapacity = 1, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    open val messageUpdates = _messageUpdates.asSharedFlow()
 
     // Compatibility for notifications (incoming only)
     val incomingMessages = messageUpdates.filter { it.direction == uniffi.api.MessageDirection.RECEIVED }
@@ -178,6 +178,7 @@ class MeshRepository(private val context: Context) {
     private val repoScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
     private var pendingOutboxRetryJob: kotlinx.coroutines.Job? = null
     private var coverTrafficJob: kotlinx.coroutines.Job? = null
+    private var maintenanceJob: kotlinx.coroutines.Job? = null
     private val pendingOutboxFile = File(storagePath, "pending_outbox.json")
     private val pendingOutboxFlushMutex = kotlinx.coroutines.sync.Mutex()
     private val receiptAwaitSeconds: Long = 8L
@@ -335,6 +336,8 @@ class MeshRepository(private val context: Context) {
             // Initialize Data Managers
             settingsManager = uniffi.api.MeshSettingsManager(storagePath)
             historyManager = uniffi.api.HistoryManager(storagePath)
+            // WS12.41: Removed fixed 10k limit. Retention is now disk-percent aware.
+            // historyManager?.enforceRetention(10000u) 
             contactManager = uniffi.api.ContactManager(storagePath)
             ledgerManager = uniffi.api.LedgerManager(storagePath)
             autoAdjustEngine = uniffi.api.AutoAdjustEngine()
@@ -432,6 +435,17 @@ class MeshRepository(private val context: Context) {
             if (ironCore == null) {
                 throw IllegalStateException("IronCore instance is null after service start")
             }
+
+            // WS12.41: Inject IronCore into FileLoggingTree for summarized logging
+            timber.log.Timber.forest().forEach { tree ->
+                if (tree is com.scmessenger.android.utils.FileLoggingTree) {
+                    tree.setIronCore(ironCore)
+                }
+            }
+
+            // WS12.41: Start storage maintenance loop
+            startStorageMaintenance()
+
             ensureLocalIdentityFederation()
 
             // 3. Wire up CoreDelegate (Rust -> Android Events)
@@ -726,9 +740,9 @@ class MeshRepository(private val context: Context) {
 
                         val hintedRoutePeerId = verifiedHints?.libp2pPeerId
                             ?.trim()
-                            ?.takeIf { isLibp2pPeerId(it) }
+                            ?.takeIf { PeerIdValidator.isLibp2pPeerId(it) }
                         val routeWifiPeerId = senderId.takeIf { isWifiPeerId(it) }
-                        val routePeerId = senderId.takeIf { isLibp2pPeerId(it) } ?: hintedRoutePeerId
+                        val routePeerId = senderId.takeIf { PeerIdValidator.isLibp2pPeerId(it) } ?: hintedRoutePeerId
                         val hintedAddresses = (
                             verifiedHints?.listeners.orEmpty() +
                                 verifiedHints?.externalAddresses.orEmpty() +
@@ -1156,7 +1170,7 @@ class MeshRepository(private val context: Context) {
             Timber.i("📛 Blocking: Skipping receipt for blocked peer $senderId (relay unaffected)")
             return
         }
-        
+
         val normalizedMessageId = messageId.trim()
         if (normalizedMessageId.isEmpty()) return
 
@@ -1258,13 +1272,13 @@ class MeshRepository(private val context: Context) {
     private fun sendIdentitySyncIfNeeded(routePeerId: String, knownPublicKey: String? = null) {
         val normalizedRoute = routePeerId.trim()
         if (normalizedRoute.isEmpty() || isBootstrapRelayPeer(normalizedRoute)) return
-        
+
         // Check if core is initialized before attempting identity sync
         if (ironCore == null) {
             Timber.d("sendIdentitySyncIfNeeded: IronCore not initialized, skipping for $normalizedRoute")
             return
         }
-        
+
         val shouldSend = identitySyncSentPeers.add(normalizedRoute)
         if (!shouldSend) return
 
@@ -1321,13 +1335,13 @@ class MeshRepository(private val context: Context) {
         val normalizedRoute = routePeerId.trim()
         Timber.w("sendHistorySyncIfNeeded called for $normalizedRoute")
         if (normalizedRoute.isEmpty() || isBootstrapRelayPeer(normalizedRoute)) return
-        
+
         // Check if core is initialized before attempting history sync
         if (ironCore == null) {
             Timber.w("sendHistorySyncIfNeeded: IronCore not initialized, skipping for $normalizedRoute")
             return
         }
-        
+
         val now = System.currentTimeMillis()
         val lastSent = historySyncSentPeers[normalizedRoute] ?: 0L
         val shouldSend = (now - lastSent) > HISTORY_SYNC_COOLDOWN_MS
@@ -1747,7 +1761,6 @@ class MeshRepository(private val context: Context) {
                 createIfMissing = false
             )
 
-            // Attempt to dial via Swarm if we have libp2p info
             if (!routePeerId.isNullOrEmpty() && listenersStrings.isNotEmpty()) {
                 connectToPeer(routePeerId, listenersStrings)
             }
@@ -1757,8 +1770,9 @@ class MeshRepository(private val context: Context) {
     }
 
     private fun updateDiscoveredPeer(key: String, info: PeerDiscoveryInfo) {
+        val normalizedKey = PeerIdValidator.normalize(key)
         _discoveredPeers.update { current ->
-            val existing = current[key]
+            val existing = current[normalizedKey]
             if (existing != null && existing.isFull && !info.isFull && (info.lastSeen - existing.lastSeen < 300u)) {
                 // Don't downgrade a full identity to headless if we've seen it recently.
                 current
@@ -1783,17 +1797,13 @@ class MeshRepository(private val context: Context) {
                         lastSeen = maxOf(info.lastSeen, existing.lastSeen)
                     )
                 }
-                val canonicalPeerId = merged.peerId.trim().ifEmpty { key.trim() }
+                val canonicalPeerId = PeerIdValidator.normalize(merged.peerId.ifEmpty { normalizedKey })
                 val canonicalPublicKey = normalizePublicKey(merged.publicKey)
 
                 val withCanonical = current + (canonicalPeerId to merged)
                 withCanonical.filterNot { (mapKey, candidate) ->
-                    if (mapKey == canonicalPeerId) return@filterNot false
-
-                    val sameCanonicalPeerId = candidate.peerId.trim() == canonicalPeerId
-                    val samePublicKey = canonicalPublicKey != null &&
-                        normalizePublicKey(candidate.publicKey) == canonicalPublicKey
-                    sameCanonicalPeerId || samePublicKey
+                    // Cleanup duplicate entries for the same identity if they were added under different keys
+                    mapKey != canonicalPeerId && PeerIdValidator.isSame(mapKey, canonicalPeerId)
                 }
             }
         }
@@ -2240,16 +2250,39 @@ class MeshRepository(private val context: Context) {
 
     suspend fun sendMessage(peerId: String, content: String) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val normalizedPeerId = PeerIdValidator.normalize(peerId)
+            val initialMessageId = java.util.UUID.randomUUID().toString()
+            val now = (System.currentTimeMillis() / 1000).toULong()
+
+            // 1. Save to history IMMEDIATELY.
+            // This satisfies the "never drop/disappear" requirement. Even if the device
+            // crashes during the rest of this function, the message is in DB.
+            val initialRecord = uniffi.api.MessageRecord(
+                id = initialMessageId,
+                peerId = normalizedPeerId,
+                direction = uniffi.api.MessageDirection.SENT,
+                content = content,
+                timestamp = now,
+                senderTimestamp = now,
+                delivered = false
+            )
+
             try {
-                Timber.d("SEND_MSG_START: peerId='$peerId', contentLen=${content.length}")
-                val normalizedPeerId = PeerIdValidator.normalize(peerId)
-                Timber.d("SEND_MSG_START: normalized='$normalizedPeerId'")
-                
+                historyManager?.add(initialRecord)
+                historyManager?.flush()
+
+                // Emit for UI update
+                repoScope.launch {
+                    _messageUpdates.emit(initialRecord)
+                }
+
+                Timber.d("SEND_MSG_START: original='$peerId', normalized='$normalizedPeerId', initialId=$initialMessageId")
+
                 // Check if relay/messaging is enabled (bidirectional control)
                 val currentSettings = settingsManager?.load()
                 Companion.requireMeshParticipationEnabled(currentSettings)
 
-                // 1. Resolve the peer ID to canonical public_key_hex using core's unified resolver
+                // 2. Resolve the peer ID to canonical public_key_hex using core's unified resolver
                 var publicKey: String? = try {
                     val resolved = ironCore?.resolveIdentity(normalizedPeerId)
                     Timber.d("SEND_MSG: Core resolved '$normalizedPeerId' to publicKey='${resolved?.take(8)}'")
@@ -2258,103 +2291,60 @@ class MeshRepository(private val context: Context) {
                     Timber.d("SEND_MSG: Core resolution failed for '$normalizedPeerId': ${e.message}")
                     null
                 }
-                
+
                 // Fallback: Try contact manager
+                val contact = contactManager?.get(normalizedPeerId)
                 if (publicKey == null) {
-                    val contact = contactManager?.get(normalizedPeerId)
                     if (contact != null && !contact.publicKey.isNullOrEmpty()) {
                         publicKey = contact.publicKey.trim()
                         Timber.d("SEND_MSG: Resolved from contact: key=${publicKey?.take(8)}")
                     }
                 }
-                
+
                 // Fallback: Try discovered peers
                 if (publicKey == null) {
-                    val discoveredPeer = _discoveredPeers.value.entries.firstOrNull { 
-                        it.key.equals(normalizedPeerId, ignoreCase = true) 
+                    val discoveredPeer = _discoveredPeers.value.entries.find {
+                        PeerIdValidator.isSame(it.key, normalizedPeerId)
                     }?.value
                     if (discoveredPeer != null && !discoveredPeer.publicKey.isNullOrEmpty()) {
                         publicKey = discoveredPeer.publicKey.trim()
                         Timber.d("SEND_MSG: Resolved from discovered peers: key=${publicKey?.take(8)}")
                     }
                 }
-                
-                // Last resort for libp2p IDs: extract from peer ID directly
-                if (publicKey == null && isLibp2pPeerId(normalizedPeerId)) {
+
+                // Fallback: Try extracting public key directly from libp2p peer ID
+                if (publicKey == null && PeerIdValidator.isLibp2pPeerId(normalizedPeerId)) {
                     val transportIdentity = resolveTransportIdentity(normalizedPeerId)
                     if (transportIdentity != null) {
                         publicKey = transportIdentity.publicKey
                         Timber.d("SEND_MSG: Resolved via transport identity: key=${publicKey?.take(8)}, canonical=${transportIdentity.canonicalPeerId}")
-                        
-                        if (publicKey == null) {
-                            val canonicalPeer = _discoveredPeers.value.entries.firstOrNull {
-                                it.key.equals(transportIdentity.canonicalPeerId, ignoreCase = true)
-                            }?.value
-                            if (canonicalPeer != null && !canonicalPeer.publicKey.isNullOrEmpty()) {
-                                publicKey = canonicalPeer.publicKey.trim()
-                                Timber.d("SEND_MSG: Found via canonical peer ID: ${transportIdentity.canonicalPeerId}")
+                    }
+
+                    if (publicKey == null) {
+                        try {
+                            val extractedKey = ironCore?.extractPublicKeyFromPeerId(normalizedPeerId)
+                            if (!extractedKey.isNullOrEmpty()) {
+                                publicKey = normalizePublicKey(extractedKey)
+                                Timber.d("SEND_MSG: Extracted public key from peer ID: ${publicKey?.take(8)}")
                             }
+                        } catch (e: Exception) {
+                            Timber.d("SEND_MSG: Failed to extract public key from peer ID: ${e.message}")
                         }
                     }
                 }
 
-                // If still not found, try extracting public key directly from libp2p peer ID
-                if (publicKey == null && isLibp2pPeerId(normalizedPeerId)) {
-                    try {
-                        val extractedKey = ironCore?.extractPublicKeyFromPeerId(normalizedPeerId)
-                        if (!extractedKey.isNullOrEmpty()) {
-                            publicKey = normalizePublicKey(extractedKey)
-                            Timber.d("SEND_MSG: Extracted public key from peer ID: ${publicKey?.take(8)}")
-                        }
-                    } catch (e: Exception) {
-                        Timber.d("SEND_MSG: Failed to extract public key from peer ID: ${e.message}")
-                    }
-                }
-
-                // If still not found, scan discovered peers for matching canonical peer ID
                 if (publicKey == null) {
-                    val matchingPeer = _discoveredPeers.value.values.firstOrNull { 
-                        it.peerId == normalizedPeerId && !it.publicKey.isNullOrEmpty()
-                    }
-                    if (matchingPeer != null) {
-                        publicKey = matchingPeer.publicKey?.trim()
-                        Timber.d("SEND_MSG: Found by scanning discovered peers canonical IDs: key=${publicKey?.take(8)}")
-                    }
-                }
-
-                if (publicKey == null) {
-                    // Queue message for later delivery when peer is discovered
+                    // 3. Queue with placeholder encrypted data (will re-encrypt when peer discovered)
                     Timber.w("SEND_MSG_QUEUE: Peer not found - will retry when discovered: $normalizedPeerId")
-                    Timber.d("SEND_MSG_QUEUE: Discovered peers: ${_discoveredPeers.value.keys.joinToString(", ") { it.take(12) }}")
-                    
-                    // Create a placeholder message in history with pending state
-                    val pendingMessageId = java.util.UUID.randomUUID().toString()
-                    val record = uniffi.api.MessageRecord(
-                        id = pendingMessageId,
-                        peerId = normalizedPeerId,
-                        direction = uniffi.api.MessageDirection.SENT,
-                        content = content,
-                        timestamp = (System.currentTimeMillis() / 1000).toULong(),
-                        senderTimestamp = (System.currentTimeMillis() / 1000).toULong(),
-                        delivered = false
-                    )
-                    historyManager?.add(record)
-                    historyManager?.flush()
-                    
-                    // Emit for UI update
-                    repoScope.launch {
-                        _messageUpdates.emit(record)
-                    }
-                    
+
                     logDeliveryState(
-                        messageId = pendingMessageId,
+                        messageId = initialMessageId,
                         state = "queued",
                         detail = "peer_not_discovered_yet awaiting_public_key"
                     )
-                    
-                    // Queue with placeholder encrypted data (will re-encrypt when peer discovered)
+
                     enqueuePendingOutbound(
-                        historyRecordId = pendingMessageId,
+                        historyRecordId = initialMessageId,
                         peerId = normalizedPeerId,
                         routePeerId = null,
                         listeners = emptyList(),
@@ -2363,128 +2353,121 @@ class MeshRepository(private val context: Context) {
                         initialDelaySec = 5, // Retry in 5 seconds
                         strictBleOnlyMode = false
                     )
-                    
+
                     Timber.i("Message queued for $normalizedPeerId - will send when peer discovered")
-                    return@withContext // Don't throw, message is queued
+                    return@withContext
                 }
 
-                val finalPublicKey = publicKey
-
-                // Pre-validate public key to provide descriptive errors
-                if (finalPublicKey.isEmpty()) {
-                    throw IllegalStateException("Peer $normalizedPeerId has no public key. Please add as contact with a valid public key.")
-                }
-                if (finalPublicKey.length != 64) {
-                    throw IllegalStateException("Peer $normalizedPeerId has invalid public key (length: ${finalPublicKey.length}, expected 64 hex chars).")
-                }
-                if (!finalPublicKey.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
-                    throw IllegalStateException("Peer $normalizedPeerId has invalid public key (non-hex characters).")
+                val finalPublicKey = publicKey!!
+                // Pre-validate public key
+                if (finalPublicKey.length != 64 || !finalPublicKey.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }) {
+                    throw IllegalStateException("Invalid public key format for $normalizedPeerId: $finalPublicKey")
                 }
 
                 Timber.d("Preparing message for $normalizedPeerId with key: ${finalPublicKey.take(8)}...")
-                
+
                 val routePeerCandidates = buildRoutePeerCandidates(
                     peerId = normalizedPeerId,
-                    cachedRoutePeerId = null, // Simplified
-                    notes = "", // Simplified
+                    cachedRoutePeerId = null,
+                    notes = "",
                     recipientPublicKey = finalPublicKey
                 )
+
                 if (isKnownRelay(normalizedPeerId) || isBootstrapRelayPeer(normalizedPeerId)) {
                     throw IllegalStateException("Refusing to use headless relay identity as a chat recipient: $normalizedPeerId")
                 }
+
                 val preferredRoutePeerId = routePeerCandidates.firstOrNull()
-                // 2. Encrypt/Prepare message (use trimmed key)
+
+                // 4. Encrypt/Prepare message
                 val outboundContent = encodeMessageWithIdentityHints(content)
                 val prepared = ironCore?.prepareMessageWithId(finalPublicKey, outboundContent)
                     ?: throw IllegalStateException("Failed to prepare message: IronCore not initialized")
-                val messageId = prepared.messageId.trim()
-                if (messageId.isBlank()) {
+
+                val realMessageId = prepared.messageId.trim()
+                if (realMessageId.isBlank()) {
                     throw IllegalStateException("Failed to prepare message: core returned empty message ID")
                 }
                 val encryptedData = prepared.envelopeData
 
-                // 3. Save to history first so content survives transient crashes
-                val record = uniffi.api.MessageRecord(
-                    id = messageId,
-                    peerId = normalizedPeerId,
-                    direction = uniffi.api.MessageDirection.SENT,
-                    content = content,
-                    timestamp = (System.currentTimeMillis() / 1000).toULong(),
-                    senderTimestamp = (System.currentTimeMillis() / 1000).toULong(),
-                    delivered = false
-                )
-                historyManager?.add(record)
-                historyManager?.flush()
-
-                // Emit for UI updates (e.g., chat list)
-                repoScope.launch {
-                    _messageUpdates.emit(record)
+                // 5. Reconcile message IDs: update the initial history record to use
+                // Core's wire message ID. Delivery receipts and markMessageSent are
+                // keyed by realMessageId, so our local record must match.
+                if (realMessageId != initialMessageId) {
+                    try {
+                        historyManager?.delete(initialMessageId)
+                        val reconciledRecord = uniffi.api.MessageRecord(
+                            id = realMessageId,
+                            peerId = normalizedPeerId,
+                            direction = uniffi.api.MessageDirection.SENT,
+                            content = content,
+                            timestamp = now,
+                            senderTimestamp = now,
+                            delivered = false
+                        )
+                        historyManager?.add(reconciledRecord)
+                        historyManager?.flush()
+                        Timber.d("SEND_MSG: Reconciled message ID: $initialMessageId -> $realMessageId")
+                    } catch (e: Exception) {
+                        Timber.w(e, "Failed to reconcile message ID; delivery tracking may be unreliable")
+                    }
                 }
+
                 logDeliveryState(
-                    messageId = messageId,
+                    messageId = realMessageId,
                     state = "pending",
                     detail = "message_prepared_local_history_written"
                 )
 
-                // 4. Send over core-selected swarm route only.
+                // 6. Send over core-selected swarm route only.
                 val delivery = attemptDirectSwarmDelivery(
                     routePeerCandidates = routePeerCandidates,
-                    listeners = emptyList(), // Simplified
+                    listeners = emptyList(),
                     encryptedData = encryptedData,
-                    wifiPeerId = preferredRoutePeerId, // Simplified
-                    blePeerId = null, // Simplified
-                    traceMessageId = messageId,
-                    attemptContext = "initial_send"
+                    wifiPeerId = preferredRoutePeerId,
+                    blePeerId = null,
+                    traceMessageId = realMessageId,
+                    attemptContext = "initial_send",
+                    recipientIdentityId = finalPublicKey,
+                    intendedDeviceId = contact?.lastKnownDeviceId
                 )
-                val selectedRoutePeerId = if (delivery.acked) {
-                    delivery.routePeerId ?: preferredRoutePeerId
-                } else {
-                    delivery.routePeerId
-                }
+
+                val selectedRoutePeerId = delivery.routePeerId ?: preferredRoutePeerId
 
                 if (delivery.acked) {
-                    promotePendingOutboundForPeer(peerId = normalizedPeerId, excludingMessageId = messageId)
+                    promotePendingOutboundForPeer(peerId = normalizedPeerId, excludingMessageId = realMessageId)
                 }
 
                 val receiptAwaitSeconds = 30L
                 val strictBleOnlyValidation = false
 
-                if (isMessageDeliveredLocally(messageId)) {
-                    removePendingOutbound(messageId)
+                if (isMessageDeliveredLocally(realMessageId)) {
+                    removePendingOutbound(realMessageId)
                     logDeliveryState(
-                        messageId = messageId,
+                        messageId = realMessageId,
                         state = "delivered",
                         detail = "delivery_receipt_arrived_before_enqueue"
                     )
                 } else {
-                    if (delivery.acked) {
-                        enqueuePendingOutbound(
-                            historyRecordId = messageId,
-                            peerId = normalizedPeerId,
-                            routePeerId = selectedRoutePeerId,
-                            listeners = emptyList(), // Simplified
-                            encryptedData = encryptedData,
-                            initialAttemptCount = 1,
-                            initialDelaySec = receiptAwaitSeconds,
-                            strictBleOnlyMode = strictBleOnlyValidation
-                        )
-                    } else {
-                        enqueuePendingOutbound(
-                            historyRecordId = messageId,
-                            peerId = normalizedPeerId,
-                            routePeerId = selectedRoutePeerId,
-                            listeners = emptyList(), // Simplified
-                            encryptedData = encryptedData,
-                            initialAttemptCount = 1,
-                            initialDelaySec = 0,
-                            strictBleOnlyMode = strictBleOnlyValidation
-                        )
-                    }
+                    enqueuePendingOutbound(
+                        historyRecordId = realMessageId,
+                        peerId = normalizedPeerId,
+                        routePeerId = selectedRoutePeerId,
+                        listeners = emptyList(),
+                        encryptedData = encryptedData,
+                        initialAttemptCount = 1,
+                        initialDelaySec = if (delivery.acked) receiptAwaitSeconds else 0,
+                        strictBleOnlyMode = strictBleOnlyValidation
+                    )
                 }
 
-                Timber.i("Message sent (encrypted) to $normalizedPeerId")
+                Timber.i("Message sent (encrypted) to $normalizedPeerId (id=$realMessageId)")
             } catch (e: Exception) {
-                Timber.e(e, "Failed to send message")
+                Timber.e(e, "Failed to send message to $normalizedPeerId")
+                // Even on error, the message is in history (initialRecord),
+                // but we should probably ensure it's also in the pending outbox for retry if it's a transient error.
+                // However, most exceptions here (invalid key, etc.) are non-transient.
+                // Transient transport errors are handled within attemptDirectSwarmDelivery.
                 throw e
             }
         }
@@ -2706,8 +2689,8 @@ class MeshRepository(private val context: Context) {
                 val normalizedKey = normalizePublicKey(info.publicKey)
                 val aggregateKey = normalizedKey ?: canonicalPeerId
                 val routeCandidate = when {
-                    isLibp2pPeerId(mapKey) -> mapKey
-                    isLibp2pPeerId(canonicalPeerId) -> canonicalPeerId
+                    PeerIdValidator.isLibp2pPeerId(mapKey) -> mapKey
+                    PeerIdValidator.isLibp2pPeerId(canonicalPeerId) -> canonicalPeerId
                     else -> null
                 }
                 val discoveredNickname = prepopulateDiscoveryNickname(
@@ -3139,7 +3122,7 @@ class MeshRepository(private val context: Context) {
                 // Only append /p2p/ component if peerId is a valid libp2p PeerId format
                 // (base58btc multihash, starts with "12D3Koo" or "Qm").
                 // Blake3 hex identity_ids (64 hex chars) are NOT valid libp2p PeerIds.
-                val finalAddr = if (isLibp2pPeerId(peerId) && !addr.contains("/p2p/")) {
+                val finalAddr = if (PeerIdValidator.isLibp2pPeerId(peerId) && !addr.contains("/p2p/")) {
                     "$addr/p2p/$peerId"
                 } else {
                     addr
@@ -3214,7 +3197,9 @@ class MeshRepository(private val context: Context) {
         blePeerId: String? = null,
         traceMessageId: String? = null,
         attemptContext: String = "send",
-        strictBleOnlyOverride: Boolean? = null
+        strictBleOnlyOverride: Boolean? = null,
+        recipientIdentityId: String? = null,
+        intendedDeviceId: String? = null
     ): DeliveryAttemptResult {
         val strictBleOnly = strictBleOnlyOverride ?: strictBleOnlyValidation
         val routePeerFallback = routePeerCandidates.firstOrNull() ?: "unknown_route_${System.currentTimeMillis()}"
@@ -3383,31 +3368,21 @@ class MeshRepository(private val context: Context) {
                         }
                     }
                 }
-
-                Timber.d(
-                    "tryBleDelivery exhausted targets requested=$bleAddr connected=${connectedBleDevices.joinToString(",")}"
-                )
-                logDeliveryAttempt(
-                    messageId = traceMessageId,
-                    medium = "ble",
-                    phase = "local_fallback",
-                    outcome = "failed",
-                    detail = "ctx=$attemptContext requested_target=$bleAddr reason=$lastFailureReason connected=${connectedBleDevices.size}"
-                )
                 false
             }
         )
         val localAcked = localFallback.acked
+
         if (strictBleOnly) {
             logDeliveryAttempt(
                 messageId = traceMessageId,
                 medium = "ble-only",
                 phase = "aggregate",
                 outcome = if (localAcked) "accepted" else "failed",
-                detail = "ctx=$attemptContext route_fallback=$routePeerFallback"
+                detail = "ctx=$attemptContext route_fallback=$blePeerId"
             )
             // BLE-only mode: accept local ACK as delivery
-            return DeliveryAttemptResult(acked = localAcked, routePeerId = routePeerFallback)
+            return DeliveryAttemptResult(acked = localAcked, routePeerId = blePeerId)
         }
 
         val bridge = swarmBridge ?: run {
@@ -3416,14 +3391,14 @@ class MeshRepository(private val context: Context) {
                 medium = "core",
                 phase = "direct",
                 outcome = "failed",
-                detail = "ctx=$attemptContext reason=swarm_bridge_unavailable route_fallback=$routePeerFallback ble_only=${localAcked}"
+                detail = "ctx=$attemptContext reason=swarm_bridge_unavailable route_fallback=$wifiPeerId ble_only=${localAcked}"
             )
             // Core unavailable - don't mark as delivered even if BLE succeeded
-            return DeliveryAttemptResult(acked = false, routePeerId = routePeerFallback)
+            return DeliveryAttemptResult(acked = false, routePeerId = wifiPeerId)
         }
         val sanitizedCandidates = routePeerCandidates
             .map { it.trim() }
-            .filter { it.isNotEmpty() && isLibp2pPeerId(it) && !isBootstrapRelayPeer(it) }
+            .filter { it.isNotEmpty() && PeerIdValidator.isLibp2pPeerId(it) && !isBootstrapRelayPeer(it) }
             .distinct()
 
         if (sanitizedCandidates.isEmpty()) {
@@ -3432,10 +3407,10 @@ class MeshRepository(private val context: Context) {
                 medium = "core",
                 phase = "direct",
                 outcome = "failed",
-                detail = "ctx=$attemptContext reason=no_route_candidates route_fallback=$routePeerFallback ble_only=${localAcked}"
+                detail = "ctx=$attemptContext reason=no_route_candidates route_fallback=$wifiPeerId ble_only=${localAcked}"
             )
             // No core routes - don't mark as delivered even if BLE succeeded
-            return DeliveryAttemptResult(acked = false, routePeerId = routePeerFallback)
+            return DeliveryAttemptResult(acked = false, routePeerId = wifiPeerId)
         }
 
         primeRelayBootstrapConnections()
@@ -3462,7 +3437,7 @@ class MeshRepository(private val context: Context) {
             )
             val attemptStart = System.currentTimeMillis()
             try {
-                bridge.sendMessage(routePeerId, encryptedData)
+                bridge.sendMessage(routePeerId, encryptedData, recipientIdentityId, intendedDeviceId)
                 val latencyMs = System.currentTimeMillis() - attemptStart
                 Timber.i("✓ Direct delivery ACK from $routePeerId (${latencyMs}ms)")
                 logDeliveryAttempt(
@@ -3500,7 +3475,7 @@ class MeshRepository(private val context: Context) {
                 )
                 val relayStart = System.currentTimeMillis()
                 try {
-                    bridge.sendMessage(routePeerId, encryptedData)
+                    bridge.sendMessage(routePeerId, encryptedData, recipientIdentityId, intendedDeviceId)
                     val latencyMs = System.currentTimeMillis() - relayStart
                     Timber.i("✓ Delivery ACK from $routePeerId after relay-circuit retry (${latencyMs}ms)")
                     logDeliveryAttempt(
@@ -3528,10 +3503,8 @@ class MeshRepository(private val context: Context) {
             medium = "final",
             phase = "aggregate",
             outcome = "failed",
-            detail = "ctx=$attemptContext route_fallback=${sanitizedCandidates.firstOrNull() ?: routePeerFallback} ble_only=${localAcked}"
+            detail = "ctx=$attemptContext reason=all_transports_failed ble_only=${localAcked}"
         )
-        // Core delivery failed - don't mark as delivered even if BLE succeeded
-        // Message will be retried later
         return DeliveryAttemptResult(acked = false, routePeerId = null)
     }
 
@@ -3622,7 +3595,9 @@ class MeshRepository(private val context: Context) {
                     blePeerId = latestRouting.blePeerId,
                     traceMessageId = item.historyRecordId,
                     attemptContext = "outbox_retry",
-                    strictBleOnlyOverride = item.strictBleOnlyMode
+                    strictBleOnlyOverride = item.strictBleOnlyMode,
+                    recipientIdentityId = contact?.publicKey,
+                    intendedDeviceId = contact?.lastKnownDeviceId
                 )
                 val selectedRoutePeerId = if (delivery.acked) {
                     delivery.routePeerId ?: resolvedRoutePeerId
@@ -3837,11 +3812,10 @@ class MeshRepository(private val context: Context) {
             return senderId
         }
 
-        // Never rewrite an exact sender match.
-        val exactMatch = contacts.any {
+        val exactMatch = contacts.firstOrNull {
             PeerIdValidator.isSame(it.peerId, senderId) && normalizePublicKey(it.publicKey) == normalizedIncomingKey
         }
-        if (exactMatch) return senderId
+        if (exactMatch != null) return exactMatch.peerId
 
         // Prefer one stable canonical identity per public key whenever unique.
         val keyedContacts = contacts.filter {
@@ -3858,7 +3832,7 @@ class MeshRepository(private val context: Context) {
 
         // Alias libp2p sender IDs only when there is explicit linkage via notes:
         // "libp2p_peer_id:<senderId>" and the key matches.
-        if (isLibp2pPeerId(senderId)) {
+        if (PeerIdValidator.isLibp2pPeerId(senderId)) {
             val linkedIdentityContacts = contacts.filter {
                 normalizePublicKey(it.publicKey) == normalizedIncomingKey &&
                     PeerIdValidator.isSame(parseRoutingHints(it.notes).libp2pPeerId.orEmpty(), senderId) &&
@@ -3867,35 +3841,37 @@ class MeshRepository(private val context: Context) {
 
             return when (linkedIdentityContacts.size) {
                 1 -> linkedIdentityContacts.first().peerId
-                0 -> senderId
                 else -> {
-                    Timber.w(
-                        "Ambiguous canonical sender mapping for $senderId (matched ${linkedIdentityContacts.size} contacts); keeping raw sender ID"
-                    )
-                    senderId
+                    if (linkedIdentityContacts.size > 1) {
+                        Timber.w(
+                            "Ambiguous canonical sender mapping for $senderId (matched ${linkedIdentityContacts.size} contacts); keeping raw sender ID"
+                        )
+                    }
+                    PeerIdValidator.normalize(senderId)
                 }
             }
         }
 
         // Identity IDs (Blake3 hex) can represent the same peer that was
         // previously saved under a libp2p contact ID; map only when unique.
-        if (!isIdentityId(senderId)) return senderId
+        if (!PeerIdValidator.isIdentityId(senderId)) return senderId
         val keyedRoutedContacts = contacts.filter {
             normalizePublicKey(it.publicKey) == normalizedIncomingKey &&
                 it.peerId != senderId &&
                 (
                     !parseRoutingHints(it.notes).libp2pPeerId.isNullOrBlank() ||
-                    isLibp2pPeerId(it.peerId)
+                    PeerIdValidator.isLibp2pPeerId(it.peerId)
                 )
         }
         return when (keyedRoutedContacts.size) {
             1 -> keyedRoutedContacts.first().peerId
-            0 -> senderId
             else -> {
-                Timber.w(
-                    "Ambiguous identity sender mapping for $senderId (matched ${keyedRoutedContacts.size} contacts); keeping raw sender ID"
-                )
-                senderId
+                if (keyedRoutedContacts.size > 1) {
+                    Timber.w(
+                        "Ambiguous identity sender mapping for $senderId (matched ${keyedRoutedContacts.size} contacts); keeping raw sender ID"
+                    )
+                }
+                PeerIdValidator.normalize(senderId)
             }
         }
     }
@@ -3906,8 +3882,10 @@ class MeshRepository(private val context: Context) {
         senderPublicKeyHex: String,
         hintedIdentityId: String?
     ): String {
-        val normalizedHint = hintedIdentityId?.trim()?.takeIf { isIdentityId(it) } ?: return resolvedCanonicalPeerId
-        if (normalizedHint == resolvedCanonicalPeerId) return resolvedCanonicalPeerId
+        val hint = hintedIdentityId?.trim() ?: return resolvedCanonicalPeerId
+        val normalizedHint = PeerIdValidator.normalize(hint)
+        if (!PeerIdValidator.isIdentityId(normalizedHint)) return resolvedCanonicalPeerId
+        if (PeerIdValidator.isSame(normalizedHint, resolvedCanonicalPeerId)) return resolvedCanonicalPeerId
         if (isBootstrapRelayPeer(normalizedHint)) return resolvedCanonicalPeerId
 
         val normalizedSenderKey = normalizePublicKey(senderPublicKeyHex)
@@ -3918,9 +3896,9 @@ class MeshRepository(private val context: Context) {
         }
 
         if (normalizedSenderKey != null) {
-            val hintedContact = contacts.firstOrNull { it.peerId == normalizedHint }
+            val hintedContact = contacts.firstOrNull { PeerIdValidator.isSame(it.peerId, normalizedHint) }
             if (hintedContact != null && normalizePublicKey(hintedContact.publicKey) == normalizedSenderKey) {
-                return normalizedHint
+                return hintedContact.peerId
             }
 
             val keyMatches = contacts.filter { normalizePublicKey(it.publicKey) == normalizedSenderKey }
@@ -3928,7 +3906,7 @@ class MeshRepository(private val context: Context) {
             if (keyMatches.isNotEmpty()) return resolvedCanonicalPeerId
         }
 
-        return if (resolvedCanonicalPeerId == senderId || isLibp2pPeerId(resolvedCanonicalPeerId)) {
+        return if (PeerIdValidator.isSame(resolvedCanonicalPeerId, senderId) || PeerIdValidator.isLibp2pPeerId(resolvedCanonicalPeerId)) {
             normalizedHint
         } else {
             resolvedCanonicalPeerId
@@ -3995,7 +3973,7 @@ class MeshRepository(private val context: Context) {
                     publicKey = normalizePublicKey(it.optString("public_key", "")),
                     nickname = normalizeNickname(it.optString("nickname", "")),
                     libp2pPeerId = it.optString("libp2p_peer_id", "").trim().takeIf { value ->
-                        value.isNotBlank() && isLibp2pPeerId(value)
+                        value.isNotBlank() && PeerIdValidator.isLibp2pPeerId(value)
                     },
                     listeners = jsonArrayToStringList(it.optJSONArray("listeners")),
                     externalAddresses = jsonArrayToStringList(it.optJSONArray("external_addresses")),
@@ -4079,10 +4057,10 @@ class MeshRepository(private val context: Context) {
         if (incoming.isEmpty()) return existing
         if (existing.isEmpty() || existing == incoming) return incoming
 
-        val incomingIsLibp2p = isLibp2pPeerId(incoming)
-        val existingIsLibp2p = isLibp2pPeerId(existing)
-        val incomingIsIdentity = isIdentityId(incoming)
-        val existingIsIdentity = isIdentityId(existing)
+        val incomingIsLibp2p = PeerIdValidator.isLibp2pPeerId(incoming)
+        val existingIsLibp2p = PeerIdValidator.isLibp2pPeerId(existing)
+        val incomingIsIdentity = PeerIdValidator.isIdentityId(incoming)
+        val existingIsIdentity = PeerIdValidator.isIdentityId(existing)
         val incomingIsBle = isBlePeerId(incoming)
         val existingIsBle = isBlePeerId(existing)
 
@@ -4116,12 +4094,12 @@ class MeshRepository(private val context: Context) {
                         normalizePublicKey(it.publicKey) == normalizedKey
                     )
         }?.nickname
-        
+
         val resolved = selectAuthoritativeNickname(incomingNickname, fromContact)
         if (!resolved.isNullOrBlank()) {
             return resolved
         }
-        
+
         // Auto-generate nickname if none found
         val shortId = if (peerId.startsWith("12D3KooW")) {
             peerId.takeLast(8)
@@ -4195,7 +4173,7 @@ class MeshRepository(private val context: Context) {
         nickname: String?
     ) {
         val normalizedRoute = routePeerId?.trim().orEmpty()
-        if (normalizedRoute.isEmpty() || !isLibp2pPeerId(normalizedRoute)) return
+        if (normalizedRoute.isEmpty() || !PeerIdValidator.isLibp2pPeerId(normalizedRoute)) return
 
         val dialHints = buildDialCandidatesForPeer(
             routePeerId = normalizedRoute,
@@ -4247,7 +4225,7 @@ class MeshRepository(private val context: Context) {
     }
 
     private fun resolveTransportIdentity(libp2pPeerId: String): TransportIdentityResolution? {
-        if (!isLibp2pPeerId(libp2pPeerId)) return null
+        if (!PeerIdValidator.isLibp2pPeerId(libp2pPeerId)) return null
 
         val extractedKey = try {
             ironCore?.extractPublicKeyFromPeerId(libp2pPeerId)
@@ -4570,7 +4548,7 @@ class MeshRepository(private val context: Context) {
             val kv = component.trim()
             if (!kv.startsWith("libp2p_peer_id:")) continue
             val value = kv.removePrefix("libp2p_peer_id:").trim()
-            if (value.isNotEmpty() && isLibp2pPeerId(value)) {
+            if (value.isNotEmpty() && PeerIdValidator.isLibp2pPeerId(value)) {
                 out.add(value)
             }
         }
@@ -4590,12 +4568,12 @@ class MeshRepository(private val context: Context) {
         if (!newestHint.isNullOrBlank()) candidates.add(newestHint)
         for (hint in notedPeerIds.asReversed()) candidates.add(hint)
         cachedRoutePeerId?.trim()?.takeIf { it.isNotEmpty() }?.let { candidates.add(it) }
-        if (isLibp2pPeerId(peerId)) candidates.add(peerId)
+        if (PeerIdValidator.isLibp2pPeerId(peerId)) candidates.add(peerId)
         return candidates
             .map { it.trim() }
             .filter { candidate ->
                 candidate.isNotEmpty() &&
-                    isLibp2pPeerId(candidate) &&
+                    PeerIdValidator.isLibp2pPeerId(candidate) &&
                     routeCandidateMatchesRecipient(candidate, recipientPublicKey)
             }
             .distinct()
@@ -4608,7 +4586,7 @@ class MeshRepository(private val context: Context) {
             .map { it.peerId.trim() }
             .filter { candidate ->
                 candidate.isNotEmpty() &&
-                    isLibp2pPeerId(candidate) &&
+                    PeerIdValidator.isLibp2pPeerId(candidate) &&
                     !isKnownRelay(candidate)
             }
             .filter { candidate ->
@@ -4626,7 +4604,7 @@ class MeshRepository(private val context: Context) {
             .asSequence()
             .mapNotNull { entry ->
                 val candidate = entry.peerId?.trim().orEmpty()
-                if (candidate.isEmpty() || !isLibp2pPeerId(candidate) || isKnownRelay(candidate)) {
+                if (candidate.isEmpty() || !PeerIdValidator.isLibp2pPeerId(candidate) || isKnownRelay(candidate)) {
                     return@mapNotNull null
                 }
                 val candidateKey = normalizePublicKey(entry.publicKey) ?: return@mapNotNull null
@@ -4643,7 +4621,7 @@ class MeshRepository(private val context: Context) {
         recipientPublicKey: String?
     ): Boolean {
         val normalizedRoute = routePeerId.trim()
-        if (normalizedRoute.isEmpty() || !isLibp2pPeerId(normalizedRoute)) return false
+        if (normalizedRoute.isEmpty() || !PeerIdValidator.isLibp2pPeerId(normalizedRoute)) return false
         if (isKnownRelay(normalizedRoute)) return false
 
         val normalizedRecipientKey = normalizePublicKey(recipientPublicKey) ?: return true
@@ -4670,15 +4648,7 @@ class MeshRepository(private val context: Context) {
         return ledgerMatch
     }
 
-    private fun isLibp2pPeerId(value: String): Boolean {
-        return value.startsWith("12D3Koo") || value.startsWith("Qm")
-    }
-
-    private fun isIdentityId(value: String): Boolean {
-        return value.length == 64 && value.all {
-            (it in '0'..'9') || (it in 'a'..'f') || (it in 'A'..'F')
-        }
-    }
+    // Identity validation logic centralized in PeerIdValidator
 
     private fun buildDialCandidatesForPeer(
         routePeerId: String?,
@@ -4689,7 +4659,7 @@ class MeshRepository(private val context: Context) {
             .mapNotNull { normalizeAddressHint(it) }
             .distinct()
         val prioritized = prioritizeAddressesForCurrentNetwork(normalized)
-        val relayCircuits = if (includeRelayCircuits && !routePeerId.isNullOrBlank() && isLibp2pPeerId(routePeerId)) {
+        val relayCircuits = if (includeRelayCircuits && !routePeerId.isNullOrBlank() && PeerIdValidator.isLibp2pPeerId(routePeerId)) {
             relayCircuitAddressesForPeer(routePeerId)
         } else {
             emptyList()
@@ -4701,7 +4671,7 @@ class MeshRepository(private val context: Context) {
     }
 
     fun getDialHintsForRoutePeer(routePeerId: String): List<String> {
-        if (!isLibp2pPeerId(routePeerId)) return emptyList()
+        if (!PeerIdValidator.isLibp2pPeerId(routePeerId)) return emptyList()
         val fromLedger = (ledgerManager?.dialableAddresses() ?: emptyList())
             .filter { it.peerId == routePeerId }
             .map { it.multiaddr }
@@ -4819,7 +4789,7 @@ class MeshRepository(private val context: Context) {
     }
 
     private fun relayCircuitAddressesForPeer(targetPeerId: String): List<String> {
-        if (!isLibp2pPeerId(targetPeerId)) return emptyList()
+        if (!PeerIdValidator.isLibp2pPeerId(targetPeerId)) return emptyList()
         val circuits = mutableListOf<String>()
 
         // 1. Static Bootstrap Relays
@@ -4836,7 +4806,7 @@ class MeshRepository(private val context: Context) {
             it.value.isRelay && !it.value.isFull && it.key != targetPeerId
         }.forEach { entry ->
             val relayPeerId = entry.key
-            if (isLibp2pPeerId(relayPeerId)) {
+            if (PeerIdValidator.isLibp2pPeerId(relayPeerId)) {
                 val directAddrs = getDialHintsForRoutePeer(relayPeerId)
                 directAddrs.forEach { addr ->
                     val circuit = "$addr/p2p/$relayPeerId/p2p-circuit/p2p/$targetPeerId"
@@ -4945,6 +4915,28 @@ class MeshRepository(private val context: Context) {
     fun getPreferredRelay(): String? {
         val relays = ledgerManager?.getPreferredRelays(1u)
         return relays?.firstOrNull()?.peerId
+    }
+
+    private fun startStorageMaintenance() {
+        if (maintenanceJob?.isActive == true) return
+
+        maintenanceJob = repoScope.launch {
+            while (isActive) {
+                try {
+                    val stat = android.os.StatFs(context.filesDir.path)
+                    val total = stat.blockCountLong * stat.blockSizeLong
+                    val free = stat.availableBlocksLong * stat.blockSizeLong
+                    
+                    ironCore?.updateDiskStats(total.toULong(), free.toULong())
+                    ironCore?.performMaintenance()
+                    
+                    Timber.d("Storage maintenance check: free=${free / 1024 / 1024}MB / total=${total / 1024 / 1024}MB")
+                } catch (e: Exception) {
+                    Timber.w("Storage maintenance loop error: ${e.message}")
+                }
+                kotlinx.coroutines.delay(15 * 60 * 1000) // Every 15 minutes
+            }
+        }
     }
 
     /**

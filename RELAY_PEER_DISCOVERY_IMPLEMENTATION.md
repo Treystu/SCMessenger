@@ -1,5 +1,5 @@
 # Relay Peer Discovery - Final Implementation Report
-**Date:** March 10, 2026  
+**Date:** March 10, 2026
 **Status:** FULLY IMPLEMENTED
 
 ## Summary
@@ -12,7 +12,7 @@ Completed full implementation of active relay peer discovery. All nodes now broa
 - **File:** `core/src/relay/protocol.rs`
 - Added 4 new message types: `PeerJoined`, `PeerLeft`, `PeerListRequest`, `PeerListResponse`
 
-### 2. Peer Broadcaster ✅  
+### 2. Peer Broadcaster ✅
 - **File:** `core/src/transport/peer_broadcast.rs` (NEW - 148 lines)
 - Tracks connected peers
 - Generates peer announcement messages
@@ -22,7 +22,7 @@ Completed full implementation of active relay peer discovery. All nodes now broa
 - **File:** `core/src/transport/swarm.rs`
 - Line ~1247: Added PeerBroadcaster instance
 - Line ~2430-2456: Broadcast on peer connect
-- Line ~2491-2505: Broadcast on peer disconnect  
+- Line ~2491-2505: Broadcast on peer disconnect
 - Line ~1507-1560: Handle incoming peer discovery messages
 
 ### 4. Module Exports ✅
@@ -100,7 +100,7 @@ RelayMessage::PeerListResponse {
 
 ### Runtime Observations
 - OSX Relay: 8 peers, 6 relay reservations
-- Connections establishing successfully  
+- Connections establishing successfully
 - Relay circuit reservations working
 
 ### Peer Discovery Verification Needed
@@ -131,7 +131,7 @@ All clients now know about A and can connect directly
 ## Performance Considerations
 
 ### Scalability
-- Broadcast cost: O(n) per peer join/leave  
+- Broadcast cost: O(n) per peer join/leave
 - Peer list size: O(n) per new connection
 - For large networks (>100 peers), consider:
   - Batching announcements

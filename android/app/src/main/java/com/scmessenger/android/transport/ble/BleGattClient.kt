@@ -719,7 +719,7 @@ class BleGattClient(
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Timber.d("MTU changed to $mtu for $deviceAddress")
                 negotiatedMtus[deviceAddress] = mtu
-                
+
                 // P5: Request high priority for faster GATT writes/handshakes
                 try {
                     gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)

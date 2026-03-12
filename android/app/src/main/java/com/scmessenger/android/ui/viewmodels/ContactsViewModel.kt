@@ -6,6 +6,7 @@ import com.scmessenger.android.data.MeshRepository
 import com.scmessenger.android.service.MeshEventBus
 import com.scmessenger.android.service.PeerEvent
 import com.scmessenger.android.utils.ContactImportParseResult
+import com.scmessenger.android.utils.PeerIdValidator
 import com.scmessenger.android.utils.parseContactImportPayload
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -117,17 +118,7 @@ class ContactsViewModel @Inject constructor(
         }
     }
 
-    private fun isLibp2pPeerId(value: String?): Boolean {
-        val normalized = value?.trim().orEmpty()
-        return normalized.startsWith("12D3Koo") || normalized.startsWith("Qm")
-    }
-
-    private fun isIdentityId(value: String?): Boolean {
-        val normalized = value?.trim().orEmpty()
-        return normalized.length == 64 && normalized.all {
-            (it in '0'..'9') || (it in 'a'..'f') || (it in 'A'..'F')
-        }
-    }
+    // Identity validation logic centralized in PeerIdValidator
 
     private fun isBlePeerId(value: String?): Boolean {
         val normalized = value?.trim().orEmpty()
@@ -140,10 +131,10 @@ class ContactsViewModel @Inject constructor(
         val existing = existingPeerId?.trim().orEmpty()
         if (existing.isEmpty() || existing == incoming) return incoming
 
-        val incomingIsLibp2p = isLibp2pPeerId(incoming)
-        val existingIsLibp2p = isLibp2pPeerId(existing)
-        val incomingIsIdentity = isIdentityId(incoming)
-        val existingIsIdentity = isIdentityId(existing)
+        val incomingIsLibp2p = PeerIdValidator.isLibp2pPeerId(incoming)
+        val existingIsLibp2p = PeerIdValidator.isLibp2pPeerId(existing)
+        val incomingIsIdentity = PeerIdValidator.isIdentityId(incoming)
+        val existingIsIdentity = PeerIdValidator.isIdentityId(existing)
         val incomingIsBle = isBlePeerId(incoming)
         val existingIsBle = isBlePeerId(existing)
 
@@ -157,23 +148,23 @@ class ContactsViewModel @Inject constructor(
     }
 
     private fun isSameNearbyIdentity(peer: NearbyPeer, event: PeerEvent.IdentityDiscovered): Boolean {
-        val incomingPeerId = event.peerId.trim()
-        val incomingLibp2p = event.libp2pPeerId?.trim().orEmpty()
+        val incomingPeerId = PeerIdValidator.normalize(event.peerId)
+        val incomingLibp2p = event.libp2pPeerId?.let { PeerIdValidator.normalize(it) }.orEmpty()
         val incomingBle = event.blePeerId?.trim().orEmpty()
-        val peerLibp2p = peer.libp2pPeerId?.trim().orEmpty()
+        val peerLibp2p = peer.libp2pPeerId?.let { PeerIdValidator.normalize(it) }.orEmpty()
         val peerBle = peer.blePeerId?.trim().orEmpty()
 
-        val sameById = peer.peerId == incomingPeerId ||
+        val sameById = PeerIdValidator.isSame(peer.peerId, incomingPeerId) ||
             (incomingLibp2p.isNotEmpty() && (
-                peer.peerId == incomingLibp2p ||
-                    peerLibp2p == incomingLibp2p
+                PeerIdValidator.isSame(peer.peerId, incomingLibp2p) ||
+                    PeerIdValidator.isSame(peerLibp2p, incomingLibp2p)
                 )) ||
             (incomingBle.isNotEmpty() && (
                 peer.peerId == incomingBle ||
                     peerBle == incomingBle
                 ))
         val sameByPublicKey = !peer.publicKey.isNullOrBlank() &&
-            peer.publicKey.equals(event.publicKey, ignoreCase = true)
+            PeerIdValidator.isSame(peer.publicKey, event.publicKey)
         return sameById || sameByPublicKey
     }
 
@@ -197,8 +188,8 @@ class ContactsViewModel @Inject constructor(
                         cancelPendingNearbyRemoval(event.blePeerId)
 
                         val alreadyContact = _contacts.value.any { contact ->
-                            contact.peerId == event.peerId ||
-                                contact.publicKey.equals(event.publicKey, ignoreCase = true)
+                            PeerIdValidator.isSame(contact.peerId, event.peerId) ||
+                                PeerIdValidator.isSame(contact.publicKey, event.publicKey)
                         }
                         if (alreadyContact) {
                             // Federated nickname/route hints can update in repository upsert;
@@ -211,7 +202,7 @@ class ContactsViewModel @Inject constructor(
                             val matches = current.filter { peer -> isSameNearbyIdentity(peer, event) }
                             val existing = matches.maxByOrNull { peer ->
                                 val hasNickname = if (normalizeNickname(peer.nickname) != null) 2 else 0
-                                val hasStableId = if (!isLibp2pPeerId(peer.peerId)) 1 else 0
+                                val hasStableId = if (!PeerIdValidator.isLibp2pPeerId(peer.peerId)) 1 else 0
                                 hasNickname + hasStableId
                             }
                             if (matches.isNotEmpty()) {
@@ -222,7 +213,7 @@ class ContactsViewModel @Inject constructor(
                             val resolvedPeerId = selectStablePeerId(event.peerId, existing?.peerId)
                             val resolvedLibp2pPeerId = event.libp2pPeerId?.trim()?.takeIf { it.isNotEmpty() }
                                 ?: existing?.libp2pPeerId?.trim()?.takeIf { it.isNotEmpty() }
-                                ?: event.peerId.takeIf { isLibp2pPeerId(it) }
+                                ?: event.peerId.takeIf { PeerIdValidator.isLibp2pPeerId(it) }
                             val resolvedBlePeerId = event.blePeerId?.trim()?.takeIf { it.isNotEmpty() }
                                 ?: existing?.blePeerId?.trim()?.takeIf { it.isNotEmpty() }
                             val updated = NearbyPeer(
@@ -242,11 +233,14 @@ class ContactsViewModel @Inject constructor(
                     is PeerEvent.Discovered -> {
                         // Don't surface bootstrap relay nodes in the nearby list.
                         if (meshRepository.isBootstrapRelayPeer(event.peerId)) return@collect
-                        
-                        val alreadyContact = _contacts.value.any { it.peerId == event.peerId }
+
+                        val alreadyContact = _contacts.value.any { PeerIdValidator.isSame(it.peerId, event.peerId) }
                         cancelPendingNearbyRemoval(event.peerId)
                         val current = _nearbyPeers.value.toMutableList()
-                        val existingIdx = current.indexOfFirst { it.peerId == event.peerId || it.libp2pPeerId == event.peerId }
+                        val existingIdx = current.indexOfFirst {
+                            PeerIdValidator.isSame(it.peerId, event.peerId) ||
+                            it.libp2pPeerId?.let { libp -> PeerIdValidator.isSame(libp, event.peerId) } ?: false
+                        }
                         if (existingIdx >= 0) {
                             current[existingIdx] = current[existingIdx].copy(isOnline = true)
                             _nearbyPeers.value = current
@@ -260,7 +254,8 @@ class ContactsViewModel @Inject constructor(
                         var changed = false
                         current.indices.forEach { idx ->
                             val peer = current[idx]
-                            if (peer.peerId == event.peerId || peer.libp2pPeerId == event.peerId) {
+                            if (PeerIdValidator.isSame(peer.peerId, event.peerId) ||
+                                peer.libp2pPeerId?.let { PeerIdValidator.isSame(it, event.peerId) } ?: false) {
                                 if (peer.isOnline) {
                                     current[idx] = peer.copy(isOnline = false)
                                     changed = true
@@ -289,7 +284,8 @@ class ContactsViewModel @Inject constructor(
         pendingNearbyRemovalJobs[peerId] = viewModelScope.launch {
             kotlinx.coroutines.delay(nearbyDisconnectGraceMs)
             _nearbyPeers.value = _nearbyPeers.value.filterNot {
-                it.peerId == peerId || it.libp2pPeerId == peerId
+                PeerIdValidator.isSame(it.peerId, peerId) ||
+                it.libp2pPeerId?.let { libp -> PeerIdValidator.isSame(libp, peerId) } ?: false
             }
             pendingNearbyRemovalJobs.remove(peerId)
         }

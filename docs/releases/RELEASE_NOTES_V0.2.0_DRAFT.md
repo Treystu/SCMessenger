@@ -1,6 +1,6 @@
 # SCMessenger v0.2.0-alpha
 
-Status: Draft  
+Status: Draft
 Last updated: 2026-03-03
 
 This major update introduces significant improvements to reliability, transport variety, and cross-platform feature parity, moving SCMessenger closer to a public beta.

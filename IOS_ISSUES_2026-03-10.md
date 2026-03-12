@@ -1,13 +1,13 @@
 # iOS Issues - 2026-03-10
 
-**Status:** ONGOING  
+**Status:** ONGOING
 **Last Updated:** 2026-03-10T12:02:00Z
 
 ## Critical Issues
 
 ### 1. Conversation Deletion Not Persisting
-**Status:** 🔴 OPEN  
-**Priority:** HIGH  
+**Status:** 🔴 OPEN
+**Priority:** HIGH
 **User Impact:** SEVERE
 
 **Problem:**
@@ -49,7 +49,7 @@
 5. Implement deletion marker or suppress deleted conversations
 
 ### 2. Contact Deletion vs. Conversation Deletion
-**Status:** 🟡 FEATURE REQUEST  
+**Status:** 🟡 FEATURE REQUEST
 **Priority:** MEDIUM
 
 **Current Behavior:**
@@ -79,8 +79,8 @@ User wants to be able to:
 - Add swipe actions or context menu
 
 ### 3. App Freezing and Hanging
-**Status:** 🔴 OPEN  
-**Priority:** HIGH  
+**Status:** 🔴 OPEN
+**Priority:** HIGH
 **User Impact:** SEVERE
 
 **Symptoms:**

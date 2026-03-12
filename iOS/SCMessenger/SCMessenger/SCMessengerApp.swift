@@ -13,17 +13,17 @@ struct SCMessengerApp: App {
 
     // Repository - single source of truth
     @State private var meshRepository = MeshRepository()
-    
+
     // Background service
     @State private var backgroundService: MeshBackgroundService?
     @State private var didRunSetup = false
     @State private var showOnboarding = false
-    
+
     init() {
         // Initialize background service after repository
         // Will be set in onAppear
     }
-    
+
     var body: some Scene {
         WindowGroup {
             Group {
@@ -45,7 +45,7 @@ struct SCMessengerApp: App {
             }
         }
     }
-    
+
     private func setupApp() {
         if didRunSetup { return }
         didRunSetup = true
@@ -53,7 +53,7 @@ struct SCMessengerApp: App {
         // Initialize background service
         backgroundService = MeshBackgroundService(meshRepository: meshRepository)
         backgroundService?.registerBackgroundTasks()
-        
+
         // Initialize + start repository so identity/service state is hydrated at launch.
         do {
             try meshRepository.initialize()
@@ -63,11 +63,11 @@ struct SCMessengerApp: App {
             print("❌ Failed to initialize repository: \(error)")
         }
     }
-    
+
     private func handleEnteringBackground() {
         backgroundService?.onEnteringBackground()
     }
-    
+
     private func handleEnteringForeground() {
         backgroundService?.onEnteringForeground()
         refreshOnboardingGate()

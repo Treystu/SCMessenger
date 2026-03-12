@@ -119,7 +119,7 @@ Key Files:
   docker/QUICKSTART.md                 → 5-minute guide
   docker/TESTING_GUIDE.md              → Full documentation
   DOCKER_TEST_SETUP_COMPLETE.md        → Complete overview
-  
+
 Test Code:
   core/src/**/*.rs                     → Rust tests
   core/tests/*.rs                      → Integration tests
@@ -156,16 +156,16 @@ docker exec -it <container> bash     # Access container shell
 
 ## [Needs Revalidation] Success Indicators
 
-✅ Exit code 0 = all tests passed  
-❌ Exit code 1 = some tests failed  
-📊 Results in `docker/test-results/`  
-🔍 Detailed logs in console output  
+✅ Exit code 0 = all tests passed
+❌ Exit code 1 = some tests failed
+📊 Results in `docker/test-results/`
+🔍 Detailed logs in console output
 
 ## [Needs Revalidation] Documentation
 
-📖 Start here: `docker/QUICKSTART.md`  
-📚 Full guide: `docker/TESTING_GUIDE.md`  
-📋 Summary: `DOCKER_TEST_SETUP_COMPLETE.md`  
+📖 Start here: `docker/QUICKSTART.md`
+📚 Full guide: `docker/TESTING_GUIDE.md`
+📋 Summary: `DOCKER_TEST_SETUP_COMPLETE.md`
 
 ---
 **Pro tip**: Use `--verbose` flag when debugging failures!

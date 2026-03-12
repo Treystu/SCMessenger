@@ -1,7 +1,7 @@
 # SCMessenger — Implementation Cheat Sheet
 ## Global Viability: 10 Action Items with Exact Code Plans
 
-**Date:** 2026-03-04  
+**Date:** 2026-03-04
 **Use:** Implementation reference — exact files, line numbers, what to change, how to verify
 
 > Items 1–2 are hard prerequisites. Items 3–5 can run in parallel after builds are stable. Items 6–10 can follow in any order.
@@ -10,7 +10,7 @@
 
 ## ITEM 1 — iOS Crash-Free BLE Send Path
 
-**Issue:** `SIGTRAP` crash in `BLEPeripheralManager.sendDataToCentral` + CPU watchdog kill under retry load  
+**Issue:** `SIGTRAP` crash in `BLEPeripheralManager.sendDataToCentral` + CPU watchdog kill under retry load
 **Priority:** 🔴 P0 — nothing else matters until iOS doesn't crash
 
 ### 1a. Audit BLE send path for remaining crash triggers
@@ -95,7 +95,7 @@ ls /tmp/crash_pull/ | grep SCMessenger
 
 ## ITEM 2 — Android ↔ iOS End-to-End Delivery Proof
 
-**Issue:** No synchronized evidence of `stored → delivered` in both directions on real devices  
+**Issue:** No synchronized evidence of `stored → delivered` in both directions on real devices
 **Priority:** 🔴 P0 — required for alpha claim
 
 ### 2a. Prerequisite: clean device builds
@@ -166,7 +166,7 @@ bash ./scripts/verify_receipt_convergence.sh \
 
 ## ITEM 3 — Message Ordering: Enforce `sender_timestamp` as Sort Key
 
-**Issue:** iOS and Android sort by local `timestamp` but this field isn't guaranteed to be the sender's creation time  
+**Issue:** iOS and Android sort by local `timestamp` but this field isn't guaranteed to be the sender's creation time
 **Priority:** 🔴 P0 — fix is fast, impact is high
 
 ### 3a. Understand the data model first
@@ -261,7 +261,7 @@ fun `messages sorted by senderTimestamp regardless of insertion order`() {
 
 ## ITEM 4 — iOS Message List Scroll Stability (UX-IOS-002)
 
-**Issue:** List jumps to top and flickers during active conversation  
+**Issue:** List jumps to top and flickers during active conversation
 **File:** [iOS/SCMessenger/SCMessenger/Views/Navigation/MainTabView.swift](file:///Users/christymaxwell/Desktop/Luke_Stuff/GitHub/SCMessenger/iOS/SCMessenger/SCMessenger/Views/Navigation/MainTabView.swift)
 
 ### 4a. Identify the scroll trigger bug
@@ -371,7 +371,7 @@ private func subscribeToNewMessages() {
 
 ## ITEM 5 — Local Transport Isolation Tests
 
-**Issue:** BLE, WiFi Direct, Multipeer, mDNS all coded but none field-proven in isolation  
+**Issue:** BLE, WiFi Direct, Multipeer, mDNS all coded but none field-proven in isolation
 **Priority:** 🟠 P1
 
 ### 5a. BLE-only test (Android ↔ iOS)
@@ -431,7 +431,7 @@ Update [docs/INTEROP_MATRIX_V0.2.0_ALPHA.md](file:///Users/christymaxwell/Deskto
 
 ## ITEM 6 — Confirm Stale Route/BLE Cache Fix (WS12.31)
 
-**Issue:** 291 `Network error` events + repeated stale MAC `65:99:F2:D9:77:01` retries  
+**Issue:** 291 `Network error` events + repeated stale MAC `65:99:F2:D9:77:01` retries
 **Priority:** 🟠 P1
 
 ### 6a. Deploy WS12.31+ Android binary
@@ -477,7 +477,7 @@ grep "12D3KooWHqa2jd8Ec3bbXR24Fn8Lc2rPQQwjeEiY2zUyXXMCez27" logs/stale-route-fix
 
 ## ITEM 7 — Internet Global Reach (Cross-Carrier Proof)
 
-**Issue:** Global relay path not proven across different carrier networks  
+**Issue:** Global relay path not proven across different carrier networks
 **Priority:** 🟡 P1
 
 ### 7a. Test setup
@@ -515,7 +515,7 @@ grep -E "network_changed|reconnect|roaming|bootstrap" logs/global-proof/android_
 
 ## ITEM 8 — Dynamic Bootstrap / Multi-Relay Infrastructure
 
-**Issue:** Single GCP relay is a single point of failure; dynamic bootstrap fetch not implemented  
+**Issue:** Single GCP relay is a single point of failure; dynamic bootstrap fetch not implemented
 **Priority:** 🟡 P1
 
 ### 8a. Verify `BootstrapResolver` is already wired in UDL
@@ -579,7 +579,7 @@ ssh gcp-relay "sudo systemctl start scmessenger-relay"
 
 ## ITEM 9 — Store-and-Forward Proof (Offline Recipient)
 
-**Issue:** Relay custody works in unit tests but has no field proof on real devices  
+**Issue:** Relay custody works in unit tests but has no field proof on real devices
 **Priority:** 🟡 P2
 
 ### 9a. Test setup
@@ -617,7 +617,7 @@ adb shell run-as com.scmessenger.android cat files/pending_outbox.json
 
 ## ITEM 10 — iOS Background Lifecycle and Power Evidence
 
-**Issue:** iOS background keep-alive / reconnect not field-validated  
+**Issue:** iOS background keep-alive / reconnect not field-validated
 **Priority:** 🟡 P2 (beta gate)
 
 ### 10a. Background message delivery test

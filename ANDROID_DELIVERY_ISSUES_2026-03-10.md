@@ -12,7 +12,7 @@
 **Evidence:**
 ```
 - Logcat filter for "SEND_BUTTON": 0 results during test period
-- Logcat filter for "ChatScreen": 0 results during test period  
+- Logcat filter for "ChatScreen": 0 results during test period
 - App process confirmed running
 - No crash detected
 ```
@@ -40,7 +40,7 @@
 **Evidence:**
 ```
 delivery_attempt msg=unknown medium=core phase=direct outcome=failed
-delivery_attempt msg=unknown medium=relay-circuit phase=retry outcome=failed  
+delivery_attempt msg=unknown medium=relay-circuit phase=retry outcome=failed
 delivery_state msg=15496c61-c13a-49d9-9016-6fd32ad3cf97 state=stored detail=retry_backoff_sec=300 attempt=169
 ```
 
@@ -113,7 +113,7 @@ delivery_attempt medium=final phase=aggregate outcome=failed
 
 ## Test Plan
 
-1. **UI Test:** 
+1. **UI Test:**
    - Fresh app restart
    - Type message in input field
    - Click send once

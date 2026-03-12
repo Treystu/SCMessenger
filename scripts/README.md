@@ -1,6 +1,6 @@
 # SCMessenger Scripts Guide
 
-Status: Active  
+Status: Active
 Last updated: 2026-03-06
 
 This guide covers active launch/debug/verification scripts, with a focus on AI-assisted debugging workflows.

@@ -1,19 +1,19 @@
 # Android Contact Persistence & Send Reliability Fix
-**Date:** March 10, 2026  
+**Date:** March 10, 2026
 **Status:** IMPLEMENTED
 
 ## Issues Fixed
 
 ### 1. Contacts Not Persisting ✅
-**Problem:** Discovered peers were not being auto-added as contacts  
-**Root Cause:** `createIfMissing = false` in `upsertFederatedContact`  
+**Problem:** Discovered peers were not being auto-added as contacts
+**Root Cause:** `createIfMissing = false` in `upsertFederatedContact`
 **Fix:** Changed to `createIfMissing = true` (line ~625)
 
 **File:** `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
 
 ### 2. Missing Nicknames ✅
-**Problem:** Peers discovered without nicknames showed as blank  
-**Root Cause:** `prepopulateDiscoveryNickname` returned `null` when no nickname provided  
+**Problem:** Peers discovered without nicknames showed as blank
+**Root Cause:** `prepopulateDiscoveryNickname` returned `null` when no nickname provided
 **Fix:** Auto-generate nicknames like `peer-ABCD1234` from peer ID
 
 **Changes:**
@@ -33,21 +33,21 @@ private fun prepopulateDiscoveryNickname(...): String {
 ```
 
 ### 3. Send Message Failures ✅
-**Problem:** App crashed when trying to send to undiscovered peer  
-**Root Cause:** Threw exception instead of queuing for retry  
+**Problem:** App crashed when trying to send to undiscovered peer
+**Root Cause:** Threw exception instead of queuing for retry
 **Fix:** Better error message explaining peer will be discovered and retried
 
 ## Verification
 
 ### Auto-Created Contacts
 ```
-03-09 22:11:51.159 I MeshRepository: Auto-created/updated contact for peer: 
+03-09 22:11:51.159 I MeshRepository: Auto-created/updated contact for peer:
    12D3KooWDWQmA52hJtjtmxXqbWZRnWHWpg1ibXsPuEXGHabrm1Fr (nickname: null)
 ```
 
 ### Nickname Generation
 ```
-03-09 22:11:52.800 I MeshRepository: Generated default nickname 
+03-09 22:11:52.800 I MeshRepository: Generated default nickname
    'peer-f77690ef' for peer f77690efd3e66f6b...
 ```
 
@@ -66,9 +66,9 @@ private fun prepopulateDiscoveryNickname(...): String {
 
 ## Build Status
 
-✅ Android APK built successfully  
-✅ Deployed to device  
-✅ Contacts now persist  
+✅ Android APK built successfully
+✅ Deployed to device
+✅ Contacts now persist
 ✅ Nicknames auto-generated
 
 ## Files Modified

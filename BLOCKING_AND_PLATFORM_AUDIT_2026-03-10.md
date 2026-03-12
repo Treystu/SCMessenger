@@ -1,5 +1,5 @@
 # Blocking & Platform Feature Audit
-**Date:** 2026-03-10  
+**Date:** 2026-03-10
 **Status:** Blocking Implemented, Platform Parity Audit Complete
 
 ## Executive Summary
@@ -311,9 +311,9 @@ D/ConversationsScreen: displayName=Bob, localNick=, fedNick=Bob
 
 ## Conclusion
 
-✅ **Blocking system fully implemented in Core + Android**  
-✅ **Android UI responsiveness issues resolved**  
-✅ **Platform feature parity documented and mostly complete**  
+✅ **Blocking system fully implemented in Core + Android**
+✅ **Android UI responsiveness issues resolved**
+✅ **Platform feature parity documented and mostly complete**
 ⚠️ **iOS and WASM need blocking UI integration**
 
 **Next Steps:**

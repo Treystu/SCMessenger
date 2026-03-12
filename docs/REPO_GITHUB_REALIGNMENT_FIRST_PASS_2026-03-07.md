@@ -1,7 +1,7 @@
 # SCMessenger GitHub + Repository Realignment Audit (First Pass)
 
-Status: Active  
-Last updated: 2026-03-07  
+Status: Active
+Last updated: 2026-03-07
 Scope: Planning-only audit and execution blueprint for repository/GitHub realignment
 
 This document is the planning-first pass requested for `Treystu/SCMessenger`. It audits the repository's current documentation, GitHub operating surface, issue tracker, CI/workflow topology, and contributor/agent context so a follow-up execution pass can cleanly implement the required changes.

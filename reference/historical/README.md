@@ -1,6 +1,6 @@
 # Historical Reference Artifacts
 
-Status: Historical  
+Status: Historical
 Last updated: 2026-03-02
 
 This folder stores non-canonical operational artifacts that were moved from the repository root during the alpha readiness sanity sweep.

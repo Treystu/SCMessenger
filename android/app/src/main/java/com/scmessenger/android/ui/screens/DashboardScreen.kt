@@ -37,7 +37,7 @@ fun DashboardScreen(
     val serviceState by serviceViewModel.serviceState.collectAsState()
     val isRunning by serviceViewModel.isRunning.collectAsState()
     val stats by serviceViewModel.serviceStats.collectAsState()
-    
+
     val fullPeers by dashboardViewModel.fullPeersCount.collectAsState()
     val headlessPeers by dashboardViewModel.headlessPeersCount.collectAsState()
     val totalPeers by dashboardViewModel.totalPeersCount.collectAsState()
@@ -50,7 +50,7 @@ fun DashboardScreen(
         }
     ) { paddingValues ->
         val peers by dashboardViewModel.peers.collectAsState()
-        
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()

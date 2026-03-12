@@ -15,7 +15,7 @@ struct Conversation: Identifiable, Hashable {
     let lastMessage: String?
     let lastMessageTime: Date?
     let unreadCount: Int
-    
+
     init(peerId: String, peerNickname: String, lastMessage: String? = nil, lastMessageTime: Date? = nil, unreadCount: Int = 0) {
         self.id = peerId
         self.peerId = peerId
@@ -31,7 +31,7 @@ enum TransportType: String, CaseIterable {
     case multipeer = "Multipeer"
     case ble = "BLE"
     case internet = "Internet"
-    
+
     var icon: String {
         switch self {
         case .multipeer: return "wifi"
@@ -46,7 +46,7 @@ struct AppSettings {
     var hasCompletedOnboarding: Bool = false
     var notificationsEnabled: Bool = true
     var appearance: AppAppearance = .auto
-    
+
     enum AppAppearance: String {
         case auto = "Auto"
         case light = "Light"

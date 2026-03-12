@@ -12,7 +12,7 @@ import Vision
 struct JoinMeshView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(MeshRepository.self) private var repository
-    
+
     @State private var topicManager: TopicManager?
     @State private var topicName = ""
     @State private var autoSubscribe = true
@@ -25,7 +25,7 @@ struct JoinMeshView: View {
         }
         return false
     }
-    
+
     var body: some View {
         NavigationStack {
             Form {
@@ -33,7 +33,7 @@ struct JoinMeshView: View {
                     TextField("Topic Name", text: $topicName)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    
+
                     Toggle("Auto-subscribe to messages", isOn: $autoSubscribe)
                 }
 
@@ -48,7 +48,7 @@ struct JoinMeshView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                
+
                 if let error = error {
                     Section {
                         Text(error)
@@ -56,14 +56,14 @@ struct JoinMeshView: View {
                             .font(Theme.bodySmall)
                     }
                 }
-                
+
                 Section {
                     Button("Join") {
                         joinMesh()
                     }
                     .disabled(topicName.isEmpty)
                 }
-                
+
                 Section("Subscribed Meshes") {
                     ForEach(topicManager?.listTopics() ?? [], id: \.self) { topic in
                         HStack {
@@ -79,7 +79,7 @@ struct JoinMeshView: View {
                         }
                     }
                 }
-                
+
                 Section {
                     Text("Topics allow you to join specific mesh networks and receive messages from all participants in that topic.")
                         .font(Theme.bodySmall)
@@ -118,7 +118,7 @@ struct JoinMeshView: View {
             }
         }
     }
-    
+
     private func joinMesh() {
         do {
             try topicManager?.subscribe(to: topicName)
@@ -128,7 +128,7 @@ struct JoinMeshView: View {
             self.error = error.localizedDescription
         }
     }
-    
+
     private func leaveTopic(_ topic: String) {
         try? topicManager?.unsubscribe(from: topic)
     }

@@ -270,7 +270,7 @@ fun ContactItem(
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showEditNicknameDialog by remember { mutableStateOf(false) }
-    
+
     val dismissState = rememberDismissState(
         confirmValueChange = { dismissValue ->
             if (dismissValue == DismissValue.DismissedToEnd || dismissValue == DismissValue.DismissedToStart) {
@@ -360,7 +360,7 @@ fun ContactItem(
     // Edit nickname dialog
     if (showEditNicknameDialog) {
         var newNickname by remember { mutableStateOf(contact.localNickname ?: contact.nickname ?: "") }
-        
+
         AlertDialog(
             onDismissRequest = { showEditNicknameDialog = false },
             title = { Text("Edit Nickname") },

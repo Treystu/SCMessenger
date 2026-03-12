@@ -442,13 +442,13 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 _isLoading.value = true
-                
+
                 // Clear app-level preferences
                 preferencesRepository.clearAll()
-                
+
                 // Reset mesh data (identity, history, etc)
                 meshRepository.resetAllData()
-                
+
                 Timber.i("Application reset complete")
             } catch (e: Exception) {
                 _error.value = "Failed to reset application: ${e.message}"

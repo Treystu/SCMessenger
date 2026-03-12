@@ -1,7 +1,7 @@
 # SCMessenger Documentation Hub
 
-Status: Active  
-Last updated: 2026-03-10
+Status: Active
+Last updated: 2026-03-11 (POST-ID-NORMALIZATION-FIX)
 
 This is the primary documentation entrypoint.
 
@@ -73,6 +73,7 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 - [Bootstrap Governance](docs/BOOTSTRAP_GOVERNANCE.md)
 - [NAT Traversal Guide](docs/NAT_TRAVERSAL_GUIDE.md)
 - [Scripts Operations Guide](scripts/README.md)
+- [Log Mincing / Exploratory Analysis](scripts/mince_logs.py)
 
 ## Mixed and Historical Context
 
@@ -90,9 +91,19 @@ Historical audit artifacts currently live under `docs/historical/`.
 - WS12.39 closeout burndown re-baseline (2026-03-10 UTC, Rust/WASM baseline restoration + issue/workflow/branch reconciliation for steady v0.2.0 alpha truth) is tracked in:
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`
-  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
-  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
   - `docs/DOCUMENT_STATUS_INDEX.md`
+- WS12.41: Dynamic Log Retention & Storage Management (2026-03-12, implemented summarized log storage using time offsets from install time, dynamic disk-aware retention with 80/20 message-priority buffer, and cross-platform StorageManager/LogManager integration) is tracked in:
+  - `core/src/store/logs.rs`
+  - `core/src/store/storage.rs`
+  - `android/app/src/main/java/com/scmessenger/android/utils/FileLoggingTree.kt`
+  - `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift`
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+- iOS ID Normalization & Case-Sensitivity (2026-03-11, centralized `PeerIdValidator` + exhaustive normalization in repository and viewmodels to fix iOS cross-platform ID mismatches) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift`
+  - `iOS/SCMessenger/SCMessenger/ViewModels/ContactsViewModel.swift`
 - WS11 (2026-03-03) delivery-state UX and diagnostics/tester-readiness updates are tracked in:
   - `docs/CURRENT_STATE.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
@@ -124,7 +135,7 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`
 - WS12.11 iOS relay flapping diagnosis (2026-03-03 HST, no-code-change runtime triage for GCP relay visibility churn and potential state/race paths) is tracked in:
-  - `docs/CURRENT_STATE.md`
+  - `docs/CURRENT_STATE.MD`
   - `REMAINING_WORK_TRACKING.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 - WS12.12 Android<->iOS pairing message-delivery RCA (2026-03-03 HST, diagnosis-only pass for non-delivery despite active pairing) is tracked in:

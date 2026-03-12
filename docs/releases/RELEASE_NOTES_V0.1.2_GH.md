@@ -1,6 +1,6 @@
 # SCMessenger v0.1.2-alpha
 
-Status: Draft  
+Status: Draft
 Last updated: 2026-03-03
 
 This release focuses on bringing the Web/WASM platform to parity with mobile networking and hardening the core storage layer.

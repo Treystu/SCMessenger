@@ -48,7 +48,7 @@ fun ChatScreen(
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
-    
+
     val contact = viewModel.getContactForPeer(conversationId)
     val localNickname = contact?.localNickname?.trim().orEmpty()
     val federatedNickname = contact?.nickname?.trim().orEmpty()
@@ -57,7 +57,7 @@ fun ChatScreen(
         federatedNickname.isNotEmpty() -> federatedNickname
         else -> conversationId.take(12) + "..."
     }
-    
+
     Timber.d("CHAT_SCREEN: conversationId=$conversationId, displayName=$displayName, localNick=$localNickname, fedNick=$federatedNickname")
     val isPeerAvailable = viewModel.isPeerAvailable(conversationId)
     var showAddContactDialog by remember { mutableStateOf(false) }
@@ -147,7 +147,7 @@ fun ChatScreen(
                     }
                 }
             }
-            
+
             // Messages List
             StateLegendCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             LazyColumn(
@@ -216,14 +216,14 @@ fun ChatScreen(
             }
         }
     }
-    
+
     // Quick add contact dialog
     if (showAddContactDialog) {
         val peerInfo = viewModel.getPeerInfo(conversationId)
         if (peerInfo != null) {
             val (publicKey, suggestedNickname) = peerInfo
             var nickname by remember { mutableStateOf(suggestedNickname) }
-            
+
             AlertDialog(
                 onDismissRequest = { showAddContactDialog = false },
                 title = { Text("Add Contact") },

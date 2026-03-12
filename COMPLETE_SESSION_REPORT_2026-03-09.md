@@ -172,7 +172,7 @@ delivery_state msg=15496c61... attempt=169
 ## Known Working Features
 
 ✅ Android build process
-✅ iOS build process  
+✅ iOS build process
 ✅ Peer discovery (both platforms)
 ✅ Case-insensitive peer lookups (Android)
 ✅ Multi-platform test harness (run5.sh)
@@ -190,7 +190,7 @@ delivery_state msg=15496c61... attempt=169
 
 **Partially Complete:**
 - Phase 1 (case-sensitivity) ✅ DONE
-- Phase 2 (iOS audit) ✅ DONE  
+- Phase 2 (iOS audit) ✅ DONE
 - Phase 3 (Android delivery) ❌ IN PROGRESS - CRITICAL ISSUES REMAIN
 
 **Critical Issues Identified But Not Resolved:**
