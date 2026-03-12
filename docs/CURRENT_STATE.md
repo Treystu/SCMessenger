@@ -3,9 +3,29 @@
 Status: Active  
 Last updated: 2026-03-12
 
-Last verified: **2026-03-12** (local workspace checks on this machine)
+Last verified: **2026-03-12** (PR83 consolidation branch — full merge of PR79/PR80/PR81/PR82)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
+
+## 2026-03-12 Comprehensive Consolidation — PR83 (Verified)
+
+**Branch:** `copilot/consolidate-branches-for-clean-build`  
+**Includes:** All work from PR79 (pr77-reconciliation), PR80 (sub-pr-79), PR81 (sub-pr-79-again), PR82 (consolidate-prs-79-80-81)  
+**Build verification (2026-03-12):**
+- `cargo build --workspace` — **PASS**
+- `cargo test --workspace` — **PASS** (528 tests, 0 failures, 17 ignored)
+- `cargo clippy --workspace` — **PASS** (no new errors)
+- `./scripts/docs_sync_check.sh` — **PASS**
+
+**WS completion state:**
+- WS13.1 ✅ Identity device metadata + persistence
+- WS13.2 ✅ Contact + request schema updates
+- WS13.3 ✅ Registration protocol + signature verification
+- WS13.4 ⬜ **NEXT:** Relay registry state machine + custody enforcement
+- WS13.5 ⬜ Handover/abandon queue migration + rejection UX
+- WS13.6 ⬜ Migration + compatibility + test matrix
+
+---
 
 ## 2026-03-12 Consolidated PR79+PR80+PR81 (Verified)
 
