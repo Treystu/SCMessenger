@@ -1,103 +1,33 @@
 # SCMessenger Current State (Verified)
 
-Status: Active
+Status: Active  
 Last updated: 2026-03-11
 
-Last verified: **2026-03-12** (local workspace checks on this machine)
+Last verified: **2026-03-11** (local workspace checks on this machine)
 
-## 2026-03-12 Dynamic Log Retention & Storage Overhaul (Verified)
+For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
 
-- **Summarized Logging (WS12.41)**: Implemented specialized log summarization in Rust `LogManager`.
-  - Logs now store content hashes and time offsets (seconds) from install time or previous events, drastically reducing storage footprint for high-frequency events.
-  - Initialized with `StorageBackend` for persistence.
-- **Disk-Aware Retention**:
-  - `StorageManager` in Rust core now monitors disk space and maintains a 20% free space buffer.
-  - Messages can dynamically grow up to 80% of disk usage.
-  - **Purging Priority**: Logs and caches are pruned first, followed by messages. Contacts and identity data are preserved as highest priority.
-- **Cross-Platform Integration**:
-  - **Android**: `FileLoggingTree` now forwards all logs to `IronCore` for summarization. `MeshRepository` implemented periodic maintenance loop to update disk stats and trigger core maintenance.
-  - **iOS**: `MeshRepository` now forwards logs to `IronCore`. Periodic maintenance Task added to update disk stats every 15 minutes. Fixed fixed 10k message limit.
-- **Verification on this host**:
-  - `cargo build -p scmessenger-core` — **pass**
-  - Summarized log record logic verified via internal core state.
-  - iOS and Android repository call-sites verified for proper `IronCore` delegation.
+## 2026-03-11 WS13.3 Registration Protocol + Signature Verification (Implemented)
 
-## 2026-03-11 Logging Audit and Disk Bloat Remediation (Verified)
-
-- **Bloat Mitigation**: Identified and removed 1.5GB+ of stale simulation logs and redundant build artifacts on macOS.
-- **Log Rotation Enforced**:
-  - **iOS**: Implemented rolling diagnostic logs (1MB limit, 5 file retention) in `MeshRepository.swift`.
-  - **CLI**: Integrated `prune_logs` in `main.rs` to automatically remove log files older than 7 days on startup.
-  - **Android**: Hardened `FileLoggingTree` truncation logic and fixed recursion crashes.
-- **History Retention**: Unified message history retention at 10,000 entries across all platforms via `HistoryManager.enforce_retention`. (Superseded by WS12.41 disk-aware retention).
-- **Log Mincing Tooling**:
-  - Introduced `scripts/mince_logs.py` for iterative tree-mincing analysis.
-  - Redacts high-entropy variables (PeerIDs, UUIDs, timestamps) to expose structural mesh behavioral patterns.
-  - Generates Sankey-compatible log fragments for the Log Visualizer.
-- **Verification on this host**:
-  - Simulation logs pruned successfully.
-  - `cli --version` startup confirms log pruning.
-  - iOS build verified with manual log rotation logic check.
-
-## 2026-03-11 Android Logcat & Stability Fixes (Verified)
-
-- **Root Cause Resolution**: Resolved recurring `java.lang.StackOverflowError` in `FileLoggingTree.truncateLogFile()`.
-  - **Issue**: Timber.d calls inside the custom LoggingTree were recursively triggering the same tree's log method, leading to a stack overflow when rotating files.
-  - **Fix**: Changed internal FileLoggingTree diagnostic logs to use `android.util.Log.d` directly, bypassing the Timber forest and breaking the recursion.
-- **Unit Test Stabilization**: Resolved `io.mockk.MockKException` in `MeshServiceViewModelTest`.
-  - **Issue**: `mockk-android` was incorrectly included in `testImplementation`, interfering with JVM-based unit tests.
-  - **Fix**: Moved `mockk-android` to `androidTestImplementation` and improved explicit type inference in `mockk<T>` calls.
-- **Verification on this host**:
-  - `cd android && ./gradlew assembleDebug` — **pass**
-  - `cd android && ./gradlew testDebugUnitTest` — **pass** (62 tests, 0 failures)
-  - **Runtime Observation**: App successfully installed via USB. Logcat confirms `FileLoggingTree` is operating correctly without recursion loops during startup maintenance.
-
-## 2026-03-11 Peer ID Normalization & Case-Sensitivity Fix (Verified)
-
-- **Root Cause Resolution**: Resolved persistent "Contact not found" and ID mismatch issues on iOS and Android.
-  - **Normalization Logic**: Implemented `normalizePeerId` to handle different ID types correctly.
-    - Identity IDs (64-char hex) are normalized to **lowercase**.
-    - libp2p Peer IDs (Base58) are **preserved exactly** (case-sensitive).
-  - **iOS Implementation**: Added `normalizePeerId` and `isSamePeerId` helpers to `MeshRepository.swift`. Updated `resolveCanonicalPeerId`, `resolveCanonicalPeerIdFromMessageHints`, and `emitIdentityDiscoveredIfChanged` to use these helpers.
-  - **Android Implementation**: Updated `MeshRepository.kt` and `PeerIdValidator.kt` to ensure consistent normalization. Fixed `resolveCanonicalPeerId` and `resolveCanonicalPeerIdFromMessageHints` to use normalized IDs for fallback and comparisons.
-  - **Identity Hints**: Ensured that hinted Peer IDs in message envelopes are normalized before resolution to prevent case mismatches.
-- **Verification on this host**:
-  - `cd android && ./gradlew :app:assembleDebug -x test` — **pass**
-  - `xcodebuild -project SCMessenger.xcodeproj -scheme SCMessenger -destination 'generic/platform=iOS Simulator' build` — **pass**
-
-## 2026-03-11 iOS API and Log Visualization Fix (Verified)
-
-- **Root Cause Resolution**: Resolved `SCMessenger/api.swift:1454: Fatal error: ... UniffiInternalError.incompleteData`.
-  - **Issue**: The Rust library (`libscmessenger_mobile.a`) was out of sync with the generated Swift code, causing a mismatch in the `IdentityInfo` struct during FFI calls.
-  - **Fix**: Rebuilt the mobile core for both iOS and iOS Simulator targets using `./rebuild_ios_core.sh`. Verified that the library and Swift bindings are now synchronized.
-- **Log Visualization Improvements**:
-  - **Single Pane of Glass**: The Log Sankey visualizer now processes logs from Android, iOS, and OSX simultaneously.
-  - **Interactive Controls**: Added sliders for density and depth to manage visual clutter.
-  - **Normalization**: Improved regex-based parsing specifically for SCMessenger logs to group operational noise and focus on key mesh events.
-  - **Auto-Loading**: Set initial density to 0 to ensure logs appear immediately on load.
-- **Verification on this host**:
-  - `./rebuild_ios_core.sh` — **pass**
-  - `npm start` in `log-visualizer` — **pass** (server running on port 3001)
-  - `ls -l` verification of library vs swift timestamps — **pass** (synchronized)
-
-## 2026-03-11 Android Unit Test Fixes (Verified)
-
-- All Android unit tests (62 total) are now passing.
-- **Compilation Errors Resolved**:
-  - `ContactsViewModelTest.kt` and `UniffiIntegrationTest.kt` updated to include missing `lastKnownDeviceId` in `Contact` initializers.
-- **Logic Errors Fixed**:
-  - `DeliveryStateMapper.resolve` fixed to prioritize `delivered` status over `pending` retry metadata, ensuring correct UI delivery state.
-- **Mocking & Coroutine Stability**:
-  - `MeshRepository` and `PreferencesRepository` (and key `val` properties) marked as `open` to allow reliable MockK stubbing on the JVM.
-  - `ChatViewModelTest` setup hardened with explicit stubs for `messageUpdates` flow to prevent `KotlinNothingValueException` during ViewModel initialization.
-- **Verification on this host**:
-  - `cd android && ./gradlew testDebugUnitTest` — **pass** (62 tests, 0 failures)
+- WS13.3 landed as an additive transport protocol on top of current `main`.
+- Files changed:
+  - `core/src/transport/behaviour.rs` — added `/sc/registration/1.0.0` request/response behaviour plus canonical `RegistrationPayload`, `RegistrationRequest`, `DeregistrationPayload`, `DeregistrationRequest`, and `RegistrationResponse` types.
+  - `core/src/transport/swarm.rs` — added `SwarmCommand::{RegisterIdentity,DeregisterIdentity}` and `SwarmHandle::{register_identity,deregister_identity}`; incoming registration messages now fail closed on malformed identity IDs, malformed UUIDv4 device IDs, peer/identity mismatches, invalid signatures, and invalid deregistration state (`target_device_id == from_device_id`).
+  - `core/src/transport/mod.rs` — re-exported the new WS13.3 transport request/response types.
+  - `core/tests/integration_registration_protocol.rs` — added end-to-end swarm tests for successful registration plus malformed/tampered rejection paths.
+  - `core/src/transport/behaviour.rs`, `core/src/transport/swarm.rs` (tests) — added canonical serialization, signature pass/fail, peer/public-key extraction, and identity-mismatch coverage.
+- Verification on this Linux host:
   - `cargo fmt --all -- --check` — **pass**
   - `cargo build --workspace` — **pass**
   - `cargo test --workspace` — **pass**
-  - `./scripts/docs_sync_check.sh` — **pass**
-
-For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
+  - `cargo test -p scmessenger-core transport::behaviour -- --nocapture` — **pass**
+  - `cargo test -p scmessenger-core --test integration_registration_protocol -- --nocapture` — **pass**
+- Scope boundary preserved:
+  - no relay-registry mutation or custody enforcement was added yet; valid registration/deregistration requests are verified and acknowledged only,
+  - mobile UniFFI / adapter surfaces were intentionally left unchanged in this phase because WS13.3 is transport-internal and this Linux host still lacks Android/iOS regeneration tooling.
+- Residual follow-up:
+  - WS13.4 still owns persisted registry state, collision policy, and custody enforcement.
+  - Anti-replay / monotonic registration-state protection remains open until registry state exists (tracked in `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`).
 
 ## 2026-03-10 WS13.2 Transport Boundary Widening (Implemented)
 
@@ -116,7 +46,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 - Verification on this Linux host:
   - `cargo fmt --all -- --check` — **pass**
   - `cargo build --workspace` — **pass**
-  - `cargo test --workspace` — **pass** (280 tests, 0 failures)
+  - `cargo test --workspace` — **pass**
   - `./scripts/docs_sync_check.sh` — **pass**
 - Platform tooling NOT available on this host: `xcodebuild` (iOS), `cargo-ndk` / `ANDROID_HOME` (Android). Mobile adapter call-sites that consume `SwarmBridge::send_message` must be updated when those tools are available — the new UDL signature is the source of truth for generated bindings.
 - WS13.2 status: **transport boundary complete, relay metadata plumbing implemented, `last_known_device_id` wired in Contact**. WS13.3 (registration protocol) and WS13.4 (registry/custody state machine) are now unblocked architecturally.

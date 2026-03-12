@@ -1,7 +1,7 @@
 # SCMessenger Remaining Work Tracking
 
-Status: Active
-Last updated: 2026-03-11 (POST-LOGCAT-STABILITY-FIX)
+Status: Active  
+Last updated: 2026-03-11
 
 This is the active implementation backlog based on repository state verified on **2026-03-11**.
 
@@ -15,17 +15,6 @@ Owner policy constraints (2026-02-23):
 - No abuse-control or regional compliance hard gate for alpha.
 - Anti-abuse controls are required before beta release.
 - Critical UX controls must stay in Android+iOS+Web parity with no temporary lead platform.
-
-## Android Unit Test Stability (2026-03-11)
-
-Completed in this pass:
-
-1. [x] **Verification**: Resolved all failing unit tests in the Android project.
-2. [x] **Compilation**: Fixed `Contact` initializer drift in `ContactsViewModelTest` and `UniffiIntegrationTest`.
-3. [x] **Logic**: Fixed `DeliveryStateMapper` precedence bug.
-4. [x] **Infrastructure**: Made `MeshRepository` and `PreferencesRepository` mockable on JVM by marking them as `open`.
-5. [x] **Stability**: Fixed recurring `StackOverflowError` in `FileLoggingTree` and `MockKException` in `MeshServiceViewModelTest` by correcting dependency scopes and breaking logging recursion.
-6. [x] **Deployment**: Verified successful build and USB install to physical device; confirmed healthy logcat output.
 
 ## WS13.1 Tight-Pair Kickoff (2026-03-10 UTC)
 
@@ -53,8 +42,8 @@ Completed in this pass:
 Remaining WS13 queue:
 
 1. [x] WS13.2 — Transport/API boundary widened: `SwarmCommand::SendMessage`, `SwarmHandle::send_message`, `SwarmBridge::send_message`, `RelayRequest`, and `Contact` all now carry `recipient_identity_id`/`intended_device_id`/`last_known_device_id` as `Option<String>`. All existing callers updated with `None, None`; `#[serde(default)]` ensures pre-WS13 relay nodes continue to interoperate. Mobile adapter call-sites (Android/iOS Kotlin/Swift consumers generated from `api.udl`) must be regenerated — use `void send_message(string peer_id, bytes data, string? recipient_identity_id, string? intended_device_id)` as the source of truth.
-2. [ ] WS13.3 — Registration protocol (`/sc/registration/1.0.0`) + signature verification. Transport boundary blocker is cleared; architecturally unblocked.
-3. [ ] WS13.4 — Relay registry state machine + custody enforcement. Architecturally unblocked now that relay requests carry identity + device metadata.
+2. [x] WS13.3 — Registration protocol (`/sc/registration/1.0.0`) + signature verification. `IronCoreBehaviour` now exposes an additive registration request/response protocol with canonical payload serialization, signed registration/deregistration helpers, `SwarmHandle::{register_identity,deregister_identity}` wiring, and fail-closed validation for malformed identity IDs, malformed UUIDv4 device IDs, peer/identity mismatches, invalid signatures, and invalid deregistration state. Targeted unit + integration tests cover success and rejection paths. Residual: no registry mutation/anti-replay enforcement yet; WS13.4 owns persisted active-device state.
+3. [ ] WS13.4 — Relay registry state machine + custody enforcement. Architecturally unblocked now that relay requests carry identity + device metadata and registration messages can be signed/verified.
 4. [ ] WS13.5 — Handover/abandon queue migration + sender-facing rejection UX. Blocked behind WS13.3–WS13.4 plus unavailable local Android/iOS verification tooling on this host (`ANDROID_HOME`, `cargo-ndk`, `xcodebuild`).
 5. [ ] WS13.6 — Compatibility/migration matrix, runbook, and acceptance lock. Unblocked after WS13.3–WS13.5 complete.
 
@@ -69,7 +58,6 @@ Completed in this pass:
 5. [x] **Transport Optimization** (2026-03-10): Faster BLE/WiFi switching with reduced timeouts, aggressive retry backoff, enhanced transport logging
 6. [x] **Android Mesh UI Scrolling** (2026-03-10): Converted DashboardScreen to LazyColumn for proper scrolling with large peer lists
 7. [x] **Android ID Normalization** (2026-03-10): Standardized peer ID handling to fix "Contact not found" messaging issues
-8. [x] **iOS ID Normalization & Case-Sensitivity** (2026-03-11): Implemented centralized `PeerIdValidator` to fix ID mismatches. Ensured libp2p Peer IDs are treated as case-sensitive while Identity IDs are normalized to lowercase.
 
 Outstanding items:
 
@@ -114,18 +102,12 @@ Still open after this pass:
    - resolve the approval/policy setting behind `action_required` PR runs,
    - prune stale non-`main` branches after merge/closure decisions.
 2. [ ] Non-device CI cleanup still needed in-repo:
-   - [x] re-run iOS verification on a macOS host / CI now that MainActor-safe helper fixes are in place for `BLEPeripheralManager`, `ContactsViewModel`, `TopicManager`, and `IosPlatformBridge`,
-   - [ ] re-run Docker Integration Suite now that the Android-unit-test host-library copy path in `docker/docker-compose.test.yml` matches the workspace release artifact layout.
+   - re-run iOS verification on a macOS host / CI now that MainActor-safe helper fixes are in place for `BLEPeripheralManager`, `ContactsViewModel`, `TopicManager`, and `IosPlatformBridge`,
+   - re-run Docker Integration Suite now that the Android-unit-test host-library copy path in `docker/docker-compose.test.yml` matches the workspace release artifact layout.
 3. [ ] Physical-device WS12 closure evidence is still required:
    - `R-WS12-29-01` iOS send-path crash non-repro on latest binary,
    - `R-WS12-29-02` stale-route / stale-BLE-target convergence,
    - `R-WS12-04`, `R-WS12-05`, `R-WS12-06` synchronized Android+iOS relay/delivery/BLE evidence.
-4. [x] **iOS Build and Binding Stability**:
-   - Resolved `UniffiInternalError.incompleteData` runtime error by ensuring UniFFI bindings are synchronized with Rust core UDL.
-   - Fixed `MeshRepository.swift` compilation errors by aligning with the updated `SwarmBridge.sendMessage` signature (including `recipientIdentityId` and `intendedDeviceId`).
-   - **New**: Fixed contact state preservation regression (`lastKnownDeviceId` persistence).
-   - **New**: Enhanced message metadata propagation (adding `deviceId` to internal JSON payload).
-   - Hardened binding verification via `scripts/verify_ios_bindings.sh`.
 
 ## WS12.38 Cross-Platform Status Sync Convergence (2026-03-09 HST)
 
@@ -138,12 +120,7 @@ Completed in this pass:
 
 Still open:
 
-1. [x] Monitor real-world convergence on physical devices to confirm "stuck pending" messages resolve on next sync trigger.
-2. [x] Audit for bloat (2+GB consumption) and enforce rotation/cache-clearing across all platforms. (WS12.41)
-   - Implemented dynamic log retention and disk-aware maintenance (80/20 split).
-   - Summarized logging implemented in Core to minimize log footprint.
-   - Periodic maintenance loop added to Android and iOS.
-   - PURGE PRIORITY: Logs > Cache > Messages > Contacts/Identity.
+1. [ ] Monitor real-world convergence on physical devices to confirm "stuck pending" messages resolve on next sync trigger.
 
 ## WS12.36 Repo/GitHub Operating-Model Planning Audit (2026-03-07 UTC)
 

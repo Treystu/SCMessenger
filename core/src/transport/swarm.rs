@@ -16,8 +16,9 @@
 #[cfg(not(target_arch = "wasm32"))]
 use super::behaviour::RelayRequest;
 use super::behaviour::{
-    IronCoreBehaviour, LedgerExchangeRequest, LedgerExchangeResponse, MessageRequest,
-    MessageResponse, RelayResponse, SharedPeerEntry,
+    DeregistrationRequest, IronCoreBehaviour, LedgerExchangeRequest, LedgerExchangeResponse,
+    MessageRequest, MessageResponse, RegistrationMessage, RegistrationRequest,
+    RegistrationResponse, RelayResponse, SharedPeerEntry,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use super::mesh_routing::{
@@ -456,6 +457,38 @@ fn should_apply_delivery_convergence_marker(
     Ok(())
 }
 
+fn extract_ed25519_public_key_from_peer_id(peer_id: &PeerId) -> Result<[u8; 32], &'static str> {
+    let bytes = peer_id.to_bytes();
+    // Inline Ed25519 PeerIds use the protobuf-encoded public key bytes:
+    // 0x00(identity multihash), 0x24(total len 36), 0x08(field 1), 0x01(Ed25519),
+    // 0x12(field 2), 0x20(32-byte key), followed by the raw 32-byte public key.
+    if bytes.len() == 38
+        && bytes[0] == 0x00
+        && bytes[1] == 0x24
+        && bytes[2] == 0x08
+        && bytes[3] == 0x01
+        && bytes[4] == 0x12
+        && bytes[5] == 0x20
+    {
+        let mut public_key = [0u8; 32];
+        public_key.copy_from_slice(&bytes[6..38]);
+        Ok(public_key)
+    } else {
+        Err("peer_identity_public_key_unavailable")
+    }
+}
+
+fn verify_registration_message(
+    peer: &PeerId,
+    message: &RegistrationMessage,
+) -> Result<(), &'static str> {
+    let public_key = extract_ed25519_public_key_from_peer_id(peer)?;
+    match message {
+        RegistrationMessage::Register(request) => request.verify_for_public_key(&public_key),
+        RegistrationMessage::Deregister(request) => request.verify_for_public_key(&public_key),
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 fn log_route_decision(
     message_id: &str,
@@ -788,6 +821,18 @@ pub enum SwarmCommand {
         intended_device_id: Option<String>,
         reply: mpsc::Sender<Result<(), String>>,
     },
+    /// Register the sender's active device for an identity on a remote peer.
+    RegisterIdentity {
+        peer_id: PeerId,
+        request: RegistrationRequest,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
+    /// Deregister or hand over the sender's active device for an identity on a remote peer.
+    DeregisterIdentity {
+        peer_id: PeerId,
+        request: DeregistrationRequest,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
     /// Request address reflection from a peer
     RequestAddressReflection {
         peer_id: PeerId,
@@ -898,6 +943,50 @@ impl SwarmHandle {
                 envelope_data,
                 recipient_identity_id,
                 intended_device_id,
+                reply: reply_tx,
+            })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+
+        reply_rx
+            .recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("No reply from swarm"))?
+            .map_err(|e| anyhow::anyhow!(e))
+    }
+
+    pub async fn register_identity(
+        &self,
+        peer_id: PeerId,
+        request: RegistrationRequest,
+    ) -> Result<()> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(SwarmCommand::RegisterIdentity {
+                peer_id,
+                request,
+                reply: reply_tx,
+            })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+
+        reply_rx
+            .recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("No reply from swarm"))?
+            .map_err(|e| anyhow::anyhow!(e))
+    }
+
+    pub async fn deregister_identity(
+        &self,
+        peer_id: PeerId,
+        request: DeregistrationRequest,
+    ) -> Result<()> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(SwarmCommand::DeregisterIdentity {
+                peer_id,
+                request,
                 reply: reply_tx,
             })
             .await
@@ -1230,6 +1319,10 @@ pub async fn start_swarm_with_config(
         let mut pending_reflections: HashMap<
             libp2p::request_response::OutboundRequestId,
             mpsc::Sender<Result<String, String>>,
+        > = HashMap::new();
+        let mut pending_registration_replies: HashMap<
+            libp2p::request_response::OutboundRequestId,
+            mpsc::Sender<Result<(), String>>,
         > = HashMap::new();
 
         // Track connections and address observations (Phase 1 & 2)
@@ -1763,6 +1856,86 @@ pub async fn start_swarm_with_config(
                                             observed_address: response.observed_address,
                                         }).await;
                                     }
+                                }
+                            }
+
+                            SwarmEvent::Behaviour(
+                                super::behaviour::IronCoreBehaviourEvent::Registration(
+                                    request_response::Event::Message { peer, message, .. },
+                                ),
+                            ) => {
+                                match message {
+                                    request_response::Message::Request { request, channel, .. } => {
+                                        let response = match verify_registration_message(&peer, &request) {
+                                            Ok(()) => {
+                                                match &request {
+                                                    RegistrationMessage::Register(request) => {
+                                                        tracing::info!(
+                                                            "✅ Verified registration from {} for identity {} device {}",
+                                                            peer,
+                                                            request.payload.identity_id,
+                                                            request.payload.device_id
+                                                        );
+                                                    }
+                                                    RegistrationMessage::Deregister(request) => {
+                                                        tracing::info!(
+                                                            "✅ Verified deregistration from {} for identity {} source_device={} target_device={}",
+                                                            peer,
+                                                            request.payload.identity_id,
+                                                            request.payload.from_device_id,
+                                                            request.payload.target_device_id.as_deref().unwrap_or("none")
+                                                        );
+                                                    }
+                                                }
+                                                RegistrationResponse {
+                                                    accepted: true,
+                                                    error: None,
+                                                }
+                                            }
+                                            Err(error) => {
+                                                tracing::warn!(
+                                                    "Rejected registration message from {}: {}",
+                                                    peer,
+                                                    error
+                                                );
+                                                RegistrationResponse {
+                                                    accepted: false,
+                                                    error: Some(error.to_string()),
+                                                }
+                                            }
+                                        };
+                                        let _ = swarm
+                                            .behaviour_mut()
+                                            .registration
+                                            .send_response(channel, response);
+                                    }
+                                    request_response::Message::Response { request_id, response } => {
+                                        if let Some(reply_tx) =
+                                            pending_registration_replies.remove(&request_id)
+                                        {
+                                            let result = if response.accepted {
+                                                Ok(())
+                                            } else {
+                                                Err(response.error.unwrap_or_else(|| {
+                                                    "registration_request_rejected".to_string()
+                                                }))
+                                            };
+                                            let _ = reply_tx.send(result).await;
+                                        }
+                                    }
+                                }
+                            }
+                            SwarmEvent::Behaviour(
+                                super::behaviour::IronCoreBehaviourEvent::Registration(
+                                    request_response::Event::OutboundFailure {
+                                        request_id, error, ..
+                                    },
+                                ),
+                            ) => {
+                                if let Some(reply_tx) =
+                                    pending_registration_replies.remove(&request_id)
+                                {
+                                    let _ = reply_tx.send(Err(error.to_string())).await;
                                 }
                             }
 
@@ -2676,6 +2849,22 @@ pub async fn start_swarm_with_config(
                                 });
                             }
 
+                            SwarmCommand::RegisterIdentity { peer_id, request, reply } => {
+                                let request_id = swarm
+                                    .behaviour_mut()
+                                    .registration
+                                    .send_request(&peer_id, RegistrationMessage::Register(request));
+                                pending_registration_replies.insert(request_id, reply);
+                            }
+
+                            SwarmCommand::DeregisterIdentity { peer_id, request, reply } => {
+                                let request_id = swarm
+                                    .behaviour_mut()
+                                    .registration
+                                    .send_request(&peer_id, RegistrationMessage::Deregister(request));
+                                pending_registration_replies.insert(request_id, reply);
+                            }
+
                             SwarmCommand::RequestAddressReflection { peer_id, reply } => {
                                 let mut request_id_bytes = [0u8; 16];
                                 use rand::RngCore;
@@ -2914,6 +3103,10 @@ pub async fn start_swarm_with_config(
             libp2p::request_response::OutboundRequestId,
             mpsc::Sender<Result<String, String>>,
         > = HashMap::new();
+        let mut pending_registration_replies: HashMap<
+            libp2p::request_response::OutboundRequestId,
+            mpsc::Sender<Result<(), String>>,
+        > = HashMap::new();
 
         let mut pending_relay_requests: HashMap<
             libp2p::request_response::OutboundRequestId,
@@ -2969,6 +3162,20 @@ pub async fn start_swarm_with_config(
                                     MessageRequest { envelope_data },
                                 );
                                 pending_direct_replies.insert(request_id, reply);
+                            }
+                            SwarmCommand::RegisterIdentity { peer_id, request, reply } => {
+                                let request_id = swarm
+                                    .behaviour_mut()
+                                    .registration
+                                    .send_request(&peer_id, RegistrationMessage::Register(request));
+                                pending_registration_replies.insert(request_id, reply);
+                            }
+                            SwarmCommand::DeregisterIdentity { peer_id, request, reply } => {
+                                let request_id = swarm
+                                    .behaviour_mut()
+                                    .registration
+                                    .send_request(&peer_id, RegistrationMessage::Deregister(request));
+                                pending_registration_replies.insert(request_id, reply);
                             }
                             SwarmCommand::RequestAddressReflection { peer_id, reply } => {
                                 let mut request_id_bytes = [0u8; 16];
@@ -3149,6 +3356,52 @@ pub async fn start_swarm_with_config(
                                             );
                                         } else if let Some(reply_tx) =
                                             pending_direct_replies.remove(&request_id)
+                                        {
+                                            let _ = reply_tx.send(Err(error.to_string())).await;
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            SwarmEvent::Behaviour(
+                                super::behaviour::IronCoreBehaviourEvent::Registration(ev),
+                            ) => {
+                                match ev {
+                                    request_response::Event::Message { peer, message, .. } => match message {
+                                        request_response::Message::Request { request, channel, .. } => {
+                                            let response = match verify_registration_message(&peer, &request) {
+                                                Ok(()) => RegistrationResponse {
+                                                    accepted: true,
+                                                    error: None,
+                                                },
+                                                Err(error) => RegistrationResponse {
+                                                    accepted: false,
+                                                    error: Some(error.to_string()),
+                                                },
+                                            };
+                                            let _ = swarm
+                                                .behaviour_mut()
+                                                .registration
+                                                .send_response(channel, response);
+                                        }
+                                        request_response::Message::Response { request_id, response } => {
+                                            if let Some(reply_tx) =
+                                                pending_registration_replies.remove(&request_id)
+                                            {
+                                                let result = if response.accepted {
+                                                    Ok(())
+                                                } else {
+                                                    Err(response.error.unwrap_or_else(|| {
+                                                        "registration_request_rejected".to_string()
+                                                    }))
+                                                };
+                                                let _ = reply_tx.send(result).await;
+                                            }
+                                        }
+                                    },
+                                    request_response::Event::OutboundFailure { request_id, error, .. } => {
+                                        if let Some(reply_tx) =
+                                            pending_registration_replies.remove(&request_id)
                                         {
                                             let _ = reply_tx.send(Err(error.to_string())).await;
                                         }
@@ -3571,12 +3824,15 @@ use libp2p::{gossipsub, request_response};
 #[cfg(test)]
 mod tests {
     use super::{
-        should_apply_delivery_convergence_marker, validate_delivery_convergence_marker_shape,
+        extract_ed25519_public_key_from_peer_id, should_apply_delivery_convergence_marker,
+        validate_delivery_convergence_marker_shape, verify_registration_message,
         DeliveryConvergenceMarker, PendingCustodyDispatch, PendingMessage, RelayAbuseGuardrails,
         RELAY_DUPLICATE_WINDOW_MS, RELAY_PEER_BUCKET_BURST_CAPACITY,
         RELAY_PEER_BUCKET_REFILL_PER_SEC,
     };
+    use crate::identity::IdentityKeys;
     use crate::store::relay_custody::RelayCustodyStore;
+    use crate::transport::RegistrationMessage;
     use std::collections::HashMap;
 
     #[test]
@@ -3736,5 +3992,37 @@ mod tests {
             &custody_store,
         )
         .is_ok());
+    }
+
+    #[test]
+    fn peer_id_public_key_extraction_roundtrips_for_ed25519_peers() {
+        let keys = IdentityKeys::generate();
+        let keypair = keys.to_libp2p_keypair().unwrap();
+        let peer_id = keypair.public().to_peer_id();
+
+        let extracted = extract_ed25519_public_key_from_peer_id(&peer_id).unwrap();
+        assert_eq!(extracted, keys.signing_key.verifying_key().to_bytes());
+    }
+
+    #[test]
+    fn verify_registration_message_rejects_peer_identity_mismatch() {
+        let signing_identity = IdentityKeys::generate();
+        let wrong_peer_identity = IdentityKeys::generate();
+        let request = crate::transport::RegistrationRequest::new_signed(
+            &signing_identity,
+            "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            1_731_000_000,
+        )
+        .unwrap();
+        let wrong_peer = wrong_peer_identity
+            .to_libp2p_keypair()
+            .unwrap()
+            .public()
+            .to_peer_id();
+
+        assert_eq!(
+            verify_registration_message(&wrong_peer, &RegistrationMessage::Register(request)),
+            Err("registration_identity_mismatch")
+        );
     }
 }
