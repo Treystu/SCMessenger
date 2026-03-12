@@ -1,9 +1,30 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-03-11
+Last updated: 2026-03-12
 
 Last verified: **2026-03-12** (local workspace checks on this machine)
+
+## 2026-03-12 PR Reconciliation & Hardening (Verified)
+
+- **Build fixes**:
+  - CLI: Added missing `UiEvent::Error` variant in `server.rs`, resolving build failure.
+  - WASM: Removed duplicate `PortMapping(_)` arm in swarm event match, eliminating `unreachable_patterns` warning.
+- **Production safety**:
+  - `core/src/store/logs.rs`: Replaced `.unwrap()` on `SystemTime::now()` with `.unwrap_or_default()` (2 sites).
+  - `core/src/store/logs.rs`: Implemented delta pruning when entries exceed 1000 (previously a no-op).
+  - `core/src/store/logs.rs`: Backend flush failures now logged via `tracing::warn!` instead of silently ignored.
+  - `core/src/store/storage.rs`: Removed unused `_message_max_threshold` dead code.
+  - `core/src/lib.rs`: Root sled backend initialization now falls back to `MemoryStorage` on error instead of panicking.
+- **New tests** (11 tests added):
+  - `store::logs::tests` (6): record/export, flush/reload, prune_oldest, install_time persistence, empty export, delta pruning limits.
+  - `store::storage::tests` (5): update_disk_stats, maintenance noop/zero/enough_space/low_space, DiskStats default.
+- **Verification**:
+  - `cargo fmt --all -- --check` — **pass**
+  - `cargo clippy --workspace` — **pass** (only pre-existing `too_many_arguments` warning)
+  - `cargo build --workspace` — **pass**
+  - `cargo test --workspace` — **pass** (514 tests, 0 failures)
+  - `./scripts/docs_sync_check.sh` — **pass**
 
 ## 2026-03-12 Dynamic Log Retention & Storage Overhaul (Verified)
 

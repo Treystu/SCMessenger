@@ -145,3 +145,95 @@ impl LogManager {
         serde_json::to_string_pretty(&logs).map_err(|_| IronCoreError::Internal)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::store::backend::MemoryStorage;
+
+    fn make_manager() -> LogManager {
+        let backend = Arc::new(MemoryStorage::new());
+        LogManager::new(backend)
+    }
+
+    #[test]
+    fn test_record_and_export() {
+        let mgr = make_manager();
+        mgr.record_log("test line 1".to_string());
+        mgr.record_log("test line 2".to_string());
+        mgr.record_log("test line 1".to_string()); // duplicate
+
+        let exported = mgr.export_all().unwrap();
+        let logs: Vec<LogSummary> = serde_json::from_str(&exported).unwrap();
+        // Two unique lines
+        assert_eq!(logs.len(), 2);
+        // "test line 1" should have 2 deltas (recorded twice)
+        let line1 = logs.iter().find(|l| l.content == "test line 1").unwrap();
+        assert_eq!(line1.deltas.len(), 2);
+        // "test line 2" should have 1 delta
+        let line2 = logs.iter().find(|l| l.content == "test line 2").unwrap();
+        assert_eq!(line2.deltas.len(), 1);
+    }
+
+    #[test]
+    fn test_flush_and_reload() {
+        let backend = Arc::new(MemoryStorage::new());
+        let mgr = LogManager::new(backend.clone());
+        mgr.record_log("persistent line".to_string());
+        mgr.flush().unwrap();
+
+        // Create new manager with same backend
+        let mgr2 = LogManager::new(backend);
+        mgr2.record_log("persistent line".to_string());
+        let exported = mgr2.export_all().unwrap();
+        let logs: Vec<LogSummary> = serde_json::from_str(&exported).unwrap();
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].deltas.len(), 2); // original + new
+    }
+
+    #[test]
+    fn test_prune_oldest() {
+        let mgr = make_manager();
+        for i in 0..20 {
+            mgr.record_log(format!("log line {}", i));
+        }
+        mgr.flush().unwrap();
+        let pruned = mgr.prune_oldest(10).unwrap();
+        assert_eq!(pruned, 10);
+
+        let exported = mgr.export_all().unwrap();
+        let logs: Vec<LogSummary> = serde_json::from_str(&exported).unwrap();
+        assert_eq!(logs.len(), 10);
+    }
+
+    #[test]
+    fn test_install_time_persisted() {
+        let backend = Arc::new(MemoryStorage::new());
+        let mgr1 = LogManager::new(backend.clone());
+        let time1 = mgr1.install_time;
+
+        // Second manager should read same install time
+        let mgr2 = LogManager::new(backend);
+        assert_eq!(mgr2.install_time, time1);
+    }
+
+    #[test]
+    fn test_empty_export() {
+        let mgr = make_manager();
+        let exported = mgr.export_all().unwrap();
+        assert_eq!(exported, "[]");
+    }
+
+    #[test]
+    fn test_delta_pruning_under_limit() {
+        let mgr = make_manager();
+        // Record same line many times - should not overflow
+        for _ in 0..50 {
+            mgr.record_log("repeated".to_string());
+        }
+        let exported = mgr.export_all().unwrap();
+        let logs: Vec<LogSummary> = serde_json::from_str(&exported).unwrap();
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].deltas.len(), 50);
+    }
+}
