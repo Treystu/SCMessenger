@@ -32,9 +32,9 @@ class MeshServiceViewModelTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
 
-        mockContext = mockk(relaxed = true)
-        mockMeshRepository = mockk(relaxed = true)
-        mockPreferencesRepository = mockk(relaxed = true)
+        mockContext = mockk<Context>(relaxed = true)
+        mockMeshRepository = mockk<MeshRepository>(relaxed = true)
+        mockPreferencesRepository = mockk<PreferencesRepository>(relaxed = true)
 
         // Setup default flows
         every { mockMeshRepository.serviceState } returns MutableStateFlow(uniffi.api.ServiceState.STOPPED)

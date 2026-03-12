@@ -1,6 +1,6 @@
 # BLE Connection Failure - Root Cause Analysis
-**Date**: 2026-03-09 14:22 UTC  
-**Status**: 🔴 CRITICAL BUG - DeadObjectException in GATT Server  
+**Date**: 2026-03-09 14:22 UTC
+**Status**: 🔴 CRITICAL BUG - DeadObjectException in GATT Server
 **Priority**: P0 - Blocking BLE Messaging
 
 ## Problem Statement
@@ -86,10 +86,10 @@ override fun onDescriptorWriteRequest(
     value: ByteArray
 ) {
     val characteristic = descriptor.characteristic
-    
+
     if (descriptor.uuid == CLIENT_CHARACTERISTIC_CONFIG_UUID) {
         val isSubscribing = value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-        
+
         if (isSubscribing) {
             // Track subscription
             subscribedDevices.getOrPut(device.address) { mutableSetOf() }
@@ -100,7 +100,7 @@ override fun onDescriptorWriteRequest(
             subscribedDevices[device.address]?.remove(characteristic.uuid)
             Timber.d("Device ${device.address} unsubscribed from ${characteristic.uuid}")
         }
-        
+
         if (responseNeeded) {
             gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, value)
         }
@@ -132,7 +132,7 @@ fun sendData(device: BluetoothDevice, data: ByteArray): Boolean {
         Timber.w("Device ${device.address} not subscribed to MESSAGE characteristic")
         return false
     }
-    
+
     // Wrap in try-catch to handle DeadObjectException
     return try {
         sendFragmented(device, data, MESSAGE_CHAR_UUID)
@@ -150,9 +150,9 @@ fun sendData(device: BluetoothDevice, data: ByteArray): Boolean {
 ```kotlin
 companion object {
     // ... existing UUIDs ...
-    
+
     // Client Characteristic Configuration Descriptor
-    val CLIENT_CHARACTERISTIC_CONFIG_UUID: UUID = 
+    val CLIENT_CHARACTERISTIC_CONFIG_UUID: UUID =
         UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 }
 ```

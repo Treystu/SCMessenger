@@ -1,7 +1,7 @@
 # SCMessenger Edge-Case Readiness Matrix (v0.2.x)
 
-Status: Active planning artifact  
-Last updated: 2026-03-03  
+Status: Active planning artifact
+Last updated: 2026-03-03
 Baseline used: v0.2.0 execution tracking through WS12 evidence in `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 
 ---

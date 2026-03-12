@@ -131,7 +131,7 @@ class ConversationsViewModel @Inject constructor(
                 Timber.d("VIEWMODEL_SEND: peerId='$peerId', contentLen=${content.length}")
                 val normalizedPeerId = PeerIdValidator.normalize(peerId)
                 Timber.d("VIEWMODEL_SEND: normalized='$normalizedPeerId'")
-                
+
                 // Call repository to handle encryption and transmission
                 meshRepository.sendMessage(normalizedPeerId, content)
 
@@ -205,7 +205,7 @@ class ConversationsViewModel @Inject constructor(
     fun isPeerAvailable(peerId: String): Boolean {
         val contact = getContactForPeer(peerId)
         if (contact != null) return true
-        
+
         // Check discovered peers
         val discoveredPeers = meshRepository.discoveredPeers.value
         return discoveredPeers[peerId]?.publicKey != null

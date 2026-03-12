@@ -24,22 +24,22 @@ final class BLECentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralD
     - Discovered/connected peripherals tracking
     - Peer cache for deduplication (5s window)
     - Scan timer for duty cycling
-    
+
     // Write Queue (matches Android BleGattClient pattern)
-    - writeInProgress: [UUID: Bool] 
+    - writeInProgress: [UUID: Bool]
     - pendingWrites: [UUID: [Data]]
     - CRITICAL: Never overlap writes (iOS silently drops)
-    
+
     // Key Methods
     - startScanning(): Duty-cycled scanning (10s on, 30s off)
     - stopScanning(): Disconnect all, clear cache
     - sendData(to:data:): Queue-managed GATT write
     - setBackgroundMode(_:): Adjust parameters for background
-    
+
     // State Restoration (iOS-specific, no Android equivalent)
     - willRestoreState: Restore peripherals after app kill
     - CBCentralManagerOptionRestoreIdentifierKey
-    
+
     // Delegates
     - centralManagerDidUpdateState: Handle BLE on/off
     - didDiscover: Cache peripheral, connect if new
@@ -58,26 +58,26 @@ final class BLEPeripheralManager: NSObject, CBPeripheralManagerDelegate {
     - Mesh service with TX/RX/ID characteristics
     - Subscribed centrals tracking
     - Privacy rotation timer
-    
+
     // Identity Data
     - identityData: Data (≤24 bytes for background)
     - Rotates every 15 minutes for privacy
-    
+
     // Key Methods
     - startAdvertising(): Build service, add characteristics, advertise
     - stopAdvertising(): Remove services, stop advertising
     - setIdentityData(_:): Update ID characteristic
     - sendNotification(to:data:): Send via RX characteristic
     - setRotationInterval(_:): Configure privacy rotation
-    
+
     // Background Constraints (iOS-specific)
     - Advertising payload limited to 28 bytes in background
     - Must use CBAdvertisementDataLocalNameKey
-    
+
     // State Restoration
     - willRestoreState: Restore services after app kill
     - CBPeripheralManagerOptionRestoreIdentifierKey
-    
+
     // Delegates
     - peripheralManagerDidUpdateState: Handle BLE on/off
     - didReceiveWrite: Process TX characteristic writes
@@ -93,13 +93,13 @@ final class BLEL2CAPManager: NSObject, CBPeripheralDelegate {
     - L2CAP channels for bulk transfer
     - Channel cache and state tracking
     - Stream buffers
-    
+
     // Key Methods
     - openChannel(to:psm:): Connect L2CAP as central
     - publishChannel(psm:): Publish L2CAP as peripheral
     - sendData(_:on:): Stream data over L2CAP
     - closeChannel(_:): Cleanup and disconnect
-    
+
     // Delegates
     - peripheral(_:didOpen:): Handle L2CAP channel opened
     - l2capChannel(_:didReceive:): Process incoming data
@@ -172,8 +172,8 @@ func centralManager(_ central: CBCentralManager, willRestoreState dict: [String:
 // 1. Cannot use CBCentralManagerScanOptionAllowDuplicatesKey in background
 // 2. Scan must specify service UUIDs
 // 3. Scan results are aggregated/delayed
-let options: [String: Any] = isBackgroundMode ? 
-    [:] : 
+let options: [String: Any] = isBackgroundMode ?
+    [:] :
     [CBCentralManagerScanOptionAllowDuplicatesKey: true]
 centralManager.scanForPeripherals(
     withServices: [MeshBLEConstants.serviceUUID],

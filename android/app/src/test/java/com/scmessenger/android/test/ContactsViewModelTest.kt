@@ -38,7 +38,8 @@ class ContactsViewModelTest {
             publicKey = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
             addedAt = 1u,
             lastSeen = null,
-            notes = null
+            notes = null,
+            lastKnownDeviceId = null
         )
     }
 

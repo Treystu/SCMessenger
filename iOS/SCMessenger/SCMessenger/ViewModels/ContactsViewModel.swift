@@ -106,17 +106,13 @@ final class ContactsViewModel {
     }
 
     private func isLibp2pPeerId(_ value: String?) -> Bool {
-        guard let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !normalized.isEmpty else { return false }
-        return normalized.hasPrefix("12D3Koo") || normalized.hasPrefix("Qm")
+        guard let val = value else { return false }
+        return PeerIdValidator.isLibp2pPeerId(val)
     }
 
     private func isIdentityId(_ value: String?) -> Bool {
-        guard let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines),
-              normalized.count == 64 else { return false }
-        return normalized.unicodeScalars.allSatisfy { scalar in
-            CharacterSet(charactersIn: "0123456789abcdefABCDEF").contains(scalar)
-        }
+        guard let val = value else { return false }
+        return PeerIdValidator.isIdentityId(val)
     }
 
     private func isBlePeerId(_ value: String?) -> Bool {
@@ -126,9 +122,9 @@ final class ContactsViewModel {
     }
 
     private func normalizedNonEmpty(_ value: String?) -> String? {
-        guard let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !normalized.isEmpty else { return nil }
-        return normalized
+        guard let val = value else { return nil }
+        let normalized = PeerIdValidator.normalize(val)
+        return normalized.isEmpty ? nil : normalized
     }
 
     private func selectStablePeerId(incoming: String, existing: String?) -> String {
@@ -157,18 +153,18 @@ final class ContactsViewModel {
         libp2pPeerId: String?,
         blePeerId: String?
     ) -> Bool {
-        let incomingPeerId = peerId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let incomingLibp2p = libp2pPeerId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let incomingPeerId = PeerIdValidator.normalize(peerId)
+        let incomingLibp2p = PeerIdValidator.normalize(libp2pPeerId ?? "")
         let incomingBle = blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let peerLibp2p = peer.libp2pPeerId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let peerLibp2p = PeerIdValidator.normalize(peer.libp2pPeerId ?? "")
         let peerBle = peer.blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         let sameById =
-            peer.peerId == incomingPeerId ||
+            PeerIdValidator.isSame(peer.peerId, incomingPeerId) ||
             (!incomingLibp2p.isEmpty &&
-                (peer.peerId == incomingLibp2p || peerLibp2p == incomingLibp2p)) ||
+                (PeerIdValidator.isSame(peer.peerId, incomingLibp2p) || PeerIdValidator.isSame(peerLibp2p, incomingLibp2p))) ||
             (!incomingBle.isEmpty &&
-                (peer.peerId == incomingBle || peerBle == incomingBle))
+                (PeerIdValidator.isSame(peer.peerId, incomingBle) || PeerIdValidator.isSame(peerBle, incomingBle)))
 
         let sameByKey =
             (peer.publicKey?.isEmpty == false) &&
@@ -253,7 +249,7 @@ final class ContactsViewModel {
         cancelPendingNearbyRemoval(peerId: blePeerId)
 
         let alreadySaved = contacts.contains {
-            $0.peerId == peerId || $0.publicKey.caseInsensitiveCompare(publicKey) == .orderedSame
+            PeerIdValidator.isSame($0.peerId, peerId) || $0.publicKey.caseInsensitiveCompare(publicKey) == .orderedSame
         }
         if alreadySaved {
             // Federated nickname/route hints can update in repository upsert;
@@ -313,7 +309,7 @@ final class ContactsViewModel {
         let alreadySaved = contacts.contains { $0.peerId == peerId }
         guard !alreadySaved else { return }
 
-        if let idx = nearbyPeers.firstIndex(where: { $0.peerId == peerId || $0.libp2pPeerId == peerId }) {
+        if let idx = nearbyPeers.firstIndex(where: { PeerIdValidator.isSame($0.peerId, peerId) || PeerIdValidator.isSame($0.libp2pPeerId ?? "", peerId) }) {
             let existing = nearbyPeers[idx]
             nearbyPeers[idx] = NearbyPeer(
                 peerId: existing.peerId,
@@ -333,7 +329,7 @@ final class ContactsViewModel {
         var changed = false
         for idx in nearbyPeers.indices {
             let peer = nearbyPeers[idx]
-            if peer.peerId == peerId || peer.libp2pPeerId == peerId {
+            if PeerIdValidator.isSame(peer.peerId, peerId) || PeerIdValidator.isSame(peer.libp2pPeerId ?? "", peerId) {
                 if peer.isOnline {
                     nearbyPeers[idx] = NearbyPeer(
                         peerId: peer.peerId,

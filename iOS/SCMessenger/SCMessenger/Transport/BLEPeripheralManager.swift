@@ -20,32 +20,32 @@ final class BLEPeripheralManager: NSObject {
     private let logger = Logger(subsystem: "com.scmessenger", category: "BLE-Peripheral")
     private var peripheralManager: CBPeripheralManager!
     private weak var meshRepository: MeshRepository?
-    
+
     // GATT Service and Characteristics (names match Android BleGattServer)
     private var meshService: CBMutableService?
     private var messageCharacteristic: CBMutableCharacteristic?  // Write: central → peripheral
     private var syncCharacteristic: CBMutableCharacteristic?     // Notify: peripheral → central
     private var identityCharacteristic: CBMutableCharacteristic? // Read: identity beacon
-    
+
     // Subscribed centrals
     private var subscribedCentrals: [CBCentral] = []
-    
+
     // Privacy rotation
     private var rotationInterval: TimeInterval = MeshBLEConstants.privacyRotationInterval
     private var rotationTimer: Timer?
     private var identityData: Data?
-    
+
     // Notification Buffer (Performance Optimization)
     private var pendingNotifications: [(central: CBCentral, data: Data)] = []
-    
+
     // Advertising state
     private var isAdvertising = false
     private var isRotationEnabled = true
-    
+
     // Reassembly buffers per central
     private var reassemblyBuffers: [UUID: [Int: Data]] = [:]
     private var expectedFragments: [UUID: Int] = [:]
-    
+
     init(meshRepository: MeshRepository) {
         self.meshRepository = meshRepository
         super.init()
@@ -57,20 +57,20 @@ final class BLEPeripheralManager: NSObject {
             options: [CBPeripheralManagerOptionRestoreIdentifierKey: MeshBLEConstants.peripheralRestoreId]
         )
     }
-    
+
     // MARK: - Public API
-    
+
     func startAdvertising() {
         logger.info("Starting BLE advertising")
         guard peripheralManager.state == .poweredOn else {
             logger.warning("Cannot start advertising: BLE not powered on")
             return
         }
-        
+
         setupService()
         startPrivacyRotation()
     }
-    
+
     func stopAdvertising() {
         logger.info("Stopping BLE advertising")
         peripheralManager.stopAdvertising()
@@ -79,14 +79,14 @@ final class BLEPeripheralManager: NSObject {
         rotationTimer = nil
         isAdvertising = false
     }
-    
+
     func setIdentityData(_ data: Data) {
         // This payload is served over GATT identity characteristic reads, not
         // advertisement service data. Full JSON identity is expected here.
         identityData = data
         logger.debug("Identity data updated for dynamic read: \(data.count) bytes")
     }
-    
+
     func setRotationInterval(_ interval: TimeInterval) {
         rotationInterval = interval
         logger.debug("Rotation interval set: \(interval)s")
@@ -95,7 +95,7 @@ final class BLEPeripheralManager: NSObject {
             startPrivacyRotation()
         }
     }
-    
+
     func setRotationEnabled(_ enabled: Bool) {
         isRotationEnabled = enabled
         logger.debug("Rotation enabled: \(enabled)")
@@ -108,13 +108,13 @@ final class BLEPeripheralManager: NSObject {
             }
         }
     }
-    
+
     func applyAdvertiseSettings(intervalMs: UInt32, txPowerDbm: Int8) {
         logger.debug("Advertise settings: interval=\(intervalMs)ms, txPower=\(txPowerDbm)dBm")
         // iOS doesn't allow direct control of advertising interval/power
         // Settings are advisory only
     }
-    
+
     func broadcastDataToCentrals(_ data: Data) {
         if !Thread.isMainThread {
             DispatchQueue.main.async { [weak self] in
@@ -188,7 +188,7 @@ final class BLEPeripheralManager: NSObject {
         }
         let fragments = fragmentData(data, mtu: mtu)
         var accepted = false
-        
+
         for fragment in fragments {
             if !subscribedCentrals.contains(where: { $0.identifier == central.identifier }) {
                 logger.warning("sendDataToCentral: central unsubscribed mid-send \(central.identifier)")
@@ -243,9 +243,9 @@ final class BLEPeripheralManager: NSObject {
         }
         return fragments
     }
-    
+
     // MARK: - Private Methods
-    
+
     private func setupService() {
         // P3: Guard against re-adding service when already set up
         guard meshService == nil else {
@@ -293,7 +293,7 @@ final class BLEPeripheralManager: NSObject {
         // Add service and start advertising
         peripheralManager.add(service)
     }
-    
+
     private func beginAdvertising() {
         // P3: Guard against re-starting advertising when already active
         guard !isAdvertising else { return }
@@ -302,12 +302,12 @@ final class BLEPeripheralManager: NSObject {
             CBAdvertisementDataServiceUUIDsKey: [MeshBLEConstants.serviceUUID],
             CBAdvertisementDataLocalNameKey: MeshBLEConstants.advertisedName
         ]
-        
+
         peripheralManager.startAdvertising(advertisementData)
         isAdvertising = true
         logger.info("BLE advertising started")
     }
-    
+
     private func startPrivacyRotation() {
         guard isRotationEnabled else { return }
         rotationTimer?.invalidate()
@@ -322,12 +322,12 @@ final class BLEPeripheralManager: NSObject {
             }
         }
     }
-    
+
     private func rotateIdentity() {
         logger.info("Rotating identity...")
         stopAdvertising()
         isAdvertising = false // Ensure we clear state so beginAdvertising succeeds
-        
+
         // Short delay to let hardware settle
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.beginAdvertising()
@@ -340,7 +340,7 @@ final class BLEPeripheralManager: NSObject {
 extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
         logger.info("Peripheral manager state: \(peripheral.state.rawValue)")
-        
+
         switch peripheral.state {
         case .poweredOn:
             if !isAdvertising {
@@ -352,7 +352,7 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
             break
         }
     }
-    
+
     func peripheralManager(_ peripheral: CBPeripheralManager, didAdd service: CBService, error: Error?) {
         if let error = error {
             logger.error("Failed to add service: \(error.localizedDescription)")
@@ -363,7 +363,7 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
         appendRepositoryDiagnostic("ble_peripheral_service_added")
         beginAdvertising()
     }
-    
+
     func peripheralManagerDidStartAdvertising(_ peripheral: CBPeripheralManager, error: Error?) {
         if let error = error {
             let nsError = error as NSError
@@ -382,14 +382,14 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
         isAdvertising = true
         appendRepositoryDiagnostic("ble_peripheral_adv_start")
     }
-    
+
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
         for request in requests {
             guard let data = request.value, !data.isEmpty else {
                 peripheral.respond(to: request, withResult: .success)
                 continue
             }
-            
+
             if request.characteristic.uuid == MeshBLEConstants.syncCharUUID {
                 // Fragmented sync data
                 handleFragmentedWrite(data: data, centralId: request.central.identifier, isSync: true)
@@ -447,21 +447,21 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
             }
         }
     }
-    
+
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveRead request: CBATTRequest) {
         if request.characteristic.uuid == MeshBLEConstants.identityCharUUID {
             guard let data = identityData else {
                 peripheral.respond(to: request, withResult: .unlikelyError)
                 return
             }
-            
+
             let offset = request.offset
-            
+
             if offset > data.count {
                 peripheral.respond(to: request, withResult: .invalidOffset)
                 return
             }
-            
+
             request.value = data.subdata(in: offset..<data.count)
             peripheral.respond(to: request, withResult: .success)
             logger.debug("Responded to read for identity beacon, offset: \(offset), returning \(request.value?.count ?? 0) bytes")
@@ -469,7 +469,7 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
             peripheral.respond(to: request, withResult: .requestNotSupported)
         }
     }
-    
+
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
         logger.info("Central \(central.identifier.uuidString) subscribed to \(characteristic.uuid.shortUUID)")
         // Ensure we only record subscription for the message sync characteristic (or both)
@@ -481,13 +481,13 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
             subscribedCentrals.append(central)
         }
     }
-    
+
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
         logger.info("Central \(central.identifier) unsubscribed from \(characteristic.uuid.shortUUID)")
         subscribedCentrals.removeAll(where: { $0.identifier == central.identifier })
         pendingNotifications.removeAll(where: { $0.central.identifier == central.identifier })
     }
-    
+
     func peripheralManager(_ peripheral: CBPeripheralManager, willRestoreState dict: [String: Any]) {
         // State restoration for background BLE
         if let services = dict[CBPeripheralManagerRestoredStateServicesKey] as? [CBMutableService] {
@@ -495,12 +495,12 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
             meshService = services.first
         }
     }
-    
+
     func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
         logger.debug("Peripheral manager ready to resume notifications")
         processPendingNotifications()
     }
-    
+
     private func processPendingNotifications() {
         guard let messageChar = messageCharacteristic else { return }
         guard peripheralManager.state == .poweredOn else {

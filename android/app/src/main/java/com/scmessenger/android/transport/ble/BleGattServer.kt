@@ -33,7 +33,7 @@ class BleGattServer(
 
     // Track connected devices
     private val connectedDevices = ConcurrentHashMap<String, BluetoothDevice>()
-    
+
     // Track subscribed devices and their subscribed characteristics
     private val subscribedDevices = ConcurrentHashMap<String, MutableSet<UUID>>()
 
@@ -400,7 +400,7 @@ class BleGattServer(
             if (descriptor.uuid == CLIENT_CHARACTERISTIC_CONFIG_UUID) {
                 val characteristic = descriptor.characteristic
                 val isSubscribing = value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-                
+
                 if (isSubscribing) {
                     // Track subscription
                     subscribedDevices.getOrPut(device.address) { ConcurrentHashMap.newKeySet() }
@@ -411,7 +411,7 @@ class BleGattServer(
                     subscribedDevices[device.address]?.remove(characteristic.uuid)
                     Timber.d("BLE GATT: Device ${device.address} unsubscribed from ${characteristic.uuid}")
                 }
-                
+
                 if (responseNeeded) {
                     sendResponseSafe(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
                 }

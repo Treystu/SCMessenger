@@ -82,16 +82,16 @@ final class MultipeerTransport: NSObject {
             meshRepository?.appendDiagnostic(message)
         }
     }
-    
+
     // MARK: - Setup
-    
+
     private func setupPeerID() {
         // Use identity snippet as display name
         let displayName = identitySnippetForDisplayName()
         peerID = MCPeerID(displayName: displayName)
         logger.info("Multipeer peer ID: \(displayName)")
     }
-    
+
     private func setupSession() {
         // .required encryption enforces TLS-like security for all Multipeer frames.
         // This is non-negotiable for a sovereign messenger.
@@ -185,15 +185,15 @@ final class MultipeerTransport: NSObject {
         inviteTimeoutWorkItems[name] = timeoutWork
         DispatchQueue.main.asyncAfter(deadline: .now() + inviteTimeoutSeconds, execute: timeoutWork)
     }
-    
+
     // MARK: - Public API
-    
+
     func startAdvertising() {
         guard !isAdvertising else {
             logger.debug("Already advertising")
             return
         }
-        
+
         advertiser = MCNearbyServiceAdvertiser(
             peer: peerID,
             discoveryInfo: nil,
@@ -204,40 +204,40 @@ final class MultipeerTransport: NSObject {
         isAdvertising = true
         logger.info("Started Multipeer advertising")
     }
-    
+
     func stopAdvertising() {
         advertiser?.stopAdvertisingPeer()
         advertiser = nil
         isAdvertising = false
         logger.info("Stopped Multipeer advertising")
     }
-    
+
     func startBrowsing() {
         guard !isBrowsing else {
             logger.debug("Already browsing")
             return
         }
-        
+
         browser = MCNearbyServiceBrowser(peer: peerID, serviceType: serviceType)
         browser?.delegate = self
         browser?.startBrowsingForPeers()
         isBrowsing = true
         logger.info("Started Multipeer browsing")
     }
-    
+
     func stopBrowsing() {
         browser?.stopBrowsingForPeers()
         browser = nil
         isBrowsing = false
         logger.info("Stopped Multipeer browsing")
     }
-    
+
     func sendData(to peer: MCPeerID, data: Data) throws {
         guard connectedPeers.contains(peer) else {
             logger.error("Peer \(peer.displayName) not connected")
             throw MultipeerError.notConnected
         }
-        
+
         try session.send(data, toPeers: [peer], with: .reliable)
         logger.debug("Sent \(data.count) bytes to \(peer.displayName)")
     }
@@ -249,14 +249,14 @@ final class MultipeerTransport: NSObject {
         }
         try sendData(to: connectedPeer, data: data)
     }
-    
+
     func sendDataToAll(_ data: Data) {
         let peers = Array(connectedPeers)
         guard !peers.isEmpty else {
             logger.warning("No connected peers")
             return
         }
-        
+
         do {
             try session.send(data, toPeers: peers, with: .reliable)
             logger.debug("Sent \(data.count) bytes to \(peers.count) peers")
@@ -264,7 +264,7 @@ final class MultipeerTransport: NSObject {
             logger.error("Failed to send data: \(error.localizedDescription)")
         }
     }
-    
+
     func disconnect() {
         // Clear reconnect table first so scheduled retries become no-ops
         reconnectAttempts.removeAll()
@@ -279,7 +279,7 @@ final class MultipeerTransport: NSObject {
         connectedPeers.removeAll()
         logger.info("Disconnected from Multipeer session")
     }
-    
+
     func hasConnection(_ peerId: String) -> Bool {
         connectedPeers.contains(where: { $0.displayName == peerId })
     }
@@ -303,7 +303,7 @@ extension MultipeerTransport: MCSessionDelegate {
     func session(_ session: MCSession, peer peerID: MCPeerID, didChange state: MCSessionState) {
         logger.info("Peer \(peerID.displayName) state changed: \(state.rawValue)")
         let peerName = peerID.displayName
-        
+
         switch state {
         case .connected:
             connectedPeers.insert(peerID)
@@ -340,23 +340,23 @@ extension MultipeerTransport: MCSessionDelegate {
             logger.warning("Unknown session state")
         }
     }
-    
+
     func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {
         logger.debug("Received \(data.count) bytes from \(peerID.displayName)")
         DispatchQueue.main.async { [weak self] in
             self?.meshRepository?.onMultipeerDataReceived(peerId: peerID.displayName, data: data)
         }
     }
-    
+
     func session(_ session: MCSession, didReceive stream: InputStream, withName streamName: String, fromPeer peerID: MCPeerID) {
         logger.debug("Received stream from \(peerID.displayName)")
         // Handle stream if needed
     }
-    
+
     func session(_ session: MCSession, didStartReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID, with progress: Progress) {
         logger.debug("Receiving resource from \(peerID.displayName)")
     }
-    
+
     func session(_ session: MCSession, didFinishReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID, at localURL: URL?, withError error: Error?) {
         if let error = error {
             logger.error("Resource receive error: \(error.localizedDescription)")
@@ -369,11 +369,11 @@ extension MultipeerTransport: MCSessionDelegate {
 extension MultipeerTransport: MCNearbyServiceAdvertiserDelegate {
     func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didReceiveInvitationFromPeer peerID: MCPeerID, withContext context: Data?, invitationHandler: @escaping (Bool, MCSession?) -> Void) {
         logger.info("Received invitation from \(peerID.displayName)")
-        
+
         // Auto-accept invitations (mesh network)
         invitationHandler(true, session)
     }
-    
+
     func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didNotStartAdvertisingPeer error: Error) {
         logger.error("Failed to start advertising: \(error.localizedDescription)")
         isAdvertising = false
@@ -389,16 +389,16 @@ extension MultipeerTransport: MCNearbyServiceBrowserDelegate {
         // Auto-invite with debounce/in-flight guardrails to prevent invitation storms.
         invitePeerIfAllowed(peerID, source: "discovery")
         appendRepositoryDiagnostic("multipeer_discovered id=\(peerID.displayName)")
-        
+
         DispatchQueue.main.async {
             MeshEventBus.shared.peerEvents.send(.discovered(peerId: peerID.displayName))
         }
     }
-    
+
     func browser(_ browser: MCNearbyServiceBrowser, lostPeer peerID: MCPeerID) {
         logger.info("Lost peer: \(peerID.displayName)")
     }
-    
+
     func browser(_ browser: MCNearbyServiceBrowser, didNotStartBrowsingForPeers error: Error) {
         logger.error("Failed to start browsing: \(error.localizedDescription)")
         isBrowsing = false
@@ -410,7 +410,7 @@ extension MultipeerTransport: MCNearbyServiceBrowserDelegate {
 enum MultipeerError: LocalizedError {
     case notConnected
     case sendFailed
-    
+
     var errorDescription: String? {
         switch self {
         case .notConnected:

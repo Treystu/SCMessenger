@@ -1,7 +1,7 @@
 # WS12 Gate Closure + App Store Rollout Plan
 
-Status: Active  
-Last updated: 2026-03-08  
+Status: Active
+Last updated: 2026-03-08
 Author: Antigravity (AI agent session)
 
 ---

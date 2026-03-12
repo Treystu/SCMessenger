@@ -1,6 +1,6 @@
 # Mesh Debug - RCA: Android→iOS Message Delivery Failure
-**Date**: 2026-03-09  
-**Session**: Interrupted debugging session completion  
+**Date**: 2026-03-09
+**Session**: Interrupted debugging session completion
 **Status**: Root Cause Identified
 
 ---
@@ -22,7 +22,7 @@ The Android peer (`12D3KooWHqa2jd8Ec3bbXR24Fn8Lc2rPQQwjeEiY2zUyXXMCez27`) succes
 03-09 00:46:07.544 I MeshRepository: delivery_attempt msg=unknown medium=core phase=direct outcome=success
 ```
 
-**Route Used**: 
+**Route Used**:
 - Direct connection to relay node: `12D3KooWDWQmA52hJtjtmxXqbWZRnWHWpg1ibXsPuEXGHabrm1Fr`
 - Relay addresses:
   - `/ip4/34.135.34.73/tcp/9001/p2p/...` (GCP)

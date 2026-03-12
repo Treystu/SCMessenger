@@ -1,6 +1,6 @@
 # Cellular NAT Traversal Solution
-**Status**: Implementation Required  
-**Priority**: P0 - Blocking Message Delivery  
+**Status**: Implementation Required
+**Priority**: P0 - Blocking Message Delivery
 **Date**: 2026-03-09
 
 ## Problem Statement

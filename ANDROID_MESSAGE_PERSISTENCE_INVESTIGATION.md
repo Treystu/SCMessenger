@@ -1,7 +1,7 @@
 # Android Message Persistence Investigation
 
-**Status:** ONGOING  
-**Priority:** CRITICAL  
+**Status:** ONGOING
+**Priority:** CRITICAL
 **Last Updated:** 2026-03-10
 
 ## Problem Statement
@@ -11,7 +11,7 @@ Messages typed and sent on Android disappear from the chat thread immediately af
 ## Root Causes Identified
 
 ### 1. Case-Sensitive Peer ID Matching (FIXED)
-**Discovered:** 2026-03-10  
+**Discovered:** 2026-03-10
 **Status:** ✅ RESOLVED
 
 **Problem:**
@@ -36,7 +36,7 @@ if record.peer_id.eq_ignore_ascii_case(peer) {
 - `test_remove_conversation_case_insensitive()`
 
 ### 2. Replace vs. Merge Strategy (ATTEMPTED FIX)
-**Discovered:** 2026-03-10  
+**Discovered:** 2026-03-10
 **Status:** ⚠️ PARTIALLY IMPLEMENTED
 
 **Problem:**
@@ -64,7 +64,7 @@ for (optimistic in currentMessages) {
 **Status:** Code deployed but messages still disappearing
 
 ### 3. Optimistic UI Updates (IMPLEMENTED)
-**Implemented:** 2026-03-10  
+**Implemented:** 2026-03-10
 **Status:** ✅ CODE COMPLETE, ❌ NOT WORKING IN PRACTICE
 
 **Implementation:**
@@ -75,7 +75,7 @@ for (optimistic in currentMessages) {
 
 **Files Changed:**
 - `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ChatViewModel.kt`
-  - Added `observeMessageUpdates()` 
+  - Added `observeMessageUpdates()`
   - Modified `sendMessage()` to add optimistic message
   - Added deduplication logic
 
@@ -158,7 +158,7 @@ Messages still disappearing despite this triple-guarantee system.
 ## Related Issues
 
 ### ID Mismatch Across Transports
-**Status:** 🔴 OPEN  
+**Status:** 🔴 OPEN
 **Priority:** HIGH
 
 **Problem:**
@@ -179,7 +179,7 @@ Multiple ID formats cause confusion:
 - Document ID mapping and when each format is used
 
 ### iOS Conversation Deletion Not Persisting
-**Status:** 🔴 OPEN  
+**Status:** 🔴 OPEN
 **Priority:** MEDIUM
 
 **Problem:**
@@ -197,7 +197,7 @@ Multiple ID formats cause confusion:
 - Add UI for individual message deletion
 
 ### iOS Performance Issues
-**Status:** 🔴 OPEN  
+**Status:** 🔴 OPEN
 **Priority:** MEDIUM
 
 **Symptoms:**

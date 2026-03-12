@@ -1,6 +1,6 @@
 # Phantom Peers Bug - Root Cause Analysis & Fix
-**Date**: 2026-03-09 21:25 UTC  
-**Status**: ✅ FIXED  
+**Date**: 2026-03-09 21:25 UTC
+**Status**: ✅ FIXED
 **Priority**: P0 - Critical Bug
 
 ## Problem Statement
@@ -78,7 +78,7 @@ serviceScope.launch {
 // Before
 "Connected to $peerCount peers • $messagesRelayed relayed"
 
-// After  
+// After
 "Connected to ${connectedPeers.size} peers • $messagesRelayed relayed"
 ```
 
@@ -153,6 +153,6 @@ This bug would have been worse with:
 
 ---
 
-**Status**: ✅ Fixed, built, ready for deployment  
-**Verified**: Code compiled successfully  
+**Status**: ✅ Fixed, built, ready for deployment
+**Verified**: Code compiled successfully
 **Next**: Install on device and verify peer count accuracy

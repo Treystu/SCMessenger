@@ -13,20 +13,20 @@ import Combine
 final class ChatViewModel {
     private weak var repository: MeshRepository?
     private var cancellables = Set<AnyCancellable>()
-    
+
     let conversation: Conversation
     var messages: [MessageRecord] = []
     var messageText = ""
     var isSending = false
     var error: String?
-    
+
     init(conversation: Conversation, repository: MeshRepository) {
         self.conversation = conversation
         self.repository = repository
         loadMessages()
         subscribeToNewMessages()
     }
-    
+
     func loadMessages() {
         do {
             let fetched = try repository?.getConversation(peerId: conversation.peerId) ?? []
@@ -40,14 +40,14 @@ final class ChatViewModel {
             self.error = error.localizedDescription
         }
     }
-    
+
     func sendMessage() async {
         guard !messageText.isEmpty else { return }
-        
+
         let content = messageText
         messageText = ""
         isSending = true
-        
+
         do {
             try await repository?.sendMessage(peerId: conversation.peerId, content: content)
             // loadMessages() triggered automatically via subscription
@@ -77,10 +77,10 @@ final class ChatViewModel {
             self.error = error.localizedDescription
             messageText = content // Restore text on error
         }
-        
+
         isSending = false
     }
-    
+
     private var reloadDebounceTask: Task<Void, Never>?
 
     private func subscribeToNewMessages() {

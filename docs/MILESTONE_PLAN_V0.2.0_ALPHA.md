@@ -1,8 +1,43 @@
 # SCMessenger v0.2.0 Alpha Milestone Plan
 
-Status: Active (execution complete through WS12.35 non-device reliability reconciliation)
-Last updated: 2026-03-10
+Status: Active (execution complete through WS12.41 Logging Audit)
+Last updated: 2026-03-11
 Scope: Core + Android + iOS + Desktop GUI + Relay topology
+
+---
+
+## iOS Build and Binding Stability Addendum (WS12.40, 2026-03-11 UTC)
+
+## Logging Audit and Mincing Addendum (WS12.41, 2026-03-11 UTC)
+
+1.  **Bloat Audit Completed**: Identified and pruned 1.5GB+ of stale simulation logs and build artifacts.
+2.  **Summarized Logging Enforced**:
+    *   **Core**: Implemented `LogManager` using content hashing and time offsets (seconds) from install time. Drastically reduces log disk footprint.
+3.  **Dynamic Disk-Aware Retention**:
+    *   **StorageManager**: Enforces 80/20 disk split (80% messages, 20% reserved buffer).
+    *   **Removal of Fixed Limits**: The legacy 10,000 message limit has been removed in favor of dynamic disk-capacity-based limits.
+    *   **Purge Priority**: Established strict priority: Logs > Cache > Messages > Contacts/Identity.
+4.  **Platform Integration**:
+    *   **Android**: `FileLoggingTree` forwards for summarization; periodic maintenance loop added for disk stats.
+    *   **iOS**: `MeshRepository` forwards logs; 15m periodic maintenance task added.
+5.  **Iterative Tree-Mincing exploratory analysis**:
+    *   Delivered `scripts/mince_logs.py` for high-precision log segment extraction.
+    *   Redacts rotating variables (timestamps, UUIDs, Hex, PeerIDs) to focus on structural mesh events.
+    *   Compatible with LogSankey visualizer.
+6.  **Lint Hygiene**: Cleaned up trailing whitespaces across core and mobile repositories.
+
+---
+
+## iOS Build and Binding Stability Addendum (WS12.40, 2026-03-11 UTC)
+
+1. Resolved critical iOS runtime crash (`UniffiInternalError.incompleteData`) caused by stale UniFFI bindings.
+2. Restored iOS buildability after the WS13.2 transport boundary widening by updating all `MeshRepository` call sites.
+3. Hardened the development loop for cross-platform bindings:
+   - Automated Swift field verification against UDL source of truth.
+   - Automated patching of generated Swift code for concurrency compatibility.
+4. Milestone implication:
+   - iOS is now back to a buildable and theoretically stable state for Phase 2 physical device testing.
+   - The risk of binding-drift-induced crashes is significantly reduced by the new verification tooling.
 
 ---
 
@@ -320,9 +355,9 @@ This plan follows repository policy from `CONTRIBUTING.md` and `CLAUDE.md`:
 
 These are confirmed and treated as contract inputs:
 
-1. Feature scope is text messaging only.  
+1. Feature scope is text messaging only.
    Large sync batches (1000+ messages) are reliability scenarios, not new media scope.
-2. All nodes/relays are open.  
+2. All nodes/relays are open.
    User can disable mesh participation entirely, which disables inbound/outbound messaging and relay participation.
 3. Messages must retry indefinitely until delivered.
 4. Route expansion is not fixed-width; prioritize peers/relays by best "recipient seen most recently" signal.
@@ -338,7 +373,7 @@ These are confirmed and treated as contract inputs:
 Follow-up locks:
 
 1. Message payload target cap: 8 KB.
-2. Disk pressure policy: dynamic quota + rolling purge; never let SCM storage push device past 90% used.
+2. Disk pressure policy: dynamic quota + rolling purge (WS12.41); never let SCM storage push device past 80% total utilization (leaving 20% buffer).
 3. Anti-abuse: low effort, high reward guardrails only for alpha.
 4. iOS floor: keep iOS 17 for v0.2.0.
 5. Desktop target: full GUI parity (not CLI-only parity).
@@ -384,7 +419,7 @@ Current v0.2.0 state:
 6. Android WiFi direct path and iOS Multipeer path are both fully wired.
 7. Headless-default behavior when no identity is present.
 8. Desktop GUI reaches functional parity with mobile core workflows.
-9. Dynamic disk safety policy prevents SCM from pushing device beyond 90% utilization.
+9. Dynamic disk safety policy prevents SCM from pushing device beyond 80% utilization (20% safety buffer).
 
 ---
 
@@ -404,9 +439,9 @@ Definitions:
 - `U`: current used device bytes
 - `S`: current SCM storage bytes
 - `N = U - S`: non-SCM used bytes
-- `hard_ceiling = floor(0.90 * T) - N`
+- `hard_ceiling = floor(0.80 * T) - N`
 
-`hard_ceiling` is the absolute maximum SCM can use without pushing device above 90% total utilization.
+`hard_ceiling` is the absolute maximum SCM can use without pushing device above 80% total utilization.
 
 Dynamic target quota:
 
@@ -415,7 +450,7 @@ Dynamic target quota:
 - If device used 50-70%: target up to 25% of free bytes, bounded by `hard_ceiling`.
 - If device used 70-80%: target up to 10% of free bytes, bounded by `hard_ceiling`.
 - If device used 80-90%: target up to 3% of free bytes, bounded by `hard_ceiling`.
-- If device used > 90%: emergency mode; reject new non-critical writes and immediately purge until under bound.
+- If device used > 80%: emergency mode; reject new non-critical writes and immediately purge until under bound.
 
 ### 6.3 Rolling purge order
 
@@ -748,7 +783,7 @@ v0.2.0 is done when all are true:
 6. Android WiFi direct and iOS Multipeer paths are fully wired.
 7. Headless-default startup works with UI/network role parity.
 8. Desktop GUI parity is available across Windows/macOS/Linux targets.
-9. Dynamic storage policy protects device usage ceiling and purges by locked ordering.
+9. Dynamic storage policy protects device usage ceiling (80%) and purges by locked ordering (Logs > Cache > Messages > Contacts/Identity).
 10. Public beta readiness criteria are satisfied for external testers.
 11. Residual risk closure sweep is complete: each risk in `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md` is either `Closed` or explicitly `Accepted/Deferred` with rationale and verification evidence.
 

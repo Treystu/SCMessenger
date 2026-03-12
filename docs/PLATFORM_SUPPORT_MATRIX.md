@@ -1,7 +1,7 @@
 # SCMessenger Platform Support Matrix (v0.2.0-alpha)
 
-Status: Active  
-Last updated: 2026-03-03  
+Status: Active
+Last updated: 2026-03-03
 Lock policy: **Lock to Code** (baseline values match current repository build configuration)
 
 ## Minimum Supported Versions

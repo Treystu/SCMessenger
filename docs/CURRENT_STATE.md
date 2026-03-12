@@ -1,13 +1,15 @@
 # SCMessenger Current State (Verified)
 
 Status: Active  
-Last updated: 2026-03-11
+Last updated: 2026-03-12
 
-Last verified: **2026-03-11** (local workspace checks on this machine)
+Last verified: **2026-03-12** (local workspace checks on this machine)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
 
-## 2026-03-11 WS13.3 Registration Protocol + Signature Verification (Implemented)
+## 2026-03-12 Consolidated PR79+PR80+PR81 (Verified)
+
+### WS13.3 Registration Protocol + Signature Verification
 
 - WS13.3 landed as an additive transport protocol on top of current `main`.
 - Files changed:
@@ -16,12 +18,6 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - `core/src/transport/mod.rs` — re-exported the new WS13.3 transport request/response types.
   - `core/tests/integration_registration_protocol.rs` — added end-to-end swarm tests for successful registration plus malformed/tampered rejection paths.
   - `core/src/transport/behaviour.rs`, `core/src/transport/swarm.rs` (tests) — added canonical serialization, signature pass/fail, peer/public-key extraction, and identity-mismatch coverage.
-- Verification on this Linux host:
-  - `cargo fmt --all -- --check` — **pass**
-  - `cargo build --workspace` — **pass**
-  - `cargo test --workspace` — **pass**
-  - `cargo test -p scmessenger-core transport::behaviour -- --nocapture` — **pass**
-  - `cargo test -p scmessenger-core --test integration_registration_protocol -- --nocapture` — **pass**
 - Scope boundary preserved:
   - no relay-registry mutation or custody enforcement was added yet; valid registration/deregistration requests are verified and acknowledged only,
   - mobile UniFFI / adapter surfaces were intentionally left unchanged in this phase because WS13.3 is transport-internal and this Linux host still lacks Android/iOS regeneration tooling.
@@ -29,6 +25,58 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - WS13.4 still owns persisted registry state, collision policy, and custody enforcement.
   - Anti-replay / monotonic registration-state protection remains open until registry state exists (tracked in `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`).
 
+### PR79 Code Review Fixes
+
+- **P1: Persistent blocklist backend** (core/src/lib.rs):
+  - `IronCore` now stores a persistent `blocked_manager: Arc<BlockedManager>` field initialized from the root storage backend.
+  - All blocking API methods (`block_peer`, `unblock_peer`, `is_peer_blocked`, `list_blocked_peers`, `blocked_count`) use the shared persistent manager instead of creating ephemeral `MemoryStorage` per call.
+  - WASM async init also constructs the `blocked_manager`.
+- **P1: Android message ID reconciliation** (android MeshRepository.kt):
+  - After `prepareMessageWithId` returns `realMessageId`, the initial history record (keyed by `initialMessageId` UUID) is now replaced with `realMessageId` so delivery receipts can find and mark the correct record.
+  - All downstream tracking (delivery state, pending outbox, promotions) uses `realMessageId`.
+- **P2: Identity resolver order** (core/src/lib.rs):
+  - `resolve_identity` now checks contacts for identity_id (Blake3 hash) matches BEFORE testing Ed25519 key shape. Prevents misclassification of identity hashes that happen to be valid Ed25519 points.
+- **P2: Android SharedFlow replay** (android MeshRepository.kt):
+  - Changed `_messageUpdates` from `replay=1` to `replay=0, extraBufferCapacity=1, onBufferOverflow=DROP_OLDEST` to prevent duplicate notifications to late subscribers.
+- **P2: FileLoggingTree thread safety** (android FileLoggingTree.kt):
+  - `ironCore` field marked `@Volatile`; `setIronCore` uses `synchronized(this)`.
+  - `ironCore?.recordLog()` wrapped in `runCatching` so IronCore failures don't skip file fallback.
+- **P2: PeerIdValidator strictness** (android PeerIdValidator.kt):
+  - `isLibp2pPeerId` now validates length range and base58 charset (no 0, O, I, l) beyond prefix-only checks.
+- **P2: Storage maintenance guard** (android MeshRepository.kt):
+  - Added `maintenanceJob` field with `isActive` check to prevent duplicate maintenance coroutines on service restart.
+- **New tests** (2 tests added):
+  - `test_blocklist_persistence_across_calls`: Verifies block/unblock/list persist across separate calls to the same `IronCore` instance.
+  - `test_resolve_identity_checks_contacts_before_key_shape`: Verifies identity_id is resolved via contact lookup before Ed25519 key shape test.
+- **Verification**:
+  - `cargo fmt --all -- --check` — **pass**
+  - `cargo clippy --workspace` — **pass** (only pre-existing `too_many_arguments` warning)
+  - `cargo build --workspace` — **pass**
+  - `cargo test --workspace` — **pass** (516 tests, 0 failures)
+  - `./scripts/docs_sync_check.sh` — **pass**
+
+### PR Reconciliation & Hardening
+
+- **Build fixes**:
+  - CLI: Added missing `UiEvent::Error` variant in `server.rs`, resolving build failure.
+  - WASM: Removed duplicate `PortMapping(_)` arm in swarm event match, eliminating `unreachable_patterns` warning.
+- **Production safety**:
+  - `core/src/store/logs.rs`: Replaced `.unwrap()` on `SystemTime::now()` with `.unwrap_or_default()` (2 sites).
+  - `core/src/store/logs.rs`: Implemented delta pruning when entries exceed 1000 (previously a no-op).
+  - `core/src/store/logs.rs`: Backend flush failures now logged via `tracing::warn!` instead of silently ignored.
+  - `core/src/store/storage.rs`: Removed unused `_message_max_threshold` dead code.
+  - `core/src/lib.rs`: Root sled backend initialization now falls back to `MemoryStorage` on error instead of panicking.
+- **New tests** (11 tests added):
+  - `store::logs::tests` (6): record/export, flush/reload, prune_oldest, install_time persistence, empty export, delta pruning limits.
+  - `store::storage::tests` (5): update_disk_stats, maintenance noop/zero/enough_space/low_space, DiskStats default.
+- **Contacts hardening**:
+  - `update_last_known_device_id` now trims whitespace and validates UUIDv4 format before persisting; clears on `None` as before.
+- **Verification**:
+  - `cargo fmt --all -- --check` — **pass**
+  - `cargo clippy --workspace` — **pass** (only pre-existing `too_many_arguments` warning)
+  - `cargo build --workspace` — **pass**
+  - `cargo test --workspace` — **pass** (514+ tests, 0 failures)
+  - `./scripts/docs_sync_check.sh` — **pass**
 ## 2026-03-10 WS13.2 Transport Boundary Widening (Implemented)
 
 - Architectural blocker resolved: transport/API boundary widened to carry WS13 tight-pair metadata.

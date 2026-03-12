@@ -35,30 +35,30 @@ import os
 final class MultipeerTransport: NSObject {
     private let logger = Logger(subsystem: "com.scmessenger", category: "Multipeer")
     private weak var meshRepository: MeshRepository?
-    
+
     // Multipeer components
     private var peerID: MCPeerID!
     private var advertiser: MCNearbyServiceAdvertiser?
     private var browser: MCNearbyServiceBrowser?
     private var session: MCSession?
-    
+
     // Service type (must be ≤15 chars, no special chars)
     private let serviceType = "scmesh"
-    
+
     init(meshRepository: MeshRepository) {
         self.meshRepository = meshRepository
         super.init()
         setupPeerID()
     }
-    
+
     func startAdvertising() {
         // MCNearbyServiceAdvertiser for discoverability
     }
-    
+
     func startBrowsing() {
         // MCNearbyServiceBrowser for discovery
     }
-    
+
     func sendData(to peer: MCPeerID, data: Data) {
         // MCSession.send with reliable mode
     }
@@ -96,7 +96,7 @@ func startTransports() {
     bleCentralManager = BLECentralManager(meshRepository: self)
     blePeripheralManager = BLEPeripheralManager(meshRepository: self)
     multipeerTransport = MultipeerTransport(meshRepository: self)
-    
+
     bleCentralManager?.startScanning()
     blePeripheralManager?.startAdvertising()
     multipeerTransport?.startAdvertising()
@@ -129,12 +129,12 @@ struct IdentityView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var isGenerating = false
     @State private var identity: IdentityInfo?
-    
+
     var body: some View {
         VStack(spacing: 24) {
             Text("Your Identity")
                 .font(.largeTitle.bold())
-            
+
             if let identity = identity {
                 IdentityCardView(identity: identity)
                 QRCodeView(publicKey: identity.publicKeyHex ?? "")
@@ -145,7 +145,7 @@ struct IdentityView: View {
             }
         }
     }
-    
+
     private func generateIdentity() {
         Task {
             isGenerating = true
@@ -162,7 +162,7 @@ struct IdentityView: View {
 struct OnboardingFlow: View {
     @Environment(MeshRepository.self) private var repository
     @State private var currentStep = 0
-    
+
     var body: some View {
         TabView(selection: $currentStep) {
             WelcomeView().tag(0)
@@ -182,7 +182,7 @@ struct OnboardingFlow: View {
 final class OnboardingViewModel {
     var currentStep = 0
     var hasCompletedOnboarding = false
-    
+
     func advance() { currentStep += 1 }
     func completeOnboarding() {
         hasCompletedOnboarding = true
@@ -203,7 +203,7 @@ struct ContactsListView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var contacts: [Contact] = []
     @State private var showingAddContact = false
-    
+
     var body: some View {
         List {
             ForEach(contacts, id: \.peerId) { contact in
@@ -249,7 +249,7 @@ struct ContactsListView: View {
 struct ConversationListView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var conversations: [Conversation] = []
-    
+
     var body: some View {
         List(conversations) { conversation in
             NavigationLink(value: conversation) {
@@ -271,7 +271,7 @@ struct ChatView: View {
     let conversation: Conversation
     @State private var messages: [MessageRecord] = []
     @State private var messageText = ""
-    
+
     var body: some View {
         VStack {
             ScrollView {
@@ -281,7 +281,7 @@ struct ChatView: View {
                     }
                 }
             }
-            
+
             MessageInputBar(
                 text: $messageText,
                 onSend: sendMessage
@@ -289,7 +289,7 @@ struct ChatView: View {
         }
         .navigationTitle(conversation.peerNickname)
     }
-    
+
     private func sendMessage() {
         Task {
             try? await repository.sendMessage(
@@ -325,7 +325,7 @@ struct MeshDashboardView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var stats: ServiceStats?
     @State private var peers: [LedgerEntry] = []
-    
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -364,22 +364,22 @@ struct MeshDashboardView: View {
 struct SettingsView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var settings: MeshSettings?
-    
+
     var body: some View {
         Form {
             Section("Relay & Messaging") {
                 RelayToggle(settings: $settings)
                 RelayWarningCard()
             }
-            
+
             Section("Transports") {
                 TransportToggles(settings: $settings)
             }
-            
+
             Section("Privacy") {
                 PrivacySettings(settings: $settings)
             }
-            
+
             Section("Advanced") {
                 NavigationLink("Mesh Settings") {
                     MeshSettingsView(settings: $settings)
@@ -400,7 +400,7 @@ struct SettingsView: View {
 ```swift
 struct RelayToggle: View {
     @Binding var settings: MeshSettings?
-    
+
     var body: some View {
         Toggle(isOn: Binding(
             get: { settings?.relayEnabled ?? false },
@@ -434,27 +434,27 @@ import UserNotifications
 
 final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationManager()
-    
+
     func requestPermission() async -> Bool {
         try? await UNUserNotificationCenter.current()
             .requestAuthorization(options: [.alert, .sound, .badge])
     }
-    
+
     func sendMessageNotification(from sender: String, content: String) {
         let content = UNMutableNotificationContent()
         content.title = sender
         content.body = content
         content.sound = .default
-        
+
         let request = UNNotificationRequest(
             identifier: UUID().uuidString,
             content: content,
             trigger: nil
         )
-        
+
         UNUserNotificationCenter.current().add(request)
     }
-    
+
     // UNUserNotificationCenterDelegate
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
@@ -487,21 +487,21 @@ struct MainTabView: View {
             .tabItem {
                 Label("Messages", systemImage: "message")
             }
-            
+
             NavigationStack {
                 ContactsListView()
             }
             .tabItem {
                 Label("Contacts", systemImage: "person.2")
             }
-            
+
             NavigationStack {
                 MeshDashboardView()
             }
             .tabItem {
                 Label("Mesh", systemImage: "network")
             }
-            
+
             NavigationStack {
                 SettingsView()
             }
@@ -521,12 +521,12 @@ struct Theme {
     static let onErrorContainer = Color.red
     static let primaryContainer = Color.blue.opacity(0.12)
     static let onPrimaryContainer = Color.blue
-    
+
     // Typography
     static let titleLarge = Font.largeTitle.bold()
     static let bodyMedium = Font.body
     static let labelSmall = Font.caption
-    
+
     // Spacing
     static let spacingSmall: CGFloat = 8
     static let spacingMedium: CGFloat = 16
@@ -562,18 +562,18 @@ import XCTest
 
 final class MeshRepositoryTests: XCTestCase {
     var repository: MeshRepository!
-    
+
     override func setUp() async throws {
         repository = MeshRepository()
         try repository.initialize()
     }
-    
+
     func testRelayEnforcement_SendDisabled() async throws {
         // Given: Relay disabled
         var settings = try repository.loadSettings()
         settings.relayEnabled = false
         try repository.saveSettings(settings)
-        
+
         // When: Attempting to send message
         // Then: Should throw relayDisabled error
         await XCTAssertThrowsError(
@@ -582,20 +582,20 @@ final class MeshRepositoryTests: XCTestCase {
             XCTAssertEqual(error as? MeshError, .relayDisabled)
         }
     }
-    
+
     func testRelayEnforcement_ReceiveDisabled() {
         // Given: Relay disabled
         var settings = try repository.loadSettings()
         settings.relayEnabled = false
         try repository.saveSettings(settings)
-        
+
         // When: Message received
         repository.onMessageReceived(
             senderId: "peer",
             messageId: "msg1",
             data: Data()
         )
-        
+
         // Then: Message should be silently dropped (no error)
         // Verify no message in history
     }
@@ -617,21 +617,21 @@ final class MeshRepositoryTests: XCTestCase {
 final class TopicManager {
     private weak var meshRepository: MeshRepository?
     private var subscribedTopics: Set<String> = []
-    
+
     func subscribe(to topic: String) throws {
         try meshRepository?.swarmBridge?.subscribe(topic: topic)
         subscribedTopics.insert(topic)
     }
-    
+
     func unsubscribe(from topic: String) throws {
         try meshRepository?.swarmBridge?.unsubscribe(topic: topic)
         subscribedTopics.remove(topic)
     }
-    
+
     func publish(to topic: String, data: Data) throws {
         try meshRepository?.swarmBridge?.publish(topic: topic, data: data)
     }
-    
+
     func listTopics() -> [String] {
         Array(subscribedTopics)
     }
@@ -644,20 +644,20 @@ struct JoinMeshView: View {
     @Environment(TopicManager.self) private var topicManager
     @State private var topicName = ""
     @State private var autoSubscribe = true
-    
+
     var body: some View {
         Form {
             Section("Join Mesh") {
                 TextField("Mesh Topic", text: $topicName)
                 Toggle("Auto-subscribe", isOn: $autoSubscribe)
             }
-            
+
             Section {
                 Button("Join") {
                     joinMesh()
                 }
             }
-            
+
             Section("Subscribed Meshes") {
                 ForEach(topicManager.listTopics(), id: \.self) { topic in
                     TopicRow(topic: topic)
@@ -665,7 +665,7 @@ struct JoinMeshView: View {
             }
         }
     }
-    
+
     private func joinMesh() {
         try? topicManager.subscribe(to: topicName)
     }

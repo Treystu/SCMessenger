@@ -1,6 +1,6 @@
 # SCMessenger Testing Guide
 
-Status: Active  
+Status: Active
 Last updated: 2026-03-07
 
 Current release line: `v0.2.0` is the active alpha baseline. Planned workstreams `WS13` and `WS14` remain `v0.2.1` follow-up scope.

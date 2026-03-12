@@ -151,7 +151,7 @@ struct ConversationListView: View {
         }
         conversations.removeAll { $0.id == conversation.id }
     }
-    
+
     private func loadConversations() {
         // Load conversations from repository
         do {
@@ -171,7 +171,7 @@ struct ConversationListView: View {
                 })
                 let lastTime = lastMsg.map { Date(timeIntervalSince1970: Double($0.senderTimestamp > 0 ? $0.senderTimestamp : $0.timestamp)) }
                 return Conversation(
-                    peerId: contact.peerId, 
+                    peerId: contact.peerId,
                     peerNickname: displayName,
                     lastMessage: lastMsg?.content,
                     lastMessageTime: lastTime
@@ -219,7 +219,7 @@ struct ConversationListView: View {
 
 struct ConversationRow: View {
     let conversation: Conversation
-    
+
     var body: some View {
         HStack(spacing: Theme.spacingMedium) {
             Circle()
@@ -230,11 +230,11 @@ struct ConversationRow: View {
                         .font(Theme.titleMedium)
                         .foregroundStyle(Theme.onPrimaryContainer)
                 }
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(conversation.peerNickname)
                     .font(Theme.titleMedium)
-                
+
                 if let lastMessage = conversation.lastMessage {
                     Text(lastMessage)
                         .font(Theme.bodySmall)
@@ -242,16 +242,16 @@ struct ConversationRow: View {
                         .lineLimit(1)
                 }
             }
-            
+
             Spacer()
-            
+
             VStack(alignment: .trailing, spacing: 4) {
                 if let lastTime = conversation.lastMessageTime {
                     Text(formatMessageDate(lastTime))
                         .font(Theme.labelSmall)
                         .foregroundStyle(Theme.onSurfaceVariant)
                 }
-                
+
                 if conversation.unreadCount > 0 {
                     Text("\(conversation.unreadCount)")
                         .font(Theme.labelSmall)
@@ -265,7 +265,7 @@ struct ConversationRow: View {
         }
         .padding(.vertical, 4)
     }
-    
+
     private func formatMessageDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = Calendar.current.isDateInToday(date) ? .none : .short
@@ -369,19 +369,19 @@ struct ChatView: View {
 struct MessageBubble: View {
     let message: MessageRecord
     let deliveryState: MeshRepository.DeliveryStatePresentation
-    
+
     private var isSent: Bool {
         message.direction == .sent
     }
-    
+
     var body: some View {
         HStack {
             if isSent { Spacer() }
-            
+
             VStack(alignment: isSent ? .trailing : .leading, spacing: 2) {
                 Text(message.content)
                     .font(Theme.bodyMedium)
-                
+
                 let msgDate = Date(timeIntervalSince1970: Double(message.timestamp))
                 Text(formatMessageDate(msgDate))
                     .font(Theme.labelSmall)
@@ -396,13 +396,13 @@ struct MessageBubble: View {
             .background(isSent ? Theme.primaryContainer : Theme.surfaceVariant)
             .foregroundStyle(isSent ? Theme.onPrimaryContainer : Theme.onSurface)
             .cornerRadius(Theme.cornerRadiusMedium)
-            
+
             if !isSent { Spacer() }
         }
         .padding(.horizontal, Theme.spacingMedium)
         .padding(.vertical, Theme.spacingSmall)
     }
-    
+
     private func formatMessageDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = Calendar.current.isDateInToday(date) ? .none : .short
@@ -427,13 +427,13 @@ struct MessageInputBar: View {
     @Binding var text: String
     let isSending: Bool
     let onSend: () -> Void
-    
+
     var body: some View {
         HStack(spacing: Theme.spacingSmall) {
             TextField("Message", text: $text, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(1...4)
-            
+
             Button(action: onSend) {
                 if isSending {
                     ProgressView()
