@@ -177,14 +177,27 @@ impl ContactManager {
     /// Called when an inbound message or ledger exchange reveals the sender's current device UUID.
     /// The stored value is used as `intended_device_id` when routing future messages to this peer.
     /// A `None` value clears any previously-stored device ID (e.g., after a factory reset signal).
+    /// `Some` values are normalized (`trim`) and only persisted when non-empty and valid UUIDs;
+    /// malformed values are ignored to avoid replacing a previously known-good device ID.
     pub fn update_last_known_device_id(
         &self,
         peer_id: String,
         device_id: Option<String>,
     ) -> Result<(), IronCoreError> {
         if let Some(mut contact) = self.get(peer_id)? {
-            contact.last_known_device_id = device_id;
-            self.add(contact)?;
+            match device_id {
+                None => {
+                    contact.last_known_device_id = None;
+                    self.add(contact)?;
+                }
+                Some(device_id) => {
+                    let normalized = device_id.trim();
+                    if !normalized.is_empty() && uuid::Uuid::parse_str(normalized).is_ok() {
+                        contact.last_known_device_id = Some(normalized.to_string());
+                        self.add(contact)?;
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -262,6 +275,44 @@ mod tests {
         assert!(
             c.last_known_device_id.is_none(),
             "legacy records must default to None"
+        );
+    }
+
+    #[test]
+    fn update_last_known_device_id_trims_valid_uuid() {
+        let mgr = make_manager();
+        mgr.add(Contact::new("peer-3".to_string(), "pubkey".to_string()))
+            .unwrap();
+
+        mgr.update_last_known_device_id(
+            "peer-3".to_string(),
+            Some("  550e8400-e29b-41d4-a716-446655440000  ".to_string()),
+        )
+        .unwrap();
+
+        let contact = mgr.get("peer-3".to_string()).unwrap().unwrap();
+        assert_eq!(
+            contact.last_known_device_id.as_deref(),
+            Some("550e8400-e29b-41d4-a716-446655440000")
+        );
+    }
+
+    #[test]
+    fn update_last_known_device_id_ignores_invalid_values() {
+        let mgr = make_manager();
+        let mut c = Contact::new("peer-4".to_string(), "pubkey".to_string());
+        c.last_known_device_id = Some("550e8400-e29b-41d4-a716-446655440000".to_string());
+        mgr.add(c).unwrap();
+
+        mgr.update_last_known_device_id("peer-4".to_string(), Some("   ".to_string()))
+            .unwrap();
+        mgr.update_last_known_device_id("peer-4".to_string(), Some("not-a-uuid".to_string()))
+            .unwrap();
+
+        let contact = mgr.get("peer-4".to_string()).unwrap().unwrap();
+        assert_eq!(
+            contact.last_known_device_id.as_deref(),
+            Some("550e8400-e29b-41d4-a716-446655440000")
         );
     }
 }
