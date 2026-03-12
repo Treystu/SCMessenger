@@ -68,6 +68,9 @@ pub enum UiEvent {
         level_tag: String,
         msg: String,
     },
+    Error {
+        message: String,
+    },
 }
 
 #[derive(Deserialize, Debug)]

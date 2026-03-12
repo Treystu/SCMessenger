@@ -41,7 +41,6 @@ impl StorageManager {
         }
 
         let buffer_threshold = (stats.total_bytes as f64 * 0.2) as u64;
-        let _message_max_threshold = (stats.total_bytes as f64 * 0.8) as u64;
 
         // Current free space is below 20% buffer
         if stats.free_bytes < buffer_threshold {
@@ -73,5 +72,58 @@ impl StorageManager {
         // User asked: "to accommodate up to 80% disk usage would be the amount each device gets"
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::store::backend::MemoryStorage;
+    use crate::store::history::HistoryManager;
+    use crate::store::logs::LogManager;
+
+    fn make_storage_manager() -> StorageManager {
+        let backend = Arc::new(MemoryStorage::new());
+        let history = Arc::new(HistoryManager::new(backend.clone()));
+        let logs = Arc::new(LogManager::new(backend));
+        StorageManager::new(history, logs)
+    }
+
+    #[test]
+    fn test_update_disk_stats() {
+        let mgr = make_storage_manager();
+        mgr.update_disk_stats(1_000_000, 500_000);
+        let stats = mgr.stats.read().clone();
+        assert_eq!(stats.total_bytes, 1_000_000);
+        assert_eq!(stats.free_bytes, 500_000);
+    }
+
+    #[test]
+    fn test_maintenance_noop_when_zero() {
+        let mgr = make_storage_manager();
+        // total_bytes = 0 means no stats yet, should be a no-op
+        assert!(mgr.perform_maintenance().is_ok());
+    }
+
+    #[test]
+    fn test_maintenance_noop_when_enough_space() {
+        let mgr = make_storage_manager();
+        mgr.update_disk_stats(1_000_000, 300_000); // 30% free > 20% threshold
+        assert!(mgr.perform_maintenance().is_ok());
+    }
+
+    #[test]
+    fn test_maintenance_triggers_prune_when_low() {
+        let mgr = make_storage_manager();
+        mgr.update_disk_stats(1_000_000, 100_000); // 10% free < 20% threshold
+                                                   // Should not error even with empty stores
+        assert!(mgr.perform_maintenance().is_ok());
+    }
+
+    #[test]
+    fn test_disk_stats_default() {
+        let stats = DiskStats::default();
+        assert_eq!(stats.total_bytes, 0);
+        assert_eq!(stats.free_bytes, 0);
     }
 }

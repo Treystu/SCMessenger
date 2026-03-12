@@ -189,6 +189,8 @@ pub struct IronCore {
     storage_manager: Arc<store::storage::StorageManager>,
     /// Log summarization/management
     log_manager: Arc<store::logs::LogManager>,
+    /// Persistent blocked identity manager
+    blocked_manager: Arc<store::blocked::BlockedManager>,
     /// UniFFI-facing contacts manager (non-wasm builds only)
     #[cfg(not(target_arch = "wasm32"))]
     contacts_bridge_manager: Arc<crate::contacts_bridge::ContactManager>,
@@ -563,24 +565,35 @@ impl IronCore {
         let history_arc = Arc::new(RwLock::new(history));
 
         // Root backend for logs and storage metadata
-        let root_backend: Arc<dyn store::backend::StorageBackend> = if let Some(path) = &storage_path {
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                Arc::new(crate::store::backend::SledStorage::new(
-                    Path::new(path).join("root").to_string_lossy().as_ref(),
-                ).unwrap())
-            }
-            #[cfg(target_arch = "wasm32")]
-            Arc::new(store::backend::MemoryStorage::new())
-        } else {
-            Arc::new(store::backend::MemoryStorage::new())
-        };
+        let root_backend: Arc<dyn store::backend::StorageBackend> =
+            if let Some(path) = &storage_path {
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    match crate::store::backend::SledStorage::new(
+                        Path::new(path).join("root").to_string_lossy().as_ref(),
+                    ) {
+                        Ok(sled) => Arc::new(sled),
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to open root sled backend, falling back to memory: {}",
+                                e
+                            );
+                            Arc::new(store::backend::MemoryStorage::new())
+                        }
+                    }
+                }
+                #[cfg(target_arch = "wasm32")]
+                Arc::new(store::backend::MemoryStorage::new())
+            } else {
+                Arc::new(store::backend::MemoryStorage::new())
+            };
 
         let log_manager = Arc::new(store::logs::LogManager::new(root_backend.clone()));
         let storage_manager = Arc::new(store::storage::StorageManager::new(
             history_arc.read().clone().into(),
             log_manager.clone(),
         ));
+        let blocked_manager = Arc::new(store::blocked::BlockedManager::new(root_backend.clone()));
 
         #[cfg(not(target_arch = "wasm32"))]
         let contacts_bridge_manager = init_uniffi_contacts_manager(storage_path.as_deref());
@@ -595,6 +608,7 @@ impl IronCore {
             history: history_arc,
             storage_manager,
             log_manager,
+            blocked_manager,
             #[cfg(not(target_arch = "wasm32"))]
             contacts_bridge_manager,
             #[cfg(not(target_arch = "wasm32"))]
@@ -694,12 +708,25 @@ impl IronCore {
             store::HistoryManager::new(Arc::new(store::backend::MemoryStorage::new()))
         };
 
+        let history_arc = Arc::new(RwLock::new(history));
+        let root_backend: Arc<dyn store::backend::StorageBackend> =
+            Arc::new(store::backend::MemoryStorage::new());
+        let log_manager = Arc::new(store::logs::LogManager::new(root_backend.clone()));
+        let storage_manager = Arc::new(store::storage::StorageManager::new(
+            history_arc.read().clone().into(),
+            log_manager.clone(),
+        ));
+        let blocked_manager = Arc::new(store::blocked::BlockedManager::new(root_backend));
+
         Self {
             identity,
             outbox: Arc::new(RwLock::new(outbox)),
             inbox: Arc::new(RwLock::new(inbox)),
             contacts: Arc::new(RwLock::new(contacts)),
-            history: Arc::new(RwLock::new(history)),
+            history: history_arc,
+            storage_manager,
+            log_manager,
+            blocked_manager,
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
         }
@@ -927,24 +954,13 @@ impl IronCore {
         // Check if it's already a valid 64-char hex public key
         if trimmed.len() == 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
             // Could be public_key_hex OR identity_id (both 64 hex chars)
-            // Try to verify if it's a valid Ed25519 public key
-            if let Ok(bytes) = hex::decode(trimmed) {
-                if bytes.len() == 32 {
-                    // Valid format - check if it's a real public key by trying to use it
-                    if ed25519_dalek::VerifyingKey::from_bytes(bytes.as_slice().try_into().unwrap())
-                        .is_ok()
-                    {
-                        // It's a valid Ed25519 public key
-                        return Ok(trimmed.to_lowercase());
-                    }
-                }
-            }
-
-            // Not a valid public key, might be identity_id - search contacts
+            // Check contacts for identity_id match FIRST, before key-shape test,
+            // because some identity hashes are valid Ed25519 points and would be
+            // misclassified as public keys.
             let contacts = self.contacts.read();
             if let Ok(all_contacts) = contacts.list() {
-                for contact in all_contacts {
-                    // Check if this identity_id matches by hashing the contact's public key
+                for contact in &all_contacts {
+                    // Check if this is an identity_id (Blake3 hash of public key)
                     if let Ok(pub_bytes) = hex::decode(&contact.public_key) {
                         let hash = blake3::hash(&pub_bytes);
                         let computed_identity_id = hex::encode(hash.as_bytes());
@@ -952,10 +968,25 @@ impl IronCore {
                             return Ok(contact.public_key.to_lowercase());
                         }
                     }
+                    // Also check if the input matches the contact's public key directly
+                    if contact.public_key.eq_ignore_ascii_case(trimmed) {
+                        return Ok(contact.public_key.to_lowercase());
+                    }
+                }
+            }
+            drop(contacts);
+
+            // No contact match — verify it's a valid Ed25519 public key
+            if let Ok(bytes) = hex::decode(trimmed) {
+                if bytes.len() == 32
+                    && ed25519_dalek::VerifyingKey::from_bytes(bytes.as_slice().try_into().unwrap())
+                        .is_ok()
+                {
+                    return Ok(trimmed.to_lowercase());
                 }
             }
 
-            // Assume it's a public key if we can't find a matching identity_id
+            // Not a valid public key and not a known identity_id — assume public key format
             return Ok(trimmed.to_lowercase());
         }
 
@@ -1394,7 +1425,8 @@ impl IronCore {
     }
 
     pub fn update_disk_stats(&self, total_bytes: u64, free_bytes: u64) {
-        self.storage_manager.update_disk_stats(total_bytes, free_bytes);
+        self.storage_manager
+            .update_disk_stats(total_bytes, free_bytes);
     }
 
     pub fn perform_maintenance(&self) -> Result<(), IronCoreError> {
@@ -1415,41 +1447,29 @@ impl IronCore {
 
     /// Block a peer by ID
     pub fn block_peer(&self, peer_id: String, reason: Option<String>) -> Result<(), IronCoreError> {
-        use crate::store::blocked::{BlockedIdentity, BlockedManager};
-        // Create a new MemoryStorage backend for blocking - in production this should use persistent storage
-        let backend = Arc::new(crate::store::backend::MemoryStorage::new());
-        let manager = BlockedManager::new(backend);
+        use crate::store::blocked::BlockedIdentity;
         let mut blocked = BlockedIdentity::new(peer_id);
         if let Some(r) = reason {
             blocked.reason = Some(r);
         }
-        manager.block(blocked)
+        self.blocked_manager.block(blocked)
     }
 
     /// Unblock a peer
     pub fn unblock_peer(&self, peer_id: String) -> Result<(), IronCoreError> {
-        use crate::store::blocked::BlockedManager;
-        let backend = Arc::new(crate::store::backend::MemoryStorage::new());
-        let manager = BlockedManager::new(backend);
-        manager.unblock(peer_id, None)
+        self.blocked_manager.unblock(peer_id, None)
     }
 
     /// Check if a peer is blocked
     pub fn is_peer_blocked(&self, peer_id: String) -> Result<bool, IronCoreError> {
-        use crate::store::blocked::BlockedManager;
-        let backend = Arc::new(crate::store::backend::MemoryStorage::new());
-        let manager = BlockedManager::new(backend);
-        manager.is_blocked(&peer_id, None)
+        self.blocked_manager.is_blocked(&peer_id, None)
     }
 
     /// List all blocked peers
     pub fn list_blocked_peers(
         &self,
     ) -> Result<Vec<crate::blocked_bridge::BlockedIdentity>, IronCoreError> {
-        use crate::store::blocked::BlockedManager;
-        let backend = Arc::new(crate::store::backend::MemoryStorage::new());
-        let manager = BlockedManager::new(backend);
-        let core_list = manager.list()?;
+        let core_list = self.blocked_manager.list()?;
         Ok(core_list
             .into_iter()
             .map(crate::blocked_bridge::BlockedIdentity::from)
@@ -1458,10 +1478,7 @@ impl IronCore {
 
     /// Get count of blocked peers
     pub fn blocked_count(&self) -> Result<u32, IronCoreError> {
-        use crate::store::blocked::BlockedManager;
-        let backend = Arc::new(crate::store::backend::MemoryStorage::new());
-        let manager = BlockedManager::new(backend);
-        manager.count().map(|c| c as u32)
+        self.blocked_manager.count().map(|c| c as u32)
     }
 
     /// Notify the delegate that a peer was discovered on the network.
@@ -1951,5 +1968,56 @@ mod tests {
             .expect("history lookup should succeed")
             .expect("history record should exist");
         assert!(!record.delivered);
+    }
+
+    #[test]
+    fn test_blocklist_persistence_across_calls() {
+        let core = IronCore::new();
+
+        // Initially no blocked peers
+        assert_eq!(core.blocked_count().unwrap(), 0);
+        assert!(core.list_blocked_peers().unwrap().is_empty());
+
+        // Block a peer
+        core.block_peer("peer123".into(), Some("test reason".into()))
+            .unwrap();
+
+        // Verify persistence across separate calls
+        assert_eq!(core.blocked_count().unwrap(), 1);
+        assert!(core.is_peer_blocked("peer123".into()).unwrap());
+        assert!(!core.is_peer_blocked("peer456".into()).unwrap());
+
+        let list = core.list_blocked_peers().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].peer_id, "peer123");
+
+        // Unblock
+        core.unblock_peer("peer123".into()).unwrap();
+        assert_eq!(core.blocked_count().unwrap(), 0);
+        assert!(!core.is_peer_blocked("peer123".into()).unwrap());
+    }
+
+    #[test]
+    fn test_resolve_identity_checks_contacts_before_key_shape() {
+        let core = IronCore::new();
+        core.initialize_identity().unwrap();
+
+        // Add a contact with a known public key
+        let contacts = core.contacts.read();
+        let fake_pk = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+        let contact = crate::store::Contact::new(fake_pk.to_string(), fake_pk.to_string());
+        let _ = contacts.add(contact);
+        drop(contacts);
+
+        // Compute the identity_id (Blake3 hash of public key bytes)
+        let pub_bytes = hex::decode(fake_pk).unwrap();
+        let hash = blake3::hash(&pub_bytes);
+        let identity_id = hex::encode(hash.as_bytes());
+
+        // Resolving the identity_id should return the contact's public key, not the identity_id itself
+        let resolved = core.resolve_identity(identity_id.clone()).unwrap();
+        assert_eq!(resolved, fake_pk.to_lowercase());
+        // The resolved value should differ from the identity_id input
+        assert_ne!(resolved, identity_id.to_lowercase());
     }
 }

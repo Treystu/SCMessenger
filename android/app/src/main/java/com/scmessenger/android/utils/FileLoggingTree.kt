@@ -18,10 +18,11 @@ class FileLoggingTree(context: Context) : Timber.Tree() {
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     // Guard against recursion (Timber -> FileLoggingTree -> Timber -> ...)
     private val isLogging = ThreadLocal.withInitial { false }
+    @Volatile
     private var ironCore: uniffi.api.IronCore? = null
 
     fun setIronCore(core: uniffi.api.IronCore?) {
-        this.ironCore = core
+        synchronized(this) { this.ironCore = core }
     }
 
     override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
@@ -45,7 +46,8 @@ class FileLoggingTree(context: Context) : Timber.Tree() {
             
             // WS12.41: Send to IronCore for summarized storage
             synchronized(this) {
-                ironCore?.recordLog(logLine)
+                runCatching { ironCore?.recordLog(logLine) }
+                    .onFailure { android.util.Log.w("FileLoggingTree", "IronCore logging failed; using file fallback", it) }
                 
                 // Fallback/Legacy: Still append to file but with smaller limit
                 // The user wants "instead of saving all the log files, we only save the log once"

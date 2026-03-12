@@ -158,21 +158,21 @@ fileprivate protocol FfiConverter {
     associatedtype FfiType
     associatedtype SwiftType
 
-    static func lift(_ value: FfiType) throws -> SwiftType
-    static func lower(_ value: SwiftType) -> FfiType
-    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType
-    static func write(_ value: SwiftType, into buf: inout [UInt8])
+    nonisolated(unsafe) static func lift(_ value: FfiType) throws -> SwiftType
+    nonisolated(unsafe) static func lower(_ value: SwiftType) -> FfiType
+    nonisolated(unsafe) static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType
+    nonisolated(unsafe) static func write(_ value: SwiftType, into buf: inout [UInt8])
 }
 
 // Types conforming to `Primitive` pass themselves directly over the FFI.
 fileprivate protocol FfiConverterPrimitive: FfiConverter where FfiType == SwiftType { }
 
 extension FfiConverterPrimitive {
-    public static func lift(_ value: FfiType) throws -> SwiftType {
+    public nonisolated(unsafe) static func lift(_ value: FfiType) throws -> SwiftType {
         return value
     }
 
-    public static func lower(_ value: SwiftType) -> FfiType {
+    public nonisolated(unsafe) static func lower(_ value: SwiftType) -> FfiType {
         return value
     }
 }
@@ -182,7 +182,7 @@ extension FfiConverterPrimitive {
 fileprivate protocol FfiConverterRustBuffer: FfiConverter where FfiType == RustBuffer {}
 
 extension FfiConverterRustBuffer {
-    public static func lift(_ buf: RustBuffer) throws -> SwiftType {
+    public nonisolated(unsafe) static func lift(_ buf: RustBuffer) throws -> SwiftType {
         var reader = createReader(data: Data(rustBuffer: buf))
         let value = try read(from: &reader)
         if hasRemaining(reader) {
@@ -192,7 +192,7 @@ extension FfiConverterRustBuffer {
         return value
     }
 
-    public static func lower(_ value: SwiftType) -> RustBuffer {
+    public nonisolated(unsafe) static func lower(_ value: SwiftType) -> RustBuffer {
           var writer = createWriter()
           write(value, into: &writer)
           return RustBuffer(bytes: writer)
@@ -511,19 +511,19 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 public protocol AutoAdjustEngineProtocol : AnyObject {
-
-    func clearOverrides()
-
+    
+    func clearOverrides() 
+    
     func computeBleAdjustment(profile: AdjustmentProfile)  -> BleAdjustment
-
+    
     func computeProfile(device: DeviceProfile)  -> AdjustmentProfile
-
+    
     func computeRelayAdjustment(profile: AdjustmentProfile)  -> RelayAdjustment
-
-    func overrideBleScanInterval(intervalMs: UInt32)
-
-    func overrideRelayMaxPerHour(max: UInt32)
-
+    
+    func overrideBleScanInterval(intervalMs: UInt32) 
+    
+    func overrideRelayMaxPerHour(max: UInt32) 
+    
 }
 
 open class AutoAdjustEngine:
@@ -571,15 +571,15 @@ public convenience init() {
         try! rustCall { uniffi_scmessenger_core_fn_free_autoadjustengine(pointer, $0) }
     }
 
+    
 
-
-
+    
 open func clearOverrides() {try! rustCall() {
     uniffi_scmessenger_core_fn_method_autoadjustengine_clear_overrides(self.uniffiClonePointer(),$0
     )
 }
 }
-
+    
 open func computeBleAdjustment(profile: AdjustmentProfile) -> BleAdjustment {
     return try!  FfiConverterTypeBleAdjustment.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_autoadjustengine_compute_ble_adjustment(self.uniffiClonePointer(),
@@ -587,7 +587,7 @@ open func computeBleAdjustment(profile: AdjustmentProfile) -> BleAdjustment {
     )
 })
 }
-
+    
 open func computeProfile(device: DeviceProfile) -> AdjustmentProfile {
     return try!  FfiConverterTypeAdjustmentProfile.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_autoadjustengine_compute_profile(self.uniffiClonePointer(),
@@ -595,7 +595,7 @@ open func computeProfile(device: DeviceProfile) -> AdjustmentProfile {
     )
 })
 }
-
+    
 open func computeRelayAdjustment(profile: AdjustmentProfile) -> RelayAdjustment {
     return try!  FfiConverterTypeRelayAdjustment.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_autoadjustengine_compute_relay_adjustment(self.uniffiClonePointer(),
@@ -603,21 +603,21 @@ open func computeRelayAdjustment(profile: AdjustmentProfile) -> RelayAdjustment 
     )
 })
 }
-
+    
 open func overrideBleScanInterval(intervalMs: UInt32) {try! rustCall() {
     uniffi_scmessenger_core_fn_method_autoadjustengine_override_ble_scan_interval(self.uniffiClonePointer(),
         FfiConverterUInt32.lower(intervalMs),$0
     )
 }
 }
-
+    
 open func overrideRelayMaxPerHour(max: UInt32) {try! rustCall() {
     uniffi_scmessenger_core_fn_method_autoadjustengine_override_relay_max_per_hour(self.uniffiClonePointer(),
         FfiConverterUInt32.lower(max),$0
     )
 }
 }
-
+    
 
 }
 
@@ -667,19 +667,19 @@ public func FfiConverterTypeAutoAdjustEngine_lower(_ value: AutoAdjustEngine) ->
 
 
 public protocol BootstrapResolverProtocol : AnyObject {
-
+    
     /**
      * Resolve bootstrap nodes using the priority chain: env → remote → static.
      * This is a synchronous, deterministic resolution (remote fetch is attempted
      * but falls back on timeout/error). Call this once at startup.
      */
     func resolve()  -> [String]
-
+    
     /**
      * Return the raw static fallback list without env/remote resolution.
      */
     func staticFallback()  -> [String]
-
+    
 }
 
 open class BootstrapResolver:
@@ -728,9 +728,9 @@ public convenience init(config: BootstrapConfig) {
         try! rustCall { uniffi_scmessenger_core_fn_free_bootstrapresolver(pointer, $0) }
     }
 
+    
 
-
-
+    
     /**
      * Resolve bootstrap nodes using the priority chain: env → remote → static.
      * This is a synchronous, deterministic resolution (remote fetch is attempted
@@ -742,7 +742,7 @@ open func resolve() -> [String] {
     )
 })
 }
-
+    
     /**
      * Return the raw static fallback list without env/remote resolution.
      */
@@ -752,7 +752,7 @@ open func staticFallback() -> [String] {
     )
 })
 }
-
+    
 
 }
 
@@ -802,32 +802,32 @@ public func FfiConverterTypeBootstrapResolver_lower(_ value: BootstrapResolver) 
 
 
 public protocol ContactManagerProtocol : AnyObject {
-
-    func add(contact: Contact) throws
-
+    
+    func add(contact: Contact) throws 
+    
     func count()  -> UInt32
-
-    func flush()
-
+    
+    func flush() 
+    
     func get(peerId: String) throws  -> Contact?
-
+    
     func list() throws  -> [Contact]
-
-    func remove(peerId: String) throws
-
+    
+    func remove(peerId: String) throws 
+    
     func search(query: String) throws  -> [Contact]
-
-    func setLocalNickname(peerId: String, nickname: String?) throws
-
-    func setNickname(peerId: String, nickname: String?) throws
-
+    
+    func setLocalNickname(peerId: String, nickname: String?) throws 
+    
+    func setNickname(peerId: String, nickname: String?) throws 
+    
     /**
      * Update the last known device ID for a contact (WS13.2)
      */
-    func updateDeviceId(peerId: String, deviceId: String?) throws
-
-    func updateLastSeen(peerId: String) throws
-
+    func updateDeviceId(peerId: String, deviceId: String?) throws 
+    
+    func updateLastSeen(peerId: String) throws 
+    
 }
 
 open class ContactManager:
@@ -876,29 +876,29 @@ public convenience init(storagePath: String)throws  {
         try! rustCall { uniffi_scmessenger_core_fn_free_contactmanager(pointer, $0) }
     }
 
+    
 
-
-
+    
 open func add(contact: Contact)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_contactmanager_add(self.uniffiClonePointer(),
         FfiConverterTypeContact.lower(contact),$0
     )
 }
 }
-
+    
 open func count() -> UInt32 {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_contactmanager_count(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func flush() {try! rustCall() {
     uniffi_scmessenger_core_fn_method_contactmanager_flush(self.uniffiClonePointer(),$0
     )
 }
 }
-
+    
 open func get(peerId: String)throws  -> Contact? {
     return try  FfiConverterOptionTypeContact.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_contactmanager_get(self.uniffiClonePointer(),
@@ -906,21 +906,21 @@ open func get(peerId: String)throws  -> Contact? {
     )
 })
 }
-
+    
 open func list()throws  -> [Contact] {
     return try  FfiConverterSequenceTypeContact.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_contactmanager_list(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func remove(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_contactmanager_remove(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),$0
     )
 }
 }
-
+    
 open func search(query: String)throws  -> [Contact] {
     return try  FfiConverterSequenceTypeContact.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_contactmanager_search(self.uniffiClonePointer(),
@@ -928,7 +928,7 @@ open func search(query: String)throws  -> [Contact] {
     )
 })
 }
-
+    
 open func setLocalNickname(peerId: String, nickname: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_contactmanager_set_local_nickname(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),
@@ -936,7 +936,7 @@ open func setLocalNickname(peerId: String, nickname: String?)throws  {try rustCa
     )
 }
 }
-
+    
 open func setNickname(peerId: String, nickname: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_contactmanager_set_nickname(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),
@@ -944,7 +944,7 @@ open func setNickname(peerId: String, nickname: String?)throws  {try rustCallWit
     )
 }
 }
-
+    
     /**
      * Update the last known device ID for a contact (WS13.2)
      */
@@ -955,14 +955,14 @@ open func updateDeviceId(peerId: String, deviceId: String?)throws  {try rustCall
     )
 }
 }
-
+    
 open func updateLastSeen(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_contactmanager_update_last_seen(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),$0
     )
 }
 }
-
+    
 
 }
 
@@ -1012,45 +1012,45 @@ public func FfiConverterTypeContactManager_lower(_ value: ContactManager) -> Uns
 
 
 public protocol HistoryManagerProtocol : AnyObject {
-
-    func add(record: MessageRecord) throws
-
-    func clear() throws
-
-    func clearConversation(peerId: String) throws
-
+    
+    func add(record: MessageRecord) throws 
+    
+    func clear() throws 
+    
+    func clearConversation(peerId: String) throws 
+    
     func conversation(peerId: String, limit: UInt32) throws  -> [MessageRecord]
-
+    
     func count()  -> UInt32
-
-    func delete(id: String) throws
-
+    
+    func delete(id: String) throws 
+    
     /**
      * Enforce a maximum message cap — keeps ``max_messages`` newest, prunes the rest.
      * Returns the number of pruned records.
      */
     func enforceRetention(maxMessages: UInt32) throws  -> UInt32
-
-    func flush()
-
+    
+    func flush() 
+    
     func get(id: String) throws  -> MessageRecord?
-
-    func markDelivered(id: String) throws
-
+    
+    func markDelivered(id: String) throws 
+    
     /**
      * Remove all messages older than ``before_timestamp`` (Unix epoch seconds).
      * Returns the number of pruned records.
      */
     func pruneBefore(beforeTimestamp: UInt64) throws  -> UInt32
-
+    
     func recent(peerFilter: String?, limit: UInt32) throws  -> [MessageRecord]
-
-    func removeConversation(peerId: String) throws
-
+    
+    func removeConversation(peerId: String) throws 
+    
     func search(query: String, limit: UInt32) throws  -> [MessageRecord]
-
+    
     func stats() throws  -> HistoryStats
-
+    
 }
 
 open class HistoryManager:
@@ -1099,29 +1099,29 @@ public convenience init(storagePath: String)throws  {
         try! rustCall { uniffi_scmessenger_core_fn_free_historymanager(pointer, $0) }
     }
 
+    
 
-
-
+    
 open func add(record: MessageRecord)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_historymanager_add(self.uniffiClonePointer(),
         FfiConverterTypeMessageRecord.lower(record),$0
     )
 }
 }
-
+    
 open func clear()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_historymanager_clear(self.uniffiClonePointer(),$0
     )
 }
 }
-
+    
 open func clearConversation(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_historymanager_clear_conversation(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),$0
     )
 }
 }
-
+    
 open func conversation(peerId: String, limit: UInt32)throws  -> [MessageRecord] {
     return try  FfiConverterSequenceTypeMessageRecord.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_historymanager_conversation(self.uniffiClonePointer(),
@@ -1130,21 +1130,21 @@ open func conversation(peerId: String, limit: UInt32)throws  -> [MessageRecord] 
     )
 })
 }
-
+    
 open func count() -> UInt32 {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_historymanager_count(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func delete(id: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_historymanager_delete(self.uniffiClonePointer(),
         FfiConverterString.lower(id),$0
     )
 }
 }
-
+    
     /**
      * Enforce a maximum message cap — keeps ``max_messages`` newest, prunes the rest.
      * Returns the number of pruned records.
@@ -1156,13 +1156,13 @@ open func enforceRetention(maxMessages: UInt32)throws  -> UInt32 {
     )
 })
 }
-
+    
 open func flush() {try! rustCall() {
     uniffi_scmessenger_core_fn_method_historymanager_flush(self.uniffiClonePointer(),$0
     )
 }
 }
-
+    
 open func get(id: String)throws  -> MessageRecord? {
     return try  FfiConverterOptionTypeMessageRecord.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_historymanager_get(self.uniffiClonePointer(),
@@ -1170,14 +1170,14 @@ open func get(id: String)throws  -> MessageRecord? {
     )
 })
 }
-
+    
 open func markDelivered(id: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_historymanager_mark_delivered(self.uniffiClonePointer(),
         FfiConverterString.lower(id),$0
     )
 }
 }
-
+    
     /**
      * Remove all messages older than ``before_timestamp`` (Unix epoch seconds).
      * Returns the number of pruned records.
@@ -1189,7 +1189,7 @@ open func pruneBefore(beforeTimestamp: UInt64)throws  -> UInt32 {
     )
 })
 }
-
+    
 open func recent(peerFilter: String?, limit: UInt32)throws  -> [MessageRecord] {
     return try  FfiConverterSequenceTypeMessageRecord.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_historymanager_recent(self.uniffiClonePointer(),
@@ -1198,14 +1198,14 @@ open func recent(peerFilter: String?, limit: UInt32)throws  -> [MessageRecord] {
     )
 })
 }
-
+    
 open func removeConversation(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_historymanager_remove_conversation(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),$0
     )
 }
 }
-
+    
 open func search(query: String, limit: UInt32)throws  -> [MessageRecord] {
     return try  FfiConverterSequenceTypeMessageRecord.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_historymanager_search(self.uniffiClonePointer(),
@@ -1214,14 +1214,14 @@ open func search(query: String, limit: UInt32)throws  -> [MessageRecord] {
     )
 })
 }
-
+    
 open func stats()throws  -> HistoryStats {
     return try  FfiConverterTypeHistoryStats.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_historymanager_stats(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 
 }
 
@@ -1271,80 +1271,88 @@ public func FfiConverterTypeHistoryManager_lower(_ value: HistoryManager) -> Uns
 
 
 public protocol IronCoreProtocol : AnyObject {
-
-    func blockPeer(peerId: String, reason: String?) throws
-
+    
+    func blockPeer(peerId: String, reason: String?) throws 
+    
     func blockedCount() throws  -> UInt32
-
+    
     func contactsManager()  -> ContactManager
-
+    
     func exportIdentityBackup() throws  -> String
-
+    
+    func exportLogs() throws  -> String
+    
     func extractPublicKeyFromPeerId(peerId: String) throws  -> String
-
+    
     /**
      * Get device ID for this installation (WS13.1)
      */
     func getDeviceId()  -> String?
-
+    
     func getIdentityInfo()  -> IdentityInfo
-
+    
     /**
      * Get seniority timestamp for this installation (WS13.1)
      */
     func getSeniorityTimestamp()  -> UInt64?
-
+    
     func historyManager()  -> HistoryManager
-
-    func importIdentityBackup(backup: String) throws
-
+    
+    func importIdentityBackup(backup: String) throws 
+    
     func inboxCount()  -> UInt32
-
-    func initializeIdentity() throws
-
+    
+    func initializeIdentity() throws 
+    
     func isPeerBlocked(peerId: String) throws  -> Bool
-
+    
     func isRunning()  -> Bool
-
+    
     func listBlockedPeers() throws  -> [BlockedIdentity]
-
+    
     func markMessageSent(messageId: String)  -> Bool
-
+    
     func outboxCount()  -> UInt32
-
+    
+    func performMaintenance() throws 
+    
     /**
      * Generate a cover traffic payload — random bytes that look like an encrypted
      * message. Broadcast via send_to_all_peers() to obscure real traffic patterns.
      * `size_bytes` controls payload size (16-1024); values outside range are clamped.
      */
     func prepareCoverTraffic(sizeBytes: UInt32) throws  -> Data
-
+    
     func prepareMessage(recipientPublicKeyHex: String, text: String) throws  -> Data
-
+    
     func prepareMessageWithId(recipientPublicKeyHex: String, text: String) throws  -> PreparedMessage
-
+    
     func prepareReceipt(recipientPublicKeyHex: String, messageId: String) throws  -> Data
-
+    
+    func recordLog(line: String) 
+    
     /**
      * Resolve any ID format (public_key_hex, identity_id, or libp2p_peer_id) to canonical public_key_hex.
      * This is the primary ID resolution function for cross-platform identity unification.
      */
     func resolveIdentity(anyId: String) throws  -> String
-
-    func setDelegate(delegate: CoreDelegate?)
-
-    func setNickname(nickname: String) throws
-
+    
+    func setDelegate(delegate: CoreDelegate?) 
+    
+    func setNickname(nickname: String) throws 
+    
     func signData(data: Data) throws  -> SignatureResult
-
-    func start() throws
-
-    func stop()
-
-    func unblockPeer(peerId: String) throws
-
+    
+    func start() throws 
+    
+    func stop() 
+    
+    func unblockPeer(peerId: String) throws 
+    
+    func updateDiskStats(totalBytes: UInt64, freeBytes: UInt64) 
+    
     func verifySignature(data: Data, signature: Data, publicKeyHex: String) throws  -> Bool
-
+    
 }
 
 open class IronCore:
@@ -1392,7 +1400,7 @@ public convenience init() {
         try! rustCall { uniffi_scmessenger_core_fn_free_ironcore(pointer, $0) }
     }
 
-
+    
 public static func withStorage(storagePath: String) -> IronCore {
     return try!  FfiConverterTypeIronCore.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_constructor_ironcore_with_storage(
@@ -1400,9 +1408,9 @@ public static func withStorage(storagePath: String) -> IronCore {
     )
 })
 }
+    
 
-
-
+    
 open func blockPeer(peerId: String, reason: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_block_peer(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),
@@ -1410,28 +1418,35 @@ open func blockPeer(peerId: String, reason: String?)throws  {try rustCallWithErr
     )
 }
 }
-
+    
 open func blockedCount()throws  -> UInt32 {
     return try  FfiConverterUInt32.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_blocked_count(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func contactsManager() -> ContactManager {
     return try!  FfiConverterTypeContactManager.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_contacts_manager(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func exportIdentityBackup()throws  -> String {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_export_identity_backup(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
+open func exportLogs()throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_export_logs(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func extractPublicKeyFromPeerId(peerId: String)throws  -> String {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_extract_public_key_from_peer_id(self.uniffiClonePointer(),
@@ -1439,7 +1454,7 @@ open func extractPublicKeyFromPeerId(peerId: String)throws  -> String {
     )
 })
 }
-
+    
     /**
      * Get device ID for this installation (WS13.1)
      */
@@ -1449,14 +1464,14 @@ open func getDeviceId() -> String? {
     )
 })
 }
-
+    
 open func getIdentityInfo() -> IdentityInfo {
     return try!  FfiConverterTypeIdentityInfo.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_get_identity_info(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
     /**
      * Get seniority timestamp for this installation (WS13.1)
      */
@@ -1466,34 +1481,34 @@ open func getSeniorityTimestamp() -> UInt64? {
     )
 })
 }
-
+    
 open func historyManager() -> HistoryManager {
     return try!  FfiConverterTypeHistoryManager.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_history_manager(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func importIdentityBackup(backup: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_import_identity_backup(self.uniffiClonePointer(),
         FfiConverterString.lower(backup),$0
     )
 }
 }
-
+    
 open func inboxCount() -> UInt32 {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_inbox_count(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func initializeIdentity()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_initialize_identity(self.uniffiClonePointer(),$0
     )
 }
 }
-
+    
 open func isPeerBlocked(peerId: String)throws  -> Bool {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_is_peer_blocked(self.uniffiClonePointer(),
@@ -1501,21 +1516,21 @@ open func isPeerBlocked(peerId: String)throws  -> Bool {
     )
 })
 }
-
+    
 open func isRunning() -> Bool {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_is_running(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func listBlockedPeers()throws  -> [BlockedIdentity] {
     return try  FfiConverterSequenceTypeBlockedIdentity.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_list_blocked_peers(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func markMessageSent(messageId: String) -> Bool {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_mark_message_sent(self.uniffiClonePointer(),
@@ -1523,14 +1538,20 @@ open func markMessageSent(messageId: String) -> Bool {
     )
 })
 }
-
+    
 open func outboxCount() -> UInt32 {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_outbox_count(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
+open func performMaintenance()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_perform_maintenance(self.uniffiClonePointer(),$0
+    )
+}
+}
+    
     /**
      * Generate a cover traffic payload — random bytes that look like an encrypted
      * message. Broadcast via send_to_all_peers() to obscure real traffic patterns.
@@ -1543,7 +1564,7 @@ open func prepareCoverTraffic(sizeBytes: UInt32)throws  -> Data {
     )
 })
 }
-
+    
 open func prepareMessage(recipientPublicKeyHex: String, text: String)throws  -> Data {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_prepare_message(self.uniffiClonePointer(),
@@ -1552,7 +1573,7 @@ open func prepareMessage(recipientPublicKeyHex: String, text: String)throws  -> 
     )
 })
 }
-
+    
 open func prepareMessageWithId(recipientPublicKeyHex: String, text: String)throws  -> PreparedMessage {
     return try  FfiConverterTypePreparedMessage.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_prepare_message_with_id(self.uniffiClonePointer(),
@@ -1561,7 +1582,7 @@ open func prepareMessageWithId(recipientPublicKeyHex: String, text: String)throw
     )
 })
 }
-
+    
 open func prepareReceipt(recipientPublicKeyHex: String, messageId: String)throws  -> Data {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_prepare_receipt(self.uniffiClonePointer(),
@@ -1570,7 +1591,14 @@ open func prepareReceipt(recipientPublicKeyHex: String, messageId: String)throws
     )
 })
 }
-
+    
+open func recordLog(line: String) {try! rustCall() {
+    uniffi_scmessenger_core_fn_method_ironcore_record_log(self.uniffiClonePointer(),
+        FfiConverterString.lower(line),$0
+    )
+}
+}
+    
     /**
      * Resolve any ID format (public_key_hex, identity_id, or libp2p_peer_id) to canonical public_key_hex.
      * This is the primary ID resolution function for cross-platform identity unification.
@@ -1582,21 +1610,21 @@ open func resolveIdentity(anyId: String)throws  -> String {
     )
 })
 }
-
+    
 open func setDelegate(delegate: CoreDelegate?) {try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_set_delegate(self.uniffiClonePointer(),
         FfiConverterOptionCallbackInterfaceCoreDelegate.lower(delegate),$0
     )
 }
 }
-
+    
 open func setNickname(nickname: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_set_nickname(self.uniffiClonePointer(),
         FfiConverterString.lower(nickname),$0
     )
 }
 }
-
+    
 open func signData(data: Data)throws  -> SignatureResult {
     return try  FfiConverterTypeSignatureResult.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_sign_data(self.uniffiClonePointer(),
@@ -1604,26 +1632,34 @@ open func signData(data: Data)throws  -> SignatureResult {
     )
 })
 }
-
+    
 open func start()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_start(self.uniffiClonePointer(),$0
     )
 }
 }
-
+    
 open func stop() {try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_stop(self.uniffiClonePointer(),$0
     )
 }
 }
-
+    
 open func unblockPeer(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_unblock_peer(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),$0
     )
 }
 }
-
+    
+open func updateDiskStats(totalBytes: UInt64, freeBytes: UInt64) {try! rustCall() {
+    uniffi_scmessenger_core_fn_method_ironcore_update_disk_stats(self.uniffiClonePointer(),
+        FfiConverterUInt64.lower(totalBytes),
+        FfiConverterUInt64.lower(freeBytes),$0
+    )
+}
+}
+    
 open func verifySignature(data: Data, signature: Data, publicKeyHex: String)throws  -> Bool {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_verify_signature(self.uniffiClonePointer(),
@@ -1633,7 +1669,7 @@ open func verifySignature(data: Data, signature: Data, publicKeyHex: String)thro
     )
 })
 }
-
+    
 
 }
 
@@ -1683,25 +1719,25 @@ public func FfiConverterTypeIronCore_lower(_ value: IronCore) -> UnsafeMutableRa
 
 
 public protocol LedgerManagerProtocol : AnyObject {
-
+    
     func allKnownTopics()  -> [String]
-
-    func annotateIdentity(multiaddr: String, peerId: String, publicKey: String?, nickname: String?)
-
+    
+    func annotateIdentity(multiaddr: String, peerId: String, publicKey: String?, nickname: String?) 
+    
     func dialableAddresses()  -> [LedgerEntry]
-
+    
     func getPreferredRelays(limit: UInt32)  -> [LedgerEntry]
-
-    func load() throws
-
-    func recordConnection(multiaddr: String, peerId: String)
-
-    func recordFailure(multiaddr: String)
-
-    func save() throws
-
+    
+    func load() throws 
+    
+    func recordConnection(multiaddr: String, peerId: String) 
+    
+    func recordFailure(multiaddr: String) 
+    
+    func save() throws 
+    
     func summary()  -> String
-
+    
 }
 
 open class LedgerManager:
@@ -1750,16 +1786,16 @@ public convenience init(storagePath: String) {
         try! rustCall { uniffi_scmessenger_core_fn_free_ledgermanager(pointer, $0) }
     }
 
+    
 
-
-
+    
 open func allKnownTopics() -> [String] {
     return try!  FfiConverterSequenceString.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ledgermanager_all_known_topics(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func annotateIdentity(multiaddr: String, peerId: String, publicKey: String?, nickname: String?) {try! rustCall() {
     uniffi_scmessenger_core_fn_method_ledgermanager_annotate_identity(self.uniffiClonePointer(),
         FfiConverterString.lower(multiaddr),
@@ -1769,14 +1805,14 @@ open func annotateIdentity(multiaddr: String, peerId: String, publicKey: String?
     )
 }
 }
-
+    
 open func dialableAddresses() -> [LedgerEntry] {
     return try!  FfiConverterSequenceTypeLedgerEntry.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ledgermanager_dialable_addresses(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func getPreferredRelays(limit: UInt32) -> [LedgerEntry] {
     return try!  FfiConverterSequenceTypeLedgerEntry.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ledgermanager_get_preferred_relays(self.uniffiClonePointer(),
@@ -1784,13 +1820,13 @@ open func getPreferredRelays(limit: UInt32) -> [LedgerEntry] {
     )
 })
 }
-
+    
 open func load()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ledgermanager_load(self.uniffiClonePointer(),$0
     )
 }
 }
-
+    
 open func recordConnection(multiaddr: String, peerId: String) {try! rustCall() {
     uniffi_scmessenger_core_fn_method_ledgermanager_record_connection(self.uniffiClonePointer(),
         FfiConverterString.lower(multiaddr),
@@ -1798,27 +1834,27 @@ open func recordConnection(multiaddr: String, peerId: String) {try! rustCall() {
     )
 }
 }
-
+    
 open func recordFailure(multiaddr: String) {try! rustCall() {
     uniffi_scmessenger_core_fn_method_ledgermanager_record_failure(self.uniffiClonePointer(),
         FfiConverterString.lower(multiaddr),$0
     )
 }
 }
-
+    
 open func save()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ledgermanager_save(self.uniffiClonePointer(),$0
     )
 }
 }
-
+    
 open func summary() -> String {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ledgermanager_summary(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 
 }
 
@@ -1868,58 +1904,58 @@ public func FfiConverterTypeLedgerManager_lower(_ value: LedgerManager) -> Unsaf
 
 
 public protocol MeshServiceProtocol : AnyObject {
-
+    
     /**
      * Export a structured diagnostics JSON payload for support and partner testing.
      */
     func exportDiagnostics()  -> String
-
+    
     func getConnectionPathState()  -> ConnectionPathState
-
+    
     func getCore()  -> IronCore?
-
+    
     /**
      * Get the current NAT status as a string: "open", "restricted", "symmetric", or "unknown".
      */
     func getNatStatus()  -> String
-
+    
     func getState()  -> ServiceState
-
+    
     func getStats()  -> ServiceStats
-
+    
     func getSwarmBridge()  -> SwarmBridge
-
-    func onDataReceived(peerId: String, data: Data)
-
-    func onPeerDisconnected(peerId: String)
-
-    func onPeerDiscovered(peerId: String)
-
-    func pause()
-
-    func resetStats()
-
-    func resume()
-
+    
+    func onDataReceived(peerId: String, data: Data) 
+    
+    func onPeerDisconnected(peerId: String) 
+    
+    func onPeerDiscovered(peerId: String) 
+    
+    func pause() 
+    
+    func resetStats() 
+    
+    func resume() 
+    
     /**
      * Configure bootstrap nodes for NAT traversal and internet roaming.
      * These are multiaddr strings like "/ip4/1.2.3.4/tcp/4001" or
      * "/dns4/bootstrap.scmessenger.net/tcp/4001".
      */
-    func setBootstrapNodes(addrs: [String])
-
-    func setPlatformBridge(bridge: PlatformBridge?)
-
-    func setRelayBudget(messagesPerHour: UInt32)
-
-    func start() throws
-
-    func startSwarm(listenAddr: String) throws
-
-    func stop()
-
-    func updateDeviceState(profile: DeviceProfile)
-
+    func setBootstrapNodes(addrs: [String]) 
+    
+    func setPlatformBridge(bridge: PlatformBridge?) 
+    
+    func setRelayBudget(messagesPerHour: UInt32) 
+    
+    func start() throws 
+    
+    func startSwarm(listenAddr: String) throws 
+    
+    func stop() 
+    
+    func updateDeviceState(profile: DeviceProfile) 
+    
 }
 
 open class MeshService:
@@ -1968,7 +2004,7 @@ public convenience init(config: MeshServiceConfig) {
         try! rustCall { uniffi_scmessenger_core_fn_free_meshservice(pointer, $0) }
     }
 
-
+    
 public static func withStorage(config: MeshServiceConfig, storagePath: String) -> MeshService {
     return try!  FfiConverterTypeMeshService.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_constructor_meshservice_with_storage(
@@ -1977,9 +2013,9 @@ public static func withStorage(config: MeshServiceConfig, storagePath: String) -
     )
 })
 }
+    
 
-
-
+    
     /**
      * Export a structured diagnostics JSON payload for support and partner testing.
      */
@@ -1989,21 +2025,21 @@ open func exportDiagnostics() -> String {
     )
 })
 }
-
+    
 open func getConnectionPathState() -> ConnectionPathState {
     return try!  FfiConverterTypeConnectionPathState.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_get_connection_path_state(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func getCore() -> IronCore? {
     return try!  FfiConverterOptionTypeIronCore.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_get_core(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
     /**
      * Get the current NAT status as a string: "open", "restricted", "symmetric", or "unknown".
      */
@@ -2013,28 +2049,28 @@ open func getNatStatus() -> String {
     )
 })
 }
-
+    
 open func getState() -> ServiceState {
     return try!  FfiConverterTypeServiceState.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_get_state(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func getStats() -> ServiceStats {
     return try!  FfiConverterTypeServiceStats.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_get_stats(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func getSwarmBridge() -> SwarmBridge {
     return try!  FfiConverterTypeSwarmBridge.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_get_swarm_bridge(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func onDataReceived(peerId: String, data: Data) {try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_on_data_received(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),
@@ -2042,39 +2078,39 @@ open func onDataReceived(peerId: String, data: Data) {try! rustCall() {
     )
 }
 }
-
+    
 open func onPeerDisconnected(peerId: String) {try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_on_peer_disconnected(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),$0
     )
 }
 }
-
+    
 open func onPeerDiscovered(peerId: String) {try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_on_peer_discovered(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),$0
     )
 }
 }
-
+    
 open func pause() {try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_pause(self.uniffiClonePointer(),$0
     )
 }
 }
-
+    
 open func resetStats() {try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_reset_stats(self.uniffiClonePointer(),$0
     )
 }
 }
-
+    
 open func resume() {try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_resume(self.uniffiClonePointer(),$0
     )
 }
 }
-
+    
     /**
      * Configure bootstrap nodes for NAT traversal and internet roaming.
      * These are multiaddr strings like "/ip4/1.2.3.4/tcp/4001" or
@@ -2086,47 +2122,47 @@ open func setBootstrapNodes(addrs: [String]) {try! rustCall() {
     )
 }
 }
-
+    
 open func setPlatformBridge(bridge: PlatformBridge?) {try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_set_platform_bridge(self.uniffiClonePointer(),
         FfiConverterOptionCallbackInterfacePlatformBridge.lower(bridge),$0
     )
 }
 }
-
+    
 open func setRelayBudget(messagesPerHour: UInt32) {try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_set_relay_budget(self.uniffiClonePointer(),
         FfiConverterUInt32.lower(messagesPerHour),$0
     )
 }
 }
-
+    
 open func start()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_meshservice_start(self.uniffiClonePointer(),$0
     )
 }
 }
-
+    
 open func startSwarm(listenAddr: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_meshservice_start_swarm(self.uniffiClonePointer(),
         FfiConverterString.lower(listenAddr),$0
     )
 }
 }
-
+    
 open func stop() {try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_stop(self.uniffiClonePointer(),$0
     )
 }
 }
-
+    
 open func updateDeviceState(profile: DeviceProfile) {try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshservice_update_device_state(self.uniffiClonePointer(),
         FfiConverterTypeDeviceProfile.lower(profile),$0
     )
 }
 }
-
+    
 
 }
 
@@ -2176,15 +2212,15 @@ public func FfiConverterTypeMeshService_lower(_ value: MeshService) -> UnsafeMut
 
 
 public protocol MeshSettingsManagerProtocol : AnyObject {
-
+    
     func defaultSettings()  -> MeshSettings
-
+    
     func load() throws  -> MeshSettings
-
-    func save(settings: MeshSettings) throws
-
-    func validate(settings: MeshSettings) throws
-
+    
+    func save(settings: MeshSettings) throws 
+    
+    func validate(settings: MeshSettings) throws 
+    
 }
 
 open class MeshSettingsManager:
@@ -2233,37 +2269,37 @@ public convenience init(storagePath: String) {
         try! rustCall { uniffi_scmessenger_core_fn_free_meshsettingsmanager(pointer, $0) }
     }
 
+    
 
-
-
+    
 open func defaultSettings() -> MeshSettings {
     return try!  FfiConverterTypeMeshSettings.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_meshsettingsmanager_default_settings(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func load()throws  -> MeshSettings {
     return try  FfiConverterTypeMeshSettings.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_meshsettingsmanager_load(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func save(settings: MeshSettings)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_meshsettingsmanager_save(self.uniffiClonePointer(),
         FfiConverterTypeMeshSettings.lower(settings),$0
     )
 }
 }
-
+    
 open func validate(settings: MeshSettings)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_meshsettingsmanager_validate(self.uniffiClonePointer(),
         FfiConverterTypeMeshSettings.lower(settings),$0
     )
 }
 }
-
+    
 
 }
 
@@ -2313,29 +2349,29 @@ public func FfiConverterTypeMeshSettingsManager_lower(_ value: MeshSettingsManag
 
 
 public protocol SwarmBridgeProtocol : AnyObject {
-
-    func dial(multiaddr: String) throws
-
+    
+    func dial(multiaddr: String) throws 
+    
     func getExternalAddresses()  -> [String]
-
+    
     func getListeners()  -> [String]
-
+    
     func getPeers()  -> [String]
-
+    
     func getTopics()  -> [String]
-
-    func publishTopic(topic: String, data: Data) throws
-
-    func sendMessage(peerId: String, data: Data, recipientIdentityId: String?, intendedDeviceId: String?) throws
-
-    func sendToAllPeers(data: Data) throws
-
-    func shutdown()
-
-    func subscribeTopic(topic: String) throws
-
-    func unsubscribeTopic(topic: String) throws
-
+    
+    func publishTopic(topic: String, data: Data) throws 
+    
+    func sendMessage(peerId: String, data: Data, recipientIdentityId: String?, intendedDeviceId: String?) throws 
+    
+    func sendToAllPeers(data: Data) throws 
+    
+    func shutdown() 
+    
+    func subscribeTopic(topic: String) throws 
+    
+    func unsubscribeTopic(topic: String) throws 
+    
 }
 
 open class SwarmBridge:
@@ -2383,44 +2419,44 @@ public convenience init() {
         try! rustCall { uniffi_scmessenger_core_fn_free_swarmbridge(pointer, $0) }
     }
 
+    
 
-
-
+    
 open func dial(multiaddr: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_swarmbridge_dial(self.uniffiClonePointer(),
         FfiConverterString.lower(multiaddr),$0
     )
 }
 }
-
+    
 open func getExternalAddresses() -> [String] {
     return try!  FfiConverterSequenceString.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_swarmbridge_get_external_addresses(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func getListeners() -> [String] {
     return try!  FfiConverterSequenceString.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_swarmbridge_get_listeners(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func getPeers() -> [String] {
     return try!  FfiConverterSequenceString.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_swarmbridge_get_peers(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func getTopics() -> [String] {
     return try!  FfiConverterSequenceString.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_swarmbridge_get_topics(self.uniffiClonePointer(),$0
     )
 })
 }
-
+    
 open func publishTopic(topic: String, data: Data)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_swarmbridge_publish_topic(self.uniffiClonePointer(),
         FfiConverterString.lower(topic),
@@ -2428,7 +2464,7 @@ open func publishTopic(topic: String, data: Data)throws  {try rustCallWithError(
     )
 }
 }
-
+    
 open func sendMessage(peerId: String, data: Data, recipientIdentityId: String?, intendedDeviceId: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_swarmbridge_send_message(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),
@@ -2438,34 +2474,34 @@ open func sendMessage(peerId: String, data: Data, recipientIdentityId: String?, 
     )
 }
 }
-
+    
 open func sendToAllPeers(data: Data)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_swarmbridge_send_to_all_peers(self.uniffiClonePointer(),
         FfiConverterData.lower(data),$0
     )
 }
 }
-
+    
 open func shutdown() {try! rustCall() {
     uniffi_scmessenger_core_fn_method_swarmbridge_shutdown(self.uniffiClonePointer(),$0
     )
 }
 }
-
+    
 open func subscribeTopic(topic: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_swarmbridge_subscribe_topic(self.uniffiClonePointer(),
         FfiConverterString.lower(topic),$0
     )
 }
 }
-
+    
 open func unsubscribeTopic(topic: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_swarmbridge_unsubscribe_topic(self.uniffiClonePointer(),
         FfiConverterString.lower(topic),$0
     )
 }
 }
-
+    
 
 }
 
@@ -2554,8 +2590,8 @@ public struct FfiConverterTypeBleAdjustment: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BleAdjustment {
         return
             try BleAdjustment(
-                scanIntervalMs: FfiConverterUInt32.read(from: &buf),
-                advertiseIntervalMs: FfiConverterUInt32.read(from: &buf),
+                scanIntervalMs: FfiConverterUInt32.read(from: &buf), 
+                advertiseIntervalMs: FfiConverterUInt32.read(from: &buf), 
                 txPowerDbm: FfiConverterInt8.read(from: &buf)
         )
     }
@@ -2631,10 +2667,10 @@ public struct FfiConverterTypeBlockedIdentity: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlockedIdentity {
         return
             try BlockedIdentity(
-                peerId: FfiConverterString.read(from: &buf),
-                deviceId: FfiConverterOptionString.read(from: &buf),
-                blockedAt: FfiConverterUInt64.read(from: &buf),
-                reason: FfiConverterOptionString.read(from: &buf),
+                peerId: FfiConverterString.read(from: &buf), 
+                deviceId: FfiConverterOptionString.read(from: &buf), 
+                blockedAt: FfiConverterUInt64.read(from: &buf), 
+                reason: FfiConverterOptionString.read(from: &buf), 
                 notes: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -2706,9 +2742,9 @@ public struct FfiConverterTypeBootstrapConfig: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BootstrapConfig {
         return
             try BootstrapConfig(
-                staticNodes: FfiConverterSequenceString.read(from: &buf),
-                remoteUrl: FfiConverterOptionString.read(from: &buf),
-                fetchTimeoutSecs: FfiConverterUInt32.read(from: &buf),
+                staticNodes: FfiConverterSequenceString.read(from: &buf), 
+                remoteUrl: FfiConverterOptionString.read(from: &buf), 
+                fetchTimeoutSecs: FfiConverterUInt32.read(from: &buf), 
                 envOverrideKey: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -2803,13 +2839,13 @@ public struct FfiConverterTypeContact: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Contact {
         return
             try Contact(
-                peerId: FfiConverterString.read(from: &buf),
-                nickname: FfiConverterOptionString.read(from: &buf),
-                localNickname: FfiConverterOptionString.read(from: &buf),
-                publicKey: FfiConverterString.read(from: &buf),
-                addedAt: FfiConverterUInt64.read(from: &buf),
-                lastSeen: FfiConverterOptionUInt64.read(from: &buf),
-                notes: FfiConverterOptionString.read(from: &buf),
+                peerId: FfiConverterString.read(from: &buf), 
+                nickname: FfiConverterOptionString.read(from: &buf), 
+                localNickname: FfiConverterOptionString.read(from: &buf), 
+                publicKey: FfiConverterString.read(from: &buf), 
+                addedAt: FfiConverterUInt64.read(from: &buf), 
+                lastSeen: FfiConverterOptionUInt64.read(from: &buf), 
+                notes: FfiConverterOptionString.read(from: &buf), 
                 lastKnownDeviceId: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -2884,9 +2920,9 @@ public struct FfiConverterTypeDeviceProfile: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DeviceProfile {
         return
             try DeviceProfile(
-                batteryPct: FfiConverterUInt8.read(from: &buf),
-                isCharging: FfiConverterBool.read(from: &buf),
-                hasWifi: FfiConverterBool.read(from: &buf),
+                batteryPct: FfiConverterUInt8.read(from: &buf), 
+                isCharging: FfiConverterBool.read(from: &buf), 
+                hasWifi: FfiConverterBool.read(from: &buf), 
                 motionState: FfiConverterTypeMotionState.read(from: &buf)
         )
     }
@@ -2957,9 +2993,9 @@ public struct FfiConverterTypeHistoryStats: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HistoryStats {
         return
             try HistoryStats(
-                totalMessages: FfiConverterUInt32.read(from: &buf),
-                sentCount: FfiConverterUInt32.read(from: &buf),
-                receivedCount: FfiConverterUInt32.read(from: &buf),
+                totalMessages: FfiConverterUInt32.read(from: &buf), 
+                sentCount: FfiConverterUInt32.read(from: &buf), 
+                receivedCount: FfiConverterUInt32.read(from: &buf), 
                 undeliveredCount: FfiConverterUInt32.read(from: &buf)
         )
     }
@@ -3048,12 +3084,12 @@ public struct FfiConverterTypeIdentityInfo: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IdentityInfo {
         return
             try IdentityInfo(
-                identityId: FfiConverterOptionString.read(from: &buf),
-                publicKeyHex: FfiConverterOptionString.read(from: &buf),
-                deviceId: FfiConverterOptionString.read(from: &buf),
-                seniorityTimestamp: FfiConverterOptionUInt64.read(from: &buf),
-                initialized: FfiConverterBool.read(from: &buf),
-                nickname: FfiConverterOptionString.read(from: &buf),
+                identityId: FfiConverterOptionString.read(from: &buf), 
+                publicKeyHex: FfiConverterOptionString.read(from: &buf), 
+                deviceId: FfiConverterOptionString.read(from: &buf), 
+                seniorityTimestamp: FfiConverterOptionUInt64.read(from: &buf), 
+                initialized: FfiConverterBool.read(from: &buf), 
+                nickname: FfiConverterOptionString.read(from: &buf), 
                 libp2pPeerId: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -3151,13 +3187,13 @@ public struct FfiConverterTypeLedgerEntry: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LedgerEntry {
         return
             try LedgerEntry(
-                multiaddr: FfiConverterString.read(from: &buf),
-                peerId: FfiConverterOptionString.read(from: &buf),
-                publicKey: FfiConverterOptionString.read(from: &buf),
-                nickname: FfiConverterOptionString.read(from: &buf),
-                successCount: FfiConverterUInt32.read(from: &buf),
-                failureCount: FfiConverterUInt32.read(from: &buf),
-                lastSeen: FfiConverterOptionUInt64.read(from: &buf),
+                multiaddr: FfiConverterString.read(from: &buf), 
+                peerId: FfiConverterOptionString.read(from: &buf), 
+                publicKey: FfiConverterOptionString.read(from: &buf), 
+                nickname: FfiConverterOptionString.read(from: &buf), 
+                successCount: FfiConverterUInt32.read(from: &buf), 
+                failureCount: FfiConverterUInt32.read(from: &buf), 
+                lastSeen: FfiConverterOptionUInt64.read(from: &buf), 
                 topics: FfiConverterSequenceString.read(from: &buf)
         )
     }
@@ -3220,7 +3256,7 @@ public struct FfiConverterTypeMeshServiceConfig: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MeshServiceConfig {
         return
             try MeshServiceConfig(
-                discoveryIntervalMs: FfiConverterUInt32.read(from: &buf),
+                discoveryIntervalMs: FfiConverterUInt32.read(from: &buf), 
                 batteryFloorPct: FfiConverterUInt8.read(from: &buf)
         )
     }
@@ -3337,17 +3373,17 @@ public struct FfiConverterTypeMeshSettings: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MeshSettings {
         return
             try MeshSettings(
-                relayEnabled: FfiConverterBool.read(from: &buf),
-                maxRelayBudget: FfiConverterUInt32.read(from: &buf),
-                batteryFloor: FfiConverterUInt8.read(from: &buf),
-                bleEnabled: FfiConverterBool.read(from: &buf),
-                wifiAwareEnabled: FfiConverterBool.read(from: &buf),
-                wifiDirectEnabled: FfiConverterBool.read(from: &buf),
-                internetEnabled: FfiConverterBool.read(from: &buf),
-                discoveryMode: FfiConverterTypeDiscoveryMode.read(from: &buf),
-                onionRouting: FfiConverterBool.read(from: &buf),
-                coverTrafficEnabled: FfiConverterBool.read(from: &buf),
-                messagePaddingEnabled: FfiConverterBool.read(from: &buf),
+                relayEnabled: FfiConverterBool.read(from: &buf), 
+                maxRelayBudget: FfiConverterUInt32.read(from: &buf), 
+                batteryFloor: FfiConverterUInt8.read(from: &buf), 
+                bleEnabled: FfiConverterBool.read(from: &buf), 
+                wifiAwareEnabled: FfiConverterBool.read(from: &buf), 
+                wifiDirectEnabled: FfiConverterBool.read(from: &buf), 
+                internetEnabled: FfiConverterBool.read(from: &buf), 
+                discoveryMode: FfiConverterTypeDiscoveryMode.read(from: &buf), 
+                onionRouting: FfiConverterBool.read(from: &buf), 
+                coverTrafficEnabled: FfiConverterBool.read(from: &buf), 
+                messagePaddingEnabled: FfiConverterBool.read(from: &buf), 
                 timingObfuscationEnabled: FfiConverterBool.read(from: &buf)
         )
     }
@@ -3444,12 +3480,12 @@ public struct FfiConverterTypeMessageRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MessageRecord {
         return
             try MessageRecord(
-                id: FfiConverterString.read(from: &buf),
-                direction: FfiConverterTypeMessageDirection.read(from: &buf),
-                peerId: FfiConverterString.read(from: &buf),
-                content: FfiConverterString.read(from: &buf),
-                timestamp: FfiConverterUInt64.read(from: &buf),
-                senderTimestamp: FfiConverterUInt64.read(from: &buf),
+                id: FfiConverterString.read(from: &buf), 
+                direction: FfiConverterTypeMessageDirection.read(from: &buf), 
+                peerId: FfiConverterString.read(from: &buf), 
+                content: FfiConverterString.read(from: &buf), 
+                timestamp: FfiConverterUInt64.read(from: &buf), 
+                senderTimestamp: FfiConverterUInt64.read(from: &buf), 
                 delivered: FfiConverterBool.read(from: &buf)
         )
     }
@@ -3511,7 +3547,7 @@ public struct FfiConverterTypePreparedMessage: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PreparedMessage {
         return
             try PreparedMessage(
-                messageId: FfiConverterString.read(from: &buf),
+                messageId: FfiConverterString.read(from: &buf), 
                 envelopeData: FfiConverterData.read(from: &buf)
         )
     }
@@ -3574,8 +3610,8 @@ public struct FfiConverterTypeRelayAdjustment: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayAdjustment {
         return
             try RelayAdjustment(
-                maxPerHour: FfiConverterUInt32.read(from: &buf),
-                priorityThreshold: FfiConverterUInt8.read(from: &buf),
+                maxPerHour: FfiConverterUInt32.read(from: &buf), 
+                priorityThreshold: FfiConverterUInt8.read(from: &buf), 
                 maxPayloadBytes: FfiConverterUInt32.read(from: &buf)
         )
     }
@@ -3645,9 +3681,9 @@ public struct FfiConverterTypeServiceStats: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ServiceStats {
         return
             try ServiceStats(
-                peersDiscovered: FfiConverterUInt32.read(from: &buf),
-                messagesRelayed: FfiConverterUInt32.read(from: &buf),
-                bytesTransferred: FfiConverterUInt64.read(from: &buf),
+                peersDiscovered: FfiConverterUInt32.read(from: &buf), 
+                messagesRelayed: FfiConverterUInt32.read(from: &buf), 
+                bytesTransferred: FfiConverterUInt64.read(from: &buf), 
                 uptimeSecs: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -3706,7 +3742,7 @@ public struct FfiConverterTypeSignatureResult: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SignatureResult {
         return
             try SignatureResult(
-                signature: FfiConverterData.read(from: &buf),
+                signature: FfiConverterData.read(from: &buf), 
                 publicKeyHex: FfiConverterString.read(from: &buf)
         )
     }
@@ -3730,7 +3766,7 @@ public func FfiConverterTypeSignatureResult_lower(_ value: SignatureResult) -> R
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum AdjustmentProfile {
-
+    
     case maximum
     case high
     case standard
@@ -3745,44 +3781,44 @@ public struct FfiConverterTypeAdjustmentProfile: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AdjustmentProfile {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .maximum
-
+        
         case 2: return .high
-
+        
         case 3: return .standard
-
+        
         case 4: return .reduced
-
+        
         case 5: return .minimal
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: AdjustmentProfile, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .maximum:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .high:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .standard:
             writeInt(&buf, Int32(3))
-
-
+        
+        
         case .reduced:
             writeInt(&buf, Int32(4))
-
-
+        
+        
         case .minimal:
             writeInt(&buf, Int32(5))
-
+        
         }
     }
 }
@@ -3809,7 +3845,7 @@ extension AdjustmentProfile: Equatable, Hashable {}
  */
 
 public enum ConnectionPathState {
-
+    
     case disconnected
     case bootstrapping
     case directPreferred
@@ -3824,44 +3860,44 @@ public struct FfiConverterTypeConnectionPathState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConnectionPathState {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .disconnected
-
+        
         case 2: return .bootstrapping
-
+        
         case 3: return .directPreferred
-
+        
         case 4: return .relayFallback
-
+        
         case 5: return .relayOnly
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: ConnectionPathState, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .disconnected:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .bootstrapping:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .directPreferred:
             writeInt(&buf, Int32(3))
-
-
+        
+        
         case .relayFallback:
             writeInt(&buf, Int32(4))
-
-
+        
+        
         case .relayOnly:
             writeInt(&buf, Int32(5))
-
+        
         }
     }
 }
@@ -3885,7 +3921,7 @@ extension ConnectionPathState: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum DiscoveryMode {
-
+    
     case normal
     case cautious
     case paranoid
@@ -3898,32 +3934,32 @@ public struct FfiConverterTypeDiscoveryMode: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscoveryMode {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .normal
-
+        
         case 2: return .cautious
-
+        
         case 3: return .paranoid
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: DiscoveryMode, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .normal:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .cautious:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .paranoid:
             writeInt(&buf, Int32(3))
-
+        
         }
     }
 }
@@ -3946,24 +3982,24 @@ extension DiscoveryMode: Equatable, Hashable {}
 
 public enum IronCoreError {
 
-
-
+    
+    
     case NotInitialized(message: String)
-
+    
     case AlreadyRunning(message: String)
-
+    
     case StorageError(message: String)
-
+    
     case CryptoError(message: String)
-
+    
     case NetworkError(message: String)
-
+    
     case InvalidInput(message: String)
-
+    
     case Blocked(message: String)
-
+    
     case Internal(message: String)
-
+    
 }
 
 
@@ -3974,41 +4010,41 @@ public struct FfiConverterTypeIronCoreError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
+        
 
-
-
+        
         case 1: return .NotInitialized(
             message: try FfiConverterString.read(from: &buf)
         )
-
+        
         case 2: return .AlreadyRunning(
             message: try FfiConverterString.read(from: &buf)
         )
-
+        
         case 3: return .StorageError(
             message: try FfiConverterString.read(from: &buf)
         )
-
+        
         case 4: return .CryptoError(
             message: try FfiConverterString.read(from: &buf)
         )
-
+        
         case 5: return .NetworkError(
             message: try FfiConverterString.read(from: &buf)
         )
-
+        
         case 6: return .InvalidInput(
             message: try FfiConverterString.read(from: &buf)
         )
-
+        
         case 7: return .Blocked(
             message: try FfiConverterString.read(from: &buf)
         )
-
+        
         case 8: return .Internal(
             message: try FfiConverterString.read(from: &buf)
         )
-
+        
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -4017,9 +4053,9 @@ public struct FfiConverterTypeIronCoreError: FfiConverterRustBuffer {
     public static func write(_ value: IronCoreError, into buf: inout [UInt8]) {
         switch value {
 
+        
 
-
-
+        
         case .NotInitialized(_ /* message is ignored*/):
             writeInt(&buf, Int32(1))
         case .AlreadyRunning(_ /* message is ignored*/):
@@ -4037,7 +4073,7 @@ public struct FfiConverterTypeIronCoreError: FfiConverterRustBuffer {
         case .Internal(_ /* message is ignored*/):
             writeInt(&buf, Int32(8))
 
-
+        
         }
     }
 }
@@ -4051,7 +4087,7 @@ extension IronCoreError: Error { }
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum MessageDirection {
-
+    
     case sent
     case received
 }
@@ -4063,26 +4099,26 @@ public struct FfiConverterTypeMessageDirection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MessageDirection {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .sent
-
+        
         case 2: return .received
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: MessageDirection, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .sent:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .received:
             writeInt(&buf, Int32(2))
-
+        
         }
     }
 }
@@ -4106,7 +4142,7 @@ extension MessageDirection: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum MotionState {
-
+    
     case still
     case walking
     case running
@@ -4121,44 +4157,44 @@ public struct FfiConverterTypeMotionState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MotionState {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .still
-
+        
         case 2: return .walking
-
+        
         case 3: return .running
-
+        
         case 4: return .automotive
-
+        
         case 5: return .unknown
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: MotionState, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .still:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .walking:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .running:
             writeInt(&buf, Int32(3))
-
-
+        
+        
         case .automotive:
             writeInt(&buf, Int32(4))
-
-
+        
+        
         case .unknown:
             writeInt(&buf, Int32(5))
-
+        
         }
     }
 }
@@ -4182,7 +4218,7 @@ extension MotionState: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum ServiceState {
-
+    
     case stopped
     case starting
     case running
@@ -4196,38 +4232,38 @@ public struct FfiConverterTypeServiceState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ServiceState {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .stopped
-
+        
         case 2: return .starting
-
+        
         case 3: return .running
-
+        
         case 4: return .stopping
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: ServiceState, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .stopped:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .starting:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .running:
             writeInt(&buf, Int32(3))
-
-
+        
+        
         case .stopping:
             writeInt(&buf, Int32(4))
-
+        
         }
     }
 }
@@ -4251,17 +4287,17 @@ extension ServiceState: Equatable, Hashable {}
 
 
 public protocol CoreDelegate : AnyObject {
-
-    func onPeerDiscovered(peerId: String)
-
-    func onPeerDisconnected(peerId: String)
-
-    func onPeerIdentified(peerId: String, agentVersion: String, listenAddrs: [String])
-
-    func onMessageReceived(senderId: String, senderPublicKeyHex: String, messageId: String, senderTimestamp: UInt64, data: Data)
-
-    func onReceiptReceived(messageId: String, status: String)
-
+    
+    func onPeerDiscovered(peerId: String) 
+    
+    func onPeerDisconnected(peerId: String) 
+    
+    func onPeerIdentified(peerId: String, agentVersion: String, listenAddrs: [String]) 
+    
+    func onMessageReceived(senderId: String, senderPublicKeyHex: String, messageId: String, senderTimestamp: UInt64, data: Data) 
+    
+    func onReceiptReceived(messageId: String, status: String) 
+    
 }
 
 // Magic number for the Rust proxy to call using the same mechanism as every other method,
@@ -4294,7 +4330,7 @@ fileprivate struct UniffiCallbackInterfaceCoreDelegate {
                 )
             }
 
-
+            
             let writeReturn = { () }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -4318,7 +4354,7 @@ fileprivate struct UniffiCallbackInterfaceCoreDelegate {
                 )
             }
 
-
+            
             let writeReturn = { () }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -4346,7 +4382,7 @@ fileprivate struct UniffiCallbackInterfaceCoreDelegate {
                 )
             }
 
-
+            
             let writeReturn = { () }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -4378,7 +4414,7 @@ fileprivate struct UniffiCallbackInterfaceCoreDelegate {
                 )
             }
 
-
+            
             let writeReturn = { () }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -4404,7 +4440,7 @@ fileprivate struct UniffiCallbackInterfaceCoreDelegate {
                 )
             }
 
-
+            
             let writeReturn = { () }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -4456,21 +4492,21 @@ extension FfiConverterCallbackInterfaceCoreDelegate : FfiConverter {
 
 
 public protocol PlatformBridge : AnyObject {
-
-    func onBatteryChanged(batteryPct: UInt8, isCharging: Bool)
-
-    func onNetworkChanged(hasWifi: Bool, hasCellular: Bool)
-
-    func onMotionChanged(motion: MotionState)
-
-    func onBleDataReceived(peerId: String, data: Data)
-
-    func onEnteringBackground()
-
-    func onEnteringForeground()
-
-    func sendBlePacket(peerId: String, data: Data)
-
+    
+    func onBatteryChanged(batteryPct: UInt8, isCharging: Bool) 
+    
+    func onNetworkChanged(hasWifi: Bool, hasCellular: Bool) 
+    
+    func onMotionChanged(motion: MotionState) 
+    
+    func onBleDataReceived(peerId: String, data: Data) 
+    
+    func onEnteringBackground() 
+    
+    func onEnteringForeground() 
+    
+    func sendBlePacket(peerId: String, data: Data) 
+    
 }
 
 
@@ -4499,7 +4535,7 @@ fileprivate struct UniffiCallbackInterfacePlatformBridge {
                 )
             }
 
-
+            
             let writeReturn = { () }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -4525,7 +4561,7 @@ fileprivate struct UniffiCallbackInterfacePlatformBridge {
                 )
             }
 
-
+            
             let writeReturn = { () }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -4549,7 +4585,7 @@ fileprivate struct UniffiCallbackInterfacePlatformBridge {
                 )
             }
 
-
+            
             let writeReturn = { () }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -4575,7 +4611,7 @@ fileprivate struct UniffiCallbackInterfacePlatformBridge {
                 )
             }
 
-
+            
             let writeReturn = { () }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -4597,7 +4633,7 @@ fileprivate struct UniffiCallbackInterfacePlatformBridge {
                 )
             }
 
-
+            
             let writeReturn = { () }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -4619,7 +4655,7 @@ fileprivate struct UniffiCallbackInterfacePlatformBridge {
                 )
             }
 
-
+            
             let writeReturn = { () }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -4645,7 +4681,7 @@ fileprivate struct UniffiCallbackInterfacePlatformBridge {
                 )
             }
 
-
+            
             let writeReturn = { () }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -5122,6 +5158,9 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_ironcore_export_identity_backup() != 49536) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_export_logs() != 6607) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_extract_public_key_from_peer_id() != 39145) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5161,6 +5200,9 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_ironcore_outbox_count() != 26099) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_perform_maintenance() != 61914) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_prepare_cover_traffic() != 15820) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5171,6 +5213,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_prepare_receipt() != 37483) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_record_log() != 31089) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_resolve_identity() != 25110) {
@@ -5192,6 +5237,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_unblock_peer() != 16500) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_update_disk_stats() != 9332) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_verify_signature() != 26914) {
