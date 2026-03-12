@@ -169,7 +169,7 @@ open class MeshRepository(private val context: Context) {
     open val serviceStats: StateFlow<uniffi.api.ServiceStats?> = _serviceStats.asStateFlow()
 
     // Message updates flow (both sent and received) used for UI updates
-    private val _messageUpdates = kotlinx.coroutines.flow.MutableSharedFlow<uniffi.api.MessageRecord>(replay = 1)
+    private val _messageUpdates = kotlinx.coroutines.flow.MutableSharedFlow<uniffi.api.MessageRecord>(replay = 0, extraBufferCapacity = 1, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
     open val messageUpdates = _messageUpdates.asSharedFlow()
 
     // Compatibility for notifications (incoming only)
@@ -178,6 +178,7 @@ open class MeshRepository(private val context: Context) {
     private val repoScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
     private var pendingOutboxRetryJob: kotlinx.coroutines.Job? = null
     private var coverTrafficJob: kotlinx.coroutines.Job? = null
+    private var maintenanceJob: kotlinx.coroutines.Job? = null
     private val pendingOutboxFile = File(storagePath, "pending_outbox.json")
     private val pendingOutboxFlushMutex = kotlinx.coroutines.sync.Mutex()
     private val receiptAwaitSeconds: Long = 8L
@@ -2388,15 +2389,34 @@ open class MeshRepository(private val context: Context) {
                     throw IllegalStateException("Failed to prepare message: core returned empty message ID")
                 }
                 val encryptedData = prepared.envelopeData
-                // 5. Use initialMessageId as the primary key for Android history for now
-                // to maintain persistence even if Core's preparation ID changes.
-                // NOTE: We should ideally update this when we have a robust way to
-                // match Core's IDs with our local ones in receipts.
+
+                // 5. Reconcile message IDs: update the initial history record to use
+                // Core's wire message ID. Delivery receipts and markMessageSent are
+                // keyed by realMessageId, so our local record must match.
+                if (realMessageId != initialMessageId) {
+                    try {
+                        historyManager?.delete(initialMessageId)
+                        val reconciledRecord = uniffi.api.MessageRecord(
+                            id = realMessageId,
+                            peerId = normalizedPeerId,
+                            direction = uniffi.api.MessageDirection.SENT,
+                            content = content,
+                            timestamp = now,
+                            senderTimestamp = now,
+                            delivered = false
+                        )
+                        historyManager?.add(reconciledRecord)
+                        historyManager?.flush()
+                        Timber.d("SEND_MSG: Reconciled message ID: $initialMessageId -> $realMessageId")
+                    } catch (e: Exception) {
+                        Timber.w(e, "Failed to reconcile message ID; delivery tracking may be unreliable")
+                    }
+                }
 
                 logDeliveryState(
-                    messageId = initialMessageId,
+                    messageId = realMessageId,
                     state = "pending",
-                    detail = "message_prepared_local_history_written_coreId=${realMessageId}"
+                    detail = "message_prepared_local_history_written"
                 )
 
                 // 6. Send over core-selected swarm route only.
@@ -2406,7 +2426,7 @@ open class MeshRepository(private val context: Context) {
                     encryptedData = encryptedData,
                     wifiPeerId = preferredRoutePeerId,
                     blePeerId = null,
-                    traceMessageId = initialMessageId,
+                    traceMessageId = realMessageId,
                     attemptContext = "initial_send",
                     recipientIdentityId = finalPublicKey,
                     intendedDeviceId = contact?.lastKnownDeviceId
@@ -2415,22 +2435,22 @@ open class MeshRepository(private val context: Context) {
                 val selectedRoutePeerId = delivery.routePeerId ?: preferredRoutePeerId
 
                 if (delivery.acked) {
-                    promotePendingOutboundForPeer(peerId = normalizedPeerId, excludingMessageId = initialMessageId)
+                    promotePendingOutboundForPeer(peerId = normalizedPeerId, excludingMessageId = realMessageId)
                 }
 
                 val receiptAwaitSeconds = 30L
                 val strictBleOnlyValidation = false
 
-                if (isMessageDeliveredLocally(initialMessageId)) {
-                    removePendingOutbound(initialMessageId)
+                if (isMessageDeliveredLocally(realMessageId)) {
+                    removePendingOutbound(realMessageId)
                     logDeliveryState(
-                        messageId = initialMessageId,
+                        messageId = realMessageId,
                         state = "delivered",
                         detail = "delivery_receipt_arrived_before_enqueue"
                     )
                 } else {
                     enqueuePendingOutbound(
-                        historyRecordId = initialMessageId,
+                        historyRecordId = realMessageId,
                         peerId = normalizedPeerId,
                         routePeerId = selectedRoutePeerId,
                         listeners = emptyList(),
@@ -2441,7 +2461,7 @@ open class MeshRepository(private val context: Context) {
                     )
                 }
 
-                Timber.i("Message sent (encrypted) to $normalizedPeerId (id=$initialMessageId, coreId=$realMessageId)")
+                Timber.i("Message sent (encrypted) to $normalizedPeerId (id=$realMessageId)")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to send message to $normalizedPeerId")
                 // Even on error, the message is in history (initialRecord),
@@ -4898,7 +4918,9 @@ open class MeshRepository(private val context: Context) {
     }
 
     private fun startStorageMaintenance() {
-        repoScope.launch {
+        if (maintenanceJob?.isActive == true) return
+
+        maintenanceJob = repoScope.launch {
             while (isActive) {
                 try {
                     val stat = android.os.StatFs(context.filesDir.path)

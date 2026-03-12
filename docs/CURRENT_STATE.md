@@ -5,6 +5,36 @@ Last updated: 2026-03-12
 
 Last verified: **2026-03-12** (local workspace checks on this machine)
 
+## 2026-03-12 PR79 Code Review Fixes (Verified)
+
+- **P1: Persistent blocklist backend** (core/src/lib.rs):
+  - `IronCore` now stores a persistent `blocked_manager: Arc<BlockedManager>` field initialized from the root storage backend.
+  - All blocking API methods (`block_peer`, `unblock_peer`, `is_peer_blocked`, `list_blocked_peers`, `blocked_count`) use the shared persistent manager instead of creating ephemeral `MemoryStorage` per call.
+  - WASM async init also constructs the `blocked_manager`.
+- **P1: Android message ID reconciliation** (android MeshRepository.kt):
+  - After `prepareMessageWithId` returns `realMessageId`, the initial history record (keyed by `initialMessageId` UUID) is now replaced with `realMessageId` so delivery receipts can find and mark the correct record.
+  - All downstream tracking (delivery state, pending outbox, promotions) uses `realMessageId`.
+- **P2: Identity resolver order** (core/src/lib.rs):
+  - `resolve_identity` now checks contacts for identity_id (Blake3 hash) matches BEFORE testing Ed25519 key shape. Prevents misclassification of identity hashes that happen to be valid Ed25519 points.
+- **P2: Android SharedFlow replay** (android MeshRepository.kt):
+  - Changed `_messageUpdates` from `replay=1` to `replay=0, extraBufferCapacity=1, onBufferOverflow=DROP_OLDEST` to prevent duplicate notifications to late subscribers.
+- **P2: FileLoggingTree thread safety** (android FileLoggingTree.kt):
+  - `ironCore` field marked `@Volatile`; `setIronCore` uses `synchronized(this)`.
+  - `ironCore?.recordLog()` wrapped in `runCatching` so IronCore failures don't skip file fallback.
+- **P2: PeerIdValidator strictness** (android PeerIdValidator.kt):
+  - `isLibp2pPeerId` now validates length range and base58 charset (no 0, O, I, l) beyond prefix-only checks.
+- **P2: Storage maintenance guard** (android MeshRepository.kt):
+  - Added `maintenanceJob` field with `isActive` check to prevent duplicate maintenance coroutines on service restart.
+- **New tests** (2 tests added):
+  - `test_blocklist_persistence_across_calls`: Verifies block/unblock/list persist across separate calls to the same `IronCore` instance.
+  - `test_resolve_identity_checks_contacts_before_key_shape`: Verifies identity_id is resolved via contact lookup before Ed25519 key shape test.
+- **Verification**:
+  - `cargo fmt --all -- --check` — **pass**
+  - `cargo clippy --workspace` — **pass** (only pre-existing `too_many_arguments` warning)
+  - `cargo build --workspace` — **pass**
+  - `cargo test --workspace` — **pass** (516 tests, 0 failures)
+  - `./scripts/docs_sync_check.sh` — **pass**
+
 ## 2026-03-12 PR Reconciliation & Hardening (Verified)
 
 - **Build fixes**:

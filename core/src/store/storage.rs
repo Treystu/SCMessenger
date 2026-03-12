@@ -116,7 +116,7 @@ mod tests {
     fn test_maintenance_triggers_prune_when_low() {
         let mgr = make_storage_manager();
         mgr.update_disk_stats(1_000_000, 100_000); // 10% free < 20% threshold
-        // Should not error even with empty stores
+                                                   // Should not error even with empty stores
         assert!(mgr.perform_maintenance().is_ok());
     }
 
