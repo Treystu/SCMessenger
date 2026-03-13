@@ -134,6 +134,13 @@ pub struct PreparedMessage {
     pub envelope_data: Vec<u8>,
 }
 
+#[derive(Clone)]
+pub struct RegistrationStateInfo {
+    pub state: String,
+    pub device_id: Option<String>,
+    pub seniority_timestamp: Option<u64>,
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 struct IdentityBackupV1 {
     version: u8,
@@ -191,6 +198,8 @@ pub struct IronCore {
     log_manager: Arc<store::logs::LogManager>,
     /// Persistent blocked identity manager
     blocked_manager: Arc<store::blocked::BlockedManager>,
+    /// Relay registration registry surfaced through the core API
+    registration_store: Arc<store::RelayCustodyStore>,
     /// UniFFI-facing contacts manager (non-wasm builds only)
     #[cfg(not(target_arch = "wasm32"))]
     contacts_bridge_manager: Arc<crate::contacts_bridge::ContactManager>,
@@ -594,6 +603,7 @@ impl IronCore {
             log_manager.clone(),
         ));
         let blocked_manager = Arc::new(store::blocked::BlockedManager::new(root_backend.clone()));
+        let registration_store = Arc::new(store::RelayCustodyStore::persistent(root_backend));
 
         #[cfg(not(target_arch = "wasm32"))]
         let contacts_bridge_manager = init_uniffi_contacts_manager(storage_path.as_deref());
@@ -609,6 +619,7 @@ impl IronCore {
             storage_manager,
             log_manager,
             blocked_manager,
+            registration_store,
             #[cfg(not(target_arch = "wasm32"))]
             contacts_bridge_manager,
             #[cfg(not(target_arch = "wasm32"))]
@@ -1441,6 +1452,41 @@ impl IronCore {
         self.log_manager.export_all()
     }
 
+    pub fn get_registration_state(&self, identity_id: String) -> RegistrationStateInfo {
+        match self
+            .registration_store
+            .get_state(&identity_id)
+            .ok()
+            .flatten()
+        {
+            Some(store::RegistrationState::Active {
+                device_id,
+                seniority_timestamp,
+            }) => RegistrationStateInfo {
+                state: "active".to_string(),
+                device_id: Some(device_id),
+                seniority_timestamp: Some(seniority_timestamp),
+            },
+            Some(store::RegistrationState::Handover { to_device_id, .. }) => {
+                RegistrationStateInfo {
+                    state: "handover".to_string(),
+                    device_id: Some(to_device_id),
+                    seniority_timestamp: None,
+                }
+            }
+            Some(store::RegistrationState::Abandoned { device_id, .. }) => RegistrationStateInfo {
+                state: "abandoned".to_string(),
+                device_id: Some(device_id),
+                seniority_timestamp: None,
+            },
+            None => RegistrationStateInfo {
+                state: "none".to_string(),
+                device_id: None,
+                seniority_timestamp: None,
+            },
+        }
+    }
+
     // ========================================================================
     // BLOCKING
     // ========================================================================
@@ -1515,6 +1561,24 @@ mod tests {
     fn test_iron_core_creation() {
         let core = IronCore::new();
         assert!(!core.is_running());
+    }
+
+    #[test]
+    fn registration_state_defaults_to_none_and_reflects_persisted_active_state() {
+        let dir = tempdir().unwrap();
+        let core = IronCore::with_storage(dir.path().to_string_lossy().to_string());
+
+        let initial = core.get_registration_state("identity-none".to_string());
+        assert_eq!(initial.state, "none");
+        assert!(initial.device_id.is_none());
+
+        core.registration_store
+            .register("identity-live", "device-live", 1234)
+            .unwrap();
+        let active = core.get_registration_state("identity-live".to_string());
+        assert_eq!(active.state, "active");
+        assert_eq!(active.device_id.as_deref(), Some("device-live"));
+        assert_eq!(active.seniority_timestamp, Some(1234));
     }
 
     #[test]

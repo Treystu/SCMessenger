@@ -14,9 +14,11 @@ use std::{ffi::CString, path::PathBuf};
 
 const CUSTODY_MSG_PREFIX: &str = "relay_custody_msg_";
 const CUSTODY_AUDIT_PREFIX: &str = "relay_custody_audit_";
+const REGISTRATION_STATE_PREFIX: &str = "relay_registration_state_";
 const MAX_PENDING_PER_DESTINATION: usize = 10_000;
 const DEVICE_USAGE_CEILING_PERCENT: u64 = 90;
 const FALLBACK_STORAGE_TOTAL_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+const REGISTRATION_HANDOVER_STALE_MS: u64 = 15 * 24 * 60 * 60 * 1000;
 
 static CUSTODY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -160,6 +162,54 @@ pub enum CustodyState {
     Accepted,
     Dispatching,
     Delivered,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RegistrationState {
+    Active {
+        device_id: String,
+        seniority_timestamp: u64,
+    },
+    Handover {
+        from_device_id: String,
+        to_device_id: String,
+        initiated_at: u64,
+    },
+    Abandoned {
+        device_id: String,
+        abandoned_at: u64,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CustodyError {
+    DeviceMismatch {
+        expected_device_id: String,
+        provided_device_id: String,
+    },
+    AbandonedIdentity {
+        device_id: String,
+    },
+    NoRegistration,
+}
+
+impl std::fmt::Display for CustodyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CustodyError::DeviceMismatch {
+                expected_device_id,
+                provided_device_id,
+            } => write!(
+                f,
+                "device_mismatch expected={} provided={}",
+                expected_device_id, provided_device_id
+            ),
+            CustodyError::AbandonedIdentity { device_id } => {
+                write!(f, "abandoned_identity device_id={}", device_id)
+            }
+            CustodyError::NoRegistration => write!(f, "no_registration"),
+        }
+    }
 }
 
 impl CustodyState {
@@ -751,6 +801,240 @@ impl RelayCustodyStore {
         self.backend.flush()?;
         Ok(())
     }
+
+    pub fn register(
+        &self,
+        identity_id: &str,
+        device_id: &str,
+        seniority_timestamp: u64,
+    ) -> Result<RegistrationState, String> {
+        if identity_id.trim().is_empty() {
+            return Err("registration_identity_id_invalid".to_string());
+        }
+        if device_id.trim().is_empty() {
+            return Err("registration_device_id_invalid".to_string());
+        }
+        if seniority_timestamp == 0 {
+            return Err("registration_seniority_invalid".to_string());
+        }
+
+        let next = match self.get_state(identity_id)? {
+            None => RegistrationState::Active {
+                device_id: device_id.to_string(),
+                seniority_timestamp,
+            },
+            Some(RegistrationState::Active {
+                device_id: current_device_id,
+                seniority_timestamp: current_seniority,
+            }) => {
+                if current_device_id == device_id {
+                    RegistrationState::Active {
+                        device_id: current_device_id,
+                        seniority_timestamp: current_seniority.max(seniority_timestamp),
+                    }
+                } else if seniority_timestamp < current_seniority {
+                    return Err("registration_seniority_stale".to_string());
+                } else {
+                    RegistrationState::Handover {
+                        from_device_id: current_device_id,
+                        to_device_id: device_id.to_string(),
+                        initiated_at: now_ms(),
+                    }
+                }
+            }
+            Some(RegistrationState::Handover {
+                from_device_id,
+                to_device_id,
+                ..
+            }) => {
+                if device_id == to_device_id {
+                    RegistrationState::Active {
+                        device_id: to_device_id,
+                        seniority_timestamp,
+                    }
+                } else if device_id == from_device_id {
+                    return Err("registration_handover_in_progress".to_string());
+                } else {
+                    RegistrationState::Handover {
+                        from_device_id: to_device_id,
+                        to_device_id: device_id.to_string(),
+                        initiated_at: now_ms(),
+                    }
+                }
+            }
+            Some(RegistrationState::Abandoned { .. }) => RegistrationState::Active {
+                device_id: device_id.to_string(),
+                seniority_timestamp,
+            },
+        };
+
+        self.put_registration_state(identity_id, &next)?;
+        Ok(next)
+    }
+
+    pub fn deregister(
+        &self,
+        identity_id: &str,
+        from_device_id: &str,
+        target_device_id: Option<&str>,
+    ) -> Result<RegistrationState, String> {
+        let Some(current) = self.get_state(identity_id)? else {
+            return Err("registration_not_found".to_string());
+        };
+
+        let next = match current {
+            RegistrationState::Active { device_id, .. } => {
+                if device_id != from_device_id {
+                    return Err("registration_device_mismatch".to_string());
+                }
+                match target_device_id {
+                    Some(target) => RegistrationState::Handover {
+                        from_device_id: from_device_id.to_string(),
+                        to_device_id: target.to_string(),
+                        initiated_at: now_ms(),
+                    },
+                    None => RegistrationState::Abandoned {
+                        device_id,
+                        abandoned_at: now_ms(),
+                    },
+                }
+            }
+            RegistrationState::Handover {
+                from_device_id: current_from,
+                to_device_id: current_to,
+                ..
+            } => {
+                if current_from != from_device_id {
+                    return Err("registration_device_mismatch".to_string());
+                }
+                match target_device_id {
+                    Some(target) if target == current_to => RegistrationState::Handover {
+                        from_device_id: current_from,
+                        to_device_id: current_to,
+                        initiated_at: now_ms(),
+                    },
+                    Some(target) => RegistrationState::Handover {
+                        from_device_id: current_from,
+                        to_device_id: target.to_string(),
+                        initiated_at: now_ms(),
+                    },
+                    None => RegistrationState::Abandoned {
+                        device_id: current_to,
+                        abandoned_at: now_ms(),
+                    },
+                }
+            }
+            RegistrationState::Abandoned { device_id, .. } => {
+                if device_id != from_device_id {
+                    return Err("registration_device_mismatch".to_string());
+                }
+                RegistrationState::Abandoned {
+                    device_id,
+                    abandoned_at: now_ms(),
+                }
+            }
+        };
+
+        self.put_registration_state(identity_id, &next)?;
+        Ok(next)
+    }
+
+    pub fn get_state(&self, identity_id: &str) -> Result<Option<RegistrationState>, String> {
+        let Some(raw) = self
+            .backend
+            .get(registration_state_key(identity_id).as_bytes())?
+        else {
+            return Ok(None);
+        };
+        let state: RegistrationState = bincode::deserialize(&raw)
+            .map_err(|e| format!("registration_state_decode_failed: {e}"))?;
+        if let Some(collapsed) = self.collapse_stale_handover(identity_id, &state)? {
+            return Ok(Some(collapsed));
+        }
+        Ok(Some(state))
+    }
+
+    pub fn enforce_custody(&self, identity_id: &str, device_id: &str) -> Result<(), CustodyError> {
+        match self
+            .get_state(identity_id)
+            .map_err(|_| CustodyError::NoRegistration)?
+        {
+            Some(RegistrationState::Active {
+                device_id: expected_device_id,
+                ..
+            }) => {
+                if expected_device_id == device_id {
+                    Ok(())
+                } else {
+                    Err(CustodyError::DeviceMismatch {
+                        expected_device_id,
+                        provided_device_id: device_id.to_string(),
+                    })
+                }
+            }
+            Some(RegistrationState::Handover {
+                to_device_id,
+                from_device_id,
+                ..
+            }) => {
+                if to_device_id == device_id {
+                    Ok(())
+                } else {
+                    Err(CustodyError::DeviceMismatch {
+                        expected_device_id: to_device_id,
+                        provided_device_id: if device_id.is_empty() {
+                            from_device_id
+                        } else {
+                            device_id.to_string()
+                        },
+                    })
+                }
+            }
+            Some(RegistrationState::Abandoned { device_id, .. }) => {
+                Err(CustodyError::AbandonedIdentity { device_id })
+            }
+            None => Err(CustodyError::NoRegistration),
+        }
+    }
+
+    fn collapse_stale_handover(
+        &self,
+        identity_id: &str,
+        state: &RegistrationState,
+    ) -> Result<Option<RegistrationState>, String> {
+        let RegistrationState::Handover {
+            to_device_id,
+            initiated_at,
+            ..
+        } = state
+        else {
+            return Ok(None);
+        };
+
+        if now_ms().saturating_sub(*initiated_at) <= REGISTRATION_HANDOVER_STALE_MS {
+            return Ok(None);
+        }
+
+        let collapsed = RegistrationState::Abandoned {
+            device_id: to_device_id.clone(),
+            abandoned_at: now_ms(),
+        };
+        self.put_registration_state(identity_id, &collapsed)?;
+        Ok(Some(collapsed))
+    }
+
+    fn put_registration_state(
+        &self,
+        identity_id: &str,
+        state: &RegistrationState,
+    ) -> Result<(), String> {
+        let encoded = bincode::serialize(state)
+            .map_err(|e| format!("registration_state_encode_failed: {e}"))?;
+        self.backend
+            .put(registration_state_key(identity_id).as_bytes(), &encoded)?;
+        self.backend.flush()?;
+        Ok(())
+    }
 }
 
 impl Default for RelayCustodyStore {
@@ -869,6 +1153,10 @@ fn destination_prefix(destination_peer_id: &str) -> String {
 
 fn message_key(destination_peer_id: &str, custody_id: &str) -> String {
     format!("{}{}", destination_prefix(destination_peer_id), custody_id)
+}
+
+fn registration_state_key(identity_id: &str) -> String {
+    format!("{}{}", REGISTRATION_STATE_PREFIX, identity_id)
 }
 
 #[cfg(test)]
@@ -1323,5 +1611,86 @@ mod tests {
             "expected custody dir override to be created"
         );
         std::env::remove_var("SCM_RELAY_CUSTODY_DIR");
+    }
+
+    #[test]
+    fn registration_state_tracks_active_handover_and_abandoned_transitions() {
+        let store = RelayCustodyStore::in_memory();
+        let active = store.register("identity-a", "device-a", 100).unwrap();
+        assert_eq!(
+            active,
+            RegistrationState::Active {
+                device_id: "device-a".to_string(),
+                seniority_timestamp: 100
+            }
+        );
+
+        let handover = store.register("identity-a", "device-b", 200).unwrap();
+        let RegistrationState::Handover {
+            from_device_id,
+            to_device_id,
+            ..
+        } = handover
+        else {
+            panic!("expected handover state");
+        };
+        assert_eq!(from_device_id, "device-a");
+        assert_eq!(to_device_id, "device-b");
+
+        let activated = store.register("identity-a", "device-b", 200).unwrap();
+        assert_eq!(
+            activated,
+            RegistrationState::Active {
+                device_id: "device-b".to_string(),
+                seniority_timestamp: 200
+            }
+        );
+
+        let abandoned = store.deregister("identity-a", "device-b", None).unwrap();
+        let RegistrationState::Abandoned { device_id, .. } = abandoned else {
+            panic!("expected abandoned state");
+        };
+        assert_eq!(device_id, "device-b");
+    }
+
+    #[test]
+    fn enforce_custody_rejects_mismatch_abandoned_and_missing_registration() {
+        let store = RelayCustodyStore::in_memory();
+        store.register("identity-b", "device-1", 50).unwrap();
+
+        assert!(store.enforce_custody("identity-b", "device-1").is_ok());
+        assert!(matches!(
+            store.enforce_custody("identity-b", "device-2"),
+            Err(CustodyError::DeviceMismatch { .. })
+        ));
+
+        store.deregister("identity-b", "device-1", None).unwrap();
+        assert!(matches!(
+            store.enforce_custody("identity-b", "device-1"),
+            Err(CustodyError::AbandonedIdentity { .. })
+        ));
+        assert!(matches!(
+            store.enforce_custody("identity-missing", "device-x"),
+            Err(CustodyError::NoRegistration)
+        ));
+    }
+
+    #[test]
+    fn stale_handover_collapses_to_abandoned_on_read() {
+        let store = RelayCustodyStore::in_memory();
+        let stale = RegistrationState::Handover {
+            from_device_id: "device-old".to_string(),
+            to_device_id: "device-new".to_string(),
+            initiated_at: now_ms().saturating_sub(REGISTRATION_HANDOVER_STALE_MS + 1_000),
+        };
+        store
+            .put_registration_state("identity-stale", &stale)
+            .unwrap();
+
+        let state = store.get_state("identity-stale").unwrap().unwrap();
+        let RegistrationState::Abandoned { device_id, .. } = state else {
+            panic!("expected stale handover to collapse");
+        };
+        assert_eq!(device_id, "device-new");
     }
 }

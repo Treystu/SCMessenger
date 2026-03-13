@@ -28,6 +28,12 @@ dictionary PreparedMessage {
     bytes envelope_data;
 };
 
+dictionary RegistrationStateInfo {
+    string state;
+    string? device_id;
+    u64? seniority_timestamp;
+};
+
 // ============================================================================
 // MAIN INTERFACE
 // ============================================================================
@@ -53,6 +59,7 @@ interface IronCore {
     string? get_device_id();
     /// Get seniority timestamp for this installation (WS13.1)
     u64? get_seniority_timestamp();
+    RegistrationStateInfo get_registration_state(string identity_id);
     [Throws=IronCoreError]
     string export_identity_backup();
     [Throws=IronCoreError]

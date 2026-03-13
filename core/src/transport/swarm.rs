@@ -576,6 +576,21 @@ fn dispatch_ranked_route(
     }
 }
 
+fn enforce_relay_registration(
+    relay_custody_store: &RelayCustodyStore,
+    request: &RelayRequest,
+) -> Result<(), String> {
+    match (
+        request.recipient_identity_id.as_deref(),
+        request.intended_device_id.as_deref(),
+    ) {
+        (Some(identity_id), Some(device_id)) => relay_custody_store
+            .enforce_custody(identity_id, device_id)
+            .map_err(|error| format!("relay_custody_rejected: {error}")),
+        _ => Ok(()),
+    }
+}
+
 #[derive(Debug, Clone)]
 struct PendingCustodyDispatch {
     destination_peer: PeerId,
@@ -1335,12 +1350,16 @@ pub async fn start_swarm_with_config(
         let mut address_observer = AddressObserver::new();
 
         // Track successful relay reservations by ListenerId
-        let mut successful_relay_reservations: HashMap<PeerId, libp2p::core::transport::ListenerId> = HashMap::new();
+        let mut successful_relay_reservations: HashMap<
+            PeerId,
+            libp2p::core::transport::ListenerId,
+        > = HashMap::new();
 
         // P0.12: Deduplicate bridge events to prevent UI freezing and bridge spam
         // We track the last reported 'PeerIdentified' and 'PeerDiscovered' state.
         let mut reported_peer_info: HashMap<PeerId, (String, Vec<Multiaddr>)> = HashMap::new();
-        let mut reported_peer_discoveries: std::collections::HashSet<PeerId> = std::collections::HashSet::new();
+        let mut reported_peer_discoveries: std::collections::HashSet<PeerId> =
+            std::collections::HashSet::new();
 
         tracing::info!("=== OWN_IDENTITY: {} ===", local_peer_id);
 
@@ -1883,7 +1902,7 @@ pub async fn start_swarm_with_config(
                                     request_response::Message::Request { request, channel, .. } => {
                                         let response = match verify_registration_message(&peer, &request) {
                                             Ok(()) => {
-                                                match &request {
+                                                let registry_result = match &request {
                                                     RegistrationMessage::Register(request) => {
                                                         tracing::info!(
                                                             "✅ Verified registration from {} for identity {} device {}",
@@ -1891,6 +1910,11 @@ pub async fn start_swarm_with_config(
                                                             request.payload.identity_id,
                                                             request.payload.device_id
                                                         );
+                                                        relay_custody_store.register(
+                                                            &request.payload.identity_id,
+                                                            &request.payload.device_id,
+                                                            request.payload.seniority_ts,
+                                                        )
                                                     }
                                                     RegistrationMessage::Deregister(request) => {
                                                         tracing::info!(
@@ -1900,11 +1924,29 @@ pub async fn start_swarm_with_config(
                                                             request.payload.from_device_id,
                                                             request.payload.target_device_id.as_deref().unwrap_or("none")
                                                         );
+                                                        relay_custody_store.deregister(
+                                                            &request.payload.identity_id,
+                                                            &request.payload.from_device_id,
+                                                            request.payload.target_device_id.as_deref(),
+                                                        )
                                                     }
-                                                }
-                                                RegistrationResponse {
-                                                    accepted: true,
-                                                    error: None,
+                                                };
+                                                match registry_result {
+                                                    Ok(_) => RegistrationResponse {
+                                                        accepted: true,
+                                                        error: None,
+                                                    },
+                                                    Err(error) => {
+                                                        tracing::warn!(
+                                                            "Rejected registration state transition from {}: {}",
+                                                            peer,
+                                                            error
+                                                        );
+                                                        RegistrationResponse {
+                                                            accepted: false,
+                                                            error: Some(error),
+                                                        }
+                                                    }
                                                 }
                                             }
                                             Err(error) => {
@@ -2054,12 +2096,21 @@ pub async fn start_swarm_with_config(
                                                             message_id: relay_message_id,
                                                         }
                                                     } else {
-                                                    match relay_custody_store.accept_custody(
-                                                        peer.to_string(),
-                                                        destination.to_string(),
-                                                        relay_message_id.clone(),
-                                                        request.envelope_data.clone(),
+                                                    match enforce_relay_registration(
+                                                        &relay_custody_store,
+                                                        &request,
                                                     ) {
+                                                        Err(error) => RelayResponse {
+                                                            accepted: false,
+                                                            error: Some(error),
+                                                            message_id: relay_message_id,
+                                                        },
+                                                        Ok(()) => match relay_custody_store.accept_custody(
+                                                            peer.to_string(),
+                                                            destination.to_string(),
+                                                            relay_message_id.clone(),
+                                                            request.envelope_data.clone(),
+                                                        ) {
                                                         Ok(custody) => {
                                                             relay_guardrails.record_accepted(
                                                                 &peer.to_string(),
@@ -2098,6 +2149,7 @@ pub async fn start_swarm_with_config(
                                                             )),
                                                             message_id: relay_message_id,
                                                         },
+                                                    },
                                                     }
                                                     }
                                                 }
@@ -3415,10 +3467,30 @@ pub async fn start_swarm_with_config(
                                     request_response::Event::Message { peer, message, .. } => match message {
                                         request_response::Message::Request { request, channel, .. } => {
                                             let response = match verify_registration_message(&peer, &request) {
-                                                Ok(()) => RegistrationResponse {
-                                                    accepted: true,
-                                                    error: None,
-                                                },
+                                                Ok(()) => {
+                                                    let registry_result = match &request {
+                                                        RegistrationMessage::Register(request) => relay_custody_store.register(
+                                                            &request.payload.identity_id,
+                                                            &request.payload.device_id,
+                                                            request.payload.seniority_ts,
+                                                        ),
+                                                        RegistrationMessage::Deregister(request) => relay_custody_store.deregister(
+                                                            &request.payload.identity_id,
+                                                            &request.payload.from_device_id,
+                                                            request.payload.target_device_id.as_deref(),
+                                                        ),
+                                                    };
+                                                    match registry_result {
+                                                        Ok(_) => RegistrationResponse {
+                                                            accepted: true,
+                                                            error: None,
+                                                        },
+                                                        Err(error) => RegistrationResponse {
+                                                            accepted: false,
+                                                            error: Some(error),
+                                                        },
+                                                    }
+                                                }
                                                 Err(error) => RegistrationResponse {
                                                     accepted: false,
                                                     error: Some(error.to_string()),
@@ -3570,12 +3642,21 @@ pub async fn start_swarm_with_config(
                                                                 message_id: relay_message_id,
                                                             }
                                                         } else {
-                                                            match relay_custody_store.accept_custody(
-                                                                peer.to_string(),
-                                                                destination.to_string(),
-                                                                relay_message_id.clone(),
-                                                                request.envelope_data.clone(),
+                                                            match enforce_relay_registration(
+                                                                &relay_custody_store,
+                                                                &request,
                                                             ) {
+                                                                Err(error) => RelayResponse {
+                                                                    accepted: false,
+                                                                    error: Some(error),
+                                                                    message_id: relay_message_id,
+                                                                },
+                                                                Ok(()) => match relay_custody_store.accept_custody(
+                                                                    peer.to_string(),
+                                                                    destination.to_string(),
+                                                                    relay_message_id.clone(),
+                                                                    request.envelope_data.clone(),
+                                                                ) {
                                                                 Ok(_) => {
                                                                     relay_guardrails.record_accepted(
                                                                         &peer.to_string(),
@@ -3607,6 +3688,7 @@ pub async fn start_swarm_with_config(
                                                                     )),
                                                                     message_id: relay_message_id,
                                                                 },
+                                                            },
                                                             }
                                                         }
                                                     }
@@ -3871,14 +3953,14 @@ use libp2p::{gossipsub, request_response};
 #[cfg(test)]
 mod tests {
     use super::{
-        extract_ed25519_public_key_from_peer_id, should_apply_delivery_convergence_marker,
-        validate_delivery_convergence_marker_shape, verify_registration_message,
-        DeliveryConvergenceMarker, PendingCustodyDispatch, PendingMessage, RelayAbuseGuardrails,
-        RELAY_DUPLICATE_WINDOW_MS, RELAY_PEER_BUCKET_BURST_CAPACITY,
-        RELAY_PEER_BUCKET_REFILL_PER_SEC,
+        enforce_relay_registration, extract_ed25519_public_key_from_peer_id,
+        should_apply_delivery_convergence_marker, validate_delivery_convergence_marker_shape,
+        verify_registration_message, DeliveryConvergenceMarker, PendingCustodyDispatch,
+        PendingMessage, RelayAbuseGuardrails, RELAY_DUPLICATE_WINDOW_MS,
+        RELAY_PEER_BUCKET_BURST_CAPACITY, RELAY_PEER_BUCKET_REFILL_PER_SEC,
     };
     use crate::identity::IdentityKeys;
-    use crate::store::relay_custody::RelayCustodyStore;
+    use crate::store::relay_custody::{CustodyError, RelayCustodyStore};
     use crate::transport::RegistrationMessage;
     use std::collections::HashMap;
 
@@ -4071,5 +4153,39 @@ mod tests {
             verify_registration_message(&wrong_peer, &RegistrationMessage::Register(request)),
             Err("registration_identity_mismatch")
         );
+    }
+
+    #[test]
+    fn relay_registration_enforcement_rejects_device_mismatch() {
+        let store = RelayCustodyStore::in_memory();
+        store.register("identity-a", "device-a", 11).unwrap();
+        let request = super::RelayRequest {
+            destination_peer: vec![1, 2, 3],
+            envelope_data: vec![9, 9, 9],
+            message_id: "msg-1".to_string(),
+            recipient_identity_id: Some("identity-a".to_string()),
+            intended_device_id: Some("device-b".to_string()),
+        };
+
+        let error = enforce_relay_registration(&store, &request).unwrap_err();
+        assert!(error.contains("relay_custody_rejected"));
+        assert!(matches!(
+            store.enforce_custody("identity-a", "device-b"),
+            Err(CustodyError::DeviceMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn relay_registration_enforcement_keeps_legacy_requests_compatible() {
+        let store = RelayCustodyStore::in_memory();
+        let request = super::RelayRequest {
+            destination_peer: vec![1, 2, 3],
+            envelope_data: vec![9, 9, 9],
+            message_id: "msg-2".to_string(),
+            recipient_identity_id: Some("identity-a".to_string()),
+            intended_device_id: None,
+        };
+
+        assert!(enforce_relay_registration(&store, &request).is_ok());
     }
 }

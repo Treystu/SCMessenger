@@ -236,9 +236,8 @@ async fn main() -> Result<()> {
 
     // 3. Initialize tracing with both stdout (fmt) and file (appender)
     use tracing_subscriber::prelude::*;
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        tracing_subscriber::EnvFilter::new("info")
-    });
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
 
     tracing_subscriber::registry()
         .with(filter)

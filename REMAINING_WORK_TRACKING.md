@@ -56,8 +56,23 @@ Remaining WS13 queue:
 
 1. [x] WS13.2 — Transport/API boundary widened: `SwarmCommand::SendMessage`, `SwarmHandle::send_message`, `SwarmBridge::send_message`, `RelayRequest`, and `Contact` all now carry `recipient_identity_id`/`intended_device_id`/`last_known_device_id` as `Option<String>`. All existing callers updated with `None, None`; `#[serde(default)]` ensures pre-WS13 relay nodes continue to interoperate. Mobile adapter call-sites (Android/iOS Kotlin/Swift consumers generated from `api.udl`) must be regenerated — use `void send_message(string peer_id, bytes data, string? recipient_identity_id, string? intended_device_id)` as the source of truth.
 2. [x] WS13.3 — Registration protocol (`/sc/registration/1.0.0`) + signature verification. `IronCoreBehaviour` now exposes an additive registration request/response protocol with canonical payload serialization, signed registration/deregistration helpers, `SwarmHandle::{register_identity,deregister_identity}` wiring, and fail-closed validation for malformed identity IDs, malformed UUIDv4 device IDs, peer/identity mismatches, invalid signatures, and invalid deregistration state. Targeted unit + integration tests cover success and rejection paths. Residual: no registry mutation/anti-replay enforcement yet; WS13.4 owns persisted active-device state. **Merged in PR83 (2026-03-12) — consolidated build verified (528 tests, 0 failures).**
-3. [ ] WS13.4 — Relay registry state machine + custody enforcement. **Architecturally unblocked; launch prompt in `docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md` (WS13.4 Launch section).** File targets: `core/src/store/relay_custody.rs`, `core/src/transport/swarm.rs`, `core/src/lib.rs`, `core/src/api.udl`. LoC envelope: 900–1600.
-4. [ ] WS13.5 — Handover/abandon queue migration + sender-facing rejection UX. Blocked behind WS13.3–WS13.4 plus unavailable local Android/iOS verification tooling on this host (`ANDROID_HOME`, `cargo-ndk`, `xcodebuild`).
+3. [ ] WS13.4 — Relay registry state machine + custody enforcement. **In progress on `codex/ws13-ws14-hourly-20260313-1613`.** Core state machine and relay enforcement landed in this run:
+   - `RelayCustodyStore` now persists `RegistrationState::{Active,Handover,Abandoned}` per identity and auto-collapses stale handovers (>15 days) to `Abandoned`.
+   - verified `/sc/registration/1.0.0` requests now mutate registry state instead of remaining ack-only.
+   - relay accept path now enforces `recipient_identity_id` + `intended_device_id` when both are present and preserves compatibility mode for legacy no-device requests.
+   - `IronCore.get_registration_state()` / `RegistrationStateInfo` added as additive UDL surface.
+   - Rust verification passed:
+     - `cargo fmt --all -- --check`
+     - `cargo build --workspace`
+     - `cargo clippy --workspace`
+     - `cargo test --workspace`
+   - Still blocking phase completion:
+     - `cd android && ./gradlew assembleDebug` failed: missing Android SDK path (`ANDROID_HOME` / `android/local.properties`)
+     - `cd android && ./gradlew testDebugUnitTest` failed: Gradle wrapper lock under `~/.gradle` not writable in sandbox
+     - `cd android && ./gradlew lintDebug` failed: same Gradle wrapper lock permission failure
+     - `bash ./iOS/verify-test.sh` failed: Xcode copy step hit `No space left on device`
+   - Confidence: **89%** overall (core behavior implemented/tested; platform verification incomplete so do not mark complete).
+4. [ ] WS13.5 — Handover/abandon queue migration + sender-facing rejection UX. Blocked behind WS13.4 closeout plus unavailable local Android/iOS verification tooling in this run (missing Android SDK path/writable Gradle cache, iOS DerivedData disk exhaustion).
 5. [ ] WS13.6 — Compatibility/migration matrix, runbook, and acceptance lock. Unblocked after WS13.3–WS13.5 complete.
 
 ## v0.2.1 Critical Bug Fixes (2026-03-12)
