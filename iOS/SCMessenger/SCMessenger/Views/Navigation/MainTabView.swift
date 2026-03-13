@@ -332,14 +332,10 @@ struct ChatView: View {
                     get: { viewModel?.messageText ?? "" },
                     set: { viewModel?.messageText = $0 }
                 ),
-                isSending: viewModel?.isSending ?? false,
                 onSend: {
-                    Task {
-                        await viewModel?.sendMessage()
-                        // Scroll to bottom after sending
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            scrollProxy?.scrollTo("bottom", anchor: .bottom)
-                        }
+                    viewModel?.sendMessage()
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        scrollProxy?.scrollTo("bottom", anchor: .bottom)
                     }
                 }
             )
@@ -425,7 +421,6 @@ private struct DeliveryStateLegend: View {
 
 struct MessageInputBar: View {
     @Binding var text: String
-    let isSending: Bool
     let onSend: () -> Void
 
     var body: some View {
@@ -435,16 +430,11 @@ struct MessageInputBar: View {
                 .lineLimit(1...4)
 
             Button(action: onSend) {
-                if isSending {
-                    ProgressView()
-                        .frame(width: 24, height: 24)
-                } else {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(text.isEmpty ? .gray : Theme.onPrimaryContainer)
-                }
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(text.isEmpty ? .gray : Theme.onPrimaryContainer)
             }
-            .disabled(text.isEmpty || isSending)
+            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .padding(Theme.spacingMedium)
         .background(Theme.surface)

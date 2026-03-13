@@ -1,11 +1,57 @@
 # SCMessenger Current State (Verified)
 
 Status: Active  
-Last updated: 2026-03-12
+Last updated: 2026-03-13
 
 Last verified: **2026-03-12** (PR83 consolidation branch — full merge of PR79/PR80/PR81/PR82)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
+
+## 2026-03-13 BLE Freshness Profiling + run5 Visibility Clarification (Verified)
+
+- **Android BLE profiling is now freshness-first**:
+  - `BleScanner.kt` starts with a service-filtered scan, then promotes to an unfiltered scan after 20s with zero mesh advertisements.
+  - `MeshRepository.kt` now keeps a 120s BLE route-observation cache so send-path fallback prefers:
+    1. currently connected BLE peer,
+    2. freshest observed BLE alias/address,
+    3. persisted BLE hint only if it is still fresh.
+  - stale cached BLE hints are now explicitly skipped instead of silently outranking fresher runtime evidence.
+- **run5 collector ambiguity is now made explicit instead of hidden**:
+  - `run5.sh` now writes physical-device app console output to `ios-device.log` and host/system Bluetooth + Multipeer context to `ios-device-system.log`.
+  - if the physical iOS app is already running, `run5.sh` no longer relaunches it just to chase console output; the app log now records that passive app-console capture is unavailable in that case.
+  - the post-run visibility matrix now counts only peers whose own IDs were actually captured in the current log window.
+  - unknown own IDs are now reported as collector gaps, not auto-counted as mesh failures.
+  - duplicate/ambiguous own-ID inference is suppressed instead of being reused across multiple nodes.
+- **Operator ambiguity clarified**:
+  - `ios_dev own id = unknown` now means "app startup identity lines were not captured in this log window," not "the iPhone was off mesh."
+  - transport evidence and visibility proof are now separate concepts in `run5.sh`; BLE/direct/relay activity can be real even when a node's local own ID was not captured.
+  - GCP relay log collection now grabs a recent `docker logs --tail 200` snapshot before incremental polling so short runs have a better chance of capturing headless startup identity context.
+  - Android BLE fallback telemetry still has one remaining forensic ambiguity: accepted-send lines can retain the requested fallback MAC while `BleGattClient` callback success is emitted for the fresher connected GATT address actually used on the wire. Until that logging is unified, treat the callback-success address as authoritative.
+- **Verification**:
+  - `cd android && ./gradlew app:assembleDebug` — **PASS**
+
+## 2026-03-13 Documentation Sync + Build Verification Governance Lock
+
+- **Canonical Closeout Policy Tightened**: `AGENTS.md` now explicitly requires same-run canonical doc updates whenever behavior, scope, risk, scripts, verification commands, or operator workflow changes.
+- **Edited-Target Build Verification Locked In**: Repo agent guidance now explicitly requires build verification for any edited code path, generated bindings, build wiring, or runtime-affecting script before a session can be considered complete.
+- **Cross-Agent Consistency**: `.github/copilot-instructions.md` now mirrors the same requirements so Codex and Copilot execution policy stay aligned.
+- **Verification Workflow**: `./scripts/docs_sync_check.sh` remains the mandatory documentation consistency gate before finalizing change-bearing work.
+- **Current implication**: Documentation sync and build verification are now first-class completion criteria, not best-effort follow-up tasks.
+
+## 2026-03-13 NAT Traversal & BLE Stability (Verified)
+
+- **NAT Traversal Restoration**: Fixed a regression where relay nodes were being filtered out of swarm routing and direct delivery candidates. Restoring relay participation ensures connectivity across NAT boundaries (Cellular/WiFi cross-over).
+- **BLE Identity Beacon Throttling**: Added a 5-second throttle to BLE identity updates on both Android and iOS. This significantly reduces log noise and radio churn, and prevents potential UI/bridge freezing caused by rapid sub-stream identify events.
+- **Android BLE Connect-on-Demand**: Fixed overly aggressive skip logic that prevented connecting to stale BLE MACs. The system now attempts connection to hinted addresses during send-path fallback.
+- **Deduplication Hardening**: Implemented Rust-level and adapter-level deduplication for `PeerIdentified` events to mitigate performance issues on iOS.
+- **Build Verification**: `gradlew assembleDebug` (Android) — **PASS**. `docs_sync_check.sh` — **PASS**.
+
+## 2026-03-12 iOS CryptoError & Power Optimization (Verified)
+
+- **CryptoError (Error 4) Resolve**: Traced to encryption failures against peers resolved via stale bootstrap nodes. Fixed by updating static fallback and enabling dynamic ledger-based bootstrap discovery.
+- **Power Optimization**: Increased `adaptiveIntervalSeconds` for top-end battery levels (5 mins at >80%, 10 mins at >95%) to reduce background activity during full health.
+- **Log Noise Reduction**: Simplified "Power profile applied" messages and removed redundant polling data from info-level logs.
+- **Build Verification**: `bash ./iOS/verify-test.sh` — **PASS** (iOS build succeeded, transport parity tests passed).
 
 ## 2026-03-12 Comprehensive Consolidation — PR83 (Verified)
 
@@ -1228,3 +1274,89 @@ Use this file plus:
 - `docs/EDGE_CASE_READINESS_MATRIX.md` (extreme environment readiness/hardening)
 
 Treat older status and audit report docs as historical snapshots unless they are explicitly linked from the files above as current.
+
+## 2026-03-13 iOS Simulator Launch Blocker (Operational) (Verified)
+
+- The iPhone 17 Pro simulator had a stale SCMessenger app bundle installed with Mach-O `platform IOS` instead of `platform IOSSIMULATOR`.
+- Symptom: `xcrun simctl launch` failed with SpringBoard denial and `NSPOSIXErrorDomain Code=163` / `Launchd job spawn failed`, even though the app appeared installed.
+- Verified root cause: the installed simulator bundle reported `platform IOS`, while the freshly rebuilt simulator artifact reported `platform IOSSIMULATOR`.
+- Operational fix: uninstall the stale simulator app, rebuild for `Debug-iphonesimulator`, reinstall the fresh simulator app, and relaunch.
+- Important ambiguity now documented: on Apple Silicon, a wrong-flavor iOS arm64 bundle can appear installable in the simulator but still fail only at process bootstrap. "Installed" is not sufficient proof of a valid simulator artifact.
+- Verification: `xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj -scheme SCMessenger -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build` passed, reinstall succeeded, and `xcrun simctl launch booted SovereignCommunications.SCMessenger` returned a live PID.
+
+## 2026-03-13 Conversation Consolidation: Transport, Stability, Relay, Harness, and Debt Ledger
+
+- Android send semantics were reaffirmed as the canonical architectural model: local durable write first, immediate local-ledger/UI reflection second, asynchronous delivery progression third. A message queued locally is already "on the mesh" from that node's perspective even if delivery is still pending.
+- Android pending-message investigation confirmed the send pipeline itself was operating correctly for the investigated stuck message `c35aa8da-d220-466c-8769-951523771af7`: local history write succeeded, retries/backoff executed, and failure was due to route instability to the recipient rather than lost UI state.
+- Product expectation was clarified and accepted as binding: Bluetooth, direct LAN/libp2p, relay, and Wi-Fi Direct/local transports must all work together when available. The goal is simultaneous transport viability, not merely a single working fallback.
+- GCP relay was repaired live after multiple operational failures were found:
+  - active `gcloud` project drift
+  - `/var/lib/docker` full
+  - excessive Docker JSON log growth
+  - stale exited containers
+  - corrupted persisted relay ledger (`peers.json`)
+- GCP recovery steps completed:
+  - switch to project `scmessenger-bootstrapnode`
+  - clear Docker log bloat and stale containers
+  - replace corrupted `peers.json` with a valid empty `ConnectionLedger`
+  - restart relay container
+- Post-repair GCP verification showed:
+  - relay container running cleanly
+  - ports `9000` and `9001` listening
+  - HTTP responsive
+  - normal startup logs with relay/peer activity restored
+- iOS physical-node participation improved materially after bootstrap/relay correction. The device no longer appeared completely off-mesh; direct and relay evidence returned, though app-level visibility evidence remained less complete than system/radio evidence.
+- BLE remained an active focus area:
+  - Android repeatedly showed strong BLE fallback activity and successful GATT writes.
+  - Physical iOS still showed lower-confidence app-level BLE evidence than Android.
+  - BLE freshness and route-selection quality were identified as central to reliability.
+- Android BLE freshness profiling is now the documented active model:
+  - filtered scan fallback to unfiltered scan after 20 seconds
+  - 120-second BLE observation freshness cache
+  - connected BLE peer preferred over stale persisted hint
+  - stale BLE hints explicitly skipped and logged
+- Remaining Android BLE ambiguity is still open and documented: accepted-send logs can preserve the requested stale BLE target while the actual on-wire GATT success callback is emitted for the fresher connected device. This is a telemetry debt item, not proven transport failure.
+- iOS UX/stability conclusions from this conversation:
+  - the send-button spinner behavior conflicts with the repo's store-and-forward mentality
+  - the source of truth should be the local durable ledger, not live network success
+  - messages should appear immediately and advance delivery state asynchronously
+  - freeze/unfreeze behavior correlated with heavy peer-identify / identity-beacon churn during convergence
+- The narrow safe stability direction established for iOS is:
+  - remove beacon rebroadcast from hot peer-identification paths
+  - debounce beacon refreshes
+  - reduce redundant peer-identification churn
+  - maintain fully local-ledger-first send behavior
+- `run5.sh` was substantially upgraded in this conversation lineage:
+  - GCP collector prepends Docker snapshot logs before incremental polling
+  - physical iOS logs split into app-console and system/Bluetooth context
+  - live status ticker now surfaces Android peer/BLE counts and separate iOS app/system counts
+  - post-run analysis uses known own IDs only for visibility accounting
+  - unknown own IDs are treated as collector gaps, not false mesh failures
+  - transport evidence table added for peer IDs, app events, BLE, direct, relay, and Wi-Fi/Multipeer evidence
+  - pre-running physical iOS app is no longer force-relaunched solely to capture console output
+- Harness honesty improved, but full 5-node proof was still not achieved in the recent runs:
+  - GCP healthy and active
+  - OSX relay healthy with captured own ID
+  - Android active across BLE/direct/relay
+  - physical iOS active at system/radio level and sometimes app/peer level
+  - iOS simulator had been a blind spot until launch recovery
+  - overall state remained partially indeterminate rather than verified full 5-node visibility
+- iOS simulator launch debugging found an operationally important failure mode:
+  - stale installed SCMessenger bundle had Mach-O `platform IOS`
+  - fresh simulator artifact had Mach-O `platform IOSSIMULATOR`
+  - on Apple Silicon, a wrong-flavor arm64 app can appear installed in the simulator yet fail only at process bootstrap with SpringBoard denial and `NSPOSIXErrorDomain Code=163`
+  - uninstalling the stale app, rebuilding for `Debug-iphonesimulator`, reinstalling, and relaunching restored simulator launchability
+- After simulator launch recovery, real runtime follow-on issues were still visible:
+  - BLE unavailable in the simulator
+  - `historySync request failed to prepare message`
+  - these are runtime issues, not launch blockers, and remain open for follow-up
+- Documentation/process policy was explicitly tightened during this conversation and is now part of active repo expectations:
+  - docs must be updated in the same run whenever behavior/scope/risk/scripts/workflows change
+  - build verification must be performed whenever edited code/build-affecting targets change
+  - final summaries should explicitly report docs-sync and build-verification status
+- Consolidated tech debt / ambiguity ledger from this conversation:
+  - physical iOS app-level own-ID/peer capture can still be absent from the active log window even when radio/system activity is strong
+  - iOS simulator runtime mesh participation still needs validation even though launch now works again
+  - Android BLE telemetry still needs unification so requested target and actual transport target match in logs
+  - "installed in simulator" must not be treated as proof of a valid simulator artifact
+  - iOS send-path parity with Android store-and-forward semantics still requires final confirmation across all code paths

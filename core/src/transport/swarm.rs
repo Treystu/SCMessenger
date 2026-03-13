@@ -59,39 +59,44 @@ use tokio::sync::mpsc;
 /// Allowing private IPs is essential for local WiFi mesh discovery via DHT.
 fn is_discoverable_multiaddr(addr: &Multiaddr) -> bool {
     use libp2p::multiaddr::Protocol;
+    let mut is_p2p_circuit = false;
+    let mut ip_is_restricted = false;
+    let mut has_ip = false;
+
     for proto in addr.iter() {
         match proto {
             Protocol::Ip4(ip) => {
-                if ip.is_loopback() {
-                    return false;
-                } // 127.x
-                if ip.is_unspecified() {
-                    return false;
-                } // 0.0.0.0
-                if ip.is_link_local() {
-                    return false;
-                } // 169.254.x.x
-                  // Android uses 192.0.0.x for internal NAT / VPN-like interfaces
-                if ip.octets()[0] == 192 && ip.octets()[1] == 0 && ip.octets()[2] == 0 {
-                    return false;
+                has_ip = true;
+                if ip.is_loopback() || ip.is_unspecified() || ip.is_link_local() {
+                    ip_is_restricted = true;
                 }
-                // We intentionally allow RFC1918 and CGNAT for local discovery
+                // Special check for 192.0.0.x (IETF Protocol Assignments)
+                // Often used for internal NAT on mobile/VPN.
+                if ip.octets()[0] == 192 && ip.octets()[1] == 0 && ip.octets()[2] == 0 {
+                    ip_is_restricted = true;
+                }
             }
             Protocol::Ip6(ip) => {
-                if ip.is_loopback() {
-                    return false;
-                } // ::1
-                if ip.is_unspecified() {
-                    return false;
-                } // ::
+                has_ip = true;
+                if ip.is_loopback() || ip.is_unspecified() {
+                    ip_is_restricted = true;
+                }
             }
             Protocol::P2pCircuit => {
-                return false;
-            } // relay circuits go through relay, not kad
+                is_p2p_circuit = true;
+            }
             _ => {}
         }
     }
-    true
+
+    // Allow ANY P2P circuit address, even if it traverses a restricted IP (like 192.0.0.x)
+    // as it's the ONLY way to reach the peer via that relay.
+    if is_p2p_circuit {
+        return true;
+    }
+
+    // Otherwise, require an IP and it must not be restricted.
+    has_ip && !ip_is_restricted
 }
 
 fn relay_reservation_multiaddr(base: &Multiaddr, relay_peer_id: PeerId) -> Multiaddr {
@@ -1329,6 +1334,16 @@ pub async fn start_swarm_with_config(
         let mut connection_tracker = ConnectionTracker::new();
         let mut address_observer = AddressObserver::new();
 
+        // Track successful relay reservations by ListenerId
+        let mut successful_relay_reservations: HashMap<PeerId, libp2p::core::transport::ListenerId> = HashMap::new();
+
+        // P0.12: Deduplicate bridge events to prevent UI freezing and bridge spam
+        // We track the last reported 'PeerIdentified' and 'PeerDiscovered' state.
+        let mut reported_peer_info: HashMap<PeerId, (String, Vec<Multiaddr>)> = HashMap::new();
+        let mut reported_peer_discoveries: std::collections::HashSet<PeerId> = std::collections::HashSet::new();
+
+        tracing::info!("=== OWN_IDENTITY: {} ===", local_peer_id);
+
         // Mesh routing components (Phase 3-6)
         let mut multi_path_delivery = MultiPathDelivery::new();
         let mut bootstrap_capability = BootstrapCapability::new();
@@ -2378,7 +2393,10 @@ pub async fn start_swarm_with_config(
                                                 addr
                                             );
                                         }
-                                        let _ = event_tx.send(SwarmEvent2::PeerDiscovered(remote_peer_id)).await;
+                                        bootstrap_capability.add_peer(remote_peer_id);
+                                        if reported_peer_discoveries.insert(remote_peer_id) {
+                                            let _ = event_tx.send(SwarmEvent2::PeerDiscovered(remote_peer_id)).await;
+                                        }
                                     }
                                     dcutr::Event { remote_peer_id, result: Err(e) } => {
                                         tracing::warn!(
@@ -2483,7 +2501,9 @@ pub async fn start_swarm_with_config(
                                     }
 
                                     bootstrap_capability.add_peer(peer_id);
-                                    let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
+                                    if reported_peer_discoveries.insert(peer_id) {
+                                        let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
+                                    }
                                 }
                             }
 
@@ -2555,7 +2575,7 @@ pub async fn start_swarm_with_config(
                                 // Check if peer advertises relay capability
                                 let is_relay = info.agent_version.contains("relay");
                                 if is_relay {
-                                    tracing::info!("🔄 Peer {} is a relay node", peer_id);
+                                    tracing::info!("🔄 Peer {} is identified as a RELAY node (agent: {})", peer_id, info.agent_version);
                                     bootstrap_capability.add_peer(peer_id);
                                     multi_path_delivery.add_relay(peer_id);
 
@@ -2563,7 +2583,7 @@ pub async fn start_swarm_with_config(
                                     // Guard: only register ONCE per relay peer — identify fires every 60s
                                     // and without this guard we accumulate unbounded ListenerIds, which
                                     // floods the relay and crowds out real message delivery.
-                                    let already_reserved = relay_peer_addrs.contains_key(&peer_id);
+                                    let already_reserved = successful_relay_reservations.contains_key(&peer_id);
 
                                     if !already_reserved {
                                         let routable_relay_addrs: Vec<Multiaddr> = info.listen_addrs
@@ -2573,8 +2593,6 @@ pub async fn start_swarm_with_config(
                                             .collect();
 
                                         if !routable_relay_addrs.is_empty() {
-                                            relay_peer_addrs.insert(peer_id, routable_relay_addrs.clone());
-
                                             // Pick the first routable relay address and register a circuit reservation.
                                             // Format: /ip4/<relay-ip>/tcp/<port>/p2p/<relay-peer-id>/p2p-circuit
                                             let relay_circuit_addr = relay_reservation_multiaddr(
@@ -2587,10 +2605,14 @@ pub async fn start_swarm_with_config(
                                                 peer_id, relay_circuit_addr
                                             );
                                             match swarm.listen_on(relay_circuit_addr.clone()) {
-                                                Ok(listener_id) => tracing::info!(
-                                                    "✅ Relay circuit reservation registered: {:?} via {}",
-                                                    listener_id, peer_id
-                                                ),
+                                                Ok(listener_id) => {
+                                                    tracing::info!(
+                                                        "✅ Relay circuit reservation registered: {:?} via {}",
+                                                        listener_id, peer_id
+                                                    );
+                                                    successful_relay_reservations.insert(peer_id, listener_id);
+                                                    relay_peer_addrs.insert(peer_id, routable_relay_addrs.clone());
+                                                },
                                                 Err(e) => tracing::warn!(
                                                     "⚠️ Could not register relay circuit reservation via {}: {:?}",
                                                     peer_id, e
@@ -2605,19 +2627,30 @@ pub async fn start_swarm_with_config(
                                         }
                                     } else {
                                         tracing::debug!(
-                                            "📡 Relay circuit already reserved for {} — skipping duplicate",
+                                            "📡 Relay circuit already active for {} — skipping duplicate",
                                             peer_id
                                         );
                                     }
                                 }
 
-                                // Emit event for application layer
-                                let _ = event_tx.send(SwarmEvent2::PeerIdentified {
-                                    peer_id,
-                                    agent_version: info.agent_version.clone(),
-                                    listen_addrs: info.listen_addrs.clone(),
-                                    protocols: info.protocols.iter().map(|p| p.to_string()).collect(),
-                                }).await;
+                                // Deduplicate event emission to avoid bridge spam
+                                let should_report = match reported_peer_info.get(&peer_id) {
+                                    Some((old_agent, old_addrs)) => {
+                                        old_agent != &info.agent_version || old_addrs != &info.listen_addrs
+                                    }
+                                    None => true,
+                                };
+
+                                if should_report {
+                                    reported_peer_info.insert(peer_id, (info.agent_version.clone(), info.listen_addrs.clone()));
+                                    // Emit event for application layer
+                                    let _ = event_tx.send(SwarmEvent2::PeerIdentified {
+                                        peer_id,
+                                        agent_version: info.agent_version.clone(),
+                                        listen_addrs: info.listen_addrs.clone(),
+                                        protocols: info.protocols.iter().map(|p| p.to_string()).collect(),
+                                    }).await;
+                                }
                             }
 
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Upnp(event)) => {
@@ -2707,7 +2740,9 @@ pub async fn start_swarm_with_config(
                                     tracing::info!("📋 Sent peer list ({} peers) to {}", peer_broadcaster.peer_count(), peer_id);
                                 }
 
-                                let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
+                                if reported_peer_discoveries.insert(peer_id) {
+                                    let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
+                                }
 
                                 // AUTO LEDGER EXCHANGE: On every new connection, share our
                                 // known peers. The application layer will receive
@@ -2721,6 +2756,16 @@ pub async fn start_swarm_with_config(
                                 connection_tracker.remove_connection(&peer_id);
                                 // Allow re-exchange if they reconnect
                                 ledger_exchanged_peers.remove(&peer_id);
+                                reported_peer_discoveries.remove(&peer_id);
+                                reported_peer_info.remove(&peer_id);
+
+                                // P0.13: Clear relay tracking so we can re-reserve on reconnect
+                                if let Some(listener_id) = successful_relay_reservations.remove(&peer_id) {
+                                    tracing::debug!("🧹 Clearing stale relay reservation for {}: {:?}", peer_id, listener_id);
+                                    // Note: libp2p usually kills circuit listeners on connection close,
+                                    // but we remove it from swarm to be sure.
+                                    let _ = swarm.remove_listener(listener_id);
+                                }
 
                                 let stale_dispatches: Vec<libp2p::request_response::OutboundRequestId> =
                                     pending_custody_dispatches
@@ -2889,7 +2934,7 @@ pub async fn start_swarm_with_config(
                             }
 
                             SwarmCommand::Dial { addr, reply } => {
-                                tracing::info!("📞 Dialing {} (promiscuous — accepting any PeerID)", addr);
+                                tracing::debug!("📞 Dialing {} (promiscuous — accepting any PeerID)", addr);
                                 match swarm.dial(addr) {
                                     Ok(_) => { let _ = reply.send(Ok(())).await; }
                                     Err(e) => { let _ = reply.send(Err(e.to_string())).await; }
@@ -3716,7 +3761,9 @@ pub async fn start_swarm_with_config(
                                     RELAY_MAX_INFLIGHT_DISPATCHES,
                                     "peer_reconnect",
                                 );
-                                let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
+                                if reported_peer_discoveries.insert(peer_id) {
+                                    let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
+                                }
                             }
                             SwarmEvent::ConnectionClosed { peer_id, .. } => {
                                 connection_tracker.remove_connection(&peer_id);

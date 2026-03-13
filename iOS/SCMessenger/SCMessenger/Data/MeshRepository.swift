@@ -56,10 +56,8 @@ final class MeshRepository {
     /// These are used only if env override and remote fetch both fail/are absent.
     /// Priority order: GCP relay (cloud) → OSX relay (home/local backup).
     private static let staticBootstrapNodes: [String] = [
-        // GCP relay — primary cloud node
+        // AWS Relay (Stable backup)
         "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw",
-        // OSX home relay — secondary backup (this machine, port 9010)
-        "/ip4/104.28.216.43/tcp/9010/p2p/12D3KooWHpmuhytgzLcM4nj1hZvN5b4crB1wka3LCNfKRCd7yHj9",
     ]
 
     /// Resolved bootstrap nodes using the core BootstrapResolver.
@@ -109,6 +107,8 @@ final class MeshRepository {
     private var pendingOutboxRetryTask: Task<Void, Never>?
     private var coverTrafficTask: Task<Void, Never>?
     private var storageMaintenanceTask: Task<Void, Never>?
+    private var pendingBleBeaconRefreshTask: Task<Void, Never>?
+    private var pendingBleBeaconListenerRefreshTask: Task<Void, Never>?
     private var lastRelayBootstrapDialAt: Date = .distantPast
     private var relayBootstrapDialInProgress = false
     private var dialThrottleState: [String: (attempts: Int, nextAllowedAt: Date)] = [:]
@@ -246,8 +246,18 @@ final class MeshRepository {
     // P0: Dedup cache — suppress redundant peer-identified callbacks for the same peer
     // within a 30-second window. The Rust core fires identify per-substream, producing
     // 34K+ duplicate events in a typical session.
-    private var peerIdentifiedDedupCache: [String: Date] = [:]
+    private var peerIdentifiedDedupCache: [String: (signature: String, observedAt: Date)] = [:]
     private let peerIdentifiedDedupInterval: TimeInterval = 30
+
+    // Transmission throttle to prevent rapid-click duplicates
+    private var transmissionThrottleCache: [String: Date] = [:]
+    private let transmissionThrottleInterval: TimeInterval = 1.0
+
+    // P0: Throttle BLE identity beacon updates to 5s to reduce radio churn and bridge flood.
+    private var lastBleBeaconUpdate: Date?
+    private let bleBeaconUpdateInterval: TimeInterval = 5.0
+    private var lastBleBeaconPayload: Data?
+    private var lastBleBeaconPayloadPublishedAt: Date?
 
     // P1: Dedup cache — suppress duplicate disconnect callbacks for the same peer
     // within a 1-second window. The Rust core fires one disconnect per-substream,
@@ -548,12 +558,22 @@ final class MeshRepository {
             // Core auto-selects headless mode when identity is absent and upgrades when identity appears.
             let settings = try? settingsManager?.load()
             if settings?.internetEnabled == true {
-                // Configure bootstrap nodes for NAT traversal
-                meshService?.setBootstrapNodes(addrs: Self.defaultBootstrapNodes)
+                // Configure bootstrap nodes for NAT traversal.
+                // Priority: Ledger (cached) → Remote → Static.
+                var bootstrapAddrs = Self.defaultBootstrapNodes
+                if let ledgerNodes = ledgerManager?.getPreferredRelays(limit: 10) {
+                    for entry in ledgerNodes {
+                        if !bootstrapAddrs.contains(entry.multiaddr) {
+                            bootstrapAddrs.append(entry.multiaddr)
+                        }
+                    }
+                }
+
+                meshService?.setBootstrapNodes(addrs: bootstrapAddrs)
                 // Listen on random port
                 try? meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/0")
                 broadcastIdentityBeacon()
-                logger.info("Internet transport (Swarm) initiated")
+                logger.info("Internet transport (Swarm) initiated with \(bootstrapAddrs.count) bootstrap nodes")
             }
 
             serviceState = .running
@@ -619,6 +639,10 @@ final class MeshRepository {
         pendingOutboxRetryTask = nil
         coverTrafficTask?.cancel()
         coverTrafficTask = nil
+        pendingBleBeaconRefreshTask?.cancel()
+        pendingBleBeaconRefreshTask = nil
+        pendingBleBeaconListenerRefreshTask?.cancel()
+        pendingBleBeaconListenerRefreshTask = nil
         pendingReceiptSendTasks.values.forEach { $0.cancel() }
         pendingReceiptSendTasks.removeAll()
         identitySyncSentPeers.removeAll()
@@ -880,6 +904,14 @@ final class MeshRepository {
             throw MeshError.relayDisabled(errorMsg)
         }
 
+        // Throttling: prevent sending identical content to same peer within 1s
+        let throttleKey = "\(peerId):\(content.hashValue)"
+        if let lastSend = transmissionThrottleCache[throttleKey], Date().timeIntervalSince(lastSend) < transmissionThrottleInterval {
+            logger.warning("Throttling duplicate send for \(peerId)")
+            return
+        }
+        transmissionThrottleCache[throttleKey] = Date()
+
         // Proceed with sending message
         guard let ironCore = ironCore else {
             throw MeshError.notInitialized("IronCore not initialized")
@@ -946,61 +978,18 @@ final class MeshRepository {
         // Notify UI (Unified flow for sent messages)
         messageUpdates.send(messageRecord)
         appendDiagnostic("delivery_state msg=\(messageId) state=pending detail=message_prepared_local_history_written")
-
-        // 3. Attempt deterministic local fallback first (Multipeer -> BLE),
-        // then send over core-selected swarm route.
-        // Mobile app passes identity/routing hints; Rust core owns internet path selection.
-        let delivery = await attemptDirectSwarmDelivery(
-            routePeerCandidates: routePeerCandidates,
+        enqueuePendingOutbound(
+            historyRecordId: messageId,
+            peerId: peerId,
+            routePeerId: preferredRoutePeerId,
             addresses: routing.listeners,
             envelopeData: envelopeData,
-            multipeerPeerId: multipeerPeerId,
-            blePeerId: routing.blePeerId,
-            traceMessageId: messageId,
-            attemptContext: "initial_send",
+            initialAttemptCount: 0,
+            initialDelaySec: 0,
+            strictBleOnlyMode: strictBleOnlyValidation,
             recipientIdentityId: trimmedKey,
             intendedDeviceId: contact?.lastKnownDeviceId
         )
-        let selectedRoutePeerId = delivery.acked
-            ? (delivery.routePeerId ?? preferredRoutePeerId)
-            : delivery.routePeerId
-
-        if delivery.acked {
-            promotePendingOutboundForPeer(peerId: peerId, excludingMessageId: messageId)
-        }
-
-        if isMessageDeliveredLocally(messageId) {
-            removePendingOutbound(historyRecordId: messageId)
-            appendDiagnostic("delivery_state msg=\(messageId) state=delivered detail=delivery_receipt_arrived_before_enqueue")
-        } else {
-            if delivery.acked {
-                enqueuePendingOutbound(
-                    historyRecordId: messageId,
-                    peerId: peerId,
-                    routePeerId: selectedRoutePeerId,
-                    addresses: routing.listeners,
-                    envelopeData: envelopeData,
-                    initialAttemptCount: 1,
-                    initialDelaySec: receiptAwaitSeconds,
-                    strictBleOnlyMode: strictBleOnlyValidation,
-                    recipientIdentityId: trimmedKey,
-                    intendedDeviceId: contact?.lastKnownDeviceId
-                )
-            } else {
-                enqueuePendingOutbound(
-                    historyRecordId: messageId,
-                    peerId: peerId,
-                    routePeerId: selectedRoutePeerId,
-                    addresses: routing.listeners,
-                    envelopeData: envelopeData,
-                    initialAttemptCount: 1,
-                    initialDelaySec: 0,
-                    strictBleOnlyMode: strictBleOnlyValidation,
-                    recipientIdentityId: trimmedKey,
-                    intendedDeviceId: contact?.lastKnownDeviceId
-                )
-            }
-        }
     }
 
     /// Handle incoming message (from CoreDelegate callback)
@@ -1233,12 +1222,18 @@ final class MeshRepository {
                     if let existing = try? historyManager?.get(id: msgId) {
                         let dirStr = obj["dir"] as? String
                         let isPeerReflectingRecv = dirStr == "recv"
-                        if existing.direction == .sent && !existing.delivered && isPeerReflectingRecv {
-                            try? historyManager?.markDelivered(id: msgId)
-                            if let updated = try? historyManager?.get(id: msgId) {
-                                messageUpdates.send(updated)
-                                MeshEventBus.shared.messageEvents.send(.delivered(messageId: msgId))
+
+                        // If peer has the message we sent, it's delivered.
+                        if existing.direction == .sent && isPeerReflectingRecv {
+                            if !existing.delivered {
+                                try? historyManager?.markDelivered(id: msgId)
+                                if let updated = try? historyManager?.get(id: msgId) {
+                                    messageUpdates.send(updated)
+                                    MeshEventBus.shared.messageEvents.send(.delivered(messageId: msgId))
+                                }
                             }
+                            // Always clear from outbox if peer has it
+                            removePendingOutbound(historyRecordId: msgId)
                         }
                         continue
                     }
@@ -1312,37 +1307,50 @@ final class MeshRepository {
     /// Marks local history and removes pending retry entries when IDs match.
     func onDeliveryReceipt(messageId: String, status: String) {
         let normalized = status.lowercased()
+        let normalizedMessageId = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard normalized == "delivered" || normalized == "read" else { return }
-        let existingRecord = (try? historyManager?.get(id: messageId)) ?? nil
+        let hasPendingForReceipt = loadPendingOutbox().contains { $0.historyRecordId == normalizedMessageId }
+        let existingRecord = (try? historyManager?.get(id: normalizedMessageId)) ?? nil
         guard let existingRecord else {
-            appendDiagnostic("delivery_state msg=\(messageId) state=pending detail=delivery_receipt_ignored_non_outbound status=\(normalized) direction=missing")
+            if hasPendingForReceipt {
+                removePendingOutbound(historyRecordId: normalizedMessageId)
+                appendDiagnostic("delivery_state msg=\(normalizedMessageId) state=delivered detail=delivery_receipt_recovered_without_history status=\(normalized) direction=missing")
+            } else {
+                appendDiagnostic("delivery_state msg=\(normalizedMessageId) state=pending detail=delivery_receipt_ignored_non_outbound status=\(normalized) direction=missing")
+            }
             return
         }
         guard existingRecord.direction == .sent else {
-            appendDiagnostic("delivery_state msg=\(messageId) state=pending detail=delivery_receipt_ignored_non_outbound status=\(normalized) direction=\(existingRecord.direction)")
+            if hasPendingForReceipt {
+                removePendingOutbound(historyRecordId: normalizedMessageId)
+                appendDiagnostic("delivery_state msg=\(normalizedMessageId) state=delivered detail=delivery_receipt_recovered_without_history status=\(normalized) direction=\(existingRecord.direction)")
+            } else {
+                appendDiagnostic("delivery_state msg=\(normalizedMessageId) state=pending detail=delivery_receipt_ignored_non_outbound status=\(normalized) direction=\(existingRecord.direction)")
+            }
             return
         }
         let wasAlreadyDelivered = existingRecord.delivered
-        let firstReceiptSeen = markDeliveredReceiptSeen(messageId)
+        let firstReceiptSeen = markDeliveredReceiptSeen(normalizedMessageId)
         if !firstReceiptSeen && wasAlreadyDelivered {
-            removePendingOutbound(historyRecordId: messageId)
-            appendDiagnostic("delivery_state msg=\(messageId) state=delivered detail=delivery_receipt_duplicate_status=\(normalized)")
+            removePendingOutbound(historyRecordId: normalizedMessageId)
+            appendDiagnostic("delivery_state msg=\(normalizedMessageId) state=delivered detail=delivery_receipt_duplicate_status=\(normalized)")
             return
         }
-        appendDiagnostic("receipt_rx msg=\(messageId) status=\(normalized)")
+        appendDiagnostic("receipt_rx msg=\(normalizedMessageId) status=\(normalized)")
         if !wasAlreadyDelivered {
-            try? historyManager?.markDelivered(id: messageId)
+            try? historyManager?.markDelivered(id: normalizedMessageId)
             historyManager?.flush()
         }
-        removePendingOutbound(historyRecordId: messageId)
-        if let updated = try? historyManager?.get(id: messageId) {
+        removePendingOutbound(historyRecordId: normalizedMessageId)
+        if let updated = try? historyManager?.get(id: normalizedMessageId) {
             // Keep chat and conversation views aligned after receipt-driven status changes.
             messageUpdates.send(updated)
         }
         if wasAlreadyDelivered { return }
-        _ = ironCore?.markMessageSent(messageId: messageId)
-        appendDiagnostic("delivery_state msg=\(messageId) state=delivered detail=delivery_receipt_status=\(normalized)")
-        MeshEventBus.shared.messageEvents.send(.delivered(messageId: messageId))
+        _ = ironCore?.markMessageSent(messageId: normalizedMessageId)
+        appendDiagnostic("delivery_state msg=\(normalizedMessageId) state=delivered detail=delivery_receipt_status=\(normalized)")
+        // CoreDelegateImpl also sends this to the event bus; avoiding double-emission here.
+        // MeshEventBus.shared.messageEvents.send(.delivered(messageId: messageId))
     }
 
     private func sendDeliveryReceiptAsync(
@@ -2798,12 +2806,18 @@ final class MeshRepository {
         // P0: Deduplicate peer-identified events — Rust core fires one per substream,
         // producing 34K+ duplicate events. Skip if same peer identified within 30s.
         let trimmedPeerId = PeerIdValidator.normalize(peerId)
+        let identifySignature = ([agentVersion.trimmingCharacters(in: .whitespacesAndNewlines)] +
+            listenAddrs
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .sorted()).joined(separator: "|")
         let now = Date()
         if let lastIdentified = peerIdentifiedDedupCache[trimmedPeerId],
-           now.timeIntervalSince(lastIdentified) < peerIdentifiedDedupInterval {
+           lastIdentified.signature == identifySignature,
+           now.timeIntervalSince(lastIdentified.observedAt) < peerIdentifiedDedupInterval {
             return
         }
-        peerIdentifiedDedupCache[trimmedPeerId] = now
+        peerIdentifiedDedupCache[trimmedPeerId] = (identifySignature, now)
 
         appendDiagnostic("peer_identified transport=\(peerId) agent=\(agentVersion) addrs=\(listenAddrs.count)")
         let resetSuffix = "/p2p/\(peerId)"
@@ -2915,7 +2929,7 @@ final class MeshRepository {
 
         // Identified implies an active session already exists; avoid re-dial loops here.
         triggerPendingSyncForPeerIds(syncPeerIds, reason: "peer_identified:\(peerId)")
-        broadcastIdentityBeacon()
+        scheduleIdentityBeaconRefresh(reason: "peer_identified")
     }
 
     // MARK: - BLE Transport Integration
@@ -3327,7 +3341,7 @@ final class MeshRepository {
             .compactMap { info -> String? in
                 guard normalizePublicKey(info.publicKey) == normalizedRecipientKey else { return nil }
                 let candidate = info.canonicalPeerId.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !candidate.isEmpty, isLibp2pPeerId(candidate), !isKnownRelay(candidate) else { return nil }
+                guard !candidate.isEmpty, isLibp2pPeerId(candidate) else { return nil }
                 return candidate
             }
 
@@ -3336,7 +3350,6 @@ final class MeshRepository {
                 guard let candidate = entry.peerId?.trimmingCharacters(in: .whitespacesAndNewlines),
                       !candidate.isEmpty,
                       isLibp2pPeerId(candidate),
-                      !isKnownRelay(candidate),
                       normalizePublicKey(entry.publicKey) == normalizedRecipientKey else {
                     return nil
                 }
@@ -3615,7 +3628,7 @@ final class MeshRepository {
 
         let sanitizedCandidates = routePeerCandidates
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && isLibp2pPeerId($0) && !isBootstrapRelayPeer($0) }
+            .filter { !$0.isEmpty && isLibp2pPeerId($0) }
             .reduce(into: [String]()) { acc, peer in
                 if !acc.contains(peer) { acc.append(peer) }
             }
@@ -3644,38 +3657,44 @@ final class MeshRepository {
                 _ = await awaitPeerConnection(peerId: routePeerId)
             }
 
-            logDeliveryAttempt(
-                messageId: traceMessageId,
-                medium: "core",
-                phase: "direct",
-                outcome: "attempt",
-                detail: "ctx=\(attemptContext) route=\(routePeerId)"
-            )
-            do {
-                try swarmBridge.sendMessage(
-                    peerId: routePeerId,
-                    data: envelopeData,
-                    recipientIdentityId: recipientIdentityId,
-                    intendedDeviceId: intendedDeviceId
-                )
-                logger.info("✓ Direct delivery ACK from \(routePeerId)")
+            // Deduplication: if message was already acked via Multipeer or BLE,
+            // skip the duplicate swarm send to avoid double notifications on recipient side.
+            if !localAcked {
                 logDeliveryAttempt(
                     messageId: traceMessageId,
                     medium: "core",
                     phase: "direct",
-                    outcome: "success",
+                    outcome: "attempt",
                     detail: "ctx=\(attemptContext) route=\(routePeerId)"
                 )
-                return DeliveryAttemptResult(acked: true, routePeerId: routePeerId)
-            } catch {
-                logger.warning("Core-routed delivery failed for \(routePeerId): \(error.localizedDescription); trying alternative transports")
-                logDeliveryAttempt(
-                    messageId: traceMessageId,
-                    medium: "core",
-                    phase: "direct",
-                    outcome: "failed",
-                    detail: "ctx=\(attemptContext) route=\(routePeerId) reason=\(error.localizedDescription)"
-                )
+                do {
+                    try swarmBridge.sendMessage(
+                        peerId: routePeerId,
+                        data: envelopeData,
+                        recipientIdentityId: recipientIdentityId,
+                        intendedDeviceId: intendedDeviceId
+                    )
+                    logger.info("✓ Direct delivery ACK from \(routePeerId)")
+                    logDeliveryAttempt(
+                        messageId: traceMessageId,
+                        medium: "core",
+                        phase: "direct",
+                        outcome: "success",
+                        detail: "ctx=\(attemptContext) route=\(routePeerId)"
+                    )
+                    return DeliveryAttemptResult(acked: true, routePeerId: routePeerId)
+                } catch {
+                    logger.warning("Core-routed delivery failed for \(routePeerId): \(error.localizedDescription); trying alternative transports")
+                    logDeliveryAttempt(
+                        messageId: traceMessageId,
+                        medium: "core",
+                        phase: "direct",
+                        outcome: "failed",
+                        detail: "ctx=\(attemptContext) route=\(routePeerId) reason=\(error.localizedDescription)"
+                    )
+                }
+            } else {
+                logger.debug("Skipping redundant core send for \(traceMessageId ?? "unknown"): already delivered via local transport")
             }
 
             let relayOnly = relayCircuitAddresses(for: routePeerId)
@@ -4499,6 +4518,13 @@ final class MeshRepository {
     }
 
     private func broadcastIdentityBeacon() {
+        let now = Date()
+        if let last = lastBleBeaconUpdate, now.timeIntervalSince(last) < bleBeaconUpdateInterval {
+            // Already sent a beacon recently; skip to avoid radio churn
+            return
+        }
+        lastBleBeaconUpdate = now
+
         guard let info = ironCore?.getIdentityInfo(),
               info.publicKeyHex != nil else { return }
 
@@ -4507,15 +4533,35 @@ final class MeshRepository {
         setIdentityBeaconInternal(info: info, listeners: [])
 
         // 2. Delayed update with full connection hints
-        Task {
+        pendingBleBeaconListenerRefreshTask?.cancel()
+        pendingBleBeaconListenerRefreshTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.pendingBleBeaconListenerRefreshTask = nil }
             var listeners = getListeningAddresses()
             var attempts = 0
             while listeners.isEmpty && attempts < 10 {
                 try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
+                guard !Task.isCancelled else { return }
                 listeners = getListeningAddresses()
                 attempts += 1
             }
+            guard !Task.isCancelled else { return }
             setIdentityBeaconInternal(info: info, listeners: listeners)
+        }
+    }
+
+    private func scheduleIdentityBeaconRefresh(reason: String, delayNanoseconds: UInt64 = 1_000_000_000) {
+        guard pendingBleBeaconRefreshTask == nil else {
+            logger.debug("BLE identity beacon refresh already pending (\(reason))")
+            return
+        }
+        pendingBleBeaconRefreshTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.pendingBleBeaconRefreshTask = nil }
+            try? await Task.sleep(nanoseconds: delayNanoseconds)
+            guard !Task.isCancelled else { return }
+            logger.debug("Refreshing BLE identity beacon (\(reason))")
+            broadcastIdentityBeacon()
         }
     }
 
@@ -4571,6 +4617,15 @@ final class MeshRepository {
             logger.error("Failed to serialize identity beacon")
             return
         }
+        let now = Date()
+        if let lastPayload = lastBleBeaconPayload,
+           lastPayload == data,
+           let lastPublishedAt = lastBleBeaconPayloadPublishedAt,
+           now.timeIntervalSince(lastPublishedAt) < bleBeaconUpdateInterval {
+            return
+        }
+        lastBleBeaconPayload = data
+        lastBleBeaconPayloadPublishedAt = now
         blePeripheralManager?.setIdentityData(data)
         logger.info("BLE identity beacon set: \(publicKeyHex.prefix(8))... (\(data.count) bytes, listeners=\(listeners.count))")
     }
@@ -4666,12 +4721,10 @@ final class MeshRepository {
         ].joined(separator: "|")
 
         if lastAppliedPowerSnapshot != snapshot {
-            let message = "Power profile applied (\(reason)): profile=\(String(describing: adjustmentProfile)) relay=\(relayAdjustment.maxPerHour)/h scan=\(bleAdjustment.scanIntervalMs)ms adv=\(bleAdjustment.advertiseIntervalMs)ms tx=\(bleAdjustment.txPowerDbm)dBm battery=\(profile.batteryPct)% charging=\(profile.isCharging) wifi=\(profile.hasWifi) motion=\(String(describing: profile.motionState))"
+            let message = "Power profile: \(adjustmentProfile) (relay:\(relayAdjustment.maxPerHour)/h, ble:\(bleAdjustment.scanIntervalMs)ms) [bat:\(profile.batteryPct)%]"
             logger.info("\(message)")
-            appendDiagnostic("power_profile_applied: \(message)")
+            appendDiagnostic("power_profile: \(message) reason=\(reason)")
             lastAppliedPowerSnapshot = snapshot
-        } else {
-            logger.debug("Power profile unchanged (\(reason)): \(snapshot)")
         }
     }
 
@@ -4886,15 +4939,15 @@ final class MeshRepository {
                     let attributes = try FileManager.default.attributesOfFileSystem(forPath: path)
                     let total = attributes[.systemSize] as? UInt64 ?? 0
                     let free = attributes[.systemFreeSize] as? UInt64 ?? 0
-                    
+
                     ironCore?.updateDiskStats(totalBytes: total, freeBytes: free)
                     try ironCore?.performMaintenance()
-                    
+
                     appendDiagnostic("storage_pulse free=\(free / 1024 / 1024)MB total=\(total / 1024 / 1024)MB")
                 } catch {
                     logger.warning("Storage maintenance loop error: \(error.localizedDescription)")
                 }
-                
+
                 try? await Task.sleep(nanoseconds: 15 * 60 * 1_000_000_000) // 15 minutes
             }
         }

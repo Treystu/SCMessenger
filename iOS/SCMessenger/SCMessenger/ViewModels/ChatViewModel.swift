@@ -17,7 +17,6 @@ final class ChatViewModel {
     let conversation: Conversation
     var messages: [MessageRecord] = []
     var messageText = ""
-    var isSending = false
     var error: String?
 
     init(conversation: Conversation, repository: MeshRepository) {
@@ -41,44 +40,62 @@ final class ChatViewModel {
         }
     }
 
-    func sendMessage() async {
-        guard !messageText.isEmpty else { return }
+    func sendMessage() {
+        let content = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty else { return }
 
-        let content = messageText
         messageText = ""
-        isSending = true
+        error = nil
 
-        do {
-            try await repository?.sendMessage(peerId: conversation.peerId, content: content)
-            // loadMessages() triggered automatically via subscription
-            error = nil
-        } catch let error as IronCoreError {
-            // Extract detailed message from IronCoreError
-            switch error {
-            case .CryptoError(let message):
-                self.error = "Crypto Error: \(message)"
-            case .NetworkError(let message):
-                self.error = "Network Error: \(message)"
-            case .StorageError(let message):
-                self.error = "Storage Error: \(message)"
-            case .NotInitialized(let message):
-                self.error = "Not Initialized: \(message)"
-            case .InvalidInput(_):
-                self.error = "Could not encrypt message — this contact may have an invalid public key. Try re-adding them using their identity export."
-            case .Internal(let message):
-                self.error = "Internal Error: \(message)"
-            case .AlreadyRunning(let message):
-                self.error = "Already Running: \(message)"
-            @unknown default:
-                self.error = "Unknown IronCore Error"
-            }
-            messageText = content // Restore text on error
-        } catch {
-            self.error = error.localizedDescription
-            messageText = content // Restore text on error
+        let now = UInt64(Date().timeIntervalSince1970)
+        let optimisticMessage = MessageRecord(
+            id: UUID().uuidString,
+            direction: .sent,
+            peerId: conversation.peerId,
+            content: content,
+            timestamp: now,
+            senderTimestamp: now,
+            delivered: false
+        )
+        messages.append(optimisticMessage)
+        messages.sort { a, b in
+            let t1 = a.senderTimestamp > 0 ? a.senderTimestamp : a.timestamp
+            let t2 = b.senderTimestamp > 0 ? b.senderTimestamp : b.timestamp
+            if t1 == t2 { return a.timestamp < b.timestamp }
+            return t1 < t2
         }
 
-        isSending = false
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            do {
+                try await repository?.sendMessage(peerId: conversation.peerId, content: content)
+                self.error = nil
+            } catch let error as IronCoreError {
+                switch error {
+                case .CryptoError(let message):
+                    self.error = "Crypto Error: \(message)"
+                case .NetworkError(let message):
+                    self.error = "Network Error: \(message)"
+                case .StorageError(let message):
+                    self.error = "Storage Error: \(message)"
+                case .NotInitialized(let message):
+                    self.error = "Not Initialized: \(message)"
+                case .InvalidInput(_):
+                    self.error = "Could not encrypt message — this contact may have an invalid public key. Try re-adding them using their identity export."
+                case .Internal(let message):
+                    self.error = "Internal Error: \(message)"
+                case .AlreadyRunning(let message):
+                    self.error = "Already Running: \(message)"
+                @unknown default:
+                    self.error = "Unknown IronCore Error"
+                }
+                self.loadMessages()
+            } catch {
+                self.error = error.localizedDescription
+                self.loadMessages()
+            }
+        }
     }
 
     private var reloadDebounceTask: Task<Void, Never>?

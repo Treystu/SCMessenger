@@ -2,7 +2,7 @@
 **/*.rs.bk
 *.pdb
 reference/rust-1.92.0-aarch64-unknown-linux-gnu.tar.gz
-
+tmp/*
 # SCMessenger Runtime
 *.log
 *.logarchive

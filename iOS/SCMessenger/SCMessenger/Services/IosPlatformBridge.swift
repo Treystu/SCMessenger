@@ -29,6 +29,30 @@ final class IosPlatformBridge: PlatformBridge {
     private var batteryObserver: NSObjectProtocol?
     private var chargingObserver: NSObjectProtocol?
 
+    // --- Adaptive throttling state ---
+    private var lastBatteryReportTime: Date = .distantPast
+    private var lastMotionReportTime: Date = .distantPast
+    private var lastReportedMotionState: MotionState?
+    private var pendingMotionState: MotionState?
+    private var motionCoalesceTimer: Timer?
+    private var lastReportedBatteryPct: UInt8 = 255  // sentinel
+    private var lastReportedCharging: Bool?
+
+    /// Adaptive minimum interval between power-related reports.
+    /// High battery → long delay (stable, no rush).
+    /// Low battery → shorter delay (user needs accurate info, drain matters).
+    private var adaptiveIntervalSeconds: TimeInterval {
+        let pct = lastReportedBatteryPct
+        if pct == 255 { return 5 } // first report, use short interval
+
+        // Adaptive report intervals based on battery health
+        if pct >= 95 { return 300 } // Near full: report every 5 mins
+        if pct >= 80 { return 120 } // Healthy: report every 2 mins
+        if pct >= 50 { return 30 }  // Mid-range: report every 30s
+        if pct >= 25 { return 10 }  // Getting low: report every 10s
+        return 5                    // Low battery: report every 5s
+    }
+
     private func withMeshRepositoryOnMain(_ body: @escaping @MainActor (MeshRepository) -> Void) {
         let meshRepository = self.meshRepository
         Task { @MainActor in
@@ -122,6 +146,15 @@ final class IosPlatformBridge: PlatformBridge {
         let charging = UIDevice.current.batteryState == .charging
                     || UIDevice.current.batteryState == .full
 
+        // Skip if nothing changed AND we're within the adaptive throttle window
+        let elapsed = Date().timeIntervalSince(lastBatteryReportTime)
+        if pct == lastReportedBatteryPct && charging == lastReportedCharging && elapsed < adaptiveIntervalSeconds {
+            return
+        }
+
+        lastBatteryReportTime = Date()
+        lastReportedBatteryPct = pct
+        lastReportedCharging = charging
         logger.debug("Reporting battery: \(pct)% charging=\(charging)")
         withMeshRepositoryOnMain { $0.reportBattery(pct: pct, charging: charging) }
     }
@@ -165,9 +198,63 @@ final class IosPlatformBridge: PlatformBridge {
                 state = .unknown
             }
 
-            self.logger.debug("Motion state: \(String(describing: state))")
-            self.withMeshRepositoryOnMain { $0.reportMotion(state: state) }
+            self.coalesceMotionReport(state)
         }
+    }
+
+    /// Coalesce rapid-fire motion updates into a single report.
+    /// If the state genuinely changes (e.g. still → walking), report immediately.
+    /// If the state toggles rapidly (e.g. still ↔ unknown), debounce via timer.
+    private func coalesceMotionReport(_ state: MotionState) {
+        let elapsed = Date().timeIntervalSince(lastMotionReportTime)
+
+        // Significant motion change (e.g. still → walking, or walking → automotive)
+        // gets reported immediately regardless of throttle.
+        let isSignificantChange: Bool = {
+            guard let last = lastReportedMotionState else { return true }
+            // still ↔ unknown is NOT significant — it's sensor noise
+            let noiseStates: Set<MotionState> = [.still, .unknown]
+            if noiseStates.contains(last) && noiseStates.contains(state) {
+                return false
+            }
+            return last != state
+        }()
+
+        if isSignificantChange {
+            motionCoalesceTimer?.invalidate()
+            motionCoalesceTimer = nil
+            deliverMotionReport(state)
+            return
+        }
+
+        // Same state or noise toggle — throttle
+        if elapsed < adaptiveIntervalSeconds {
+            // Store the latest state; a timer will deliver it later
+            pendingMotionState = state
+            if motionCoalesceTimer == nil {
+                let remaining = adaptiveIntervalSeconds - elapsed
+                motionCoalesceTimer = Timer.scheduledTimer(withTimeInterval: remaining, repeats: false) { [weak self] _ in
+                    guard let self, let pending = self.pendingMotionState else { return }
+                    self.deliverMotionReport(pending)
+                    self.motionCoalesceTimer = nil
+                    self.pendingMotionState = nil
+                }
+            }
+            return
+        }
+
+        // Throttle window elapsed — deliver now
+        motionCoalesceTimer?.invalidate()
+        motionCoalesceTimer = nil
+        pendingMotionState = nil
+        deliverMotionReport(state)
+    }
+
+    private func deliverMotionReport(_ state: MotionState) {
+        lastMotionReportTime = Date()
+        lastReportedMotionState = state
+        logger.debug("Motion state: \(String(describing: state))")
+        withMeshRepositoryOnMain { $0.reportMotion(state: state) }
     }
 
     // MARK: - Lifecycle
@@ -176,6 +263,7 @@ final class IosPlatformBridge: PlatformBridge {
         logger.info("IosPlatformBridge deinit")
 
         // Stop monitoring
+        motionCoalesceTimer?.invalidate()
         pathMonitor.cancel()
         motionManager.stopActivityUpdates()
         UIDevice.current.isBatteryMonitoringEnabled = false

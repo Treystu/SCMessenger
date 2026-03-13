@@ -1,7 +1,7 @@
 # SCMessenger Scripts Guide
 
 Status: Active
-Last updated: 2026-03-06
+Last updated: 2026-03-13
 
 This guide covers active launch/debug/verification scripts, with a focus on AI-assisted debugging workflows.
 
@@ -27,7 +27,15 @@ This guide covers active launch/debug/verification scripts, with a focus on AI-a
 
 Primary scripts used during 5-node and relay continuity investigations:
 
-1. `scripts/run5-live-feedback.sh`
+1. `run5.sh`
+   - Baseline 5-node capture harness for live topology, transport, and visibility context.
+   - Physical iOS runs now write:
+     - app console / SCMessenger stdout to `ios-device.log`,
+     - host/system Bluetooth + Multipeer context to `ios-device-system.log`.
+   - If the physical iOS app is already running, `run5.sh` does not relaunch it just to capture console output; `ios-device.log` records that passive app-console capture is unavailable in that case.
+   - Post-run visibility now counts only peers whose local own IDs were actually captured in the current window; unknown own IDs are surfaced as collector gaps instead of mesh failures.
+   - Post-run transport evidence now surfaces BLE, direct, relay, WiFi/multipeer, and app-peer markers separately so operator conclusions do not depend on one blended score.
+2. `scripts/run5-live-feedback.sh`
    - Iterative harness that keeps `run5.sh` untouched while enforcing strict phase gates per fix step:
      - mobile build/deploy (optional),
      - 5-node update/capture run,
@@ -37,17 +45,17 @@ Primary scripts used during 5-node and relay continuity investigations:
     - iOS diagnostics pull now requires retry-stable capture sizing before accepting `mesh_diagnostics.log` artifacts, reducing truncated-copy false positives.
     - When `IOS_DIAG_PULL_ATTEMPTS=1`, a non-empty one-shot pull is accepted; when stability checks fail, the untrusted output file is removed before returning failure.
    - Produces per-attempt evidence bundles under `logs/live-verify/`.
-2. `scripts/verify_ws12_matrix.sh`
+3. `scripts/verify_ws12_matrix.sh`
    - Canonical multi-surface verification gate (Rust + Android + iOS parity checks).
-3. `scripts/live-smoke.sh`
+4. `scripts/live-smoke.sh`
    - Live interaction harness for Android+iOS runtime checks with synchronized log capture.
-4. `scripts/correlate_relay_flap_windows.sh`
+5. `scripts/correlate_relay_flap_windows.sh`
    - Correlates iOS relay churn windows with GCP relay logs.
-5. `scripts/verify_relay_flap_regression.sh`
+6. `scripts/verify_relay_flap_regression.sh`
    - Deterministic iOS relay dial-loop regression check.
-6. `scripts/verify_receipt_convergence.sh`
+7. `scripts/verify_receipt_convergence.sh`
    - Message-ID convergence validation across Android/iOS diagnostics.
-7. `scripts/verify_ble_only_pairing.sh`
+8. `scripts/verify_ble_only_pairing.sh`
    - BLE-only strict-mode behavior and instability checks.
 
 ## Launch / Control Scripts

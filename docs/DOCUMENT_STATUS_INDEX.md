@@ -1,7 +1,7 @@
 # SCMessenger Document Status Index
 
 Status: Active
-Last updated: 2026-03-11
+Last updated: 2026-03-13
 
 Purpose: classify documentation by lifecycle state so execution decisions use authoritative files and historical content remains discoverable without causing drift.
 
@@ -24,8 +24,8 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 | `README.md`                                           | Active | Repo entrypoint and quick-start links                          |
 | `DOCUMENTATION.md`                                    | Active | Main docs hub and navigation policy                            |
 | `SUPPORT.md`                                          | Active | Support/reporting routing for contributors and operators       |
-| `.github/copilot-instructions.md`                     | Active | Canonical GitHub Copilot adapter to repo-agent guidance        |
-| `AGENTS.md`                                           | Active | Codex run policy, including mandatory doc sync behavior        |
+| `.github/copilot-instructions.md`                     | Active | Canonical GitHub Copilot adapter to repo-agent guidance, including doc-sync and build-verify closeout rules |
+| `AGENTS.md`                                           | Active | Codex run policy, including mandatory doc sync and edited-target build verification |
 | `docs/DOCUMENT_STATUS_INDEX.md`                       | Active | Lifecycle map (this file)                                      |
 | `docs/REPO_CONTEXT.md`                                | Active | Cross-component architecture and operating context             |
 | `docs/CURRENT_STATE.md`                               | Active | Verified current runtime/build state                           |
@@ -142,3 +142,8 @@ These documents may contain both current and historical sections; verify section
 35. WS12.37 Storage Management + Bloat Mitigation pass (2026-03-09 HST) updates reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/DOCUMENT_STATUS_INDEX.md`), including `StorageManager.kt` startup maintenance, multi-stage log rotation, noisy blob pruning (100MB threshold), and proactive low-storage UI warnings (500MB threshold) on Android.
 36. WS12.39 closeout burndown re-baseline (2026-03-10 UTC) updates reflected in active docs (`DOCUMENTATION.md`, `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`), including restored local Rust/WASM verification, current CI blocker classification, automation-issue reconciliation, and maintainer-vs-repo GitHub cleanup split.
 37. WS12.41 Dynamic Log Retention & Storage Management (2026-03-12) updates reflected in active docs (`DOCUMENTATION.md`, `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/DOCUMENT_STATUS_INDEX.md`), including summarized log storage, 80/20 disk split maintenance, and purge priority enforcement.
+38. WS12.42 iOS CryptoError & Power Optimization (2026-03-12) updates reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/DOCUMENT_STATUS_INDEX.md`), including stale bootstrap resolution, adaptive power check intervals, and simplified power logging.
+39. WS12.44 BLE freshness profiling + run5 visibility clarification (2026-03-13 UTC) updates reflected in active docs (`DOCUMENTATION.md`, `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`, `docs/DOCUMENT_STATUS_INDEX.md`, and `scripts/README.md`), including Android fresh-BLE-observation preference, 20s filtered-scan fallback promotion, physical iOS app/system log separation, and explicit collector-gap handling for unknown own IDs.
+
+- 2026-03-13: WS12.45 simulator-launch ambiguity documented. Added current-state, tracking, and residual-risk entries for stale `iphoneos` bundles installed into the iOS simulator causing launchd/SpringBoard bootstrap failure until reinstalled with an `iphonesimulator` artifact.
+- 2026-03-13: WS12.45 conversation-consolidation updates documented. Added canonical current-state, tracking, milestone, and residual-risk coverage for GCP relay repair, Android/iOS transport findings, run5 harness upgrades, simulator recovery, and remaining debt/ambiguity items.

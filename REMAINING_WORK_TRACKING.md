@@ -1,11 +1,24 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active  
-Last updated: 2026-03-12
+Last updated: 2026-03-13
 
 This is the active implementation backlog based on repository state verified on **2026-03-11**.
 
 Primary delivery target: **one unified Android + iOS + Web app**.
+
+## Repo Governance Lock: Documentation Sync + Build Verification (2026-03-13)
+
+Completed in this pass:
+
+1. [x] Tightened `AGENTS.md` so same-run canonical documentation updates are explicit whenever behavior, scope, risk, scripts, verification commands, or operator workflow change.
+2. [x] Tightened `AGENTS.md` so edited-target build verification is mandatory whenever code, bindings, build wiring, or runtime-affecting scripts change.
+3. [x] Mirrored the same closeout rules in `.github/copilot-instructions.md` to keep Codex/Copilot policy aligned.
+4. [x] Updated the active canonical doc chain to reflect that documentation sync and build verification are release-governance requirements rather than optional cleanup.
+
+Remaining governance expectation:
+
+1. [ ] Enforce these rules on every future change-bearing run and record exceptions only with exact blocking command output and rationale.
 
 Owner policy constraints (2026-02-23):
 
@@ -52,6 +65,8 @@ Remaining WS13 queue:
 Completed in this pass:
 
 1. [x] **Android Duplicate Messages**: Fixed UI duplication bug by properly emitting reconciled message IDs from `MeshRepository` and deduplicating by content/timestamp in `ChatViewModel.loadMessages()`.
+2. [x] **iOS CryptoError (Error 4)**: Traced to stale bootstrap data; resolved by updating static fallbacks and implementing dynamic ledger-driven discovery in `MeshRepository.swift`.
+3. [x] **iOS Power & Log Optimization**: Increased adaptive interval for high battery levels in `IosPlatformBridge.swift` and simplified noisy power profile logs.
 
 ## v0.2.0 Critical Bug Fixes (2026-03-09)
 
@@ -64,14 +79,19 @@ Completed in this pass:
 5. [x] **Transport Optimization** (2026-03-10): Faster BLE/WiFi switching with reduced timeouts, aggressive retry backoff, enhanced transport logging
 6. [x] **Android Mesh UI Scrolling** (2026-03-10): Converted DashboardScreen to LazyColumn for proper scrolling with large peer lists
 7. [x] **Android ID Normalization** (2026-03-10): Standardized peer ID handling to fix "Contact not found" messaging issues
+8. [x] **NAT Traversal & BLE Stability** (2026-03-13): Restored relay routing, throttled BLE beacons, fixed Android connect-on-demand.
+9. [x] **BLE Freshness Profiling + run5 Visibility Clarification** (2026-03-13): Android now prefers fresh BLE observations over stale cached hints, promotes to unfiltered BLE scan after 20s of zero mesh advertisements, and `run5.sh` now splits iOS app/system logs while treating unknown own IDs as collector gaps instead of mesh failures.
 
 Outstanding items:
 
-1. [ ] Verify stuck messages now deliver via relay circuits
-2. [ ] Test BLE reconnection scenarios end-to-end
-3. [ ] Monitor delivery status accuracy in production use
+1. [ ] Monitor Android-to-iOS delivery for "Missing Direction" receipts
+2. [ ] Verify iOS UI no longer freezes during high-density peer discovery
+3. [ ] Test BLE reconnection scenarios end-to-end with new 5s throttles
 4. [ ] Verify parallel transport attempts reduce WiFi→BLE transition time to < 2s
 5. [ ] Test Mesh tab scrolling with 50+ discovered peers
+6. [ ] Re-run upgraded `run5.sh` on fresh artifacts and close the remaining "unknown own ID in current log window" ambiguity where full mesh transport evidence exists but passive identity capture is incomplete.
+7. [ ] Bring iOS BLE route profiling to the same freshness-observation standard if stale BLE hint churn reappears; current explicit freshness cache is Android-only, while iOS still relies primarily on connected-peer preference plus runtime transport evidence.
+8. [ ] Unify Android BLE fallback telemetry so the accepted-send target reflects the actual connected GATT address used on wire; current logs can still show the requested stale MAC while `BleGattClient` success callbacks fire for the fresher connected device.
 
 ## v0.2.0 Execution Residual Register
 
@@ -1220,3 +1240,19 @@ Priority items to track into remaining v0.2.x execution:
 6. `EC-06` (Reduced in WS11, accepted in WS12): sender-facing delivery states are normalized in Android+iOS UI/export surfaces; remaining Core-native transition API work is tracked via `R-WS11-01` for post-v0.2.0 follow-up.
 7. `EC-07` to `EC-09` (v0.2.1 WS13): execute tight-pair single-active-device lifecycle.
 8. `EC-10` to `EC-16` (post-v0.2.1): captive portal adaptation, high-latency profile tuning, censorship-resilience strategy, wake/delegate architecture, sparse encounter optimization, and clock-skew normalization.
+
+## 2026-03-13 iOS Simulator Launch Ambiguity
+
+- Completed: Identified and cleared an iPhone 17 Pro simulator launch blocker caused by a stale `platform IOS` SCMessenger bundle installed into the simulator instead of an `IOSSIMULATOR` build.
+- Open: If this recurs, audit any operator or harness path that reuses a previously installed simulator bundle without validating the built Mach-O platform.
+
+## 2026-03-13 Consolidated Open Items From Full Conversation
+
+- Open: prove full 5-node visibility after simulator recovery using the upgraded `run5.sh`; current honest state remains partially indeterminate rather than fully verified.
+- Open: investigate iOS simulator runtime `historySync request failed to prepare message` after successful launch recovery.
+- Open: complete iOS send-path parity with store-and-forward-first UX so the send action never blocks on live transport success.
+- Open: continue hardening iOS against peer-identify / identity-beacon event storms that can contribute to transient freeze/unfreeze behavior.
+- Open: unify Android BLE telemetry so accepted-send target reporting matches the actual fresher connected GATT target used on the wire.
+- Open: improve physical iOS app-level own-ID/peer capture in harness evidence so transport activity is not hidden by collector gaps.
+- Open: validate simultaneous transport functionality across BLE, direct LAN/libp2p, relay, and Wi-Fi Direct/local options.
+- Open: identify any script/operator path capable of reinstalling or preserving a stale `iphoneos` bundle inside the simulator.

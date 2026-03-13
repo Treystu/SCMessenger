@@ -127,7 +127,10 @@ final class BLECentralManager: NSObject {
     }
 
     func connectedPeripheralIds() -> [String] {
-        connectedPeripherals.keys.map(\.uuidString)
+        connectedPeripherals.keys.compactMap { peripheralId in
+            guard messageCharacteristics[peripheralId] != nil else { return nil }
+            return peripheralId.uuidString
+        }
     }
 
     private func appendRepositoryDiagnostic(_ message: String) {

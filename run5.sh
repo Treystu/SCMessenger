@@ -32,11 +32,12 @@ ln -sfn "$TIMESTAMP" "logs/5mesh/latest"
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 BUNDLE_ID="SovereignCommunications.SCMessenger"
-SYNC_MARKER="=== TEST_START_MARKER: $(date -u +'%Y-%m-%dT%H:%M:%SZ') ==="
+TEST_START_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+SYNC_MARKER="=== TEST_START_MARKER: $TEST_START_UTC ==="
 GCP_ZONE="us-central1-a"
 GCP_HOST="scmessenger-bootstrap"
 GCP_IMAGE="us-central1-docker.pkg.dev/scmessenger-bootstrapnode/scmessenger-repo/scmessenger-cli:latest"
-OSX_RUST_LOG="info,libp2p_autonat=debug,libp2p_dcutr=debug,libp2p_relay=debug,scmessenger_core::transport::swarm=debug,scmessenger_core::store::relay_custody=debug,scmessenger_core::mesh::delivery=debug"
+OSX_RUST_LOG="info"
 
 # Prefer pre-built binary (instant start) over cargo run (30-60s compile)
 if [ -f "target/debug/scmessenger-cli" ]; then
@@ -346,21 +347,27 @@ echo ""
 # ── GCP: stream docker logs with SSH keepalive ────────────────────────────────
 {
   printf "\n%s\n" "$SYNC_MARKER"
-  # Try direct SSH; on failure, try IAP; on both failures, emit clear error
-  if ! gcloud compute ssh "$GCP_HOST" --zone="$GCP_ZONE" \
-      --ssh-flag="-o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3" \
-      --command="CID=\$(sudo docker ps --filter status=running -q | head -n1); \
-                 [ -n \"\$CID\" ] && sudo docker logs --tail 200 -f \"\$CID\" 2>&1 \
-                 || echo 'ERROR: No running GCP container'" 2>&1; then
-    if ! gcloud compute ssh "$GCP_HOST" --zone="$GCP_ZONE" \
-        --tunnel-through-iap \
-        --ssh-flag="-o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3" \
-        --command="CID=\$(sudo docker ps --filter status=running -q | head -n1); \
-                   [ -n \"\$CID\" ] && sudo docker logs --tail 200 -f \"\$CID\" 2>&1 \
-                   || echo 'ERROR: No running GCP container'" 2>&1; then
+  if ! gcp_ssh "CID=\$(sudo docker ps --filter status=running -q | head -n1); \
+                if [ -n \"\$CID\" ]; then \
+                  sudo docker logs --tail 200 \"\$CID\" 2>&1; \
+                else \
+                  echo 'ERROR: No running GCP container'; \
+                fi"; then
+    echo "ERROR: GCP SSH unreachable via direct and IAP tunnel"
+  fi
+  GCP_LAST_SINCE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+  while true; do
+    if ! gcp_ssh "CID=\$(sudo docker ps --filter status=running -q | head -n1); \
+                  if [ -n \"\$CID\" ]; then \
+                    sudo docker logs --since \"$GCP_LAST_SINCE\" \"\$CID\" 2>&1; \
+                  else \
+                    echo 'ERROR: No running GCP container'; \
+                  fi"; then
       echo "ERROR: GCP SSH unreachable via direct and IAP tunnel"
     fi
-  fi
+    GCP_LAST_SINCE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+    sleep 15
+  done
 } >> "$LOGDIR/gcp.log" 2>&1 &
 GCP_LOG_PID=$!
 echo "  [1/5] GCP log stream      PID=$GCP_LOG_PID  → $(basename $LOGDIR)/gcp.log"
@@ -406,15 +413,27 @@ fi
 # We use --no-activate to avoid interrupting foreground state.
 if [ -n "$IOS_DEVICE_UDID" ]; then
   printf "\n%s\n" "$SYNC_MARKER" > "$LOGDIR/ios-device.log"
+  printf "\n%s\n" "$SYNC_MARKER" > "$LOGDIR/ios-device-system.log"
 
   # Console stdio stream (Rust core output)
-  xcrun devicectl device process launch \
-    --device "$IOS_DEVICE_UDID" \
-    --console \
-    --no-activate \
-    "$BUNDLE_ID" \
-    >> "$LOGDIR/ios-device.log" 2>&1 &
-  IOS_DEV_LAUNCH_PID=$!
+  # This requires a launch. If the app is already running, do NOT perturb it;
+  # record the limitation explicitly and rely on the system/radio stream below.
+  if [ "$IOS_DEV_RUNNING" = "1" ] && [ "$STARTED_IOS_DEV_APP" = "0" ]; then
+    IOS_DEV_LAUNCH_PID=""
+    {
+      echo "NOTE: iOS app was already running before run5.sh started."
+      echo "NOTE: passive physical-device app-console capture is unavailable without relaunch."
+      echo "NOTE: ios-device-system.log remains valid for radio/Bluetooth/Multipeer context."
+    } >> "$LOGDIR/ios-device.log"
+  else
+    xcrun devicectl device process launch \
+      --device "$IOS_DEVICE_UDID" \
+      --console \
+      --no-activate \
+      "$BUNDLE_ID" \
+      >> "$LOGDIR/ios-device.log" 2>&1 &
+    IOS_DEV_LAUNCH_PID=$!
+  fi
 
   # System log stream: BLE + MPC subsystems (these appear in the host log)
   # Use `log stream` with predicate targeted at the device process name
@@ -424,10 +443,14 @@ if [ -n "$IOS_DEVICE_UDID" ]; then
     --style compact \
     --level info \
     --predicate 'process == "SCMessenger" OR subsystem == "com.apple.bluetooth" OR subsystem == "com.apple.MultipeerConnectivity"' \
-    >> "$LOGDIR/ios-device.log" 2>&1 &
+    >> "$LOGDIR/ios-device-system.log" 2>&1 &
   IOS_DEV_STREAM_PID=$!
 
-  echo "  [4/5] iOS Device          Launch=$IOS_DEV_LAUNCH_PID  Stream=$IOS_DEV_STREAM_PID → $(basename $LOGDIR)/ios-device.log"
+  if [ -n "${IOS_DEV_LAUNCH_PID:-}" ]; then
+    echo "  [4/5] iOS Device          Launch=$IOS_DEV_LAUNCH_PID  App=$(basename $LOGDIR)/ios-device.log  System=$(basename $LOGDIR)/ios-device-system.log"
+  else
+    echo "  [4/5] iOS Device          App=passive-unavailable  App=$(basename $LOGDIR)/ios-device.log  System=$(basename $LOGDIR)/ios-device-system.log"
+  fi
 else
   echo "  [4/5] iOS Device          skipped (no device)"
 fi
@@ -467,7 +490,7 @@ _chk "GCP log stream"    "$GCP_LOG_PID"         "gcp.log"
 _chk "OSX relay"         "$OSX_LOG_PID"         "osx.log"
 _chk "Android logcat"    "$ANDROID_LOGCAT_PID"  "android.log"
 _chk "iOS Dev launch"    "$IOS_DEV_LAUNCH_PID"  "ios-device.log"
-_chk "iOS Dev stream"    "$IOS_DEV_STREAM_PID"  "ios-device.log"
+_chk "iOS Dev system"    "$IOS_DEV_STREAM_PID"  "ios-device-system.log"
 _chk "iOS Sim stream"    "$IOS_SIM_STREAM_PID"  "ios-sim.log"
 
 echo ""
@@ -501,10 +524,11 @@ status_ticker() {
 
     # Android
     if [ -f "$LOGDIR/android.log" ]; then
-      ANDROID_EVENTS=$(grep -c "BLE.*scan\|Peer.*discov\|isFull" "$LOGDIR/android.log" 2>/dev/null || echo 0)
+      ANDROID_PEERS=$(grep -Ec "IdentityDiscovered|PeerEvent emitted: (Connected|Disconnected)|Peer.*identif|peer_identified" "$LOGDIR/android.log" 2>/dev/null || echo 0)
+      ANDROID_BLE=$(grep -Ec "Identity beacon from|Characteristic write successful|delivery_attempt .*medium=ble|Delivery via BLE|BleGatt" "$LOGDIR/android.log" 2>/dev/null || echo 0)
       ANDROID_LINES=$(wc -l < "$LOGDIR/android.log" 2>/dev/null | tr -d ' \n')
       ANDROID_NAT=$(grep "NAT status" "$LOGDIR/android.log" 2>/dev/null | tail -1 | grep -oE 'Public|Private|Unknown' || echo "?")
-      printf "  Android: %-5s lines  %-5s events  NAT=%s" "$ANDROID_LINES" "$ANDROID_EVENTS" "$ANDROID_NAT"
+      printf "  Android: %-5s lines  peer=%-5s ble=%-5s NAT=%s" "$ANDROID_LINES" "$ANDROID_PEERS" "$ANDROID_BLE" "$ANDROID_NAT"
       pid_alive "${ANDROID_LOGCAT_PID:-0}" 2>/dev/null && echo " ✅" || echo " ❌ logcat dead"
     else
       echo "  Android: no log"
@@ -512,9 +536,15 @@ status_ticker() {
 
     # iOS Dev
     if [ -f "$LOGDIR/ios-device.log" ]; then
-      IOS_DEV_LINES=$(wc -l < "$LOGDIR/ios-device.log" 2>/dev/null | tr -d ' \n')
-      IOS_DEV_PEERS=$(grep -c "Peer.*identif\|BLE.*identity" "$LOGDIR/ios-device.log" 2>/dev/null || echo 0)
-      printf "  iOS Dev: %-5s lines  %-5s peer events" "$IOS_DEV_LINES" "$IOS_DEV_PEERS"
+      IOS_DEV_APP_LINES=$(wc -l < "$LOGDIR/ios-device.log" 2>/dev/null | tr -d ' \n')
+      IOS_DEV_APP_PEERS=$(grep -Ec "Peer.*identif|peer_identified|IdentityDiscovered|Connected\\(peerId|Starting Swarm with PeerID|Initialized core for peer id|local_peer_id" "$LOGDIR/ios-device.log" 2>/dev/null || echo 0)
+      IOS_DEV_SYS_LINES=0
+      IOS_DEV_RADIO=0
+      if [ -f "$LOGDIR/ios-device-system.log" ]; then
+        IOS_DEV_SYS_LINES=$(wc -l < "$LOGDIR/ios-device-system.log" 2>/dev/null | tr -d ' \n')
+        IOS_DEV_RADIO=$(grep -Ec "bluetoothd|com\\.apple\\.bluetooth|com\\.apple\\.MultipeerConnectivity|CB[A-Z]" "$LOGDIR/ios-device-system.log" 2>/dev/null || echo 0)
+      fi
+      printf "  iOS Dev: app=%-5s peer=%-5s system=%-5s radio=%-5s" "$IOS_DEV_APP_LINES" "$IOS_DEV_APP_PEERS" "$IOS_DEV_SYS_LINES" "$IOS_DEV_RADIO"
       pid_alive "${IOS_DEV_STREAM_PID:-0}" 2>/dev/null && echo " ✅" || echo " ❌ stream dead"
     else
       echo "  iOS Dev: no log"
@@ -523,7 +553,7 @@ status_ticker() {
     # iOS Sim
     if [ -f "$LOGDIR/ios-sim.log" ]; then
       IOS_SIM_LINES=$(wc -l < "$LOGDIR/ios-sim.log" 2>/dev/null | tr -d ' \n')
-      IOS_SIM_PEERS=$(grep -c "Peer.*identif\|BLE.*identity" "$LOGDIR/ios-sim.log" 2>/dev/null || echo 0)
+      IOS_SIM_PEERS=$(grep -Ec "Peer.*identif|peer_identified|IdentityDiscovered|Connected\\(peerId|Starting Swarm with PeerID|Initialized core for peer id|local_peer_id" "$LOGDIR/ios-sim.log" 2>/dev/null || echo 0)
       printf "  iOS Sim: %-5s lines  %-5s peer events" "$IOS_SIM_LINES" "$IOS_SIM_PEERS"
       pid_alive "${IOS_SIM_STREAM_PID:-0}" 2>/dev/null && echo " ✅" || echo " ❌ stream dead"
     else
@@ -531,7 +561,7 @@ status_ticker() {
     fi
 
     # Notable recent events
-    RECENT=$(grep -hE "✅ Relay|🔭 NAT|🕳️ DCUtR|Peer.*identif|isFull=true" \
+    RECENT=$(grep -hE "✅ Relay|🔭 NAT|🕳️ DCUtR|Peer.*identif|delivery_attempt .*medium=(ble|core|relay-circuit)|isFull=true" \
       "$LOGDIR"/*.log 2>/dev/null | tail -4)
     if [ -n "$RECENT" ]; then
       echo "  Recent:"
@@ -601,35 +631,53 @@ shutdown() {
 import os, re, sys
 
 LOGDIR = sys.argv[1]
-logs = {
+all_logs = {
     'gcp':     os.path.join(LOGDIR, 'gcp.log'),
     'osx':     os.path.join(LOGDIR, 'osx.log'),
     'android': os.path.join(LOGDIR, 'android.log'),
     'ios_dev': os.path.join(LOGDIR, 'ios-device.log'),
+    'ios_dev_system': os.path.join(LOGDIR, 'ios-device-system.log'),
     'ios_sim': os.path.join(LOGDIR, 'ios-sim.log'),
 }
+visible_nodes = ['gcp', 'osx', 'android', 'ios_dev', 'ios_sim']
 NODE_TYPES = {'gcp':'Headless','osx':'Headless','android':'Full','ios_dev':'Full','ios_sim':'Full'}
 PAT = re.compile(r"(12D3KooW[1-9A-HJ-NP-Za-km-z]{44,})")
-OWN_ID_PATTERNS = [
-    re.compile(r'===\s*OWN_IDENTITY:\s*(12D3KooW[a-zA-Z0-9]{44,})\s*==='),
-    re.compile(r'local_peer_id\s*=\s*(12D3KooW[a-zA-Z0-9]{44,})'),
-    re.compile(r'Starting Swarm with PeerID:\s*(12D3KooW[a-zA-Z0-9]{44,})'),
-    re.compile(r'SwarmBridge with peer id:?\s*(12D3KooW[a-zA-Z0-9]{44,})'),
-    re.compile(r'Initialized core for peer id:?\s*(12D3KooW[a-zA-Z0-9]{44,})'),
-    # relay agent string pattern: relay/<peerid> — only valid for headless nodes
-    re.compile(r'agent: scmessenger/[^/]+/headless/relay/(12D3KooW[a-zA-Z0-9]{44,})'),
-    # Android logcat: identity info from MeshRepository/IronCore
-    re.compile(r'Mesh service started.*?libp2pPeerId=\s*(12D3KooW[a-zA-Z0-9]{44,})'),
-    re.compile(r'"libp2p_peer_id"\s*:\s*"(12D3KooW[a-zA-Z0-9]{44,})"'),
-    # Android: own identity emission
-    re.compile(r'Emitted IdentityDiscovered.*?peerId=(12D3KooW[a-zA-Z0-9]{44,})'),
-    # Android logcat with tag prefix: "D/Rust  ( 1234): Starting Swarm with PeerID: ..."
-    re.compile(r'Rust\s*:\s*Starting Swarm with PeerID:\s*(12D3KooW[a-zA-Z0-9]{44,})'),
-    re.compile(r'SCMessengerCore\s*:\s*.*?peer.?id[:\s]+(12D3KooW[a-zA-Z0-9]{44,})', re.I),
-]
+OWN_ID_PATTERNS = {
+    'gcp': [
+        re.compile(r'===\s*OWN_IDENTITY:\s*(12D3KooW[a-zA-Z0-9]{44,})\s*==='),
+        re.compile(r'Starting Swarm with PeerID:\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+    ],
+    'osx': [
+        re.compile(r'===\s*OWN_IDENTITY:\s*(12D3KooW[a-zA-Z0-9]{44,})\s*==='),
+        re.compile(r'Starting Swarm with PeerID:\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+    ],
+    'android': [
+        re.compile(r'Mesh service started.*?libp2pPeerId=\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+        re.compile(r'Rust\s*:\s*Starting Swarm with PeerID:\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+        re.compile(r'Starting Swarm with PeerID:\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+        re.compile(r'Initialized core for peer id:?\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+    ],
+    'ios_dev': [
+        re.compile(r'local_peer_id\s*=\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+        re.compile(r'Starting Swarm with PeerID:\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+        re.compile(r'SwarmBridge with peer id:?\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+        re.compile(r'Initialized core for peer id:?\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+    ],
+    'ios_sim': [
+        re.compile(r'local_peer_id\s*=\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+        re.compile(r'Starting Swarm with PeerID:\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+        re.compile(r'SwarmBridge with peer id:?\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+        re.compile(r'Initialized core for peer id:?\s*(12D3KooW[a-zA-Z0-9]{44,})'),
+    ],
+}
+APP_PEER_PAT = re.compile(r'(Peer.*identif|peer_identified|IdentityDiscovered|Connected\(peerId|Peer discovered:|peer.*connect)', re.I)
+BLE_PAT = re.compile(r'(Identity beacon from|BLE.*identity|BleGatt|Characteristic write successful|Delivery via BLE|delivery_attempt .*medium=ble|CBPeripheral|CBCentralManager)', re.I)
+DIRECT_PAT = re.compile(r'(delivery_attempt .*medium=core phase=direct|✓ Direct delivery ACK|direct delivery)', re.I)
+RELAY_PAT = re.compile(r'(Relay circuit reservation|reservation registered|Relaying message|delivery_attempt .*medium=relay-circuit|relay-circuit route=|Lost relay peer|p2p-circuit)', re.I)
+WIFI_PAT = re.compile(r'(WiFi Direct|wifi.?direct|NearbyMediums|transport=WiFi|transport=WIFI|multipeer)', re.I)
+RADIO_PAT = re.compile(r'(bluetoothd|com\.apple\.bluetooth|com\.apple\.MultipeerConnectivity|MultipeerConnectivity)', re.I)
 CONNECT_PAT = re.compile(r'(connected|PeerConnected|peer.*connect)', re.I)
-ERROR_PAT   = re.compile(r'(Failed to negotiate|connection error|ERR)', re.I)
-RELAY_PAT   = re.compile(r'(Relay circuit reservation|Relaying message)', re.I)
+ERROR_PAT   = re.compile(r'(Failed to negotiate|connection error|ERR|all_transports_failed)', re.I)
 SENT_PAT    = re.compile(r'(✓ Direct delivery ACK|outcome=success|sent message)', re.I)
 RECV_PAT    = re.compile(r'(✓ Received message|msg_rx_processed|receive_message)', re.I)
 NAT_PAT     = re.compile(r'AutoNAT.*?(Public|Private|Unknown)', re.I)
@@ -641,107 +689,164 @@ def read(path):
 
 def strip_ansi(s): return re.sub(r'\x1b\[[^m]*m', '', s)
 
-contents = {n: strip_ansi(read(p)) for n, p in logs.items()}
+contents = {n: strip_ansi(read(p)) for n, p in all_logs.items()}
 
-# For each node, try to find its OWN peer ID (not a peer it's talking to)
-# Strategy: the OWN ID should NOT appear as a relay agent string in ANOTHER node
-file_to_id = {}
-all_candidates = {}
-for name, content in contents.items():
-    if not content: continue
-    for pat in OWN_ID_PATTERNS:
+def find_own_id(name, content):
+    for pat in OWN_ID_PATTERNS.get(name, []):
         m = pat.search(content)
         if m and len(m.group(1)) >= 52:
-            cand = m.group(1)
-            # Validate: a real "own" ID generally appears in lines about local config
-            # (not in "Peer identified:" lines which describe remote peers)
-            all_candidates[name] = cand
-            file_to_id[name] = cand
-            break
+            return m.group(1)
+    return None
 
-# Cross-check: if a candidate ID appears as a relay AGENT in another log, it's a
-# remote peer being described, not the local node's own ID. De-conflict.
-relay_agent_ids = set()
-for name, content in contents.items():
-    for m in re.finditer(r'agent: scmessenger/[^/]+/[^/]+/relay/(12D3KooW[a-zA-Z0-9]{44,})', content):
-        relay_agent_ids.add(m.group(1))
-    for m in re.finditer(r'agent: scmessenger/[^/]+/[^/]+/identity/(12D3KooW[a-zA-Z0-9]{44,})', content):
-        relay_agent_ids.add(m.group(1))
+file_to_id = {name: find_own_id(name, contents.get(name, "")) for name in visible_nodes}
+duplicates = {}
+for name, pid in file_to_id.items():
+    if not pid:
+        continue
+    duplicates.setdefault(pid, []).append(name)
 
-# Un-assign any full node that incorrectly grabbed a headless node's ID
-for name in list(file_to_id.keys()):
-    if NODE_TYPES.get(name) == 'Full' and file_to_id[name] in relay_agent_ids:
-        del file_to_id[name]
+ambiguous_ids = {pid: names for pid, names in duplicates.items() if len(names) > 1}
+for pid, names in ambiguous_ids.items():
+    for name in names:
+        file_to_id[name] = None
 
-# Fallback for nodes (especially Android/iOS) whose startup logs might be truncated.
-# The most frequently appearing peer ID that isn't a known relay node or already taken is likely their own.
-taken_ids = set(file_to_id.values()) | relay_agent_ids
-for name, content in contents.items():
-    if name not in file_to_id:
-        all_ids = PAT.findall(content)
-        freq = {}
-        for pid in all_ids:
-            if pid not in taken_ids:
-                freq[pid] = freq.get(pid, 0) + 1
-        if freq:
-            best_id = sorted(freq.items(), key=lambda x: x[1], reverse=True)[0][0]
-            file_to_id[name] = best_id
-            taken_ids.add(best_id)
+matrix = {name: set(PAT.findall(contents.get(name, ""))) for name in visible_nodes}
 
-matrix = {name: set(PAT.findall(c)) for name, c in contents.items()}
+def count_matches(pattern, text):
+    if not text:
+        return 0
+    return len(pattern.findall(text))
+
+metrics = {}
+for name in visible_nodes:
+    content = contents.get(name, "")
+    nat_m = NAT_PAT.findall(content)
+    metrics[name] = {
+        'peer_ids_seen': len(set(PAT.findall(content))),
+        'app_peers': count_matches(APP_PEER_PAT, content),
+        'ble': count_matches(BLE_PAT, content),
+        'direct': count_matches(DIRECT_PAT, content),
+        'relay': count_matches(RELAY_PAT, content),
+        'wifi': count_matches(WIFI_PAT, content),
+        'sent': count_matches(SENT_PAT, content),
+        'recv': count_matches(RECV_PAT, content),
+        'conns': count_matches(CONNECT_PAT, content),
+        'errs': count_matches(ERROR_PAT, content),
+        'nat': nat_m[-1].lower() if nat_m else '?',
+        'lines': content.count('\n'),
+    }
+
+metrics['ios_dev']['radio'] = count_matches(RADIO_PAT, contents.get('ios_dev_system', ''))
+metrics['ios_dev']['system_lines'] = contents.get('ios_dev_system', '').count('\n')
 
 # Header
 print(f"  {'Node':<10} {'Own ID':<26} {'Sent':>5} {'Recv':>5} {'Relay':>6} {'Conns':>6} {'NAT':<9} {'Errors':>7}")
 print("  " + "─" * 88)
-for name in logs:
-    c   = contents[name]
-    pid = file_to_id.get(name, 'unknown')
+for name in visible_nodes:
+    c = contents.get(name, "")
+    pid = file_to_id.get(name) or 'unknown'
     pid_d = (pid[:22] + '..') if len(pid) > 22 else pid
-    lines  = c.count('\n')
-    sent   = len(SENT_PAT.findall(c))
-    recv   = len(RECV_PAT.findall(c))
-    relays = len(RELAY_PAT.findall(c))
-    nat_m  = NAT_PAT.findall(c)
-    nat    = nat_m[-1].lower() if nat_m else '?'
-    conns  = len(CONNECT_PAT.findall(c))
-    errs   = len(ERROR_PAT.findall(c))
+    lines = metrics[name]['lines']
+    sent = metrics[name]['sent']
+    recv = metrics[name]['recv']
+    relays = metrics[name]['relay']
+    nat = metrics[name]['nat']
+    conns = metrics[name]['conns']
+    errs = metrics[name]['errs']
     has_content = lines > 2
     icon = '✅' if (pid != 'unknown' or has_content) else '❌'
     print(f"  {icon} {name:<8} {pid_d:<26} {sent:>5} {recv:>5} {relays:>6} {conns:>6} {nat:<9} {errs:>7}")
 
 print()
-print("  Visibility Matrix (did node X see node Y's peer ID?):")
-print(f"  {'Node':<10} {'Peers Seen':<12} Missing")
-print("  " + "─" * 62)
-all_ok = True
-for name in logs:
-    seen = matrix[name]
-    missing = []
-    for other in logs:
-        if other == name: continue
-        oid = file_to_id.get(other)
-        if not oid or oid not in seen:
-            missing.append(other)
-            all_ok = False
-    seen_count = len(logs) - 1 - len(missing)
-    icon = '✅' if not missing else ('⚠️ ' if len(missing) <= 2 else '❌')
-    print(f"  {icon} {name:<8} {seen_count}/{len(logs)-1:<10} {', '.join(missing) or 'none'}")
+print("  Transport Evidence (app-level evidence, not inferred visibility):")
+print(f"  {'Node':<10} {'PeerIDs':>7} {'App':>5} {'BLE':>5} {'Direct':>7} {'Relay':>6} {'WiFi':>5} {'Notes'}")
+print("  " + "─" * 96)
+for name in visible_nodes:
+    note_parts = []
+    if name == 'ios_dev':
+        radio = metrics[name].get('radio', 0)
+        if radio and metrics[name]['app_peers'] == 0:
+            note_parts.append('system-radio-only')
+        elif radio:
+            note_parts.append(f"system-radio={radio}")
+    if file_to_id.get(name) is None and metrics[name]['lines'] > 0:
+        note_parts.append('own-id-not-captured')
+    if metrics[name]['ble'] > 0 and metrics[name]['app_peers'] == 0 and name != 'ios_dev':
+        note_parts.append('ble-without-app-peer-id')
+    note = ', '.join(note_parts) or '-'
+    print(
+        f"  {'✅' if metrics[name]['lines'] > 2 else '⚠️ ':<2} {name:<8} "
+        f"{metrics[name]['peer_ids_seen']:>7} {metrics[name]['app_peers']:>5} "
+        f"{metrics[name]['ble']:>5} {metrics[name]['direct']:>7} {metrics[name]['relay']:>6} "
+        f"{metrics[name]['wifi']:>5} {note}"
+    )
 
 print()
-if all_ok:
+print("  Visibility Matrix (known own IDs only; unknown collector gaps are not counted as failures):")
+print(f"  {'Node':<10} {'Known Seen':<12} {'Unknown IDs':<20} Missing Known")
+print("  " + "─" * 92)
+all_ok = True
+unknown_visibility = False
+for name in visible_nodes:
+    seen = matrix[name]
+    missing = []
+    unknown = []
+    expected_known = 0
+    seen_known = 0
+    for other in visible_nodes:
+        if other == name:
+            continue
+        oid = file_to_id.get(other)
+        if not oid:
+            unknown.append(other)
+            unknown_visibility = True
+            continue
+        expected_known += 1
+        if oid in seen:
+            seen_known += 1
+        else:
+            missing.append(other)
+            all_ok = False
+    if missing:
+        icon = '❌'
+    elif unknown:
+        icon = '⚠️ '
+    else:
+        icon = '✅'
+    print(f"  {icon} {name:<8} {seen_known}/{expected_known:<10} {', '.join(unknown) or 'none':<20} {', '.join(missing) or 'none'}")
+
+print()
+if ambiguous_ids:
+    print("  ⚠️  Suppressed ambiguous own IDs:")
+    for pid, names in sorted(ambiguous_ids.items()):
+        short_pid = pid[:22] + '..'
+        print(f"     {short_pid}: {', '.join(names)}")
+    print()
+
+if all_ok and not unknown_visibility:
     print("  🎉 FULL MESH — All nodes visible to all peers!")
 else:
-    gaps = sum(1 for n in logs for o in logs if o != n and
-               (not file_to_id.get(o) or file_to_id.get(o) not in matrix[n]))
-    total = len(logs) * (len(logs)-1)
-    pct = int(100 * (total - gaps) / total)
-    print(f"  ⚠️  Partial mesh — {gaps}/{total} gap(s)  ({pct}% connected)")
-    print(f"     Tip: run longer (--time=10) for peer IDs to propagate fully")
+    if unknown_visibility:
+        unknown_nodes = [name for name in visible_nodes if not file_to_id.get(name)]
+        print("  ⚠️  Visibility is partially indeterminate.")
+        print(f"     Own IDs not captured in current log window: {', '.join(unknown_nodes)}")
+        print("     Treat those as collector gaps unless transport evidence above is also empty.")
+    else:
+        gaps = sum(
+            1
+            for n in visible_nodes
+            for o in visible_nodes
+            if o != n and file_to_id.get(o) and file_to_id.get(o) not in matrix[n]
+        )
+        total = len(visible_nodes) * (len(visible_nodes) - 1)
+        pct = int(100 * (total - gaps) / total) if total else 0
+        print(f"  ⚠️  Partial mesh — {gaps}/{total} known-ID gap(s)  ({pct}% connected)")
+    print("     Tip: longer runs improve peer-ID propagation, but app/system log split now makes collector blind spots explicit.")
 
 print()
 # Log file health summary
 print("  Log file health:")
-for name, path in logs.items():
+for name, path in all_logs.items():
     if os.path.exists(path):
         sz = os.path.getsize(path)
         lines = contents[name].count('\n')

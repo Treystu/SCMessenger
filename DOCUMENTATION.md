@@ -1,7 +1,7 @@
 # SCMessenger Documentation Hub
 
 Status: Active
-Last updated: 2026-03-11 (POST-ID-NORMALIZATION-FIX)
+Last updated: 2026-03-13 (DOC-SYNC-AND-BUILD-VERIFY-GOVERNANCE)
 
 This is the primary documentation entrypoint.
 
@@ -88,6 +88,14 @@ Historical audit artifacts currently live under `docs/historical/`.
 
 ## Recent Execution Notes
 
+- Documentation/build-verification governance lock (2026-03-13, repo policy tightened so same-run canonical doc updates and edited-target build verification are explicit closeout requirements for both Codex and Copilot agents) is tracked in:
+  - `AGENTS.md`
+  - `.github/copilot-instructions.md`
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+
 - WS12.39 closeout burndown re-baseline (2026-03-10 UTC, Rust/WASM baseline restoration + issue/workflow/branch reconciliation for steady v0.2.0 alpha truth) is tracked in:
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`
@@ -119,6 +127,13 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+- WS12.42 iOS/Android Missing-Direction Receipt Recovery (2026-03-13, added iOS outbound pending-outbox recovery when receipts arrive without local sent history to prevent stale in-app pending state) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+  - `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
+  - `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift`
 - WS12.8 runtime recheck (2026-03-02 HST, post-redeploy relay verification + custody regression signal triage) is tracked in:
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`
@@ -242,6 +257,14 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
   - `docs/DOCUMENT_STATUS_INDEX.md`
+- WS12.44 BLE freshness profiling + run5 visibility clarification (2026-03-13 UTC, Android freshness-first BLE routing + filtered-scan fallback + iOS app/system log split + known-vs-unknown visibility accounting) is tracked in:
+  - `run5.sh`
+  - `scripts/README.md`
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+  - `docs/DOCUMENT_STATUS_INDEX.md`
 - GitHub + repo realignment first-pass planning audit (2026-03-07 UTC, comprehensive GitHub/repo hygiene and execution sequencing blueprint) is tracked in:
   - `docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md`
   - `docs/CURRENT_STATE.md`
@@ -286,3 +309,7 @@ Historical audit artifacts currently live under `docs/historical/`.
 4. Superseded status/audit reports should be moved to or referenced from `docs/historical/`, not duplicated as new "final" docs.
 5. Use `iOS/` (uppercase-I) for all path references.
 6. Run `./scripts/docs_sync_check.sh` before finalizing task output; fix failures in the same run.
+7. If the run edits code, bindings, scripts that affect runtime/build behavior, or platform wiring, run the appropriate build verification command(s) before finalizing and record the result in the active doc chain.
+
+- 2026-03-13: Added operational documentation for the iOS simulator launch ambiguity where a stale `platform IOS` app can remain installed in the simulator and fail only at bootstrap; canonical references updated in `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`.
+- 2026-03-13: Consolidated the full live-debug conversation into canonical docs, including GCP relay repair, Android store-and-forward/send-debug findings, iOS stability/send-path observations, upgraded `run5.sh` visibility methodology, simulator launch recovery, and remaining transport/telemetry/runtime debt items.

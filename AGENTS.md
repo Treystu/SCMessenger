@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Status: Active
-Last updated: 2026-03-07
+Last updated: 2026-03-13
 
 Repository-scoped instructions for Codex agents.
 
@@ -18,6 +18,8 @@ This includes:
 ## Core rule: Mandatory Build Verification
 
 **You MUST verify all edited builds before completing any session.** If you push code updates or patches for a given build (e.g. Android Kotlin or iOS Swift), you MUST run the appropriate compiler/builder to prove that the edits compile successfully before concluding the conversation with the user.
+
+This rule applies whenever behavior, interfaces, scripts, generated code, or platform wiring changes. Do not treat "small" code edits as exempt.
 
 ## Required docs touchpoints (review each run)
 
@@ -37,6 +39,14 @@ Run:
 ```
 
 before finalizing work. If it fails, resolve documentation drift in the same run.
+
+## Required closeout checklist on every change-bearing run
+
+1. Re-read the active canonical doc chain before editing implementation or workflow behavior.
+2. Update the canonical docs in the same run whenever behavior, scope, scripts, risks, verification commands, or operator workflow changes.
+3. Run `./scripts/docs_sync_check.sh` before finalizing; fix failures in the same run.
+4. If any code, build wiring, generated bindings, or scripts affecting a build target changed, run the appropriate build verification command(s) before finalizing.
+5. Do not conclude the session until both documentation sync and required build verification are complete, or the blocker is explicitly called out with the exact failed command and reason.
 
 ## Final response requirement
 

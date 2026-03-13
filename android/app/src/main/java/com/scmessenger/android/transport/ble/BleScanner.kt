@@ -15,6 +15,7 @@ import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Handles Bluetooth Low Energy scanning for mesh peers.
@@ -57,6 +58,10 @@ class BleScanner(
     private val advertisementsSeen = AtomicInteger(0)
     private val peersDiscoveredCount = AtomicInteger(0)
     private val scanFailures = AtomicInteger(0)
+    private val lastMatchedAdvertisementAtMs = AtomicLong(0L)
+    private val scanSessionStartedAtMs = AtomicLong(0L)
+    private var fallbackScanEnabled = false
+    private var fallbackPromotionRunnable: Runnable? = null
 
     // SCMessenger Service UUID: 0xDF01
     // Full UUID: 0000DF01-0000-1000-8000-00805F9B34FB
@@ -74,14 +79,21 @@ class BleScanner(
         const val FOREGROUND_SCAN_INTERVAL_MS = 30000L  // no pause in foreground
         const val BACKGROUND_SCAN_WINDOW_MS = 5000L
         const val BACKGROUND_SCAN_INTERVAL_MS = 60000L
+        private const val FALLBACK_SCAN_PROMOTION_DELAY_MS = 20_000L
+        private const val ADVERTISED_NAME = "SCMesh"
     }
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             result?.let { scanResult ->
-                advertisementsSeen.incrementAndGet()
                 val device = scanResult.device
                 val peerId = device.address
+                if (!matchesMeshAdvertisement(scanResult)) {
+                    return
+                }
+
+                advertisementsSeen.incrementAndGet()
+                lastMatchedAdvertisementAtMs.set(System.currentTimeMillis())
 
                 // Check if we've recently seen this peer
                 val now = System.currentTimeMillis()
@@ -176,33 +188,16 @@ class BleScanner(
         }
         if (isScanning) return
 
-        val filters = listOf(
-            ScanFilter.Builder()
-                .setServiceUuid(ParcelUuid(SERVICE_UUID))
-                .build()
-        )
-
-        val scanMode = if (isBackgroundMode) {
-            ScanSettings.SCAN_MODE_LOW_POWER
-        } else {
-            ScanSettings.SCAN_MODE_LOW_LATENCY
-        }
-
-        val settings = ScanSettings.Builder()
-            .setScanMode(scanMode)
-            // MATCH_MODE_AGGRESSIVE: trigger reports for even weak signals.
-            // CALLBACK_TYPE_ALL_MATCHES: report all matching adverts, not just first.
-            // numOfMatches(1): trigger callback on first match per scan cycle for
-            // lowest latency peer detection when any peer is nearby.
-            .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
-            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-            .setNumOfMatches(ScanSettings.MATCH_NUM_ONE_ADVERTISEMENT)
-            .build()
+        advertisementsSeen.set(0)
+        fallbackScanEnabled = false
+        scanSessionStartedAtMs.set(System.currentTimeMillis())
+        lastMatchedAdvertisementAtMs.set(0L)
 
         try {
-            scanner.startScan(filters, settings, scanCallback)
+            scanner.startScan(currentFilters(), buildScanSettings(), scanCallback)
             isScanning = true
-            Timber.i("BLE Scanning started (background=$isBackgroundMode)")
+            Timber.i("BLE Scanning started (background=$isBackgroundMode, fallback=$fallbackScanEnabled)")
+            scheduleFallbackPromotion()
 
             // Start duty cycle if intervals are configured
             if (scanWindowMs < scanIntervalMs) {
@@ -249,31 +244,90 @@ class BleScanner(
         dutyCycleRunnable = null
     }
 
+    private fun currentFilters(): List<ScanFilter> {
+        return if (fallbackScanEnabled) {
+            emptyList()
+        } else {
+            listOf(
+                ScanFilter.Builder()
+                    .setServiceUuid(ParcelUuid(SERVICE_UUID))
+                    .build()
+            )
+        }
+    }
+
+    private fun buildScanSettings(): ScanSettings {
+        val scanMode = if (isBackgroundMode) {
+            ScanSettings.SCAN_MODE_LOW_POWER
+        } else {
+            ScanSettings.SCAN_MODE_LOW_LATENCY
+        }
+
+        return ScanSettings.Builder()
+            .setScanMode(scanMode)
+            .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+            .setNumOfMatches(ScanSettings.MATCH_NUM_ONE_ADVERTISEMENT)
+            .build()
+    }
+
+    private fun scheduleFallbackPromotion() {
+        fallbackPromotionRunnable?.let { handler.removeCallbacks(it) }
+        fallbackPromotionRunnable = Runnable {
+            if (!isScanning || fallbackScanEnabled) {
+                return@Runnable
+            }
+            if (advertisementsSeen.get() > 0 || lastMatchedAdvertisementAtMs.get() > 0L) {
+                return@Runnable
+            }
+            val elapsedMs = System.currentTimeMillis() - scanSessionStartedAtMs.get()
+            if (elapsedMs < FALLBACK_SCAN_PROMOTION_DELAY_MS) {
+                return@Runnable
+            }
+            fallbackScanEnabled = true
+            Timber.w(
+                "BLE scan fallback enabled after %d ms without mesh advertisements; switching to unfiltered scan",
+                elapsedMs
+            )
+            restartActiveScan()
+        }
+        handler.postDelayed(fallbackPromotionRunnable!!, FALLBACK_SCAN_PROMOTION_DELAY_MS)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun restartActiveScan() {
+        if (scanner == null || !isScanning) return
+
+        try {
+            scanner.stopScan(scanCallback)
+        } catch (_: Exception) {
+        }
+
+        try {
+            scanner.startScan(currentFilters(), buildScanSettings(), scanCallback)
+            Timber.i("BLE scan restarted (background=$isBackgroundMode, fallback=$fallbackScanEnabled)")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to restart BLE scan")
+        }
+    }
+
+    private fun matchesMeshAdvertisement(result: ScanResult): Boolean {
+        val record = result.scanRecord
+        val serviceUuidMatch = record?.serviceUuids?.any { it.uuid == SERVICE_UUID } == true
+        val serviceDataMatch = record?.getServiceData(PARCEL_UUID) != null
+        val advertisedName = record?.deviceName?.trim()
+        val deviceName = result.device.name?.trim()
+        val nameMatch = advertisedName == ADVERTISED_NAME || deviceName == ADVERTISED_NAME
+
+        return serviceUuidMatch || serviceDataMatch || nameMatch
+    }
+
     @SuppressLint("MissingPermission")
     private fun startScanningInternal() {
         if (scanner == null) return
 
         try {
-            val filters = listOf(
-                ScanFilter.Builder()
-                    .setServiceUuid(ParcelUuid(SERVICE_UUID))
-                    .build()
-            )
-
-            val scanMode = if (isBackgroundMode) {
-                ScanSettings.SCAN_MODE_LOW_POWER
-            } else {
-                ScanSettings.SCAN_MODE_LOW_LATENCY
-            }
-
-            val settings = ScanSettings.Builder()
-                .setScanMode(scanMode)
-                .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
-                .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-                .setNumOfMatches(ScanSettings.MATCH_NUM_ONE_ADVERTISEMENT)
-                .build()
-
-            scanner.startScan(filters, settings, scanCallback)
+            scanner.startScan(currentFilters(), buildScanSettings(), scanCallback)
             Timber.v("BLE scan window started")
         } catch (e: Exception) {
             Timber.e(e, "Failed to restart BLE scan")
@@ -297,6 +351,8 @@ class BleScanner(
         if (scanner == null || !isScanning) return
 
         stopDutyCycle()
+        fallbackPromotionRunnable?.let { handler.removeCallbacks(it) }
+        fallbackPromotionRunnable = null
 
         try {
             scanner.stopScan(scanCallback)

@@ -95,17 +95,23 @@ final class CoreDelegateImpl: CoreDelegate {
     }
 
     // P1: Dedup identify events — Rust fires one per substream.
-    private var identifyDedupCache: [String: Date] = [:]
+    private var identifyDedupCache: [String: (signature: String, observedAt: Date)] = [:]
     private let identifyDedupInterval: TimeInterval = 2.0
 
     func onPeerIdentified(peerId: String, agentVersion: String, listenAddrs: [String]) {
         let trimmed = PeerIdValidator.normalize(peerId)
+        let identifySignature = ([agentVersion.trimmingCharacters(in: .whitespacesAndNewlines)] +
+            listenAddrs
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .sorted()).joined(separator: "|")
         let now = Date()
         if let last = identifyDedupCache[trimmed],
-           now.timeIntervalSince(last) < identifyDedupInterval {
+           last.signature == identifySignature,
+           now.timeIntervalSince(last.observedAt) < identifyDedupInterval {
             return
         }
-        identifyDedupCache[trimmed] = now
+        identifyDedupCache[trimmed] = (identifySignature, now)
 
         logger.info("Peer identified: \(peerId) (agent: \(agentVersion)) with \(listenAddrs.count) addresses")
         let repo = meshRepository

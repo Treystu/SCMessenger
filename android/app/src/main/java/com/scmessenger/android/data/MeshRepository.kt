@@ -206,7 +206,8 @@ open class MeshRepository(private val context: Context) {
     private val activeSessions = ConcurrentHashMap<String, Long>() // libp2pPeerId -> lastActive
     // P0: Dedup cache — suppress redundant peer-identified callbacks for the same peer
     // within a 30-second window. The Rust core fires identify per-substream.
-    private val peerIdentifiedDedupCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val peerIdentifiedDedupCache =
+        java.util.concurrent.ConcurrentHashMap<String, Pair<String, Long>>()
     private val peerIdentifiedDedupIntervalMs = 30_000L
 
     // P1: Dedup cache — suppress duplicate disconnect callbacks for the same peer
@@ -227,6 +228,9 @@ open class MeshRepository(private val context: Context) {
     private var bleAdvertiser: com.scmessenger.android.transport.ble.BleAdvertiser? = null
     private var bleGattServer: com.scmessenger.android.transport.ble.BleGattServer? = null
     private var bleGattClient: com.scmessenger.android.transport.ble.BleGattClient? = null
+    private var lastBleBeaconUpdateMillis: Long = 0
+    private var lastBleBeaconPayload: ByteArray = byteArrayOf()
+    private var lastBleBeaconPayloadPublishedAtMillis: Long = 0
 
     private data class RoutingHints(
         val wifiPeerId: String?,
@@ -308,7 +312,15 @@ open class MeshRepository(private val context: Context) {
         val blePeerId: String?
     )
 
+    private data class BleRouteObservation(
+        val address: String,
+        val lastSeenMs: Long,
+        val source: String
+    )
+
     private val strictBleOnlyValidation = isEnabledFlag(System.getenv("SC_BLE_ONLY_VALIDATION"))
+    private val bleRouteObservations = ConcurrentHashMap<String, BleRouteObservation>()
+    private val bleRouteFreshnessTtlMs = 120_000L
 
     init {
         Timber.d("MeshRepository initialized with storage: $storagePath")
@@ -533,12 +545,20 @@ open class MeshRepository(private val context: Context) {
 	                override fun onPeerIdentified(peerId: String, agentVersion: String, listenAddrs: List<String>) {
                     // P0: Deduplicate peer-identified events — Rust core fires one per substream
                     val trimmedPeerId = peerId.trim()
+                    val identifySignature = (
+                        listOf(agentVersion.trim()) +
+                            listenAddrs.map { it.trim() }.filter { it.isNotEmpty() }.sorted()
+                        ).joinToString("|")
                     val now = System.currentTimeMillis()
                     val lastIdentified = peerIdentifiedDedupCache[trimmedPeerId]
-                    if (lastIdentified != null && (now - lastIdentified) < peerIdentifiedDedupIntervalMs) {
+                    if (
+                        lastIdentified != null &&
+                        lastIdentified.first == identifySignature &&
+                        (now - lastIdentified.second) < peerIdentifiedDedupIntervalMs
+                    ) {
                         return
                     }
-                    peerIdentifiedDedupCache[trimmedPeerId] = now
+                    peerIdentifiedDedupCache[trimmedPeerId] = identifySignature to now
 
                     Timber.d("Core notified identified: $peerId (agent: $agentVersion) with ${listenAddrs.size} addresses")
                     repoScope.launch {
@@ -993,6 +1013,7 @@ open class MeshRepository(private val context: Context) {
                                                     )
                                                 }
                                             }
+                                            removePendingOutbound(msgId)
                                         }
                                     }
                                 }
@@ -1064,7 +1085,17 @@ open class MeshRepository(private val context: Context) {
                     } catch (_: Exception) {
                         null
                     }
+                    val hasPendingForReceipt = loadPendingOutbox().any { it.historyRecordId == messageId }
                     if (existingRecord == null || existingRecord.direction != uniffi.api.MessageDirection.SENT) {
+                        if (hasPendingForReceipt) {
+                            removePendingOutbound(messageId)
+                            logDeliveryState(
+                                messageId = messageId,
+                                state = "delivered",
+                                detail = "delivery_receipt_recovered_without_history status=$normalized direction=${existingRecord?.direction ?: "missing"}"
+                            )
+                            return
+                        }
                         logDeliveryState(
                             messageId = messageId,
                             state = "pending",
@@ -1472,6 +1503,7 @@ open class MeshRepository(private val context: Context) {
             bleScanner = com.scmessenger.android.transport.ble.BleScanner(
                 context,
                 onPeerDiscovered = { peerId ->
+                    noteBleRouteObservation(peerId = peerId, bleAddress = peerId, source = "scan")
                     meshService?.onPeerDiscovered(peerId)
                     // Connect via GATT client to read identity if needed.
                     kotlin.runCatching { bleGattClient?.connect(peerId) }
@@ -1517,6 +1549,13 @@ open class MeshRepository(private val context: Context) {
         val identity = ironCore?.getIdentityInfo()
         val publicKeyHex = identity?.publicKeyHex
         if (!publicKeyHex.isNullOrEmpty()) {
+            val now = System.currentTimeMillis()
+            if (now - lastBleBeaconUpdateMillis < 5000) {
+                // Throttled: wait for the next call or periodic update
+                return
+            }
+            lastBleBeaconUpdateMillis = now
+
             // 1. Immediate update with just identity (no listeners yet)
             // This allows peers to "see" us in the UI immediately while we wait for swarm listeners to bind.
             setIdentityBeaconInternal(identity, emptyList())
@@ -1583,6 +1622,15 @@ open class MeshRepository(private val context: Context) {
                     .put("connection_hints", org.json.JSONArray())
                 beaconJson = beaconJsonObject.toString().toByteArray(Charsets.UTF_8)
             }
+            val publishedAt = System.currentTimeMillis()
+            if (
+                beaconJson.contentEquals(lastBleBeaconPayload) &&
+                (publishedAt - lastBleBeaconPayloadPublishedAtMillis) < 5000
+            ) {
+                return
+            }
+            lastBleBeaconPayload = beaconJson.copyOf()
+            lastBleBeaconPayloadPublishedAtMillis = publishedAt
             bleAdvertiser?.updateIdentityBeacon(beaconJson)
             bleGattServer?.setIdentityData(beaconJson)
             identityData = beaconJson // Store for immediate use by GATT server
@@ -1621,6 +1669,9 @@ open class MeshRepository(private val context: Context) {
             val externalAddresses = json.optJSONArray("external_addresses")
             val connectionHints = json.optJSONArray("connection_hints")
             val normalizedLibp2p = libp2pPeerId.takeIf { !it.isNullOrBlank() }?.trim()
+            noteBleRouteObservation(peerId = blePeerId, bleAddress = blePeerId, source = "identity_self")
+            noteBleRouteObservation(peerId = identityId, bleAddress = blePeerId, source = "identity_canonical")
+            noteBleRouteObservation(peerId = normalizedLibp2p, bleAddress = blePeerId, source = "identity_route")
 
             val discoveredNickname = prepopulateDiscoveryNickname(
                 nickname = rawNickname,
@@ -1807,6 +1858,40 @@ open class MeshRepository(private val context: Context) {
                 }
             }
         }
+    }
+
+    private fun noteBleRouteObservation(peerId: String?, bleAddress: String?, source: String) {
+        val normalizedPeerId = peerId?.trim().orEmpty()
+        val normalizedBleAddress = bleAddress?.trim().orEmpty()
+        if (normalizedPeerId.isEmpty() || normalizedBleAddress.isEmpty()) return
+
+        val observation = BleRouteObservation(
+            address = normalizedBleAddress,
+            lastSeenMs = System.currentTimeMillis(),
+            source = source
+        )
+        bleRouteObservations[normalizedPeerId] = observation
+        bleRouteObservations[normalizedBleAddress] = observation
+    }
+
+    private fun resolveFreshBlePeerId(candidates: List<String>): BleRouteObservation? {
+        if (candidates.isEmpty()) return null
+
+        val now = System.currentTimeMillis()
+        return candidates
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .mapNotNull { candidate ->
+                val observation = bleRouteObservations[candidate] ?: return@mapNotNull null
+                if ((now - observation.lastSeenMs) > bleRouteFreshnessTtlMs) {
+                    bleRouteObservations.remove(candidate, observation)
+                    null
+                } else {
+                    observation
+                }
+            }
+            .maxByOrNull { it.lastSeenMs }
     }
 
     private fun pruneDisconnectedPeer(peerId: String) {
@@ -3237,7 +3322,19 @@ open class MeshRepository(private val context: Context) {
             .mapNotNull { it.trim().takeIf { value -> value.isNotEmpty() } }
             .distinct()
         val requestedBlePeerId = blePeerId?.trim()?.takeIf { it.isNotEmpty() }
-        val effectiveBlePeerId = connectedBleDevices.firstOrNull() ?: requestedBlePeerId
+        val freshBleObservation = resolveFreshBlePeerId(
+            buildList {
+                addAll(routePeerCandidates)
+                requestedBlePeerId?.let(::add)
+                recipientIdentityId?.trim()?.takeIf { it.isNotEmpty() }?.let(::add)
+                intendedDeviceId?.trim()?.takeIf { it.isNotEmpty() }?.let(::add)
+            }
+        )
+        val effectiveBlePeerId = connectedBleDevices.firstOrNull()
+            ?: freshBleObservation?.address
+            ?: requestedBlePeerId?.takeIf {
+                resolveFreshBlePeerId(listOf(it))?.address == it
+            }
 
         if (requestedBlePeerId == null && effectiveBlePeerId != null) {
             logDeliveryAttempt(
@@ -3246,6 +3343,19 @@ open class MeshRepository(private val context: Context) {
                 phase = "local_fallback",
                 outcome = "target_fallback",
                 detail = "ctx=$attemptContext target=$effectiveBlePeerId reason=ble_peer_missing_connected_device_available"
+            )
+        } else if (
+            freshBleObservation != null &&
+            effectiveBlePeerId != null &&
+            requestedBlePeerId != null &&
+            effectiveBlePeerId != requestedBlePeerId
+        ) {
+            logDeliveryAttempt(
+                messageId = traceMessageId,
+                medium = "ble",
+                phase = "local_fallback",
+                outcome = "target_fallback",
+                detail = "ctx=$attemptContext target=$effectiveBlePeerId requested_target=$requestedBlePeerId reason=fresh_ble_observation source=${freshBleObservation.source}"
             )
         } else if (
             requestedBlePeerId != null &&
@@ -3258,6 +3368,18 @@ open class MeshRepository(private val context: Context) {
                 phase = "local_fallback",
                 outcome = "target_fallback",
                 detail = "ctx=$attemptContext target=$effectiveBlePeerId requested_target=$requestedBlePeerId reason=prefer_connected_device"
+            )
+        } else if (
+            requestedBlePeerId != null &&
+            effectiveBlePeerId == null &&
+            connectedBleDevices.isEmpty()
+        ) {
+            logDeliveryAttempt(
+                messageId = traceMessageId,
+                medium = "ble",
+                phase = "local_fallback",
+                outcome = "skipped",
+                detail = "ctx=$attemptContext requested_target=$requestedBlePeerId reason=stale_ble_hint_no_fresh_observation"
             )
         }
 
@@ -3314,13 +3436,13 @@ open class MeshRepository(private val context: Context) {
                 // Fast-skip: if no BLE devices are connected and the requested
                 // address is a cached hint (not actively connected), skip entirely
                 // to avoid wasting time on stale MACs.
-                if (connectedBleDevices.isEmpty() && bleAddr !in connectedBleDevices) {
+                if (bleAddr.isNullOrBlank() && connectedBleDevices.isEmpty()) {
                     logDeliveryAttempt(
                         messageId = traceMessageId,
                         medium = "ble",
                         phase = "local_fallback",
                         outcome = "skipped",
-                        detail = "ctx=$attemptContext no_connected_ble_devices requested=$bleAddr"
+                        detail = "ctx=$attemptContext no_hint_and_no_connected_devices"
                     )
                     return@attemptWifiThenBleFallback false
                 }
@@ -3399,7 +3521,7 @@ open class MeshRepository(private val context: Context) {
         }
         val sanitizedCandidates = routePeerCandidates
             .map { it.trim() }
-            .filter { it.isNotEmpty() && PeerIdValidator.isLibp2pPeerId(it) && !isBootstrapRelayPeer(it) }
+            .filter { it.isNotEmpty() && PeerIdValidator.isLibp2pPeerId(it) }
             .distinct()
 
         if (sanitizedCandidates.isEmpty()) {
@@ -3417,9 +3539,10 @@ open class MeshRepository(private val context: Context) {
         primeRelayBootstrapConnections()
 
         for (routePeerId in sanitizedCandidates) {
+            val liveRouteHints = getDialHintsForRoutePeer(routePeerId)
             val dialCandidates = buildDialCandidatesForPeer(
                 routePeerId = routePeerId,
-                rawAddresses = listeners,
+                rawAddresses = listeners + liveRouteHints,
                 includeRelayCircuits = true
             )
             Timber.d("🔀 Transport: route=$routePeerId dialCandidates=${dialCandidates.size} (${dialCandidates.joinToString { it.substringBefore("/") }})")
@@ -4587,8 +4710,7 @@ open class MeshRepository(private val context: Context) {
             .map { it.peerId.trim() }
             .filter { candidate ->
                 candidate.isNotEmpty() &&
-                    PeerIdValidator.isLibp2pPeerId(candidate) &&
-                    !isKnownRelay(candidate)
+                    PeerIdValidator.isLibp2pPeerId(candidate)
             }
             .filter { candidate ->
                 val discoveredPeer = _discoveredPeers.value.entries.firstOrNull {
@@ -4605,7 +4727,7 @@ open class MeshRepository(private val context: Context) {
             .asSequence()
             .mapNotNull { entry ->
                 val candidate = entry.peerId?.trim().orEmpty()
-                if (candidate.isEmpty() || !PeerIdValidator.isLibp2pPeerId(candidate) || isKnownRelay(candidate)) {
+                if (candidate.isEmpty() || !PeerIdValidator.isLibp2pPeerId(candidate)) {
                     return@mapNotNull null
                 }
                 val candidateKey = normalizePublicKey(entry.publicKey) ?: return@mapNotNull null
