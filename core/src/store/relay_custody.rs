@@ -213,6 +213,20 @@ impl std::fmt::Display for CustodyError {
     }
 }
 
+impl CustodyError {
+    pub fn as_relay_rejection_code(&self) -> &'static str {
+        match self {
+            CustodyError::DeviceMismatch { .. } => "identity_recycled",
+            CustodyError::AbandonedIdentity { .. } => "identity_abandoned",
+            CustodyError::NoRegistration => "identity_not_registered",
+        }
+    }
+
+    pub fn is_retryable(&self) -> bool {
+        matches!(self, Self::NoRegistration)
+    }
+}
+
 impl CustodyState {
     fn as_str(self) -> &'static str {
         match self {
@@ -850,6 +864,11 @@ impl RelayCustodyStore {
                 ..
             }) => {
                 if device_id == to_device_id {
+                    self.migrate_destination_queue(
+                        &from_device_id,
+                        &to_device_id,
+                        "handover_queue_migrated",
+                    )?;
                     RegistrationState::Active {
                         device_id: to_device_id,
                         seniority_timestamp,
@@ -1055,6 +1074,85 @@ impl RelayCustodyStore {
             self.remove_message(destination_peer_id, &record.custody_id)?;
         }
         Ok(purged)
+    }
+
+    fn migrate_destination_queue(
+        &self,
+        from_destination_peer_id: &str,
+        to_destination_peer_id: &str,
+        reason: &str,
+    ) -> Result<usize, String> {
+        let records = self.pending_for_destination(from_destination_peer_id, usize::MAX);
+        let migrated = records.len();
+        if migrated == 0 || from_destination_peer_id == to_destination_peer_id {
+            return Ok(0);
+        }
+
+        let migration_reason = format!(
+            "{}: {}->{}",
+            reason, from_destination_peer_id, to_destination_peer_id
+        );
+        for record in records {
+            let mut migrated_record = record;
+            migrated_record.destination_peer_id = to_destination_peer_id.to_string();
+            migrated_record.updated_at_ms = now_ms();
+            let custody_id = migrated_record.custody_id.clone();
+            self.record_transition(
+                &migrated_record,
+                Some(migrated_record.state),
+                migrated_record.state,
+                &migration_reason,
+            )?;
+            self.remove_message(from_destination_peer_id, &custody_id)?;
+            self.put_message(&migrated_record)?;
+        }
+
+        Ok(migrated)
+    }
+
+    pub fn mark_dispatch_rejected(
+        &self,
+        destination_peer_id: &str,
+        custody_id: &str,
+        reason: &str,
+        retryable: bool,
+    ) -> Result<bool, String> {
+        let record = match self.get_message(destination_peer_id, custody_id)? {
+            Some(record) => record,
+            None => return Ok(false),
+        };
+
+        if matches!(record.state, CustodyState::Delivered) {
+            return Ok(false);
+        }
+
+        let from_state = record.state;
+        if !retryable {
+            self.record_transition(
+                &record,
+                Some(from_state),
+                CustodyState::Delivered,
+                &format!("dispatch_rejected_terminal:{}", reason),
+            )?;
+            self.remove_message(destination_peer_id, custody_id)?;
+            return Ok(true);
+        }
+
+        if matches!(record.state, CustodyState::Accepted) {
+            return Ok(false);
+        }
+
+        let mut next = record;
+        next.state = CustodyState::Accepted;
+        next.updated_at_ms = now_ms();
+        self.record_transition(
+            &next,
+            Some(from_state),
+            CustodyState::Accepted,
+            &format!("dispatch_rejected:{}", reason),
+        )?;
+        self.put_message(&next)?;
+        Ok(true)
     }
 }
 
@@ -1736,6 +1834,118 @@ mod tests {
             panic!("expected stale handover to collapse");
         };
         assert_eq!(device_id, "device-new");
+    }
+
+    #[test]
+    fn clean_handover_register_migrates_pending_custody_queue() {
+        let store = RelayCustodyStore::in_memory();
+        let identity_id = "identity-handover";
+        let from_device = "device-from";
+        let to_device = "device-to";
+
+        store
+            .register(identity_id, from_device, 50)
+            .expect("register initial device");
+        store
+            .deregister(identity_id, from_device, Some(to_device))
+            .expect("start handover");
+        let first = store
+            .accept_custody(
+                "source-1".to_string(),
+                from_device.to_string(),
+                "msg-1".to_string(),
+                vec![1u8; 8],
+            )
+            .expect("accept custody for source 1");
+        let second = store
+            .accept_custody(
+                "source-2".to_string(),
+                from_device.to_string(),
+                "msg-2".to_string(),
+                vec![2u8; 8],
+            )
+            .expect("accept custody for source 2");
+
+        let pre_migration_from = store.pending_for_destination(from_device, 10).len();
+        let pre_migration_to = store.pending_for_destination(to_device, 10).len();
+        assert_eq!(pre_migration_from, 2);
+        assert_eq!(pre_migration_to, 0);
+        assert_eq!(first.source_peer_id, "source-1");
+        assert_eq!(second.source_peer_id, "source-2");
+
+        store
+            .register(identity_id, to_device, 100)
+            .expect("complete clean handover");
+
+        let post_migration_from = store.pending_for_destination(from_device, 10);
+        let post_migration_to = store.pending_for_destination(to_device, 10);
+        assert!(post_migration_from.is_empty());
+        assert_eq!(post_migration_to.len(), 2);
+        let migrated_sources = post_migration_to
+            .iter()
+            .map(|record| record.source_peer_id.as_str())
+            .collect::<Vec<_>>();
+        assert!(migrated_sources.contains(&"source-1"));
+        assert!(migrated_sources.contains(&"source-2"));
+    }
+
+    #[test]
+    fn enforce_custody_retryability_is_terminal_aware() {
+        let no_registration = CustodyError::NoRegistration;
+        let mismatch = CustodyError::DeviceMismatch {
+            expected_device_id: "a".to_string(),
+            provided_device_id: "b".to_string(),
+        };
+        let abandoned = CustodyError::AbandonedIdentity {
+            device_id: "a".to_string(),
+        };
+
+        assert!(no_registration.is_retryable());
+        assert!(!mismatch.is_retryable());
+        assert!(!abandoned.is_retryable());
+    }
+
+    #[test]
+    fn mark_dispatch_rejected_transitions_retryable_and_terminal_states() {
+        let store = RelayCustodyStore::in_memory();
+        let accepted = store
+            .accept_custody(
+                "source-peer".to_string(),
+                "destination-peer".to_string(),
+                "msg-retry".to_string(),
+                vec![3u8; 8],
+            )
+            .expect("accept initial message");
+        store
+            .mark_dispatching("destination-peer", &accepted.custody_id, "transition")
+            .expect("move to dispatching");
+        assert!(store.has_message_for_destination("destination-peer", &accepted.relay_message_id));
+        assert!(store
+            .mark_dispatch_rejected("destination-peer", &accepted.custody_id, "retryable", true)
+            .expect("mark retryable rejection"));
+        assert!(store.has_message_for_destination("destination-peer", &accepted.relay_message_id));
+        assert_eq!(
+            store
+                .transitions_for_custody(&accepted.custody_id)
+                .into_iter()
+                .last()
+                .expect("transition should exist")
+                .to_state,
+            CustodyState::Accepted
+        );
+
+        let terminal = store
+            .accept_custody(
+                "source-peer".to_string(),
+                "destination-peer".to_string(),
+                "msg-terminal".to_string(),
+                vec![4u8; 8],
+            )
+            .expect("accept terminal message");
+        assert!(store
+            .mark_dispatch_rejected("destination-peer", &terminal.custody_id, "terminal", false)
+            .expect("mark terminal rejection"));
+        assert!(!store.has_message_for_destination("destination-peer", &terminal.relay_message_id));
     }
 
     #[test]

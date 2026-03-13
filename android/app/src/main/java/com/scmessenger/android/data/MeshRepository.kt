@@ -292,7 +292,9 @@ open class MeshRepository(private val context: Context) {
 
     private data class DeliveryAttemptResult(
         val acked: Boolean,
-        val routePeerId: String?
+        val routePeerId: String?,
+        val terminalRejection: Boolean = false,
+        val terminalReason: String? = null
     )
 
     private data class ReplayDiscoveredIdentity(
@@ -1242,6 +1244,17 @@ open class MeshRepository(private val context: Context) {
                             detail = "ctx=receipt_send sender=$senderId attempt=$attempt"
                         )
                         Timber.d("Targeted delivery receipt sent for $normalizedMessageId to $senderId")
+                        return@launch
+                    }
+
+                    if (delivery.terminalRejection) {
+                        logDeliveryAttempt(
+                            messageId = normalizedMessageId,
+                            medium = "receipt",
+                            phase = "aggregate",
+                            outcome = "aborted",
+                            detail = "ctx=receipt_send sender=$senderId attempt=$attempt reason=terminal_rejection reason=${delivery.terminalReason ?: "unknown"}"
+                        )
                         return@launch
                     }
 
@@ -2534,6 +2547,12 @@ open class MeshRepository(private val context: Context) {
                         state = "delivered",
                         detail = "delivery_receipt_arrived_before_enqueue"
                     )
+                } else if (delivery.terminalRejection) {
+                    logDeliveryState(
+                        messageId = realMessageId,
+                        state = "failed",
+                        detail = "terminal_rejection reason=${delivery.terminalReason ?: "unknown"}"
+                    )
                 } else {
                     enqueuePendingOutbound(
                         historyRecordId = realMessageId,
@@ -3581,6 +3600,14 @@ open class MeshRepository(private val context: Context) {
                     outcome = "failed",
                     detail = "ctx=$attemptContext route=$routePeerId reason=${e.message ?: "exception"}"
                 )
+                if (isTerminalRelayCustodyRejection(e.message)) {
+                    return DeliveryAttemptResult(
+                        acked = false,
+                        routePeerId = routePeerId,
+                        terminalRejection = true,
+                        terminalReason = e.message,
+                    )
+                }
             }
 
             val relayOnlyCandidates = relayCircuitAddressesForPeer(routePeerId)
@@ -3619,6 +3646,14 @@ open class MeshRepository(private val context: Context) {
                         outcome = "failed",
                         detail = "ctx=$attemptContext route=$routePeerId reason=${e.message ?: "exception"}"
                     )
+                    if (isTerminalRelayCustodyRejection(e.message)) {
+                        return DeliveryAttemptResult(
+                            acked = false,
+                            routePeerId = routePeerId,
+                            terminalRejection = true,
+                            terminalReason = e.message,
+                        )
+                    }
                 }
             }
         }
@@ -3630,6 +3665,12 @@ open class MeshRepository(private val context: Context) {
             detail = "ctx=$attemptContext reason=all_transports_failed ble_only=${localAcked}"
         )
         return DeliveryAttemptResult(acked = false, routePeerId = null)
+    }
+
+    private fun isTerminalRelayCustodyRejection(message: String?): Boolean {
+        if (message.isNullOrBlank()) return false
+        val normalized = message.trim().lowercase()
+        return normalized.contains("identity_recycled") || normalized.contains("identity_abandoned")
     }
 
     private suspend fun awaitPeerConnection(peerId: String, timeoutMs: Long = 1200L): Boolean {
@@ -3729,6 +3770,16 @@ open class MeshRepository(private val context: Context) {
                     delivery.routePeerId
                 }
                 if (isMessageDeliveredLocally(item.historyRecordId)) {
+                    iterator.remove()
+                    updated = true
+                    continue
+                }
+                if (delivery.terminalRejection) {
+                    logDeliveryState(
+                        messageId = item.historyRecordId,
+                        state = "failed",
+                        detail = "terminal_rejection reason=${delivery.terminalReason ?: "unknown"}"
+                    )
                     iterator.remove()
                     updated = true
                     continue

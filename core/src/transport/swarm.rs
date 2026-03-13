@@ -581,6 +581,19 @@ fn dispatch_ranked_route(
     }
 }
 
+fn is_terminal_relay_custody_rejection(error: &str) -> bool {
+    matches!(
+        parse_relay_custody_rejection_code(error),
+        Some("identity_recycled" | "identity_abandoned")
+    )
+}
+
+fn parse_relay_custody_rejection_code(error: &str) -> Option<&str> {
+    const PREFIX: &str = "relay_custody_rejected:";
+    let tail = error.strip_prefix(PREFIX)?;
+    tail.split(':').next().map(|part| part.trim())
+}
+
 fn enforce_relay_registration(
     relay_custody_store: &RelayCustodyStore,
     request: &RelayRequest,
@@ -1790,13 +1803,15 @@ pub async fn start_swarm_with_config(
                                                     .error
                                                     .unwrap_or_else(|| "recipient_rejected".to_string());
                                                 let reason = format!("recipient_rejected:{}", reason);
-                                                if let Err(e) = relay_custody_store.mark_dispatch_failed(
+                                                let retryable = !is_terminal_relay_custody_rejection(&reason);
+                                                if let Err(e) = relay_custody_store.mark_dispatch_rejected(
                                                     &dispatch.destination_peer.to_string(),
                                                     &dispatch.custody_id,
                                                     &reason,
+                                                    retryable,
                                                 ) {
                                                     tracing::warn!(
-                                                        "Failed to return custody {} to accepted after rejection (relay message {}): {}",
+                                                        "Failed to update custody {} after recipient rejection (relay message {}): {}",
                                                         dispatch.custody_id,
                                                         dispatch.relay_message_id,
                                                         e
@@ -1815,10 +1830,25 @@ pub async fn start_swarm_with_config(
                                                     tracing::info!("✓ Message delivered successfully to {} ({}ms)", pending.target_peer, latency_ms);
                                                     let _ = pending.reply_tx.send(Ok(())).await;
                                                 } else {
-                                                    // Message rejected, trigger retry
-                                                    tracing::warn!("✗ Message rejected by {}: {:?}", pending.target_peer, response.error);
-                                                    multi_path_delivery.record_failure(&message_id, vec![pending.target_peer]);
-                                                    pending_messages.insert(message_id, pending);
+                                                    let reason = response
+                                                        .error
+                                                        .unwrap_or_else(|| "recipient_rejected".to_string());
+                                                    let terminal =
+                                                        is_terminal_relay_custody_rejection(&reason);
+                                                    let reply_tx = pending.reply_tx.clone();
+                                                    tracing::warn!(
+                                                        "✗ Message rejected by {}: {}",
+                                                        pending.target_peer,
+                                                        reason
+                                                    );
+                                                    multi_path_delivery.record_failure(
+                                                        &message_id,
+                                                        vec![pending.target_peer],
+                                                    );
+                                                    if !terminal {
+                                                        pending_messages.insert(message_id, pending);
+                                                    }
+                                                    let _ = reply_tx.send(Err(reason)).await;
                                                 }
                                             }
                                         }
@@ -1830,13 +1860,14 @@ pub async fn start_swarm_with_config(
                             )) => {
                                 if let Some(dispatch) = pending_custody_dispatches.remove(&request_id) {
                                     let reason = format!("dispatch_outbound_failure:{}", error);
-                                    if let Err(e) = relay_custody_store.mark_dispatch_failed(
+                                    if let Err(e) = relay_custody_store.mark_dispatch_rejected(
                                         &dispatch.destination_peer.to_string(),
                                         &dispatch.custody_id,
                                         &reason,
+                                        true,
                                     ) {
                                         tracing::warn!(
-                                            "Failed to return custody {} to accepted after outbound failure (relay message {}): {}",
+                                            "Failed to retry custody {} after outbound failure (relay message {}): {}",
                                             dispatch.custody_id,
                                             dispatch.relay_message_id,
                                             e
@@ -2840,10 +2871,12 @@ pub async fn start_swarm_with_config(
                                     if let Some(dispatch) =
                                         pending_custody_dispatches.remove(&request_id)
                                     {
-                                        let _ = relay_custody_store.mark_dispatch_failed(
+                                        let reason = format!("peer_disconnected:{}", peer_id);
+                                        let _ = relay_custody_store.mark_dispatch_rejected(
                                             &dispatch.destination_peer.to_string(),
                                             &dispatch.custody_id,
-                                            "peer_disconnected",
+                                            &reason,
+                                            true,
                                         );
                                     }
                                 }
@@ -3434,10 +3467,12 @@ pub async fn start_swarm_with_config(
                                                         .error
                                                         .unwrap_or_else(|| "recipient_rejected".to_string());
                                                     let reason = format!("recipient_rejected:{}", reason);
-                                                    let _ = relay_custody_store.mark_dispatch_failed(
+                                                    let retryable = !is_terminal_relay_custody_rejection(&reason);
+                                                    let _ = relay_custody_store.mark_dispatch_rejected(
                                                         &dispatch.destination_peer.to_string(),
                                                         &dispatch.custody_id,
                                                         &reason,
+                                                        retryable,
                                                     );
                                                 }
                                             } else if let Some(reply_tx) =
@@ -3457,10 +3492,11 @@ pub async fn start_swarm_with_config(
                                             pending_custody_dispatches.remove(&request_id)
                                         {
                                             let reason = format!("dispatch_outbound_failure:{}", error);
-                                            let _ = relay_custody_store.mark_dispatch_failed(
+                                            let _ = relay_custody_store.mark_dispatch_rejected(
                                                 &dispatch.destination_peer.to_string(),
                                                 &dispatch.custody_id,
                                                 &reason,
+                                                true,
                                             );
                                         } else if let Some(reply_tx) =
                                             pending_direct_replies.remove(&request_id)
@@ -3873,10 +3909,11 @@ pub async fn start_swarm_with_config(
                                     if let Some(dispatch) =
                                         pending_custody_dispatches.remove(&request_id)
                                     {
-                                        let _ = relay_custody_store.mark_dispatch_failed(
+                                        let _ = relay_custody_store.mark_dispatch_rejected(
                                             &dispatch.destination_peer.to_string(),
                                             &dispatch.custody_id,
                                             "peer_disconnected",
+                                            true,
                                         );
                                     }
                                 }
