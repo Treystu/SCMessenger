@@ -33,9 +33,25 @@ Last updated: 2026-03-13
   - `bash ./iOS/verify-test.sh` — **FAIL** (`fcopyfile failed: No space left on device` while Xcode copies the simulator Rust artifact into DerivedData)
 - **Handoff truth**:
   - Branch to continue: `codex/ws13-ws14-hourly-20260313-1613`
-  - Base commit before this run’s new work: `952dce7`
+  - Stable code checkpoint from this run: `ed363d6`
   - Current phase in progress: `WS13.4`
+  - Intentionally mid-stream files for next run:
+    - `core/src/api.udl`
+    - `core/src/lib.rs`
+    - `core/src/store/relay_custody.rs`
+    - `core/src/transport/swarm.rs`
   - Next recommended task: rerun Android/iOS verification on a host/session with a valid Android SDK path, writable Gradle cache, and sufficient free disk for Xcode DerivedData; then start WS13.5 queue migration/rejection plumbing once platform evidence exists.
+  - Commands passed in this run:
+    - `cargo fmt --all -- --check`
+    - `cargo build --workspace`
+    - `cargo clippy --workspace`
+    - `cargo test --workspace`
+    - `./scripts/docs_sync_check.sh`
+  - Commands failed in this run:
+    - `cd android && ./gradlew assembleDebug`
+    - `cd android && ./gradlew testDebugUnitTest`
+    - `cd android && ./gradlew lintDebug`
+    - `bash ./iOS/verify-test.sh`
 
 Last verified: **2026-03-12** (PR83 consolidation branch — full merge of PR79/PR80/PR81/PR82)
 
