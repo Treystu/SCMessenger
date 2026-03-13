@@ -2407,6 +2407,7 @@ open class MeshRepository(private val context: Context) {
                         )
                         historyManager?.add(reconciledRecord)
                         historyManager?.flush()
+                        repoScope.launch { _messageUpdates.emit(reconciledRecord) }
                         Timber.d("SEND_MSG: Reconciled message ID: $initialMessageId -> $realMessageId")
                     } catch (e: Exception) {
                         Timber.w(e, "Failed to reconcile message ID; delivery tracking may be unreliable")

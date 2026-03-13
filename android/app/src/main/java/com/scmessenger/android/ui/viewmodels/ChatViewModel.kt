@@ -94,7 +94,11 @@ class ChatViewModel @Inject constructor(
 
                 // Add optimistic messages that aren't in history yet
                 for (optimistic in currentMessages) {
-                    if (mergedMessages.none { it.id == optimistic.id }) {
+                    val alreadyExistedInHistory = mergedMessages.any {
+                        it.id == optimistic.id ||
+                        (it.content == optimistic.content && it.direction == optimistic.direction && Math.abs(it.senderTimestamp.toLong() - optimistic.senderTimestamp.toLong()) < 2)
+                    }
+                    if (!alreadyExistedInHistory) {
                         // Keep optimistic message if not confirmed yet
                         mergedMessages.add(optimistic)
                     }

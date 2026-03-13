@@ -47,6 +47,12 @@ Remaining WS13 queue:
 4. [ ] WS13.5 — Handover/abandon queue migration + sender-facing rejection UX. Blocked behind WS13.3–WS13.4 plus unavailable local Android/iOS verification tooling on this host (`ANDROID_HOME`, `cargo-ndk`, `xcodebuild`).
 5. [ ] WS13.6 — Compatibility/migration matrix, runbook, and acceptance lock. Unblocked after WS13.3–WS13.5 complete.
 
+## v0.2.1 Critical Bug Fixes (2026-03-12)
+
+Completed in this pass:
+
+1. [x] **Android Duplicate Messages**: Fixed UI duplication bug by properly emitting reconciled message IDs from `MeshRepository` and deduplicating by content/timestamp in `ChatViewModel.loadMessages()`.
+
 ## v0.2.0 Critical Bug Fixes (2026-03-09)
 
 Completed in this pass:
