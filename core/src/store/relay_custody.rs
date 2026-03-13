@@ -19,6 +19,7 @@ const MAX_PENDING_PER_DESTINATION: usize = 10_000;
 const DEVICE_USAGE_CEILING_PERCENT: u64 = 90;
 const FALLBACK_STORAGE_TOTAL_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 const REGISTRATION_HANDOVER_STALE_MS: u64 = 15 * 24 * 60 * 60 * 1000;
+const ACTIVE_REGISTRATION_STALE_WINDOW_SECS: u64 = 14 * 24 * 60 * 60;
 
 static CUSTODY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -832,13 +833,14 @@ impl RelayCustodyStore {
                         device_id: current_device_id,
                         seniority_timestamp: current_seniority.max(seniority_timestamp),
                     }
-                } else if seniority_timestamp < current_seniority {
-                    return Err("registration_seniority_stale".to_string());
                 } else {
-                    RegistrationState::Handover {
-                        from_device_id: current_device_id,
-                        to_device_id: device_id.to_string(),
-                        initiated_at: now_ms(),
+                    let takeover_age = seniority_timestamp.saturating_sub(current_seniority);
+                    if takeover_age < ACTIVE_REGISTRATION_STALE_WINDOW_SECS {
+                        return Err("registration_conflict_active_device".to_string());
+                    }
+                    RegistrationState::Active {
+                        device_id: device_id.to_string(),
+                        seniority_timestamp,
                     }
                 }
             }
@@ -936,6 +938,9 @@ impl RelayCustodyStore {
         };
 
         self.put_registration_state(identity_id, &next)?;
+        if matches!(next, RegistrationState::Abandoned { .. }) {
+            self.purge_destination_queue(identity_id, "identity_abandoned")?;
+        }
         Ok(next)
     }
 
@@ -1034,6 +1039,22 @@ impl RelayCustodyStore {
             .put(registration_state_key(identity_id).as_bytes(), &encoded)?;
         self.backend.flush()?;
         Ok(())
+    }
+
+    fn purge_destination_queue(
+        &self,
+        destination_peer_id: &str,
+        reason: &str,
+    ) -> Result<usize, String> {
+        let records = self.pending_for_destination(destination_peer_id, usize::MAX);
+
+        let purged = records.len();
+        for record in records {
+            let purge_reason = format!("{}_purged", reason);
+            self.record_transition(&record, Some(record.state), record.state, &purge_reason)?;
+            self.remove_message(destination_peer_id, &record.custody_id)?;
+        }
+        Ok(purged)
     }
 }
 
@@ -1625,24 +1646,18 @@ mod tests {
             }
         );
 
-        let handover = store.register("identity-a", "device-b", 200).unwrap();
-        let RegistrationState::Handover {
-            from_device_id,
-            to_device_id,
-            ..
-        } = handover
-        else {
-            panic!("expected handover state");
-        };
-        assert_eq!(from_device_id, "device-a");
-        assert_eq!(to_device_id, "device-b");
-
-        let activated = store.register("identity-a", "device-b", 200).unwrap();
+        let activated = store
+            .register(
+                "identity-a",
+                "device-b",
+                100 + ACTIVE_REGISTRATION_STALE_WINDOW_SECS + 1,
+            )
+            .unwrap();
         assert_eq!(
             activated,
             RegistrationState::Active {
                 device_id: "device-b".to_string(),
-                seniority_timestamp: 200
+                seniority_timestamp: 100 + ACTIVE_REGISTRATION_STALE_WINDOW_SECS + 1
             }
         );
 
@@ -1651,6 +1666,35 @@ mod tests {
             panic!("expected abandoned state");
         };
         assert_eq!(device_id, "device-b");
+    }
+
+    #[test]
+    fn active_registration_conflicts_are_rejected_until_stale_takeover_window_passes() {
+        let store = RelayCustodyStore::in_memory();
+        store
+            .register("identity-conflict", "device-a", 1_000)
+            .unwrap();
+
+        let conflict = store.register("identity-conflict", "device-b", 1_500);
+        assert_eq!(
+            conflict.unwrap_err(),
+            "registration_conflict_active_device".to_string()
+        );
+
+        let takeover = store
+            .register(
+                "identity-conflict",
+                "device-b",
+                1_000 + ACTIVE_REGISTRATION_STALE_WINDOW_SECS + 1,
+            )
+            .unwrap();
+        assert_eq!(
+            takeover,
+            RegistrationState::Active {
+                device_id: "device-b".to_string(),
+                seniority_timestamp: 1_000 + ACTIVE_REGISTRATION_STALE_WINDOW_SECS + 1,
+            }
+        );
     }
 
     #[test]
@@ -1692,5 +1736,32 @@ mod tests {
             panic!("expected stale handover to collapse");
         };
         assert_eq!(device_id, "device-new");
+    }
+
+    #[test]
+    fn abandoning_identity_purges_pending_custody_for_that_identity() {
+        let store = RelayCustodyStore::in_memory();
+        store.register("identity-purge", "device-a", 42).unwrap();
+        let accepted = store
+            .accept_custody(
+                "source-peer".to_string(),
+                "identity-purge".to_string(),
+                "relay-msg-purge".to_string(),
+                vec![4, 2],
+            )
+            .unwrap();
+        assert_eq!(store.pending_for_destination("identity-purge", 10).len(), 1);
+
+        let abandoned = store
+            .deregister("identity-purge", "device-a", None)
+            .unwrap();
+        assert!(matches!(abandoned, RegistrationState::Abandoned { .. }));
+        assert!(store
+            .pending_for_destination("identity-purge", 10)
+            .is_empty());
+
+        let transitions = store.transitions_for_custody(&accepted.custody_id);
+        assert_eq!(transitions.len(), 2);
+        assert_eq!(transitions[1].reason, "identity_abandoned_purged");
     }
 }

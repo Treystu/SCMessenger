@@ -8,50 +8,54 @@ Last updated: 2026-03-13
 - **WS13.4 core enforcement is now real**:
   - `core/src/store/relay_custody.rs` now persists identity-scoped `RegistrationState` entries alongside custody data with `Active`, `Handover`, and `Abandoned` states.
   - verified registration messages now mutate registry state instead of being acknowledgement-only:
-    - `Register` transitions `None -> Active`, `Active -> Handover`, and `Handover -> Active` on target-device confirmation,
+    - `Register` transitions `None -> Active`, rejects non-stale active-device collisions, permits stale takeover after the 14-day window, and still resolves `Handover -> Active` on target-device confirmation,
     - `Deregister` transitions active identities to `Abandoned` or explicit `Handover` when a target device is named,
     - stale handovers older than 15 days auto-collapse to `Abandoned` on read.
   - relay acceptance now enforces tight-pair custody when both `recipient_identity_id` and `intended_device_id` are present; mismatched or abandoned identities are rejected fail-closed while legacy no-device traffic remains compatibility-safe.
+  - abandonment now purges accepted custody backlog for that identity so recycled identities do not inherit stale pending relay state.
   - `IronCore` now exposes `get_registration_state(identity_id)` via `api.udl` as additive `RegistrationStateInfo` metadata for future adapter consumption.
 - **WS13 truth audit outcome for this run**:
   - WS13.1: `VERIFIED COMPLETE`
   - WS13.2: `VERIFIED COMPLETE` in Rust/core surfaces, but Android binding verification remains environment-blocked
   - WS13.3: `VERIFIED COMPLETE`
-  - WS13.4: `PARTIAL` overall; core implementation landed and Rust verification passed, but platform verification + WS13.5 follow-through are still open.
-- **Rust verification on this branch (`codex/ws13-ws14-hourly-20260313-1613`)**:
+  - WS13.4: `PARTIAL` overall; core implementation, corrected collision policy, and abandonment purge are verified, but Android verification and remaining WS13.5 follow-through are still open.
+- **Verification on this branch (`codex/ws13-ws14-hourly-20260313-2118`)**:
   - `cargo fmt --all -- --check` — **PASS**
   - `cargo build --workspace` — **PASS**
   - `cargo clippy --workspace` — **PASS** (existing `too_many_arguments` warning only)
-  - `cargo test --workspace` — **PASS** (`528` passed, `16` ignored, `0` failed)
+  - `cargo test --workspace` — **PASS**
   - targeted additions:
     - `cargo test -p scmessenger-core relay_custody -- --nocapture` — **PASS**
     - `cargo test -p scmessenger-core relay_registration_enforcement -- --nocapture` — **PASS**
+    - `cargo test -p scmessenger-core active_registration_conflicts_are_rejected_until_stale_takeover_window_passes -- --nocapture` — **PASS**
+    - `cargo test -p scmessenger-core abandoning_identity_purges_pending_custody_for_that_identity -- --nocapture --test-threads=1` — **PASS**
 - **Platform verification blockers in this run**:
   - `cd android && ./gradlew assembleDebug` — **FAIL** (`ANDROID_HOME` / `android/local.properties` SDK path missing)
   - `cd android && ./gradlew testDebugUnitTest` — **FAIL** (Gradle wrapper lock file could not be opened: `Operation not permitted`)
   - `cd android && ./gradlew lintDebug` — **FAIL** (same Gradle wrapper lock permission failure)
-  - `bash ./iOS/verify-test.sh` — **FAIL** (`fcopyfile failed: No space left on device` while Xcode copies the simulator Rust artifact into DerivedData)
+  - `bash ./iOS/verify-test.sh` — **PASS**
 - **Handoff truth**:
-  - Branch to continue: `codex/ws13-ws14-hourly-20260313-1613`
-  - Stable code checkpoint from this run: `ed363d6`
-  - Current phase in progress: `WS13.4`
+  - Branch to continue: `codex/ws13-ws14-hourly-20260313-2118`
+  - Stable code checkpoint from this run: working tree contains verified WS13.4 corrections plus updated canonical docs; commit still pending.
+  - Current phase in progress: `WS13.4 closeout / WS13.5 prep`
   - Intentionally mid-stream files for next run:
-    - `core/src/api.udl`
-    - `core/src/lib.rs`
     - `core/src/store/relay_custody.rs`
-    - `core/src/transport/swarm.rs`
-  - Next recommended task: rerun Android/iOS verification on a host/session with a valid Android SDK path, writable Gradle cache, and sufficient free disk for Xcode DerivedData; then start WS13.5 queue migration/rejection plumbing once platform evidence exists.
+    - `docs/CURRENT_STATE.md`
+    - `REMAINING_WORK_TRACKING.md`
+    - `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`
+    - `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md`
+  - Next recommended task: unblock Android verification in an environment with a valid SDK path and writable Gradle user home, then continue WS13.5 sender-facing rejection plumbing on this same branch.
   - Commands passed in this run:
     - `cargo fmt --all -- --check`
     - `cargo build --workspace`
     - `cargo clippy --workspace`
     - `cargo test --workspace`
     - `./scripts/docs_sync_check.sh`
+    - `bash ./iOS/verify-test.sh`
   - Commands failed in this run:
     - `cd android && ./gradlew assembleDebug`
     - `cd android && ./gradlew testDebugUnitTest`
     - `cd android && ./gradlew lintDebug`
-    - `bash ./iOS/verify-test.sh`
 
 Last verified: **2026-03-12** (PR83 consolidation branch — full merge of PR79/PR80/PR81/PR82)
 
