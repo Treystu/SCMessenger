@@ -1,7 +1,12 @@
 package com.scmessenger.android.transport.ble
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -112,6 +117,34 @@ class BleGattClient(
     private val addressTypeMismatchSignals = AtomicInteger(0)
     private val addressTypeMismatchConnectSkips = AtomicInteger(0)
     private val addressTypeMismatchBackoffUntilMs = ConcurrentHashMap<String, Long>()
+
+    private fun hasBluetoothConnectPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return true
+        }
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.BLUETOOTH_CONNECT
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun retryDiscoverServices(gatt: BluetoothGatt, deviceAddress: String) {
+        if (!hasBluetoothConnectPermission()) {
+            Timber.w(
+                "BLUETOOTH_CONNECT permission missing; cannot retry service discovery on %s",
+                deviceAddress
+            )
+            disconnect(deviceAddress)
+            return
+        }
+        try {
+            gatt.discoverServices()
+        } catch (e: SecurityException) {
+            Timber.w(e, "Retry service discovery failed on %s", deviceAddress)
+            disconnect(deviceAddress)
+        }
+    }
 
     // ---------- GATT op queue helpers ----------
 
@@ -543,11 +576,7 @@ class BleGattClient(
                             val gattRef = activeConnections[deviceAddress] ?: return@launch
                             val stateRef = connectionStates[deviceAddress]
                             if (stateRef == ConnectionState.DISCONNECTED) return@launch
-                            runCatching { gattRef.discoverServices() }
-                                .onFailure { ex ->
-                                    Timber.w(ex, "Retry service discovery failed on %s", deviceAddress)
-                                    disconnect(deviceAddress)
-                                }
+                            retryDiscoverServices(gattRef, deviceAddress)
                         }
                     } else {
                         Timber.w(

@@ -540,39 +540,44 @@ fn log_route_decision(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+struct RankedRouteDispatch<'a> {
+    message_id: &'a str,
+    target_peer: PeerId,
+    envelope_data: &'a [u8],
+    recipient_identity_id: Option<&'a str>,
+    intended_device_id: Option<&'a str>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn dispatch_ranked_route(
     swarm: &mut libp2p::Swarm<IronCoreBehaviour>,
     route: &RankedRoute,
-    message_id: &str,
-    target_peer: PeerId,
-    envelope_data: &[u8],
+    dispatch: RankedRouteDispatch<'_>,
     request_to_message: &mut HashMap<libp2p::request_response::OutboundRequestId, String>,
     pending_relay_requests: &mut HashMap<libp2p::request_response::OutboundRequestId, String>,
-    recipient_identity_id: Option<&str>,
-    intended_device_id: Option<&str>,
 ) {
     if route.path.len() == 1 {
         let request_id = swarm.behaviour_mut().messaging.send_request(
-            &target_peer,
+            &dispatch.target_peer,
             MessageRequest {
-                envelope_data: envelope_data.to_vec(),
+                envelope_data: dispatch.envelope_data.to_vec(),
             },
         );
-        request_to_message.insert(request_id, message_id.to_string());
+        request_to_message.insert(request_id, dispatch.message_id.to_string());
     } else {
         let relay_peer = route.path[0];
         let relay_request = RelayRequest {
-            destination_peer: target_peer.to_bytes(),
-            envelope_data: envelope_data.to_vec(),
-            message_id: message_id.to_string(),
-            recipient_identity_id: recipient_identity_id.map(|s| s.to_string()),
-            intended_device_id: intended_device_id.map(|s| s.to_string()),
+            destination_peer: dispatch.target_peer.to_bytes(),
+            envelope_data: dispatch.envelope_data.to_vec(),
+            message_id: dispatch.message_id.to_string(),
+            recipient_identity_id: dispatch.recipient_identity_id.map(|s| s.to_string()),
+            intended_device_id: dispatch.intended_device_id.map(|s| s.to_string()),
         };
         let request_id = swarm
             .behaviour_mut()
             .relay
             .send_request(&relay_peer, relay_request);
-        pending_relay_requests.insert(request_id, message_id.to_string());
+        pending_relay_requests.insert(request_id, dispatch.message_id.to_string());
     }
 }
 
@@ -1520,13 +1525,17 @@ pub async fn start_swarm_with_config(
                                 dispatch_ranked_route(
                                     &mut swarm,
                                     route,
-                                    &msg_id,
-                                    pending.target_peer,
-                                    &pending.envelope_data,
+                                    RankedRouteDispatch {
+                                        message_id: &msg_id,
+                                        target_peer: pending.target_peer,
+                                        envelope_data: &pending.envelope_data,
+                                        recipient_identity_id: pending
+                                            .recipient_identity_id
+                                            .as_deref(),
+                                        intended_device_id: pending.intended_device_id.as_deref(),
+                                    },
                                     &mut request_to_message,
                                     &mut pending_relay_requests,
-                                    pending.recipient_identity_id.as_deref(),
-                                    pending.intended_device_id.as_deref(),
                                 );
 
                                 pending_messages.insert(msg_id, pending);
@@ -2922,13 +2931,15 @@ pub async fn start_swarm_with_config(
                                 dispatch_ranked_route(
                                     &mut swarm,
                                     initial_route,
-                                    &message_id,
-                                    peer_id,
-                                    &envelope_data,
+                                    RankedRouteDispatch {
+                                        message_id: &message_id,
+                                        target_peer: peer_id,
+                                        envelope_data: &envelope_data,
+                                        recipient_identity_id: recipient_identity_id.as_deref(),
+                                        intended_device_id: intended_device_id.as_deref(),
+                                    },
                                     &mut request_to_message,
                                     &mut pending_relay_requests,
-                                    recipient_identity_id.as_deref(),
-                                    intended_device_id.as_deref(),
                                 );
 
                                 // Store pending message for retry handling

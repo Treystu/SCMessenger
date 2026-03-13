@@ -3,7 +3,7 @@
 Status: Active  
 Last updated: 2026-03-13
 
-## 2026-03-13 WS13.4 Relay Registry + Custody Enforcement (Partially Verified)
+## 2026-03-13 WS13.4 Relay Registry + Custody Enforcement (Consolidated + Platform Verified)
 
 - **WS13.4 core enforcement is now real**:
   - `core/src/store/relay_custody.rs` now persists identity-scoped `RegistrationState` entries alongside custody data with `Active`, `Handover`, and `Abandoned` states.
@@ -16,48 +16,44 @@ Last updated: 2026-03-13
   - `IronCore` now exposes `get_registration_state(identity_id)` via `api.udl` as additive `RegistrationStateInfo` metadata for future adapter consumption.
 - **WS13 truth audit outcome for this run**:
   - WS13.1: `VERIFIED COMPLETE`
-  - WS13.2: `VERIFIED COMPLETE` in Rust/core surfaces, but Android binding verification remains environment-blocked
+  - WS13.2: `VERIFIED COMPLETE` including Android/iOS adapter-surface verification on this host
   - WS13.3: `VERIFIED COMPLETE`
-  - WS13.4: `PARTIAL` overall; core implementation, corrected collision policy, and abandonment purge are verified, but Android verification and remaining WS13.5 follow-through are still open.
-- **Verification on this branch (`codex/ws13-ws14-hourly-20260313-2118`)**:
+  - WS13.4: `IMPLEMENTED + PLATFORM VERIFIED`; remaining open work is now the explicitly deferred WS13.5 queue migration / sender-facing rejection follow-through, not build or platform readiness.
+- **Automation branch consolidation outcome**:
+  - `codex/ws13-ws14-hourly-20260313-0900` is identical to `main`,
+  - `codex/ws13-ws14-hourly-20260313-1613` is an ancestor checkpoint,
+  - `codex/ws13-ws14-hourly-20260313-2118` and `codex/ws13-ws14-hourly-20260313-2215` point to the same tip commit,
+  - active merge candidate is now `codex/ws13-ws14-consolidated-20260313-1245`.
+- **Closeout fixes added during consolidation**:
+  - `core/src/transport/swarm.rs` now wraps ranked-route dispatch inputs in a request context so strict workspace clippy passes cleanly.
+  - Android BLE permission-safe wrappers were added in `BleGattClient.kt` and `BleScanner.kt` so retry service discovery and device-name reads fail closed when `BLUETOOTH_CONNECT` is missing, allowing `lintDebug` to pass without weakening runtime safety.
+- **Verification on this branch (`codex/ws13-ws14-consolidated-20260313-1245`)**:
   - `cargo fmt --all -- --check` — **PASS**
   - `cargo build --workspace` — **PASS**
-  - `cargo clippy --workspace` — **PASS** (existing `too_many_arguments` warning only)
+  - `cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments` — **PASS**
   - `cargo test --workspace` — **PASS**
-  - targeted additions:
-    - `cargo test -p scmessenger-core relay_custody -- --nocapture` — **PASS**
-    - `cargo test -p scmessenger-core relay_registration_enforcement -- --nocapture` — **PASS**
-    - `cargo test -p scmessenger-core active_registration_conflicts_are_rejected_until_stale_takeover_window_passes -- --nocapture` — **PASS**
-    - `cargo test -p scmessenger-core abandoning_identity_purges_pending_custody_for_that_identity -- --nocapture --test-threads=1` — **PASS**
-- **Platform verification blockers in this run**:
-  - `cd android && ./gradlew assembleDebug` — **FAIL** (`ANDROID_HOME` / `android/local.properties` SDK path missing)
-  - `cd android && ./gradlew testDebugUnitTest` — **FAIL** (Gradle wrapper lock file could not be opened: `Operation not permitted`)
-  - `cd android && ./gradlew lintDebug` — **FAIL** (same Gradle wrapper lock permission failure)
+  - `./scripts/docs_sync_check.sh` — **PASS**
   - `bash ./iOS/verify-test.sh` — **PASS**
+  - `cd android && export ANDROID_HOME=\"$HOME/Library/Android/sdk\" ANDROID_SDK_ROOT=\"$ANDROID_HOME\" GRADLE_USER_HOME=\"$PWD/../.gradle-user-home\" && ./gradlew assembleDebug testDebugUnitTest lintDebug --console=plain` — **PASS**
 - **Handoff truth**:
-  - Branch to continue: `codex/ws13-ws14-hourly-20260313-2118`
-  - Stable code checkpoint from this run: working tree contains verified WS13.4 corrections plus updated canonical docs; commit still pending.
-  - Current phase in progress: `WS13.4 closeout / WS13.5 prep`
+  - Branch to continue: `codex/ws13-ws14-consolidated-20260313-1245`
+  - Stable code checkpoint from this run: consolidated branch contains the latest unique WS13.4 implementation plus strict-lint / strict-clippy closeout fixes and refreshed canonical docs.
+  - Current phase in progress: `WS13.5 prep`
   - Intentionally mid-stream files for next run:
     - `core/src/store/relay_custody.rs`
-    - `docs/CURRENT_STATE.md`
-    - `REMAINING_WORK_TRACKING.md`
-    - `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`
-    - `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md`
-  - Next recommended task: unblock Android verification in an environment with a valid SDK path and writable Gradle user home, then continue WS13.5 sender-facing rejection plumbing on this same branch.
+    - `core/src/lib.rs`
+    - adapter-facing error surfaces that need recycled-identity messaging
+  - Next recommended task: open or update a PR from `codex/ws13-ws14-consolidated-20260313-1245` onto `main`, then continue WS13.5 sender-facing rejection plumbing and clean-handover queue migration on that same branch (or its PR follow-up).
   - Commands passed in this run:
     - `cargo fmt --all -- --check`
     - `cargo build --workspace`
-    - `cargo clippy --workspace`
+    - `cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments`
     - `cargo test --workspace`
     - `./scripts/docs_sync_check.sh`
     - `bash ./iOS/verify-test.sh`
-  - Commands failed in this run:
-    - `cd android && ./gradlew assembleDebug`
-    - `cd android && ./gradlew testDebugUnitTest`
-    - `cd android && ./gradlew lintDebug`
+    - `cd android && ./gradlew assembleDebug testDebugUnitTest lintDebug --console=plain`
 
-Last verified: **2026-03-12** (PR83 consolidation branch — full merge of PR79/PR80/PR81/PR82)
+Last verified: **2026-03-13** (WS13.4 consolidation branch — duplicate hourly branches reconciled, Rust/doc/iOS/Android verification all green)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
 

@@ -1,5 +1,6 @@
 package com.scmessenger.android.transport.ble
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
@@ -8,9 +9,12 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
+import androidx.core.content.ContextCompat
 import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -135,6 +139,26 @@ class BleScanner(
             scanFailures.incrementAndGet()
             isScanning = false
         }
+    }
+
+    private fun hasBluetoothConnectPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return true
+        }
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.BLUETOOTH_CONNECT
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun safeDeviceName(result: ScanResult): String? {
+        if (!hasBluetoothConnectPermission()) {
+            return null
+        }
+        return runCatching { result.device.name?.trim() }
+            .onFailure { Timber.w(it, "Unable to read BLE device name safely") }
+            .getOrNull()
     }
 
     /**
@@ -316,7 +340,7 @@ class BleScanner(
         val serviceUuidMatch = record?.serviceUuids?.any { it.uuid == SERVICE_UUID } == true
         val serviceDataMatch = record?.getServiceData(PARCEL_UUID) != null
         val advertisedName = record?.deviceName?.trim()
-        val deviceName = result.device.name?.trim()
+        val deviceName = safeDeviceName(result)
         val nameMatch = advertisedName == ADVERTISED_NAME || deviceName == ADVERTISED_NAME
 
         return serviceUuidMatch || serviceDataMatch || nameMatch
