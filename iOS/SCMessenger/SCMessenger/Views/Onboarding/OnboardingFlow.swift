@@ -18,18 +18,18 @@ struct OnboardingFlow: View {
     init(onComplete: @escaping () -> Void = {}) {
         self.onComplete = onComplete
     }
-    
+
     var body: some View {
         TabView(selection: $viewModel.currentStep) {
             WelcomeView()
                 .tag(0)
-            
+
             ConsentView()
                 .tag(1)
-            
+
             IdentityView()
                 .tag(2)
-            
+
             CompletionView(viewModel: viewModel)
                 .tag(3)
         }
@@ -46,27 +46,27 @@ struct OnboardingFlow: View {
 
 struct WelcomeView: View {
     @Environment(OnboardingViewModel.self) private var viewModel
-    
+
     var body: some View {
         VStack(spacing: Theme.spacingLarge) {
             Spacer()
-            
+
             Image(systemName: "network")
                 .font(.system(size: 80))
                 .foregroundStyle(Theme.onPrimaryContainer)
-            
+
             Text("Welcome to SCMessenger")
                 .font(Theme.headlineLarge)
                 .multilineTextAlignment(.center)
-            
+
             Text("The world's first truly sovereign messenger")
                 .font(Theme.bodyLarge)
                 .foregroundStyle(Theme.onSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, Theme.spacingXLarge)
-            
+
             Spacer()
-            
+
             Button("Get Started") {
                 viewModel.advance()
             }
@@ -84,17 +84,17 @@ struct IdentityView: View {
     @State private var identity: IdentityInfo?
     @State private var nickname = ""
     @State private var setupError: String?
-    
+
     var body: some View {
         VStack(spacing: Theme.spacingLarge) {
             Text("Your Identity")
                 .font(Theme.headlineLarge)
-            
+
             if let identity = identity {
                 VStack(spacing: Theme.spacingMedium) {
                     Text("Identity Generated")
                         .font(Theme.titleMedium)
-                    
+
                     Text(identity.publicKeyHex?.prefix(16) ?? "")
                         .font(.system(.body, design: .monospaced))
                         .foregroundStyle(Theme.onSurfaceVariant)
@@ -125,9 +125,9 @@ struct IdentityView: View {
                     .font(Theme.bodySmall)
                     .foregroundStyle(.red)
             }
-            
+
             Spacer()
-            
+
             Button("Continue") {
                 completeIdentityStep()
             }
@@ -156,12 +156,12 @@ struct IdentityView: View {
             }
         }
     }
-    
+
     private func generateIdentity() {
         Task { @MainActor in
             isGenerating = true
             defer { isGenerating = false }
-            
+
             do {
                 try repository.createIdentity()
                 let trimmedNickname = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -207,20 +207,20 @@ struct IdentityView: View {
 
 struct PermissionsView: View {
     @Environment(OnboardingViewModel.self) private var viewModel
-    
+
     var body: some View {
         VStack(spacing: Theme.spacingLarge) {
             Text("Permissions")
                 .font(Theme.headlineLarge)
-            
+
             VStack(alignment: .leading, spacing: Theme.spacingMedium) {
                 PermissionRow(icon: "antenna.radiowaves.left.and.right", title: "Bluetooth", description: "Required for mesh networking")
                 PermissionRow(icon: "wifi", title: "Local Network", description: "Enables WiFi Direct connections")
                 PermissionRow(icon: "bell.fill", title: "Notifications", description: "Get notified of new messages")
             }
-            
+
             Spacer()
-            
+
             Button("Continue") {
                 viewModel.advance()
             }
@@ -234,14 +234,14 @@ struct PermissionRow: View {
     let icon: String
     let title: String
     let description: String
-    
+
     var body: some View {
         HStack(spacing: Theme.spacingMedium) {
             Image(systemName: icon)
                 .font(.title2)
                 .foregroundStyle(Theme.onPrimaryContainer)
                 .frame(width: 40)
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(Theme.titleMedium)
@@ -255,16 +255,16 @@ struct PermissionRow: View {
 
 struct RelayExplanationView: View {
     @Environment(OnboardingViewModel.self) private var viewModel
-    
+
     var body: some View {
         VStack(spacing: Theme.spacingLarge) {
             Image(systemName: "arrow.triangle.2.circlepath")
                 .font(.system(size: 60))
                 .foregroundStyle(Theme.onErrorContainer)
-            
+
             Text("Relay = Messaging")
                 .font(Theme.headlineLarge)
-            
+
             VStack(alignment: .leading, spacing: Theme.spacingSmall) {
                 BulletPoint("You relay messages for others")
                 BulletPoint("Others relay messages for you")
@@ -272,9 +272,9 @@ struct RelayExplanationView: View {
                 BulletPoint("This is how the mesh stays strong")
             }
             .errorContainerStyle()
-            
+
             Spacer()
-            
+
             Button("I Understand") {
                 viewModel.advance()
             }
@@ -287,16 +287,16 @@ struct RelayExplanationView: View {
 struct ConsentView: View {
     @Environment(OnboardingViewModel.self) private var viewModel
     @State private var accepted = false
-    
+
     var body: some View {
         VStack(spacing: Theme.spacingLarge) {
             Image(systemName: "shield.checkered")
                 .font(.system(size: 60))
                 .foregroundStyle(Theme.onPrimaryContainer)
-            
+
             Text("Before You Begin")
                 .font(Theme.headlineLarge)
-            
+
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.spacingMedium) {
                     ConsentItem(
@@ -304,25 +304,25 @@ struct ConsentView: View {
                         title: "Keypair Identity",
                         detail: "Your identity is a cryptographic keypair stored only on this device. There are no phone numbers, emails, or accounts. If you lose your keys, your identity cannot be recovered unless you have a backup."
                     )
-                    
+
                     ConsentItem(
                         icon: "externaldrive.fill",
                         title: "Local-Only Data",
                         detail: "All messages, contacts, and history are stored locally on your device. No data is stored on any server. You are solely responsible for your data."
                     )
-                    
+
                     ConsentItem(
                         icon: "arrow.triangle.2.circlepath",
                         title: "Relay Participation",
                         detail: "Your device helps relay encrypted messages for other users. This is how the mesh network operates — you relay for others, and they relay for you."
                     )
-                    
+
                     ConsentItem(
                         icon: "lock.shield.fill",
                         title: "End-to-End Encryption",
                         detail: "All messages are encrypted before leaving your device. Only the intended recipient can read them. Relay nodes cannot access message contents."
                     )
-                    
+
                     ConsentItem(
                         icon: "exclamationmark.triangle.fill",
                         title: "Alpha Software",
@@ -331,14 +331,14 @@ struct ConsentView: View {
                 }
                 .padding(.horizontal, Theme.spacingSmall)
             }
-            
+
             Toggle(isOn: $accepted) {
                 Text("I understand and accept these terms")
                     .font(Theme.bodyMedium)
             }
             .toggleStyle(.switch)
             .padding(.horizontal)
-            
+
             Button("Continue") {
                 UserDefaults.standard.set(true, forKey: "hasAcceptedConsent")
                 viewModel.advance()
@@ -355,14 +355,14 @@ struct ConsentItem: View {
     let icon: String
     let title: String
     let detail: String
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: Theme.spacingMedium) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(Theme.onPrimaryContainer)
                 .frame(width: 28)
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(Theme.titleMedium)
@@ -376,11 +376,11 @@ struct ConsentItem: View {
 
 struct BulletPoint: View {
     let text: String
-    
+
     init(_ text: String) {
         self.text = text
     }
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: Theme.spacingSmall) {
             Text("•")
@@ -392,24 +392,24 @@ struct BulletPoint: View {
 
 struct CompletionView: View {
     let viewModel: OnboardingViewModel
-    
+
     var body: some View {
         VStack(spacing: Theme.spacingLarge) {
             Spacer()
-            
+
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 80))
                 .foregroundStyle(.green)
-            
+
             Text("You're All Set!")
                 .font(Theme.headlineLarge)
-            
+
             Text("Start messaging on the mesh")
                 .font(Theme.bodyLarge)
                 .foregroundStyle(Theme.onSurfaceVariant)
-            
+
             Spacer()
-            
+
             Button("Start Messaging") {
                 viewModel.completeOnboarding()
             }

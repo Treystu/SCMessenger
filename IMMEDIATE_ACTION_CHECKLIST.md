@@ -1,5 +1,5 @@
 # IMMEDIATE ACTION CHECKLIST
-**Created:** 2026-03-10 09:23 UTC  
+**Created:** 2026-03-10 09:23 UTC
 **Priority:** CRITICAL - Test Now!
 
 ---
@@ -46,7 +46,7 @@ adb logcat -v time | grep "SEND_MSG"
 - [ ] Both Android and iOS connected to relay
 - [ ] Send from Android → iOS
 - [ ] **OBSERVE:** Does iOS receive it?
-- [ ] Send from iOS → Android  
+- [ ] Send from iOS → Android
 - [ ] **OBSERVE:** Does Android receive it?
 
 ---
@@ -59,7 +59,7 @@ After testing, report:
 - "Send is working! Messages deliver successfully."
 - Proceed to: Nickname display fix
 
-### If PARTIAL 🟡  
+### If PARTIAL 🟡
 - "Send works sometimes but..."
 - Describe: What works? What doesn't?
 - Provide: Relevant log excerpt
@@ -82,7 +82,7 @@ After testing, report:
 
 ### 2. No Block Button
 - **Symptom:** Can't block annoying users
-- **Priority:** P1  
+- **Priority:** P1
 - **Fix:** Add menu item in ChatScreen
 - **Est:** 25-30 lines
 
@@ -241,8 +241,8 @@ NEXT: [what should we do next?]
 
 ## ⚡ READY? GO TEST!
 
-**Everything is built and installed.**  
-**App is on your device.**  
+**Everything is built and installed.**
+**App is on your device.**
 **Just open it and try sending a message!**
 
 **Report back with results and we'll proceed to the next fix!**

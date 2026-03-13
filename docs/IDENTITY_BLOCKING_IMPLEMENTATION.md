@@ -1,5 +1,5 @@
 # Identity Blocking Implementation
-**Date:** March 10, 2026  
+**Date:** March 10, 2026
 **Status:** CORE IMPLEMENTED, DEVICE ID PAIRING TODO
 
 ## Summary
@@ -36,19 +36,19 @@ pub struct BlockedIdentity {
 impl BlockedManager {
     // Block an identity
     pub fn block(&self, blocked: BlockedIdentity) -> Result<(), IronCoreError>;
-    
+
     // Unblock an identity or device
     pub fn unblock(&self, peer_id: String, device_id: Option<String>) -> Result<(), IronCoreError>;
-    
+
     // Check if blocked
     pub fn is_blocked(&self, peer_id: &str, device_id: Option<&str>) -> Result<bool, IronCoreError>;
-    
+
     // Get block details
     pub fn get(&self, peer_id: &str, device_id: Option<&str>) -> Result<Option<BlockedIdentity>, IronCoreError>;
-    
+
     // List all blocks
     pub fn list(&self) -> Result<Vec<BlockedIdentity>, IronCoreError>;
-    
+
     // Count blocked identities
     pub fn count(&self) -> Result<usize, IronCoreError>;
 }
@@ -62,7 +62,7 @@ let manager = BlockedManager::new(backend);
 
 let blocked = BlockedIdentity::new("12D3KooWSpammer123".to_string())
     .with_reason("Spam messages".to_string());
-    
+
 manager.block(blocked)?;
 ```
 
@@ -80,7 +80,7 @@ if manager.is_blocked("12D3KooWSpammer123", None)? {
 let blocked = BlockedIdentity::new("12D3KooWUser456".to_string())
     .with_device_id("device-abc-123".to_string())
     .with_reason("Malicious device".to_string());
-    
+
 manager.block(blocked)?;
 
 // This device is blocked

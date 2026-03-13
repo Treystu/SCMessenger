@@ -25,7 +25,7 @@ if (ironCore == null) {
 
 ### Impact
 - ✅ Eliminates "Not initialized" crashes on fresh install
-- ✅ Prevents premature message send attempts  
+- ✅ Prevents premature message send attempts
 - ✅ Allows core to fully initialize before sync operations
 - ✅ Fixes the "pre-loaded identity" issue (was trying to use uninitialized core)
 

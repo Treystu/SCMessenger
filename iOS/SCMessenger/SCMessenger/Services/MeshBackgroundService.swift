@@ -20,25 +20,25 @@ import os
 final class MeshBackgroundService {
     private let logger = Logger(subsystem: "com.scmessenger", category: "Background")
     private let meshRepository: MeshRepository
-    
+
     // BGTask identifiers - must match Info.plist BGTaskSchedulerPermittedIdentifiers
     static let refreshTaskId = "com.scmessenger.mesh.refresh"
     static let processingTaskId = "com.scmessenger.mesh.processing"
-    
+
     // Background task state
     private var refreshTaskScheduled = false
     private var processingTaskScheduled = false
-    
+
     init(meshRepository: MeshRepository) {
         self.meshRepository = meshRepository
     }
-    
+
     // MARK: - Public API
-    
+
     /// Register background tasks — call from app init
     func registerBackgroundTasks() {
         logger.info("Registering background tasks")
-        
+
         // Register refresh task (quick sync, 30 seconds max)
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: Self.refreshTaskId,
@@ -72,10 +72,10 @@ final class MeshBackgroundService {
             }
             self.handleBackgroundProcessing(processingTask)
         }
-        
+
         logger.info("Background tasks registered successfully")
     }
-    
+
     /// Called when app enters background
     func onEnteringBackground() {
         logger.info("App entering background")
@@ -83,22 +83,22 @@ final class MeshBackgroundService {
         scheduleBackgroundRefresh()
         scheduleBackgroundProcessing()
     }
-    
+
     /// Called when app enters foreground
     func onEnteringForeground() {
         logger.info("App entering foreground")
         meshRepository.onEnteringForeground()
     }
-    
+
     // MARK: - Background Task Scheduling
-    
+
     /// Schedule next background fetch
     private func scheduleBackgroundRefresh() {
         guard !refreshTaskScheduled else { return }
-        
+
         let request = BGAppRefreshTaskRequest(identifier: Self.refreshTaskId)
         request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60) // 15 min
-        
+
         do {
             try BGTaskScheduler.shared.submit(request)
             refreshTaskScheduled = true
@@ -107,16 +107,16 @@ final class MeshBackgroundService {
             logger.error("Failed to schedule background refresh: \(error.localizedDescription)")
         }
     }
-    
+
     /// Schedule background processing (longer tasks)
     private func scheduleBackgroundProcessing() {
         guard !processingTaskScheduled else { return }
-        
+
         let request = BGProcessingTaskRequest(identifier: Self.processingTaskId)
         request.requiresNetworkConnectivity = false // mesh works offline
         request.requiresExternalPower = false
         request.earliestBeginDate = Date(timeIntervalSinceNow: 60 * 60) // 1 hour
-        
+
         do {
             try BGTaskScheduler.shared.submit(request)
             processingTaskScheduled = true
@@ -125,35 +125,35 @@ final class MeshBackgroundService {
             logger.error("Failed to schedule background processing: \(error.localizedDescription)")
         }
     }
-    
+
     // MARK: - Background Task Handlers
-    
+
     /// Handle background refresh wakeup (quick sync, 30 seconds max)
     private func handleBackgroundRefresh(_ task: BGAppRefreshTask) {
         logger.info("Background refresh triggered")
         refreshTaskScheduled = false
-        
+
         // Schedule next one
         scheduleBackgroundRefresh()
-        
+
         // Set expiration handler
         task.expirationHandler = { [weak self] in
             self?.logger.warning("Background refresh expired, pausing service")
             self?.meshRepository.pauseService()
         }
-        
+
         // Perform quick sync operations
         Task {
             do {
                 // Sync pending messages
                 try await meshRepository.syncPendingMessages()
-                
+
                 // Update stats
                 meshRepository.updateStats()
-                
+
                 // Discover nearby peers (quick scan)
                 try await meshRepository.quickPeerDiscovery()
-                
+
                 task.setTaskCompleted(success: true)
                 logger.info("Background refresh completed successfully")
             } catch {
@@ -162,33 +162,33 @@ final class MeshBackgroundService {
             }
         }
     }
-    
+
     /// Handle background processing (bulk operations, several minutes)
     private func handleBackgroundProcessing(_ task: BGProcessingTask) {
         logger.info("Background processing triggered")
         processingTaskScheduled = false
-        
+
         // Schedule next one
         scheduleBackgroundProcessing()
-        
+
         // Set expiration handler
         task.expirationHandler = { [weak self] in
             self?.logger.warning("Background processing expired, pausing service")
             self?.meshRepository.pauseService()
         }
-        
+
         // Perform bulk operations
         Task {
             do {
                 // Full sync with all known peers
                 try await meshRepository.performBulkSync()
-                
+
                 // Cleanup old messages
                 try await meshRepository.cleanupOldMessages()
-                
+
                 // Update peer connection ledger
                 try await meshRepository.updatePeerLedger()
-                
+
                 task.setTaskCompleted(success: true)
                 logger.info("Background processing completed successfully")
             } catch {
@@ -215,7 +215,7 @@ extension MeshBackgroundService {
             }
         }
     }
-    
+
     /// Simulate background processing for testing
     func simulateBackgroundProcessing() {
         logger.debug("🧪 Simulating background processing")

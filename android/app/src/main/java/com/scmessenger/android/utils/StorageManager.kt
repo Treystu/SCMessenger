@@ -21,16 +21,16 @@ object StorageManager {
      */
     fun performStartupMaintenance(context: Context) {
         Timber.d("Performing startup storage maintenance...")
-        
+
         // 1. Consolidate and rotate logs
         rotateLogsOnStartup(context)
-        
+
         // 2. Clear application cache (noisy/temporary)
         clearCache(context)
-        
+
         // 3. Prune oversized non-critical storage
         pruneNoisyStorage(context)
-        
+
         Timber.d("Startup maintenance complete. Available storage: ${getAvailableStorageMB(context)} MB")
     }
 
@@ -51,15 +51,15 @@ object StorageManager {
                     current.renameTo(next)
                 }
             }
-            
+
             // Move current log to .1
             val firstHistory = File(context.filesDir, "mesh_diagnostics.log.1")
             if (firstHistory.exists()) firstHistory.delete()
             logFile.renameTo(firstHistory)
-            
+
             // Cleanup legacy .old files from previous versions
             File(context.filesDir, "mesh_diagnostics.log.old").delete()
-            
+
             Timber.d("Logs rotated successfully.")
         } catch (e: Exception) {
             Timber.e(e, "Failed to rotate logs")
@@ -87,7 +87,7 @@ object StorageManager {
         // 'inbox' and 'outbox' can grow significantly if relaying traffic.
         // We prune the 'blobs' subdirectories if they exceed a noise threshold.
         val nonCriticalDirs = listOf("inbox/blobs", "outbox/blobs")
-        
+
         nonCriticalDirs.forEach { path ->
             val dir = File(context.filesDir, path)
             if (dir.exists() && dir.isDirectory) {

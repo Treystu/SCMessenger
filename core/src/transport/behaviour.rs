@@ -201,8 +201,10 @@ impl DeregistrationPayload {
         )?;
         if let Some(target_device_id) = self.target_device_id.as_deref() {
             validate_uuid_v4(target_device_id, "deregistration_target_device_id_invalid")?;
-            let from_uuid = Uuid::parse_str(&self.from_device_id).map_err(|_| "deregistration_from_device_id_invalid")?;
-            let target_uuid = Uuid::parse_str(target_device_id).map_err(|_| "deregistration_target_device_id_invalid")?;
+            let from_uuid = Uuid::parse_str(&self.from_device_id)
+                .map_err(|_| "deregistration_from_device_id_invalid")?;
+            let target_uuid = Uuid::parse_str(target_device_id)
+                .map_err(|_| "deregistration_target_device_id_invalid")?;
             if target_uuid == from_uuid {
                 return Err("deregistration_target_matches_source");
             }

@@ -1280,6 +1280,8 @@ public protocol IronCoreProtocol : AnyObject {
     
     func exportIdentityBackup() throws  -> String
     
+    func exportLogs() throws  -> String
+    
     func extractPublicKeyFromPeerId(peerId: String) throws  -> String
     
     /**
@@ -1312,6 +1314,8 @@ public protocol IronCoreProtocol : AnyObject {
     
     func outboxCount()  -> UInt32
     
+    func performMaintenance() throws 
+    
     /**
      * Generate a cover traffic payload — random bytes that look like an encrypted
      * message. Broadcast via send_to_all_peers() to obscure real traffic patterns.
@@ -1324,6 +1328,8 @@ public protocol IronCoreProtocol : AnyObject {
     func prepareMessageWithId(recipientPublicKeyHex: String, text: String) throws  -> PreparedMessage
     
     func prepareReceipt(recipientPublicKeyHex: String, messageId: String) throws  -> Data
+    
+    func recordLog(line: String) 
     
     /**
      * Resolve any ID format (public_key_hex, identity_id, or libp2p_peer_id) to canonical public_key_hex.
@@ -1342,6 +1348,8 @@ public protocol IronCoreProtocol : AnyObject {
     func stop() 
     
     func unblockPeer(peerId: String) throws 
+    
+    func updateDiskStats(totalBytes: UInt64, freeBytes: UInt64) 
     
     func verifySignature(data: Data, signature: Data, publicKeyHex: String) throws  -> Bool
     
@@ -1428,6 +1436,13 @@ open func contactsManager() -> ContactManager {
 open func exportIdentityBackup()throws  -> String {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_export_identity_backup(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func exportLogs()throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_export_logs(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -1531,6 +1546,12 @@ open func outboxCount() -> UInt32 {
 })
 }
     
+open func performMaintenance()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_perform_maintenance(self.uniffiClonePointer(),$0
+    )
+}
+}
+    
     /**
      * Generate a cover traffic payload — random bytes that look like an encrypted
      * message. Broadcast via send_to_all_peers() to obscure real traffic patterns.
@@ -1569,6 +1590,13 @@ open func prepareReceipt(recipientPublicKeyHex: String, messageId: String)throws
         FfiConverterString.lower(messageId),$0
     )
 })
+}
+    
+open func recordLog(line: String) {try! rustCall() {
+    uniffi_scmessenger_core_fn_method_ironcore_record_log(self.uniffiClonePointer(),
+        FfiConverterString.lower(line),$0
+    )
+}
 }
     
     /**
@@ -1620,6 +1648,14 @@ open func stop() {try! rustCall() {
 open func unblockPeer(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_unblock_peer(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),$0
+    )
+}
+}
+    
+open func updateDiskStats(totalBytes: UInt64, freeBytes: UInt64) {try! rustCall() {
+    uniffi_scmessenger_core_fn_method_ironcore_update_disk_stats(self.uniffiClonePointer(),
+        FfiConverterUInt64.lower(totalBytes),
+        FfiConverterUInt64.lower(freeBytes),$0
     )
 }
 }
@@ -2326,7 +2362,7 @@ public protocol SwarmBridgeProtocol : AnyObject {
     
     func publishTopic(topic: String, data: Data) throws 
     
-    func sendMessage(peerId: String, data: Data) throws 
+    func sendMessage(peerId: String, data: Data, recipientIdentityId: String?, intendedDeviceId: String?) throws 
     
     func sendToAllPeers(data: Data) throws 
     
@@ -2429,10 +2465,12 @@ open func publishTopic(topic: String, data: Data)throws  {try rustCallWithError(
 }
 }
     
-open func sendMessage(peerId: String, data: Data)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func sendMessage(peerId: String, data: Data, recipientIdentityId: String?, intendedDeviceId: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_swarmbridge_send_message(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),
-        FfiConverterData.lower(data),$0
+        FfiConverterData.lower(data),
+        FfiConverterOptionString.lower(recipientIdentityId),
+        FfiConverterOptionString.lower(intendedDeviceId),$0
     )
 }
 }
@@ -2983,15 +3021,19 @@ public func FfiConverterTypeHistoryStats_lower(_ value: HistoryStats) -> RustBuf
 public struct IdentityInfo {
     public var identityId: String?
     public var publicKeyHex: String?
+    public var deviceId: String?
+    public var seniorityTimestamp: UInt64?
     public var initialized: Bool
     public var nickname: String?
     public var libp2pPeerId: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(identityId: String?, publicKeyHex: String?, initialized: Bool, nickname: String?, libp2pPeerId: String?) {
+    public init(identityId: String?, publicKeyHex: String?, deviceId: String?, seniorityTimestamp: UInt64?, initialized: Bool, nickname: String?, libp2pPeerId: String?) {
         self.identityId = identityId
         self.publicKeyHex = publicKeyHex
+        self.deviceId = deviceId
+        self.seniorityTimestamp = seniorityTimestamp
         self.initialized = initialized
         self.nickname = nickname
         self.libp2pPeerId = libp2pPeerId
@@ -3006,6 +3048,12 @@ extension IdentityInfo: Equatable, Hashable {
             return false
         }
         if lhs.publicKeyHex != rhs.publicKeyHex {
+            return false
+        }
+        if lhs.deviceId != rhs.deviceId {
+            return false
+        }
+        if lhs.seniorityTimestamp != rhs.seniorityTimestamp {
             return false
         }
         if lhs.initialized != rhs.initialized {
@@ -3023,6 +3071,8 @@ extension IdentityInfo: Equatable, Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(identityId)
         hasher.combine(publicKeyHex)
+        hasher.combine(deviceId)
+        hasher.combine(seniorityTimestamp)
         hasher.combine(initialized)
         hasher.combine(nickname)
         hasher.combine(libp2pPeerId)
@@ -3036,6 +3086,8 @@ public struct FfiConverterTypeIdentityInfo: FfiConverterRustBuffer {
             try IdentityInfo(
                 identityId: FfiConverterOptionString.read(from: &buf), 
                 publicKeyHex: FfiConverterOptionString.read(from: &buf), 
+                deviceId: FfiConverterOptionString.read(from: &buf), 
+                seniorityTimestamp: FfiConverterOptionUInt64.read(from: &buf), 
                 initialized: FfiConverterBool.read(from: &buf), 
                 nickname: FfiConverterOptionString.read(from: &buf), 
                 libp2pPeerId: FfiConverterOptionString.read(from: &buf)
@@ -3045,6 +3097,8 @@ public struct FfiConverterTypeIdentityInfo: FfiConverterRustBuffer {
     public static func write(_ value: IdentityInfo, into buf: inout [UInt8]) {
         FfiConverterOptionString.write(value.identityId, into: &buf)
         FfiConverterOptionString.write(value.publicKeyHex, into: &buf)
+        FfiConverterOptionString.write(value.deviceId, into: &buf)
+        FfiConverterOptionUInt64.write(value.seniorityTimestamp, into: &buf)
         FfiConverterBool.write(value.initialized, into: &buf)
         FfiConverterOptionString.write(value.nickname, into: &buf)
         FfiConverterOptionString.write(value.libp2pPeerId, into: &buf)
@@ -5104,6 +5158,9 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_ironcore_export_identity_backup() != 49536) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_export_logs() != 6607) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_extract_public_key_from_peer_id() != 39145) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5143,6 +5200,9 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_ironcore_outbox_count() != 26099) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_perform_maintenance() != 61914) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_prepare_cover_traffic() != 15820) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5153,6 +5213,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_prepare_receipt() != 37483) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_record_log() != 31089) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_resolve_identity() != 25110) {
@@ -5174,6 +5237,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_unblock_peer() != 16500) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_update_disk_stats() != 9332) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_verify_signature() != 26914) {
@@ -5296,7 +5362,7 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_swarmbridge_publish_topic() != 65103) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_scmessenger_core_checksum_method_swarmbridge_send_message() != 48419) {
+    if (uniffi_scmessenger_core_checksum_method_swarmbridge_send_message() != 33265) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_swarmbridge_send_to_all_peers() != 18109) {

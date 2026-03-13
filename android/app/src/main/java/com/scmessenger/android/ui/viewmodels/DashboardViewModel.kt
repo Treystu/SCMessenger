@@ -121,7 +121,7 @@ class DashboardViewModel @Inject constructor(
                     }
                 }
                 .toMap()
-           
+
             val peerMap = discovered.mapValues { (_, info) ->
                 PeerInfo(
                     peerId = info.peerId,
@@ -140,7 +140,7 @@ class DashboardViewModel @Inject constructor(
                     isRelay = meshRepository.isKnownRelay(info.peerId)
                 )
             }.toMutableMap()
-           
+
             // Enrich/Add with ledger entries (dialable peers)
             ledgerEntries.forEach { entry ->
                 val rawPeerId = entry.peerId ?: return@forEach
@@ -175,7 +175,7 @@ class DashboardViewModel @Inject constructor(
                     )
                 }
             }
-           
+
             val peerList = peerMap.values.toList()
             _peers.value = peerList
 

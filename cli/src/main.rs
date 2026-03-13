@@ -253,6 +253,11 @@ async fn main() -> Result<()> {
     tracing::info!("SCMessenger CLI starting up...");
     tracing::info!("Log directory: {}", log_dir.display());
 
+    // 4. Prune old logs (keep last 7 days)
+    if let Err(e) = prune_logs(&log_dir, 7) {
+        tracing::warn!("Failed to prune old logs: {}", e);
+    }
+
     let cli = Cli::parse();
 
     match cli.command {
@@ -836,6 +841,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
     let contacts = core.contacts_store_manager();
     let history = core.history_store_manager();
+    let _ = history.enforce_retention(10000); // Limit history to 10k messages
 
     // ── Outbox — persistent store-and-forward queue ──────────────────────
     // Messages sent to offline peers are queued here and flushed automatically
@@ -2145,4 +2151,31 @@ fn format_timestamp(timestamp: u64) -> String {
     let local: DateTime<Local> = dt.into();
 
     local.format("%Y-%m-%d %H:%M:%S").to_string()
+}
+
+fn prune_logs(log_dir: &std::path::Path, max_days: u64) -> Result<()> {
+    if !log_dir.exists() {
+        return Ok(());
+    }
+
+    let now = std::time::SystemTime::now();
+    let max_age = std::time::Duration::from_secs(max_days * 24 * 60 * 60);
+
+    for entry in std::fs::read_dir(log_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("log") {
+            if let Ok(metadata) = entry.metadata() {
+                if let Ok(modified) = metadata.modified() {
+                    if let Ok(age) = now.duration_since(modified) {
+                        if age > max_age {
+                            tracing::info!("Pruning old log file: {}", path.display());
+                            let _ = std::fs::remove_file(path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }

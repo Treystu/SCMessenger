@@ -1,6 +1,6 @@
 # Community Relay & Bootstrap Node Operator Guide
 
-> **Version:** v0.2.0-alpha  
+> **Version:** v0.2.0-alpha
 > **Last updated:** 2026-03-03
 
 ## Overview

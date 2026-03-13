@@ -14,7 +14,7 @@ import timber.log.Timber
  * Stores UI and app-level preferences separate from mesh settings
  * (which are stored via MeshSettingsManager in Rust).
  */
-class PreferencesRepository(private val context: Context) {
+open class PreferencesRepository(private val context: Context) {
 
     private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "app_preferences")
 
@@ -40,7 +40,7 @@ class PreferencesRepository(private val context: Context) {
     // SERVICE PREFERENCES
     // ========================================================================
 
-    val serviceAutoStart: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    open val serviceAutoStart: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[SERVICE_AUTO_START] ?: false
     }
 

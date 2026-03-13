@@ -37,9 +37,9 @@ object DeliveryStateMapper {
         nowEpochSec: Long
     ): DeliveryStatePresentation {
         val state = when {
+            delivered -> DeliveryStateSurface.DELIVERED
             pending != null && pending.nextAttemptAtEpochSec <= nowEpochSec -> DeliveryStateSurface.FORWARDING
             pending != null -> DeliveryStateSurface.STORED
-            delivered -> DeliveryStateSurface.DELIVERED
             else -> DeliveryStateSurface.PENDING
         }
         return DeliveryStatePresentation(

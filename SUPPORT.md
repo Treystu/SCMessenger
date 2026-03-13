@@ -1,6 +1,6 @@
 # SCMessenger Support
 
-Status: Active  
+Status: Active
 Last updated: 2026-03-07
 
 SCMessenger's current public development line is **v0.2.0 alpha**. Planned workstreams `WS13` and `WS14` are currently tracked as **v0.2.1** follow-up scope, not part of the active alpha-closeout baseline.

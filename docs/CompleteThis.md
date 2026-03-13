@@ -940,7 +940,7 @@ I have completed the debugging and hardening of the P2P connection logic, ensuri
 ### 🛠️ Technical Fixes & Enhancements
 
 *   **Integrated UPnP**: Added `libp2p::upnp` behavior to the core engine. The swarm now automatically maps external ports on compatible routers and advertises these addresses to the mesh.
-*   **Consensus-Based Advertisement**: 
+*   **Consensus-Based Advertisement**:
     *   Wired the `AddressObserver` to the swarm event loop. When multiple peers agree on a node's external IP via the **Address Reflection** protocol, that address is now proactively added to the swarm's advertised external addresses.
     *   Similarly, stable addresses observed via the **Identify** protocol are now validated and advertised.
 *   **Hardened Event Loop**: Corrected a variant mismatch in the UPnP event handler (`NonRoutableGateway`) and improved logging for NAT status transitions.

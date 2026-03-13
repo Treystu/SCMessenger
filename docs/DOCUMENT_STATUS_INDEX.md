@@ -1,7 +1,7 @@
 # SCMessenger Document Status Index
 
-Status: Active  
-Last updated: 2026-03-10
+Status: Active
+Last updated: 2026-03-11
 
 Purpose: classify documentation by lifecycle state so execution decisions use authoritative files and historical content remains discoverable without causing drift.
 
@@ -141,3 +141,4 @@ These documents may contain both current and historical sections; verify section
 34. WS12 BLE Sync Closure (2026-03-08 HST) bidirectional BLE history sync fixes reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`, and `docs/DOCUMENT_STATUS_INDEX.md`), including BLE peripheral-before-central transport priority, sync trigger on BLE identity, 60s cooldown-based re-sync, chunked 20-message payload batching, and concurrent sync dedup guard. Gate closure and app store rollout checklist captured in `docs/WS12_GATE_CLOSURE_AND_STORE_ROLLOUT_PLAN.md`.
 35. WS12.37 Storage Management + Bloat Mitigation pass (2026-03-09 HST) updates reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/DOCUMENT_STATUS_INDEX.md`), including `StorageManager.kt` startup maintenance, multi-stage log rotation, noisy blob pruning (100MB threshold), and proactive low-storage UI warnings (500MB threshold) on Android.
 36. WS12.39 closeout burndown re-baseline (2026-03-10 UTC) updates reflected in active docs (`DOCUMENTATION.md`, `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`), including restored local Rust/WASM verification, current CI blocker classification, automation-issue reconciliation, and maintainer-vs-repo GitHub cleanup split.
+37. WS12.41 Dynamic Log Retention & Storage Management (2026-03-12) updates reflected in active docs (`DOCUMENTATION.md`, `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/DOCUMENT_STATUS_INDEX.md`), including summarized log storage, 80/20 disk split maintenance, and purge priority enforcement.

@@ -107,7 +107,7 @@ struct MeshDashboardView: View {
         var contactsByRoutePeerId: [String: Contact] = [:]
         var contactsByPublicKey: [String: Contact] = [:]
         var contactsByNickname: [String: Contact] = [:]
-        
+
         contacts.forEach { contact in
             if let routePeerId = parseRoutingLibp2pPeerId(from: contact.notes) {
                 if contactsByRoutePeerId[routePeerId] == nil {
@@ -129,7 +129,7 @@ struct MeshDashboardView: View {
         for contact in contacts {
             let isRelay = repository.isKnownRelay(contact.peerId)
             let routePeerId = parseRoutingLibp2pPeerId(from: contact.notes)
-            
+
             var existing = merged[contact.peerId]
             if existing == nil {
                 let pk = contact.publicKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -143,7 +143,7 @@ struct MeshDashboardView: View {
             if existing == nil, let nn = contact.nickname?.trimmingCharacters(in: .whitespacesAndNewlines), !nn.isEmpty {
                 existing = merged.values.first(where: { $0.nickname == nn })
             }
-            
+
             if let oldId = existing?.id, oldId != contact.peerId {
                 merged.removeValue(forKey: oldId)
             }
@@ -174,18 +174,18 @@ struct MeshDashboardView: View {
             for entry in entries {
                 guard let routePeerId = entry.peerId?.trimmingCharacters(in: .whitespacesAndNewlines),
                       !routePeerId.isEmpty else { continue }
-                
+
                 let entryPublicKey = entry.publicKey?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let entryNickname = entry.nickname?.trimmingCharacters(in: .whitespacesAndNewlines)
-                
-                let matchedContact = contactsByPeerId[routePeerId] ?? 
-                                     contactsByRoutePeerId[routePeerId] ?? 
+
+                let matchedContact = contactsByPeerId[routePeerId] ??
+                                     contactsByRoutePeerId[routePeerId] ??
                                      (entryPublicKey.flatMap { pk in pk.isEmpty ? nil : contactsByPublicKey[pk] }) ??
                                      (entryNickname.flatMap { nn in nn.isEmpty ? nil : contactsByNickname[nn] })
-                
+
                 let canonicalPeerId = matchedContact?.peerId ?? routePeerId
                 let relay = repository.isKnownRelay(routePeerId) || repository.isKnownRelay(canonicalPeerId)
-                
+
                 var existing = merged[canonicalPeerId]
                 if existing == nil, let pk = matchedContact?.publicKey ?? entryPublicKey, !pk.isEmpty {
                     existing = merged.values.first(where: { $0.publicKey == pk })
@@ -199,7 +199,7 @@ struct MeshDashboardView: View {
                         merged.removeValue(forKey: oldId)
                     }
                 }
-                
+
                 let lastSeenDate = dateFromEpoch(entry.lastSeen) ?? existing?.lastSeen ?? now
 
                 merged[canonicalPeerId] = DashboardPeer(
@@ -332,7 +332,7 @@ struct MeshDashboardView: View {
         if let oldBlePeer = normalizedBlePeer, oldBlePeer != peer.id {
             merged.removeValue(forKey: oldBlePeer)
         }
-        
+
         merged[peer.id] = peer
         peersByKey = merged
 

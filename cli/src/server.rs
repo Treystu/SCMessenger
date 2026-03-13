@@ -63,6 +63,11 @@ pub enum UiEvent {
         peer_id: String,
         messages: Vec<crate::api::HistoryMessage>,
     },
+    Log {
+        segments: Vec<String>,
+        level_tag: String,
+        msg: String,
+    },
     Error {
         message: String,
     },
@@ -439,7 +444,7 @@ ARCH="$(uname -m)"
 # 1. Check for SCM Binary
 if ! command -v scm &> /dev/null; then
     echo "⬇️  'scm' binary not found. Downloading..."
-    
+
     URL=""
     if [ "$OS" = "Linux" ] && [ "$ARCH" = "x86_64" ]; then
         # Download from THIS node directly (fastest)
@@ -462,7 +467,7 @@ if ! command -v scm &> /dev/null; then
     echo "Downloading from: $URL"
     curl -L "$URL" -o scm
     chmod +x scm
-    
+
     echo "📦 Installing to /usr/local/bin (requires sudo)..."
     sudo mv scm /usr/local/bin/scm || {{ echo "❌ Failed to move to /usr/local/bin. Running locally."; export PATH=$PATH:.; }}
 else

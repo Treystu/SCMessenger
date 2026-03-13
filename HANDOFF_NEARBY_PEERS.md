@@ -6,7 +6,7 @@
 
 ### ✅ What's Working
 1. **Protocol** - New message types added and compiling
-2. **PeerBroadcaster** - Tracking peers and generating messages  
+2. **PeerBroadcaster** - Tracking peers and generating messages
 3. **Swarm Integration** - Broadcasting on connect/disconnect
 4. **Builds** - Core, iOS, Android all build successfully
 
@@ -23,7 +23,7 @@ Peer A connects → OSX Relay
   → peer_broadcaster.peer_connected(A)
   → Creates PeerJoined message
   → Sends via messaging.send_request() to all other peers
-  
+
 Peer B receives → MessageRequest with peer discovery bytes
   → Treats it as encrypted user message
   → Fails to decrypt / ignores it
@@ -54,7 +54,7 @@ if let Ok(relay_msg) = RelayMessage::from_bytes(&envelope_data) {
 }
 ```
 
-### Option 2: Use Separate Request/Response Protocol  
+### Option 2: Use Separate Request/Response Protocol
 Create dedicated peer_discovery protocol in behaviour.rs similar to how ledger_exchange works.
 
 ## Recommended Fix: Option 1 (Faster)
@@ -99,7 +99,7 @@ if let Ok(relay_msg) = crate::relay::protocol::RelayMessage::from_bytes(&respons
 ## Next Steps
 
 1. Find MessageResponse handler in swarm.rs
-2. Add relay message parsing/handling  
+2. Add relay message parsing/handling
 3. Test that peers now discover each other
 4. Verify cross-network messaging works
 

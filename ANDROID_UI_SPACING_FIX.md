@@ -78,7 +78,7 @@ Both now know about each other → Can attempt P2P connection
    fn broadcast_peer_joined(peer_id: &PeerId) {
        // Send peer announcement to all connected clients
    }
-   
+
    // New: Send full peer list to newly connected client
    fn send_peer_list_to_client(client: &PeerId) {
        // Send list of all currently connected peers

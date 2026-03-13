@@ -113,7 +113,7 @@ All source files are already in the `SCMessenger/` directory. Add them to Xcode:
    - `SCMessenger/SCMessengerApp.swift`
    - `SCMessenger/Services/*.swift`
    - `SCMessenger/Data/*.swift`
-   
+
 2. **Drag and drop** into Xcode project navigator
 3. **Important**: Check "Copy items if needed" is **UNCHECKED** (files are already in place)
 4. Check "Add to targets: SCMessenger"
@@ -171,7 +171,7 @@ Click "+ Capability" and add:
 **Solution**: Check "Objective-C Bridging Header" in Build Settings points to `SCMessenger/Bridging-Header.h`
 
 #### Issue: "Undefined symbols for architecture arm64"
-**Solution**: 
+**Solution**:
 - Verify `libscmessenger_mobile.a` is in Link Binary With Libraries
 - Check Library Search Paths includes `$(CONFIGURATION_BUILD_DIR)`
 - Clean build folder (Shift+⌘K) and rebuild

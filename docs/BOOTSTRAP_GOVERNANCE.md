@@ -1,6 +1,6 @@
 # Bootstrap Governance Model (Alpha)
 
-> **Status:** Locked for v0.1.2-alpha  
+> **Status:** Locked for v0.1.2-alpha
 > **Last updated:** 2026-02-25
 
 ## Decision
@@ -13,15 +13,15 @@ self-hosted and centrally-operated deployment scenarios.
 
 When a client starts, bootstrap nodes are resolved in strict priority order:
 
-1. **Environment variable override** (`SC_BOOTSTRAP_NODES`)  
+1. **Environment variable override** (`SC_BOOTSTRAP_NODES`)
    Comma-separated list of multiaddr strings. If set and non-empty, this is the
    only source used. Designed for operators and CI.
 
-2. **Remote URL fetch** (`remote_url` in `BootstrapConfig`)  
+2. **Remote URL fetch** (`remote_url` in `BootstrapConfig`)
    HTTP GET to a JSON endpoint returning an array of multiaddr strings.
    Timeout: configurable (default 5 seconds). On failure, falls through.
 
-3. **Static fallback list** (`static_nodes` in `BootstrapConfig`)  
+3. **Static fallback list** (`static_nodes` in `BootstrapConfig`)
    Hardcoded multiaddr strings compiled into the binary. Always available.
    Current default: GCP relay at `34.135.34.73:9001`.
 

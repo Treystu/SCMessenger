@@ -20,7 +20,7 @@ class MeshApplication : Application() {
 
         // Initialize Timber logging
         timber.log.Timber.plant(timber.log.Timber.DebugTree())
-        
+
         // Always plant FileLoggingTree for debugging "out and about"
         timber.log.Timber.plant(com.scmessenger.android.utils.FileLoggingTree(this))
 

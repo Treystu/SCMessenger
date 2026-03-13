@@ -85,7 +85,7 @@ xcrun simctl spawn E3284273 log show --last 30s \
   --predicate 'process == "SCMessenger"' --style compact | \
   grep "Peer.*identified"
 
-# Check iOS 17 Pro peers  
+# Check iOS 17 Pro peers
 xcrun simctl spawn F7AAF4C8 log show --last 30s \
   --predicate 'process == "SCMessenger"' --style compact | \
   grep "Peer.*identified"
