@@ -18,7 +18,10 @@ Last updated: 2026-03-13
   - WS13.1: `VERIFIED COMPLETE`
   - WS13.2: `VERIFIED COMPLETE` including Android/iOS adapter-surface verification on this host
   - WS13.3: `VERIFIED COMPLETE`
-  - WS13.4: `IMPLEMENTED + PLATFORM VERIFIED`; remaining open work is now the explicitly deferred WS13.5 queue migration / sender-facing rejection follow-through, not build or platform readiness.
+  - WS13.4: `IMPLEMENTED + PLATFORM VERIFIED`; this run adds WS13.5-partial terminal-rejection follow-through:
+    - core now marks terminal mismatches (`identity_recycled`, `identity_abandoned`) as non-retryable in dispatch paths
+    - Android adapter now surfaces terminal-rejection states as `failed` and does not requeue those attempts
+    - remaining open WS13.5 work is explicit sender UX and iOS parity beyond this run.
 - **Automation branch consolidation outcome**:
   - `codex/ws13-ws14-hourly-20260313-0900` is identical to `main`,
   - `codex/ws13-ws14-hourly-20260313-1613` is an ancestor checkpoint,
@@ -27,6 +30,10 @@ Last updated: 2026-03-13
 - **Closeout fixes added during consolidation**:
   - `core/src/transport/swarm.rs` now wraps ranked-route dispatch inputs in a request context so strict workspace clippy passes cleanly.
   - Android BLE permission-safe wrappers were added in `BleGattClient.kt` and `BleScanner.kt` so retry service discovery and device-name reads fail closed when `BLUETOOTH_CONNECT` is missing, allowing `lintDebug` to pass without weakening runtime safety.
+  - WS13.4/WS13.5 terminal-rejection follow-through now also includes:
+    - retry-state-aware dispatch updates via `RelayCustodyStore::mark_dispatch_rejected` in `core/src/store/relay_custody.rs`
+    - clean-handover queue migration test coverage for clean handover transitions in the same file
+    - Android adapter terminal path handling in `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` (failure logging + queue drain on terminal recycle/abandon).
 - **Verification on this branch (`codex/ws13-ws14-consolidated-20260313-1245`)**:
   - `cargo fmt --all -- --check` — **PASS**
   - `cargo build --workspace` — **PASS**

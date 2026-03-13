@@ -77,7 +77,7 @@ Remaining WS13 queue:
    - Still blocking phase completion:
      - clean-handover queue migration and explicit sender-facing rejection semantics remain WS13.5 work.
    - Confidence: **94%** overall (platform verification is green; the remaining work is scoped feature follow-through, not build instability).
-4. [ ] WS13.5 — Handover/abandon queue migration + sender-facing rejection UX. Android/iOS adapter follow-through is no longer blocked by platform verification; next step is explicit clean-handover queue migration plus recycled/abandoned identity UX on the consolidated branch.
+4. [ ] WS13.5 — Handover/abandon queue migration + sender-facing rejection UX. Core clean-handover queue migration and terminal-rejection classification are now in place, and Android now treats recycled/abandoned identity rejections as terminal failure state, but iOS parity and explicit cross-platform sender UX acceptance wording remain open.
 5. [ ] WS13.6 — Compatibility/migration matrix, runbook, and acceptance lock. Unblocked after WS13.3–WS13.5 complete.
 
 ## v0.2.1 Critical Bug Fixes (2026-03-12)
