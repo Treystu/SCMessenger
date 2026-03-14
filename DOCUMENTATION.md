@@ -1,7 +1,7 @@
 # SCMessenger Documentation Hub
 
 Status: Active
-Last updated: 2026-03-13 (DOC-SYNC-AND-BUILD-VERIFY-GOVERNANCE)
+Last updated: 2026-03-13 (WS13.4-WS13.5-EXECUTION)
 
 This is the primary documentation entrypoint.
 
@@ -19,6 +19,8 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 - [v0.2.0 Milestone Plan](docs/MILESTONE_PLAN_V0.2.0_ALPHA.md)
 - [v0.2.0 Phase Prompts](docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md)
 - [v0.2.0 Residual Risk Register](docs/V0.2.0_RESIDUAL_RISK_REGISTER.md)
+- [v0.2.1 Tight Pair / WS13 Plan](docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md)
+- [v0.2.1 Residual Risk Register](docs/V0.2.1_RESIDUAL_RISK_REGISTER.md)
 - [Platform Support Matrix](docs/PLATFORM_SUPPORT_MATRIX.md)
 - [Alpha Interop Matrix](docs/INTEROP_MATRIX_V0.2.0_ALPHA.md)
 - [Protocol Specification](docs/PROTOCOL.md)
@@ -27,8 +29,6 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 
 ## Planned Docs (Future Scope)
 
-- [v0.2.1 Tight Pair / WS13 Plan](docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md)
-- [v0.2.1 Residual Risk Register](docs/V0.2.1_RESIDUAL_RISK_REGISTER.md)
 - [v0.2.1 Notifications / WS14 Plan](docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md)
 
 ## Active Supporting Audits and Execution Plans
@@ -87,6 +87,12 @@ Use these for context only; do not treat as execution source of truth unless rev
 Historical audit artifacts currently live under `docs/historical/`.
 
 ## Recent Execution Notes
+
+- WS13.4/WS13.5 tight-pair execution (2026-03-13, relay registry/custody enforcement landed; sender-facing rejection UX landed; Android physical-device install+launch passed; iOS signed device install passed but automated launch was blocked because the connected iPhone was locked) is tracked in:
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md`
+  - `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`
 
 - Documentation/build-verification governance lock (2026-03-13, repo policy tightened so same-run canonical doc updates and edited-target build verification are explicit closeout requirements for both Codex and Copilot agents) is tracked in:
   - `AGENTS.md`

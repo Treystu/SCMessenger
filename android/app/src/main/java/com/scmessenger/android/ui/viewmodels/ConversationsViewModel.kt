@@ -327,7 +327,14 @@ class ConversationsViewModel @Inject constructor(
         nowEpochSec: Long = System.currentTimeMillis() / 1000
     ): DeliveryStatePresentation {
         val pendingPair = meshRepository.getPendingDeliverySnapshot(message.id)
-        val pending = pendingPair?.let { PendingDeliverySnapshot(it.first, it.second) }
+        val terminalFailureCode = meshRepository.getPendingTerminalFailureCode(message.id)
+        val pending = pendingPair?.let {
+            PendingDeliverySnapshot(
+                attemptCount = it.first,
+                nextAttemptAtEpochSec = it.second,
+                terminalFailureCode = terminalFailureCode
+            )
+        }
         return DeliveryStateMapper.resolve(
             delivered = message.delivered,
             pending = pending,

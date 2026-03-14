@@ -173,6 +173,7 @@ final class MeshRepository {
         let strictBleOnlyMode: Bool?
         let recipientIdentityId: String?
         let intendedDeviceId: String?
+        let terminalFailureCode: String?
     }
 
     struct DeliveryStatePresentation {
@@ -200,6 +201,7 @@ final class MeshRepository {
     private struct DeliveryAttemptResult {
         let acked: Bool
         let routePeerId: String?
+        let terminalFailureCode: String?
     }
 
     private struct PeerDiscoveryInfo {
@@ -238,6 +240,26 @@ final class MeshRepository {
     private let identityReemitInterval: TimeInterval = 15
     private var connectedEmissionCache: [String: Date] = [:]
     private let connectedReemitInterval: TimeInterval = 15
+
+    private func isTerminalIdentityFailure(_ errorCode: String?) -> Bool {
+        switch errorCode?.trimmingCharacters(in: .whitespacesAndNewlines) {
+        case "identity_device_mismatch", "identity_abandoned":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func terminalIdentityFailureMessage(_ errorCode: String?) -> String {
+        switch errorCode?.trimmingCharacters(in: .whitespacesAndNewlines) {
+        case "identity_device_mismatch":
+            return "This contact's identity has been recycled onto another device. Refresh their contact details before retrying."
+        case "identity_abandoned":
+            return "This contact abandoned the identity you tried to reach. Re-verify the contact before sending again."
+        default:
+            return "This message was rejected because the recipient identity is no longer valid."
+        }
+    }
 
     // Reinstall detection: set true when Keychain has identity but disk has no contacts/history.
     // Triggers aggressive post-start identity beacon to recover contacts from mesh peers.
@@ -978,18 +1000,53 @@ final class MeshRepository {
         // Notify UI (Unified flow for sent messages)
         messageUpdates.send(messageRecord)
         appendDiagnostic("delivery_state msg=\(messageId) state=pending detail=message_prepared_local_history_written")
-        enqueuePendingOutbound(
-            historyRecordId: messageId,
-            peerId: peerId,
-            routePeerId: preferredRoutePeerId,
+        let delivery = await attemptDirectSwarmDelivery(
+            routePeerCandidates: routePeerCandidates,
             addresses: routing.listeners,
             envelopeData: envelopeData,
-            initialAttemptCount: 0,
-            initialDelaySec: 0,
-            strictBleOnlyMode: strictBleOnlyValidation,
+            multipeerPeerId: multipeerPeerId,
+            blePeerId: routing.blePeerId,
+            traceMessageId: messageId,
+            attemptContext: "initial_send",
+            strictBleOnlyOverride: strictBleOnlyValidation,
             recipientIdentityId: trimmedKey,
             intendedDeviceId: contact?.lastKnownDeviceId
         )
+        let selectedRoutePeerId = delivery.routePeerId ?? preferredRoutePeerId
+
+        if isMessageDeliveredLocally(messageId) {
+            removePendingOutbound(historyRecordId: messageId)
+            appendDiagnostic("delivery_state msg=\(messageId) state=delivered detail=delivery_receipt_arrived_before_enqueue")
+        } else if let terminalFailureCode = delivery.terminalFailureCode {
+            enqueuePendingOutbound(
+                historyRecordId: messageId,
+                peerId: peerId,
+                routePeerId: selectedRoutePeerId,
+                addresses: routing.listeners,
+                envelopeData: envelopeData,
+                initialAttemptCount: 1,
+                initialDelaySec: 0,
+                strictBleOnlyMode: strictBleOnlyValidation,
+                recipientIdentityId: trimmedKey,
+                intendedDeviceId: contact?.lastKnownDeviceId,
+                terminalFailureCode: terminalFailureCode
+            )
+            appendDiagnostic("delivery_state msg=\(messageId) state=rejected detail=terminal_failure_code=\(terminalFailureCode)")
+            throw MeshError.invalidInput(terminalIdentityFailureMessage(terminalFailureCode))
+        } else {
+            enqueuePendingOutbound(
+                historyRecordId: messageId,
+                peerId: peerId,
+                routePeerId: selectedRoutePeerId,
+                addresses: routing.listeners,
+                envelopeData: envelopeData,
+                initialAttemptCount: 1,
+                initialDelaySec: delivery.acked ? receiptAwaitSeconds : 0,
+                strictBleOnlyMode: strictBleOnlyValidation,
+                recipientIdentityId: trimmedKey,
+                intendedDeviceId: contact?.lastKnownDeviceId
+            )
+        }
     }
 
     /// Handle incoming message (from CoreDelegate callback)
@@ -2283,6 +2340,21 @@ final class MeshRepository {
 
     func deliveryStatePresentation(for message: MessageRecord, nowEpochSec: UInt64 = UInt64(Date().timeIntervalSince1970)) -> DeliveryStatePresentation {
         if let pending = loadPendingOutbox().first(where: { $0.historyRecordId == message.id }) {
+            if let terminalFailureCode = pending.terminalFailureCode {
+                let detail: String
+                switch terminalFailureCode {
+                case "identity_device_mismatch":
+                    detail = "Rejected because this identity moved to another device. Refresh the contact before retrying."
+                case "identity_abandoned":
+                    detail = "Rejected because the contact abandoned this identity. Re-verify the contact before sending again."
+                default:
+                    detail = "Rejected because the recipient identity is no longer valid."
+                }
+                return DeliveryStatePresentation(
+                    label: "rejected",
+                    detail: detail
+                )
+            }
             if pending.nextAttemptAtEpochSec <= nowEpochSec {
                 return DeliveryStatePresentation(
                     label: "forwarding",
@@ -3612,7 +3684,11 @@ final class MeshRepository {
                 outcome: localAcked ? "accepted" : "failed",
                 detail: "ctx=\(attemptContext) route_fallback=\(routePeerFallback)"
             )
-            return DeliveryAttemptResult(acked: localAcked, routePeerId: routePeerFallback)
+            return DeliveryAttemptResult(
+                acked: localAcked,
+                routePeerId: routePeerFallback,
+                terminalFailureCode: nil
+            )
         }
 
         guard let swarmBridge else {
@@ -3623,7 +3699,11 @@ final class MeshRepository {
                 outcome: localAcked ? "skipped_local_accepted" : "failed",
                 detail: "ctx=\(attemptContext) reason=swarm_bridge_unavailable route_fallback=\(routePeerFallback)"
             )
-            return DeliveryAttemptResult(acked: localAcked, routePeerId: routePeerFallback)
+            return DeliveryAttemptResult(
+                acked: localAcked,
+                routePeerId: routePeerFallback,
+                terminalFailureCode: nil
+            )
         }
 
         let sanitizedCandidates = routePeerCandidates
@@ -3641,7 +3721,11 @@ final class MeshRepository {
                 outcome: localAcked ? "skipped_local_accepted" : "failed",
                 detail: "ctx=\(attemptContext) reason=no_route_candidates route_fallback=\(routePeerFallback)"
             )
-            return DeliveryAttemptResult(acked: localAcked, routePeerId: routePeerFallback)
+            return DeliveryAttemptResult(
+                acked: localAcked,
+                routePeerId: routePeerFallback,
+                terminalFailureCode: nil
+            )
         }
 
         primeRelayBootstrapConnections()
@@ -3667,32 +3751,43 @@ final class MeshRepository {
                     outcome: "attempt",
                     detail: "ctx=\(attemptContext) route=\(routePeerId)"
                 )
-                do {
-                    try swarmBridge.sendMessage(
-                        peerId: routePeerId,
-                        data: envelopeData,
-                        recipientIdentityId: recipientIdentityId,
-                        intendedDeviceId: intendedDeviceId
-                    )
-                    logger.info("✓ Direct delivery ACK from \(routePeerId)")
-                    logDeliveryAttempt(
-                        messageId: traceMessageId,
-                        medium: "core",
-                        phase: "direct",
-                        outcome: "success",
-                        detail: "ctx=\(attemptContext) route=\(routePeerId)"
-                    )
-                    return DeliveryAttemptResult(acked: true, routePeerId: routePeerId)
-                } catch {
-                    logger.warning("Core-routed delivery failed for \(routePeerId): \(error.localizedDescription); trying alternative transports")
+                let sendError = swarmBridge.sendMessageStatus(
+                    peerId: routePeerId,
+                    data: envelopeData,
+                    recipientIdentityId: recipientIdentityId,
+                    intendedDeviceId: intendedDeviceId
+                )
+                guard sendError == nil else {
+                    logger.warning("Core-routed delivery failed for \(routePeerId): \(sendError ?? "unknown"); trying alternative transports")
                     logDeliveryAttempt(
                         messageId: traceMessageId,
                         medium: "core",
                         phase: "direct",
                         outcome: "failed",
-                        detail: "ctx=\(attemptContext) route=\(routePeerId) reason=\(error.localizedDescription)"
+                        detail: "ctx=\(attemptContext) route=\(routePeerId) reason=\(sendError ?? "unknown")"
                     )
+                    if isTerminalIdentityFailure(sendError) {
+                        return DeliveryAttemptResult(
+                            acked: false,
+                            routePeerId: routePeerId,
+                            terminalFailureCode: sendError
+                        )
+                    }
+                    continue
                 }
+                logger.info("✓ Direct delivery ACK from \(routePeerId)")
+                logDeliveryAttempt(
+                    messageId: traceMessageId,
+                    medium: "core",
+                    phase: "direct",
+                    outcome: "success",
+                    detail: "ctx=\(attemptContext) route=\(routePeerId)"
+                )
+                return DeliveryAttemptResult(
+                    acked: true,
+                    routePeerId: routePeerId,
+                    terminalFailureCode: nil
+                )
             } else {
                 logger.debug("Skipping redundant core send for \(traceMessageId ?? "unknown"): already delivered via local transport")
             }
@@ -3709,32 +3804,43 @@ final class MeshRepository {
                     outcome: "attempt",
                     detail: "ctx=\(attemptContext) route=\(routePeerId)"
                 )
-                do {
-                    try swarmBridge.sendMessage(
-                        peerId: routePeerId,
-                        data: envelopeData,
-                        recipientIdentityId: recipientIdentityId,
-                        intendedDeviceId: intendedDeviceId
-                    )
-                    logger.info("✓ Delivery ACK from \(routePeerId) after relay-circuit retry")
-                    logDeliveryAttempt(
-                        messageId: traceMessageId,
-                        medium: "relay-circuit",
-                        phase: "retry",
-                        outcome: "success",
-                        detail: "ctx=\(attemptContext) route=\(routePeerId)"
-                    )
-                    return DeliveryAttemptResult(acked: true, routePeerId: routePeerId)
-                } catch {
-                    logger.warning("Relay-circuit retry failed for \(routePeerId): \(error.localizedDescription)")
+                let sendError = swarmBridge.sendMessageStatus(
+                    peerId: routePeerId,
+                    data: envelopeData,
+                    recipientIdentityId: recipientIdentityId,
+                    intendedDeviceId: intendedDeviceId
+                )
+                guard sendError == nil else {
+                    logger.warning("Relay-circuit retry failed for \(routePeerId): \(sendError ?? "unknown")")
                     logDeliveryAttempt(
                         messageId: traceMessageId,
                         medium: "relay-circuit",
                         phase: "retry",
                         outcome: "failed",
-                        detail: "ctx=\(attemptContext) route=\(routePeerId) reason=\(error.localizedDescription)"
+                        detail: "ctx=\(attemptContext) route=\(routePeerId) reason=\(sendError ?? "unknown")"
                     )
+                    if isTerminalIdentityFailure(sendError) {
+                        return DeliveryAttemptResult(
+                            acked: false,
+                            routePeerId: routePeerId,
+                            terminalFailureCode: sendError
+                        )
+                    }
+                    continue
                 }
+                logger.info("✓ Delivery ACK from \(routePeerId) after relay-circuit retry")
+                logDeliveryAttempt(
+                    messageId: traceMessageId,
+                    medium: "relay-circuit",
+                    phase: "retry",
+                    outcome: "success",
+                    detail: "ctx=\(attemptContext) route=\(routePeerId)"
+                )
+                return DeliveryAttemptResult(
+                    acked: true,
+                    routePeerId: routePeerId,
+                    terminalFailureCode: nil
+                )
             }
         }
 
@@ -3745,7 +3851,11 @@ final class MeshRepository {
             outcome: localAcked ? "local_accepted_no_core_ack" : "failed",
             detail: "ctx=\(attemptContext) route_fallback=\(sanitizedCandidates.first ?? routePeerFallback)"
         )
-        return DeliveryAttemptResult(acked: localAcked, routePeerId: nil)
+        return DeliveryAttemptResult(
+            acked: localAcked,
+            routePeerId: nil,
+            terminalFailureCode: nil
+        )
     }
 
     private func awaitPeerConnection(peerId: String, timeoutMs: UInt64 = 5000) async -> Bool {
@@ -3770,7 +3880,8 @@ final class MeshRepository {
         initialDelaySec: UInt64 = 0,
         strictBleOnlyMode: Bool = false,
         recipientIdentityId: String? = nil,
-        intendedDeviceId: String? = nil
+        intendedDeviceId: String? = nil,
+        terminalFailureCode: String? = nil
     ) {
         if isMessageDeliveredLocally(historyRecordId) {
             appendDiagnostic("delivery_state msg=\(historyRecordId) state=delivered detail=skip_enqueue_already_delivered")
@@ -3791,7 +3902,8 @@ final class MeshRepository {
                 nextAttemptAtEpochSec: now + initialDelaySec,
                 strictBleOnlyMode: strictBleOnlyMode,
                 recipientIdentityId: recipientIdentityId,
-                intendedDeviceId: intendedDeviceId
+                intendedDeviceId: intendedDeviceId,
+                terminalFailureCode: terminalFailureCode
             )
         )
         savePendingOutbox(queue)
@@ -3838,6 +3950,10 @@ final class MeshRepository {
                 )
                 continue
             }
+            if item.terminalFailureCode != nil {
+                nextQueue.append(item)
+                continue
+            }
             if item.nextAttemptAtEpochSec > now {
                 nextQueue.append(item)
                 continue
@@ -3878,13 +3994,35 @@ final class MeshRepository {
                 traceMessageId: item.historyRecordId,
                 attemptContext: "outbox_retry",
                 strictBleOnlyOverride: item.strictBleOnlyMode,
-                recipientIdentityId: item.recipientIdentityId,
-                intendedDeviceId: item.intendedDeviceId
+                recipientIdentityId: item.recipientIdentityId ?? contact?.publicKey,
+                intendedDeviceId: item.intendedDeviceId ?? contact?.lastKnownDeviceId
             )
             let selectedRoutePeerId = delivery.acked
                 ? (delivery.routePeerId ?? resolvedRoutePeerId)
                 : delivery.routePeerId
             if isMessageDeliveredLocally(item.historyRecordId) {
+                continue
+            }
+
+            if let terminalFailureCode = delivery.terminalFailureCode {
+                nextQueue.append(
+                    PendingOutboundEnvelope(
+                        queueId: item.queueId,
+                        historyRecordId: item.historyRecordId,
+                        peerId: item.peerId,
+                        routePeerId: selectedRoutePeerId,
+                        addresses: resolvedAddresses,
+                        envelopeBase64: item.envelopeBase64,
+                        createdAtEpochSec: item.createdAtEpochSec,
+                        attemptCount: item.attemptCount,
+                        nextAttemptAtEpochSec: item.nextAttemptAtEpochSec,
+                        strictBleOnlyMode: item.strictBleOnlyMode,
+                        recipientIdentityId: item.recipientIdentityId,
+                        intendedDeviceId: item.intendedDeviceId,
+                        terminalFailureCode: terminalFailureCode
+                    )
+                )
+                appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=rejected detail=terminal_failure_code=\(terminalFailureCode)")
                 continue
             }
 
@@ -3915,7 +4053,8 @@ final class MeshRepository {
                         nextAttemptAtEpochSec: now + adaptiveReceiptWait,
                         strictBleOnlyMode: item.strictBleOnlyMode,
                         recipientIdentityId: item.recipientIdentityId,
-                        intendedDeviceId: item.intendedDeviceId
+                        intendedDeviceId: item.intendedDeviceId,
+                        terminalFailureCode: item.terminalFailureCode
                     )
                 )
                 appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=stored detail=awaiting_receipt_delay_sec=\(adaptiveReceiptWait)")
@@ -3948,7 +4087,8 @@ final class MeshRepository {
                         nextAttemptAtEpochSec: now + backoff,
                         strictBleOnlyMode: item.strictBleOnlyMode,
                         recipientIdentityId: item.recipientIdentityId,
-                        intendedDeviceId: item.intendedDeviceId
+                        intendedDeviceId: item.intendedDeviceId,
+                        terminalFailureCode: item.terminalFailureCode
                     )
             )
             appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=stored detail=retry_backoff_sec=\(backoff) attempt=\(nextAttemptCount)")
@@ -4023,6 +4163,9 @@ final class MeshRepository {
             if let excludingMessageId, item.historyRecordId == excludingMessageId {
                 return item
             }
+            if item.terminalFailureCode != nil {
+                return item
+            }
             if item.nextAttemptAtEpochSec <= now {
                 return item
             }
@@ -4039,7 +4182,8 @@ final class MeshRepository {
                 nextAttemptAtEpochSec: now,
                 strictBleOnlyMode: item.strictBleOnlyMode,
                 recipientIdentityId: item.recipientIdentityId,
-                intendedDeviceId: item.intendedDeviceId
+                intendedDeviceId: item.intendedDeviceId,
+                terminalFailureCode: item.terminalFailureCode
             )
         }
         guard changed else { return }

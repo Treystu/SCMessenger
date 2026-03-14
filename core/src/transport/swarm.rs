@@ -30,7 +30,7 @@ use super::multiport::MultiPortConfig;
 use super::multiport::{self, BindResult, MultiPortConfig};
 use super::observation::{AddressObserver, ConnectionTracker};
 use super::reflection::{AddressReflectionRequest, AddressReflectionService};
-use crate::store::relay_custody::RelayCustodyStore;
+use crate::store::relay_custody::{CustodyEnforcement, RelayCustodyStore};
 use anyhow::Result;
 use bincode;
 #[cfg(target_arch = "wasm32")]
@@ -492,6 +492,66 @@ fn verify_registration_message(
         RegistrationMessage::Register(request) => request.verify_for_public_key(&public_key),
         RegistrationMessage::Deregister(request) => request.verify_for_public_key(&public_key),
     }
+}
+
+fn apply_verified_registration_message(
+    relay_custody_store: &RelayCustodyStore,
+    request: &RegistrationMessage,
+) -> RegistrationResponse {
+    let result = match request {
+        RegistrationMessage::Register(request) => relay_custody_store.register_identity(
+            request.payload.identity_id.clone(),
+            request.payload.device_id.clone(),
+            request.payload.seniority_ts,
+        ),
+        RegistrationMessage::Deregister(request) => relay_custody_store.deregister_identity(
+            request.payload.identity_id.clone(),
+            request.payload.from_device_id.clone(),
+            request.payload.target_device_id.clone(),
+        ),
+    };
+
+    match result {
+        Ok(_) => RegistrationResponse {
+            accepted: true,
+            error: None,
+        },
+        Err(error) => RegistrationResponse {
+            accepted: false,
+            error: Some(error),
+        },
+    }
+}
+
+fn resolve_custody_metadata(
+    relay_custody_store: &RelayCustodyStore,
+    recipient_identity_id: Option<&str>,
+    intended_device_id: Option<&str>,
+) -> Result<(Option<String>, Option<String>), String> {
+    match (recipient_identity_id, intended_device_id) {
+        (Some(identity_id), Some(device_id)) => {
+            match relay_custody_store.enforce_custody(identity_id, device_id) {
+                Ok(CustodyEnforcement::Active {
+                    identity_id,
+                    device_id,
+                }) => Ok((Some(identity_id), Some(device_id))),
+                Ok(CustodyEnforcement::Redirected {
+                    identity_id,
+                    to_device_id,
+                    ..
+                }) => Ok((Some(identity_id), Some(to_device_id))),
+                Err(error) => Err(error.to_string()),
+            }
+        }
+        _ => Ok((
+            recipient_identity_id.map(|value| value.to_string()),
+            intended_device_id.map(|value| value.to_string()),
+        )),
+    }
+}
+
+fn is_terminal_identity_rejection(error: &str) -> bool {
+    matches!(error, "identity_device_mismatch" | "identity_abandoned")
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1186,7 +1246,16 @@ pub async fn start_swarm(
     event_tx: mpsc::Sender<SwarmEvent2>,
     headless: bool,
 ) -> Result<SwarmHandle> {
-    start_swarm_with_config(keypair, listen_addr, event_tx, None, Vec::new(), headless).await
+    start_swarm_with_config(
+        keypair,
+        listen_addr,
+        event_tx,
+        None,
+        Vec::new(),
+        None,
+        headless,
+    )
+    .await
 }
 
 /// Build and start the libp2p swarm with custom multi-port configuration.
@@ -1200,10 +1269,13 @@ pub async fn start_swarm_with_config(
     event_tx: mpsc::Sender<SwarmEvent2>,
     multiport_config: Option<MultiPortConfig>,
     bootstrap_addrs: Vec<Multiaddr>,
+    storage_path: Option<String>,
     headless: bool,
 ) -> Result<SwarmHandle> {
     #[cfg(target_arch = "wasm32")]
     let _ = &multiport_config;
+    #[cfg(target_arch = "wasm32")]
+    let _ = &storage_path;
     #[cfg(target_arch = "wasm32")]
     let _ = headless;
 
@@ -1335,12 +1407,16 @@ pub async fn start_swarm_with_config(
         let mut address_observer = AddressObserver::new();
 
         // Track successful relay reservations by ListenerId
-        let mut successful_relay_reservations: HashMap<PeerId, libp2p::core::transport::ListenerId> = HashMap::new();
+        let mut successful_relay_reservations: HashMap<
+            PeerId,
+            libp2p::core::transport::ListenerId,
+        > = HashMap::new();
 
         // P0.12: Deduplicate bridge events to prevent UI freezing and bridge spam
         // We track the last reported 'PeerIdentified' and 'PeerDiscovered' state.
         let mut reported_peer_info: HashMap<PeerId, (String, Vec<Multiaddr>)> = HashMap::new();
-        let mut reported_peer_discoveries: std::collections::HashSet<PeerId> = std::collections::HashSet::new();
+        let mut reported_peer_discoveries: std::collections::HashSet<PeerId> =
+            std::collections::HashSet::new();
 
         tracing::info!("=== OWN_IDENTITY: {} ===", local_peer_id);
 
@@ -1360,7 +1436,10 @@ pub async fn start_swarm_with_config(
             libp2p::request_response::OutboundRequestId,
             String,
         > = HashMap::new();
-        let relay_custody_store = RelayCustodyStore::for_local_peer(&local_peer_id.to_string());
+        let relay_custody_store = RelayCustodyStore::for_service_storage(
+            storage_path.as_deref(),
+            &local_peer_id.to_string(),
+        );
         let mut pending_custody_dispatches: HashMap<
             libp2p::request_response::OutboundRequestId,
             PendingCustodyDispatch,
@@ -1883,29 +1962,10 @@ pub async fn start_swarm_with_config(
                                     request_response::Message::Request { request, channel, .. } => {
                                         let response = match verify_registration_message(&peer, &request) {
                                             Ok(()) => {
-                                                match &request {
-                                                    RegistrationMessage::Register(request) => {
-                                                        tracing::info!(
-                                                            "✅ Verified registration from {} for identity {} device {}",
-                                                            peer,
-                                                            request.payload.identity_id,
-                                                            request.payload.device_id
-                                                        );
-                                                    }
-                                                    RegistrationMessage::Deregister(request) => {
-                                                        tracing::info!(
-                                                            "✅ Verified deregistration from {} for identity {} source_device={} target_device={}",
-                                                            peer,
-                                                            request.payload.identity_id,
-                                                            request.payload.from_device_id,
-                                                            request.payload.target_device_id.as_deref().unwrap_or("none")
-                                                        );
-                                                    }
-                                                }
-                                                RegistrationResponse {
-                                                    accepted: true,
-                                                    error: None,
-                                                }
+                                                apply_verified_registration_message(
+                                                    &relay_custody_store,
+                                                    &request,
+                                                )
                                             }
                                             Err(error) => {
                                                 tracing::warn!(
@@ -2036,69 +2096,93 @@ pub async fn start_swarm_with_config(
                                             match PeerId::from_bytes(&request.destination_peer) {
                                                 Ok(destination) => {
                                                     let relay_message_id = request.message_id.clone();
-                                                    if relay_guardrails.is_recent_duplicate(
-                                                        &peer.to_string(),
-                                                        &destination.to_string(),
-                                                        &relay_message_id,
-                                                        now_ms,
+                                                    match resolve_custody_metadata(
+                                                        &relay_custody_store,
+                                                        request.recipient_identity_id.as_deref(),
+                                                        request.intended_device_id.as_deref(),
                                                     ) {
-                                                        tracing::info!(
-                                                            "Relay duplicate suppressed from {} -> {} for message {}",
-                                                            peer,
-                                                            destination,
-                                                            relay_message_id
-                                                        );
-                                                        RelayResponse {
-                                                            accepted: true,
-                                                            error: None,
-                                                            message_id: relay_message_id,
+                                                        Err(error) => {
+                                                            tracing::warn!(
+                                                                "Relay request rejected by custody enforcement from {} -> {} (message {}): {}",
+                                                                peer,
+                                                                destination,
+                                                                relay_message_id,
+                                                                error
+                                                            );
+                                                            RelayResponse {
+                                                                accepted: false,
+                                                                error: Some(error),
+                                                                message_id: relay_message_id,
+                                                            }
                                                         }
-                                                    } else {
-                                                    match relay_custody_store.accept_custody(
-                                                        peer.to_string(),
-                                                        destination.to_string(),
-                                                        relay_message_id.clone(),
-                                                        request.envelope_data.clone(),
-                                                    ) {
-                                                        Ok(custody) => {
-                                                            relay_guardrails.record_accepted(
+                                                        Ok((resolved_identity_id, resolved_device_id)) => {
+                                                            if relay_guardrails.is_recent_duplicate(
                                                                 &peer.to_string(),
                                                                 &destination.to_string(),
                                                                 &relay_message_id,
                                                                 now_ms,
-                                                            );
-                                                            if swarm.is_connected(&destination) {
-                                                                dispatch_pending_custody_for_peer(
-                                                                    &mut swarm,
-                                                                    &relay_custody_store,
-                                                                    destination,
-                                                                    &mut pending_custody_dispatches,
-                                                                    RELAY_MAX_INFLIGHT_DISPATCHES,
-                                                                    "accept_immediate_pull",
-                                                                );
-                                                            } else {
+                                                            ) {
                                                                 tracing::info!(
-                                                                    "📦 Accepted custody {} for offline destination {} (relay message {})",
-                                                                    custody.custody_id,
+                                                                    "Relay duplicate suppressed from {} -> {} for message {}",
+                                                                    peer,
                                                                     destination,
                                                                     relay_message_id
                                                                 );
-                                                            }
-                                                            RelayResponse {
-                                                                accepted: true,
-                                                                error: None,
-                                                                message_id: relay_message_id,
+                                                                RelayResponse {
+                                                                    accepted: true,
+                                                                    error: None,
+                                                                    message_id: relay_message_id,
+                                                                }
+                                                            } else {
+                                                                match relay_custody_store.accept_custody(
+                                                                    peer.to_string(),
+                                                                    destination.to_string(),
+                                                                    relay_message_id.clone(),
+                                                                    request.envelope_data.clone(),
+                                                                    resolved_identity_id,
+                                                                    resolved_device_id,
+                                                                ) {
+                                                                    Ok(custody) => {
+                                                                        relay_guardrails.record_accepted(
+                                                                            &peer.to_string(),
+                                                                            &destination.to_string(),
+                                                                            &relay_message_id,
+                                                                            now_ms,
+                                                                        );
+                                                                        if swarm.is_connected(&destination) {
+                                                                            dispatch_pending_custody_for_peer(
+                                                                                &mut swarm,
+                                                                                &relay_custody_store,
+                                                                                destination,
+                                                                                &mut pending_custody_dispatches,
+                                                                                RELAY_MAX_INFLIGHT_DISPATCHES,
+                                                                                "accept_immediate_pull",
+                                                                            );
+                                                                        } else {
+                                                                            tracing::info!(
+                                                                                "📦 Accepted custody {} for offline destination {} (relay message {})",
+                                                                                custody.custody_id,
+                                                                                destination,
+                                                                                relay_message_id
+                                                                            );
+                                                                        }
+                                                                        RelayResponse {
+                                                                            accepted: true,
+                                                                            error: None,
+                                                                            message_id: relay_message_id,
+                                                                        }
+                                                                    }
+                                                                    Err(e) => RelayResponse {
+                                                                        accepted: false,
+                                                                        error: Some(format!(
+                                                                            "custody_store_failed: {}",
+                                                                            e
+                                                                        )),
+                                                                        message_id: relay_message_id,
+                                                                    },
+                                                                }
                                                             }
                                                         }
-                                                        Err(e) => RelayResponse {
-                                                            accepted: false,
-                                                            error: Some(format!(
-                                                                "custody_store_failed: {}",
-                                                                e
-                                                            )),
-                                                            message_id: relay_message_id,
-                                                        },
-                                                    }
                                                     }
                                                 }
                                                 Err(e) => {
@@ -2122,9 +2206,16 @@ pub async fn start_swarm_with_config(
                                                     tracing::info!("✓ Message relayed successfully via {} to {} ({}ms)", peer, pending.target_peer, latency_ms);
                                                     let _ = pending.reply_tx.send(Ok(())).await;
                                                 } else {
-                                                    tracing::warn!("✗ Relay via {} failed: {:?}", peer, response.error);
+                                                    let error = response
+                                                        .error
+                                                        .unwrap_or_else(|| "relay rejected".to_string());
+                                                    tracing::warn!("✗ Relay via {} failed: {}", peer, error);
                                                     multi_path_delivery.record_failure(&message_id, vec![peer, pending.target_peer]);
-                                                    pending_messages.insert(message_id, pending);
+                                                    if is_terminal_identity_rejection(&error) {
+                                                        let _ = pending.reply_tx.send(Err(error)).await;
+                                                    } else {
+                                                        pending_messages.insert(message_id, pending);
+                                                    }
                                                 }
                                             }
                                         }
@@ -3415,10 +3506,10 @@ pub async fn start_swarm_with_config(
                                     request_response::Event::Message { peer, message, .. } => match message {
                                         request_response::Message::Request { request, channel, .. } => {
                                             let response = match verify_registration_message(&peer, &request) {
-                                                Ok(()) => RegistrationResponse {
-                                                    accepted: true,
-                                                    error: None,
-                                                },
+                                                Ok(()) => apply_verified_registration_message(
+                                                    &relay_custody_store,
+                                                    &request,
+                                                ),
                                                 Err(error) => RegistrationResponse {
                                                     accepted: false,
                                                     error: Some(error.to_string()),
@@ -3552,61 +3643,76 @@ pub async fn start_swarm_with_config(
                                                 match PeerId::from_bytes(&request.destination_peer) {
                                                     Ok(destination) => {
                                                         let relay_message_id = request.message_id.clone();
-                                                        if relay_guardrails.is_recent_duplicate(
-                                                            &peer.to_string(),
-                                                            &destination.to_string(),
-                                                            &relay_message_id,
-                                                            now_ms,
+                                                        match resolve_custody_metadata(
+                                                            &relay_custody_store,
+                                                            request.recipient_identity_id.as_deref(),
+                                                            request.intended_device_id.as_deref(),
                                                         ) {
-                                                            tracing::info!(
-                                                                "Relay duplicate suppressed from {} -> {} for message {}",
-                                                                peer,
-                                                                destination,
-                                                                relay_message_id
-                                                            );
-                                                            RelayResponse {
-                                                                accepted: true,
-                                                                error: None,
+                                                            Err(error) => RelayResponse {
+                                                                accepted: false,
+                                                                error: Some(error),
                                                                 message_id: relay_message_id,
-                                                            }
-                                                        } else {
-                                                            match relay_custody_store.accept_custody(
-                                                                peer.to_string(),
-                                                                destination.to_string(),
-                                                                relay_message_id.clone(),
-                                                                request.envelope_data.clone(),
-                                                            ) {
-                                                                Ok(_) => {
-                                                                    relay_guardrails.record_accepted(
-                                                                        &peer.to_string(),
-                                                                        &destination.to_string(),
-                                                                        &relay_message_id,
-                                                                        now_ms,
+                                                            },
+                                                            Ok((resolved_identity_id, resolved_device_id)) => {
+                                                                if relay_guardrails.is_recent_duplicate(
+                                                                    &peer.to_string(),
+                                                                    &destination.to_string(),
+                                                                    &relay_message_id,
+                                                                    now_ms,
+                                                                ) {
+                                                                    tracing::info!(
+                                                                        "Relay duplicate suppressed from {} -> {} for message {}",
+                                                                        peer,
+                                                                        destination,
+                                                                        relay_message_id
                                                                     );
-                                                                    if swarm.is_connected(&destination) {
-                                                                        dispatch_pending_custody_for_peer(
-                                                                            &mut swarm,
-                                                                            &relay_custody_store,
-                                                                            destination,
-                                                                            &mut pending_custody_dispatches,
-                                                                            RELAY_MAX_INFLIGHT_DISPATCHES,
-                                                                            "accept_immediate_pull",
-                                                                        );
-                                                                    }
                                                                     RelayResponse {
                                                                         accepted: true,
                                                                         error: None,
                                                                         message_id: relay_message_id,
                                                                     }
+                                                                } else {
+                                                                    match relay_custody_store.accept_custody(
+                                                                        peer.to_string(),
+                                                                        destination.to_string(),
+                                                                        relay_message_id.clone(),
+                                                                        request.envelope_data.clone(),
+                                                                        resolved_identity_id,
+                                                                        resolved_device_id,
+                                                                    ) {
+                                                                        Ok(_) => {
+                                                                            relay_guardrails.record_accepted(
+                                                                                &peer.to_string(),
+                                                                                &destination.to_string(),
+                                                                                &relay_message_id,
+                                                                                now_ms,
+                                                                            );
+                                                                            if swarm.is_connected(&destination) {
+                                                                                dispatch_pending_custody_for_peer(
+                                                                                    &mut swarm,
+                                                                                    &relay_custody_store,
+                                                                                    destination,
+                                                                                    &mut pending_custody_dispatches,
+                                                                                    RELAY_MAX_INFLIGHT_DISPATCHES,
+                                                                                    "accept_immediate_pull",
+                                                                                );
+                                                                            }
+                                                                            RelayResponse {
+                                                                                accepted: true,
+                                                                                error: None,
+                                                                                message_id: relay_message_id,
+                                                                            }
+                                                                        }
+                                                                        Err(e) => RelayResponse {
+                                                                            accepted: false,
+                                                                            error: Some(format!(
+                                                                                "custody_store_failed: {}",
+                                                                                e
+                                                                            )),
+                                                                            message_id: relay_message_id,
+                                                                        },
+                                                                    }
                                                                 }
-                                                                Err(e) => RelayResponse {
-                                                                    accepted: false,
-                                                                    error: Some(format!(
-                                                                        "custody_store_failed: {}",
-                                                                        e
-                                                                    )),
-                                                                    message_id: relay_message_id,
-                                                                },
                                                             }
                                                         }
                                                     }
@@ -3625,9 +3731,14 @@ pub async fn start_swarm_with_config(
                                                     if response.accepted {
                                                         let _ = pending.reply_tx.send(Ok(())).await;
                                                     } else {
-                                                        let _ = pending.reply_tx.send(Err(
-                                                            response.error.unwrap_or_else(|| "relay rejected".to_string())
-                                                        )).await;
+                                                        let error = response
+                                                            .error
+                                                            .unwrap_or_else(|| "relay rejected".to_string());
+                                                        if is_terminal_identity_rejection(&error) {
+                                                            let _ = pending.reply_tx.send(Err(error)).await;
+                                                        } else {
+                                                            pending_messages.insert(message_id, pending);
+                                                        }
                                                     }
                                                 }
                                             }
@@ -4015,6 +4126,8 @@ mod tests {
                 "dest-peer".to_string(),
                 "relay-msg-known".to_string(),
                 vec![1, 2, 3],
+                None,
+                None,
             )
             .unwrap();
         let marker = DeliveryConvergenceMarker {

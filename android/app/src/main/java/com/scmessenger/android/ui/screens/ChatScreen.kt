@@ -39,6 +39,7 @@ fun ChatScreen(
     viewModel: ConversationsViewModel = hiltViewModel()
 ) {
     val messages by viewModel.messages.collectAsState()
+    val error by viewModel.error.collectAsState()
     val chatMessages = remember(messages, conversationId) {
         // MSG-ORDER-001: Sort strictly by sender-assigned timestamp to ensure consistent ordering across platforms
         messages.filter { it.peerId == conversationId }.sortedBy { it.senderTimestamp }
@@ -112,6 +113,21 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            error?.let { errorMsg ->
+                Snackbar(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    action = {
+                        TextButton(onClick = { viewModel.clearError() }) {
+                            Text("Dismiss")
+                        }
+                    }
+                ) {
+                    Text(errorMsg)
+                }
+            }
+
             // Show banner if peer is not in contacts
             if (contact == null && isPeerAvailable) {
                 Card(
@@ -312,6 +328,7 @@ fun MessageBubble(
                 color = when (deliveryState.state) {
                     DeliveryStateSurface.DELIVERED -> MaterialTheme.colorScheme.primary
                     DeliveryStateSurface.FORWARDING -> MaterialTheme.colorScheme.tertiary
+                    DeliveryStateSurface.REJECTED -> MaterialTheme.colorScheme.error
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
                 fontWeight = FontWeight.SemiBold,
@@ -334,7 +351,7 @@ private fun StateLegendCard(modifier: Modifier = Modifier) {
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = "pending: first attempt in progress • stored: queued for retry • forwarding: retry active • delivered: receipt confirmed",
+                text = "pending: first attempt in progress • stored: queued for retry • forwarding: retry active • rejected: identity no longer valid • delivered: receipt confirmed",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

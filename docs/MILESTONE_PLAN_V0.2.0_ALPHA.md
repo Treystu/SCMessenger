@@ -895,6 +895,13 @@ Tracking document:
 - `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md`
 - WS13 kickoff prompt template: `docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md` (section "WS13 Kickoff (v0.2.1) - Tight Pairing start")
 
+Execution note (2026-03-13):
+
+1. `v0.2.1` execution is now active; use `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md`, `docs/CURRENT_STATE.md`, and `REMAINING_WORK_TRACKING.md` for the live WS13 status.
+2. WS13.1 through WS13.4 are implemented on the current tree.
+3. WS13.5 sender-facing rejection UX and queue-migration plumbing are implemented; Android physical-device install+launch verification passed on March 13, 2026, while the iOS signed device build+install passed and automated launch remained blocked because the connected iPhone was locked.
+4. WS13.6 compatibility/migration acceptance remains open.
+
 `v0.2.0` rule:
 
 1. Planning/docs and backlog tracking are allowed.

@@ -385,7 +385,11 @@ struct MessageBubble: View {
                 if isSent {
                     Text(deliveryState.label)
                         .font(Theme.labelSmall.weight(.semibold))
-                        .foregroundStyle(deliveryState.label == "delivered" ? .green : Theme.onSurface.opacity(0.8))
+                        .foregroundStyle(
+                            deliveryState.label == "delivered"
+                                ? .green
+                                : (deliveryState.label == "rejected" ? .red : Theme.onSurface.opacity(0.8))
+                        )
                 }
             }
             .padding(Theme.spacingMedium)
@@ -412,7 +416,7 @@ private struct DeliveryStateLegend: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Delivery states")
                 .font(Theme.labelLarge.weight(.semibold))
-            Text("pending: first attempt in progress • stored: queued for retry • forwarding: retry active • delivered: receipt confirmed")
+            Text("pending: first attempt in progress • stored: queued for retry • forwarding: retry active • rejected: identity no longer valid • delivered: receipt confirmed")
                 .font(Theme.labelSmall)
                 .foregroundStyle(Theme.onSurfaceVariant)
         }

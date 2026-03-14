@@ -452,6 +452,7 @@ impl MeshService {
         let bootstrap_addrs = self.bootstrap_addrs.lock().clone();
         let nat_status = self.nat_status.clone();
         let swarm_mode_state = self.swarm_headless_mode.clone();
+        let service_storage_path = self.storage_path.clone();
 
         // Spawn a dedicated OS thread that owns its own Tokio runtime.
         // This is the safest approach for mobile: we cannot rely on being
@@ -502,6 +503,7 @@ impl MeshService {
                                 event_tx,
                                 None,
                                 bootstrap_multiaddrs,
+                                service_storage_path,
                                 headless_mode,
                             )
                             .await
@@ -598,6 +600,27 @@ impl MeshService {
                                                 listen_addrs,
                                                 ..
                                             } => {
+                                                let registration_request = if headless_mode {
+                                                    None
+                                                } else {
+                                                    let core_guard = core.lock();
+                                                    core_guard
+                                                        .as_ref()
+                                                        .and_then(|core_ref| {
+                                                            core_ref.build_registration_request().ok()
+                                                        })
+                                                };
+                                                if let Some(request) = registration_request {
+                                                    if let Err(err) =
+                                                        handle.register_identity(peer_id, request).await
+                                                    {
+                                                        tracing::warn!(
+                                                            "Failed to register local identity with {}: {:?}",
+                                                            peer_id,
+                                                            err
+                                                        );
+                                                    }
+                                                }
                                                 tracing::info!(
                                                     "Peer identified via Swarm: {} (agent: {})",
                                                     peer_id,
@@ -1822,6 +1845,32 @@ impl SwarmBridge {
         let rt = self.get_runtime_handle();
         rt.block_on(handle.send_message(peer_id, data, recipient_identity_id, intended_device_id))
             .map_err(|_| crate::IronCoreError::NetworkError)
+    }
+
+    /// Send an encrypted message envelope and return the raw swarm error string
+    /// on failure so adapters can classify retryable vs terminal rejection.
+    pub fn send_message_status(
+        &self,
+        peer_id: String,
+        data: Vec<u8>,
+        recipient_identity_id: Option<String>,
+        intended_device_id: Option<String>,
+    ) -> Option<String> {
+        let handle_guard = self.handle.lock();
+        let handle = match handle_guard.as_ref() {
+            Some(handle) => handle,
+            None => return Some("swarm_bridge_unavailable".to_string()),
+        };
+
+        let peer_id = match PeerId::from_str(&peer_id) {
+            Ok(peer_id) => peer_id,
+            Err(_) => return Some("invalid_peer_id".to_string()),
+        };
+
+        let rt = self.get_runtime_handle();
+        rt.block_on(handle.send_message(peer_id, data, recipient_identity_id, intended_device_id))
+            .err()
+            .map(|err| err.to_string())
     }
 
     /// Send an encrypted message envelope to ALL connected peers.

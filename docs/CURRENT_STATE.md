@@ -3,9 +3,37 @@
 Status: Active  
 Last updated: 2026-03-13
 
-Last verified: **2026-03-12** (PR83 consolidation branch — full merge of PR79/PR80/PR81/PR82)
+Last verified: **2026-03-13** (WS13.4/WS13.5 execution + Android/iOS physical-device verification pass/blocker audit)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
+
+## 2026-03-13 WS13.4 Registry Enforcement + WS13.5 Rejection UX (Implemented, Verification In Progress)
+
+- **Relay registry + custody enforcement are now live in core**:
+  - `IronCore` now owns a persisted `RelayRegistry`, exposes `get_registration_state(identity_id)`, and builds signed registration requests for the mobile bridge.
+  - `core/src/transport/swarm.rs` now mutates active-device registry state on registration/deregistration, enforces `Active`/`Handover`/`Abandoned` custody policy, roots native custody state in service storage, and keeps wasm parity for duplicate registration/relay handling.
+  - `core/src/mobile_bridge.rs` now auto-registers the active identity on `PeerIdentified` and exposes `send_message_status(...)` so adapter layers can distinguish retryable delivery failures from terminal identity/device rejection.
+- **Sender-facing rejection UX now exists on both mobile clients**:
+  - Android `MeshRepository` now persists `recipient_identity_id`, `intended_device_id`, and `terminal_failure_code` in the pending outbox, stops retrying terminal tight-pair failures, and surfaces `rejected` delivery state plus a chat snackbar.
+  - iOS `MeshRepository` now follows the same rejection model, preserves terminal failure codes in the pending outbox, stops retrying abandoned/device-mismatch sends, and renders `rejected` delivery state in the main tab legend/UI.
+  - UniFFI bindings were regenerated and copied after the new `RegistrationStateInfo` / `send_message_status(...)` surface landed.
+- **Current WS completion state**:
+  - WS13.1 ✅ Identity device metadata + persistence
+  - WS13.2 ✅ Contact + request schema updates
+  - WS13.3 ✅ Registration protocol + signature verification
+  - WS13.4 ✅ Relay registry state machine + custody enforcement
+  - WS13.5 🟨 Handover/abandon queue migration + rejection UX implemented; Android physical-device verification passed, iPhone foreground-launch proof is still blocked by device lock
+  - WS13.6 ⬜ NEXT: compatibility/migration matrix + acceptance lock
+- **Verification completed on 2026-03-13**:
+  - `cargo build --workspace` — **PASS**
+  - `cargo test --workspace` — **PASS**
+  - `ANDROID_SERIAL=26261JEGR01896 UNINSTALL_FIRST=1 ./android/install-clean.sh` — **PASS** (clean rebuild, uninstall, install, permission grant on connected Pixel 6a)
+  - `adb -s 26261JEGR01896 shell am start -n com.scmessenger.android/.ui.MainActivity` — **PASS**
+  - `adb -s 26261JEGR01896 shell dumpsys activity activities | rg "topResumedActivity|com.scmessenger.android"` — **PASS** (`com.scmessenger.android/.ui.MainActivity` resumed in foreground)
+  - `APPLE_TEAM_ID=9578G7VQWS DEVICE_UDID=00008130-001A48DA18EB8D3A ./iOS/install-device.sh` — **PARTIAL PASS** (signed device build + install succeeded on christy's iPhone; automated launch was denied because the device was locked)
+- **Verification residue observed during real-device checks**:
+  - Android fresh-install startup emitted non-fatal `IronCoreException.NotInitialized` logs from `sendHistorySyncIfNeeded` before identity/core readiness fully settled; no fatal crash was observed, but the startup ordering remains a real residual risk.
+  - iOS device launch evidence is install-only until the connected iPhone is unlocked and the launch step is rerun.
 
 ## 2026-03-13 BLE Freshness Profiling + run5 Visibility Clarification (Verified)
 

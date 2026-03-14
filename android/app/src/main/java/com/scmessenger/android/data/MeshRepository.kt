@@ -256,12 +256,16 @@ open class MeshRepository(private val context: Context) {
         val createdAtEpochSec: Long,
         val attemptCount: Int,
         val nextAttemptAtEpochSec: Long,
-        val strictBleOnlyMode: Boolean? = null
+        val strictBleOnlyMode: Boolean? = null,
+        val recipientIdentityId: String? = null,
+        val intendedDeviceId: String? = null,
+        val terminalFailureCode: String? = null
     )
 
     private data class MessageIdentityHints(
         val identityId: String?,
         val publicKey: String?,
+        val deviceId: String?,
         val nickname: String?,
         val libp2pPeerId: String?,
         val listeners: List<String>,
@@ -292,7 +296,8 @@ open class MeshRepository(private val context: Context) {
 
     private data class DeliveryAttemptResult(
         val acked: Boolean,
-        val routePeerId: String?
+        val routePeerId: String?,
+        val terminalFailureCode: String? = null
     )
 
     private data class ReplayDiscoveredIdentity(
@@ -321,6 +326,24 @@ open class MeshRepository(private val context: Context) {
     private val strictBleOnlyValidation = isEnabledFlag(System.getenv("SC_BLE_ONLY_VALIDATION"))
     private val bleRouteObservations = ConcurrentHashMap<String, BleRouteObservation>()
     private val bleRouteFreshnessTtlMs = 120_000L
+
+    private fun isTerminalIdentityFailure(errorCode: String?): Boolean {
+        return when (errorCode?.trim()) {
+            "identity_device_mismatch",
+            "identity_abandoned" -> true
+            else -> false
+        }
+    }
+
+    private fun terminalIdentityFailureMessage(errorCode: String?): String {
+        return when (errorCode?.trim()) {
+            "identity_device_mismatch" ->
+                "This contact's identity has been recycled onto another device. Refresh their contact details before retrying."
+            "identity_abandoned" ->
+                "This contact abandoned the identity you tried to reach. Re-verify the contact before sending again."
+            else -> "This message was rejected because the recipient identity is no longer valid."
+        }
+    }
 
     init {
         Timber.d("MeshRepository initialized with storage: $storagePath")
@@ -819,7 +842,7 @@ open class MeshRepository(private val context: Context) {
                                 addedAt = (System.currentTimeMillis() / 1000).toULong(),
                                 lastSeen = (System.currentTimeMillis() / 1000).toULong(),
                                 notes = routeNotes,
-                                lastKnownDeviceId = null
+                                lastKnownDeviceId = verifiedHints?.deviceId
                             )
                             try {
                                 contactManager?.add(autoContact)
@@ -840,9 +863,9 @@ open class MeshRepository(private val context: Context) {
                                     publicKey = existingContact.publicKey,
                                     addedAt = existingContact.addedAt,
                                     lastSeen = existingContact.lastSeen,
-                                    notes = existingContact.notes
-                                ,
-                                lastKnownDeviceId = null)
+                                    notes = existingContact.notes,
+                                    lastKnownDeviceId = verifiedHints?.deviceId ?: existingContact.lastKnownDeviceId
+                                )
                                 try {
                                     contactManager?.add(updatedContact)
                                 } catch (e: Exception) {
@@ -873,9 +896,9 @@ open class MeshRepository(private val context: Context) {
                                     publicKey = existingContact.publicKey,
                                     addedAt = existingContact.addedAt,
                                     lastSeen = existingContact.lastSeen,
-                                    notes = updatedNotesWithListeners
-                                ,
-                                lastKnownDeviceId = null)
+                                    notes = updatedNotesWithListeners,
+                                    lastKnownDeviceId = verifiedHints?.deviceId ?: existingContact.lastKnownDeviceId
+                                )
                                 try {
                                     contactManager?.add(updatedContact)
                                 } catch (e: Exception) {
@@ -900,9 +923,9 @@ open class MeshRepository(private val context: Context) {
                                     publicKey = existingContact.publicKey,
                                     addedAt = existingContact.addedAt,
                                     lastSeen = existingContact.lastSeen,
-                                    notes = updatedNotesWithListeners
-                                ,
-                                lastKnownDeviceId = null)
+                                    notes = updatedNotesWithListeners,
+                                    lastKnownDeviceId = verifiedHints?.deviceId ?: existingContact.lastKnownDeviceId
+                                )
                                 try {
                                     contactManager?.add(updatedContact)
                                 } catch (e: Exception) {
@@ -919,6 +942,7 @@ open class MeshRepository(private val context: Context) {
                                 libp2pPeerId = routePeerId,
                                 wifiPeerId = routeWifiPeerId,
                                 listeners = hintedDialCandidates,
+                                deviceId = verifiedHints?.deviceId,
                                 createIfMissing = false
                             )
                             val discoveredNickname = prepopulateDiscoveryNickname(
@@ -2534,6 +2558,28 @@ open class MeshRepository(private val context: Context) {
                         state = "delivered",
                         detail = "delivery_receipt_arrived_before_enqueue"
                     )
+                } else if (delivery.terminalFailureCode != null) {
+                    enqueuePendingOutbound(
+                        historyRecordId = realMessageId,
+                        peerId = normalizedPeerId,
+                        routePeerId = selectedRoutePeerId,
+                        listeners = emptyList(),
+                        encryptedData = encryptedData,
+                        initialAttemptCount = 1,
+                        initialDelaySec = 0,
+                        strictBleOnlyMode = strictBleOnlyValidation,
+                        recipientIdentityId = finalPublicKey,
+                        intendedDeviceId = contact?.lastKnownDeviceId,
+                        terminalFailureCode = delivery.terminalFailureCode
+                    )
+                    logDeliveryState(
+                        messageId = realMessageId,
+                        state = "rejected",
+                        detail = "terminal_failure_code=${delivery.terminalFailureCode}"
+                    )
+                    throw IllegalStateException(
+                        terminalIdentityFailureMessage(delivery.terminalFailureCode)
+                    )
                 } else {
                     enqueuePendingOutbound(
                         historyRecordId = realMessageId,
@@ -2543,7 +2589,9 @@ open class MeshRepository(private val context: Context) {
                         encryptedData = encryptedData,
                         initialAttemptCount = 1,
                         initialDelaySec = if (delivery.acked) receiptAwaitSeconds else 0,
-                        strictBleOnlyMode = strictBleOnlyValidation
+                        strictBleOnlyMode = strictBleOnlyValidation,
+                        recipientIdentityId = finalPublicKey,
+                        intendedDeviceId = contact?.lastKnownDeviceId
                     )
                 }
 
@@ -2880,6 +2928,13 @@ open class MeshRepository(private val context: Context) {
         if (messageId.isBlank()) return null
         val pending = loadPendingOutbox().firstOrNull { it.historyRecordId == messageId } ?: return null
         return pending.attemptCount to pending.nextAttemptAtEpochSec
+    }
+
+    fun getPendingTerminalFailureCode(messageId: String): String? {
+        if (messageId.isBlank()) return null
+        return loadPendingOutbox()
+            .firstOrNull { it.historyRecordId == messageId }
+            ?.terminalFailureCode
     }
 
     fun getMissingRuntimePermissions(): List<String> {
@@ -3560,8 +3615,13 @@ open class MeshRepository(private val context: Context) {
                 detail = "ctx=$attemptContext route=$routePeerId transports=${dialCandidates.size}"
             )
             val attemptStart = System.currentTimeMillis()
-            try {
-                bridge.sendMessage(routePeerId, encryptedData, recipientIdentityId, intendedDeviceId)
+            val directError = bridge.sendMessageStatus(
+                routePeerId,
+                encryptedData,
+                recipientIdentityId,
+                intendedDeviceId
+            )
+            if (directError == null) {
                 val latencyMs = System.currentTimeMillis() - attemptStart
                 Timber.i("✓ Direct delivery ACK from $routePeerId (${latencyMs}ms)")
                 logDeliveryAttempt(
@@ -3572,15 +3632,22 @@ open class MeshRepository(private val context: Context) {
                     detail = "ctx=$attemptContext route=$routePeerId latency=${latencyMs}ms"
                 )
                 return DeliveryAttemptResult(acked = true, routePeerId = routePeerId)
-            } catch (e: Exception) {
-                Timber.w("Core-routed delivery failed for $routePeerId: ${e.message}; trying alternative transports")
+            } else {
+                Timber.w("Core-routed delivery failed for $routePeerId: $directError; trying alternative transports")
                 logDeliveryAttempt(
                     messageId = traceMessageId,
                     medium = "core",
                     phase = "direct",
                     outcome = "failed",
-                    detail = "ctx=$attemptContext route=$routePeerId reason=${e.message ?: "exception"}"
+                    detail = "ctx=$attemptContext route=$routePeerId reason=$directError"
                 )
+                if (isTerminalIdentityFailure(directError)) {
+                    return DeliveryAttemptResult(
+                        acked = false,
+                        routePeerId = routePeerId,
+                        terminalFailureCode = directError
+                    )
+                }
             }
 
             val relayOnlyCandidates = relayCircuitAddressesForPeer(routePeerId)
@@ -3598,8 +3665,13 @@ open class MeshRepository(private val context: Context) {
                     detail = "ctx=$attemptContext route=$routePeerId relays=${relayOnlyCandidates.size}"
                 )
                 val relayStart = System.currentTimeMillis()
-                try {
-                    bridge.sendMessage(routePeerId, encryptedData, recipientIdentityId, intendedDeviceId)
+                val relayError = bridge.sendMessageStatus(
+                    routePeerId,
+                    encryptedData,
+                    recipientIdentityId,
+                    intendedDeviceId
+                )
+                if (relayError == null) {
                     val latencyMs = System.currentTimeMillis() - relayStart
                     Timber.i("✓ Delivery ACK from $routePeerId after relay-circuit retry (${latencyMs}ms)")
                     logDeliveryAttempt(
@@ -3610,15 +3682,22 @@ open class MeshRepository(private val context: Context) {
                         detail = "ctx=$attemptContext route=$routePeerId latency=${latencyMs}ms"
                     )
                     return DeliveryAttemptResult(acked = true, routePeerId = routePeerId)
-                } catch (e: Exception) {
-                    Timber.w("Relay-circuit retry failed for $routePeerId: ${e.message}")
+                } else {
+                    Timber.w("Relay-circuit retry failed for $routePeerId: $relayError")
                     logDeliveryAttempt(
                         messageId = traceMessageId,
                         medium = "relay-circuit",
                         phase = "retry",
                         outcome = "failed",
-                        detail = "ctx=$attemptContext route=$routePeerId reason=${e.message ?: "exception"}"
+                        detail = "ctx=$attemptContext route=$routePeerId reason=$relayError"
                     )
+                    if (isTerminalIdentityFailure(relayError)) {
+                        return DeliveryAttemptResult(
+                            acked = false,
+                            routePeerId = routePeerId,
+                            terminalFailureCode = relayError
+                        )
+                    }
                 }
             }
         }
@@ -3675,6 +3754,9 @@ open class MeshRepository(private val context: Context) {
                     updated = true
                     continue
                 }
+                if (item.terminalFailureCode != null) {
+                    continue
+                }
                 if (item.nextAttemptAtEpochSec > now) continue
                 if (isMessageDeliveredLocally(item.historyRecordId)) {
                     iterator.remove()
@@ -3720,8 +3802,8 @@ open class MeshRepository(private val context: Context) {
                     traceMessageId = item.historyRecordId,
                     attemptContext = "outbox_retry",
                     strictBleOnlyOverride = item.strictBleOnlyMode,
-                    recipientIdentityId = contact?.publicKey,
-                    intendedDeviceId = contact?.lastKnownDeviceId
+                    recipientIdentityId = item.recipientIdentityId ?: contact?.publicKey,
+                    intendedDeviceId = item.intendedDeviceId ?: contact?.lastKnownDeviceId
                 )
                 val selectedRoutePeerId = if (delivery.acked) {
                     delivery.routePeerId ?: resolvedRoutePeerId
@@ -3730,6 +3812,23 @@ open class MeshRepository(private val context: Context) {
                 }
                 if (isMessageDeliveredLocally(item.historyRecordId)) {
                     iterator.remove()
+                    updated = true
+                    continue
+                }
+
+                if (delivery.terminalFailureCode != null) {
+                    iterator.set(
+                        item.copy(
+                            routePeerId = selectedRoutePeerId,
+                            listeners = resolvedListeners,
+                            terminalFailureCode = delivery.terminalFailureCode
+                        )
+                    )
+                    logDeliveryState(
+                        messageId = item.historyRecordId,
+                        state = "rejected",
+                        detail = "terminal_failure_code=${delivery.terminalFailureCode}"
+                    )
                     updated = true
                     continue
                 }
@@ -3810,7 +3909,10 @@ open class MeshRepository(private val context: Context) {
         encryptedData: ByteArray,
         initialAttemptCount: Int = 0,
         initialDelaySec: Long = 0,
-        strictBleOnlyMode: Boolean = false
+        strictBleOnlyMode: Boolean = false,
+        recipientIdentityId: String? = null,
+        intendedDeviceId: String? = null,
+        terminalFailureCode: String? = null
     ) {
         if (isMessageDeliveredLocally(historyRecordId)) {
             logDeliveryState(
@@ -3837,7 +3939,10 @@ open class MeshRepository(private val context: Context) {
                 createdAtEpochSec = now,
                 attemptCount = initialAttemptCount,
                 nextAttemptAtEpochSec = now + initialDelaySec,
-                strictBleOnlyMode = strictBleOnlyMode
+                strictBleOnlyMode = strictBleOnlyMode,
+                recipientIdentityId = recipientIdentityId,
+                intendedDeviceId = intendedDeviceId,
+                terminalFailureCode = terminalFailureCode
             )
         )
         savePendingOutbox(queue)
@@ -3879,7 +3984,10 @@ open class MeshRepository(private val context: Context) {
                             createdAtEpochSec = obj.optLong("created_at", System.currentTimeMillis() / 1000),
                             attemptCount = obj.optInt("attempt_count", 0),
                             nextAttemptAtEpochSec = obj.optLong("next_attempt_at", 0),
-                            strictBleOnlyMode = if (obj.has("strict_ble_only_mode")) obj.optBoolean("strict_ble_only_mode") else null
+                            strictBleOnlyMode = if (obj.has("strict_ble_only_mode")) obj.optBoolean("strict_ble_only_mode") else null,
+                            recipientIdentityId = obj.optString("recipient_identity_id").ifBlank { null },
+                            intendedDeviceId = obj.optString("intended_device_id").ifBlank { null },
+                            terminalFailureCode = obj.optString("terminal_failure_code").ifBlank { null }
                         )
                     )
                 }
@@ -3909,6 +4017,9 @@ open class MeshRepository(private val context: Context) {
                         .put("attempt_count", item.attemptCount)
                         .put("next_attempt_at", item.nextAttemptAtEpochSec)
                         .put("strict_ble_only_mode", item.strictBleOnlyMode ?: false)
+                        .put("recipient_identity_id", item.recipientIdentityId ?: "")
+                        .put("intended_device_id", item.intendedDeviceId ?: "")
+                        .put("terminal_failure_code", item.terminalFailureCode ?: "")
                 )
             }
             pendingOutboxFile.writeText(arr.toString())
@@ -4050,6 +4161,7 @@ open class MeshRepository(private val context: Context) {
         val publicKeyHex = normalizePublicKey(identity.publicKeyHex) ?: return content
 
         val identityId = identity.identityId?.trim().orEmpty()
+        val deviceId = identity.deviceId?.trim().orEmpty()
         val nickname = normalizeNickname(identity.nickname)?.take(64).orEmpty()
         val libp2pPeerId = identity.libp2pPeerId?.trim().orEmpty()
         val listeners = normalizeOutboundListenerHints(getListeningAddresses()).take(3)
@@ -4066,6 +4178,7 @@ open class MeshRepository(private val context: Context) {
                     org.json.JSONObject()
                         .put("identity_id", identityId)
                         .put("public_key", publicKeyHex)
+                        .put("device_id", deviceId)
                         .put("nickname", nickname)
                         .put("libp2p_peer_id", libp2pPeerId)
                         .put("listeners", org.json.JSONArray(listeners))
@@ -4095,6 +4208,7 @@ open class MeshRepository(private val context: Context) {
                 MessageIdentityHints(
                     identityId = it.optString("identity_id", "").trim().takeIf { value -> value.isNotBlank() },
                     publicKey = normalizePublicKey(it.optString("public_key", "")),
+                    deviceId = it.optString("device_id", "").trim().takeIf { value -> value.isNotBlank() },
                     nickname = normalizeNickname(it.optString("nickname", "")),
                     libp2pPeerId = it.optString("libp2p_peer_id", "").trim().takeIf { value ->
                         value.isNotBlank() && PeerIdValidator.isLibp2pPeerId(value)
@@ -4435,9 +4549,9 @@ open class MeshRepository(private val context: Context) {
                 publicKey = contact.publicKey,
                 addedAt = contact.addedAt,
                 lastSeen = contact.lastSeen,
-                notes = withListeners
-            ,
-                                lastKnownDeviceId = null)
+                notes = withListeners,
+                lastKnownDeviceId = contact.lastKnownDeviceId
+            )
             try {
                 contactManager?.add(updated)
             } catch (e: Exception) {
@@ -4454,6 +4568,7 @@ open class MeshRepository(private val context: Context) {
         wifiPeerId: String? = null,
         listeners: List<String>,
         blePeerId: String? = null,
+        deviceId: String? = null,
         createIfMissing: Boolean = true
     ) {
         val normalizedPeerId = canonicalPeerId.trim()
@@ -4523,9 +4638,9 @@ open class MeshRepository(private val context: Context) {
             publicKey = resolvedPublicKey,
             addedAt = existing?.addedAt ?: now,
             lastSeen = now,
-            notes = notes
-        ,
-                                lastKnownDeviceId = null)
+            notes = notes,
+            lastKnownDeviceId = deviceId?.trim()?.takeIf { it.isNotEmpty() } ?: existing?.lastKnownDeviceId
+        )
 
         try {
             contactManager?.add(updated)
@@ -4571,6 +4686,7 @@ open class MeshRepository(private val context: Context) {
             val routePeerId = item.routePeerId?.trim()
             if (item.peerId != trimmedPeerId && routePeerId != trimmedPeerId) continue
             if (!excludingMessageId.isNullOrBlank() && item.historyRecordId == excludingMessageId) continue
+            if (item.terminalFailureCode != null) continue
             if (item.nextAttemptAtEpochSec <= now) continue
             queue[idx] = item.copy(nextAttemptAtEpochSec = now)
             changed = true

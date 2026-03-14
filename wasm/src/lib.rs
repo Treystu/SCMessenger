@@ -915,6 +915,7 @@ async fn start_swarm_runtime(
         event_tx,
         None,
         bootstrap_multiaddrs,
+        None,
         headless_mode,
     )
     .await

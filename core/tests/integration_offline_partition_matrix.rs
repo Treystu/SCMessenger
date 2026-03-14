@@ -49,6 +49,8 @@ fn offline_partition_custody_and_outbox_survive_restart_until_reconnect_delivery
                 recipient_id.to_string(),
                 relay_message_id.to_string(),
                 vec![9, 9, 9],
+                None,
+                None,
             )
             .expect("relay should accept custody while destination is offline");
 

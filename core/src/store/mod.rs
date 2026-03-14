@@ -16,4 +16,8 @@ pub use contacts::{Contact, ContactManager};
 pub use history::{HistoryManager, HistoryStats, MessageDirection, MessageRecord};
 pub use inbox::{Inbox, ReceivedMessage};
 pub use outbox::{Outbox, QueuedMessage};
-pub use relay_custody::{CustodyMessage, CustodyState, CustodyTransition, RelayCustodyStore};
+pub use relay_custody::{
+    CustodyEnforcement, CustodyError, CustodyMessage, CustodyState, CustodyTransition,
+    RegistrationState, RegistrationStateInfo, RegistrationTransition, RelayCustodyStore,
+    RelayRegistry,
+};

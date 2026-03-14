@@ -22,6 +22,8 @@ fn multi_forwarder_convergence_stops_duplicate_retry_and_purges_pending() {
             destination_id.clone(),
             relay_message_id.clone(),
             vec![1, 2, 3],
+            None,
+            None,
         )
         .expect("forwarder A should accept custody");
     let _custody_b = forwarder_b_store
@@ -30,6 +32,8 @@ fn multi_forwarder_convergence_stops_duplicate_retry_and_purges_pending() {
             destination_id.clone(),
             relay_message_id.clone(),
             vec![1, 2, 3],
+            None,
+            None,
         )
         .expect("forwarder B should accept custody");
 
@@ -85,6 +89,8 @@ fn convergence_purges_dispatching_duplicate_attempts() {
             destination.clone(),
             relay_message_id.clone(),
             vec![9, 9, 9],
+            None,
+            None,
         )
         .expect("custody accepted");
     store

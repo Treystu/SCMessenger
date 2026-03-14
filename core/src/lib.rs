@@ -134,6 +134,13 @@ pub struct PreparedMessage {
     pub envelope_data: Vec<u8>,
 }
 
+#[derive(Clone)]
+pub struct RegistrationStateInfo {
+    pub state: String,
+    pub device_id: Option<String>,
+    pub seniority_timestamp: Option<u64>,
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 struct IdentityBackupV1 {
     version: u8,
@@ -191,6 +198,8 @@ pub struct IronCore {
     log_manager: Arc<store::logs::LogManager>,
     /// Persistent blocked identity manager
     blocked_manager: Arc<store::blocked::BlockedManager>,
+    /// Relay registration registry backed by the canonical root store
+    relay_registry: Arc<store::RelayRegistry>,
     /// UniFFI-facing contacts manager (non-wasm builds only)
     #[cfg(not(target_arch = "wasm32"))]
     contacts_bridge_manager: Arc<crate::contacts_bridge::ContactManager>,
@@ -594,6 +603,7 @@ impl IronCore {
             log_manager.clone(),
         ));
         let blocked_manager = Arc::new(store::blocked::BlockedManager::new(root_backend.clone()));
+        let relay_registry = Arc::new(store::RelayRegistry::new(root_backend.clone()));
 
         #[cfg(not(target_arch = "wasm32"))]
         let contacts_bridge_manager = init_uniffi_contacts_manager(storage_path.as_deref());
@@ -609,6 +619,7 @@ impl IronCore {
             storage_manager,
             log_manager,
             blocked_manager,
+            relay_registry,
             #[cfg(not(target_arch = "wasm32"))]
             contacts_bridge_manager,
             #[cfg(not(target_arch = "wasm32"))]
@@ -716,7 +727,8 @@ impl IronCore {
             history_arc.read().clone().into(),
             log_manager.clone(),
         ));
-        let blocked_manager = Arc::new(store::blocked::BlockedManager::new(root_backend));
+        let blocked_manager = Arc::new(store::blocked::BlockedManager::new(root_backend.clone()));
+        let relay_registry = Arc::new(store::RelayRegistry::new(root_backend));
 
         Self {
             identity,
@@ -727,6 +739,7 @@ impl IronCore {
             storage_manager,
             log_manager,
             blocked_manager,
+            relay_registry,
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
         }
@@ -822,6 +835,29 @@ impl IronCore {
     /// Get seniority timestamp for this installation (WS13.1)
     pub fn get_seniority_timestamp(&self) -> Option<u64> {
         self.identity.read().seniority_timestamp()
+    }
+
+    /// Get the relay registration state for an identity/public-key lookup.
+    pub fn get_registration_state(&self, identity_id: String) -> RegistrationStateInfo {
+        let info = self.relay_registry.get_state_info(&identity_id);
+        RegistrationStateInfo {
+            state: info.state,
+            device_id: info.device_id,
+            seniority_timestamp: info.seniority_timestamp,
+        }
+    }
+
+    pub(crate) fn build_registration_request(
+        &self,
+    ) -> Result<transport::RegistrationRequest, IronCoreError> {
+        let identity = self.identity.read();
+        let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
+        let device_id = identity.device_id().ok_or(IronCoreError::NotInitialized)?;
+        let seniority_ts = identity
+            .seniority_timestamp()
+            .ok_or(IronCoreError::NotInitialized)?;
+        transport::RegistrationRequest::new_signed(keys, device_id, seniority_ts)
+            .map_err(|_| IronCoreError::InvalidInput)
     }
 
     /// Export identity key material for platform-secure backup.
