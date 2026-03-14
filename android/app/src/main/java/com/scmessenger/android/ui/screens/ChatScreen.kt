@@ -50,7 +50,9 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
-    val contact = viewModel.getContactForPeer(conversationId)
+    // Normalize conversationId for contact lookup - may arrive as libp2pPeerId, need to resolve to saved contact
+    val normalizedPeerId = com.scmessenger.android.utils.PeerIdValidator.normalize(conversationId)
+    val contact = viewModel.getContactForPeer(normalizedPeerId)
     val localNickname = contact?.localNickname?.trim().orEmpty()
     val federatedNickname = contact?.nickname?.trim().orEmpty()
     val displayName = when {
@@ -59,8 +61,8 @@ fun ChatScreen(
         else -> conversationId.take(12) + "..."
     }
 
-    Timber.d("CHAT_SCREEN: conversationId=$conversationId, displayName=$displayName, localNick=$localNickname, fedNick=$federatedNickname")
-    val isPeerAvailable = viewModel.isPeerAvailable(conversationId)
+    Timber.d("CHAT_SCREEN: conversationId=$conversationId, normalizedPeerId=$normalizedPeerId, displayName=$displayName, localNick=$localNickname, fedNick=$federatedNickname, contactFound=${contact != null}")
+    val isPeerAvailable = viewModel.isPeerAvailable(normalizedPeerId)
     var showAddContactDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(conversationId) {
