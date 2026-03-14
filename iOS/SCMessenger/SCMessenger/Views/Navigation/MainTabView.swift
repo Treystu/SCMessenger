@@ -9,10 +9,16 @@ import SwiftUI
 import UIKit
 import OSLog
 
+enum MessagesRoute: Hashable {
+    case conversation(Conversation)
+    case requestsInbox
+}
+
 struct MainTabView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var identityInitialized = false
     @State private var selectedTab: MainTab = .mesh
+    @State private var messagesPath: [MessagesRoute] = []
 
     private enum MainTab: Hashable {
         case messages
@@ -24,8 +30,16 @@ struct MainTabView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             if identityInitialized {
-                NavigationStack {
-                    ConversationListView()
+                NavigationStack(path: $messagesPath) {
+                    ConversationListView(onOpenRequestsInbox: openRequestsInbox)
+                        .navigationDestination(for: MessagesRoute.self) { route in
+                            switch route {
+                            case .conversation(let conversation):
+                                ChatView(conversation: conversation)
+                            case .requestsInbox:
+                                RequestsInboxView(onOpenConversation: openConversation)
+                            }
+                        }
                 }
                 .tabItem {
                     Label("Messages", systemImage: "message")
@@ -61,10 +75,19 @@ struct MainTabView: View {
         }
         .onAppear {
             repository.start()
+            repository.setNotificationAppInForeground(true)
             refreshIdentityRole()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            repository.setNotificationAppInForeground(true)
             refreshIdentityRole()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+            repository.setNotificationAppInForeground(false)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .notificationRouteRequested)) { notification in
+            guard let userInfo = notification.userInfo else { return }
+            handleNotificationRoute(userInfo: userInfo)
         }
     }
 
@@ -74,19 +97,71 @@ struct MainTabView: View {
             selectedTab = .mesh
         }
     }
+
+    private func handleNotificationRoute(userInfo: [AnyHashable: Any]) {
+        selectedTab = .messages
+        messagesPath.removeAll()
+        if (userInfo["routeTarget"] as? String) == "requests" {
+            openRequestsInbox()
+            return
+        }
+        guard let peerId = userInfo["conversationId"] as? String ?? userInfo["senderPeerId"] as? String else {
+            return
+        }
+        let conversation = Conversation(
+            peerId: peerId,
+            peerNickname: repository.displayNameForPeer(peerId: peerId)
+        )
+        openConversation(conversation)
+    }
+
+    private func openConversation(_ conversation: Conversation) {
+        selectedTab = .messages
+        messagesPath = [.conversation(conversation)]
+    }
+
+    private func openRequestsInbox() {
+        selectedTab = .messages
+        messagesPath = [.requestsInbox]
+    }
 }
 
 struct ConversationListView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var conversations: [Conversation] = []
+    @State private var requestCount = 0
     @State private var conversationToDelete: Conversation?
     @State private var showingDeleteConfirmation = false
     private let logger = Logger(subsystem: "com.scmessenger", category: "ConversationList")
+    let onOpenRequestsInbox: () -> Void
 
     var body: some View {
         List {
+            if requestCount > 0 {
+                Section {
+                    Button(action: onOpenRequestsInbox) {
+                        HStack(spacing: Theme.spacingMedium) {
+                            Image(systemName: "person.crop.circle.badge.exclamationmark")
+                                .font(.title2)
+                                .foregroundStyle(Theme.onPrimaryContainer)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Message Requests")
+                                    .font(Theme.titleMedium.weight(.semibold))
+                                Text("\(requestCount) pending request\(requestCount == 1 ? "" : "s")")
+                                    .font(Theme.bodySmall)
+                                    .foregroundStyle(Theme.onSurfaceVariant)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .foregroundStyle(Theme.onSurfaceVariant)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
             ForEach(conversations) { conversation in
-                NavigationLink(value: conversation) {
+                NavigationLink(value: MessagesRoute.conversation(conversation)) {
                     ConversationRow(conversation: conversation)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -100,9 +175,6 @@ struct ConversationListView: View {
             }
         }
         .navigationTitle("Messages")
-        .navigationDestination(for: Conversation.self) { conversation in
-            ChatView(conversation: conversation)
-        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: {}) {
@@ -112,9 +184,11 @@ struct ConversationListView: View {
         }
         .task {
             loadConversations()
+            loadRequestCount()
         }
         .onReceive(repository.messageUpdates) { _ in
             loadConversations()
+            loadRequestCount()
         }
         .onReceive(MeshEventBus.shared.peerEvents) { event in
             switch event {
@@ -156,8 +230,11 @@ struct ConversationListView: View {
         // Load conversations from repository
         do {
             let contacts = try repository.getContacts()
+            let requestPeerIds = Set(repository.getMessageRequests().map(\.peerId))
             let deduped = deduplicateContactsByPublicKey(contacts)
-            conversations = deduped.map { contact in
+            conversations = deduped
+                .filter { !requestPeerIds.contains($0.peerId) }
+                .map { contact in
                 let local = contact.localNickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 let displayName = !local.isEmpty
                     ? local
@@ -176,10 +253,15 @@ struct ConversationListView: View {
                     lastMessage: lastMsg?.content,
                     lastMessageTime: lastTime
                 )
-            }.sorted { ($0.lastMessageTime ?? Date.distantPast) > ($1.lastMessageTime ?? Date.distantPast) }
+            }
+            .sorted { ($0.lastMessageTime ?? Date.distantPast) > ($1.lastMessageTime ?? Date.distantPast) }
         } catch {
             logger.error("Failed to load conversations: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    private func loadRequestCount() {
+        requestCount = repository.getMessageRequests().count
     }
 
     private func deduplicateContactsByPublicKey(_ input: [Contact]) -> [Contact] {
@@ -214,6 +296,51 @@ struct ConversationListView: View {
         if a.peerId.hasPrefix("12D3Koo") && !b.peerId.hasPrefix("12D3Koo") { return a }
         if b.peerId.hasPrefix("12D3Koo") && !a.peerId.hasPrefix("12D3Koo") { return b }
         return a
+    }
+}
+
+struct RequestsInboxView: View {
+    @Environment(MeshRepository.self) private var repository
+    @State private var requests: [MessageRequestThread] = []
+    let onOpenConversation: (Conversation) -> Void
+
+    var body: some View {
+        List {
+            if requests.isEmpty {
+                ContentUnavailableView(
+                    "No Message Requests",
+                    systemImage: "tray",
+                    description: Text("Unknown senders will appear here until you accept them.")
+                )
+            } else {
+                ForEach(requests) { request in
+                    Button {
+                        onOpenConversation(request.conversation)
+                    } label: {
+                        ConversationRow(conversation: request.conversation)
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button("Accept") {
+                            try? repository.acceptMessageRequest(peerId: request.peerId)
+                            loadRequests()
+                        }
+                        .tint(.green)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Message Requests")
+        .task {
+            loadRequests()
+        }
+        .onReceive(repository.messageUpdates) { _ in
+            loadRequests()
+        }
+    }
+
+    private func loadRequests() {
+        requests = repository.getMessageRequests()
     }
 }
 
@@ -358,6 +485,10 @@ struct ChatView: View {
             if viewModel == nil {
                 viewModel = ChatViewModel(conversation: conversation, repository: repository)
             }
+            repository.setNotificationActiveConversation(peerId: conversation.peerId)
+        }
+        .onDisappear {
+            repository.setNotificationActiveConversation(peerId: nil)
         }
     }
 }

@@ -124,6 +124,8 @@ final class MeshRepository {
     private let deliveredReceiptCacheTtl: TimeInterval = 2 * 60 * 60
     private var pendingReceiptSendTasks: [String: Task<Void, Never>] = [:]
     private let receiptSendMaxAttempts = 6
+    private var notificationAppInForeground = true
+    private var notificationActiveConversationId: String?
 
     private enum RelayAvailabilityState: String {
         case stable
@@ -202,6 +204,10 @@ final class MeshRepository {
         let acked: Bool
         let routePeerId: String?
         let terminalFailureCode: String?
+    }
+
+    private enum NotificationNoteKey {
+        static let requestPending = "notification_request_pending"
     }
 
     private struct PeerDiscoveryInfo {
@@ -1047,6 +1053,9 @@ final class MeshRepository {
                 intendedDeviceId: contact?.lastKnownDeviceId
             )
         }
+
+        clearNotificationRequestPending(peerId: peerId)
+        NotificationManager.shared.markConversationRead(conversationId: peerId)
     }
 
     /// Handle incoming message (from CoreDelegate callback)
@@ -1128,6 +1137,28 @@ final class MeshRepository {
         let isChatEvent = messageKind == "text" || messageKind.isEmpty
 
         let existingContact = try? contactManager?.get(peerId: canonicalPeerId)
+        let requestPending = isNotificationRequestPending(notes: existingContact?.notes)
+        let hasExistingConversation = ((try? historyManager?.conversation(peerId: canonicalPeerId, limit: 1)) ?? []).isEmpty == false
+        let notificationSettings = currentNotificationSettings()
+        let notificationDecision = ironCore?.classifyNotification(
+            message: NotificationMessageContext(
+                conversationId: canonicalPeerId,
+                senderPeerId: canonicalPeerId,
+                messageId: messageId,
+                explicitDmRequest: nil,
+                senderIsKnownContact: existingContact != nil && !requestPending,
+                hasExistingConversation: hasExistingConversation,
+                isSelfOriginated: false,
+                isDuplicate: false,
+                alreadySeen: false,
+                isBlocked: false
+            ),
+            uiState: NotificationUiState(
+                appInForeground: notificationAppInForeground,
+                activeConversationId: notificationActiveConversationId
+            ),
+            settings: notificationSettings
+        )
         if existingContact == nil && isChatEvent {
             if let normalizedSenderKey {
                 var routeNotes: String?
@@ -1138,6 +1169,13 @@ final class MeshRepository {
                     notes: routeNotes,
                     listeners: normalizeOutboundListenerHints(hintedDialCandidates)
                 )
+                if notificationDecision?.kind == .directMessageRequest {
+                    routeNotes = appendRoutingHint(
+                        notes: routeNotes,
+                        key: NotificationNoteKey.requestPending,
+                        value: "true"
+                    )
+                }
                 let autoContact = Contact(
                     peerId: canonicalPeerId,
                     nickname: knownNickname,
@@ -1159,42 +1197,49 @@ final class MeshRepository {
         } else if let existingContact {
             try? contactManager?.updateLastSeen(peerId: canonicalPeerId)
 
-            if (existingContact.nickname?.isEmpty ?? true), let knownNickname, !knownNickname.isEmpty {
-                let updatedContact = Contact(
-                    peerId: existingContact.peerId,
-                    nickname: knownNickname,
-                    localNickname: existingContact.localNickname,
-                    publicKey: existingContact.publicKey,
-                    addedAt: existingContact.addedAt,
-                    lastSeen: existingContact.lastSeen,
-                    notes: existingContact.notes,
-                    lastKnownDeviceId: verifiedHints?.deviceId ?? existingContact.lastKnownDeviceId
-                )
-                try? contactManager?.add(contact: updatedContact)
-                contactManager?.flush()
-            }
-
+            var updatedNotes = existingContact.notes
+            var updatedNickname = existingContact.nickname
             let currentRouting = parseRoutingHintsFromNotes(existingContact.notes)
             let normalizedRoutePeerId = routePeerId?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .nilIfEmpty
+            var shouldPersistContact = false
+
+            if (existingContact.nickname?.isEmpty ?? true), let knownNickname, !knownNickname.isEmpty {
+                updatedNickname = knownNickname
+                shouldPersistContact = true
+            }
+
             if let normalizedRoutePeerId,
                let normalizedSenderKey,
                normalizePublicKey(existingContact.publicKey) == normalizedSenderKey,
                currentRouting.libp2pPeerId != normalizedRoutePeerId {
-                let updatedNotes = appendRoutingHint(notes: existingContact.notes, key: "libp2p_peer_id", value: routePeerId)
-                let updatedNotesWithListeners = upsertRoutingListeners(
+                updatedNotes = appendRoutingHint(notes: updatedNotes, key: "libp2p_peer_id", value: routePeerId)
+                updatedNotes = upsertRoutingListeners(
                     notes: updatedNotes,
                     listeners: normalizeOutboundListenerHints(hintedDialCandidates)
                 )
+                shouldPersistContact = true
+            }
+
+            if notificationDecision?.kind == .directMessageRequest && !requestPending {
+                updatedNotes = appendRoutingHint(
+                    notes: updatedNotes,
+                    key: NotificationNoteKey.requestPending,
+                    value: "true"
+                )
+                shouldPersistContact = true
+            }
+
+            if shouldPersistContact {
                 let updatedContact = Contact(
                     peerId: existingContact.peerId,
-                    nickname: existingContact.nickname,
+                    nickname: updatedNickname,
                     localNickname: existingContact.localNickname,
                     publicKey: existingContact.publicKey,
                     addedAt: existingContact.addedAt,
                     lastSeen: existingContact.lastSeen,
-                    notes: updatedNotesWithListeners,
+                    notes: updatedNotes,
                     lastKnownDeviceId: verifiedHints?.deviceId ?? existingContact.lastKnownDeviceId
                 )
                 try? contactManager?.add(contact: updatedContact)
@@ -1344,11 +1389,25 @@ final class MeshRepository {
         )
 
         try? historyManager?.add(record: messageRecord)
+        historyManager?.flush()
 
         // Notify UI
         messageUpdates.send(messageRecord)
         logger.info("Message received and processed from \(canonicalPeerId)")
         appendDiagnostic("msg_rx_processed peer=\(canonicalPeerId) msg=\(messageId)")
+
+        if isChatEvent && notificationSettings.notificationsEnabled,
+           let notificationDecision,
+           notificationDecision.kind != .none {
+            NotificationManager.shared.sendNotification(
+                decision: notificationDecision,
+                senderDisplayName: displayNameForPeer(peerId: canonicalPeerId),
+                content: content,
+                soundEnabled: notificationSettings.soundEnabled,
+                badgeEnabled: notificationSettings.badgeEnabled,
+                routesToRequestsInbox: notificationDecision.kind == .directMessageRequest
+            )
+        }
 
         // Send delivery receipt ACK back to sender
         sendDeliveryReceiptAsync(
@@ -2221,6 +2280,109 @@ final class MeshRepository {
         return merged.isEmpty ? nil : merged
     }
 
+    private func removeRoutingHint(notes: String?, key: String) -> String? {
+        guard let notes else { return nil }
+        let filtered = notes
+            .split(whereSeparator: { $0 == ";" || $0 == "\n" })
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("\(key):") }
+        let merged = filtered.joined(separator: ";")
+        return merged.isEmpty ? nil : merged
+    }
+
+    private func currentNotificationSettings() -> MeshSettings {
+        if let loaded = try? settingsManager?.load() {
+            return loaded
+        }
+        if let defaults = settingsManager?.defaultSettings() {
+            return defaults
+        }
+        return MeshSettings(
+            relayEnabled: true,
+            maxRelayBudget: DefaultSettings.maxRelayBudget,
+            batteryFloor: DefaultSettings.batteryFloor,
+            bleEnabled: true,
+            wifiAwareEnabled: true,
+            wifiDirectEnabled: true,
+            internetEnabled: true,
+            discoveryMode: .normal,
+            onionRouting: false,
+            coverTrafficEnabled: false,
+            messagePaddingEnabled: false,
+            timingObfuscationEnabled: false,
+            notificationsEnabled: true,
+            notifyDmEnabled: true,
+            notifyDmRequestEnabled: true,
+            notifyDmInForeground: false,
+            notifyDmRequestInForeground: true,
+            soundEnabled: true,
+            badgeEnabled: true
+        )
+    }
+
+    private func isNotificationRequestPending(notes: String?) -> Bool {
+        guard let notes else { return false }
+        return notes
+            .split(whereSeparator: { $0 == ";" || $0 == "\n" })
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .contains { $0 == "\(NotificationNoteKey.requestPending):true" }
+    }
+
+    private func clearNotificationRequestPending(peerId: String) {
+        guard let existingContact = try? contactManager?.get(peerId: peerId),
+              isNotificationRequestPending(notes: existingContact.notes) else {
+            return
+        }
+
+        let updated = Contact(
+            peerId: existingContact.peerId,
+            nickname: existingContact.nickname,
+            localNickname: existingContact.localNickname,
+            publicKey: existingContact.publicKey,
+            addedAt: existingContact.addedAt,
+            lastSeen: existingContact.lastSeen,
+            notes: removeRoutingHint(notes: existingContact.notes, key: NotificationNoteKey.requestPending),
+            lastKnownDeviceId: existingContact.lastKnownDeviceId
+        )
+        try? contactManager?.add(contact: updated)
+        contactManager?.flush()
+    }
+
+    private func displayNameForContact(_ contact: Contact?, fallbackPeerId: String) -> String {
+        let localNickname = contact?.localNickname?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        if let localNickname {
+            return localNickname
+        }
+
+        let nickname = contact?.nickname?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        if let nickname {
+            return nickname
+        }
+
+        let normalizedPeerId = fallbackPeerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedPeerId.count > 8 {
+            return String(normalizedPeerId.prefix(8)) + "..."
+        }
+        return normalizedPeerId
+    }
+
+    private func effectiveTimestamp(for message: MessageRecord) -> UInt64 {
+        message.senderTimestamp > 0 ? message.senderTimestamp : message.timestamp
+    }
+
+    private func compareMessageRecency(_ lhs: MessageRecord, _ rhs: MessageRecord) -> Bool {
+        let lhsTimestamp = effectiveTimestamp(for: lhs)
+        let rhsTimestamp = effectiveTimestamp(for: rhs)
+        if lhsTimestamp == rhsTimestamp {
+            return lhs.timestamp < rhs.timestamp
+        }
+        return lhsTimestamp < rhsTimestamp
+    }
+
     private func resolveTransportIdentity(libp2pPeerId: String) -> TransportIdentityResolution? {
         guard isLibp2pPeerId(libp2pPeerId) else { return nil }
         let extractedKey: String? = {
@@ -2274,6 +2436,9 @@ final class MeshRepository {
             throw MeshError.notInitialized("SettingsManager not initialized")
         }
         try settingsManager.save(settings: settings)
+        if !settings.notificationsEnabled {
+            NotificationManager.shared.clearBadge()
+        }
         logger.info("✓ Settings saved (relay: \(settings.relayEnabled))")
     }
 
@@ -2461,6 +2626,11 @@ final class MeshRepository {
         return try contactManager.get(peerId: peerId)
     }
 
+    func displayNameForPeer(peerId: String) -> String {
+        let contact = try? contactManager?.get(peerId: peerId)
+        return displayNameForContact(contact, fallbackPeerId: peerId)
+    }
+
     func addContact(_ contact: Contact) throws {
         guard let contactManager = contactManager else {
             throw MeshError.notInitialized("ContactManager not initialized")
@@ -2530,6 +2700,24 @@ final class MeshRepository {
         return try historyManager.conversation(peerId: peerId, limit: limit)
     }
 
+    func getMessageRequests(limit: UInt32 = 100) -> [MessageRequestThread] {
+        let contacts = (try? contactManager?.list()) ?? []
+        let pendingContacts = contacts.filter { isNotificationRequestPending(notes: $0.notes) }
+
+        return pendingContacts.compactMap { contact in
+            let messages = (try? historyManager?.conversation(peerId: contact.peerId, limit: limit)) ?? []
+            let lastMessage = messages.max(by: compareMessageRecency(_:_:))
+            return MessageRequestThread(
+                peerId: contact.peerId,
+                displayName: displayNameForContact(contact, fallbackPeerId: contact.peerId),
+                previewText: lastMessage?.content,
+                lastMessageTime: lastMessage.map { Date(timeIntervalSince1970: Double(effectiveTimestamp(for: $0))) },
+                unreadCount: Int(messages.filter { $0.direction == .received }.count)
+            )
+        }
+        .sorted { ($0.lastMessageTime ?? .distantPast) > ($1.lastMessageTime ?? .distantPast) }
+    }
+
     func getRecentMessages(peerIdFilter: String? = nil, limit: UInt32 = 50) throws -> [MessageRecord] {
         guard let historyManager = historyManager else {
             throw MeshError.notInitialized("HistoryManager not initialized")
@@ -2580,6 +2768,28 @@ final class MeshRepository {
         }
         try historyManager.clearConversation(peerId: peerId)
         logger.info("✓ Conversation cleared for peer: \(peerId)")
+    }
+
+    func acceptMessageRequest(peerId: String) throws {
+        clearNotificationRequestPending(peerId: peerId)
+        NotificationManager.shared.markConversationRead(conversationId: peerId)
+    }
+
+    func notificationSettingsEnabled() -> Bool {
+        currentNotificationSettings().notificationsEnabled
+    }
+
+    func setNotificationAppInForeground(_ inForeground: Bool) {
+        notificationAppInForeground = inForeground
+    }
+
+    func setNotificationActiveConversation(peerId: String?) {
+        notificationActiveConversationId = peerId?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        if let activeConversationId = notificationActiveConversationId {
+            NotificationManager.shared.markConversationRead(conversationId: activeConversationId)
+        }
     }
 
     func getHistoryStats() throws -> HistoryStats? {

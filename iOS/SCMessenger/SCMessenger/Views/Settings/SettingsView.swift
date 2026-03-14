@@ -99,6 +99,42 @@ struct SettingsView: View {
                     get: { viewModel?.isNotificationsEnabled ?? true },
                     set: { viewModel?.isNotificationsEnabled = $0 }
                 ))
+
+                Toggle("Direct Messages", isOn: Binding(
+                    get: { viewModel?.notifyDmEnabled ?? true },
+                    set: { viewModel?.notifyDmEnabled = $0 }
+                ))
+                .disabled(!(viewModel?.isNotificationsEnabled ?? true))
+
+                Toggle("Message Requests", isOn: Binding(
+                    get: { viewModel?.notifyDmRequestEnabled ?? true },
+                    set: { viewModel?.notifyDmRequestEnabled = $0 }
+                ))
+                .disabled(!(viewModel?.isNotificationsEnabled ?? true))
+
+                Toggle("Direct Messages In Foreground", isOn: Binding(
+                    get: { viewModel?.notifyDmInForeground ?? false },
+                    set: { viewModel?.notifyDmInForeground = $0 }
+                ))
+                .disabled(!(viewModel?.isNotificationsEnabled ?? true))
+
+                Toggle("Message Requests In Foreground", isOn: Binding(
+                    get: { viewModel?.notifyDmRequestInForeground ?? true },
+                    set: { viewModel?.notifyDmRequestInForeground = $0 }
+                ))
+                .disabled(!(viewModel?.isNotificationsEnabled ?? true))
+
+                Toggle("Sounds", isOn: Binding(
+                    get: { viewModel?.soundEnabled ?? true },
+                    set: { viewModel?.soundEnabled = $0 }
+                ))
+                .disabled(!(viewModel?.isNotificationsEnabled ?? true))
+
+                Toggle("Badges", isOn: Binding(
+                    get: { viewModel?.badgeEnabled ?? true },
+                    set: { viewModel?.badgeEnabled = $0 }
+                ))
+                .disabled(!(viewModel?.isNotificationsEnabled ?? true))
             } header: {
                 Text("App Preferences")
             }

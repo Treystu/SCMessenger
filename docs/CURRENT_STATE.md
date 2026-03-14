@@ -3,11 +3,31 @@
 Status: Active
 Last updated: 2026-03-14
 
-Last verified: **2026-03-14** (Android audit + critical bug fixes + WS13.6 completion; WS14.1 core notification contract landed, full test rerun deferred after sandbox-only relay failures)
+Last verified: **2026-03-14** (WS14.2 iOS DM/DM-request notification flow build-verified after WS14.1 gate acceptance)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
 
-## 2026-03-14 WS14.1 Core Notification Contract (Implemented, Verification Deferred)
+## 2026-03-14 WS14.2 iOS DM / DM Request Notifications (Implemented, Build-Verified)
+
+- **iOS notification handling is now production-routed instead of placeholder-only**:
+  - `iOS/SCMessenger/SCMessenger/Services/NotificationManager.swift` now defines separate DM and DM Request notification categories, badge accounting, quick-reply handling, mark-read actions, and notification-tap routing via `notificationRouteRequested`.
+  - `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift` now calls the shared Rust classifier for inbound chat events, persists pending-request state on unknown-sender contacts, clears that state on accept/reply, and only opens the Requests Inbox for request notifications.
+  - `iOS/SCMessenger/SCMessenger/Generated/api.swift` and `apiFFI.h` were regenerated so Swift now consumes the WS14.1 notification decision/context/settings contract directly.
+- **Requests Inbox routing is now wired through the real navigation stack**:
+  - `iOS/SCMessenger/SCMessenger/Views/Navigation/MainTabView.swift` now owns a message-route stack with explicit `conversation` vs `requestsInbox` destinations.
+  - Pending request threads are separated from the main conversation list and exposed through a dedicated Requests Inbox view with accept actions.
+  - Active-conversation foreground state is now fed back into the repository so shared suppression rules can distinguish visible chat from background delivery.
+- **Settings parity is now exposed on iOS**:
+  - `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift` and `Views/Settings/SettingsView.swift` now surface `notifications_enabled`, DM/DM-request toggles, foreground behavior toggles, sound, and badge state from the shared settings model instead of a local-only single toggle.
+  - `iOS/SCMessenger/SCMessenger/SCMessengerApp.swift` now configures the notification manager during app bootstrap, requests permission when notifications are enabled, and reports foreground/background transitions back into the repository notification state.
+- **Verification evidence captured in this run**:
+  - `bash ./iOS/copy-bindings.sh` — **PASS**
+  - `bash ./iOS/verify-test.sh` — **PASS**
+- **Closeout status**:
+  - WS14.2 implementation is in place and the touched iOS target now builds cleanly through the repo verification path.
+  - WS14.3 Android parity remains the next incomplete WS14 phase.
+
+## 2026-03-14 WS14.1 Core Notification Contract (Implemented, Gate Accepted)
 
 - **Core notification policy now exists in shared Rust code**:
   - `core/src/notification.rs` defines `NotificationKind`, `NotificationMessageContext`, `NotificationUiState`, and `NotificationDecision`.
@@ -26,7 +46,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - `CARGO_TARGET_DIR=/tmp/scm-ws14-target cargo test --workspace` — **FAILED IN SANDBOX** (`relay::client::tests::test_connect_to_relay` and `relay::client::tests::test_push_pull_and_ping_over_network` both failed with `Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" }`)
 - **Closeout status**:
   - Implementation is in place.
-  - The full test rerun was explicitly deferred after the sandbox-only relay failures, so WS14.1 should still be treated as not yet fully closed from a governance standpoint.
+  - The earlier sandbox-only relay-test residue was explicitly accepted before WS14.2 began, so WS14.1 is no longer the active phase gate for the hourly stream.
 
 ## 2026-03-14 WS14 Hourly Automation Reset (Docs/Workflow Update)
 
@@ -43,8 +63,8 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - blocked verification keeps the current phase partial instead of skipping ahead.
 - **Current operator posture**:
   - the hourly automation is now running on the writable continuation branch `codex/ws14-hourly-20260314-0301`, rebased onto the prepared stream baseline,
-  - the active target remains **WS14.1 only** until its deferred test/docs closeout is finished,
-  - WS14.2 must not start on the next run unless the WS14.1 verification posture is explicitly accepted.
+  - WS14.1 has been cleared as the opening gate for the continuation branch,
+  - WS14.2 is implemented and build-verified on iOS, so WS14.3 Android notification parity is the next exact phase.
 - **Verification note**: this reset changed documentation and automation workflow only. No build-target code, bindings, or build-affecting repo scripts changed, so no additional product build-verification rerun was required beyond the March 14 product evidence already recorded below.
 
 ## 2026-03-14 Android Audit & Critical Bug Fixes (Completed)
@@ -75,7 +95,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - Testing procedures and monitoring guidance
 - **Residual risk closed**: R-WS13.4-01 marked as Closed in `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`
 - **WS13 workstream complete**: All WS13.1-WS13.6 tasks marked as complete in `REMAINING_WORK_TRACKING.md`
-- **WS14 scope reviewed**: WS14 (Notifications + DM) is unstarted; scope documented in `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`
+- **WS14 scope reviewed**: WS14 now has WS14.1 and WS14.2 in place on the continuation branch; remaining scope is tracked in `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`
 
 ## 2026-03-13 WS13.4 Registry Enforcement + WS13.5 Rejection UX (Implemented, Verification In Progress)
 

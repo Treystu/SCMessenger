@@ -26,6 +26,34 @@ struct Conversation: Identifiable, Hashable {
     }
 }
 
+struct MessageRequestThread: Identifiable, Hashable {
+    let id: String
+    let peerId: String
+    let displayName: String
+    let previewText: String?
+    let lastMessageTime: Date?
+    let unreadCount: Int
+
+    init(peerId: String, displayName: String, previewText: String? = nil, lastMessageTime: Date? = nil, unreadCount: Int = 0) {
+        self.id = peerId
+        self.peerId = peerId
+        self.displayName = displayName
+        self.previewText = previewText
+        self.lastMessageTime = lastMessageTime
+        self.unreadCount = unreadCount
+    }
+
+    var conversation: Conversation {
+        Conversation(
+            peerId: peerId,
+            peerNickname: displayName,
+            lastMessage: previewText,
+            lastMessageTime: lastMessageTime,
+            unreadCount: unreadCount
+        )
+    }
+}
+
 /// Transport type enumeration
 enum TransportType: String, CaseIterable {
     case multipeer = "Multipeer"

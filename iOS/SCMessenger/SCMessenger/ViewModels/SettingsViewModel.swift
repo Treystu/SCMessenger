@@ -164,8 +164,78 @@ final class SettingsViewModel {
     // MARK: - App Preferences (mirrors Android PreferencesRepository)
 
     var isNotificationsEnabled: Bool {
-        get { UserDefaults.standard.object(forKey: "notifications_enabled") as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: "notifications_enabled") }
+        get { settings?.notificationsEnabled ?? true }
+        set {
+            guard var currentSettings = settings else { return }
+            currentSettings.notificationsEnabled = newValue
+            settings = currentSettings
+            saveSettings()
+            if newValue {
+                Task {
+                    _ = await NotificationManager.shared.requestPermissionIfNeeded()
+                }
+            }
+        }
+    }
+
+    var notifyDmEnabled: Bool {
+        get { settings?.notifyDmEnabled ?? true }
+        set {
+            guard var currentSettings = settings else { return }
+            currentSettings.notifyDmEnabled = newValue
+            settings = currentSettings
+            saveSettings()
+        }
+    }
+
+    var notifyDmRequestEnabled: Bool {
+        get { settings?.notifyDmRequestEnabled ?? true }
+        set {
+            guard var currentSettings = settings else { return }
+            currentSettings.notifyDmRequestEnabled = newValue
+            settings = currentSettings
+            saveSettings()
+        }
+    }
+
+    var notifyDmInForeground: Bool {
+        get { settings?.notifyDmInForeground ?? false }
+        set {
+            guard var currentSettings = settings else { return }
+            currentSettings.notifyDmInForeground = newValue
+            settings = currentSettings
+            saveSettings()
+        }
+    }
+
+    var notifyDmRequestInForeground: Bool {
+        get { settings?.notifyDmRequestInForeground ?? true }
+        set {
+            guard var currentSettings = settings else { return }
+            currentSettings.notifyDmRequestInForeground = newValue
+            settings = currentSettings
+            saveSettings()
+        }
+    }
+
+    var soundEnabled: Bool {
+        get { settings?.soundEnabled ?? true }
+        set {
+            guard var currentSettings = settings else { return }
+            currentSettings.soundEnabled = newValue
+            settings = currentSettings
+            saveSettings()
+        }
+    }
+
+    var badgeEnabled: Bool {
+        get { settings?.badgeEnabled ?? true }
+        set {
+            guard var currentSettings = settings else { return }
+            currentSettings.badgeEnabled = newValue
+            settings = currentSettings
+            saveSettings()
+        }
     }
 
     // MARK: - Privacy Feature Preferences

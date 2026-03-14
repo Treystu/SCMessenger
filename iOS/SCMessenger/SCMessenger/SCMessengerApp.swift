@@ -57,7 +57,14 @@ struct SCMessengerApp: App {
         // Initialize + start repository so identity/service state is hydrated at launch.
         do {
             try meshRepository.initialize()
+            NotificationManager.shared.configure(repository: meshRepository)
             meshRepository.start()
+            meshRepository.setNotificationAppInForeground(true)
+            if meshRepository.notificationSettingsEnabled() {
+                Task {
+                    _ = await NotificationManager.shared.requestPermissionIfNeeded()
+                }
+            }
             refreshOnboardingGate()
         } catch {
             print("❌ Failed to initialize repository: \(error)")
@@ -65,10 +72,12 @@ struct SCMessengerApp: App {
     }
 
     private func handleEnteringBackground() {
+        meshRepository.setNotificationAppInForeground(false)
         backgroundService?.onEnteringBackground()
     }
 
     private func handleEnteringForeground() {
+        meshRepository.setNotificationAppInForeground(true)
         backgroundService?.onEnteringForeground()
         refreshOnboardingGate()
     }

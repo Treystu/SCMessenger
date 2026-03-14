@@ -5,8 +5,13 @@
 //  Notification management with UNUserNotificationCenter
 //
 
+import Foundation
 import UserNotifications
 import os
+
+extension Notification.Name {
+    static let notificationRouteRequested = Notification.Name("com.scmessenger.notification-route-requested")
+}
 
 /// Manages local notifications for incoming messages
 final class NotificationManager: NSObject {
@@ -14,15 +19,51 @@ final class NotificationManager: NSObject {
 
     private let logger = Logger(subsystem: "com.scmessenger", category: "Notifications")
     private let center = UNUserNotificationCenter.current()
+    private weak var repository: MeshRepository?
+    private var notificationConversationMap: [String: String] = [:]
+    private var unreadMessageIds = Set<String>()
+
+    private enum Category {
+        static let directMessage = "DIRECT_MESSAGE"
+        static let directMessageRequest = "DIRECT_MESSAGE_REQUEST"
+    }
+
+    private enum UserInfoKey {
+        static let messageId = "messageId"
+        static let senderPeerId = "senderPeerId"
+        static let senderDisplayName = "senderDisplayName"
+        static let conversationId = "conversationId"
+        static let routeTarget = "routeTarget"
+    }
 
     private override init() {
         super.init()
         center.delegate = self
     }
 
+    func configure(repository: MeshRepository) {
+        self.repository = repository
+        setupNotificationCategories()
+    }
+
     // MARK: - Permission
 
-    func requestPermission() async -> Bool {
+    func requestPermissionIfNeeded() async -> Bool {
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .denied:
+            logger.warning("Notification permission denied")
+            return false
+        case .notDetermined:
+            return await requestPermission()
+        @unknown default:
+            return false
+        }
+    }
+
+    private func requestPermission() async -> Bool {
         do {
             let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
             logger.info("Notification permission: \(granted)")
@@ -35,26 +76,47 @@ final class NotificationManager: NSObject {
 
     // MARK: - Message Notifications
 
-    func sendMessageNotification(from sender: String, content: String, messageId: String) {
+    func sendNotification(
+        decision: NotificationDecision,
+        senderDisplayName: String,
+        content: String,
+        soundEnabled: Bool,
+        badgeEnabled: Bool,
+        routesToRequestsInbox: Bool
+    ) {
+        guard decision.shouldAlert else { return }
+
         let notificationContent = UNMutableNotificationContent()
-        notificationContent.title = sender
-        notificationContent.body = content
-        notificationContent.sound = .default
-        notificationContent.badge = NSNumber(value: getUnreadCount() + 1)
-        notificationContent.categoryIdentifier = "MESSAGE"
-        notificationContent.userInfo = ["messageId": messageId, "sender": sender]
+        notificationContent.title = title(for: decision.kind, senderDisplayName: senderDisplayName)
+        notificationContent.body = body(for: decision.kind, senderDisplayName: senderDisplayName, content: content)
+        if soundEnabled {
+            notificationContent.sound = .default
+        }
+        if badgeEnabled {
+            unreadMessageIds.insert(decision.messageId)
+            notificationContent.badge = NSNumber(value: unreadMessageIds.count)
+        }
+        notificationContent.categoryIdentifier = categoryIdentifier(for: decision.kind)
+        notificationContent.userInfo = [
+            UserInfoKey.messageId: decision.messageId,
+            UserInfoKey.senderPeerId: decision.senderPeerId,
+            UserInfoKey.senderDisplayName: senderDisplayName,
+            UserInfoKey.conversationId: decision.conversationId,
+            UserInfoKey.routeTarget: routesToRequestsInbox ? "requests" : "chat",
+        ]
+        notificationConversationMap[decision.messageId] = decision.conversationId
 
         let request = UNNotificationRequest(
-            identifier: messageId,
+            identifier: decision.messageId,
             content: notificationContent,
-            trigger: nil // Deliver immediately
+            trigger: nil
         )
 
         center.add(request) { [weak self] error in
             if let error = error {
                 self?.logger.error("Failed to send notification: \(error.localizedDescription)")
             } else {
-                self?.logger.debug("Notification sent for message \(messageId)")
+                self?.logger.debug("Notification sent for message \(decision.messageId)")
             }
         }
     }
@@ -70,12 +132,66 @@ final class NotificationManager: NSObject {
     }
 
     func clearBadge() {
+        unreadMessageIds.removeAll()
         updateBadge(count: 0)
     }
 
-    private func getUnreadCount() -> Int {
-        // Would get actual unread count from repository
-        return 0
+    func markMessageRead(messageId: String?) {
+        guard let messageId else {
+            clearBadge()
+            return
+        }
+        unreadMessageIds.remove(messageId)
+        notificationConversationMap.removeValue(forKey: messageId)
+        center.removeDeliveredNotifications(withIdentifiers: [messageId])
+        updateBadge(count: unreadMessageIds.count)
+    }
+
+    func markConversationRead(conversationId: String) {
+        let matching = notificationConversationMap
+            .filter { $0.value == conversationId }
+            .map(\.key)
+        for messageId in matching {
+            unreadMessageIds.remove(messageId)
+            notificationConversationMap.removeValue(forKey: messageId)
+        }
+        if !matching.isEmpty {
+            center.removeDeliveredNotifications(withIdentifiers: matching)
+        }
+        updateBadge(count: unreadMessageIds.count)
+    }
+
+    private func title(for kind: NotificationKind, senderDisplayName: String) -> String {
+        switch kind {
+        case .directMessage:
+            return senderDisplayName
+        case .directMessageRequest:
+            return "Message Request"
+        case .none:
+            return senderDisplayName
+        }
+    }
+
+    private func body(for kind: NotificationKind, senderDisplayName: String, content: String) -> String {
+        switch kind {
+        case .directMessage:
+            return content
+        case .directMessageRequest:
+            return "\(senderDisplayName): \(content)"
+        case .none:
+            return content
+        }
+    }
+
+    private func categoryIdentifier(for kind: NotificationKind) -> String {
+        switch kind {
+        case .directMessage:
+            return Category.directMessage
+        case .directMessageRequest:
+            return Category.directMessageRequest
+        case .none:
+            return Category.directMessage
+        }
     }
 
     // MARK: - Notification Actions
@@ -96,13 +212,20 @@ final class NotificationManager: NSObject {
         )
 
         let messageCategory = UNNotificationCategory(
-            identifier: "MESSAGE",
+            identifier: Category.directMessage,
             actions: [replyAction, markReadAction],
             intentIdentifiers: [],
             options: []
         )
 
-        center.setNotificationCategories([messageCategory])
+        let requestCategory = UNNotificationCategory(
+            identifier: Category.directMessageRequest,
+            actions: [markReadAction],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        center.setNotificationCategories([messageCategory, requestCategory])
     }
 }
 
@@ -113,7 +236,6 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        // Show notification even when app is in foreground
         [.banner, .sound, .badge]
     }
 
@@ -133,7 +255,6 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             handleMarkAsRead(userInfo: userInfo)
 
         case UNNotificationDefaultActionIdentifier:
-            // User tapped the notification
             handleNotificationTap(userInfo: userInfo)
 
         default:
@@ -142,20 +263,39 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
     }
 
     private func handleReply(text: String, userInfo: [AnyHashable: Any]) {
-        guard let sender = userInfo["sender"] as? String else { return }
-        logger.info("Quick reply to \(sender): \(text)")
-        // Send message via repository
+        guard let peerId = userInfo[UserInfoKey.senderPeerId] as? String else { return }
+        let messageId = userInfo[UserInfoKey.messageId] as? String
+        logger.info("Quick reply to \(peerId): \(text)")
+        Task { @MainActor [weak self] in
+            do {
+                try await self?.repository?.sendMessage(peerId: peerId, content: text)
+                self?.markMessageRead(messageId: messageId)
+            } catch {
+                self?.logger.error("Quick reply failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     private func handleMarkAsRead(userInfo: [AnyHashable: Any]) {
-        guard let messageId = userInfo["messageId"] as? String else { return }
-        logger.info("Mark as read: \(messageId)")
-        // Mark message as read in repository
+        let messageId = userInfo[UserInfoKey.messageId] as? String
+        if let messageId {
+            logger.info("Mark as read: \(messageId)")
+        }
+        markMessageRead(messageId: messageId)
     }
 
     private func handleNotificationTap(userInfo: [AnyHashable: Any]) {
-        guard let sender = userInfo["sender"] as? String else { return }
-        logger.info("Open chat with \(sender)")
-        // Navigate to chat (via deep link or notification)
+        let messageId = userInfo[UserInfoKey.messageId] as? String
+        if let messageId {
+            markMessageRead(messageId: messageId)
+        }
+        NotificationCenter.default.post(
+            name: .notificationRouteRequested,
+            object: nil,
+            userInfo: userInfo
+        )
+        if let peerId = userInfo[UserInfoKey.senderPeerId] as? String {
+            logger.info("Open notification route for \(peerId)")
+        }
     }
 }

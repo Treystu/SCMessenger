@@ -42,8 +42,9 @@ Remaining WS14 automation execution steps:
 
 1. [x] Resume WS14 on the writable continuation branch `codex/ws14-hourly-20260314-0301`, rebased onto the prepared WS14 stream baseline.
 2. [x] Implement WS14.1 only and update `docs/WS14_AUTOMATION_HANDOFF.md` from the repo-owned branch lane.
-3. [ ] Decide whether to accept the deferred full `cargo test --workspace` rerun or require a follow-up verification pass outside the current sandbox.
-4. [ ] Start WS14.2 only after the WS14.1 verification posture is explicitly closed.
+3. [x] Close the WS14.1 phase gate so the continuation branch can move forward.
+4. [x] Implement WS14.2 iOS DM vs DM Request notifications, request-inbox routing, and settings parity on the active branch.
+5. [ ] Implement WS14.3 Android notification channels/actions/routing/suppression parity.
 
 ## WS13.1 Tight-Pair Kickoff (2026-03-10 UTC)
 
@@ -1389,7 +1390,7 @@ Not feasible for `v0.2.0` without expanding release scope:
    - LoC planning envelope: `2,500-4,550 LoC`.
    - Canonical plan (full context): `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`.
    - Execution handoff + prompt: `docs/WS14_AUTOMATION_HANDOFF.md` and `docs/WS14_HOURLY_AUTOMATION_PROMPT.md`.
-   - Current status (2026-03-14 HST): `WS14.1` implementation is landed on `codex/ws14-hourly-20260314-0301`, but the full Rust test rerun was deferred after sandbox-only relay client failures.
+   - Current status (2026-03-14 HST): `WS14.1` core notification contract and `WS14.2` iOS notification completion are landed on `codex/ws14-hourly-20260314-0301`; next exact phase is `WS14.3` Android notification parity.
 
 ## Edge-Case Hardening Backlog (Global/Extreme Conditions)
 

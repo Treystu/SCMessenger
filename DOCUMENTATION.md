@@ -1,7 +1,7 @@
 # SCMessenger Documentation Hub
 
 Status: Active
-Last updated: 2026-03-14 (WS14-AUTOMATION-RESET + WS13.6-COMPLETION + ANDROID-BUG-FIXES)
+Last updated: 2026-03-14 (WS14.2-IOS-NOTIFICATIONS + WS14-AUTOMATION-RESET + WS13.6-COMPLETION)
 
 This is the primary documentation entrypoint.
 
