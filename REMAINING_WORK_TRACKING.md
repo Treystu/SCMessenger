@@ -29,6 +29,21 @@ Owner policy constraints (2026-02-23):
 - Anti-abuse controls are required before beta release.
 - Critical UX controls must stay in Android+iOS+Web parity with no temporary lead platform.
 
+## WS14 Hourly Automation Reset (2026-03-14 HST)
+
+Completed in this pass:
+
+1. [x] Audited the March 13, 2026 HST hourly WS13/WS14 automation runs and confirmed the last trustworthy handoff lived in Codex-local automation memory rather than repo docs.
+2. [x] Added `docs/WS14_AUTOMATION_HANDOFF.md` as the repo-owned branch/phase ledger for future WS14 hourly runs.
+3. [x] Added `docs/WS14_HOURLY_AUTOMATION_PROMPT.md` and repointed the paused automation to a WS14-only, one-phase-per-run model.
+4. [x] Locked future hourly behavior to branch-only execution, one WS14 phase per run, and no unrelated bug absorption.
+
+Remaining WS14 automation startup steps:
+
+1. [ ] Intentionally unpause the hourly automation when you want WS14 implementation to resume.
+2. [ ] Start a fresh `codex/ws14-hourly-YYYYMMDD-HHMM` branch from the current blessed `main` baseline in the dedicated automation worktree.
+3. [ ] Execute WS14.1 only, update `docs/WS14_AUTOMATION_HANDOFF.md`, and stop after that single phase.
+
 ## WS13.1 Tight-Pair Kickoff (2026-03-10 UTC)
 
 Completed in this pass:
@@ -1372,6 +1387,7 @@ Not feasible for `v0.2.0` without expanding release scope:
      - Notification tap behavior: existing conversation opens the exact conversation; new request opens Requests Inbox.
    - LoC planning envelope: `2,500-4,550 LoC`.
    - Canonical plan (full context): `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`.
+   - Execution handoff + prompt: `docs/WS14_AUTOMATION_HANDOFF.md` and `docs/WS14_HOURLY_AUTOMATION_PROMPT.md`.
 
 ## Edge-Case Hardening Backlog (Global/Extreme Conditions)
 

@@ -56,6 +56,5 @@ Do not treat mixed or historical docs as current source of truth unless the cano
 - ❌ Never store session files outside the repo
 - ❌ Never use system `/tmp`, `/var/tmp`, etc.
 - ✅ Always use repo-local `/tmp/` subdirectory
-- Example: `/Users/christymaxwell/Desktop/Luke_Stuff/GitHub/SCMessenger/tmp/session_logs/`
-
+- Example: `tmp/session_logs/`
 

@@ -3,9 +3,28 @@
 Status: Active
 Last updated: 2026-03-14
 
-Last verified: **2026-03-14** (Android audit + critical bug fixes + WS13.6 completion)
+Last verified: **2026-03-14** (Android audit + critical bug fixes + WS13.6 completion; WS14 automation reset documented)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
+
+## 2026-03-14 WS14 Hourly Automation Reset (Docs/Workflow Update)
+
+- **March 13 hourly automation drift was audited**: the last trustworthy WS13/WS14 hourly handoff lived in Codex-local automation memory and pointed at `codex/ws13-ws14-hourly-20260313-2215`, but later repo state moved outside that lane.
+- **WS14 hourly execution was rebuilt as WS14-only**:
+  - `docs/WS14_AUTOMATION_HANDOFF.md` is now the repo-owned branch/phase ledger.
+  - `docs/WS14_HOURLY_AUTOMATION_PROMPT.md` is now the canonical one-phase-per-run prompt.
+  - the local paused automation has been repointed to this WS14-only workflow and set to default to `medium` reasoning instead of `low`.
+- **Branch/worktree hygiene is now fail-closed for future hourly runs**:
+  - branch-only execution,
+  - one WS14 phase per run,
+  - no cross-phase marching,
+  - no unrelated bug absorption,
+  - blocked verification keeps the current phase partial instead of skipping ahead.
+- **Current operator posture**:
+  - the hourly automation remains **paused by default** until intentionally unpaused,
+  - the first WS14 run must start a fresh `codex/ws14-hourly-YYYYMMDD-HHMM` branch from the blessed `main` baseline in the dedicated automation worktree,
+  - the initial target is **WS14.1 only**.
+- **Verification note**: this reset changed documentation and automation workflow only. No build-target code, bindings, or build-affecting repo scripts changed, so no additional product build-verification rerun was required beyond the March 14 product evidence already recorded below.
 
 ## 2026-03-14 Android Audit & Critical Bug Fixes (Completed)
 

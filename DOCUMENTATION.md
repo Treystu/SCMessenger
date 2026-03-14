@@ -1,7 +1,7 @@
 # SCMessenger Documentation Hub
 
 Status: Active
-Last updated: 2026-03-14 (WS13.6-COMPLETION + ANDROID-BUG-FIXES)
+Last updated: 2026-03-14 (WS14-AUTOMATION-RESET + WS13.6-COMPLETION + ANDROID-BUG-FIXES)
 
 This is the primary documentation entrypoint.
 
@@ -21,6 +21,8 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 - [v0.2.0 Residual Risk Register](docs/V0.2.0_RESIDUAL_RISK_REGISTER.md)
 - [v0.2.1 Tight Pair / WS13 Plan](docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md)
 - [v0.2.1 Residual Risk Register](docs/V0.2.1_RESIDUAL_RISK_REGISTER.md)
+- [WS14 Automation Handoff](docs/WS14_AUTOMATION_HANDOFF.md)
+- [WS14 Hourly Automation Prompt](docs/WS14_HOURLY_AUTOMATION_PROMPT.md)
 - [WS13.6 Compatibility & Migration Matrix](docs/WS13.6_COMPATIBILITY_MIGRATION_MATRIX.md)
 - [WS13.6 Handover & Abandon Runbook](docs/WS13.6_HANDOVER_ABANDON_RUNBOOK.md)
 - [Platform Support Matrix](docs/PLATFORM_SUPPORT_MATRIX.md)
@@ -122,6 +124,14 @@ Use these for context only; do not treat as execution source of truth unless rev
 Historical audit artifacts currently live under `docs/historical/`.
 
 ## Recent Execution Notes
+
+- WS14 hourly automation reset (2026-03-14 HST, audited the March 13 hourly automation drift, replaced the oversized WS13+WS14 prompt with a WS14-only one-phase-per-run prompt, and added a repo-owned handoff ledger while keeping the automation paused by default) is tracked in:
+  - `docs/WS14_AUTOMATION_HANDOFF.md`
+  - `docs/WS14_HOURLY_AUTOMATION_PROMPT.md`
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`
+  - `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`
 
 - WS13.4/WS13.5 tight-pair execution (2026-03-13, relay registry/custody enforcement landed; sender-facing rejection UX landed; Android physical-device install+launch passed; iOS signed device install passed but automated launch was blocked because the connected iPhone was locked) is tracked in:
   - `docs/CURRENT_STATE.md`

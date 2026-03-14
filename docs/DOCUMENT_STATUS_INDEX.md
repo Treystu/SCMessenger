@@ -1,7 +1,7 @@
 # SCMessenger Document Status Index
 
 Status: Active
-Last updated: 2026-03-13
+Last updated: 2026-03-14
 
 Purpose: classify documentation by lifecycle state so execution decisions use authoritative files and historical content remains discoverable without causing drift.
 
@@ -60,8 +60,10 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 
 | Document                                              | Status  | Notes                                                                                    |
 | ----------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------- |
-| `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md` | Active  | WS13 workstream is now in active execution; WS13.1-WS13.5 landed/in verification, WS13.6 pending |
+| `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md` | Active  | WS13 workstream is complete; keep as the device-model/reference source for WS14          |
 | `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`               | Active  | Residual-risk source of truth for active WS13/WS14 execution                             |
+| `docs/WS14_AUTOMATION_HANDOFF.md`                     | Active  | Repo-owned branch/phase ledger for the WS14 hourly automation stream                     |
+| `docs/WS14_HOURLY_AUTOMATION_PROMPT.md`               | Active  | Canonical WS14 hourly execution prompt and operating defaults                            |
 | `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`                | Planned | WS14 workstream for v0.2.1 DM + DM Request notifications (iOS/Android/WASM, hybrid mode) |
 
 ---
@@ -118,6 +120,7 @@ These documents may contain both current and historical sections; verify section
 11. WS12.12 (2026-03-03 HST) Android/iOS pairing message-delivery RCA updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
 12. WS12.13 (2026-03-03 HST) 5-node script hardening + post-update issue-slate triage updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
 13. WS12.14 (2026-03-03 HST) Android Bluetooth-only pairing diagnosis updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
+14. WS14 hourly automation reset (2026-03-14 HST) is reflected in active docs (`DOCUMENTATION.md`, `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`, `docs/WS14_AUTOMATION_HANDOFF.md`, and `docs/WS14_HOURLY_AUTOMATION_PROMPT.md`).
 14. WS12.16 (2026-03-03 HST) wave-2 runtime hardening pass updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
 15. WS12.17 (2026-03-03 HST) wave-3 governance closure updates are reflected in active docs (`docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`), with historical checklist triage updates under `docs/historical/*`.
 16. WS12.18 (2026-03-03 HST) alpha readiness sanity + interoperability closure updates are reflected in active docs (`docs/CURRENT_STATE.md`, `docs/INTEROP_MATRIX_V0.2.0_ALPHA.md`, `docs/PLATFORM_SUPPORT_MATRIX.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`).
