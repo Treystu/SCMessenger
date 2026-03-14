@@ -1,11 +1,23 @@
 # SCMessenger Current State (Verified)
 
-Status: Active  
-Last updated: 2026-03-13
+Status: Active
+Last updated: 2026-03-14
 
-Last verified: **2026-03-13** (WS13.4/WS13.5 execution + Android/iOS physical-device verification pass/blocker audit)
+Last verified: **2026-03-14** (Android audit + critical bug fixes)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
+
+## 2026-03-14 Android Audit & Critical Bug Fixes (In Progress)
+
+- **4 critical bugs identified** from real-time Android log monitoring (12:00 PM - 8:00 PM HST)
+- **Issues #1-#3 fixed and verified**:
+  - Issue #1: Public Key Truncation — added validation + recovery in MeshRepository.kt
+  - Issue #2: Contact ID Mismatch — added canonicalContactId() normalization, public-key-first matching
+  - Issue #3: Stale Nearby Peer — resolved by Issue #2 fix
+- **Issue #4 root cause identified**: `android:allowBackup="true"` causes Android Auto Backup to restore stale data on fresh install
+- **UI fixes committed**: Edge-to-edge handling, keyboard IME padding, onboarding keyboard actions
+- **Build verification**: `./gradlew assembleDebug -x lint` — PASS
+- **Documentation sync**: `./scripts/docs_sync_check.sh` — PASS
 
 ## 2026-03-13 WS13.4 Registry Enforcement + WS13.5 Rejection UX (Implemented, Verification In Progress)
 

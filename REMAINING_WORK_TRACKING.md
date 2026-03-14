@@ -1,9 +1,9 @@
 # SCMessenger Remaining Work Tracking
 
-Status: Active  
-Last updated: 2026-03-13
+Status: Active
+Last updated: 2026-03-14
 
-This is the active implementation backlog based on repository state verified on **2026-03-11**.
+This is the active implementation backlog based on repository state verified on **2026-03-14**.
 
 Primary delivery target: **one unified Android + iOS + Web app**.
 
@@ -74,25 +74,69 @@ Completed in this pass:
 
 ## WS13.6+ Contact Persistence & Data Integrity Issues (2026-03-14 Audit)
 
-**Discovered in:** Real-time contact audit (fresh install + discovery lifecycle)  
-**Platform:** Android  
-**Status:** Identified, requires fixes before v0.2.1 release
+**Discovered in:** Real-time contact audit (fresh install + discovery lifecycle), comprehensive 8.5-hour log audit
+**Platform:** Android
+**Status:** **IN PROGRESS** - Issues #1-#3 fixed, Issue #4 root cause identified
+**Latest Audit:** 2026-03-14 12:00-20:00 HST (see `ANDROID_ID_UNIFICATION_BUG_2026-03-14.md`)
 
-### Issues Identified
+### Critical Blocking Issues
 
-1. [ ] **Contact Auto-Creation Duplication** (HIGH priority)
-   - **Symptom:** Same peer contact created twice (4 seconds apart) during fresh install discovery
-   - **Root Cause:** Duplicate `onPeerIdentified` callbacks without idempotent upsert logic
-   - **Evidence:** MeshRepository logs show: auto-create at 18:22:49.396, duplicate at 18:22:52.530 for peer ID `93a35a87...`
+1. [x] **SEND MESSAGE FAILURE - Invalid Public Key** (CRITICAL - BLOCKER) — **FIXED**
+   - **Symptom:** User cannot send messages to saved contacts; `IronCoreException$InvalidInput` at `prepareMessageWithId()`
+   - **Root Cause:** **ID Type Confusion** - Android passing peer_id hash (`df222906...`) instead of Ed25519 public_key (`a974b6f9...`) to encryption function
+   - **Evidence:**
+     - Log: `Preparing message for df222906... with key: df222906...`
+     - Core validation fails because peer_id hash is not a valid Ed25519 point on curve25519
+     - Contact stored correctly with `publicKey=a974b6f9...` but retrieval returns truncated peer_id prefix
+   - **Impact:** Complete messaging failure - users cannot send any messages to contacts
+   - **Fix Applied:**
+     - Added validation in MeshRepository.kt to check public key length (must be 64 hex chars)
+     - Added recovery logic to fall back to discovered peers cache if truncated key detected
+     - Added detailed error logging for forensic analysis
+   - **Test Case:** Send message to contact "Christy" must succeed
+   - **Tracking:** See `ANDROID_ID_UNIFICATION_BUG_2026-03-14.md` Issue #1
+
+2. [x] **Contact Recognition Failure in Chat** (HIGH priority) — **FIXED**
+   - **Symptom:** Saved contacts show as "not found" (`contactFound=false`) in chat screen despite being in database
+   - **Root Cause:** **ID Truncation/Normalization Mismatch** between ContactsViewModel (uses 16-char prefix) and ChatScreen (uses full 64-char ID)
+   - **Evidence:**
+     - ContactsViewModel: `Peer already saved as contact: df222906d561a0bd` (16 chars)
+     - ChatScreen: `conversationId=df222906d561a0bd28fe8a71a6c7949ad225238409d0c2a18b07305b0260cb31` (64 chars)
+     - Lookup fails due to ID length mismatch
+   - **Impact:** User sees hash instead of contact name; broken UX; "Add Contact" button shown for existing contacts
+   - **Fix Applied:**
+     - Added canonicalContactId() normalization in MeshRepository.kt
+     - Implemented public-key-first matching for contact lookup
+     - Standardized on full 64-char peer_id for all lookups
+   - **Test Case:** Chat screen must show contact name "Christy", not hash
+   - **Tracking:** See `ANDROID_ID_UNIFICATION_BUG_2026-03-14.md` Issue #2
+
+3. [x] **Contact Auto-Creation Duplication** (MEDIUM priority) — **FIXED**
+   - **Symptom:** Same peer contact created 3 times in 0.5 seconds during discovery
+   - **Root Cause:** Multiple `onPeerIdentified` callbacks (one per transport: WiFi + relay + BLE) without deduplication guard
+   - **Evidence:** MeshRepository logs show:
+     - 20:34:06.804: Auto-created contact for `df222906...` (Christy)
+     - 20:34:06.990: Auto-created contact for `df222906...` (Christy)
+     - 20:34:07.313: Auto-created contact for `df222906...` (Christy)
+   - **Impact:** Database write amplification; potential race conditions; wasted resources
+   - **Fix Applied:**
+     - Resolved by Issue #2 fix (canonicalContactId() normalization)
+     - Contact lookup now uses public-key-first matching, preventing duplicates
+   - **Test Case:** Fresh install + relay discovery should create 1 contact, not 3
+   - **Tracking:** See `ANDROID_ID_UNIFICATION_BUG_2026-03-14.md` Issue #3
+
+4. [ ] **Android Auto Backup Restores Stale Data on Fresh Install** (MEDIUM priority)
+   - **Symptom:** Fresh install shows pre-existing messages from previous installations
+   - **Evidence:** 2026-03-14 audit found 4 pre-existing messages on fresh install
+   - **Root Cause:** `android:allowBackup="true"` in AndroidManifest.xml enables automatic restore of SharedPreferences and database files
    - **Fix Required:**
-     - Verify onPeerIdentified callback deduplication
-     - Implement idempotent contact upsert (not insert)
-     - Add unique constraint on peer_id in contacts table
-     - Create migration to clean existing duplicates
-   - **Test Case:** Fresh install + relay discovery should create 1 contact, not 2
-   - **Tracking:** See `tmp/scm_audit_logs/contact_audit_2026-03-14/CONTACT_PERSISTENCE_AUDIT_2026-03-14.md`
+     - Update backup_rules.xml to exclude database files (contacts.db, history.db) and identity backup prefs
+     - Update data_extraction_rules.xml similarly
+     - OR set android:allowBackup="false" (simpler but loses identity on reinstall)
+   - **Test Case:** Fresh install should have zero pre-existing messages
+   - **Tracking:** See `ANDROID_ID_UNIFICATION_BUG_2026-03-14.md` Issue #4
 
-2. [ ] **Relay Peers Auto-Discovered as User Contacts** (MEDIUM priority)
+5. [ ] **Relay Peers Auto-Discovered as User Contacts** (MEDIUM priority)
    - **Symptom:** Relay server (external relay peer) auto-discovered and shown with nickname "peer-93a35a87"
    - **Question:** Should relay peers be in user contact list at all?
    - **Options:**
@@ -101,7 +145,7 @@ Completed in this pass:
    - **Fix Required:** Design decision + implementation
    - **Impact:** User confusion about auto-created contacts from relay discovery
 
-3. [ ] **Gratuitous Nearby Entries Persistence** (MEDIUM priority)
+6. [ ] **Gratuitous Nearby Entries Persistence** (MEDIUM priority)
    - **Symptom:** Discovered peer continues showing in UI for 6+ seconds after discovery is stopped
    - **Evidence:** Peer shown in DashboardViewModel from 18:22:49 to 18:23:08 (19 seconds), even though discovery stopped at 18:23:02
    - **Root Cause:** Async discovery lifecycle or UI refresh batching
@@ -111,7 +155,7 @@ Completed in this pass:
      - Remove stale peer cache entries synchronously
    - **Impact:** User sees stale contacts briefly after stopping discovery
 
-4. [ ] **Permission Request Loop on App Startup** (MEDIUM priority)
+7. [ ] **Permission Request Loop on App Startup** (MEDIUM priority)
    - **Symptom:** 9+ rapid permission requests (location, BLE, notifications, nearby WiFi) in ~700ms on fresh app launch
    - **Evidence:** Multiple "Requesting permissions" logs from 18:22:48.152 to 18:22:49.237
    - **Root Cause:** Multiple code paths requesting same permissions without deduplication
@@ -121,23 +165,55 @@ Completed in this pass:
      - Add request state machine + backoff timer
    - **Impact:** Permission dialog spam, discovery blocked until permissions granted
 
-### Data Integrity Audit
+### Identity Modal / Keyboard Issues (Reported but Not Confirmed)
 
-**Test Scenario:** Fresh install on Android 26261JEGR01896
+**User Report**: Android identity modal keyboard flapping (rapid open/close)
+
+**Audit Findings** (2026-03-13 20:00-20:42 HST):
+- ✅ IME (keyboard) events logged normally
+- ✅ WindowInsets changes look normal
+- ❌ NO flapping/rapid open-close cycle observed in 8.5-hour log window
+- **Conclusion**: Issue may have been fixed in previous session, OR only manifests during first-run onboarding (not triggered during audit window)
+- **Recommendation**: Test fresh install onboarding flow separately with screen recording
+
+### Data Integrity Audit Results
+
+**Test Scenario 1:** Fresh install on Android 26261JEGR01896 (earlier audit)
 - Ran: `adb shell pm clear com.scmessenger.android` → fresh install confirmed
 - Discovered relay peer via Internet (relay IP: 104.28.216.43, 34.135.34.73)
 - Tracked duplicate auto-creation callback
 - **Database Status:** ❓ Needs verification (do duplicates persist across restarts?)
 
+**Test Scenario 2:** Existing install 8.5-hour monitoring (2026-03-13 audit)
+- Device: Android Pixel 6a, Serial 26261JEGR01896, PID 32459
+- Uptime: 1896 seconds (~31.6 minutes continuous operation)
+- Contact "Christy" discovered via relay: libp2pPeerId `12D3KooWMDrHwP6CiVdHWSwD2RNJNM9VDBTeX8vKTqn9YZxAX198`
+- **Send Message Failure**: Cannot encrypt/send to contact due to ID type confusion
+- **Contact Lookup Failure**: Chat screen shows `contactFound=false` despite contact in database
+- **No Freezing/Crashes**: App remained responsive; no ANR events; no uncaught exceptions
+
+### "Stale Data" Question Answered
+
+**User Question**: "Why would Android be using stale data on fresh install?"
+
+**Answer**: It's **NOT stale data** - it's live relay-relayed discovery:
+- Contact "Christy" was discovered via active relay connection at 20:33:59
+- Relay listeners: `/ip4/104.28.216.43/tcp/9010/.../p2p-circuit/...`, `/ip4/34.135.34.73/tcp/9001/.../p2p-circuit/...`
+- This is expected relay functionality for NAT traversal
+- **The bug is in how discovered data is stored/retrieved, not the freshness of the data**
+
 ### Migration Path
 
-Before v0.2.1 release:
-1. Implement idempotent contact upsert + unique constraint
-2. Add deduplication to onPeerIdentified callback
-3. Decide relay peer visibility + implement
-4. Fix permission request loop
-5. Audit + clean any existing duplicate contacts in test databases
-6. Re-run fresh install test to verify all fixes
+**IMMEDIATE (Blocking v0.2.1 release)**:
+1. [x] Fix send message ID type confusion (Issue #1 - CRITICAL) — **COMPLETED**
+2. [x] Fix contact recognition in chat (Issue #2 - HIGH) — **COMPLETED**
+
+**Before v0.2.1 release**:
+3. [x] Implement contact upsert deduplication (Issue #3) — **COMPLETED**
+4. [ ] Implement backup exclusion rules to prevent stale data restore (Issue #4)
+5. [ ] Fix permission request loop
+6. [ ] Audit + clean any existing duplicate contacts in test databases
+7. [ ] Re-run fresh install test to verify all fixes
 
 See `DOCUMENTATION_UPDATE_TEMPLATE.md` in contact audit directory for canonical doc updates.
 

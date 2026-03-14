@@ -147,7 +147,26 @@ class ContactsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Check if a nearby peer and an identity discovery event represent the same entity.
+     * Uses public key matching as the primary key to handle ID format mismatches:
+     * - Identity/Discovery: SHA-256(publicKey)
+     * - Storage/Database: Hash(pubkey+identity)
+     * - Transport: LibP2P Peer ID
+     *
+     * @param peer Existing nearby peer
+     * @param event New identity discovery event
+     * @return True if they represent the same entity
+     */
     private fun isSameNearbyIdentity(peer: NearbyPeer, event: PeerEvent.IdentityDiscovered): Boolean {
+        // Primary key: public key matching (most reliable across ID schemes)
+        val sameByPublicKey = !peer.publicKey.isNullOrBlank() &&
+            !event.publicKey.isNullOrBlank() &&
+            PeerIdValidator.isSame(peer.publicKey!!, event.publicKey)
+        
+        if (sameByPublicKey) return true
+        
+        // Secondary: ID-based matching (for cases where public key may not be available)
         val incomingPeerId = PeerIdValidator.normalize(event.peerId)
         val incomingLibp2p = event.libp2pPeerId?.let { PeerIdValidator.normalize(it) }.orEmpty()
         val incomingBle = event.blePeerId?.trim().orEmpty()
@@ -163,9 +182,33 @@ class ContactsViewModel @Inject constructor(
                 peer.peerId == incomingBle ||
                     peerBle == incomingBle
                 ))
-        val sameByPublicKey = !peer.publicKey.isNullOrBlank() &&
-            PeerIdValidator.isSame(peer.publicKey, event.publicKey)
-        return sameById || sameByPublicKey
+        
+        return sameById
+    }
+    
+    /**
+     * Check if a nearby peer matches a contact using comprehensive identity matching.
+     * Uses public key as primary key to handle ID format mismatches.
+     *
+     * @param nearby Nearby peer to check
+     * @param contact Contact to compare against
+     * @return True if they represent the same entity
+     */
+    private fun isNearbyPeerContact(nearby: NearbyPeer, contact: uniffi.api.Contact): Boolean {
+        // Primary key: public key matching (most reliable across ID schemes)
+        val sameByPublicKey = !nearby.publicKey.isNullOrBlank() &&
+            !contact.publicKey.isNullOrBlank() &&
+            PeerIdValidator.isSame(nearby.publicKey!!, contact.publicKey)
+        
+        if (sameByPublicKey) return true
+        
+        // Secondary: ID-based matching
+        val sameByPeerId = PeerIdValidator.isSame(nearby.peerId, contact.peerId)
+        val sameByLibp2p = nearby.libp2pPeerId != null &&
+            PeerIdValidator.isSame(nearby.libp2pPeerId!!, contact.peerId)
+        val sameByBle = nearby.blePeerId != null && nearby.blePeerId == contact.peerId
+        
+        return sameByPeerId || sameByLibp2p || sameByBle
     }
 
     /**
@@ -189,10 +232,15 @@ class ContactsViewModel @Inject constructor(
 
                         // Check both cached contacts and database directly to avoid race conditions
                         // on startup where contacts are still loading
+                        // Use comprehensive identity matching with public key as primary key
                         val alreadyContact = _contacts.value.any { contact ->
-                            PeerIdValidator.isSame(contact.peerId, event.peerId) ||
-                                PeerIdValidator.isSame(contact.publicKey, event.publicKey)
-                        } || 
+                            isNearbyPeerContact(NearbyPeer(
+                                peerId = event.peerId,
+                                publicKey = event.publicKey,
+                                libp2pPeerId = event.libp2pPeerId,
+                                blePeerId = event.blePeerId
+                            ), contact)
+                        } ||
                         // Direct database queries for reliability even during startup
                         (meshRepository.getContact(event.peerId) != null ||
                             meshRepository.getContact(event.publicKey) != null ||
@@ -242,8 +290,13 @@ class ContactsViewModel @Inject constructor(
                         if (meshRepository.isBootstrapRelayPeer(event.peerId)) return@collect
 
                         // Check both cached contacts and database directly
-                        val alreadyContact = _contacts.value.any { PeerIdValidator.isSame(it.peerId, event.peerId) } ||
-                            (meshRepository.getContact(event.peerId) != null)
+                        // Use comprehensive identity matching with public key as primary key
+                        val alreadyContact = _contacts.value.any { contact ->
+                            isNearbyPeerContact(NearbyPeer(
+                                peerId = event.peerId,
+                                libp2pPeerId = event.peerId.takeIf { PeerIdValidator.isLibp2pPeerId(it) }
+                            ), contact)
+                        } || (meshRepository.getContact(event.peerId) != null)
                         
                         cancelPendingNearbyRemoval(event.peerId)
                         val current = _nearbyPeers.value.toMutableList()
@@ -314,14 +367,9 @@ class ContactsViewModel @Inject constructor(
                 _contacts.value = contactList
                 
                 // Drop any nearby entry that is now a saved contact
-                // Check by peerId, libp2pPeerId, publicKey, and blePeerId for comprehensive matching
+                // Use comprehensive identity matching with public key as primary key
                 _nearbyPeers.value = _nearbyPeers.value.filter { nearby ->
-                    !contactList.any { contact ->
-                        PeerIdValidator.isSame(nearby.peerId, contact.peerId) ||
-                            (nearby.libp2pPeerId != null && PeerIdValidator.isSame(nearby.libp2pPeerId!!, contact.peerId)) ||
-                            (!nearby.publicKey.isNullOrBlank() && PeerIdValidator.isSame(nearby.publicKey!!, contact.publicKey)) ||
-                            (nearby.blePeerId != null && nearby.blePeerId == contact.peerId)
-                    }
+                    !contactList.any { contact -> isNearbyPeerContact(nearby, contact) }
                 }
 
                 Timber.d("Loaded ${contactList.size} contacts, filtered nearby peers to ${_nearbyPeers.value.size}")

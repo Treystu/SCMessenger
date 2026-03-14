@@ -2222,12 +2222,43 @@ open class MeshRepository(private val context: Context) {
     // CONTACTS
     // ========================================================================
 
-    private fun canonicalId(id: String): String {
+    /**
+     * Canonical contact ID normalization function.
+     * Maps all ID variants (SHA-256(publicKey), Hash(pubkey+identity), LibP2P Peer ID)
+     * to a single canonical form using public key as the primary key.
+     *
+     * This ensures consistent contact identification across all ID schemes:
+     * - Identity/Discovery: SHA-256(publicKey) → canonical
+     * - Storage/Database: Hash(pubkey+identity) → canonical
+     * - Transport: LibP2P Peer ID → canonical
+     *
+     * @param id Any ID format (public_key_hex, identity_id, or libp2p_peer_id)
+     * @return Canonical identity_id (Blake3 hash of public key)
+     */
+    private fun canonicalContactId(id: String): String {
+        val trimmed = id.trim()
+        if (trimmed.isEmpty()) return trimmed
+        
+        // If it's already a 64-char hex identity ID, normalize and return
+        if (PeerIdValidator.isIdentityId(trimmed)) {
+            return PeerIdValidator.normalize(trimmed)
+        }
+        
+        // Try to resolve to canonical identity_id via IronCore
         return try {
-            ironCore?.resolveToIdentityId(id)
+            ironCore?.resolveToIdentityId(trimmed)
         } catch (e: Exception) {
+            Timber.d("Failed to resolve ID '$trimmed' to identity_id: ${e.message}")
             null
-        } ?: PeerIdValidator.normalize(id)
+        } ?: PeerIdValidator.normalize(trimmed)
+    }
+    
+    /**
+     * Legacy canonicalId function - kept for backward compatibility.
+     * @deprecated Use canonicalContactId() for new code.
+     */
+    private fun canonicalId(id: String): String {
+        return canonicalContactId(id)
     }
 
     fun addContact(contact: uniffi.api.Contact) {
@@ -2415,7 +2446,31 @@ open class MeshRepository(private val context: Context) {
             val contact = contactManager?.get(routingPeerId)
             if (publicKey == null && contact != null && !contact.publicKey.isNullOrEmpty()) {
                 publicKey = contact.publicKey.trim()
-                Timber.d("SEND_MSG: Resolved from contact: key=${publicKey?.take(8)}")
+                
+                // CRITICAL: Validate public key length
+                if (publicKey.length != 64) {
+                    Timber.e("SEND_MSG_BUG: Contact has invalid public key length: ${publicKey.length} (expected 64)")
+                    Timber.e("SEND_MSG_BUG: Contact peer_id: ${contact.peerId}")
+                    Timber.e("SEND_MSG_BUG: Routing peer_id: $routingPeerId")
+                    Timber.e("SEND_MSG_BUG: Public key value: '$publicKey'")
+                    
+                    // Try to recover from discovered peers
+                    val discoveredPeer = _discoveredPeers.value.entries.find {
+                        PeerIdValidator.isSame(it.key, routingPeerId) ||
+                        PeerIdValidator.isSame(it.key, contact.peerId) ||
+                        (it.value.publicKey == contact.publicKey)
+                    }?.value
+                    
+                    if (discoveredPeer != null && !discoveredPeer.publicKey.isNullOrEmpty() && 
+                        discoveredPeer.publicKey.trim().length == 64) {
+                        publicKey = discoveredPeer.publicKey.trim()
+                        Timber.w("SEND_MSG_RECOVER: Using public key from discovered peers: ${publicKey?.take(8)}")
+                    } else {
+                        throw IllegalStateException("Contact public key is invalid (${publicKey.length} chars) and no discovered peer available for recovery")
+                    }
+                } else {
+                    Timber.d("SEND_MSG: Resolved from contact: key=${publicKey?.take(8)}")
+                }
             }
 
             // Fallback: Try discovered peers

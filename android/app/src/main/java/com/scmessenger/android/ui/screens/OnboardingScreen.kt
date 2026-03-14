@@ -2,6 +2,8 @@ package com.scmessenger.android.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
@@ -12,7 +14,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -97,6 +101,7 @@ fun OnboardingScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
+            .imePadding()
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -202,13 +207,21 @@ fun OnboardingScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("Generating Identity keys...")
                 } else {
+                    val focusManager = LocalFocusManager.current
+                    
                     OutlinedTextField(
                         value = nickname,
                         onValueChange = { nickname = it },
                         label = { Text("Your nickname") },
                         placeholder = { Text("e.g. christy") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(
+                            onDone = { focusManager.clearFocus() }
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .imePadding()
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
