@@ -187,54 +187,64 @@ class ContactsViewModel @Inject constructor(
                         cancelPendingNearbyRemoval(event.libp2pPeerId)
                         cancelPendingNearbyRemoval(event.blePeerId)
 
+                        // Check both cached contacts and database directly to avoid race conditions
+                        // on startup where contacts are still loading
                         val alreadyContact = _contacts.value.any { contact ->
                             PeerIdValidator.isSame(contact.peerId, event.peerId) ||
                                 PeerIdValidator.isSame(contact.publicKey, event.publicKey)
-                        }
+                        } || 
+                        // Direct database queries for reliability even during startup
+                        (meshRepository.getContact(event.peerId) != null ||
+                            meshRepository.getContact(event.publicKey) != null ||
+                            (event.libp2pPeerId?.let { meshRepository.getContact(it) } != null))
+                        
                         if (alreadyContact) {
+                            Timber.d("Peer already saved as contact: ${event.peerId.take(16)}, skipping nearby")
                             // Federated nickname/route hints can update in repository upsert;
                             // refresh saved contacts so local UI reflects latest values.
                             loadContacts()
                             return@collect
                         }
-                        if (!alreadyContact) {
-                            val current = _nearbyPeers.value.toMutableList()
-                            val matches = current.filter { peer -> isSameNearbyIdentity(peer, event) }
-                            val existing = matches.maxByOrNull { peer ->
-                                val hasNickname = if (normalizeNickname(peer.nickname) != null) 2 else 0
-                                val hasStableId = if (!PeerIdValidator.isLibp2pPeerId(peer.peerId)) 1 else 0
-                                hasNickname + hasStableId
-                            }
-                            if (matches.isNotEmpty()) {
-                                current.removeAll(matches.toSet())
-                            }
-                            cancelPendingNearbyRemoval(existing?.peerId)
-
-                            val resolvedPeerId = selectStablePeerId(event.peerId, existing?.peerId)
-                            val resolvedLibp2pPeerId = event.libp2pPeerId?.trim()?.takeIf { it.isNotEmpty() }
-                                ?: existing?.libp2pPeerId?.trim()?.takeIf { it.isNotEmpty() }
-                                ?: event.peerId.takeIf { PeerIdValidator.isLibp2pPeerId(it) }
-                            val resolvedBlePeerId = event.blePeerId?.trim()?.takeIf { it.isNotEmpty() }
-                                ?: existing?.blePeerId?.trim()?.takeIf { it.isNotEmpty() }
-                            val updated = NearbyPeer(
-                                peerId = resolvedPeerId,
-                                publicKey = event.publicKey,
-                                nickname = selectAuthoritativeNickname(event.nickname, existing?.nickname),
-                                blePeerId = resolvedBlePeerId,
-                                libp2pPeerId = resolvedLibp2pPeerId,
-                                listeners = if (event.listeners.isNotEmpty()) event.listeners else (existing?.listeners ?: emptyList()),
-                                isOnline = true
-                            )
-                            current.add(updated)
-                            _nearbyPeers.value = current
-                            Timber.d("Nearby identity discovered: ${resolvedPeerId.take(16)}")
+                        
+                        val current = _nearbyPeers.value.toMutableList()
+                        val matches = current.filter { peer -> isSameNearbyIdentity(peer, event) }
+                        val existing = matches.maxByOrNull { peer ->
+                            val hasNickname = if (normalizeNickname(peer.nickname) != null) 2 else 0
+                            val hasStableId = if (!PeerIdValidator.isLibp2pPeerId(peer.peerId)) 1 else 0
+                            hasNickname + hasStableId
                         }
+                        if (matches.isNotEmpty()) {
+                            current.removeAll(matches.toSet())
+                        }
+                        cancelPendingNearbyRemoval(existing?.peerId)
+
+                        val resolvedPeerId = selectStablePeerId(event.peerId, existing?.peerId)
+                        val resolvedLibp2pPeerId = event.libp2pPeerId?.trim()?.takeIf { it.isNotEmpty() }
+                            ?: existing?.libp2pPeerId?.trim()?.takeIf { it.isNotEmpty() }
+                            ?: event.peerId.takeIf { PeerIdValidator.isLibp2pPeerId(it) }
+                        val resolvedBlePeerId = event.blePeerId?.trim()?.takeIf { it.isNotEmpty() }
+                            ?: existing?.blePeerId?.trim()?.takeIf { it.isNotEmpty() }
+                        val updated = NearbyPeer(
+                            peerId = resolvedPeerId,
+                            publicKey = event.publicKey,
+                            nickname = selectAuthoritativeNickname(event.nickname, existing?.nickname),
+                            blePeerId = resolvedBlePeerId,
+                            libp2pPeerId = resolvedLibp2pPeerId,
+                            listeners = if (event.listeners.isNotEmpty()) event.listeners else (existing?.listeners ?: emptyList()),
+                            isOnline = true
+                        )
+                        current.add(updated)
+                        _nearbyPeers.value = current
+                        Timber.d("Nearby identity discovered: ${resolvedPeerId.take(16)}")
                     }
                     is PeerEvent.Discovered -> {
                         // Don't surface bootstrap relay nodes in the nearby list.
                         if (meshRepository.isBootstrapRelayPeer(event.peerId)) return@collect
 
-                        val alreadyContact = _contacts.value.any { PeerIdValidator.isSame(it.peerId, event.peerId) }
+                        // Check both cached contacts and database directly
+                        val alreadyContact = _contacts.value.any { PeerIdValidator.isSame(it.peerId, event.peerId) } ||
+                            (meshRepository.getContact(event.peerId) != null)
+                        
                         cancelPendingNearbyRemoval(event.peerId)
                         val current = _nearbyPeers.value.toMutableList()
                         val existingIdx = current.indexOfFirst {
@@ -302,11 +312,19 @@ class ContactsViewModel @Inject constructor(
 
                 val contactList = meshRepository.listContacts()
                 _contacts.value = contactList
+                
                 // Drop any nearby entry that is now a saved contact
-                val contactIds = contactList.map { it.peerId }.toSet()
-                _nearbyPeers.value = _nearbyPeers.value.filter { it.peerId !in contactIds }
+                // Check by peerId, libp2pPeerId, publicKey, and blePeerId for comprehensive matching
+                _nearbyPeers.value = _nearbyPeers.value.filter { nearby ->
+                    !contactList.any { contact ->
+                        PeerIdValidator.isSame(nearby.peerId, contact.peerId) ||
+                            (nearby.libp2pPeerId != null && PeerIdValidator.isSame(nearby.libp2pPeerId!!, contact.peerId)) ||
+                            (!nearby.publicKey.isNullOrBlank() && PeerIdValidator.isSame(nearby.publicKey!!, contact.publicKey)) ||
+                            (nearby.blePeerId != null && nearby.blePeerId == contact.peerId)
+                    }
+                }
 
-                Timber.d("Loaded ${contactList.size} contacts")
+                Timber.d("Loaded ${contactList.size} contacts, filtered nearby peers to ${_nearbyPeers.value.size}")
             } catch (e: Exception) {
                 _error.value = "Failed to load contacts: ${e.message}"
                 Timber.e(e, "Failed to load contacts")
