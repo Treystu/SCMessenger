@@ -17,6 +17,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.scmessenger.android.data.MeshRepository
 import javax.inject.Inject
+import java.util.concurrent.atomic.AtomicBoolean
+import android.os.Handler
+import android.os.Looper
 
 /**
  * Main activity for SCMessenger.
@@ -28,6 +31,10 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var meshRepository: MeshRepository
 
+    private val permissionRequestInProgress = AtomicBoolean(false)
+    private val permissionRequestDebounceMs = 500L
+    private val handler = Handler(Looper.getMainLooper())
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -38,9 +45,20 @@ class MainActivity : ComponentActivity() {
         if (denied.isNotEmpty()) {
             Timber.w("Permissions denied: $denied")
         }
+        
+        // Reset flag after handling
+        schedulePermissionReset()
+        
         if (meshRepository.hasRequiredRuntimePermissions()) {
             meshRepository.onRuntimePermissionsGranted()
         }
+    }
+
+    private fun schedulePermissionReset() {
+        handler.postDelayed({
+            permissionRequestInProgress.set(false)
+            Timber.d("Permission request state reset")
+        }, permissionRequestDebounceMs)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,6 +80,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkPermissions() {
+        // Prevent concurrent permission requests
+        if (!permissionRequestInProgress.compareAndSet(false, true)) {
+            Timber.d("Permission request already in progress, skipping")
+            return
+        }
+
         val permissions = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION
@@ -85,6 +109,10 @@ class MainActivity : ComponentActivity() {
         if (toRequest.isNotEmpty()) {
             Timber.i("Requesting permissions: $toRequest")
             requestPermissionLauncher.launch(toRequest.toTypedArray())
+        } else {
+            // All permissions already granted, reset immediately
+            permissionRequestInProgress.set(false)
+            Timber.d("All permissions already granted")
         }
     }
 

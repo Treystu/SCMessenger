@@ -18,8 +18,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.android.gms.common.api.CommonStatusCodes
@@ -360,6 +363,7 @@ fun ContactItem(
     // Edit nickname dialog
     if (showEditNicknameDialog) {
         var newNickname by remember { mutableStateOf(contact.localNickname ?: contact.nickname ?: "") }
+        val focusRequester = remember { FocusRequester() }
 
         AlertDialog(
             onDismissRequest = { showEditNicknameDialog = false },
@@ -377,7 +381,9 @@ fun ContactItem(
                         onValueChange = { newNickname = it },
                         label = { Text("Nickname") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester)
                     )
                     if (contact.nickname != null) {
                         Spacer(modifier = Modifier.height(4.dp))
@@ -405,6 +411,11 @@ fun ContactItem(
                 }
             }
         )
+        
+        // Request focus on dialog open
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+        }
     }
 
     // Confirm delete dialog

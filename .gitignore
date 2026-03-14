@@ -64,3 +64,6 @@ iOS/SCMessenger/DerivedData/
 **/*.pcm
 build_ios/
 node_modules/
+
+# Temporary files - use /tmp/ at repo root for session work
+/tmp/

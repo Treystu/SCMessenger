@@ -46,11 +46,11 @@ deploy_android() {
     log_info "Cleaning build artifacts (prevents Hilt NoClassDefFoundError)..."
     ./gradlew clean 2>&1 | tail -n 3
 
-    log_info "Building release APK..."
-    ./gradlew assembleRelease 2>&1 | tail -n 5
+    log_info "Building debug APK..."
+    ./gradlew assembleDebug 2>&1 | tail -n 5
 
     local apk_path
-    apk_path=$(find app/build/outputs/apk/release -name "*.apk" -type f | head -n 1)
+    apk_path=$(find app/build/outputs/apk/debug -name "*.apk" -type f | head -n 1)
 
     if [ -z "$apk_path" ]; then
         log_error "APK not found after build"

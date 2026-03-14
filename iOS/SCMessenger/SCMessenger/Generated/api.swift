@@ -1339,6 +1339,11 @@ public protocol IronCoreProtocol : AnyObject {
      */
     func resolveIdentity(anyId: String) throws  -> String
     
+    /**
+     * Resolve any ID format to canonical identity_id (Blake3 hash of public key).
+     */
+    func resolveToIdentityId(anyId: String) throws  -> String
+    
     func setDelegate(delegate: CoreDelegate?) 
     
     func setNickname(nickname: String) throws 
@@ -1616,6 +1621,17 @@ open func recordLog(line: String) {try! rustCall() {
 open func resolveIdentity(anyId: String)throws  -> String {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_resolve_identity(self.uniffiClonePointer(),
+        FfiConverterString.lower(anyId),$0
+    )
+})
+}
+    
+    /**
+     * Resolve any ID format to canonical identity_id (Blake3 hash of public key).
+     */
+open func resolveToIdentityId(anyId: String)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_resolve_to_identity_id(self.uniffiClonePointer(),
         FfiConverterString.lower(anyId),$0
     )
 })
@@ -5310,6 +5326,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_resolve_identity() != 25110) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_resolve_to_identity_id() != 15693) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_set_delegate() != 56502) {

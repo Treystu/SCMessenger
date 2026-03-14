@@ -72,6 +72,75 @@ Completed in this pass:
 2. [x] **iOS CryptoError (Error 4)**: Traced to stale bootstrap data; resolved by updating static fallbacks and implementing dynamic ledger-driven discovery in `MeshRepository.swift`.
 3. [x] **iOS Power & Log Optimization**: Increased adaptive interval for high battery levels in `IosPlatformBridge.swift` and simplified noisy power profile logs.
 
+## WS13.6+ Contact Persistence & Data Integrity Issues (2026-03-14 Audit)
+
+**Discovered in:** Real-time contact audit (fresh install + discovery lifecycle)  
+**Platform:** Android  
+**Status:** Identified, requires fixes before v0.2.1 release
+
+### Issues Identified
+
+1. [ ] **Contact Auto-Creation Duplication** (HIGH priority)
+   - **Symptom:** Same peer contact created twice (4 seconds apart) during fresh install discovery
+   - **Root Cause:** Duplicate `onPeerIdentified` callbacks without idempotent upsert logic
+   - **Evidence:** MeshRepository logs show: auto-create at 18:22:49.396, duplicate at 18:22:52.530 for peer ID `93a35a87...`
+   - **Fix Required:**
+     - Verify onPeerIdentified callback deduplication
+     - Implement idempotent contact upsert (not insert)
+     - Add unique constraint on peer_id in contacts table
+     - Create migration to clean existing duplicates
+   - **Test Case:** Fresh install + relay discovery should create 1 contact, not 2
+   - **Tracking:** See `tmp/scm_audit_logs/contact_audit_2026-03-14/CONTACT_PERSISTENCE_AUDIT_2026-03-14.md`
+
+2. [ ] **Relay Peers Auto-Discovered as User Contacts** (MEDIUM priority)
+   - **Symptom:** Relay server (external relay peer) auto-discovered and shown with nickname "peer-93a35a87"
+   - **Question:** Should relay peers be in user contact list at all?
+   - **Options:**
+     - A: Hide relay peers from contacts (mark as internal/infrastructure)
+     - B: Show with special indicator (e.g., "Relay" badge)
+   - **Fix Required:** Design decision + implementation
+   - **Impact:** User confusion about auto-created contacts from relay discovery
+
+3. [ ] **Gratuitous Nearby Entries Persistence** (MEDIUM priority)
+   - **Symptom:** Discovered peer continues showing in UI for 6+ seconds after discovery is stopped
+   - **Evidence:** Peer shown in DashboardViewModel from 18:22:49 to 18:23:08 (19 seconds), even though discovery stopped at 18:23:02
+   - **Root Cause:** Async discovery lifecycle or UI refresh batching
+   - **Fix Required:**
+     - Profile Nearby Discovery stop propagation timing
+     - Ensure immediate UI removal of peers when discovery stops
+     - Remove stale peer cache entries synchronously
+   - **Impact:** User sees stale contacts briefly after stopping discovery
+
+4. [ ] **Permission Request Loop on App Startup** (MEDIUM priority)
+   - **Symptom:** 9+ rapid permission requests (location, BLE, notifications, nearby WiFi) in ~700ms on fresh app launch
+   - **Evidence:** Multiple "Requesting permissions" logs from 18:22:48.152 to 18:22:49.237
+   - **Root Cause:** Multiple code paths requesting same permissions without deduplication
+   - **Fix Required:**
+     - Deduplicate permission requests in MainActivity
+     - Coordinate all permission sources into single request
+     - Add request state machine + backoff timer
+   - **Impact:** Permission dialog spam, discovery blocked until permissions granted
+
+### Data Integrity Audit
+
+**Test Scenario:** Fresh install on Android 26261JEGR01896
+- Ran: `adb shell pm clear com.scmessenger.android` → fresh install confirmed
+- Discovered relay peer via Internet (relay IP: 104.28.216.43, 34.135.34.73)
+- Tracked duplicate auto-creation callback
+- **Database Status:** ❓ Needs verification (do duplicates persist across restarts?)
+
+### Migration Path
+
+Before v0.2.1 release:
+1. Implement idempotent contact upsert + unique constraint
+2. Add deduplication to onPeerIdentified callback
+3. Decide relay peer visibility + implement
+4. Fix permission request loop
+5. Audit + clean any existing duplicate contacts in test databases
+6. Re-run fresh install test to verify all fixes
+
+See `DOCUMENTATION_UPDATE_TEMPLATE.md` in contact audit directory for canonical doc updates.
+
 ## v0.2.0 Critical Bug Fixes (2026-03-09)
 
 Completed in this pass:

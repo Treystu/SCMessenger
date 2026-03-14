@@ -288,6 +288,7 @@ open class MeshRepository(private val context: Context) {
         val publicKey: String?,      // Extracted from PeerId or from identity beacon
         val nickname: String?,       // From Identity Beacon or Contact DB
         val localNickname: String? = null,
+        val libp2pPeerId: String? = null, // Libp2p peer ID for routing
         val transport: com.scmessenger.android.service.TransportType,
         val isFull: Boolean,         // True if peer identity is authenticated (non-relay)
         val isRelay: Boolean = false,
@@ -372,7 +373,7 @@ open class MeshRepository(private val context: Context) {
             settingsManager = uniffi.api.MeshSettingsManager(storagePath)
             historyManager = uniffi.api.HistoryManager(storagePath)
             // WS12.41: Removed fixed 10k limit. Retention is now disk-percent aware.
-            // historyManager?.enforceRetention(10000u) 
+            // historyManager?.enforceRetention(10000u)
             contactManager = uniffi.api.ContactManager(storagePath)
             ledgerManager = uniffi.api.LedgerManager(storagePath)
             autoAdjustEngine = uniffi.api.AutoAdjustEngine()
@@ -468,8 +469,13 @@ open class MeshRepository(private val context: Context) {
             // 2. Obtain shared IronCore instance
             ironCore = meshService?.getCore()
             if (ironCore == null) {
-                throw IllegalStateException("IronCore instance is null after service start")
+                Timber.e("Failed to obtain IronCore from MeshService")
+                _serviceState.value = uniffi.api.ServiceState.STOPPED
+                return
             }
+
+            // P0: One-time migration to unify legacy IDs (libp2p, etc) into canonical Identity IDs (hash)
+            migrateToCanonicalIds()
 
             // WS12.41: Inject IronCore into FileLoggingTree for summarized logging
             timber.log.Timber.forest().forEach { tree ->
@@ -511,6 +517,7 @@ open class MeshRepository(private val context: Context) {
                             publicKey = transportIdentity?.publicKey ?: extractedKey,
                             nickname = discoveredNickname,
                             localNickname = transportIdentity?.localNickname,
+                            libp2pPeerId = peerId,
                             transport = com.scmessenger.android.service.TransportType.INTERNET, // Default for swarm
                             isFull = !isRelay && (
                                 transportIdentity != null ||
@@ -635,6 +642,7 @@ open class MeshRepository(private val context: Context) {
                                 publicKey = transportIdentity?.publicKey,
                                 nickname = discoveredNickname,
                                 localNickname = transportIdentity?.localNickname,
+                                libp2pPeerId = peerId,
                                 transport = com.scmessenger.android.service.TransportType.INTERNET,
                                 isFull = transportIdentity != null,
                                 isRelay = isBootstrapRelayPeer(peerId),
@@ -955,6 +963,7 @@ open class MeshRepository(private val context: Context) {
                                 publicKey = normalizedSenderKey,
                                 nickname = discoveredNickname,
                                 localNickname = existingContact?.localNickname,
+                                libp2pPeerId = routePeerId,
                                 transport = com.scmessenger.android.service.TransportType.INTERNET,
                                 isFull = true,
                                 lastSeen = (System.currentTimeMillis() / 1000).toULong()
@@ -1751,6 +1760,7 @@ open class MeshRepository(private val context: Context) {
                 publicKey = publicKeyHex,
                 nickname = discoveredNickname,
                 localNickname = try { contactManager?.get(identityId)?.localNickname } catch (_: Exception) { null },
+                libp2pPeerId = normalizedLibp2p,
                 transport = com.scmessenger.android.service.TransportType.BLE,
                 isFull = true,
                 lastSeen = System.currentTimeMillis().toULong() / 1000u
@@ -1860,6 +1870,7 @@ open class MeshRepository(private val context: Context) {
                         publicKey = info.publicKey ?: existing.publicKey,
                         nickname = selectAuthoritativeNickname(info.nickname, existing.nickname),
                         localNickname = normalizeNickname(info.localNickname) ?: normalizeNickname(existing.localNickname),
+                        libp2pPeerId = info.libp2pPeerId ?: existing.libp2pPeerId,
                         transport = if (
                             info.transport == com.scmessenger.android.service.TransportType.INTERNET ||
                                 existing.transport == com.scmessenger.android.service.TransportType.INTERNET
@@ -2079,10 +2090,15 @@ open class MeshRepository(private val context: Context) {
 
         kotlin.runCatching { meshService?.stop() }
             .onFailure { Timber.w(it, "Failed to stop Rust mesh service") }
+        
         identitySyncSentPeers.clear()
         historySyncSentPeers.clear()
         identityEmissionCache.clear()
         connectedEmissionCache.clear()
+        
+        // Clear discovered peers from UI on service stop
+        _discoveredPeers.value = emptyMap()
+        Timber.i("Cleared all discovered peers on mesh service stop")
 
         // Clear references to avoid stale lifecycle state on next start.
         coreDelegate = null
@@ -2206,30 +2222,55 @@ open class MeshRepository(private val context: Context) {
     // CONTACTS
     // ========================================================================
 
+    private fun canonicalId(id: String): String {
+        return try {
+            ironCore?.resolveToIdentityId(id)
+        } catch (e: Exception) {
+            null
+        } ?: PeerIdValidator.normalize(id)
+    }
+
     fun addContact(contact: uniffi.api.Contact) {
-        contactManager?.add(contact)
-        val routing = parseRoutingHints(contact.notes)
+        val canonical = canonicalId(contact.peerId)
+        val finalContact = if (canonical != contact.peerId) {
+            uniffi.api.Contact(
+                peerId = canonical,
+                nickname = contact.nickname,
+                localNickname = contact.localNickname,
+                publicKey = contact.publicKey,
+                addedAt = contact.addedAt,
+                lastSeen = contact.lastSeen,
+                notes = contact.notes,
+                lastKnownDeviceId = contact.lastKnownDeviceId
+            )
+        } else {
+            contact
+        }
+
+        contactManager?.add(finalContact)
+        val routing = parseRoutingHints(finalContact.notes)
         annotateIdentityInLedger(
             routePeerId = routing.libp2pPeerId,
             listeners = routing.listeners,
-            publicKey = contact.publicKey,
-            nickname = contact.nickname
+            publicKey = finalContact.publicKey,
+            nickname = finalContact.nickname
         )
-        Timber.d("Contact added: ${contact.peerId}")
+        Timber.d("Contact added: $canonical")
     }
 
     fun getContact(peerId: String): uniffi.api.Contact? {
-        return contactManager?.get(peerId)
+        return contactManager?.get(canonicalId(peerId))
     }
 
     fun removeContact(peerId: String) {
-        contactManager?.remove(peerId)
+        val canonical = canonicalId(peerId)
+        contactManager?.remove(canonical)
         try {
-            historyManager?.removeConversation(peerId)
+            historyManager?.removeConversation(canonical)
         } catch (e: Exception) {
-            Timber.w("Failed to remove conversation history for $peerId: ${e.message}")
+            Timber.w("Failed to remove conversation history for $canonical: ${e.message}")
         }
-        Timber.d("Contact removed: $peerId and their message history")
+        Timber.d("Contact removed: $canonical and their message history")
     }
 
     fun listContacts(): List<uniffi.api.Contact> {
@@ -2359,13 +2400,64 @@ open class MeshRepository(private val context: Context) {
 
     suspend fun sendMessage(peerId: String, content: String) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val normalizedPeerId = PeerIdValidator.normalize(peerId)
+            val routingPeerId = PeerIdValidator.normalize(peerId)
             val initialMessageId = java.util.UUID.randomUUID().toString()
             val now = (System.currentTimeMillis() / 1000).toULong()
 
+            // 1. Resolve public key FIRST to determine canonical ID
+            var publicKey: String? = try {
+                ironCore?.resolveIdentity(routingPeerId)
+            } catch (e: Exception) {
+                null
+            }
+
+            // Fallback: Try contact manager
+            val contact = contactManager?.get(routingPeerId)
+            if (publicKey == null && contact != null && !contact.publicKey.isNullOrEmpty()) {
+                publicKey = contact.publicKey.trim()
+                Timber.d("SEND_MSG: Resolved from contact: key=${publicKey?.take(8)}")
+            }
+
+            // Fallback: Try discovered peers
+            if (publicKey == null) {
+                val discoveredPeer = _discoveredPeers.value.entries.find {
+                    PeerIdValidator.isSame(it.key, routingPeerId)
+                }?.value
+                if (discoveredPeer != null && !discoveredPeer.publicKey.isNullOrEmpty()) {
+                    publicKey = discoveredPeer.publicKey.trim()
+                    Timber.d("SEND_MSG: Resolved from discovered peers: key=${publicKey?.take(8)}")
+                }
+            }
+
+            // Fallback: Try extracting public key directly from libp2p peer ID
+            if (publicKey == null && PeerIdValidator.isLibp2pPeerId(routingPeerId)) {
+                val transportIdentity = resolveTransportIdentity(routingPeerId)
+                if (transportIdentity != null) {
+                    publicKey = transportIdentity.publicKey
+                    Timber.d("SEND_MSG: Resolved via transport identity: key=${publicKey?.take(8)}, canonical=${transportIdentity.canonicalPeerId}")
+                }
+
+                if (publicKey == null) {
+                    try {
+                        val extractedKey = ironCore?.extractPublicKeyFromPeerId(routingPeerId)
+                        if (!extractedKey.isNullOrEmpty()) {
+                            publicKey = normalizePublicKey(extractedKey)
+                            Timber.d("SEND_MSG: Extracted public key from peer ID: ${publicKey?.take(8)}")
+                        }
+                    } catch (e: Exception) {
+                        Timber.d("SEND_MSG: Failed to extract public key from peer ID: ${e.message}")
+                    }
+                }
+            }
+
+            // Use public key as canonical peer ID for history storage
+            val normalizedPeerId = if (publicKey != null) {
+                normalizePublicKey(publicKey) ?: routingPeerId
+            } else {
+                routingPeerId
+            }
+
             // 1. Save to history IMMEDIATELY.
-            // This satisfies the "never drop/disappear" requirement. Even if the device
-            // crashes during the rest of this function, the message is in DB.
             val initialRecord = uniffi.api.MessageRecord(
                 id = initialMessageId,
                 peerId = normalizedPeerId,
@@ -2385,64 +2477,13 @@ open class MeshRepository(private val context: Context) {
                     _messageUpdates.emit(initialRecord)
                 }
 
-                Timber.d("SEND_MSG_START: original='$peerId', normalized='$normalizedPeerId', initialId=$initialMessageId")
+                Timber.d("SEND_MSG_START: original='$peerId', normalized='$normalizedPeerId', routing='$routingPeerId', publicKey='${publicKey?.take(8)}', initialId=$initialMessageId")
 
                 // Check if relay/messaging is enabled (bidirectional control)
                 val currentSettings = settingsManager?.load()
                 Companion.requireMeshParticipationEnabled(currentSettings)
 
-                // 2. Resolve the peer ID to canonical public_key_hex using core's unified resolver
-                var publicKey: String? = try {
-                    val resolved = ironCore?.resolveIdentity(normalizedPeerId)
-                    Timber.d("SEND_MSG: Core resolved '$normalizedPeerId' to publicKey='${resolved?.take(8)}'")
-                    resolved
-                } catch (e: Exception) {
-                    Timber.d("SEND_MSG: Core resolution failed for '$normalizedPeerId': ${e.message}")
-                    null
-                }
-
-                // Fallback: Try contact manager
-                val contact = contactManager?.get(normalizedPeerId)
-                if (publicKey == null) {
-                    if (contact != null && !contact.publicKey.isNullOrEmpty()) {
-                        publicKey = contact.publicKey.trim()
-                        Timber.d("SEND_MSG: Resolved from contact: key=${publicKey?.take(8)}")
-                    }
-                }
-
-                // Fallback: Try discovered peers
-                if (publicKey == null) {
-                    val discoveredPeer = _discoveredPeers.value.entries.find {
-                        PeerIdValidator.isSame(it.key, normalizedPeerId)
-                    }?.value
-                    if (discoveredPeer != null && !discoveredPeer.publicKey.isNullOrEmpty()) {
-                        publicKey = discoveredPeer.publicKey.trim()
-                        Timber.d("SEND_MSG: Resolved from discovered peers: key=${publicKey?.take(8)}")
-                    }
-                }
-
-                // Fallback: Try extracting public key directly from libp2p peer ID
-                if (publicKey == null && PeerIdValidator.isLibp2pPeerId(normalizedPeerId)) {
-                    val transportIdentity = resolveTransportIdentity(normalizedPeerId)
-                    if (transportIdentity != null) {
-                        publicKey = transportIdentity.publicKey
-                        Timber.d("SEND_MSG: Resolved via transport identity: key=${publicKey?.take(8)}, canonical=${transportIdentity.canonicalPeerId}")
-                    }
-
-                    if (publicKey == null) {
-                        try {
-                            val extractedKey = ironCore?.extractPublicKeyFromPeerId(normalizedPeerId)
-                            if (!extractedKey.isNullOrEmpty()) {
-                                publicKey = normalizePublicKey(extractedKey)
-                                Timber.d("SEND_MSG: Extracted public key from peer ID: ${publicKey?.take(8)}")
-                            }
-                        } catch (e: Exception) {
-                            Timber.d("SEND_MSG: Failed to extract public key from peer ID: ${e.message}")
-                        }
-                    }
-                }
-
-                if (publicKey == null) {
+            if (publicKey == null) {
                     // 3. Queue with placeholder encrypted data (will re-encrypt when peer discovered)
                     Timber.w("SEND_MSG_QUEUE: Peer not found - will retry when discovered: $normalizedPeerId")
 
@@ -2476,9 +2517,9 @@ open class MeshRepository(private val context: Context) {
                 Timber.d("Preparing message for $normalizedPeerId with key: ${finalPublicKey.take(8)}...")
 
                 val routePeerCandidates = buildRoutePeerCandidates(
-                    peerId = normalizedPeerId,
+                    peerId = routingPeerId,
                     cachedRoutePeerId = null,
-                    notes = "",
+                    notes = contact?.notes ?: "",
                     recipientPublicKey = finalPublicKey
                 )
 
@@ -2710,11 +2751,12 @@ open class MeshRepository(private val context: Context) {
     }
 
     fun getRecentMessages(peerFilter: String? = null, limit: UInt = 50u): List<uniffi.api.MessageRecord> {
-        return historyManager?.recent(peerFilter, limit) ?: emptyList()
+        val filter = peerFilter?.let { canonicalId(it) }
+        return historyManager?.recent(filter, limit) ?: emptyList()
     }
 
     fun getConversation(peerId: String, limit: UInt = 100u): List<uniffi.api.MessageRecord> {
-        return historyManager?.conversation(peerId, limit) ?: emptyList()
+        return historyManager?.conversation(canonicalId(peerId), limit) ?: emptyList()
     }
 
     fun searchMessages(query: String, limit: UInt = 50u): List<uniffi.api.MessageRecord> {
@@ -2732,8 +2774,9 @@ open class MeshRepository(private val context: Context) {
     }
 
     fun clearConversation(peerId: String) {
-        historyManager?.clearConversation(peerId)
-        Timber.i("Conversation cleared: $peerId")
+        val canonical = canonicalId(peerId)
+        historyManager?.clearConversation(canonical)
+        Timber.i("Conversation cleared: $canonical")
     }
 
     fun getHistoryStats(): uniffi.api.HistoryStats? {
@@ -4040,6 +4083,17 @@ open class MeshRepository(private val context: Context) {
 
     private fun resolveCanonicalPeerId(senderId: String, senderPublicKeyHex: String): String {
         val normalizedIncomingKey = normalizePublicKey(senderPublicKeyHex) ?: return senderId
+
+        // Priority 1: Use direct hash resolution from core
+        val identityId = try { ironCore?.resolveToIdentityId(senderPublicKeyHex) } catch (e: Exception) { null }
+        if (identityId != null) {
+            // Check if we already have a contact pointing to ANOTHER peerId for this key
+            // (e.g. legacy libp2p ID contact). If so, we merge by returning the existing ID.
+            val contacts = try { contactManager?.list().orEmpty() } catch (e: Exception) { emptyList() }
+            val existingContact = contacts.firstOrNull { normalizePublicKey(it.publicKey) == normalizedIncomingKey }
+            return existingContact?.peerId ?: identityId
+        }
+
         val contacts = try {
             contactManager?.list().orEmpty()
         } catch (e: Exception) {
@@ -4463,12 +4517,26 @@ open class MeshRepository(private val context: Context) {
     }
 
     private fun resolveTransportIdentity(libp2pPeerId: String): TransportIdentityResolution? {
-        if (!PeerIdValidator.isLibp2pPeerId(libp2pPeerId)) return null
+        if (!PeerIdValidator.isLibp2pPeerId(libp2pPeerId)) {
+            Timber.d("Invalid libp2p peer ID format: $libp2pPeerId")
+            return null
+        }
+        
+        Timber.d("resolveTransportIdentity called for: $libp2pPeerId")
+        
+        // Relay peers should not have user-visible transport identities
+        val isRelay = isBootstrapRelayPeer(libp2pPeerId)
+        Timber.d("  isBootstrapRelayPeer check: $isRelay")
+        
+        if (isRelay) {
+            Timber.d("  → Filtering relay peer from transport identity resolution")
+            return null
+        }
 
         val extractedKey = try {
             ironCore?.extractPublicKeyFromPeerId(libp2pPeerId)
         } catch (e: Exception) {
-            Timber.d("Failed to extract public key from peer $libp2pPeerId: ${e.message}")
+            Timber.d("  Failed to extract public key from peer $libp2pPeerId: ${e.message}")
             null
         }
         val normalizedKey = normalizePublicKey(extractedKey) ?: return null
@@ -4494,12 +4562,19 @@ open class MeshRepository(private val context: Context) {
             contact.peerId == libp2pPeerId || parseRoutingHints(contact.notes).libp2pPeerId == libp2pPeerId
         }
         val canonicalContact = routeLinked ?: keyMatches.firstOrNull()
+        
+        // Only create a transport identity if we have an existing contact
+        // or if the peer is not a headless/relay agent
+        if (canonicalContact == null) {
+            Timber.d("No existing contact for transport key ${normalizedKey.take(8)}..., treating as transient relay")
+            return null
+        }
 
         return TransportIdentityResolution(
-            canonicalPeerId = canonicalContact?.peerId ?: libp2pPeerId,
+            canonicalPeerId = canonicalContact.peerId,
             publicKey = normalizedKey,
-            nickname = canonicalContact?.nickname?.takeIf { it.isNotBlank() },
-            localNickname = canonicalContact?.localNickname?.takeIf { it.isNotBlank() }
+            nickname = canonicalContact.nickname?.takeIf { it.isNotBlank() },
+            localNickname = canonicalContact.localNickname?.takeIf { it.isNotBlank() }
         )
     }
 
@@ -4823,19 +4898,17 @@ open class MeshRepository(private val context: Context) {
         val normalizedRecipientKey = normalizePublicKey(recipientPublicKey) ?: return emptyList()
         val fromDiscovery = _discoveredPeers.value.values
             .asSequence()
-            .map { it.peerId.trim() }
-            .filter { candidate ->
-                candidate.isNotEmpty() &&
-                    PeerIdValidator.isLibp2pPeerId(candidate)
+            .filter { info ->
+                normalizePublicKey(info.publicKey) == normalizedRecipientKey
             }
-            .filter { candidate ->
-                val discoveredPeer = _discoveredPeers.value.entries.firstOrNull {
-                    it.key.equals(candidate, ignoreCase = true)
-                }?.value
-                normalizePublicKey(discoveredPeer?.publicKey) == normalizedRecipientKey ||
-                    _discoveredPeers.value.values.any {
-                        it.peerId.equals(candidate, ignoreCase = true) && normalizePublicKey(it.publicKey) == normalizedRecipientKey
-                    }
+            .mapNotNull { info ->
+                // Prefer libp2pPeerId for routing if available
+                val routeId = info.libp2pPeerId?.trim()?.takeIf { 
+                    it.isNotEmpty() && PeerIdValidator.isLibp2pPeerId(it)
+                } ?: info.peerId.trim().takeIf { 
+                    it.isNotEmpty() && PeerIdValidator.isLibp2pPeerId(it) 
+                }
+                routeId
             }
             .toList()
 
@@ -5165,10 +5238,10 @@ open class MeshRepository(private val context: Context) {
                     val stat = android.os.StatFs(context.filesDir.path)
                     val total = stat.blockCountLong * stat.blockSizeLong
                     val free = stat.availableBlocksLong * stat.blockSizeLong
-                    
+
                     ironCore?.updateDiskStats(total.toULong(), free.toULong())
                     ironCore?.performMaintenance()
-                    
+
                     Timber.d("Storage maintenance check: free=${free / 1024 / 1024}MB / total=${total / 1024 / 1024}MB")
                 } catch (e: Exception) {
                     Timber.w("Storage maintenance loop error: ${e.message}")
@@ -5401,5 +5474,67 @@ open class MeshRepository(private val context: Context) {
             outcome,
             detail
         )
+    }
+    private fun migrateToCanonicalIds() {
+        val iron = ironCore ?: return
+        val history = historyManager ?: return
+        val contacts = contactManager ?: return
+
+        try {
+            val prefs = context.getSharedPreferences("mesh_migrations", android.content.Context.MODE_PRIVATE)
+            if (prefs.getBoolean("v2_id_coalescence", false)) return
+
+            Timber.i("Starting ID Coalescence Migration...")
+
+            // 1. Migrate Contacts
+            val contactList = contacts.list()
+            val idMap = mutableMapOf<String, String>() // old -> new
+
+            for (contact in contactList) {
+                val identityId = try { iron.resolveToIdentityId(contact.publicKey) } catch (e: Exception) { null }
+                if (identityId != null && identityId != contact.peerId) {
+                    Timber.i("Coalescing ID for ${contact.nickname ?: contact.peerId}: ${contact.peerId} -> $identityId")
+                    idMap[contact.peerId] = identityId
+
+                    val existingCanonical = try { contacts.get(identityId) } catch (e: Exception) { null }
+                    if (existingCanonical == null) {
+                        try {
+                            contacts.add(contact.copy(peerId = identityId))
+                        } catch (e: Exception) {
+                            Timber.w("Failed to create canonical contact $identityId")
+                        }
+                    }
+                    try { contacts.remove(contact.peerId) } catch (e: Exception) { }
+                }
+            }
+
+            // 2. Migrate History
+            val stats = history.stats()
+            if (stats.totalMessages > 0u) {
+                val allMessages = history.recent(null, 100000u)
+                var updatedMessages = 0
+                for (msg in allMessages) {
+                    val canonical = idMap[msg.peerId] ?: try { iron.resolveToIdentityId(msg.peerId) } catch (e: Exception) { null }
+                    if (canonical != null && canonical != msg.peerId) {
+                        try {
+                            history.add(msg.copy(peerId = canonical))
+                            updatedMessages++
+                        } catch (e: Exception) {
+                            Timber.w("Failed to update message peer_id for ${msg.id}")
+                        }
+                    }
+                }
+                if (updatedMessages > 0) {
+                    Timber.i("Migrated $updatedMessages messages to canonical peer IDs")
+                }
+            }
+
+            history.flush()
+            contacts.flush()
+            prefs.edit().putBoolean("v2_id_coalescence", true).apply()
+            Timber.i("ID Coalescence Migration completed successfully")
+        } catch (e: Exception) {
+            Timber.e(e, "ID Coalescence Migration failed")
+        }
     }
 }

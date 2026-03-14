@@ -5341,6 +5341,78 @@ final class MeshRepository {
             sendHistorySyncIfNeeded(routePeerId: routePeerId)
         }
     }
+    
+    // MARK: - ID Coalescence Migration
+    
+    private func migrateToCanonicalIds() {
+        guard let ironCore = ironCore,
+              let historyManager = historyManager,
+              let contactManager = contactManager else { return }
+
+        // Use a flag in UserDefaults to run this only once
+        if UserDefaults.standard.bool(forKey: "v2_id_coalescence") { return }
+
+        logger.info("Starting ID Coalescence Migration...")
+
+        do {
+            let contacts = try contactManager.list()
+            var idMap: [String: String] = [:]
+
+            for contact in contacts {
+                if let identityId = try? ironCore.resolveToIdentityId(anyId: contact.publicKey),
+                   identityId != contact.peerId {
+                    logger.info("Migrating contact \(contact.peerId) -> \(identityId)")
+                    idMap[contact.peerId] = identityId
+
+                    if (try? contactManager.get(peerId: identityId)) == nil {
+                         let newContact = Contact(
+                            peerId: identityId,
+                            nickname: contact.nickname,
+                            localNickname: contact.localNickname,
+                            publicKey: contact.publicKey,
+                            addedAt: contact.addedAt,
+                            lastSeen: contact.lastSeen,
+                            notes: contact.notes,
+                            lastKnownDeviceId: contact.lastKnownDeviceId
+                         )
+                         try contactManager.add(contact: newContact)
+                    }
+                    try contactManager.remove(peerId: contact.peerId)
+                }
+            }
+
+            // Migrate history
+            let allMessages = try historyManager.recent(peerFilter: Optional<String>.none, limit: 100000)
+            var updatedCount = 0
+            for msg in allMessages {
+                let canonical = idMap[msg.peerId] ?? (try? ironCore.resolveToIdentityId(anyId: msg.peerId))
+                if let canonical = canonical, canonical != msg.peerId {
+                    let updatedMsg = MessageRecord(
+                        id: msg.id,
+                        direction: msg.direction,
+                        peerId: canonical,
+                        content: msg.content,
+                        timestamp: msg.timestamp,
+                        senderTimestamp: msg.senderTimestamp,
+                        delivered: msg.delivered
+                    )
+                    try historyManager.add(record: updatedMsg)
+                    updatedCount += 1
+                }
+            }
+
+            if updatedCount > 0 {
+                logger.info("Migrated \(updatedCount) messages to canonical peer IDs")
+                try historyManager.flush()
+                try contactManager.flush()
+            }
+
+            UserDefaults.standard.set(true, forKey: "v2_id_coalescence")
+            logger.info("ID Coalescence Migration completed")
+        } catch {
+            logger.error("ID Coalescence Migration failed: \(error)")
+        }
+    }
 }
 
 // MARK: - Error Types

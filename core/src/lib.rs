@@ -1036,6 +1036,16 @@ impl IronCore {
         Err(IronCoreError::InvalidInput)
     }
 
+    /// Resolve any ID format to canonical identity_id (Blake3 hash of public key).
+    ///
+    /// This provides a single resolution point for user identification across platforms.
+    pub fn resolve_to_identity_id(&self, any_id: String) -> Result<String, IronCoreError> {
+        let pk_hex = self.resolve_identity(any_id)?;
+        let pk_bytes = hex::decode(&pk_hex).map_err(|_| IronCoreError::InvalidInput)?;
+        let hash = blake3::hash(&pk_bytes);
+        Ok(hex::encode(hash.as_bytes()))
+    }
+
     // ------------------------------------------------------------------------
     // MESSAGING
     // ------------------------------------------------------------------------

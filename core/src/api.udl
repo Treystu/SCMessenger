@@ -74,6 +74,9 @@ interface IronCore {
     /// This is the primary ID resolution function for cross-platform identity unification.
     [Throws=IronCoreError]
     string resolve_identity(string any_id);
+    /// Resolve any ID format to canonical identity_id (Blake3 hash of public key).
+    [Throws=IronCoreError]
+    string resolve_to_identity_id(string any_id);
 
     // Messaging
     [Throws=IronCoreError]

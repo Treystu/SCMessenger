@@ -9,6 +9,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -136,6 +138,7 @@ fun ContactDetailScreen(
     // Edit nickname dialog
     if (showEditDialog && contact != null) {
         var newNickname by remember { mutableStateOf(contact.localNickname ?: "") }
+        val focusRequester = remember { FocusRequester() }
 
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
@@ -145,7 +148,10 @@ fun ContactDetailScreen(
                     value = newNickname,
                     onValueChange = { newNickname = it },
                     label = { Text("Local nickname") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
                 )
             },
             confirmButton = {
@@ -167,6 +173,11 @@ fun ContactDetailScreen(
                 }
             }
         )
+        
+        // Request focus on dialog open
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+        }
     }
 }
 

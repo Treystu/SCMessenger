@@ -1291,6 +1291,8 @@ public protocol IronCoreProtocol : AnyObject {
     
     func getIdentityInfo()  -> IdentityInfo
     
+    func getRegistrationState(identityId: String)  -> RegistrationStateInfo
+    
     /**
      * Get seniority timestamp for this installation (WS13.1)
      */
@@ -1336,6 +1338,11 @@ public protocol IronCoreProtocol : AnyObject {
      * This is the primary ID resolution function for cross-platform identity unification.
      */
     func resolveIdentity(anyId: String) throws  -> String
+    
+    /**
+     * Resolve any ID format to canonical identity_id (Blake3 hash of public key).
+     */
+    func resolveToIdentityId(anyId: String) throws  -> String
     
     func setDelegate(delegate: CoreDelegate?) 
     
@@ -1468,6 +1475,14 @@ open func getDeviceId() -> String? {
 open func getIdentityInfo() -> IdentityInfo {
     return try!  FfiConverterTypeIdentityInfo.lift(try! rustCall() {
     uniffi_scmessenger_core_fn_method_ironcore_get_identity_info(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func getRegistrationState(identityId: String) -> RegistrationStateInfo {
+    return try!  FfiConverterTypeRegistrationStateInfo.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_ironcore_get_registration_state(self.uniffiClonePointer(),
+        FfiConverterString.lower(identityId),$0
     )
 })
 }
@@ -1606,6 +1621,17 @@ open func recordLog(line: String) {try! rustCall() {
 open func resolveIdentity(anyId: String)throws  -> String {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_resolve_identity(self.uniffiClonePointer(),
+        FfiConverterString.lower(anyId),$0
+    )
+})
+}
+    
+    /**
+     * Resolve any ID format to canonical identity_id (Blake3 hash of public key).
+     */
+open func resolveToIdentityId(anyId: String)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_resolve_to_identity_id(self.uniffiClonePointer(),
         FfiConverterString.lower(anyId),$0
     )
 })
@@ -2364,6 +2390,8 @@ public protocol SwarmBridgeProtocol : AnyObject {
     
     func sendMessage(peerId: String, data: Data, recipientIdentityId: String?, intendedDeviceId: String?) throws 
     
+    func sendMessageStatus(peerId: String, data: Data, recipientIdentityId: String?, intendedDeviceId: String?)  -> String?
+    
     func sendToAllPeers(data: Data) throws 
     
     func shutdown() 
@@ -2473,6 +2501,17 @@ open func sendMessage(peerId: String, data: Data, recipientIdentityId: String?, 
         FfiConverterOptionString.lower(intendedDeviceId),$0
     )
 }
+}
+    
+open func sendMessageStatus(peerId: String, data: Data, recipientIdentityId: String?, intendedDeviceId: String?) -> String? {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_swarmbridge_send_message_status(self.uniffiClonePointer(),
+        FfiConverterString.lower(peerId),
+        FfiConverterData.lower(data),
+        FfiConverterOptionString.lower(recipientIdentityId),
+        FfiConverterOptionString.lower(intendedDeviceId),$0
+    )
+})
 }
     
 open func sendToAllPeers(data: Data)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
@@ -3565,6 +3604,71 @@ public func FfiConverterTypePreparedMessage_lift(_ buf: RustBuffer) throws -> Pr
 
 public func FfiConverterTypePreparedMessage_lower(_ value: PreparedMessage) -> RustBuffer {
     return FfiConverterTypePreparedMessage.lower(value)
+}
+
+
+public struct RegistrationStateInfo {
+    public var state: String
+    public var deviceId: String?
+    public var seniorityTimestamp: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(state: String, deviceId: String?, seniorityTimestamp: UInt64?) {
+        self.state = state
+        self.deviceId = deviceId
+        self.seniorityTimestamp = seniorityTimestamp
+    }
+}
+
+
+
+extension RegistrationStateInfo: Equatable, Hashable {
+    public static func ==(lhs: RegistrationStateInfo, rhs: RegistrationStateInfo) -> Bool {
+        if lhs.state != rhs.state {
+            return false
+        }
+        if lhs.deviceId != rhs.deviceId {
+            return false
+        }
+        if lhs.seniorityTimestamp != rhs.seniorityTimestamp {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(state)
+        hasher.combine(deviceId)
+        hasher.combine(seniorityTimestamp)
+    }
+}
+
+
+public struct FfiConverterTypeRegistrationStateInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RegistrationStateInfo {
+        return
+            try RegistrationStateInfo(
+                state: FfiConverterString.read(from: &buf), 
+                deviceId: FfiConverterOptionString.read(from: &buf), 
+                seniorityTimestamp: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RegistrationStateInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.state, into: &buf)
+        FfiConverterOptionString.write(value.deviceId, into: &buf)
+        FfiConverterOptionUInt64.write(value.seniorityTimestamp, into: &buf)
+    }
+}
+
+
+public func FfiConverterTypeRegistrationStateInfo_lift(_ buf: RustBuffer) throws -> RegistrationStateInfo {
+    return try FfiConverterTypeRegistrationStateInfo.lift(buf)
+}
+
+public func FfiConverterTypeRegistrationStateInfo_lower(_ value: RegistrationStateInfo) -> RustBuffer {
+    return FfiConverterTypeRegistrationStateInfo.lower(value)
 }
 
 
@@ -5170,6 +5274,9 @@ private var initializationResult: InitializationResult {
     if (uniffi_scmessenger_core_checksum_method_ironcore_get_identity_info() != 10640) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_get_registration_state() != 49885) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_get_seniority_timestamp() != 57590) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5219,6 +5326,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_resolve_identity() != 25110) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_resolve_to_identity_id() != 15693) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_set_delegate() != 56502) {
@@ -5363,6 +5473,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_swarmbridge_send_message() != 33265) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_swarmbridge_send_message_status() != 20080) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_swarmbridge_send_to_all_peers() != 18109) {

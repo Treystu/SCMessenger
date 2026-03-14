@@ -1220,6 +1220,39 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 
 ## Known Gaps and Partial Areas
 
+### Contact Persistence & Data Integrity Issues (2026-03-14 Audit)
+
+**Status:** Identified during fresh-install contact discovery audit (WS13.6+)  
+**Platform:** Android  
+**Priority:** Must fix before v0.2.1 release
+
+- **Contact Auto-Creation Duplication** ❌
+  - **Issue:** Same peer contact created twice (4 seconds apart) during discovery
+  - **Root Cause:** Duplicate `onPeerIdentified` callbacks + non-idempotent contact creation
+  - **Evidence:** MeshRepository logs show auto-create at 18:22:49.396, duplicate at 18:22:52.530 for relay peer ID `93a35a87...`
+  - **Fix:** Implement idempotent upsert (not insert), add unique constraint on peer_id
+  - **Location:** `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` (onPeerIdentified callback)
+  - **Audit:** See `tmp/scm_audit_logs/contact_audit_2026-03-14/CONTACT_PERSISTENCE_AUDIT_2026-03-14.md`
+
+- **Relay Peers in User Contact List** ⚠️
+  - **Issue:** Relay server auto-discovered via Internet and shown as contact "peer-93a35a87"
+  - **Question:** Should relay infrastructure peers be in user-visible contact list?
+  - **Options:** (A) Hide from contacts, or (B) Show with special indicator
+  - **Design Decision Required:** Product + Core team
+
+- **Discovered Peers Persist in UI After Discovery Stops** ⚠️
+  - **Issue:** Discovered peer continues showing for 6+ seconds after discovery stopped
+  - **Evidence:** Peer shown from 18:22:49 to 18:23:08, even though stopDiscovery called at 18:23:02
+  - **Root Cause:** Async discovery lifecycle or UI refresh batching
+  - **Fix:** Ensure immediate UI removal when discovery stops
+
+- **Permission Request Loop on App Startup** ⚠️
+  - **Issue:** 9+ rapid permission requests (location, BLE, notifications, nearby WiFi) in ~700ms
+  - **Evidence:** Multiple "Requesting permissions" logs from 18:22:48.152 to 18:22:49.237
+  - **Root Cause:** Multiple code paths requesting same permissions without deduplication
+  - **Fix:** Deduplicate requests, add backoff timer, coordinate permission sources
+  - **Location:** `android/app/src/main/java/com/scmessenger/android/ui/MainActivity.kt`
+
 ### Product/Feature Gaps
 
 - Topic subscribe/unsubscribe/publish is now wired through Rust bridge on Android and iOS
