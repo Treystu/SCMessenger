@@ -37,7 +37,9 @@ data class NearbyPeer(
 class ContactsViewModel @Inject constructor(
     private val meshRepository: MeshRepository
 ) : ViewModel() {
-    private val nearbyDisconnectGraceMs = 30_000L
+    // Reduced from 30s to 5s to fix Issue #6: Gratuitous nearby entries persistence
+    // Peers should be removed promptly after disconnect to avoid confusing UX
+    private val nearbyDisconnectGraceMs = 5_000L
     private val pendingNearbyRemovalJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
 
     // All contacts

@@ -4,4 +4,13 @@
          identity_backup_prefs.xml is safe to back up and will be included
          by default (no <include> tag, so all non-excluded data is backed up). -->
     <exclude domain="file" path="identity/" />
+    
+    <!-- Exclude database files to prevent stale data restoration on fresh install.
+         This fixes Issue #4 where Android Auto Backup restores old message history. -->
+    <exclude domain="database" path="contacts.db" />
+    <exclude domain="database" path="history.db" />
+    
+    <!-- Exclude identity backup prefs to prevent stale identity restoration.
+         Users should go through onboarding on fresh install. -->
+    <exclude domain="sharedpref" path="identity_backup_prefs.xml" />
 </full-backup-content>

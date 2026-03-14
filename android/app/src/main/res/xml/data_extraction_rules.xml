@@ -4,10 +4,22 @@
         <!-- Exclude raw identity key files and sensitive databases from cloud backup.
              All other data (SharedPreferences, settings, etc.) is backed up by default. -->
         <exclude domain="file" path="identity/" />
+        
+        <!-- Exclude database files to prevent stale data restoration on fresh install.
+             This fixes Issue #4 where Android Auto Backup restores old message history. -->
+        <exclude domain="database" path="contacts.db" />
+        <exclude domain="database" path="history.db" />
+        
+        <!-- Exclude identity backup prefs to prevent stale identity restoration. -->
+        <exclude domain="sharedpref" path="identity_backup_prefs.xml" />
     </cloud-backup>
     <device-transfer>
         <!-- Exclude raw identity key files from device-to-device transfer;
              the encrypted identity_backup_prefs.xml will be transferred by default. -->
         <exclude domain="file" path="identity/" />
+        
+        <!-- Exclude database files from device transfer to prevent stale data. -->
+        <exclude domain="database" path="contacts.db" />
+        <exclude domain="database" path="history.db" />
     </device-transfer>
 </data-extraction-rules>

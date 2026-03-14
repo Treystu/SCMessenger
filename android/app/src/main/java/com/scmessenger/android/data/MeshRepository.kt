@@ -682,15 +682,20 @@ open class MeshRepository(private val context: Context) {
                                 knownPublicKey = transportIdentity?.publicKey
                             )
                             if (transportIdentity != null) {
-                                upsertFederatedContact(
-                                    canonicalPeerId = transportIdentity.canonicalPeerId,
-                                    publicKey = transportIdentity.publicKey,
-                                    nickname = transportIdentity.nickname,
-                                    libp2pPeerId = peerId,
-                                    listeners = dialCandidates,
-                                    createIfMissing = true  // AUTO-CREATE contacts for all discovered peers
-                                )
-                                Timber.i("Auto-created/updated contact for peer: ${transportIdentity.canonicalPeerId} (nickname: ${transportIdentity.nickname})")
+                                // Don't auto-create contacts for relay peers - they are infrastructure, not user contacts
+                                if (!isBootstrapRelayPeer(peerId)) {
+                                    upsertFederatedContact(
+                                        canonicalPeerId = transportIdentity.canonicalPeerId,
+                                        publicKey = transportIdentity.publicKey,
+                                        nickname = transportIdentity.nickname,
+                                        libp2pPeerId = peerId,
+                                        listeners = dialCandidates,
+                                        createIfMissing = true  // AUTO-CREATE contacts for all discovered peers
+                                    )
+                                    Timber.i("Auto-created/updated contact for peer: ${transportIdentity.canonicalPeerId} (nickname: ${transportIdentity.nickname})")
+                                } else {
+                                    Timber.d("Skipping contact creation for relay peer: $peerId")
+                                }
                             }
                             sendIdentitySyncIfNeeded(
                                 routePeerId = peerId,

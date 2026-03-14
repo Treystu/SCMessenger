@@ -1,7 +1,7 @@
 # SCMessenger Documentation Hub
 
 Status: Active
-Last updated: 2026-03-13 (WS13.4-WS13.5-EXECUTION)
+Last updated: 2026-03-14 (WS13.6-COMPLETION + ANDROID-BUG-FIXES)
 
 This is the primary documentation entrypoint.
 
@@ -21,6 +21,8 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 - [v0.2.0 Residual Risk Register](docs/V0.2.0_RESIDUAL_RISK_REGISTER.md)
 - [v0.2.1 Tight Pair / WS13 Plan](docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md)
 - [v0.2.1 Residual Risk Register](docs/V0.2.1_RESIDUAL_RISK_REGISTER.md)
+- [WS13.6 Compatibility & Migration Matrix](docs/WS13.6_COMPATIBILITY_MIGRATION_MATRIX.md)
+- [WS13.6 Handover & Abandon Runbook](docs/WS13.6_HANDOVER_ABANDON_RUNBOOK.md)
 - [Platform Support Matrix](docs/PLATFORM_SUPPORT_MATRIX.md)
 - [Alpha Interop Matrix](docs/INTEROP_MATRIX_V0.2.0_ALPHA.md)
 - [Protocol Specification](docs/PROTOCOL.md)
@@ -53,6 +55,39 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 
 - [Repository Agent Policy](AGENTS.md)
 - [GitHub Copilot Instructions](.github/copilot-instructions.md)
+- [Roo Code Integration Plan](scmessenger-roo-code-features-plan.md)
+
+### Roo Code Integration (2026-03-14)
+
+Custom modes, rules, and skills for optimized agent workflows:
+
+**Custom Modes** (`.roomodes/`):
+- [`scm-rust`](.roomodes/scm-rust.json) - Rust core development
+- [`scm-android`](.roomodes/scm-android.json) - Android/Kotlin development
+- [`scm-ios`](.roomodes/scm-ios.json) - iOS/Swift development
+- [`scm-protocol`](.roomodes/scm-protocol.json) - Protocol/crypto review
+- [`scm-docs`](.roomodes/scm-docs.json) - Documentation specialist
+- [`scm-release`](.roomodes/scm-release.json) - Release verification
+- [`scm-debug-mesh`](.roomodes/scm-debug-mesh.json) - Mesh/relay debugging
+
+**Project Rules** (`.roo/rules/`):
+- [`000-critical.md`](.roo/rules/000-critical.md) - Non-negotiable rules
+- [`010-documentation.md`](.roo/rules/010-documentation.md) - Doc sync requirements
+- [`020-crypto.md`](.roo/rules/020-crypto.md) - Cryptography constraints
+- [`030-platform-parity.md`](.roo/rules/030-platform-parity.md) - Cross-platform rules
+- [`040-build-verify.md`](.roo/rules/040-build-verify.md) - Build verification
+- [`050-identity.md`](.roo/rules/050-identity.md) - Identity model rules
+- [`060-testing.md`](.roo/rules/060-testing.md) - Test requirements
+
+**Skills** (`skills/`):
+- [`platform-parity-check`](skills/platform-parity-check/SKILL.md) - Cross-platform verification
+- [`release-gate-validator`](skills/release-gate-validator/SKILL.md) - Release readiness
+- [`mesh-diagnostics`](skills/mesh-diagnostics/SKILL.md) - Network troubleshooting
+
+**Memory Bank** (`.roo/memory-bank/`):
+- [`projectbrief.md`](.roo/memory-bank/projectbrief.md) - Project overview
+- [`techContext.md`](.roo/memory-bank/techContext.md) - Technology stack
+- [`activeContext.md`](.roo/memory-bank/activeContext.md) - Current focus
 
 ## Component and Platform Docs
 

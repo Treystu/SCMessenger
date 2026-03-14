@@ -3,21 +3,39 @@
 Status: Active
 Last updated: 2026-03-14
 
-Last verified: **2026-03-14** (Android audit + critical bug fixes)
+Last verified: **2026-03-14** (Android audit + critical bug fixes + WS13.6 completion)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
 
-## 2026-03-14 Android Audit & Critical Bug Fixes (In Progress)
+## 2026-03-14 Android Audit & Critical Bug Fixes (Completed)
 
 - **4 critical bugs identified** from real-time Android log monitoring (12:00 PM - 8:00 PM HST)
 - **Issues #1-#3 fixed and verified**:
   - Issue #1: Public Key Truncation — added validation + recovery in MeshRepository.kt
   - Issue #2: Contact ID Mismatch — added canonicalContactId() normalization, public-key-first matching
   - Issue #3: Stale Nearby Peer — resolved by Issue #2 fix
-- **Issue #4 root cause identified**: `android:allowBackup="true"` causes Android Auto Backup to restore stale data on fresh install
+- **Issue #4 fixed**: Updated `backup_rules.xml` and `data_extraction_rules.xml` to exclude database files and identity backup prefs from Android Auto Backup
+- **Issue #5 fixed**: Added relay peer filtering in `MeshRepository.kt` to prevent auto-creation of relay peers as contacts
+- **Issue #6 fixed**: Reduced `nearbyDisconnectGraceMs` from 30s to 5s in `ContactsViewModel.kt` to promptly remove disconnected peers
 - **UI fixes committed**: Edge-to-edge handling, keyboard IME padding, onboarding keyboard actions
 - **Build verification**: `./gradlew assembleDebug -x lint` — PASS
 - **Documentation sync**: `./scripts/docs_sync_check.sh` — PASS
+
+## 2026-03-14 WS13.6 Completion (Completed)
+
+- **Compatibility/migration matrix created**: `docs/WS13.6_COMPATIBILITY_MIGRATION_MATRIX.md`
+  - Compatibility mode policy for legacy no-device traffic
+  - Migration matrix for pre-WS13 → WS13 upgrades
+  - Enforcement mode transition plan (Phase A/B/C)
+  - Acceptance gates verified
+- **Handover/abandon runbook created**: `docs/WS13.6_HANDOVER_ABANDON_RUNBOOK.md`
+  - Operational procedures for device handover flow
+  - Operational procedures for identity abandonment flow
+  - Sender-facing error handling documentation
+  - Testing procedures and monitoring guidance
+- **Residual risk closed**: R-WS13.4-01 marked as Closed in `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`
+- **WS13 workstream complete**: All WS13.1-WS13.6 tasks marked as complete in `REMAINING_WORK_TRACKING.md`
+- **WS14 scope reviewed**: WS14 (Notifications + DM) is unstarted; scope documented in `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`
 
 ## 2026-03-13 WS13.4 Registry Enforcement + WS13.5 Rejection UX (Implemented, Verification In Progress)
 
