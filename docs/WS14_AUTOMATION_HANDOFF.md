@@ -1,23 +1,24 @@
 # WS14 Automation Handoff
 
 Status: Active
-Last updated: 2026-03-14
+Last updated: 2026-03-14 03:12 HST
 
 Purpose: repo-owned handoff ledger for the rebuilt WS14 hourly automation stream. Update this file on every WS14 change-bearing automation run before final output.
 
 ## Current Stream Fields
 
 - `current_phase`: `WS14.1`
-- `current_branch`: `NONE`
+- `phase_status`: `IMPLEMENTED_WITH_DEFERRED_TEST_CLOSEOUT`
+- `current_branch`: `codex/ws14-hourly-20260314-0301`
 - `base_main_commit`: `0d99b25191736358159fbc1d7e0272c7bc2fafa3`
-- `latest_commit`: `NONE`
-- `passed_commands`: `none yet`
-- `failed_commands`: `none yet`
-- `confidence`: `WS14 automation stream not started`
-- `blocked_by`: `Hourly automation was reset on 2026-03-14 and remains paused until intentionally unpaused on a dedicated worktree.`
-- `files_in_flight`: `none`
-- `next_exact_task`: `Unpause the automation, create fresh branch codex/ws14-hourly-YYYYMMDD-HHMM from base_main_commit in the dedicated worktree, and execute WS14.1 only.`
-- `reuse_same_branch`: `no`
+- `latest_commit`: `5f9213e114ae26d0c2e1b357f9ec99d185cc0a94`
+- `passed_commands`: `git status --short`; `git branch --show-current`; `git worktree list --porcelain`; `git log --oneline -n 10`; `cargo fmt --all -- --check`; `CARGO_TARGET_DIR=/tmp/scm-ws14-target cargo build --workspace`; `CARGO_TARGET_DIR=/tmp/scm-ws14-target cargo clippy --workspace`
+- `failed_commands`: `CARGO_TARGET_DIR=/tmp/scm-ws14-target cargo test --workspace` (`relay::client::tests::test_connect_to_relay` and `relay::client::tests::test_push_pull_and_ping_over_network` failed with `Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" }`)
+- `confidence`: `0.90 for implementation, below closeout threshold until deferred test posture is accepted`
+- `blocked_by`: `Implementation is landed. Full WS14.1 closeout is waiting on an explicit decision to accept or rerun the sandbox-blocked relay test failures.`
+- `files_in_flight`: `core/src/notification.rs`; `core/src/notification_defaults.rs`; `core/src/lib.rs`; `core/src/mobile_bridge.rs`; `core/src/api.udl`; `wasm/src/lib.rs`; `docs/CURRENT_STATE.md`; `REMAINING_WORK_TRACKING.md`; `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`; `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`; `.github/copilot-instructions.md`
+- `next_exact_task`: `Reuse codex/ws14-hourly-20260314-0301 and either accept the deferred relay-test posture or rerun CARGO_TARGET_DIR=/tmp/scm-ws14-target cargo test --workspace outside the current sandbox before starting WS14.2.`
+- `reuse_same_branch`: `yes`
 
 ## Reset Notes
 

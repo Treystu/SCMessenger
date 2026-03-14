@@ -38,11 +38,12 @@ Completed in this pass:
 3. [x] Added `docs/WS14_HOURLY_AUTOMATION_PROMPT.md` and repointed the paused automation to a WS14-only, one-phase-per-run model.
 4. [x] Locked future hourly behavior to branch-only execution, one WS14 phase per run, and no unrelated bug absorption.
 
-Remaining WS14 automation startup steps:
+Remaining WS14 automation execution steps:
 
-1. [ ] Intentionally unpause the hourly automation when you want WS14 implementation to resume.
-2. [ ] Start a fresh `codex/ws14-hourly-YYYYMMDD-HHMM` branch from the current blessed `main` baseline in the dedicated automation worktree.
-3. [ ] Execute WS14.1 only, update `docs/WS14_AUTOMATION_HANDOFF.md`, and stop after that single phase.
+1. [x] Resume WS14 on the writable continuation branch `codex/ws14-hourly-20260314-0301`, rebased onto the prepared WS14 stream baseline.
+2. [x] Implement WS14.1 only and update `docs/WS14_AUTOMATION_HANDOFF.md` from the repo-owned branch lane.
+3. [ ] Decide whether to accept the deferred full `cargo test --workspace` rerun or require a follow-up verification pass outside the current sandbox.
+4. [ ] Start WS14.2 only after the WS14.1 verification posture is explicitly closed.
 
 ## WS13.1 Tight-Pair Kickoff (2026-03-10 UTC)
 
@@ -1388,6 +1389,7 @@ Not feasible for `v0.2.0` without expanding release scope:
    - LoC planning envelope: `2,500-4,550 LoC`.
    - Canonical plan (full context): `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`.
    - Execution handoff + prompt: `docs/WS14_AUTOMATION_HANDOFF.md` and `docs/WS14_HOURLY_AUTOMATION_PROMPT.md`.
+   - Current status (2026-03-14 HST): `WS14.1` implementation is landed on `codex/ws14-hourly-20260314-0301`, but the full Rust test rerun was deferred after sandbox-only relay client failures.
 
 ## Edge-Case Hardening Backlog (Global/Extreme Conditions)
 

@@ -9,6 +9,8 @@
 pub mod crypto;
 pub mod identity;
 pub mod message;
+pub mod notification;
+pub mod notification_defaults;
 pub mod privacy;
 pub mod relay;
 pub mod store;
@@ -31,6 +33,10 @@ use zeroize::Zeroize;
 pub use crypto::{decrypt_message, encrypt_message};
 pub use identity::IdentityManager;
 pub use message::{DeliveryStatus, Envelope, Message, MessageType, Receipt};
+pub use notification::{
+    classify_notification as classify_notification_policy, NotificationDecision, NotificationKind,
+    NotificationMessageContext, NotificationUiState,
+};
 
 // Mobile bridge exports for UniFFI
 #[cfg(not(target_arch = "wasm32"))]
@@ -1238,6 +1244,15 @@ impl IronCore {
         out.extend_from_slice(&cover.recipient_hint);
         out.extend_from_slice(&cover.encrypted_payload);
         Ok(out)
+    }
+
+    pub fn classify_notification(
+        &self,
+        message: NotificationMessageContext,
+        ui_state: NotificationUiState,
+        settings: MeshSettings,
+    ) -> NotificationDecision {
+        notification::classify_notification(message, ui_state, settings)
     }
 
     /// Decrypt a received envelope and return the plaintext message.

@@ -3,9 +3,30 @@
 Status: Active
 Last updated: 2026-03-14
 
-Last verified: **2026-03-14** (Android audit + critical bug fixes + WS13.6 completion; WS14 automation reset documented)
+Last verified: **2026-03-14** (Android audit + critical bug fixes + WS13.6 completion; WS14.1 core notification contract landed, full test rerun deferred after sandbox-only relay failures)
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
+
+## 2026-03-14 WS14.1 Core Notification Contract (Implemented, Verification Deferred)
+
+- **Core notification policy now exists in shared Rust code**:
+  - `core/src/notification.rs` defines `NotificationKind`, `NotificationMessageContext`, `NotificationUiState`, and `NotificationDecision`.
+  - `IronCore::classify_notification(...)` now centralizes DM vs DM Request classification, suppression reasons, foreground checks, and normalized metadata handling so adapters do not drift.
+- **UniFFI/WASM/API parity landed in this phase**:
+  - `core/src/api.udl` now exposes the notification classifier and the notification decision/context types.
+  - `wasm/src/lib.rs` now mirrors the classifier and widened notification settings contract for browser clients.
+  - `MeshSettings` on shared Rust/mobile/WASM surfaces now includes notification toggles: `notifications_enabled`, `notify_dm_enabled`, `notify_dm_request_enabled`, `notify_dm_in_foreground`, `notify_dm_request_in_foreground`, `sound_enabled`, and `badge_enabled`.
+- **Compatibility boundary was held intentionally**:
+  - The encrypted wire `Message` format was left unchanged in WS14.1 because it is still bincode-serialized; adding an inline `is_dm_request` field without a versioning layer would risk mixed-version decode failures.
+  - Explicit DM-request intent is therefore normalized as classifier input metadata for now while legacy inference remains the compatibility fallback.
+- **Verification evidence captured in this run**:
+  - `cargo fmt --all -- --check` — **PASS**
+  - `CARGO_TARGET_DIR=/tmp/scm-ws14-target cargo build --workspace` — **PASS**
+  - `CARGO_TARGET_DIR=/tmp/scm-ws14-target cargo clippy --workspace` — **PASS** (pre-existing `too_many_arguments` warning only)
+  - `CARGO_TARGET_DIR=/tmp/scm-ws14-target cargo test --workspace` — **FAILED IN SANDBOX** (`relay::client::tests::test_connect_to_relay` and `relay::client::tests::test_push_pull_and_ping_over_network` both failed with `Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" }`)
+- **Closeout status**:
+  - Implementation is in place.
+  - The full test rerun was explicitly deferred after the sandbox-only relay failures, so WS14.1 should still be treated as not yet fully closed from a governance standpoint.
 
 ## 2026-03-14 WS14 Hourly Automation Reset (Docs/Workflow Update)
 
@@ -21,9 +42,9 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
   - no unrelated bug absorption,
   - blocked verification keeps the current phase partial instead of skipping ahead.
 - **Current operator posture**:
-  - the hourly automation remains **paused by default** until intentionally unpaused,
-  - the first WS14 run must start a fresh `codex/ws14-hourly-YYYYMMDD-HHMM` branch from the blessed `main` baseline in the dedicated automation worktree,
-  - the initial target is **WS14.1 only**.
+  - the hourly automation is now running on the writable continuation branch `codex/ws14-hourly-20260314-0301`, rebased onto the prepared stream baseline,
+  - the active target remains **WS14.1 only** until its deferred test/docs closeout is finished,
+  - WS14.2 must not start on the next run unless the WS14.1 verification posture is explicitly accepted.
 - **Verification note**: this reset changed documentation and automation workflow only. No build-target code, bindings, or build-affecting repo scripts changed, so no additional product build-verification rerun was required beyond the March 14 product evidence already recorded below.
 
 ## 2026-03-14 Android Audit & Critical Bug Fixes (Completed)

@@ -28,6 +28,39 @@ dictionary PreparedMessage {
     bytes envelope_data;
 };
 
+enum NotificationKind {
+    "DirectMessage",
+    "DirectMessageRequest",
+    "None",
+};
+
+dictionary NotificationMessageContext {
+    string? conversation_id;
+    string sender_peer_id;
+    string message_id;
+    boolean? explicit_dm_request;
+    boolean sender_is_known_contact;
+    boolean has_existing_conversation;
+    boolean is_self_originated;
+    boolean is_duplicate;
+    boolean already_seen;
+    boolean is_blocked;
+};
+
+dictionary NotificationUiState {
+    boolean app_in_foreground;
+    string? active_conversation_id;
+};
+
+dictionary NotificationDecision {
+    NotificationKind kind;
+    string conversation_id;
+    string sender_peer_id;
+    string message_id;
+    boolean should_alert;
+    string? suppression_reason;
+};
+
 dictionary RegistrationStateInfo {
     string state;
     string? device_id;
@@ -93,6 +126,11 @@ interface IronCore {
     u32 outbox_count();
     u32 inbox_count();
     boolean mark_message_sent(string message_id);
+    NotificationDecision classify_notification(
+        NotificationMessageContext message,
+        NotificationUiState ui_state,
+        MeshSettings settings
+    );
 
     // Blocking
     [Throws=IronCoreError]
@@ -309,6 +347,13 @@ dictionary MeshSettings {
     boolean cover_traffic_enabled;
     boolean message_padding_enabled;
     boolean timing_obfuscation_enabled;
+    boolean notifications_enabled;
+    boolean notify_dm_enabled;
+    boolean notify_dm_request_enabled;
+    boolean notify_dm_in_foreground;
+    boolean notify_dm_request_in_foreground;
+    boolean sound_enabled;
+    boolean badge_enabled;
 };
 
 interface MeshSettingsManager {

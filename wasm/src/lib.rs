@@ -5,7 +5,10 @@ pub mod transport;
 
 use libp2p::{Multiaddr, PeerId};
 use parking_lot::Mutex;
-use scmessenger_core::{IdentityInfo, IronCore as RustIronCore, SignatureResult};
+use scmessenger_core::{
+    IdentityInfo, IronCore as RustIronCore, NotificationDecision, NotificationMessageContext,
+    NotificationUiState, SignatureResult,
+};
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
@@ -17,6 +20,7 @@ pub enum DiscoveryMode {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct MeshSettings {
     pub relay_enabled: bool,
     pub max_relay_budget: u32,
@@ -30,6 +34,13 @@ pub struct MeshSettings {
     pub cover_traffic_enabled: bool,
     pub message_padding_enabled: bool,
     pub timing_obfuscation_enabled: bool,
+    pub notifications_enabled: bool,
+    pub notify_dm_enabled: bool,
+    pub notify_dm_request_enabled: bool,
+    pub notify_dm_in_foreground: bool,
+    pub notify_dm_request_in_foreground: bool,
+    pub sound_enabled: bool,
+    pub badge_enabled: bool,
 }
 
 impl Default for MeshSettings {
@@ -47,6 +58,13 @@ impl Default for MeshSettings {
             cover_traffic_enabled: false,
             message_padding_enabled: false,
             timing_obfuscation_enabled: false,
+            notifications_enabled: true,
+            notify_dm_enabled: true,
+            notify_dm_request_enabled: true,
+            notify_dm_in_foreground: false,
+            notify_dm_request_in_foreground: true,
+            sound_enabled: true,
+            badge_enabled: true,
         }
     }
 }
@@ -533,6 +551,22 @@ impl IronCore {
             ..MeshSettings::default()
         }))
         .unwrap()
+    }
+
+    #[wasm_bindgen(js_name = classifyNotification)]
+    pub fn classify_notification(
+        &self,
+        js_message: JsValue,
+        js_ui_state: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let message: WasmNotificationMessageContext = serde_wasm_bindgen::from_value(js_message)
+            .map_err(|e| js_value_from_str(&format!("Invalid notification message: {}", e)))?;
+        let ui_state: WasmNotificationUiState = serde_wasm_bindgen::from_value(js_ui_state)
+            .map_err(|e| js_value_from_str(&format!("Invalid notification UI state: {}", e)))?;
+        let settings = self.settings.lock().clone();
+        let decision = self.inner.classify_notification(message.into(), ui_state.into(), settings);
+        serde_wasm_bindgen::to_value(&WasmNotificationDecision::from(decision))
+            .map_err(|e| js_value_from_str(&format!("Failed to serialize decision: {}", e)))
     }
 
     // ── Identity Management ──────────────────────────────────────────────
@@ -1072,6 +1106,13 @@ struct WasmMeshSettings {
     cover_traffic_enabled: bool,
     message_padding_enabled: bool,
     timing_obfuscation_enabled: bool,
+    notifications_enabled: bool,
+    notify_dm_enabled: bool,
+    notify_dm_request_enabled: bool,
+    notify_dm_in_foreground: bool,
+    notify_dm_request_in_foreground: bool,
+    sound_enabled: bool,
+    badge_enabled: bool,
 }
 
 impl From<MeshSettings> for WasmMeshSettings {
@@ -1093,6 +1134,13 @@ impl From<MeshSettings> for WasmMeshSettings {
             cover_traffic_enabled: s.cover_traffic_enabled,
             message_padding_enabled: s.message_padding_enabled,
             timing_obfuscation_enabled: s.timing_obfuscation_enabled,
+            notifications_enabled: s.notifications_enabled,
+            notify_dm_enabled: s.notify_dm_enabled,
+            notify_dm_request_enabled: s.notify_dm_request_enabled,
+            notify_dm_in_foreground: s.notify_dm_in_foreground,
+            notify_dm_request_in_foreground: s.notify_dm_request_in_foreground,
+            sound_enabled: s.sound_enabled,
+            badge_enabled: s.badge_enabled,
         }
     }
 }
@@ -1116,6 +1164,92 @@ impl From<WasmMeshSettings> for MeshSettings {
             cover_traffic_enabled: w.cover_traffic_enabled,
             message_padding_enabled: w.message_padding_enabled,
             timing_obfuscation_enabled: w.timing_obfuscation_enabled,
+            notifications_enabled: w.notifications_enabled,
+            notify_dm_enabled: w.notify_dm_enabled,
+            notify_dm_request_enabled: w.notify_dm_request_enabled,
+            notify_dm_in_foreground: w.notify_dm_in_foreground,
+            notify_dm_request_in_foreground: w.notify_dm_request_in_foreground,
+            sound_enabled: w.sound_enabled,
+            badge_enabled: w.badge_enabled,
+        }
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmNotificationMessageContext {
+    conversation_id: Option<String>,
+    sender_peer_id: String,
+    message_id: String,
+    explicit_dm_request: Option<bool>,
+    sender_is_known_contact: bool,
+    has_existing_conversation: bool,
+    is_self_originated: bool,
+    is_duplicate: bool,
+    already_seen: bool,
+    is_blocked: bool,
+}
+
+impl From<WasmNotificationMessageContext> for NotificationMessageContext {
+    fn from(value: WasmNotificationMessageContext) -> Self {
+        Self {
+            conversation_id: value.conversation_id,
+            sender_peer_id: value.sender_peer_id,
+            message_id: value.message_id,
+            explicit_dm_request: value.explicit_dm_request,
+            sender_is_known_contact: value.sender_is_known_contact,
+            has_existing_conversation: value.has_existing_conversation,
+            is_self_originated: value.is_self_originated,
+            is_duplicate: value.is_duplicate,
+            already_seen: value.already_seen,
+            is_blocked: value.is_blocked,
+        }
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmNotificationUiState {
+    app_in_foreground: bool,
+    active_conversation_id: Option<String>,
+}
+
+impl From<WasmNotificationUiState> for NotificationUiState {
+    fn from(value: WasmNotificationUiState) -> Self {
+        Self {
+            app_in_foreground: value.app_in_foreground,
+            active_conversation_id: value.active_conversation_id,
+        }
+    }
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmNotificationDecision {
+    kind: String,
+    conversation_id: String,
+    sender_peer_id: String,
+    message_id: String,
+    should_alert: bool,
+    suppression_reason: Option<String>,
+}
+
+impl From<NotificationDecision> for WasmNotificationDecision {
+    fn from(value: NotificationDecision) -> Self {
+        let kind = match value.kind {
+            scmessenger_core::NotificationKind::DirectMessage => "directMessage",
+            scmessenger_core::NotificationKind::DirectMessageRequest => "directMessageRequest",
+            scmessenger_core::NotificationKind::None => "none",
+        }
+        .to_string();
+
+        Self {
+            kind,
+            conversation_id: value.conversation_id,
+            sender_peer_id: value.sender_peer_id,
+            message_id: value.message_id,
+            should_alert: value.should_alert,
+            suppression_reason: value.suppression_reason,
         }
     }
 }
