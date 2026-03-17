@@ -34,8 +34,9 @@ pub use crypto::{decrypt_message, encrypt_message};
 pub use identity::IdentityManager;
 pub use message::{DeliveryStatus, Envelope, Message, MessageType, Receipt};
 pub use notification::{
-    classify_notification as classify_notification_policy, NotificationDecision, NotificationKind,
-    NotificationMessageContext, NotificationUiState,
+    classify_notification as classify_notification_policy, NotificationDecision, NotificationEndpoint,
+    NotificationEndpointCapabilities, NotificationEndpointError, NotificationEndpointRegistry,
+    NotificationKind, NotificationMessageContext, NotificationPlatform, NotificationUiState,
 };
 
 // Mobile bridge exports for UniFFI

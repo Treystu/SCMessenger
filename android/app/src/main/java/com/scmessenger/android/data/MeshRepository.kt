@@ -159,6 +159,9 @@ open class MeshRepository(private val context: Context) {
 
     // Wifi Transport
     private var wifiTransportManager: com.scmessenger.android.transport.WifiTransportManager? = null
+    
+    // Smart Transport Router (500ms timeout fallback + health tracking)
+    private var smartTransportRouter: com.scmessenger.android.transport.SmartTransportRouter? = null
 
     // Service state
     private val _serviceState = MutableStateFlow(uniffi.api.ServiceState.STOPPED)
@@ -326,7 +329,11 @@ open class MeshRepository(private val context: Context) {
 
     private val strictBleOnlyValidation = isEnabledFlag(System.getenv("SC_BLE_ONLY_VALIDATION"))
     private val bleRouteObservations = ConcurrentHashMap<String, BleRouteObservation>()
-    private val bleRouteFreshnessTtlMs = 120_000L
+    // Extended from 2 minutes to 5 minutes to fix TRANSPORT-001: BLE hint staleness
+    // When iOS app crashes, BLE hints become stale. Extended TTL makes fallback more resilient.
+    private val bleRouteFreshnessTtlMs = 300_000L
+    // Stale hint grace period: allow slightly stale hints to be used for fallback
+    private val bleRouteStaleGraceMs = 600_000L  // 10 minutes
 
     private fun isTerminalIdentityFailure(errorCode: String?): Boolean {
         return when (errorCode?.trim()) {
@@ -1217,6 +1224,8 @@ open class MeshRepository(private val context: Context) {
                 }
             }
 
+            val info = ironCore?.getIdentityInfo()
+            Timber.i("SC_IDENTITY_OWN p2p_id=${info?.libp2pPeerId ?: "unknown"} pk=${info?.publicKeyHex ?: "unknown"}")
             Timber.i("Mesh service started successfully")
         } catch (e: Exception) {
             Timber.e(e, "Failed to start mesh service")
@@ -1674,7 +1683,8 @@ open class MeshRepository(private val context: Context) {
             identityData = beaconJson // Store for immediate use by GATT server
             Timber.i(
                 "BLE GATT identity beacon updated: ${publicKeyHex.take(8)}... " +
-                    "(${beaconJson.size} bytes, listeners=${resolvedListeners.size}, external=${resolvedExternal.size})"
+                    "(${beaconJson.size} bytes, listeners=${resolvedListeners.size}, external=${resolvedExternal.size}) " +
+                    "p2p_id=${identity.libp2pPeerId ?: "unknown"}"
             )
         } catch (e: Exception) {
             Timber.w("Failed to set BLE GATT identity beacon: ${e.message}")
@@ -1719,7 +1729,7 @@ open class MeshRepository(private val context: Context) {
 
             Timber.i(
                 "Peer identity read from $blePeerId: ${publicKeyHex.take(8)}... " +
-                    "identity=${identityId.take(12)} nickname='${discoveredNickname?.take(24) ?: ""}'"
+                    "identity=$identityId nickname='${discoveredNickname?.take(24) ?: ""}'"
             )
 
             // Persist BLE -> Identity mapping in contact notes so it survives restarts
@@ -1924,11 +1934,24 @@ open class MeshRepository(private val context: Context) {
             .filter { it.isNotEmpty() }
             .mapNotNull { candidate ->
                 val observation = bleRouteObservations[candidate] ?: return@mapNotNull null
-                if ((now - observation.lastSeenMs) > bleRouteFreshnessTtlMs) {
-                    bleRouteObservations.remove(candidate, observation)
-                    null
-                } else {
-                    observation
+                val ageMs = now - observation.lastSeenMs
+                
+                // Extended freshness check for TRANSPORT-001: BLE hint staleness fix
+                // 1. Within fresh TTL: use normally
+                // 2. Within stale grace period: use for fallback (slightly stale but better than nothing)
+                // 3. Beyond grace period: remove and skip
+                when {
+                    ageMs <= bleRouteFreshnessTtlMs -> observation  // Fresh
+                    ageMs <= bleRouteStaleGraceMs -> {
+                        // Stale but within grace period - use for fallback
+                        Timber.d("Using stale BLE hint for $candidate (age=${ageMs}ms, grace=${bleRouteStaleGraceMs}ms)")
+                        observation
+                    }
+                    else -> {
+                        // Too stale, remove
+                        bleRouteObservations.remove(candidate, observation)
+                        null
+                    }
                 }
             }
             .maxByOrNull { it.lastSeenMs }
@@ -2298,6 +2321,20 @@ open class MeshRepository(private val context: Context) {
         return contactManager?.get(canonicalId(peerId))
     }
 
+    /**
+     * WS14: Check if a conversation exists with the given peer.
+     * Used for notification classification (DM vs DM Request).
+     */
+    fun hasConversationWith(peerId: String): Boolean {
+        val canonical = canonicalId(peerId)
+        return try {
+            // Check if we have any message history with this peer
+            historyManager?.conversation(canonical, 1u)?.isNotEmpty() == true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     fun removeContact(peerId: String) {
         val canonical = canonicalId(peerId)
         contactManager?.remove(canonical)
@@ -2306,7 +2343,27 @@ open class MeshRepository(private val context: Context) {
         } catch (e: Exception) {
             Timber.w("Failed to remove conversation history for $canonical: ${e.message}")
         }
-        Timber.d("Contact removed: $canonical and their message history")
+        
+        // Clear in-memory caches to prevent stale contact from showing (CONTACT-STALE-001)
+        // 1. Remove from discovered peers cache
+        _discoveredPeers.update { current ->
+            val keysToRemove = current.filter { (key, info) ->
+                key == canonical ||
+                    info.peerId == canonical ||
+                    PeerIdValidator.isSame(key, canonical) ||
+                    PeerIdValidator.isSame(info.peerId, canonical)
+            }.keys
+            
+            if (keysToRemove.isEmpty()) current else current - keysToRemove
+        }
+        
+        // 2. Remove from BLE route observations cache
+        val keysToRemove = bleRouteObservations.keys.filter { key ->
+            key == canonical || PeerIdValidator.isSame(key, canonical)
+        }
+        keysToRemove.forEach { bleRouteObservations.remove(it) }
+        
+        Timber.d("Contact removed: $canonical and their message history, caches cleared")
     }
 
     fun listContacts(): List<uniffi.api.Contact> {
@@ -3239,7 +3296,14 @@ open class MeshRepository(private val context: Context) {
                 onionRouting = false,
                 coverTrafficEnabled = false,
                 messagePaddingEnabled = false,
-                timingObfuscationEnabled = false
+                timingObfuscationEnabled = false,
+                notificationsEnabled = true,
+                notifyDmEnabled = true,
+                notifyDmRequestEnabled = true,
+                notifyDmInForeground = false,
+                notifyDmRequestInForeground = true,
+                soundEnabled = true,
+                badgeEnabled = true
             )
     }
 
@@ -3541,118 +3605,303 @@ open class MeshRepository(private val context: Context) {
             )
         }
 
-        val localFallback = Companion.attemptWifiThenBleFallback(
-            wifiPeerId = if (strictBleOnly) null else wifiPeerId,
-            blePeerId = effectiveBlePeerId,
-            tryWifi = { wifiId ->
-                val wifi = wifiTransportManager ?: run {
-                    Timber.d("tryWifiDelivery: wifiTransportManager is null, returning false")
-                    return@attemptWifiThenBleFallback false
-                }
-                try {
-                    if (wifi.sendData(wifiId, encryptedData)) {
-                        Timber.i("✓ Delivery via WiFi Direct (target=$wifiId)")
+        // Use SmartTransportRouter for intelligent transport selection with 500ms timeout fallback
+        val smartResult = if (smartTransportRouter != null) {
+            smartTransportRouter!!.attemptDelivery(
+                peerId = routePeerFallback,
+                envelopeData = encryptedData,
+                wifiPeerId = if (strictBleOnly) null else wifiPeerId,
+                blePeerId = effectiveBlePeerId,
+                routePeerCandidates = routePeerCandidates,
+                listeners = listeners,
+                traceMessageId = traceMessageId,
+                attemptContext = attemptContext,
+                tryWifi = { wifiId ->
+                    val wifi = wifiTransportManager ?: run {
+                        Timber.d("tryWifiDelivery: wifiTransportManager is null, returning false")
+                        return@attemptDelivery false
+                    }
+                    try {
+                        if (wifi.sendData(wifiId, encryptedData)) {
+                            Timber.i("✓ Delivery via WiFi Direct (target=$wifiId)")
+                            logDeliveryAttempt(
+                                messageId = traceMessageId,
+                                medium = "wifi-direct",
+                                phase = "smart_router",
+                                outcome = "success",
+                                detail = "ctx=$attemptContext target=$wifiId"
+                            )
+                            true
+                        } else {
+                            Timber.d("tryWifiDelivery: wifiTransportManager.sendData returned false for $wifiId")
+                            logDeliveryAttempt(
+                                messageId = traceMessageId,
+                                medium = "wifi-direct",
+                                phase = "smart_router",
+                                outcome = "failed",
+                                detail = "ctx=$attemptContext target=$wifiId reason=sendData_false"
+                            )
+                            false
+                        }
+                    } catch (wifiEx: Exception) {
+                        Timber.w(wifiEx, "WiFi send failed for $wifiId")
                         logDeliveryAttempt(
                             messageId = traceMessageId,
                             medium = "wifi-direct",
-                            phase = "local_fallback",
+                            phase = "smart_router",
+                            outcome = "failed",
+                            detail = "ctx=$attemptContext target=$wifiId reason=${wifiEx.message ?: "exception"}"
+                        )
+                        false
+                    }
+                },
+                tryBle = { bleAddr ->
+                    val bleClient = bleGattClient
+                    val bleServer = bleGattServer
+                    if (bleClient == null && bleServer == null) {
+                        Timber.d("tryBleDelivery: both bleGattClient and bleGattServer are null, returning false")
+                        return@attemptDelivery false
+                    }
+
+                    // Fast-skip: if no BLE devices are connected and the requested
+                    // address is a cached hint (not actively connected), skip entirely
+                    // to avoid wasting time on stale MACs.
+                    if (bleAddr.isNullOrBlank() && connectedBleDevices.isEmpty()) {
+                        logDeliveryAttempt(
+                            messageId = traceMessageId,
+                            medium = "ble",
+                            phase = "smart_router",
+                            outcome = "skipped",
+                            detail = "ctx=$attemptContext no_hint_and_no_connected_devices"
+                        )
+                        return@attemptDelivery false
+                    }
+
+                    val sendTargets = linkedSetOf(bleAddr).apply { addAll(connectedBleDevices) }
+                    var lastFailureReason = "no_target_attempted"
+
+                    for (target in sendTargets) {
+                        if (bleClient != null) {
+                            try {
+                                if (bleClient.sendData(target, encryptedData)) {
+                                    Timber.i("✓ Delivery via BLE client (target=$target)")
+                                    logDeliveryAttempt(
+                                        messageId = traceMessageId,
+                                        medium = "ble",
+                                        phase = "smart_router",
+                                        outcome = "accepted",
+                                        detail = "ctx=$attemptContext role=central requested_target=$bleAddr target=$target"
+                                    )
+                                    return@attemptDelivery true
+                                }
+                                lastFailureReason = "client_sendData_false:$target"
+                            } catch (bleClientEx: Exception) {
+                                Timber.w(bleClientEx, "BLE client send failed for $target")
+                                lastFailureReason = "client_exception:${bleClientEx.message ?: "unknown"}"
+                            }
+                        }
+
+                        if (bleServer != null) {
+                            try {
+                                if (bleServer.sendData(target, encryptedData)) {
+                                    Timber.i("✓ Delivery via BLE server notify (target=$target)")
+                                    logDeliveryAttempt(
+                                        messageId = traceMessageId,
+                                        medium = "ble",
+                                        phase = "smart_router",
+                                        outcome = "accepted",
+                                        detail = "ctx=$attemptContext role=peripheral requested_target=$bleAddr target=$target"
+                                    )
+                                    return@attemptDelivery true
+                                }
+                                lastFailureReason = "server_sendData_false:$target"
+                            } catch (bleServerEx: Exception) {
+                                Timber.w(bleServerEx, "BLE server send failed for $target")
+                                lastFailureReason = "server_exception:${bleServerEx.message ?: "unknown"}"
+                            }
+                        }
+                    }
+                    false
+                },
+                tryCore = { corePeerId ->
+                    // Core transport attempt (libp2p/internet relay)
+                    val bridge = swarmBridge ?: run {
+                        logDeliveryAttempt(
+                            messageId = traceMessageId,
+                            medium = "core",
+                            phase = "smart_router",
+                            outcome = "failed",
+                            detail = "ctx=$attemptContext reason=swarm_bridge_unavailable"
+                        )
+                        return@attemptDelivery false
+                    }
+                    
+                    val liveRouteHints = getDialHintsForRoutePeer(corePeerId)
+                    val dialCandidates = buildDialCandidatesForPeer(
+                        routePeerId = corePeerId,
+                        rawAddresses = listeners + liveRouteHints,
+                        includeRelayCircuits = true
+                    )
+                    if (dialCandidates.isNotEmpty()) {
+                        connectToPeer(corePeerId, dialCandidates)
+                        val connected = awaitPeerConnection(corePeerId, timeoutMs = 2000L)
+                        Timber.d("🔀 Transport: route=$corePeerId connected=$connected timeout=2000ms")
+                    }
+                    
+                    val attemptStart = System.currentTimeMillis()
+                    val directError = bridge.sendMessageStatus(
+                        corePeerId,
+                        encryptedData,
+                        recipientIdentityId,
+                        intendedDeviceId
+                    )
+                    
+                    if (directError == null) {
+                        logDeliveryAttempt(
+                            messageId = traceMessageId,
+                            medium = "core",
+                            phase = "smart_router",
                             outcome = "success",
-                            detail = "ctx=$attemptContext target=$wifiId"
+                            detail = "ctx=$attemptContext route=$corePeerId"
                         )
                         true
                     } else {
-                        Timber.d("tryWifiDelivery: wifiTransportManager.sendData returned false for $wifiId")
+                        logDeliveryAttempt(
+                            messageId = traceMessageId,
+                            medium = "core",
+                            phase = "smart_router",
+                            outcome = "failed",
+                            detail = "ctx=$attemptContext route=$corePeerId reason=$directError"
+                        )
+                        false
+                    }
+                }
+            )
+        } else {
+            // Fallback to legacy LocalTransportFallback if router not available
+            val localFallback = Companion.attemptWifiThenBleFallback(
+                wifiPeerId = if (strictBleOnly) null else wifiPeerId,
+                blePeerId = effectiveBlePeerId,
+                tryWifi = { wifiId ->
+                    val wifi = wifiTransportManager ?: run {
+                        Timber.d("tryWifiDelivery: wifiTransportManager is null, returning false")
+                        return@attemptWifiThenBleFallback false
+                    }
+                    try {
+                        if (wifi.sendData(wifiId, encryptedData)) {
+                            Timber.i("✓ Delivery via WiFi Direct (target=$wifiId)")
+                            logDeliveryAttempt(
+                                messageId = traceMessageId,
+                                medium = "wifi-direct",
+                                phase = "local_fallback",
+                                outcome = "success",
+                                detail = "ctx=$attemptContext target=$wifiId"
+                            )
+                            true
+                        } else {
+                            Timber.d("tryWifiDelivery: wifiTransportManager.sendData returned false for $wifiId")
+                            logDeliveryAttempt(
+                                messageId = traceMessageId,
+                                medium = "wifi-direct",
+                                phase = "local_fallback",
+                                outcome = "failed",
+                                detail = "ctx=$attemptContext target=$wifiId reason=sendData_false"
+                            )
+                            false
+                        }
+                    } catch (wifiEx: Exception) {
+                        Timber.w(wifiEx, "WiFi send failed for $wifiId")
                         logDeliveryAttempt(
                             messageId = traceMessageId,
                             medium = "wifi-direct",
                             phase = "local_fallback",
                             outcome = "failed",
-                            detail = "ctx=$attemptContext target=$wifiId reason=sendData_false"
+                            detail = "ctx=$attemptContext target=$wifiId reason=${wifiEx.message ?: "exception"}"
                         )
                         false
                     }
-                } catch (wifiEx: Exception) {
-                    Timber.w(wifiEx, "WiFi send failed for $wifiId")
-                    logDeliveryAttempt(
-                        messageId = traceMessageId,
-                        medium = "wifi-direct",
-                        phase = "local_fallback",
-                        outcome = "failed",
-                        detail = "ctx=$attemptContext target=$wifiId reason=${wifiEx.message ?: "exception"}"
-                    )
+                },
+                tryBle = { bleAddr ->
+                    val bleClient = bleGattClient
+                    val bleServer = bleGattServer
+                    if (bleClient == null && bleServer == null) {
+                        Timber.d("tryBleDelivery: both bleGattClient and bleGattServer are null, returning false")
+                        return@attemptWifiThenBleFallback false
+                    }
+
+                    // Fast-skip: if no BLE devices are connected and the requested
+                    // address is a cached hint (not actively connected), skip entirely
+                    // to avoid wasting time on stale MACs.
+                    if (bleAddr.isNullOrBlank() && connectedBleDevices.isEmpty()) {
+                        logDeliveryAttempt(
+                            messageId = traceMessageId,
+                            medium = "ble",
+                            phase = "local_fallback",
+                            outcome = "skipped",
+                            detail = "ctx=$attemptContext no_hint_and_no_connected_devices"
+                        )
+                        return@attemptWifiThenBleFallback false
+                    }
+
+                    val sendTargets = linkedSetOf(bleAddr).apply { addAll(connectedBleDevices) }
+                    var lastFailureReason = "no_target_attempted"
+
+                    for (target in sendTargets) {
+                        if (bleClient != null) {
+                            try {
+                                if (bleClient.sendData(target, encryptedData)) {
+                                    Timber.i("✓ Delivery via BLE client (target=$target)")
+                                    logDeliveryAttempt(
+                                        messageId = traceMessageId,
+                                        medium = "ble",
+                                        phase = "local_fallback",
+                                        outcome = "accepted",
+                                        detail = "ctx=$attemptContext role=central requested_target=$bleAddr target=$target"
+                                    )
+                                    return@attemptWifiThenBleFallback true
+                                }
+                                lastFailureReason = "client_sendData_false:$target"
+                            } catch (bleClientEx: Exception) {
+                                Timber.w(bleClientEx, "BLE client send failed for $target")
+                                lastFailureReason = "client_exception:${bleClientEx.message ?: "unknown"}"
+                            }
+                        }
+
+                        if (bleServer != null) {
+                            try {
+                                if (bleServer.sendData(target, encryptedData)) {
+                                    Timber.i("✓ Delivery via BLE server notify (target=$target)")
+                                    logDeliveryAttempt(
+                                        messageId = traceMessageId,
+                                        medium = "ble",
+                                        phase = "local_fallback",
+                                        outcome = "accepted",
+                                        detail = "ctx=$attemptContext role=peripheral requested_target=$bleAddr target=$target"
+                                    )
+                                    return@attemptWifiThenBleFallback true
+                                }
+                                lastFailureReason = "server_sendData_false:$target"
+                            } catch (bleServerEx: Exception) {
+                                Timber.w(bleServerEx, "BLE server send failed for $target")
+                                lastFailureReason = "server_exception:${bleServerEx.message ?: "unknown"}"
+                            }
+                        }
+                    }
                     false
                 }
-            },
-            tryBle = { bleAddr ->
-                val bleClient = bleGattClient
-                val bleServer = bleGattServer
-                if (bleClient == null && bleServer == null) {
-                    Timber.d("tryBleDelivery: both bleGattClient and bleGattServer are null, returning false")
-                    return@attemptWifiThenBleFallback false
-                }
-
-                // Fast-skip: if no BLE devices are connected and the requested
-                // address is a cached hint (not actively connected), skip entirely
-                // to avoid wasting time on stale MACs.
-                if (bleAddr.isNullOrBlank() && connectedBleDevices.isEmpty()) {
-                    logDeliveryAttempt(
-                        messageId = traceMessageId,
-                        medium = "ble",
-                        phase = "local_fallback",
-                        outcome = "skipped",
-                        detail = "ctx=$attemptContext no_hint_and_no_connected_devices"
-                    )
-                    return@attemptWifiThenBleFallback false
-                }
-
-                val sendTargets = linkedSetOf(bleAddr).apply { addAll(connectedBleDevices) }
-                var lastFailureReason = "no_target_attempted"
-
-                for (target in sendTargets) {
-                    if (bleClient != null) {
-                        try {
-                            if (bleClient.sendData(target, encryptedData)) {
-                                Timber.i("✓ Delivery via BLE client (target=$target)")
-                                logDeliveryAttempt(
-                                    messageId = traceMessageId,
-                                    medium = "ble",
-                                    phase = "local_fallback",
-                                    outcome = "accepted",
-                                    detail = "ctx=$attemptContext role=central requested_target=$bleAddr target=$target"
-                                )
-                                return@attemptWifiThenBleFallback true
-                            }
-                            lastFailureReason = "client_sendData_false:$target"
-                        } catch (bleClientEx: Exception) {
-                            Timber.w(bleClientEx, "BLE client send failed for $target")
-                            lastFailureReason = "client_exception:${bleClientEx.message ?: "unknown"}"
-                        }
-                    }
-
-                    if (bleServer != null) {
-                        try {
-                            if (bleServer.sendData(target, encryptedData)) {
-                                Timber.i("✓ Delivery via BLE server notify (target=$target)")
-                                logDeliveryAttempt(
-                                    messageId = traceMessageId,
-                                    medium = "ble",
-                                    phase = "local_fallback",
-                                    outcome = "accepted",
-                                    detail = "ctx=$attemptContext role=peripheral requested_target=$bleAddr target=$target"
-                                )
-                                return@attemptWifiThenBleFallback true
-                            }
-                            lastFailureReason = "server_sendData_false:$target"
-                        } catch (bleServerEx: Exception) {
-                            Timber.w(bleServerEx, "BLE server send failed for $target")
-                            lastFailureReason = "server_exception:${bleServerEx.message ?: "unknown"}"
-                        }
-                    }
-                }
-                false
-            }
-        )
-        val localAcked = localFallback.acked
+            )
+            com.scmessenger.android.transport.SmartTransportRouter.TransportDeliveryResult(
+                transport = if (localFallback.acked) {
+                    if (localFallback.wifiAcked) com.scmessenger.android.transport.SmartTransportRouter.TransportType.WIFI_DIRECT
+                    else com.scmessenger.android.transport.SmartTransportRouter.TransportType.BLE
+                } else com.scmessenger.android.transport.SmartTransportRouter.TransportType.CORE,
+                success = localFallback.acked,
+                latencyMs = 0,
+                error = if (localFallback.acked) null else "legacy_fallback_failed"
+            )
+        }
+        
+        val localAcked = smartResult.success
 
         if (strictBleOnly) {
             logDeliveryAttempt(
@@ -4574,6 +4823,39 @@ open class MeshRepository(private val context: Context) {
         }
 
         return components.filter { it.isNotEmpty() }.joinToString(";")
+    }
+
+    /**
+     * Merge routing notes from two contacts, preserving all unique hints.
+     * Used during ID coalescence to avoid losing routing information.
+     */
+    private fun mergeNotes(existing: String?, incoming: String?): String? {
+        if (existing.isNullOrBlank()) return incoming
+        if (incoming.isNullOrBlank()) return existing
+        
+        val existingComponents = existing.split(';', '\n').map { it.trim() }.filter { it.isNotEmpty() }
+        val incomingComponents = incoming.split(';', '\n').map { it.trim() }.filter { it.isNotEmpty() }
+        
+        // Build a map of key:value pairs, preferring existing values
+        val merged = mutableMapOf<String, String>()
+        for (component in existingComponents) {
+            val colonIndex = component.indexOf(':')
+            if (colonIndex > 0) {
+                merged[component.substring(0, colonIndex)] = component
+            } else {
+                merged[component] = component
+            }
+        }
+        // Add incoming components that don't conflict
+        for (component in incomingComponents) {
+            val colonIndex = component.indexOf(':')
+            val key = if (colonIndex > 0) component.substring(0, colonIndex) else component
+            if (key !in merged) {
+                merged[key] = component
+            }
+        }
+        
+        return merged.values.filter { it.isNotEmpty() }.joinToString(";").ifEmpty { null }
     }
 
     private fun resolveTransportIdentity(libp2pPeerId: String): TransportIdentityResolution? {
@@ -5525,10 +5807,14 @@ open class MeshRepository(private val context: Context) {
         outcome: String,
         detail: String
     ) {
-        val msg = messageId?.takeIf { it.isNotBlank() } ?: "unknown"
+        val msg = messageId?.takeIf { it.isNotBlank() }
+        if (msg == null) {
+            Timber.w("delivery_attempt msg=unknown (messageId was null or blank) medium=%s phase=%s outcome=%s detail=%s",
+                medium, phase, outcome, detail)
+        }
         Timber.i(
             "delivery_attempt msg=%s medium=%s phase=%s outcome=%s detail=%s",
-            msg,
+            msg ?: "unknown",
             medium,
             phase,
             outcome,
@@ -5558,12 +5844,31 @@ open class MeshRepository(private val context: Context) {
 
                     val existingCanonical = try { contacts.get(identityId) } catch (e: Exception) { null }
                     if (existingCanonical == null) {
+                        // No existing canonical contact - create one with the identity ID
                         try {
                             contacts.add(contact.copy(peerId = identityId))
                         } catch (e: Exception) {
                             Timber.w("Failed to create canonical contact $identityId")
                         }
+                    } else {
+                        // Canonical contact already exists - merge data from old contact
+                        val merged = existingCanonical.copy(
+                            nickname = existingCanonical.nickname ?: contact.nickname,
+                            localNickname = existingCanonical.localNickname ?: contact.localNickname,
+                            lastSeen = maxOf(existingCanonical.lastSeen ?: 0u, contact.lastSeen ?: 0u),
+                            notes = mergeNotes(existingCanonical.notes, contact.notes),
+                            lastKnownDeviceId = existingCanonical.lastKnownDeviceId ?: contact.lastKnownDeviceId
+                        )
+                        if (merged != existingCanonical) {
+                            try {
+                                contacts.add(merged)
+                                Timber.i("Merged contact data from ${contact.peerId} into $identityId")
+                            } catch (e: Exception) {
+                                Timber.w("Failed to merge contact data: ${e.message}")
+                            }
+                        }
                     }
+                    // Only remove old contact after successful merge/creation
                     try { contacts.remove(contact.peerId) } catch (e: Exception) { }
                 }
             }

@@ -83,8 +83,8 @@ struct MeshDashboardView: View {
         }
         .navigationTitle("Mesh Dashboard")
         .task {
-            loadDashboardData()
-            refreshPeersFromRepository()
+            await loadDashboardDataAsync()
+            await refreshPeersFromRepositoryAsync()
         }
         .onReceive(MeshEventBus.shared.statusEvents) { event in
             if case .statsUpdated(let updatedStats) = event {
@@ -96,13 +96,24 @@ struct MeshDashboardView: View {
         }
     }
 
-    private func loadDashboardData() {
-        repository.updateStats()
-        stats = repository.serviceStats
+    private func loadDashboardDataAsync() async {
+        await Task.detached {
+            self.repository.updateStats()
+            let updatedStats = self.repository.serviceStats
+            await MainActor.run {
+                self.stats = updatedStats
+            }
+        }.value
     }
 
-    private func refreshPeersFromRepository() {
-        let contacts = (try? repository.getContacts()) ?? []
+    private func refreshPeersFromRepositoryAsync() async {
+        await Task.detached(priority: .userInitiated) {
+            let contacts: [Contact]
+            do {
+                contacts = try await MainActor.run { try self.repository.getContacts() }
+            } catch {
+                contacts = []
+            }
         let contactsByPeerId = Dictionary(uniqueKeysWithValues: contacts.map { ($0.peerId, $0) })
         var contactsByRoutePeerId: [String: Contact] = [:]
         var contactsByPublicKey: [String: Contact] = [:]
@@ -225,7 +236,11 @@ struct MeshDashboardView: View {
             }
         }
 
-        peersByKey = deduplicatePeersByIdentityAndAliases(Array(merged.values))
+            let deduped = self.deduplicatePeersByIdentityAndAliases(Array(merged.values))
+            await MainActor.run {
+                self.peersByKey = deduped
+            }
+        }.value
     }
 
     private func handlePeerEvent(_ event: MeshEventBus.PeerEvent) {
@@ -338,7 +353,7 @@ struct MeshDashboardView: View {
 
         if localNickname == nil {
             // Trigger a re-sync with contacts to ensure canonical identity merges happen correctly
-            refreshPeersFromRepository()
+            Task { await refreshPeersFromRepositoryAsync() }
         }
     }
 

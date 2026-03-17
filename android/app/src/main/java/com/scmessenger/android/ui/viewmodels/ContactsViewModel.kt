@@ -11,6 +11,8 @@ import com.scmessenger.android.utils.parseContactImportPayload
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -41,6 +43,10 @@ class ContactsViewModel @Inject constructor(
     // Peers should be removed promptly after disconnect to avoid confusing UX
     private val nearbyDisconnectGraceMs = 5_000L
     private val pendingNearbyRemovalJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
+    
+    // Debounce mechanism for nickname updates (NICKNAME-CRASH-001)
+    private val nicknameDebounceMs = 500L
+    private val pendingNicknameJobs = mutableMapOf<String, Job>()
 
     // All contacts
     private val _contacts = MutableStateFlow<List<uniffi.api.Contact>>(emptyList())
@@ -469,18 +475,35 @@ class ContactsViewModel @Inject constructor(
     }
 
     /**
-     * Update contact nickname.
+     * Update contact nickname with debouncing to prevent crashes from rapid updates.
+     *
+     * Implements debounced updates (NICKNAME-CRASH-001) - waits for user to finish
+     * typing before propagating nickname changes to prevent real-time character-by-character
+     * propagation that causes crashes.
      */
     fun setLocalNickname(peerId: String, nickname: String?) {
-        viewModelScope.launch {
+        // Cancel any pending nickname update for this peer
+        pendingNicknameJobs[peerId]?.cancel()
+        
+        // Launch a new debounced update
+        pendingNicknameJobs[peerId] = viewModelScope.launch {
             try {
+                // Wait for debounce period before syncing
+                delay(nicknameDebounceMs)
+                
                 meshRepository.setLocalNickname(peerId, nickname)
                 loadContacts()
 
-                Timber.d("Local nickname updated for $peerId")
+                Timber.d("Local nickname updated for $peerId (debounced)")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Expected when user continues typing - don't log as error
+                Timber.d("Nickname update cancelled for $peerId (user still typing)")
             } catch (e: Exception) {
                 _error.value = "Failed to update local nickname: ${e.message}"
                 Timber.e(e, "Failed to update local nickname")
+            } finally {
+                // Clean up the job reference
+                pendingNicknameJobs.remove(peerId)
             }
         }
     }
@@ -552,6 +575,8 @@ class ContactsViewModel @Inject constructor(
     override fun onCleared() {
         pendingNearbyRemovalJobs.values.forEach { it.cancel() }
         pendingNearbyRemovalJobs.clear()
+        pendingNicknameJobs.values.forEach { it.cancel() }
+        pendingNicknameJobs.clear()
         super.onCleared()
     }
 }

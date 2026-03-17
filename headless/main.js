@@ -1,6 +1,8 @@
 /**
  * SCMessenger Headless Node
  * Minimal JS to drive the libp2p swarm in the browser.
+ *
+ * WS14: Includes browser notification support with DM vs DM Request classification.
  */
 
 const DEFAULT_BOOTSTRAP_NODES = [
@@ -39,6 +41,117 @@ const UI = {
   },
 };
 
+/**
+ * WS14: Browser notification helper for WASM.
+ * Uses the Notification API with DM vs DM Request classification.
+ */
+const NotificationHelper = {
+  permissionGranted: false,
+  settings: {
+    notificationsEnabled: true,
+    notifyDmEnabled: true,
+    notifyDmRequestEnabled: true,
+    notifyDmInForeground: false,
+    notifyDmRequestInForeground: true,
+    soundEnabled: true,
+    badgeEnabled: true,
+  },
+
+  async requestPermission() {
+    if (!("Notification" in window)) {
+      console.warn("Browser does not support notifications");
+      return false;
+    }
+    if (Notification.permission === "granted") {
+      this.permissionGranted = true;
+      return true;
+    }
+    if (Notification.permission !== "denied") {
+      const permission = await Notification.requestPermission();
+      this.permissionGranted = permission === "granted";
+      return this.permissionGranted;
+    }
+    return false;
+  },
+
+  /**
+   * Show a browser notification based on classification.
+   * @param {Object} decision - NotificationDecision from classifyNotification
+   * @param {string} content - Message content
+   * @param {string} nickname - Sender nickname
+   */
+  showNotification(decision, content, nickname) {
+    if (!this.permissionGranted) {
+      console.warn("Notification permission not granted");
+      return;
+    }
+
+    if (!this.settings.notificationsEnabled) {
+      return;
+    }
+
+    // Check per-kind settings
+    if (decision.kind === "directMessage" && !this.settings.notifyDmEnabled) {
+      return;
+    }
+    if (decision.kind === "directMessageRequest" && !this.settings.notifyDmRequestEnabled) {
+      return;
+    }
+
+    if (!decision.should_alert) {
+      console.log(`Notification suppressed: ${decision.suppression_reason}`);
+      return;
+    }
+
+    const displayName = nickname || decision.sender_peer_id.substring(0, 8);
+    const isRequest = decision.kind === "directMessageRequest";
+    
+    const title = isRequest ? `Message Request from ${displayName}` : `Message from ${displayName}`;
+    const options = {
+      body: content,
+      icon: "/icon-192.png",
+      badge: "/badge-72.png",
+      tag: decision.message_id,
+      renotify: true,
+      data: {
+        conversationId: decision.conversation_id,
+        senderPeerId: decision.sender_peer_id,
+        messageId: decision.message_id,
+        isRequest: isRequest,
+      },
+    };
+
+    if (this.settings.soundEnabled) {
+      options.silent = false;
+    }
+
+    const notification = new Notification(title, options);
+
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+      
+      // Route based on classification
+      if (isRequest) {
+        // Navigate to requests inbox
+        console.log(`Navigate to requests inbox for ${decision.sender_peer_id}`);
+        // In production: window.location.hash = `#requests?sender=${decision.sender_peer_id}`;
+      } else {
+        // Navigate to conversation
+        console.log(`Navigate to conversation ${decision.conversation_id}`);
+        // In production: window.location.hash = `#chat/${decision.conversation_id}`;
+      }
+    };
+
+    console.log(`WS14: ${isRequest ? "DM Request" : "DM"} notification shown for ${displayName}`);
+  },
+
+  updateSettings(newSettings) {
+    this.settings = { ...this.settings, ...newSettings };
+    console.log("Notification settings updated:", this.settings);
+  },
+};
+
 async function init() {
   UI.addLog("Initializing headless node...");
 
@@ -69,6 +182,15 @@ async function init() {
     core.start();
     UI.addLog("Core started.");
 
+    // WS14: Request notification permission
+    UI.addLog("Requesting notification permission...");
+    await NotificationHelper.requestPermission();
+    if (NotificationHelper.permissionGranted) {
+      UI.addLog("Notification permission granted.");
+    } else {
+      UI.addLog("Notification permission denied or not supported.");
+    }
+
     // 3. Get Identity
     const identity = core.getIdentityInfo();
     UI.setPeerId(identity.peerId);
@@ -89,6 +211,39 @@ async function init() {
     await core.startSwarm(bootstrapAddrs);
     UI.updateStatus("Active in Mesh", true);
     UI.addLog("Swarm active.");
+
+    // WS14: Set up message notification listener
+    // In production, this would be driven by incoming message events
+    // For now, expose a global function for testing
+    window.showTestNotification = function(senderPeerId, messageId, content, nickname, isKnownContact, hasExistingConversation) {
+      const messageContext = {
+        conversation_id: null,
+        sender_peer_id: senderPeerId,
+        message_id: messageId,
+        explicit_dm_request: null,
+        sender_is_known_contact: isKnownContact || false,
+        has_existing_conversation: hasExistingConversation || false,
+        is_self_originated: false,
+        is_duplicate: false,
+        already_seen: false,
+        is_blocked: false,
+      };
+
+      const uiState = {
+        app_in_foreground: document.hasFocus(),
+        active_conversation_id: null,
+      };
+
+      try {
+        const decision = core.classifyNotification(messageContext, uiState);
+        NotificationHelper.showNotification(decision, content, nickname);
+        UI.addLog(`Notification classified as: ${decision.kind}`);
+      } catch (err) {
+        console.error("Notification classification failed:", err);
+      }
+    };
+
+    UI.addLog("WS14: Notification system ready. Use window.showTestNotification() to test.");
 
     // 5. Polling Loop for Diagnostics
     setInterval(async () => {

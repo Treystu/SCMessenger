@@ -1,8 +1,16 @@
-> **Component Status Notice (2026-02-23)**
+> **Component Status Notice (2026-03-16)**
 > This document contains mixed current and historical components; do not classify the entire file as deprecated.
 > Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
 > If a section has no marker, treat it as `[Needs Revalidation]`.
 > Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+
+## [Current] GCP Node Status (2026-03-16)
+
+- **VM**: `scmessenger-bootstrap` in `us-central1-a` — **RUNNING**
+- **Container**: `scmessenger-relay` — **HEALTHY** (ports 9000-9001 exposed)
+- **Image**: `us-central1-docker.pkg.dev/scmessenger-bootstrapnode/scmessenger-repo/scmessenger-cli:latest`
+- **Peer ID**: `12D3KooWHdTdBQ1utHmLn1VAwhKoJvh54oo3xDvaJkcgGNowqouc`
+- **External IP**: `34.135.34.73` (ephemeral)
 
 ## [Current] Section Action Outcome (2026-02-23)
 
@@ -55,38 +63,56 @@ gcloud artifacts repositories create scmessenger-repo \
 gcloud auth configure-docker us-central1-docker.pkg.dev
 ```
 
-## [Needs Revalidation] 3. Build & Deploy
+## [Current] 3. Build & Deploy
 
-You can run this sequence every time you want to update the app.
+You can run this sequence every time you want to update the GCP relay node.
 
 ```bash
+# Option 1: Use the deploy script (recommended)
+./scripts/deploy_gcp_node.sh
+
+# Option 2: Manual steps
 # Variables
 export PROJECT_ID=$(gcloud config get-value project)
 export REGION="us-central1"
-export IMAGE_TAG="us-central1-docker.pkg.dev/$PROJECT_ID/scmessenger-repo/scmessenger:latest"
+export IMAGE_TAG="us-central1-docker.pkg.dev/$PROJECT_ID/scmessenger-repo/scmessenger-cli:latest"
 
 # 1. Build the image for Cloud Run (Linux x86_64)
-# We use --platform linux/amd64 to ensure compatibility even if building from a Mac M1/M2
 docker build --platform linux/amd64 -f docker/Dockerfile -t $IMAGE_TAG .
 
 # 2. Push to Artifact Registry
 docker push $IMAGE_TAG
 
-# 3. Deploy to Cloud Run
-gcloud run deploy scmessenger-service \
-    --image $IMAGE_TAG \
-    --region $REGION \
-    --platform managed \
-    --allow-unauthenticated \
-    --port 8080 \
-    --session-affinity  # Recommended for WebSockets to stick to one instance
+# 3. Update container on GCP Compute Instance
+gcloud compute ssh scmessenger-bootstrap --zone=us-central1-a --tunnel-through-iap --command="
+    sudo docker stop scmessenger-relay 2>/dev/null || true
+    sudo docker rm scmessenger-relay 2>/dev/null || true
+    sudo docker run -d --restart=unless-stopped \
+        --name scmessenger-relay \
+        -p 9001:9001 \
+        -p 9000:9000 \
+        $IMAGE_TAG \
+        scm relay --listen /ip4/0.0.0.0/tcp/9001 --http-port 9000
+"
 ```
 
-## [Needs Revalidation] 4. Verify
+## [Current] 4. Verify
 
-After deployment, GCP will output a URL (e.g., `https://scmessenger-service-xyz.a.run.app`).
+After deployment, verify the node is running:
 
-1. Open that URL in your browser.
-2. The UI should load.
-3. Open the **Browser Console** (F12) to verify the WebSocket connection:
-   - It should connect to `wss://scmessenger-service-xyz.a.run.app/ws`.
+```bash
+# Test GCP node connectivity
+./scripts/test_gcp_node.sh
+
+# Or manually check via gcloud
+gcloud compute ssh scmessenger-bootstrap --zone=us-central1-a --tunnel-through-iap --command="sudo docker ps --format 'table {{.ID}}\t{{.Status}}\t{{.Ports}}'"
+```
+
+The node should show:
+- Status: `Up X seconds/minutes`
+- Ports: `0.0.0.0:9000-9001->9000-9001/tcp`
+
+To view logs:
+```bash
+gcloud compute ssh scmessenger-bootstrap --zone=us-central1-a --tunnel-through-iap --command="sudo docker logs --tail 50 scmessenger-relay"
+```

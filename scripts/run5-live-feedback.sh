@@ -179,7 +179,7 @@ collect_android_diagnostics() {
   # delivery markers so convergence/ordering verifiers still have signal.
   local raw_logcat="$out_file.raw.logcat"
   if adb -s "$serial" logcat -d -v time > "$raw_logcat" 2>> "$stderr_file"; then
-    rg -i "delivery_state|delivery_attempt|Receipt for|msg_rx|msg_rx_processed|delivery_receipt" "$raw_logcat" > "$out_file" || true
+    grep -Ei "delivery_state|delivery_attempt|Receipt for|msg_rx|msg_rx_processed|delivery_receipt" "$raw_logcat" > "$out_file" || true
     rm -f "$raw_logcat"
     if [ -s "$out_file" ]; then
       return 0
@@ -428,8 +428,8 @@ error_scan_gate() {
   local out_file="$2"
 
   local ios_hits android_hits
-  ios_hits=$(rg -n -c -i "SIGTRAP|EXC_BREAKPOINT|cpu_resource_fatal|fatal error|assertion failed" "$logdir/ios-device.log" 2>/dev/null || true)
-  android_hits=$(rg -n -c -i "FATAL EXCEPTION|java\.lang\.NullPointerException|java\.lang\.IllegalStateException" "$logdir/android.log" 2>/dev/null || true)
+  ios_hits=$(grep -Eci "SIGTRAP|EXC_BREAKPOINT|cpu_resource_fatal|fatal error|assertion failed" "$logdir/ios-device.log" 2>/dev/null || true)
+  android_hits=$(grep -Eci "FATAL EXCEPTION|java\.lang\.NullPointerException|java\.lang\.IllegalStateException" "$logdir/android.log" 2>/dev/null || true)
 
   ios_hits=$(echo "${ios_hits:-0}" | awk -F: '{sum += $NF} END {print sum + 0}')
   android_hits=$(echo "${android_hits:-0}" | awk -F: '{sum += $NF} END {print sum + 0}')
@@ -512,7 +512,6 @@ run_verifier() {
 phase "Preflight"
 require_cmd bash
 require_cmd python3
-require_cmd rg
 require_cmd awk
 require_cmd sed
 

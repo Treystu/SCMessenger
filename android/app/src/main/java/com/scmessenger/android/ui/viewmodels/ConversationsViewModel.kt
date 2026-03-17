@@ -299,11 +299,29 @@ class ConversationsViewModel @Inject constructor(
 
     /**
      * Get contact info for a peer (for displaying nickname).
+     * Tries multiple lookup strategies to handle ID format mismatches:
+     * 1. Direct lookup by peerId (canonicalized)
+     * 2. Lookup by libp2p peer ID from discovered peers
      */
     fun getContactForPeer(peerId: String): uniffi.api.Contact? {
         return try {
-            meshRepository.getContact(peerId)
+            // Strategy 1: Direct lookup (handles canonical ID resolution)
+            val directLookup = meshRepository.getContact(peerId)
+            if (directLookup != null) return directLookup
+            
+            // Strategy 2: Try looking up by libp2p peer ID from discovered peers
+            val discoveredPeers = meshRepository.discoveredPeers.value
+            val discovered = discoveredPeers.entries.firstOrNull { (key, info) ->
+                PeerIdValidator.isSame(key, peerId) ||
+                    info.peerId.equals(peerId, ignoreCase = true)
+            }?.value
+            
+            // Try libp2p peer ID if available
+            discovered?.libp2pPeerId?.let { libp2pId ->
+                meshRepository.getContact(libp2pId)
+            }
         } catch (e: Exception) {
+            Timber.d("Failed to get contact for peer $peerId: ${e.message}")
             null
         }
     }

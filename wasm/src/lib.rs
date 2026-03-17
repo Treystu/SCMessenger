@@ -69,6 +69,36 @@ impl Default for MeshSettings {
     }
 }
 
+impl From<MeshSettings> for scmessenger_core::MeshSettings {
+    fn from(wasm: MeshSettings) -> Self {
+        scmessenger_core::MeshSettings {
+            relay_enabled: wasm.relay_enabled,
+            max_relay_budget: wasm.max_relay_budget,
+            battery_floor: wasm.battery_floor,
+            ble_enabled: wasm.ble_enabled,
+            wifi_aware_enabled: wasm.wifi_aware_enabled,
+            wifi_direct_enabled: wasm.wifi_direct_enabled,
+            internet_enabled: wasm.internet_enabled,
+            discovery_mode: match wasm.discovery_mode {
+                DiscoveryMode::Normal => scmessenger_core::DiscoveryMode::Normal,
+                DiscoveryMode::Cautious => scmessenger_core::DiscoveryMode::Cautious,
+                DiscoveryMode::Paranoid => scmessenger_core::DiscoveryMode::Paranoid,
+            },
+            onion_routing: wasm.onion_routing,
+            cover_traffic_enabled: wasm.cover_traffic_enabled,
+            message_padding_enabled: wasm.message_padding_enabled,
+            timing_obfuscation_enabled: wasm.timing_obfuscation_enabled,
+            notifications_enabled: wasm.notifications_enabled,
+            notify_dm_enabled: wasm.notify_dm_enabled,
+            notify_dm_request_enabled: wasm.notify_dm_request_enabled,
+            notify_dm_in_foreground: wasm.notify_dm_in_foreground,
+            notify_dm_request_in_foreground: wasm.notify_dm_request_in_foreground,
+            sound_enabled: wasm.sound_enabled,
+            badge_enabled: wasm.badge_enabled,
+        }
+    }
+}
+
 pub struct MeshSettingsManager {
     storage_path: String,
 }
@@ -563,7 +593,7 @@ impl IronCore {
             .map_err(|e| js_value_from_str(&format!("Invalid notification message: {}", e)))?;
         let ui_state: WasmNotificationUiState = serde_wasm_bindgen::from_value(js_ui_state)
             .map_err(|e| js_value_from_str(&format!("Invalid notification UI state: {}", e)))?;
-        let settings = self.settings.lock().clone();
+        let settings: scmessenger_core::MeshSettings = self.settings.lock().clone().into();
         let decision = self.inner.classify_notification(message.into(), ui_state.into(), settings);
         serde_wasm_bindgen::to_value(&WasmNotificationDecision::from(decision))
             .map_err(|e| js_value_from_str(&format!("Failed to serialize decision: {}", e)))

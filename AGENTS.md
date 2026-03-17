@@ -54,3 +54,21 @@ Always include a short documentation-sync summary:
 
 1. Which docs were updated, or
 2. Why no documentation updates were needed.
+
+## Estimation Rules
+
+**BANNED: Time-based estimates are strictly prohibited.**
+
+Do NOT use:
+- "2 hours", "30 minutes", "~1 hour"
+- "Estimated effort: X hours"
+- Any time-based duration estimates
+
+**ALLOWED: Lines of Code (LOC) estimates only.**
+
+Use LOC-based estimates like:
+- "~50 LOC change"
+- "~200 LOC across 3 files"
+- "Single function modification (~30 LOC)"
+
+Rationale: Time estimates are unreliable and vary by developer experience. LOC provides a concrete measure of code change scope.

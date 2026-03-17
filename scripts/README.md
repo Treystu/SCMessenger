@@ -1,62 +1,181 @@
 # SCMessenger Scripts Guide
 
 Status: Active
-Last updated: 2026-03-13
+Last updated: 2026-03-16
 
 This guide covers active launch/debug/verification scripts, with a focus on AI-assisted debugging workflows.
 
+## Testing Hierarchy
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          TESTING PYRAMID                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Level 4: Full Mesh Integration (run5.sh)                                  │
+│    └── 5-node live topology: GCP + OSX + Android + iOS Device + iOS Sim   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Level 3: Live Verification Loop (run5-live-feedback.sh)                   │
+│    └── Iterative build/deploy + run5 + verifier gates                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Level 2: Platform Smoke Tests (live-smoke.sh, verify_ws12_matrix.sh)      │
+│    └── Android+iOS runtime checks, WS12 parity validation                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Level 1: Unit/Integration Tests (cargo test --workspace)                  │
+│    └── Core crypto, transport, receipts, offline/partition matrices        │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
 ## Fast Start By Goal
 
-1. Full WS12 baseline sanity:
-   - `./scripts/verify_ws12_matrix.sh`
-2. Live Android+iOS runtime smoke with logs:
-   - `./scripts/live-smoke.sh`
-3. Relay flap diagnosis:
-   - `./scripts/correlate_relay_flap_windows.sh`
-   - `./scripts/verify_relay_flap_regression.sh <ios_diagnostics_log>`
-4. Delivery/receipt convergence diagnosis:
-   - `./scripts/verify_receipt_convergence.sh <android_log> <ios_log>`
-5. BLE-only pairing diagnosis:
-   - `./scripts/verify_ble_only_pairing.sh <android_log> <ios_log>`
-6. Interop/function completeness matrix refresh:
-   - `./scripts/generate_interop_matrix.sh`
-7. Live 5-node step-gated feedback loop (build/deploy + pair-matrix gating):
-   - `./scripts/run5-live-feedback.sh --step=<fix-id> --time=5 --attempts=3`
+| Goal | Command |
+|------|---------|
+| Full WS12 baseline sanity | `./scripts/verify_ws12_matrix.sh` |
+| Live 5-node mesh capture | `./run5.sh --time=5` |
+| Live 5-node with strict gates | `./scripts/run5-live-feedback.sh --step=<id> --time=5` |
+| Live Android+iOS smoke | `./scripts/live-smoke.sh` |
+| Relay flap diagnosis | `./scripts/correlate_relay_flap_windows.sh` |
+| Delivery convergence check | `./scripts/verify_receipt_convergence.sh <android_log> <ios_log>` |
+| BLE-only pairing diagnosis | `./scripts/verify_ble_only_pairing.sh <android_log> <ios_log>` |
+| Interop matrix refresh | `./scripts/generate_interop_matrix.sh` |
 
 ## 5-Node / Multi-Node Debug Stack
 
-Primary scripts used during 5-node and relay continuity investigations:
+### Primary: `run5.sh` (Unified 5-Node Harness)
 
-1. `run5.sh`
-   - Baseline 5-node capture harness for live topology, transport, and visibility context.
-   - Physical iOS runs now write:
-     - app console / SCMessenger stdout to `ios-device.log`,
-     - host/system Bluetooth + Multipeer context to `ios-device-system.log`.
-   - If the physical iOS app is already running, `run5.sh` does not relaunch it just to capture console output; `ios-device.log` records that passive app-console capture is unavailable in that case.
-   - Post-run visibility now counts only peers whose local own IDs were actually captured in the current window; unknown own IDs are surfaced as collector gaps instead of mesh failures.
-   - Post-run transport evidence now surfaces BLE, direct, relay, WiFi/multipeer, and app-peer markers separately so operator conclusions do not depend on one blended score.
-2. `scripts/run5-live-feedback.sh`
-   - Iterative harness that keeps `run5.sh` untouched while enforcing strict phase gates per fix step:
-     - mobile build/deploy (optional),
-     - 5-node update/capture run,
-     - log-health gate,
-     - all-node pair matrix gate (directed visibility),
-     - deterministic verifier gates (`relay_flap`, `ble_only`, `receipt_convergence`, `delivery_state_monotonicity`).
-    - iOS diagnostics pull now requires retry-stable capture sizing before accepting `mesh_diagnostics.log` artifacts, reducing truncated-copy false positives.
-    - When `IOS_DIAG_PULL_ATTEMPTS=1`, a non-empty one-shot pull is accepted; when stability checks fail, the untrusted output file is removed before returning failure.
-   - Produces per-attempt evidence bundles under `logs/live-verify/`.
-3. `scripts/verify_ws12_matrix.sh`
-   - Canonical multi-surface verification gate (Rust + Android + iOS parity checks).
-4. `scripts/live-smoke.sh`
-   - Live interaction harness for Android+iOS runtime checks with synchronized log capture.
-5. `scripts/correlate_relay_flap_windows.sh`
-   - Correlates iOS relay churn windows with GCP relay logs.
-6. `scripts/verify_relay_flap_regression.sh`
-   - Deterministic iOS relay dial-loop regression check.
-7. `scripts/verify_receipt_convergence.sh`
-   - Message-ID convergence validation across Android/iOS diagnostics.
-8. `scripts/verify_ble_only_pairing.sh`
-   - BLE-only strict-mode behavior and instability checks.
+The canonical 5-node mesh test harness combining the best features from all variants:
+
+**Nodes:**
+1. GCP — headless relay (Docker on scmessenger-bootstrap)
+2. OSX — headless relay (local cargo binary)
+3. Android — full node (via adb)
+4. iOS Device — full node (physical device via devicectl)
+5. iOS Simulator — full node (simulator via simctl)
+
+**Usage:**
+```bash
+./run5.sh --time=5           # Run for 5 minutes (default)
+./run5.sh --time=10 --update # 10 minutes, rebuild headless nodes
+./run5.sh --restore-on-exit  # Stop nodes we launched on exit
+```
+
+**Key Features:**
+- `set -euo pipefail` for safe error handling
+- `--restore-on-exit` flag to control cleanup behavior
+- Passive log collection (never force-stops pre-existing apps)
+- Comprehensive post-run mesh analysis with transport evidence
+- Live status ticker showing peer discovery and relay activity
+- Timestamped logs preserved in `logs/5mesh/<timestamp>/`
+
+**Log Outputs:**
+- `gcp.log` — GCP relay docker logs (streamed via SSH)
+- `osx.log` — OSX relay stdout
+- `android.log` — Android logcat (filtered for mesh components)
+- `ios-device.log` — iOS app console output
+- `ios-device-system.log` — iOS system logs (BLE, Multipeer)
+- `ios-sim.log` — iOS simulator logs
+
+### Iterative: `scripts/run5-live-feedback.sh`
+
+Wraps `run5.sh` with strict phase gates for fix validation:
+
+```bash
+./scripts/run5-live-feedback.sh --step=fix-123 --time=5 --attempts=3
+```
+
+**Phase Gates:**
+1. Mobile build/deploy (optional, `--skip-mobile-deploy`)
+2. 5-node run with `--update`
+3. Log health gate (all logs present, minimum line counts)
+4. Pair matrix gate (all 20 directed visibility edges)
+5. Crash/fatal marker scan
+6. Deterministic verifiers:
+   - `relay_flap_regression`
+   - `ble_only_pairing`
+   - `receipt_convergence` (warn-only by default, `--require-receipt-gate`)
+   - `delivery_state_monotonicity`
+
+**Output:** Per-attempt evidence bundles in `logs/live-verify/<step>_<timestamp>/`
+
+### Platform Smoke: `scripts/live-smoke.sh`
+
+Quick Android+iOS runtime validation without full 5-node overhead:
+
+```bash
+./scripts/live-smoke.sh                    # Default: 300s, both devices
+DURATION_SEC=60 ./scripts/live-smoke.sh    # 60 second smoke
+IOS_TARGET=simulator ./scripts/live-smoke.sh  # Simulator only
+```
+
+### WS12 Matrix: `scripts/verify_ws12_matrix.sh`
+
+Canonical multi-surface verification (Rust + Android + iOS parity):
+
+```bash
+./scripts/verify_ws12_matrix.sh
+SCM_SKIP_ANDROID=1 ./scripts/verify_ws12_matrix.sh  # Skip Android
+SCM_SKIP_IOS=1 ./scripts/verify_ws12_matrix.sh      # Skip iOS
+```
+
+## Deterministic Verifier Scripts
+
+| Script | Purpose | Input |
+|--------|---------|-------|
+| `verify_relay_flap_regression.sh` | iOS relay dial-loop regression | iOS device log |
+| `verify_ble_only_pairing.sh` | BLE-only strict-mode checks | Android + iOS logs |
+| `verify_receipt_convergence.sh` | Message-ID convergence | Android + iOS diagnostics |
+| `verify_delivery_state_monotonicity.sh` | Delivery state ordering | Android + iOS diagnostics |
+| `correlate_relay_flap_windows.sh` | Relay churn correlation | iOS + GCP logs |
+
+## Launch / Control Scripts
+
+1. `scripts/scm.sh`
+   - Local process lifecycle helper (`start|stop|restart|status|logs`)
+2. `verify_integration.sh`
+   - Alias wrapper that executes `scripts/verify_ws12_matrix.sh`
+3. `verify_simulation.sh`
+   - Docker-based simulation verifier with prerequisite fail-fast checks
+4. `run_comprehensive_network_tests.sh`
+   - Extended Docker/NAT/traffic-control simulation workflow
+5. `clean_all_devices.sh`
+   - Device/simulator cleanup helper used before fresh multi-device runs
+
+## iOS Device/Install Helpers
+
+1. `iOS/build-device.sh`
+2. `iOS/install-device.sh`
+3. `iOS/install-sim.sh`
+4. `iOS/verify-test.sh`
+5. `iOS/verify-local-transport.sh`
+6. `iOS/verify-role-mode.sh`
+
+## Infrastructure / Deployment Helpers
+
+1. `scripts/deploy_gcp_node.sh`
+2. `scripts/test_gcp_node.sh`
+3. `scripts/get-node-info.sh`
+4. `scripts/deploy_to_device.sh`
+
+## Repo / Governance Helpers
+
+1. `scripts/docs_sync_check.sh`
+2. `scripts/repo_audit.sh`
+3. `scripts/verify_branch_merges.sh`
+4. `scripts/delete_merged_branches.sh`
+5. `scripts/generate_interop_matrix.sh`
+
+## Python Log Analysis
+
+1. `analyze_mesh.py`
+   - Live mesh monitor for 5-node test logs (`logs/5mesh/*`).
+
+## Historical / Deprecated
+
+Moved to `scripts/archive/`:
+- `run5_trip.sh.deprecated` — Superseded by unified `run5.sh` with `--restore-on-exit` flag
+
+Historical debug parsers in `reference/historical/`:
+- `parse_connections.py`, `snapshot_mesh.py`, `snapshot_mesh2.py`
+- Treat as reference only; promote to `scripts/` if needed again.
 
 ## Launch / Control Scripts
 

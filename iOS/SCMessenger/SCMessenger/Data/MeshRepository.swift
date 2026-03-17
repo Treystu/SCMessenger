@@ -43,6 +43,19 @@ final class MeshRepository {
         static let key = "mesh_install_marker_v1"
     }
     private let logger = Logger(subsystem: "com.scmessenger", category: "Repository")
+    
+    /// Conditional logging - only log verbose messages in DEBUG builds
+    private func logVerbose(_ message: @autoclosure @escaping () -> String) {
+        #if DEBUG
+        logger.debug("\(message())")
+        #endif
+    }
+    
+    private func logDiagnostic(_ message: @autoclosure @escaping () -> String) {
+        #if DEBUG
+        appendDiagnostic(message())
+        #endif
+    }
     private let storagePath: String
     private let diagnosticsLogFileName = "mesh_diagnostics.log"
     private let diagnosticsIOQueue = DispatchQueue(label: "com.scmessenger.diagnostics.io", qos: .utility)
@@ -98,6 +111,9 @@ final class MeshRepository {
     private var bleCentralManager: BLECentralManager?
     private var blePeripheralManager: BLEPeripheralManager?
     private var multipeerTransport: MultipeerTransport?
+    
+    // Smart Transport Router (500ms timeout fallback + health tracking)
+    private var smartTransportRouter: SmartTransportRouter?
 
     // Platform bridge
     private var platformBridge: IosPlatformBridge?
@@ -113,6 +129,16 @@ final class MeshRepository {
     private var relayBootstrapDialInProgress = false
     private var dialThrottleState: [String: (attempts: Int, nextAllowedAt: Date)] = [:]
     private var relayDialDebounceState: [String: Date] = [:]
+    
+    // MARK: - Retry Backoff & Circuit Breaker (LOG-AUDIT-001 fix)
+    /// Tracks consecutive failures per peer for exponential backoff
+    private var consecutiveDeliveryFailures: [String: Int] = [:]
+    /// Tracks last failure time per peer for circuit breaker
+    private var lastFailureTime: [String: Date] = [:]
+    /// Circuit breaker threshold - pause retries after this many consecutive failures
+    private let circuitBreakerThreshold = 10
+    /// Circuit breaker duration - pause retries for this long after threshold reached
+    private let circuitBreakerDuration: TimeInterval = 300 // 5 minutes
     private let relayDialDebounceInterval: TimeInterval = 10
     private let receiptAwaitSeconds: UInt64 = 8
     private let pendingOutboxMaxAttempts: UInt32 = 120
@@ -368,7 +394,7 @@ final class MeshRepository {
             self.diagnosticsBuffer = Array(lines.suffix(diagnosticsMaxLines))
         }
 
-        logger.info("MeshRepository initialized with storage: \(self.storagePath)")
+        logVerbose("MeshRepository initialized with storage: \(self.storagePath)")
         if strictBleOnlyValidation {
             logger.warning("Strict BLE-only validation mode is enabled (SC_BLE_ONLY_VALIDATION)")
         }
@@ -380,7 +406,7 @@ final class MeshRepository {
 
         reconcileInstallScopedIdentityState()
 
-        appendDiagnostic("repo_init storage=\(self.storagePath)")
+        logDiagnostic("repo_init storage=\(self.storagePath)")
         startHeartbeat()
     }
 
@@ -388,7 +414,7 @@ final class MeshRepository {
         heartbeatTimer?.invalidate()
         heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.appendDiagnostic("pulse uptime=\(Int(Date().timeIntervalSinceReferenceDate) % 100000)")
+                self?.logDiagnostic("pulse uptime=\(Int(Date().timeIntervalSinceReferenceDate) % 100000)")
             }
         }
     }
@@ -396,8 +422,8 @@ final class MeshRepository {
     /// Initialize all managers
     @MainActor
     func initialize() throws {
-        logger.info("Initializing managers")
-        appendDiagnostic("repo_managers_init_start")
+        logVerbose("Initializing managers")
+        logDiagnostic("repo_managers_init_start")
 
         do {
             // Initialize data managers
@@ -420,12 +446,13 @@ final class MeshRepository {
             // Initialize transport managers
             bleCentralManager = BLECentralManager(meshRepository: self)
             blePeripheralManager = BLEPeripheralManager(meshRepository: self)
+            smartTransportRouter = SmartTransportRouter()
 
             // Pre-load data where applicable
             try? ledgerManager?.load()
 
-            appendDiagnostic("repo_managers_init_success")
-            logger.info("✓ All managers initialized successfully")
+            logDiagnostic("repo_managers_init_success")
+            logVerbose("✓ All managers initialized successfully")
 
             // One-time migration: clear stale routing hints inherited from
             // pre-fix builds that accumulated duplicate BLE MACs and stale
@@ -466,7 +493,7 @@ final class MeshRepository {
             }
             UserDefaults.standard.set(true, forKey: key)
             if cleaned > 0 {
-                logger.info("Routing hint migration: cleaned \(cleaned) contact(s) with stale routing entries")
+                logVerbose("Routing hint migration: cleaned \(cleaned) contact(s) with stale routing entries")
             }
         } catch {
             logger.warning("Routing hint migration failed (non-fatal): \(error.localizedDescription)")
@@ -475,8 +502,8 @@ final class MeshRepository {
 
     /// Public start method called from App entry point
     func start() {
-        appendDiagnostic("repo_start_requested")
-        logger.info("Application requested repository start")
+        logDiagnostic("repo_start_requested")
+        logVerbose("Application requested repository start")
         do {
             try ensureServiceInitialized()
 
@@ -494,8 +521,8 @@ final class MeshRepository {
         // Initialize when service is not running (mirrors Android: state != RUNNING)
         // This properly handles all non-running states including .stopped, .starting, .stopping, .paused
         if meshService == nil || serviceState != .running {
-            appendDiagnostic("lazy_service_start_init")
-            logger.info("Lazy starting MeshService for Identity access")
+            logDiagnostic("lazy_service_start_init")
+            logVerbose("Lazy starting MeshService for Identity access")
 
             // Clean up existing service if stopped but not nil
             if meshService != nil {
@@ -523,7 +550,7 @@ final class MeshRepository {
             )
 
             try startMeshService(config: config)
-            logger.info("✓ MeshService started lazily")
+            logVerbose("✓ MeshService started lazily")
         }
 
         // Verify ironCore is available after initialization
@@ -540,8 +567,8 @@ final class MeshRepository {
 
     /// Start the mesh service with configuration
     func startMeshService(config: MeshServiceConfig) throws {
-        logger.info("Starting mesh service")
-        appendDiagnostic("service_start requested")
+        logVerbose("Starting mesh service")
+        logDiagnostic("service_start requested")
 
         guard serviceState == .stopped else {
             logger.warning("Service already started or starting")
@@ -638,8 +665,10 @@ final class MeshRepository {
             // WS12.41: Start storage maintenance loop
             startStorageMaintenance()
 
-            logger.info("✓ Mesh service started successfully")
-            appendDiagnostic("service_start success")
+            let info = getIdentityInfo()
+            logger.info("SC_IDENTITY_OWN p2p_id=\(info?.libp2pPeerId ?? "unknown") pk=\(info?.publicKeyHex ?? "unknown")")
+            logVerbose("✓ Mesh service started successfully")
+            logDiagnostic("service_start success")
         } catch {
             serviceState = .stopped
             statusEvents.send(.serviceStateChanged(.stopped))
@@ -651,8 +680,8 @@ final class MeshRepository {
 
     /// Stop the mesh service
     func stopMeshService() {
-        logger.info("Stopping mesh service")
-        appendDiagnostic("service_stop requested")
+        logVerbose("Stopping mesh service")
+        logDiagnostic("service_stop requested")
 
         guard serviceState == .running else {
             logger.warning("Service not running")
@@ -686,13 +715,13 @@ final class MeshRepository {
         multipeerTransport?.disconnect()
         multipeerTransport = nil
 
-        logger.info("✓ Mesh service stopped")
-        appendDiagnostic("service_stop success")
+        logVerbose("✓ Mesh service stopped")
+        logDiagnostic("service_stop success")
     }
 
     /// Pause the mesh service (background mode)
     func pauseMeshService() {
-        logger.info("Pausing mesh service")
+        logVerbose("Pausing mesh service")
         guard serviceState == .running else {
             logger.warning("Service not running (current state: \(self.serviceState))")
             return
@@ -700,18 +729,18 @@ final class MeshRepository {
         meshService?.pause()
         // Note: pause() is an internal operation that reduces activity
         // The external serviceState remains .running (no .paused state exists)
-        logger.info("✓ Mesh service paused")
+        logVerbose("✓ Mesh service paused")
     }
 
     /// Resume the mesh service (foreground mode)
     func resumeMeshService() {
-        logger.info("Resuming mesh service")
+        logVerbose("Resuming mesh service")
         guard serviceState == .running else {
             logger.warning("Cannot resume - service not in running state (current: \(self.serviceState))")
             return
         }
         meshService?.resume()
-        logger.info("✓ Mesh service resumed")
+        logVerbose("✓ Mesh service resumed")
     }
 
     /// Get current service state
@@ -756,7 +785,7 @@ final class MeshRepository {
 
     /// Create a new identity (first-time setup)
     func createIdentity() throws {
-        logger.info("Creating identity")
+        logVerbose("Creating identity")
 
         do {
             try ensureServiceInitialized()
@@ -766,10 +795,10 @@ final class MeshRepository {
                 throw MeshError.notInitialized("Mesh service initialization failed")
             }
 
-            logger.info("Calling ironCore.initializeIdentity()...")
+            logVerbose("Calling ironCore.initializeIdentity()...")
             try ironCore.initializeIdentity()
             try ensureLocalIdentityFederation()
-            logger.info("✓ Identity created successfully")
+            logVerbose("✓ Identity created successfully")
             initializeAndStartSwarm()
             broadcastIdentityBeacon()
         } catch {
@@ -791,7 +820,7 @@ final class MeshRepository {
             }
         }
         if !info.initialized {
-            logger.info("Identity not initialized; onboarding required")
+            logVerbose("Identity not initialized; onboarding required")
             return
         }
 
@@ -808,7 +837,7 @@ final class MeshRepository {
         }
         do {
             try ironCore.importIdentityBackup(backup: backupPayload)
-            logger.info("Restored identity from iOS Keychain backup payload")
+            logVerbose("Restored identity from iOS Keychain backup payload")
             return true
         } catch {
             logger.warning("Identity Keychain restore failed: \(error.localizedDescription, privacy: .public)")
@@ -918,7 +947,7 @@ final class MeshRepository {
     /// Send a message to a peer
     /// CRITICAL: Enforces relay = messaging coupling
     func sendMessage(peerId: String, content: String) async throws {
-        logger.info("Send message to \(peerId)")
+        logVerbose("Send message to \(peerId)")
 
         // RELAY ENFORCEMENT
         // Check if relay/messaging is enabled (bidirectional control)
@@ -935,7 +964,7 @@ final class MeshRepository {
         // Throttling: prevent sending identical content to same peer within 1s
         let throttleKey = "\(peerId):\(content.hashValue)"
         if let lastSend = transmissionThrottleCache[throttleKey], Date().timeIntervalSince(lastSend) < transmissionThrottleInterval {
-            logger.warning("Throttling duplicate send for \(peerId)")
+            logVerbose("Throttling duplicate send for \(peerId)")
             return
         }
         transmissionThrottleCache[throttleKey] = Date()
@@ -967,7 +996,7 @@ final class MeshRepository {
             throw MeshError.contactNotFound("Contact \(peerId) has an invalid public key (non-hex characters found). Please re-add this contact.")
         }
 
-        logger.debug("Preparing message for \(peerId) with key: \(trimmedKey.prefix(8))...")
+        logVerbose("Preparing message for \(peerId) with key: \(trimmedKey.prefix(8))...")
         let routing = parseRoutingHintsFromNotes(contact?.notes)
         let multipeerPeerId = routing.multipeerPeerId ?? defaultMultipeerPeerId(fromPublicKey: trimmedKey)
         let routePeerCandidates = buildRoutePeerCandidates(
@@ -1005,7 +1034,7 @@ final class MeshRepository {
 
         // Notify UI (Unified flow for sent messages)
         messageUpdates.send(messageRecord)
-        appendDiagnostic("delivery_state msg=\(messageId) state=pending detail=message_prepared_local_history_written")
+        logDiagnostic("delivery_state msg=\(messageId) state=pending detail=message_prepared_local_history_written")
         let delivery = await attemptDirectSwarmDelivery(
             routePeerCandidates: routePeerCandidates,
             addresses: routing.listeners,
@@ -1066,8 +1095,8 @@ final class MeshRepository {
         senderTimestamp: UInt64,
         data: Data
     ) {
-        logger.info("Message from \(senderId): \(messageId)")
-        appendDiagnostic("msg_rx sender=\(senderId) msg=\(messageId)")
+        logVerbose("Message from \(senderId): \(messageId)")
+        logDiagnostic("msg_rx sender=\(senderId) msg=\(messageId)")
 
         // RELAY ENFORCEMENT
         // Check if relay/messaging is enabled (bidirectional control)
@@ -1077,7 +1106,7 @@ final class MeshRepository {
 
         if !isRelayEnabled {
             logger.warning("Dropped message from \(senderId): relay disabled")
-            appendDiagnostic("msg_rx_dropped sender=\(senderId) msg=\(messageId) reason=relay_disabled")
+            logDiagnostic("msg_rx_dropped sender=\(senderId) msg=\(messageId) reason=relay_disabled")
             return
         }
 
@@ -1125,10 +1154,10 @@ final class MeshRepository {
             )
         )
         if canonicalPeerId != senderId {
-            logger.info("Canonicalized sender \(senderId) -> \(canonicalPeerId) using public key match")
+            logVerbose("Canonicalized sender \(senderId) -> \(canonicalPeerId) using public key match")
         }
         if isBootstrapRelayPeer(canonicalPeerId) {
-            logger.info("Ignoring payload attributed to bootstrap relay peer \(canonicalPeerId)")
+            logVerbose("Ignoring payload attributed to bootstrap relay peer \(canonicalPeerId)")
             return
         }
 
@@ -1189,7 +1218,7 @@ final class MeshRepository {
                 do {
                     try contactManager?.add(contact: autoContact)
                     contactManager?.flush()
-                    logger.info("Auto-created contact from received message: \(canonicalPeerId.prefix(8)) key: \(normalizedSenderKey.prefix(8))...")
+                    logVerbose("Auto-created contact from received message: \(canonicalPeerId.prefix(8)) key: \(normalizedSenderKey.prefix(8))...")
                 } catch {
                     logger.warning("Auto-create contact failed for \(canonicalPeerId.prefix(8)): \(error.localizedDescription)")
                 }
@@ -1295,8 +1324,8 @@ final class MeshRepository {
         }
 
         if messageKind == "identity_sync" {
-            logger.debug("Processed identity sync from \(canonicalPeerId) (route=\(routePeerId ?? "none"))")
-            appendDiagnostic("msg_identity_sync peer=\(canonicalPeerId) route=\(routePeerId ?? "none")")
+            logVerbose("Processed identity sync from \(canonicalPeerId) (route=\(routePeerId ?? "none"))")
+            logDiagnostic("msg_identity_sync peer=\(canonicalPeerId) route=\(routePeerId ?? "none")")
             sendDeliveryReceiptAsync(
                 senderPublicKeyHex: senderPublicKeyHex,
                 messageId: messageId,
@@ -1308,15 +1337,15 @@ final class MeshRepository {
         }
 
         if messageKind == "history_sync" {
-            logger.debug("Processed history sync request from \(canonicalPeerId)")
-            appendDiagnostic("processed_history_sync_request_from peer=\(canonicalPeerId)")
+            logVerbose("Processed history sync request from \(canonicalPeerId)")
+            logDiagnostic("processed_history_sync_request_from peer=\(canonicalPeerId)")
             sendHistorySyncDataIfNeeded(canonicalPeerId: canonicalPeerId, routePeerId: routePeerId, recipientPublicKey: senderPublicKeyHex, listeners: hintedDialCandidates, wifiPeerId: nil)
             sendDeliveryReceiptAsync(senderPublicKeyHex: senderPublicKeyHex, messageId: messageId, senderId: canonicalPeerId, preferredRoutePeerId: routePeerId, preferredListenerHints: hintedDialCandidates)
             return
         }
         if messageKind == "history_sync_data" {
-            logger.debug("Processed history sync data from \(canonicalPeerId)")
-            appendDiagnostic("processed_history_sync_data_from peer=\(canonicalPeerId)")
+            logVerbose("Processed history sync data from \(canonicalPeerId)")
+            logDiagnostic("processed_history_sync_data_from peer=\(canonicalPeerId)")
             if let data = decodedPayload.text.data(using: .utf8),
                let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
                 for obj in arr {
@@ -1363,9 +1392,21 @@ final class MeshRepository {
         // Process message
         let content = decodedPayload.text
 
+        // Smart deduplication: check if this is a duplicate and track time variance
+        let dedupResult = smartTransportRouter?.checkAndRecordMessage(
+            messageId: messageId,
+            transport: .core // Default transport for incoming messages
+        )
+        
         if let existing = try? historyManager?.get(id: messageId),
            existing.direction == .received {
-            logger.debug("Duplicate inbound message \(messageId); acknowledging without UI emit")
+            logVerbose("Duplicate inbound message \(messageId); acknowledging without UI emit")
+            
+            // Log duplicate with time variance for mesh enhancement
+            if let dedup = dedupResult, dedup.isDuplicate, let timeVariance = dedup.timeVarianceMs {
+                logDiagnostic("msg_duplicate msg=\(messageId) time_variance_ms=\(timeVariance) first_transport=\(dedup.firstTransport?.rawValue ?? "unknown") duplicate_count=\(smartTransportRouter?.getDedupStats(messageId: messageId)?.duplicateCount ?? 0)")
+            }
+            
             sendDeliveryReceiptAsync(
                 senderPublicKeyHex: senderPublicKeyHex,
                 messageId: messageId,
@@ -1374,6 +1415,11 @@ final class MeshRepository {
                 preferredListenerHints: hintedDialCandidates
             )
             return
+        }
+        
+        // First receipt of this message - log for mesh enhancement tracking
+        if let dedup = dedupResult, !dedup.isDuplicate {
+            logDiagnostic("msg_first_receipt msg=\(messageId) transport=\(dedup.firstTransport?.rawValue ?? "unknown")")
         }
 
         let fallbackNow = UInt64(Date().timeIntervalSince1970)
@@ -1393,8 +1439,8 @@ final class MeshRepository {
 
         // Notify UI
         messageUpdates.send(messageRecord)
-        logger.info("Message received and processed from \(canonicalPeerId)")
-        appendDiagnostic("msg_rx_processed peer=\(canonicalPeerId) msg=\(messageId)")
+        logVerbose("Message received and processed from \(canonicalPeerId)")
+        logDiagnostic("msg_rx_processed peer=\(canonicalPeerId) msg=\(messageId)")
 
         if isChatEvent && notificationSettings.notificationsEnabled,
            let notificationDecision,
@@ -1430,18 +1476,18 @@ final class MeshRepository {
         guard let existingRecord else {
             if hasPendingForReceipt {
                 removePendingOutbound(historyRecordId: normalizedMessageId)
-                appendDiagnostic("delivery_state msg=\(normalizedMessageId) state=delivered detail=delivery_receipt_recovered_without_history status=\(normalized) direction=missing")
+                logDiagnostic("delivery_state msg=\(normalizedMessageId) state=delivered detail=delivery_receipt_recovered_without_history status=\(normalized) direction=missing")
             } else {
-                appendDiagnostic("delivery_state msg=\(normalizedMessageId) state=pending detail=delivery_receipt_ignored_non_outbound status=\(normalized) direction=missing")
+                logDiagnostic("delivery_state msg=\(normalizedMessageId) state=pending detail=delivery_receipt_ignored_non_outbound status=\(normalized) direction=missing")
             }
             return
         }
         guard existingRecord.direction == .sent else {
             if hasPendingForReceipt {
                 removePendingOutbound(historyRecordId: normalizedMessageId)
-                appendDiagnostic("delivery_state msg=\(normalizedMessageId) state=delivered detail=delivery_receipt_recovered_without_history status=\(normalized) direction=\(existingRecord.direction)")
+                logDiagnostic("delivery_state msg=\(normalizedMessageId) state=delivered detail=delivery_receipt_recovered_without_history status=\(normalized) direction=\(existingRecord.direction)")
             } else {
-                appendDiagnostic("delivery_state msg=\(normalizedMessageId) state=pending detail=delivery_receipt_ignored_non_outbound status=\(normalized) direction=\(existingRecord.direction)")
+                logDiagnostic("delivery_state msg=\(normalizedMessageId) state=pending detail=delivery_receipt_ignored_non_outbound status=\(normalized) direction=\(existingRecord.direction)")
             }
             return
         }
@@ -1449,10 +1495,10 @@ final class MeshRepository {
         let firstReceiptSeen = markDeliveredReceiptSeen(normalizedMessageId)
         if !firstReceiptSeen && wasAlreadyDelivered {
             removePendingOutbound(historyRecordId: normalizedMessageId)
-            appendDiagnostic("delivery_state msg=\(normalizedMessageId) state=delivered detail=delivery_receipt_duplicate_status=\(normalized)")
+            logDiagnostic("delivery_state msg=\(normalizedMessageId) state=delivered detail=delivery_receipt_duplicate_status=\(normalized)")
             return
         }
-        appendDiagnostic("receipt_rx msg=\(normalizedMessageId) status=\(normalized)")
+        logDiagnostic("receipt_rx msg=\(normalizedMessageId) status=\(normalized)")
         if !wasAlreadyDelivered {
             try? historyManager?.markDelivered(id: normalizedMessageId)
             historyManager?.flush()
@@ -1464,7 +1510,7 @@ final class MeshRepository {
         }
         if wasAlreadyDelivered { return }
         _ = ironCore?.markMessageSent(messageId: normalizedMessageId)
-        appendDiagnostic("delivery_state msg=\(normalizedMessageId) state=delivered detail=delivery_receipt_status=\(normalized)")
+        logDiagnostic("delivery_state msg=\(normalizedMessageId) state=delivered detail=delivery_receipt_status=\(normalized)")
         // CoreDelegateImpl also sends this to the event bus; avoiding double-emission here.
         // MeshEventBus.shared.messageEvents.send(.delivered(messageId: messageId))
     }
@@ -1482,7 +1528,7 @@ final class MeshRepository {
         guard !normalizedMessageId.isEmpty else { return }
 
         if let activeTask = pendingReceiptSendTasks[normalizedMessageId], !activeTask.isCancelled {
-            appendDiagnostic("receipt_send msg=\(normalizedMessageId) state=deduped sender=\(senderId)")
+            logDiagnostic("receipt_send msg=\(normalizedMessageId) state=deduped sender=\(senderId)")
             return
         }
 
@@ -1501,7 +1547,7 @@ final class MeshRepository {
                         recipientPublicKeyHex: senderPublicKeyHex,
                         messageId: normalizedMessageId
                     ) else {
-                        self.logger.debug("Skipping delivery receipt for \(normalizedMessageId): prepareReceipt returned nil")
+                        self.logVerbose("Skipping delivery receipt for \(normalizedMessageId): prepareReceipt returned nil")
                         return
                     }
 
@@ -1528,26 +1574,26 @@ final class MeshRepository {
                         intendedDeviceId: contact?.lastKnownDeviceId
                     )
                     if delivery.acked {
-                        self.appendDiagnostic("receipt_send msg=\(normalizedMessageId) state=acked sender=\(senderId) attempt=\(attempt)")
-                        self.logger.debug("Targeted delivery receipt sent for \(normalizedMessageId) to \(senderId)")
+                        self.logDiagnostic("receipt_send msg=\(normalizedMessageId) state=acked sender=\(senderId) attempt=\(attempt)")
+                        self.logVerbose("Targeted delivery receipt sent for \(normalizedMessageId) to \(senderId)")
                         return
                     }
 
                     if attempt < self.receiptSendMaxAttempts {
                         let delaySec = self.receiptRetryDelaySeconds(forAttempt: attempt)
-                        self.appendDiagnostic(
+                        self.logDiagnostic(
                             "receipt_send msg=\(normalizedMessageId) state=retry_scheduled sender=\(senderId) attempt=\(attempt) delay_sec=\(delaySec)"
                         )
                         try? await Task.sleep(nanoseconds: delaySec * 1_000_000_000)
                     } else {
-                        self.appendDiagnostic(
+                        self.logDiagnostic(
                             "receipt_send msg=\(normalizedMessageId) state=exhausted sender=\(senderId) attempts=\(self.receiptSendMaxAttempts)"
                         )
                     }
                 } catch is CancellationError {
                     return
                 } catch {
-                    self.logger.debug("Failed to send delivery receipt for \(normalizedMessageId): \(error)")
+                    self.logVerbose("Failed to send delivery receipt for \(normalizedMessageId): \(error)")
                 }
             }
         }
@@ -1610,10 +1656,10 @@ final class MeshRepository {
                     blePeerId: hints.blePeerId,
                     recipientIdentityId: recipientPublicKey
                 )
-                self.logger.debug("Identity sync sent to \(normalizedRoute)")
+                self.logVerbose("Identity sync sent to \(normalizedRoute)")
             } catch {
                 self.identitySyncSentPeers.remove(normalizedRoute)
-                self.logger.debug("Failed to send identity sync to \(normalizedRoute): \(error.localizedDescription)")
+                self.logVerbose("Failed to send identity sync to \(normalizedRoute): \(error.localizedDescription)")
             }
         }
     }
@@ -1626,22 +1672,22 @@ final class MeshRepository {
 
     private func sendHistorySyncIfNeeded(routePeerId: String, knownPublicKey: String? = nil) {
         let normalizedRoute = routePeerId.trimmingCharacters(in: .whitespacesAndNewlines)
-        appendDiagnostic("sending_history_sync_request_consider route=\(normalizedRoute)")
-        logger.warning("sendHistorySyncIfNeeded called for \(normalizedRoute)")
+        logDiagnostic("sending_history_sync_request_consider route=\(normalizedRoute)")
+        logVerbose("sendHistorySyncIfNeeded called for \(normalizedRoute)")
         guard !normalizedRoute.isEmpty, !isBootstrapRelayPeer(normalizedRoute) else { return }
         let now = Date()
         let lastSent = historySyncSentPeers[normalizedRoute]
         let shouldSend = lastSent == nil || now.timeIntervalSince(lastSent!) > historySyncCooldown
-        logger.warning("sendHistorySyncIfNeeded shouldSend=\(shouldSend) for \(normalizedRoute) (age=\(lastSent.map { now.timeIntervalSince($0) } ?? 999)s)")
+        logVerbose("sendHistorySyncIfNeeded shouldSend=\(shouldSend) for \(normalizedRoute) (age=\(lastSent.map { now.timeIntervalSince($0) } ?? 999)s)")
         guard shouldSend else { return }
         historySyncSentPeers[normalizedRoute] = now
-        logger.warning("sendHistorySyncIfNeeded inserting for \(normalizedRoute)")
+        logVerbose("sendHistorySyncIfNeeded inserting for \(normalizedRoute)")
 
         Task {
             let extractedPublicKey = try? ironCore?.extractPublicKeyFromPeerId(peerId: normalizedRoute)
             guard let recipientPublicKey = normalizePublicKey(knownPublicKey) ?? normalizePublicKey(extractedPublicKey) else {
                 historySyncSentPeers.removeValue(forKey: normalizedRoute)
-                appendDiagnostic("history_sync_request_failed_no_pubkey route=\(normalizedRoute)")
+                logDiagnostic("history_sync_request_failed_no_pubkey route=\(normalizedRoute)")
                 logger.error("historySync failed: missing recipientPublicKey for \(normalizedRoute)")
                 return
             }
@@ -1650,7 +1696,7 @@ final class MeshRepository {
                 let payload = encodeMeshMessagePayload(content: "", kind: "history_sync")
                 guard let prepared = try? ironCore?.prepareMessageWithId(recipientPublicKeyHex: recipientPublicKey, text: payload) else {
                     historySyncSentPeers.removeValue(forKey: normalizedRoute)
-                    appendDiagnostic("history_sync_request_failed_prepare route=\(normalizedRoute)")
+                    logDiagnostic("history_sync_request_failed_prepare route=\(normalizedRoute)")
                     logger.error("historySync request failed to prepare message")
                     return
                 }
@@ -1673,7 +1719,7 @@ final class MeshRepository {
                     blePeerId: hints.blePeerId,
                     recipientIdentityId: recipientPublicKey
                 )
-                self.logger.warning("History sync request sent to \(normalizedRoute)")
+                self.logVerbose("History sync request sent to \(normalizedRoute)")
             } catch {
                 self.logger.error("History sync request exception: \(error.localizedDescription)")
                 self.historySyncSentPeers.removeValue(forKey: normalizedRoute)
@@ -1685,7 +1731,7 @@ final class MeshRepository {
 
     private func sendHistorySyncDataIfNeeded(canonicalPeerId: String, routePeerId: String?, recipientPublicKey: String, listeners: [String], wifiPeerId: String?) {
         guard !historySyncDataInProgress.contains(canonicalPeerId) else {
-            logger.debug("sendHistorySyncDataIfNeeded: already in progress for \(canonicalPeerId)")
+            logVerbose("sendHistorySyncDataIfNeeded: already in progress for \(canonicalPeerId)")
             return
         }
         historySyncDataInProgress.insert(canonicalPeerId)
@@ -1693,14 +1739,14 @@ final class MeshRepository {
         Task {
             defer { DispatchQueue.main.async { self.historySyncDataInProgress.remove(canonicalPeerId) } }
             do {
-                self.logger.warning("sendHistorySyncDataIfNeeded started for \(canonicalPeerId)")
+                self.logVerbose("sendHistorySyncDataIfNeeded started for \(canonicalPeerId)")
                 guard let manager = historyManager,
                       let fetchedMsgs = try? manager.conversation(peerId: canonicalPeerId, limit: 400),
                       !fetchedMsgs.isEmpty else {
-                    self.logger.warning("sendHistorySyncDataIfNeeded: no recent msgs for \(canonicalPeerId)")
+                    self.logVerbose("sendHistorySyncDataIfNeeded: no recent msgs for \(canonicalPeerId)")
                     return
                 }
-                self.logger.warning("sendHistorySyncDataIfNeeded: compiling \(fetchedMsgs.count) msgs for \(canonicalPeerId)")
+                self.logVerbose("sendHistorySyncDataIfNeeded: compiling \(fetchedMsgs.count) msgs for \(canonicalPeerId)")
                 let recentMsgs = fetchedMsgs.sorted { $0.timestamp < $1.timestamp }
 
                 let hints = parseRoutingHintsFromNotes((try? contactManager?.get(peerId: canonicalPeerId))?.notes)
@@ -1752,7 +1798,7 @@ final class MeshRepository {
                         try? await Task.sleep(nanoseconds: 200_000_000)
                     }
                 }
-                self.logger.warning("History sync data sent to \(canonicalPeerId) (\(sentBatches)/\(batches.count) batches, \(recentMsgs.count) items total)")
+                self.logVerbose("History sync data sent to \(canonicalPeerId) (\(sentBatches)/\(batches.count) batches, \(recentMsgs.count) items total)")
             } catch {
                 self.logger.error("Failed sending history sync data: \(error)")
             }
@@ -3287,7 +3333,7 @@ final class MeshRepository {
             publicKey: publicKeyHex
         )
         logger.info(
-            "Peer BLE identity read: \(blePeerId.prefix(8)) key: \(publicKeyHex.prefix(8))... identity=\(identityId.prefix(12)) nickname='\((discoveredNickname ?? "").prefix(24))'"
+            "Peer BLE identity read: \(blePeerId.prefix(8)) key: \(publicKeyHex.prefix(8))... identity=\(identityId) nickname='\((discoveredNickname ?? "").prefix(24))'"
         )
         guard let normalizedKey = normalizePublicKey(publicKeyHex) else {
             let trimmed = publicKeyHex.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3364,7 +3410,7 @@ final class MeshRepository {
             discoveredPeerMap = discoveredPeerMap.filter { key, value in
                 key != blePeerId && value.canonicalPeerId != blePeerId
             }
-            logger.debug("Removed preliminary BLE entry \(blePeerId.prefix(8)) → promoted to \(identityId.prefix(12))")
+            logger.debug("Removed preliminary BLE entry \(blePeerId.prefix(8)) → promoted to \(identityId)")
         }
         emitIdentityDiscoveredIfChanged(
             peerId: identityId,
@@ -3790,102 +3836,267 @@ final class MeshRepository {
             )
         }
 
-        let localFallback = LocalTransportFallback.attemptMultipeerThenBle(
-            multipeerPeerId: strictBleOnly ? nil : multipeerPeerId,
-            blePeerId: effectiveBlePeerId,
-            tryMultipeer: { multipeerAddr in
-                guard let transport = multipeerTransport else {
-                    logger.debug("tryMultipeerDelivery: multipeerTransport is null")
-                    return false
-                }
-                do {
-                    try transport.sendData(toPeerId: multipeerAddr, data: envelopeData)
-                    logger.info("✓ Delivery via Multipeer (target=\(multipeerAddr))")
+        // Use SmartTransportRouter for intelligent transport selection with 500ms timeout fallback
+        let smartResult: TransportDeliveryResult
+        if let router = smartTransportRouter {
+            smartResult = await router.attemptDelivery(
+                peerId: routePeerFallback,
+                envelopeData: envelopeData,
+                multipeerPeerId: strictBleOnly ? nil : multipeerPeerId,
+                blePeerId: effectiveBlePeerId,
+                routePeerCandidates: routePeerCandidates,
+                addresses: addresses,
+                traceMessageId: traceMessageId,
+                attemptContext: attemptContext,
+                tryMultipeer: { multipeerAddr in
+                    guard let transport = multipeerTransport else {
+                        logger.debug("tryMultipeerDelivery: multipeerTransport is null")
+                        return false
+                    }
+                    do {
+                        try transport.sendData(toPeerId: multipeerAddr, data: envelopeData)
+                        logger.info("✓ Delivery via Multipeer (target=\(multipeerAddr))")
+                        logDeliveryAttempt(
+                            messageId: traceMessageId,
+                            medium: "multipeer",
+                            phase: "smart_router",
+                            outcome: "success",
+                            detail: "ctx=\(attemptContext) target=\(multipeerAddr)"
+                        )
+                        return true
+                    } catch {
+                        logger.debug("tryMultipeerDelivery failed for \(multipeerAddr): \(error.localizedDescription)")
+                        logDeliveryAttempt(
+                            messageId: traceMessageId,
+                            medium: "multipeer",
+                            phase: "smart_router",
+                            outcome: "failed",
+                            detail: "ctx=\(attemptContext) target=\(multipeerAddr) reason=\(error.localizedDescription)"
+                        )
+                        return false
+                    }
+                },
+                tryBle: { bleAddr in
+                    logger.debug("tryBleDelivery: given blePeerId=\(bleAddr)")
+                    let sendTargets = ([bleAddr] + connectedBlePeerIds)
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                        .reduce(into: [String]()) { deduped, next in
+                            if !deduped.contains(next) {
+                                deduped.append(next)
+                            }
+                        }
+                    if sendTargets.isEmpty {
+                        logger.debug("tryBleDelivery: no send targets available")
+                        return false
+                    }
+
+                    var lastFailureReason = "no_target_attempted"
+                    for target in sendTargets {
+                        // Prefer Peripheral path first (notifications to subscribed Android central)
+                        // This is the ONLY reliable iOS→Android path when WiFi is off
+                        if let peripheral = blePeripheralManager {
+                            if peripheral.sendDataToConnectedCentral(peerId: target, data: envelopeData) {
+                                logDeliveryAttempt(
+                                    messageId: traceMessageId,
+                                    medium: "ble",
+                                    phase: "smart_router",
+                                    outcome: "accepted",
+                                    detail: "ctx=\(attemptContext) role=peripheral requested_target=\(bleAddr) target=\(target)"
+                                )
+                                return true
+                            }
+                            lastFailureReason = "peripheral_send_false:\(target)"
+                        }
+
+                        // Fallback: Central path (write to Android's GATT server)
+                        if let central = bleCentralManager {
+                            if let uuid = UUID(uuidString: target) {
+                                if central.sendData(to: uuid, data: envelopeData) {
+                                    logger.info("✓ Delivery via BLE Central (target=\(target))")
+                                    logDeliveryAttempt(
+                                        messageId: traceMessageId,
+                                        medium: "ble",
+                                        phase: "smart_router",
+                                        outcome: "accepted",
+                                        detail: "ctx=\(attemptContext) role=central requested_target=\(bleAddr) target=\(target)"
+                                    )
+                                    return true
+                                }
+                                lastFailureReason = "central_send_false:\(target)"
+                            } else {
+                                lastFailureReason = "central_invalid_uuid:\(target)"
+                            }
+                        }
+                    }
+
                     logDeliveryAttempt(
                         messageId: traceMessageId,
-                        medium: "multipeer",
-                        phase: "local_fallback",
-                        outcome: "success",
-                        detail: "ctx=\(attemptContext) target=\(multipeerAddr)"
-                    )
-                    return true
-                } catch {
-                    logger.debug("tryMultipeerDelivery failed for \(multipeerAddr): \(error.localizedDescription)")
-                    logDeliveryAttempt(
-                        messageId: traceMessageId,
-                        medium: "multipeer",
-                        phase: "local_fallback",
+                        medium: "ble",
+                        phase: "smart_router",
                         outcome: "failed",
-                        detail: "ctx=\(attemptContext) target=\(multipeerAddr) reason=\(error.localizedDescription)"
+                        detail: "ctx=\(attemptContext) requested_target=\(bleAddr) reason=\(lastFailureReason) connected=\(connectedBlePeerIds.count)"
                     )
                     return false
-                }
-            },
-            tryBle: { bleAddr in
-                logger.debug("tryBleDelivery: given blePeerId=\(bleAddr)")
-                let sendTargets = ([bleAddr] + connectedBlePeerIds)
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-                    .reduce(into: [String]()) { deduped, next in
-                        if !deduped.contains(next) {
-                            deduped.append(next)
-                        }
+                },
+                tryCore: { corePeerId in
+                    // Core transport attempt (libp2p/internet relay)
+                    guard let swarmBridge else {
+                        logDeliveryAttempt(
+                            messageId: traceMessageId,
+                            medium: "core",
+                            phase: "smart_router",
+                            outcome: "failed",
+                            detail: "ctx=\(attemptContext) reason=swarm_bridge_unavailable"
+                        )
+                        return false
                     }
-                if sendTargets.isEmpty {
-                    logger.debug("tryBleDelivery: no send targets available")
-                    return false
+                    
+                    let dialCandidates = buildDialCandidatesForPeer(
+                        routePeerId: corePeerId,
+                        rawAddresses: addresses,
+                        includeRelayCircuits: true
+                    )
+                    if !dialCandidates.isEmpty {
+                        connectToPeer(corePeerId, addresses: dialCandidates)
+                        _ = await awaitPeerConnection(peerId: corePeerId)
+                    }
+                    
+                    let sendError = swarmBridge.sendMessageStatus(
+                        peerId: corePeerId,
+                        data: envelopeData,
+                        recipientIdentityId: recipientIdentityId,
+                        intendedDeviceId: intendedDeviceId
+                    )
+                    
+                    if sendError == nil {
+                        logDeliveryAttempt(
+                            messageId: traceMessageId,
+                            medium: "core",
+                            phase: "smart_router",
+                            outcome: "success",
+                            detail: "ctx=\(attemptContext) route=\(corePeerId)"
+                        )
+                        return true
+                    } else {
+                        logDeliveryAttempt(
+                            messageId: traceMessageId,
+                            medium: "core",
+                            phase: "smart_router",
+                            outcome: "failed",
+                            detail: "ctx=\(attemptContext) route=\(corePeerId) reason=\(sendError ?? "unknown")"
+                        )
+                        return false
+                    }
                 }
-
-                var lastFailureReason = "no_target_attempted"
-                for target in sendTargets {
-                    // Prefer Peripheral path first (notifications to subscribed Android central)
-                    // This is the ONLY reliable iOS→Android path when WiFi is off
-                    if let peripheral = blePeripheralManager {
-                        if peripheral.sendDataToConnectedCentral(peerId: target, data: envelopeData) {
-                            logDeliveryAttempt(
-                                messageId: traceMessageId,
-                                medium: "ble",
-                                phase: "local_fallback",
-                                outcome: "accepted",
-                                detail: "ctx=\(attemptContext) role=peripheral requested_target=\(bleAddr) target=\(target)"
-                            )
-                            return true
+            )
+        } else {
+            // Fallback to legacy LocalTransportFallback if router not available
+            let localFallback = LocalTransportFallback.attemptMultipeerThenBle(
+                multipeerPeerId: strictBleOnly ? nil : multipeerPeerId,
+                blePeerId: effectiveBlePeerId,
+                tryMultipeer: { multipeerAddr in
+                    guard let transport = multipeerTransport else {
+                        logger.debug("tryMultipeerDelivery: multipeerTransport is null")
+                        return false
+                    }
+                    do {
+                        try transport.sendData(toPeerId: multipeerAddr, data: envelopeData)
+                        logger.info("✓ Delivery via Multipeer (target=\(multipeerAddr))")
+                        logDeliveryAttempt(
+                            messageId: traceMessageId,
+                            medium: "multipeer",
+                            phase: "local_fallback",
+                            outcome: "success",
+                            detail: "ctx=\(attemptContext) target=\(multipeerAddr)"
+                        )
+                        return true
+                    } catch {
+                        logger.debug("tryMultipeerDelivery failed for \(multipeerAddr): \(error.localizedDescription)")
+                        logDeliveryAttempt(
+                            messageId: traceMessageId,
+                            medium: "multipeer",
+                            phase: "local_fallback",
+                            outcome: "failed",
+                            detail: "ctx=\(attemptContext) target=\(multipeerAddr) reason=\(error.localizedDescription)"
+                        )
+                        return false
+                    }
+                },
+                tryBle: { bleAddr in
+                    logger.debug("tryBleDelivery: given blePeerId=\(bleAddr)")
+                    let sendTargets = ([bleAddr] + connectedBlePeerIds)
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                        .reduce(into: [String]()) { deduped, next in
+                            if !deduped.contains(next) {
+                                deduped.append(next)
+                            }
                         }
-                        lastFailureReason = "peripheral_send_false:\(target)"
+                    if sendTargets.isEmpty {
+                        logger.debug("tryBleDelivery: no send targets available")
+                        return false
                     }
 
-                    // Fallback: Central path (write to Android's GATT server)
-                    if let central = bleCentralManager {
-                        if let uuid = UUID(uuidString: target) {
-                            if central.sendData(to: uuid, data: envelopeData) {
-                                logger.info("✓ Delivery via BLE Central (target=\(target))")
+                    var lastFailureReason = "no_target_attempted"
+                    for target in sendTargets {
+                        // Prefer Peripheral path first (notifications to subscribed Android central)
+                        // This is the ONLY reliable iOS→Android path when WiFi is off
+                        if let peripheral = blePeripheralManager {
+                            if peripheral.sendDataToConnectedCentral(peerId: target, data: envelopeData) {
                                 logDeliveryAttempt(
                                     messageId: traceMessageId,
                                     medium: "ble",
                                     phase: "local_fallback",
                                     outcome: "accepted",
-                                    detail: "ctx=\(attemptContext) role=central requested_target=\(bleAddr) target=\(target)"
+                                    detail: "ctx=\(attemptContext) role=peripheral requested_target=\(bleAddr) target=\(target)"
                                 )
                                 return true
                             }
-                            lastFailureReason = "central_send_false:\(target)"
-                        } else {
-                            lastFailureReason = "central_invalid_uuid:\(target)"
+                            lastFailureReason = "peripheral_send_false:\(target)"
+                        }
+
+                        // Fallback: Central path (write to Android's GATT server)
+                        if let central = bleCentralManager {
+                            if let uuid = UUID(uuidString: target) {
+                                if central.sendData(to: uuid, data: envelopeData) {
+                                    logger.info("✓ Delivery via BLE Central (target=\(target))")
+                                    logDeliveryAttempt(
+                                        messageId: traceMessageId,
+                                        medium: "ble",
+                                        phase: "local_fallback",
+                                        outcome: "accepted",
+                                        detail: "ctx=\(attemptContext) role=central requested_target=\(bleAddr) target=\(target)"
+                                    )
+                                    return true
+                                }
+                                lastFailureReason = "central_send_false:\(target)"
+                            } else {
+                                lastFailureReason = "central_invalid_uuid:\(target)"
+                            }
                         }
                     }
-                }
 
-                logDeliveryAttempt(
-                    messageId: traceMessageId,
-                    medium: "ble",
-                    phase: "local_fallback",
-                    outcome: "failed",
-                    detail: "ctx=\(attemptContext) requested_target=\(bleAddr) reason=\(lastFailureReason) connected=\(connectedBlePeerIds.count)"
-                )
-                return false
-            }
-        )
-        let localAcked = localFallback.acked
+                    logDeliveryAttempt(
+                        messageId: traceMessageId,
+                        medium: "ble",
+                        phase: "local_fallback",
+                        outcome: "failed",
+                        detail: "ctx=\(attemptContext) requested_target=\(bleAddr) reason=\(lastFailureReason) connected=\(connectedBlePeerIds.count)"
+                    )
+                    return false
+                }
+            )
+            smartResult = TransportDeliveryResult(
+                transport: localFallback.acked ? (localFallback.multipeerAcked ? .multipeer : .ble) : .core,
+                success: localFallback.acked,
+                latencyMs: 0,
+                error: localFallback.acked ? nil : "legacy_fallback_failed",
+                timestamp: Date()
+            )
+        }
+        
+        let localAcked = smartResult.success
         if strictBleOnly {
             logDeliveryAttempt(
                 messageId: traceMessageId,
@@ -3993,6 +4204,11 @@ final class MeshRepository {
                     outcome: "success",
                     detail: "ctx=\(attemptContext) route=\(routePeerId)"
                 )
+                
+                // Reset failure count on success (LOG-AUDIT-001 fix)
+                consecutiveDeliveryFailures[routePeerId] = 0
+                lastFailureTime.removeValue(forKey: routePeerId)
+                
                 return DeliveryAttemptResult(
                     acked: true,
                     routePeerId: routePeerId,
@@ -4002,11 +4218,35 @@ final class MeshRepository {
                 logger.debug("Skipping redundant core send for \(traceMessageId ?? "unknown"): already delivered via local transport")
             }
 
+            // Check circuit breaker before attempting relay-circuit (LOG-AUDIT-001 fix)
+            let peerKey = routePeerId
+            let failureCount = consecutiveDeliveryFailures[peerKey] ?? 0
+            let lastFailure = lastFailureTime[peerKey]
+            
+            // Circuit breaker: if too many consecutive failures, pause retries
+            if failureCount >= circuitBreakerThreshold {
+                if let lastFailure = lastFailure,
+                   Date().timeIntervalSince(lastFailure) < circuitBreakerDuration {
+                    let remaining = circuitBreakerDuration - Date().timeIntervalSince(lastFailure)
+                    logger.warning("Circuit breaker active for \(peerKey): \(failureCount) failures, retry in \(Int(remaining))s")
+                    appendDiagnostic("delivery_circuit_breaker peer=\(peerKey) failures=\(failureCount) remaining_sec=\(Int(remaining))")
+                    continue
+                }
+                // Reset after circuit breaker duration
+                consecutiveDeliveryFailures[peerKey] = 0
+            }
+            
             let relayOnly = relayCircuitAddresses(for: routePeerId)
             if !relayOnly.isEmpty {
                 connectToPeer(routePeerId, addresses: relayOnly)
                 _ = await awaitPeerConnection(peerId: routePeerId, timeoutMs: 3000)
-                try? await Task.sleep(nanoseconds: 500_000_000)
+                
+                // Exponential backoff before relay attempt (1s → 2s → 4s → 8s → 16s → 32s max)
+                let backoffExponent = min(failureCount, 5)
+                let backoffSeconds = TimeInterval(1 << backoffExponent)
+                logger.info("Relay-circuit backoff: \(backoffSeconds)s (failure count: \(failureCount))")
+                try? await Task.sleep(nanoseconds: UInt64(backoffSeconds * 1_000_000_000))
+                
                 logDeliveryAttempt(
                     messageId: traceMessageId,
                     medium: "relay-circuit",
@@ -4029,6 +4269,12 @@ final class MeshRepository {
                         outcome: "failed",
                         detail: "ctx=\(attemptContext) route=\(routePeerId) reason=\(sendError ?? "unknown")"
                     )
+                    
+                    // Track failure for circuit breaker (LOG-AUDIT-001 fix)
+                    self.consecutiveDeliveryFailures[peerKey] = (self.consecutiveDeliveryFailures[peerKey] ?? 0) + 1
+                    self.lastFailureTime[peerKey] = Date()
+                    logger.info("Delivery failure tracked: peer=\(peerKey) consecutive=\(self.consecutiveDeliveryFailures[peerKey] ?? 0)")
+                    
                     if isTerminalIdentityFailure(sendError) {
                         return DeliveryAttemptResult(
                             acked: false,
@@ -4038,6 +4284,10 @@ final class MeshRepository {
                     }
                     continue
                 }
+                
+                // Reset failure count on success (LOG-AUDIT-001 fix)
+                consecutiveDeliveryFailures[peerKey] = 0
+                lastFailureTime.removeValue(forKey: peerKey)
                 logger.info("✓ Delivery ACK from \(routePeerId) after relay-circuit retry")
                 logDeliveryAttempt(
                     messageId: traceMessageId,
@@ -4981,7 +5231,7 @@ final class MeshRepository {
         lastBleBeaconPayload = data
         lastBleBeaconPayloadPublishedAt = now
         blePeripheralManager?.setIdentityData(data)
-        logger.info("BLE identity beacon set: \(publicKeyHex.prefix(8))... (\(data.count) bytes, listeners=\(listeners.count))")
+        logger.info("BLE identity beacon set: \(publicKeyHex.prefix(8))... (\(data.count) bytes, listeners=\(listeners.count)) p2p_id=\(info.libp2pPeerId ?? "unknown")")
     }
 
     // MARK: - Auto-Adjustment Engine

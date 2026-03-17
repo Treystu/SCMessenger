@@ -1,5 +1,7 @@
 use crate::mobile_bridge::MeshSettings;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NotificationKind {
@@ -210,6 +212,179 @@ fn ids_match(left: &str, right: &str) -> bool {
     left == right || left.eq_ignore_ascii_case(right)
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// WS14.5: Hybrid Remote Push Interface (contract only, no backend dispatch)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Platform type for notification endpoints.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NotificationPlatform {
+    Ios,
+    Android,
+    Web,
+}
+
+impl NotificationPlatform {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            NotificationPlatform::Ios => "ios",
+            NotificationPlatform::Android => "android",
+            NotificationPlatform::Web => "web",
+        }
+    }
+}
+
+/// Capabilities for a notification endpoint.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotificationEndpointCapabilities {
+    pub dm: bool,
+    pub dm_request: bool,
+}
+
+/// A registered notification endpoint for remote push.
+/// WS14: Contract only - no backend dispatch implementation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotificationEndpoint {
+    pub endpoint_id: String,
+    pub platform: NotificationPlatform,
+    pub token_or_subscription: String,
+    pub capabilities: NotificationEndpointCapabilities,
+    pub device_id: String,
+    pub last_seen_ts: u64,
+    pub registered_at_ts: u64,
+}
+
+/// Error type for endpoint operations.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NotificationEndpointError {
+    InvalidEndpointId,
+    InvalidPlatform,
+    InvalidToken,
+    InvalidDeviceId,
+    EndpointAlreadyExists,
+    EndpointNotFound,
+    StorageError(String),
+}
+
+impl std::fmt::Display for NotificationEndpointError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NotificationEndpointError::InvalidEndpointId => write!(f, "invalid_endpoint_id"),
+            NotificationEndpointError::InvalidPlatform => write!(f, "invalid_platform"),
+            NotificationEndpointError::InvalidToken => write!(f, "invalid_token"),
+            NotificationEndpointError::InvalidDeviceId => write!(f, "invalid_device_id"),
+            NotificationEndpointError::EndpointAlreadyExists => {
+                write!(f, "endpoint_already_exists")
+            }
+            NotificationEndpointError::EndpointNotFound => write!(f, "endpoint_not_found"),
+            NotificationEndpointError::StorageError(msg) => write!(f, "storage_error: {}", msg),
+        }
+    }
+}
+
+/// In-memory notification endpoint registry.
+/// WS14: Contract only - persistence would be added for production.
+#[derive(Clone)]
+pub struct NotificationEndpointRegistry {
+    endpoints: Arc<Mutex<HashMap<String, NotificationEndpoint>>>,
+}
+
+impl NotificationEndpointRegistry {
+    pub fn new() -> Self {
+        Self {
+            endpoints: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Register a new notification endpoint.
+    /// WS14: Validates inputs but does NOT dispatch to any backend.
+    pub fn register_endpoint(
+        &self,
+        platform: NotificationPlatform,
+        token_or_subscription: String,
+        capabilities: NotificationEndpointCapabilities,
+        device_id: String,
+    ) -> Result<NotificationEndpoint, NotificationEndpointError> {
+        if token_or_subscription.is_empty() {
+            return Err(NotificationEndpointError::InvalidToken);
+        }
+        if device_id.is_empty() {
+            return Err(NotificationEndpointError::InvalidDeviceId);
+        }
+
+        let endpoint_id = format!(
+            "{}-{}",
+            platform.as_str(),
+            &device_id[..8.min(device_id.len())]
+        );
+        let now = now_ms();
+
+        let endpoint = NotificationEndpoint {
+            endpoint_id: endpoint_id.clone(),
+            platform,
+            token_or_subscription,
+            capabilities,
+            device_id,
+            last_seen_ts: now,
+            registered_at_ts: now,
+        };
+
+        let mut endpoints = self
+            .endpoints
+            .lock()
+            .map_err(|e| NotificationEndpointError::StorageError(e.to_string()))?;
+        endpoints.insert(endpoint_id.clone(), endpoint.clone());
+
+        Ok(endpoint)
+    }
+
+    /// Unregister a notification endpoint.
+    pub fn unregister_endpoint(&self, endpoint_id: &str) -> Result<(), NotificationEndpointError> {
+        let mut endpoints = self
+            .endpoints
+            .lock()
+            .map_err(|e| NotificationEndpointError::StorageError(e.to_string()))?;
+        endpoints
+            .remove(endpoint_id)
+            .ok_or(NotificationEndpointError::EndpointNotFound)?;
+        Ok(())
+    }
+
+    /// List all registered endpoints.
+    pub fn list_endpoints(&self) -> Vec<NotificationEndpoint> {
+        self.endpoints
+            .lock()
+            .map(|endpoints| endpoints.values().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// Update last seen timestamp for an endpoint.
+    pub fn touch_endpoint(&self, endpoint_id: &str) -> Result<(), NotificationEndpointError> {
+        let mut endpoints = self
+            .endpoints
+            .lock()
+            .map_err(|e| NotificationEndpointError::StorageError(e.to_string()))?;
+        let endpoint = endpoints
+            .get_mut(endpoint_id)
+            .ok_or(NotificationEndpointError::EndpointNotFound)?;
+        endpoint.last_seen_ts = now_ms();
+        Ok(())
+    }
+}
+
+impl Default for NotificationEndpointRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -285,10 +460,12 @@ mod tests {
         let mut message = base_message();
         message.is_duplicate = true;
 
-        let decision =
-            classify_notification(message, base_ui_state(), MeshSettings::default());
+        let decision = classify_notification(message, base_ui_state(), MeshSettings::default());
         assert_eq!(decision.kind, NotificationKind::None);
-        assert_eq!(decision.suppression_reason.as_deref(), Some("duplicate_message"));
+        assert_eq!(
+            decision.suppression_reason.as_deref(),
+            Some("duplicate_message")
+        );
     }
 
     #[test]

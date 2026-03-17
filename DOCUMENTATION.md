@@ -151,6 +151,13 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`
   - `docs/DOCUMENT_STATUS_INDEX.md`
+- WS12.47: BLE Log Visibility Improvements (2026-03-16 HST, implemented proactive identity seeding in `run5.sh`, expanded iOS log capture predicates, and improved BLE transport recognition in the visualizer) is tracked in:
+  - `run5.sh`
+  - `log-visualizer/public/mesh.html`
+  - `docs/CURRENT_STATE.md`
+  - `REMAINING_WORK_TRACKING.md`
+  - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
+  - `docs/DOCUMENT_STATUS_INDEX.md`
 - WS12.41: Dynamic Log Retention & Storage Management (2026-03-12, implemented summarized log storage using time offsets from install time, dynamic disk-aware retention with 80/20 message-priority buffer, and cross-platform StorageManager/LogManager integration) is tracked in:
   - `core/src/store/logs.rs`
   - `core/src/store/storage.rs`

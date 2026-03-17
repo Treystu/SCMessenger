@@ -24,6 +24,11 @@ const LOG_MAPPINGS = [
     map: (m) => ["!!! CRASH !!!", m[1].toUpperCase(), m[2]],
   },
   {
+    // Identity Ownership
+    match: /SC_IDENTITY_OWN\s+p2p_id=([^\s]+)\s+pk=([^\s]+)/,
+    map: (m) => ["IDENTITY", "OWN", m[1], m[2]],
+  },
+  {
     // Rust Core Internal Failure
     match: /scmessenger_core.*(Failed|Error|regressed|dropped|rejected|invalid):\s*(.*)/i,
     map: (m) => ["!!! CORE_FAIL !!!", m[1].toUpperCase(), m[2]],
@@ -49,9 +54,19 @@ const LOG_MAPPINGS = [
     map: (m) => ["!!! CONN_FAIL !!!", "FAIL", m[2]],
   },
   {
-    // BLE Logic
-    match: /BLE (identity beacon set|characteristic write successful|scanning|discovered):\s*(.*)/i,
-    map: (m) => ["BLE_OPS", m[1].toUpperCase(), m[2].includes(":") ? "MAC_ADDR" : "DETAIL"],
+    // BLE Operations (Enhanced to catch more patterns)
+    match: /\bBLE\s+(?:.*?\s+)?(scanning|discovered|connected|disconnected|advertising|beacon|identity|write|read|characteristic|power|gatt|l2cap|error|fail|success)\b/i,
+    map: (m) => ["BLE_OPS", m[1].toUpperCase(), "DETAIL"],
+  },
+  {
+    // Local Transport (Multipeer, Wifi-Aware, WiFi-Direct, mDNS)
+    match: /\b(Multipeer|WifiDirect|WifiAware|mDNS|Discovery|Nearby)\b\s+(?:.*?\s+)?(scanning|discovered|connected|disconnected|advertising|browsing|invite|accept|reject|timeout|failed|stopped|started)\b/i,
+    map: (m) => ["LOCAL_OPS", m[1].toUpperCase(), m[2].toUpperCase()],
+  },
+  {
+    // Diagnostic Events (Internal markers from appendDiagnostic)
+    match: /(?:DIAG:\s+)?(ble|multipeer|wifi|relay|storage|power|dial|delivery)_(\w+)\s*(.*)/i,
+    map: (m) => [m[1].toUpperCase() + "_DIAG", m[2].toUpperCase(), "INFO"],
   },
   {
     // Sync Operations
@@ -113,20 +128,20 @@ function extractDynamicSections(text, depth = 0) {
 
 function cleanSegment(s) {
   let cleaned = s.trim();
-  
+
   // 1. Structural Normalization
   cleaned = cleaned.replace(/^\[|\]$/g, ""); // Strip brackets
-  
+
   // 2. Variable Scrubbing (Aggressive)
   cleaned = cleaned.replace(/12D3KooW[a-zA-Z0-9]{32,}/g, "PEER_ID"); // Full PeerIDs
   cleaned = cleaned.replace(/[a-f0-9]{32,}/gi, "HASH"); // UUIDs/Hashes
   cleaned = cleaned.replace(/\b[0-9a-f]{8,}\b/gi, "HEX"); // Short Hex
   cleaned = cleaned.replace(/\b\d{4,}\b/g, "NUM"); // Any 4+ digit variable
   cleaned = cleaned.replace(/\d{2}:\d{2}:\d{2}(\.\d{3})?/, "TIME"); // Internal timestamps
-  
+
   // 3. Network/Path Normalization
   cleaned = cleaned.replace(/\/ip[46]\/[\d\.]+/g, "/ipX/ADDR"); // IP addresses
-  
+
   // 4. Semantic Short-circuit (Pull intent to front)
   const intentMap = [
     { match: /stack\s?overflow|fatal|panic|crash/i, label: "!!! CRASH !!!" },
@@ -160,8 +175,12 @@ function processLine(rawLine, platform) {
     const scmMatch = line.match(/\(([^)]+)\)\s*\[([^\]]+)\]\s*(.*)/);
     const harnessStatMatch = line.match(/^\s*(GCP|OSX|Android|iOS Dev|iOS Sim):\s*(\d+)/i);
     if (scmMatch) {
-      tag = scmMatch[2].split(":").pop().trim();
+      // Improved iOS Category extraction
+      const complexTag = scmMatch[1];
+      tag = complexTag.includes(",") ? complexTag.split(",").pop().trim() : complexTag;
       msg = scmMatch[3].trim();
+      // If it's a DIAG log, strip the prefix if it exists to help LOG_MAPPINGS
+      msg = msg.replace(/^DIAG:\s+/i, "");
     } else if (harnessStatMatch) {
       tag = "Metrics";
       msg = `Status: ${harnessStatMatch[1]}`; // Group all "GCP: 123 lines" into "Metrics -> Status: GCP"
@@ -189,15 +208,27 @@ function processLine(rawLine, platform) {
     // Strip bracketed components from the tag (e.g. D/Repository[MyThread] -> Repository)
     tag = tag.replace(/\[.*?\]/g, "").trim();
 
+    // Extract all PeerIDs from the FULL raw line, using a slightly more permissive regex
+    // Catch both libp2p (12D3KooW...) and Blake3 hex (64 chars)
+    const peerIds = rawLine.match(/(12D3KooW[a-zA-Z0-9]{40,60}|[a-f0-9]{64})/gi) || [];
+
     // Dynamically iterate and extract based on log type sections
-    const dynamicSections = extractDynamicSections(msg);
+    let dynamicSections = extractDynamicSections(msg);
+
+    // Explicit Fallback for BLE/Local tags if dynamicSections didn't categorize it
+    if (dynamicSections.length === 1 && (tag.toLowerCase().includes("ble") || tag.toLowerCase().includes("multipeer"))) {
+       dynamicSections = [tag.toUpperCase().replace("MANAGER", "").replace("CLIENT", "").replace("SERVER", ""), ...dynamicSections];
+    }
+
     const segments = [platform, tag, ...dynamicSections];
 
     return {
       source: platform,
       levelTag: tag,
       msg: msg,
+      raw: rawLine, // Provide the absolute raw line for mesh discovery
       segments: segments,
+      peerIds: Array.from(new Set(peerIds)), // Deduplicate
     };
   } catch (e) {
     console.error("Dynamic Processor Error:", e);
@@ -225,7 +256,9 @@ wss.on("connection", (ws) => {
       buffer = lines.pop();
       for (const l of lines) {
         if (!l.trim()) continue;
-        const parsed = processLine(l, name);
+        let platform = name;
+        if (platform === "ios-sim") platform = "Sim";
+        const parsed = processLine(l, platform);
         if (ws.readyState === 1 && parsed.segments.length > 1)
           ws.send(JSON.stringify(parsed));
       }
@@ -264,13 +297,14 @@ wss.on("connection", (ws) => {
       { name: "Harness", file: "harness.log" },
       { name: "Sim", file: "ios-sim.log" },
       { name: "iOS-Dev", file: "ios-device.log" },
+      { name: "iOS-Dev", file: "ios-device-system.log" },
       { name: "Android-Mesh", file: "android.log" },
     ];
 
     sources.forEach((src) => {
       const fullPath = path.join(meshDir, src.file);
-      // Use tail -F to safely wait for file creation or rotation
-      stream(src.name, "tail", ["-F", "-n", "100", fullPath]);
+      // Use tail -n +1 -F to read from the beginning and follow
+      stream(src.name, "tail", ["-n", "+1", "-F", fullPath]);
     });
   };
 

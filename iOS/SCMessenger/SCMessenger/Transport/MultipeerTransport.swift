@@ -70,11 +70,10 @@ final class MultipeerTransport: NSObject {
             return MainActor.assumeIsolated { meshRepository?.getIdentitySnippet() ?? "SCMesh" }
         }
 
-        var displayName = "SCMesh"
-        DispatchQueue.main.sync { [weak meshRepository] in
-            displayName = MainActor.assumeIsolated { meshRepository?.getIdentitySnippet() ?? "SCMesh" }
-        }
-        return displayName
+        // Use async to avoid deadlock - return default name for background thread calls
+        // The peer ID will be updated on next identity change via broadcastIdentityBeacon
+        logger.warning("identitySnippetForDisplayName called from background thread - using default name")
+        return "SCMesh"
     }
 
     private func appendRepositoryDiagnostic(_ message: String) {

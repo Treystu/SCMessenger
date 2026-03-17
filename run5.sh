@@ -1,5 +1,5 @@
-#!/bin/bash
-# run5.sh — 5-Node SCMessenger Mesh Test Harness
+#!/usr/bin/env bash
+# run5.sh — 5-Node SCMessenger Mesh Test Harness (Unified)
 #
 # Nodes:
 #   1. GCP      — headless relay (Docker on scmessenger-bootstrap)
@@ -8,19 +8,35 @@
 #   4. iOS Dev  — full node (physical device via devicectl)
 #   5. iOS Sim  — full node (simulator via simctl)
 #
-# Usage: ./run5.sh [--time=5] [--update]
-#   --time=N   Run for N minutes then auto-exit (default: 5)
-#   --update   Rebuild headless nodes; push latest to mobile if available
+# Usage: ./run5.sh [--time=5] [--update] [--restore-on-exit]
+#   --time=N          Run for N minutes then auto-exit (default: 5)
+#   --update          Rebuild headless nodes; push latest to mobile if available
+#   --restore-on-exit Stop any nodes this script launched before exiting
 #
-# NOTE: set -e intentionally NOT used. Every command handles its own errors.
+# Design:
+#   • Full nodes (Android, iOS Device, iOS Sim): always pre-installed & running.
+#     This script NEVER touches them — it only attaches log collectors passively.
+#     If somehow not running, it brings them up gently (no force-stop, no reinstall).
+#   • Headless nodes (GCP, OSX relay): checked and brought up to date if needed.
+#     GCP: verified via docker ps; restarts container if stale.
+#     OSX: started via cargo if not already running.
+#
+set -euo pipefail
 
-# ── Args ───────────────────────────────────────────────────────────────────────
+# ── Args ──────────────────────────────────────────────────────────────────────
 DURATION_MIN=5
 UPDATE_APPS=0
-for arg in "$@"; do
-  case "$arg" in
-    -t=*|--time=*)  DURATION_MIN="${arg#*=}" ;;
-    -u|--update)    UPDATE_APPS=1 ;;
+RESTORE_ON_EXIT=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -t=*|--time=*)      DURATION_MIN="${1#*=}" ;;
+    -u|--update)        UPDATE_APPS=1 ;;
+    --restore-on-exit)  RESTORE_ON_EXIT=1 ;;
+    -h|--help)
+      head -20 "$0" | grep -E "^#" | sed 's/^# \?//'
+      exit 0
+      ;;
+    *) shift ;;
   esac
 done
 
@@ -32,12 +48,12 @@ ln -sfn "$TIMESTAMP" "logs/5mesh/latest"
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 BUNDLE_ID="SovereignCommunications.SCMessenger"
-TEST_START_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-SYNC_MARKER="=== TEST_START_MARKER: $TEST_START_UTC ==="
+SYNC_MARKER="=== TEST_START_MARKER: $(date -u +'%Y-%m-%dT%H:%M:%SZ') ==="
 GCP_ZONE="us-central1-a"
 GCP_HOST="scmessenger-bootstrap"
 GCP_IMAGE="us-central1-docker.pkg.dev/scmessenger-bootstrapnode/scmessenger-repo/scmessenger-cli:latest"
-OSX_RUST_LOG="info"
+GCP_CONTAINER_NAME="scmessenger-relay"
+OSX_RUST_LOG="info,libp2p_autonat=debug,libp2p_dcutr=debug,libp2p_relay=debug,scmessenger_core::transport::swarm=debug,scmessenger_core::store::relay_custody=debug,scmessenger_core::mesh::delivery=debug"
 
 # Prefer pre-built binary (instant start) over cargo run (30-60s compile)
 if [ -f "target/debug/scmessenger-cli" ]; then
@@ -72,12 +88,40 @@ hlog() {
 # ── Helper: check if a PID is still alive ─────────────────────────────────────
 pid_alive() { kill -0 "$1" 2>/dev/null; }
 
+# ── GCP SSH helper: tries IAP tunnel (more reliable in restricted networks) ───
+gcp_ssh() {
+  local cmd="$1"
+  # Try IAP tunnel first (avoids firewall blocks on port 22)
+  if gcloud compute ssh "$GCP_HOST" --zone="$GCP_ZONE" \
+      --tunnel-through-iap \
+      --ssh-flag="-o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3" \
+      --command="$cmd" 2>/dev/null; then
+    return 0
+  fi
+  # Fall back to direct SSH
+  hlog "  GCP IAP tunnel failed, trying direct SSH..."
+  gcloud compute ssh "$GCP_HOST" --zone="$GCP_ZONE" \
+    --ssh-flag="-o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3" \
+    --command="$cmd" 2>/dev/null
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+echo "╔══════════════════════════════════════════════════════════════╗"
+printf  "║   SCMessenger Mesh Harness  %-32s ║\n" "$TIMESTAMP"
+printf  "║   Duration: %-4sm  |  Update: %-5s  |  Restore: %-5s   ║\n" \
+        "$DURATION_MIN" "$UPDATE_APPS" "$RESTORE_ON_EXIT"
+echo "╚══════════════════════════════════════════════════════════════╝"
+echo ""
+
+# ═══════════════════════════════════════════════════════════════════════════════
+echo "Phase 1: Checking node status..."
+echo ""
+
 # ── Device Detection ───────────────────────────────────────────────────────────
 
 # Android: pin to a specific serial to avoid "more than one device" errors
 ADB_SERIAL=""
 if adb devices 2>/dev/null | grep -q "device$"; then
-  # Use a simpler, more robust selection that handles both TCP and USB
   ADB_SERIAL=$(adb devices -l | tail -n +2 | awk '$2=="device"{print $1; exit}')
 fi
 ANDROID_AVAILABLE=0
@@ -106,25 +150,7 @@ if [ -z "$IOS_SIM_UDID" ]; then
   fi
 fi
 
-# ── GCP SSH helper: tries IAP tunnel (more reliable in restricted networks) ───
-gcp_ssh() {
-  local cmd="$1"
-  # Try IAP tunnel first (avoids firewall blocks on port 22)
-  if gcloud compute ssh "$GCP_HOST" --zone="$GCP_ZONE" \
-      --tunnel-through-iap \
-      --ssh-flag="-o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3" \
-      --command="$cmd" 2>/dev/null; then
-    return 0
-  fi
-  # Fall back to direct SSH
-  hlog "  GCP IAP tunnel failed, trying direct SSH..."
-  gcloud compute ssh "$GCP_HOST" --zone="$GCP_ZONE" \
-    --ssh-flag="-o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3" \
-    --command="$cmd" 2>/dev/null
-}
-
 # ── Check if iOS device has SCMessenger running ──────────────────────────────
-# devicectl device info processes outputs a text list — grep for SCMessenger.app path or bundle exe
 ios_dev_running() {
   [ -z "$IOS_DEVICE_UDID" ] && return 1
   xcrun devicectl device info processes \
@@ -136,26 +162,22 @@ ios_dev_running() {
 ios_sim_running() {
   [ -z "$IOS_SIM_UDID" ] && return 1
   xcrun simctl listapps "$IOS_SIM_UDID" 2>/dev/null | grep -q "$BUNDLE_ID" || return 1
-  # Check if actually running vs just installed
   xcrun simctl spawn "$IOS_SIM_UDID" pgrep -f "SCMessenger" >/dev/null 2>&1
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
-echo "╔══════════════════════════════════════════════════════════════╗"
-printf  "║   SCMessenger Mesh Harness  %-32s ║\n" "$TIMESTAMP"
-printf  "║   Duration: %-4sm  |  Update: %-27s ║\n" "$DURATION_MIN" "$UPDATE_APPS"
-echo "╚══════════════════════════════════════════════════════════════╝"
-echo ""
-
-echo "═══ Phase 1: Node Status Audit ══════════════════════════════════"
+# ═══════════════════════════════════════════════════════════════════════════════
+echo "Phase 1: Node Status Audit"
 echo ""
 
 # 1. GCP -----------------------------------------------------------------------
 printf "  [1/5] GCP headless relay   ... "
-GCP_CID=$(gcp_ssh "sudo docker ps --filter status=running -q | head -n1" 2>/dev/null || true)
+GCP_CID=$(gcp_ssh "sudo docker ps --filter name=$GCP_CONTAINER_NAME --format '{{.ID}}' | head -n1" 2>/dev/null || true)
+if [ -z "${GCP_CID:-}" ]; then
+  GCP_CID=$(gcp_ssh "sudo docker ps --filter ancestor=$GCP_IMAGE --format '{{.ID}}' | head -n1" 2>/dev/null || true)
+fi
 GCP_RUNNING=0
 if [ -n "${GCP_CID:-}" ]; then
-  GCP_VERSION=$(gcp_ssh "sudo docker inspect --format='{{.Config.Image}}' $GCP_CID" 2>/dev/null | grep -oE 'cli:[^\"]+' || echo "unknown")
+  GCP_VERSION=$(gcp_ssh "sudo docker inspect --format='{{.Config.Image}}' $GCP_CID" 2>/dev/null | grep -oE 'cli:[^\"]+' || echo "latest")
   echo "✅ running  (container $GCP_CID  image: $GCP_VERSION)"
   GCP_RUNNING=1
 else
@@ -181,9 +203,7 @@ if [ "$ANDROID_AVAILABLE" = "1" ]; then
     echo "✅ running  (serial: $ADB_SERIAL)"
     ANDROID_RUNNING=1
   else
-    # Improved check: avoid output capture issues that cause integer expression errors
     ANDROID_STATE=$(adb -s "$ADB_SERIAL" shell pm list packages com.scmessenger.android 2>/dev/null | grep -c "com.scmessenger.android" || echo 0)
-    # Ensure it's a valid integer
     [[ "$ANDROID_STATE" =~ ^[0-9]+$ ]] || ANDROID_STATE=0
     if [ "$ANDROID_STATE" -gt 0 ]; then
        echo "⚠️  installed, NOT running  (serial: $ADB_SERIAL)"
@@ -231,15 +251,19 @@ echo ""
 echo "  [1/5] GCP:"
 if [ "$GCP_RUNNING" = "0" ] || [ "$UPDATE_APPS" = "1" ]; then
   if [ "$UPDATE_APPS" = "1" ]; then
-    echo "        Pulling latest image..."
+    echo "        Pulling latest image and restarting..."
     gcp_ssh "sudo docker pull $GCP_IMAGE 2>&1 | tail -3"  || hlog "        ⚠️  docker pull failed"
-    gcp_ssh "sudo docker stop \$(sudo docker ps -q) 2>/dev/null; sleep 1; \
+    gcp_ssh "sudo docker stop $GCP_CONTAINER_NAME 2>/dev/null; \
+             sudo docker rm $GCP_CONTAINER_NAME 2>/dev/null; \
              sudo docker run -d --restart=unless-stopped \
-               -p 9001:9001 $GCP_IMAGE \
-               relay --listen /ip4/0.0.0.0/tcp/9001 --http-port 9000" \
+               --name $GCP_CONTAINER_NAME \
+               -p 9001:9001 \
+               -p 9000:9000 \
+               $GCP_IMAGE \
+               scm relay --listen /ip4/0.0.0.0/tcp/9001 --http-port 9000" \
       || hlog "        ⚠️  GCP restart failed"
     sleep 3
-    GCP_CID=$(gcp_ssh "sudo docker ps --filter status=running -q | head -n1" 2>/dev/null || true)
+    GCP_CID=$(gcp_ssh "sudo docker ps --filter name=$GCP_CONTAINER_NAME --format '{{.ID}}' | head -n1" 2>/dev/null || true)
   fi
   if [ -n "${GCP_CID:-}" ]; then
     echo "        ✅ Container $GCP_CID running"
@@ -259,7 +283,6 @@ if [ "$OSX_RUNNING" = "0" ] || [ "$UPDATE_APPS" = "1" ]; then
     pkill -f "scmessenger-cli.*relay" 2>/dev/null || true; sleep 0.5
   fi
   echo "        Starting relay (nohup, binary: $OSX_RELAY_CMD)..."
-  # Use nohup so relay survives if run5.sh's terminal dies
   RUST_LOG="$OSX_RUST_LOG" \
     nohup $OSX_RELAY_CMD relay \
       --listen /ip4/0.0.0.0/tcp/9010 \
@@ -267,7 +290,6 @@ if [ "$OSX_RUNNING" = "0" ] || [ "$UPDATE_APPS" = "1" ]; then
     >> "$LOGDIR/osx.log" 2>&1 &
   OSX_PID=$!
   STARTED_OSX=1
-  # Brief sanity check — if it dies in <2s it's a binary issue
   sleep 2
   if pid_alive "$OSX_PID"; then
     echo "        ✅ Started (pid $OSX_PID)"
@@ -344,10 +366,44 @@ echo ""
 echo "═══ Phase 3: Attach Passive Log Collectors ══════════════════════"
 echo ""
 
+# ── Seed node identities for visualizer ───────────────────────────────────────
+hlog "Seeding node identities for visualizer..."
+# Android
+if [ "$ANDROID_AVAILABLE" = "1" ]; then
+  # Try to extraction from history to ensure visualizer sees it immediately
+  (
+    PID=$(adb -s "$ADB_SERIAL" shell pidof com.scmessenger.android 2>/dev/null | tr -d '\r\n' || true)
+    if [ -n "$PID" ]; then
+      OWN_ID=$(adb -s "$ADB_SERIAL" logcat -d --pid="$PID" 2>/dev/null | grep -m 1 -oE "12D3KooW[a-zA-Z0-9]{44,}" | tail -1 || true)
+      if [ -n "$OWN_ID" ]; then
+        echo "SC_IDENTITY_OWN p2p_id=$OWN_ID (seeded from logcat history)" >> "$LOGDIR/android.log"
+      fi
+    fi
+  ) &
+fi
+
+# iOS Device
+if [ -n "$IOS_DEVICE_UDID" ]; then
+  (
+    # Check if we have a recent diagnostics log we can pull ID from
+    DIAG_FILE="$ROOT_DIR/ios_diagnostics_latest.log"
+    if [ -f "$DIAG_FILE" ]; then
+       OWN_ID=$(grep -oE "12D3KooW[a-zA-Z0-9]{44,}" "$DIAG_FILE" | tail -1 || true)
+       if [ -n "$OWN_ID" ]; then
+         echo "SC_IDENTITY_OWN p2p_id=$OWN_ID (seeded from diag history)" >> "$LOGDIR/ios-device.log"
+       fi
+    fi
+  ) &
+fi
+# ──────────────────────────────────────────────────────────────────────────────
+
 # ── GCP: stream docker logs with SSH keepalive ────────────────────────────────
 {
   printf "\n%s\n" "$SYNC_MARKER"
-  if ! gcp_ssh "CID=\$(sudo docker ps --filter status=running -q | head -n1); \
+  if ! gcp_ssh "CID=\$(sudo docker ps --filter name=$GCP_CONTAINER_NAME --format '{{.ID}}' | head -n1); \
+                if [ -z \"\$CID\" ]; then \
+                  CID=\$(sudo docker ps --filter ancestor=$GCP_IMAGE --format '{{.ID}}' | head -n1); \
+                fi; \
                 if [ -n \"\$CID\" ]; then \
                   sudo docker logs --tail 200 \"\$CID\" 2>&1; \
                 else \
@@ -357,7 +413,10 @@ echo ""
   fi
   GCP_LAST_SINCE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
   while true; do
-    if ! gcp_ssh "CID=\$(sudo docker ps --filter status=running -q | head -n1); \
+    if ! gcp_ssh "CID=\$(sudo docker ps --filter name=$GCP_CONTAINER_NAME --format '{{.ID}}' | head -n1); \
+                  if [ -z \"\$CID\" ]; then \
+                    CID=\$(sudo docker ps --filter ancestor=$GCP_IMAGE --format '{{.ID}}' | head -n1); \
+                  fi; \
                   if [ -n \"\$CID\" ]; then \
                     sudo docker logs --since \"$GCP_LAST_SINCE\" \"\$CID\" 2>&1; \
                   else \
@@ -375,9 +434,6 @@ echo "  [1/5] GCP log stream      PID=$GCP_LOG_PID  → $(basename $LOGDIR)/gcp.
 # ── OSX: output already going to logdir if we started it; otherwise tail ──────
 printf "\n%s\n" "$SYNC_MARKER" >> "$LOGDIR/osx.log"
 if [ "$STARTED_OSX" = "0" ] && [ -n "$OSX_PID" ]; then
-  # Pre-existing relay: try to pick up live output via a wrapper that tees
-  # stdout of the existing process (best effort on macOS — procfs not available)
-  # We can at least tail any log file the relay was previously writing to
   PREV_LOG=$(find logs/5mesh -name "osx.log" \
                -not -path "*/$TIMESTAMP/*" \
                -not -path "*/latest/*" 2>/dev/null | \
@@ -407,17 +463,10 @@ else
 fi
 
 # ── iOS Device: console stream (captures stdout from SCMessenger) ─────────────
-# NOTE: devicectl has NO passive log stream subcommand.
-# `process launch --console` both launches AND streams — this is the only way
-# to capture stdio from a physical device without Xcode.
-# We use --no-activate to avoid interrupting foreground state.
 if [ -n "$IOS_DEVICE_UDID" ]; then
   printf "\n%s\n" "$SYNC_MARKER" > "$LOGDIR/ios-device.log"
   printf "\n%s\n" "$SYNC_MARKER" > "$LOGDIR/ios-device-system.log"
 
-  # Console stdio stream (Rust core output)
-  # This requires a launch. If the app is already running, do NOT perturb it;
-  # record the limitation explicitly and rely on the system/radio stream below.
   if [ "$IOS_DEV_RUNNING" = "1" ] && [ "$STARTED_IOS_DEV_APP" = "0" ]; then
     IOS_DEV_LAUNCH_PID=""
     {
@@ -435,14 +484,11 @@ if [ -n "$IOS_DEVICE_UDID" ]; then
     IOS_DEV_LAUNCH_PID=$!
   fi
 
-  # System log stream: BLE + MPC subsystems (these appear in the host log)
-  # Use `log stream` with predicate targeted at the device process name
-  # System log stream: BLE + MPC subsystems
-  # We try to exclude the Simulator specifically by sender path
+  # System log stream: BLE + MPC + App subsystems
   log stream \
     --style compact \
     --level info \
-    --predicate 'process == "SCMessenger" OR subsystem == "com.apple.bluetooth" OR subsystem == "com.apple.MultipeerConnectivity"' \
+    --predicate 'process == "SCMessenger" OR subsystem == "com.apple.bluetooth" OR subsystem == "com.apple.MultipeerConnectivity" OR subsystem == "com.scmessenger"' \
     >> "$LOGDIR/ios-device-system.log" 2>&1 &
   IOS_DEV_STREAM_PID=$!
 
@@ -461,7 +507,7 @@ if [ -n "$IOS_SIM_UDID" ]; then
   xcrun simctl spawn "$IOS_SIM_UDID" log stream \
     --level info \
     --style compact \
-    --predicate 'process == "SCMessenger"' \
+    --predicate 'process == "SCMessenger" OR subsystem == "com.scmessenger"' \
     >> "$LOGDIR/ios-sim.log" 2>&1 &
   IOS_SIM_STREAM_PID=$!
   echo "  [5/5] iOS Sim             PID=$IOS_SIM_STREAM_PID → $(basename $LOGDIR)/ios-sim.log"
@@ -587,45 +633,50 @@ shutdown() {
   [ -n "${IOS_SIM_STREAM_PID:-}" ]   && kill "$IOS_SIM_STREAM_PID" 2>/dev/null || true
   [ -n "${TICKER_PID:-}" ]           && kill "$TICKER_PID"         2>/dev/null || true
 
-  if [ "$STARTED_OSX" = "1" ] && [ -n "${OSX_PID:-}" ]; then
-    echo "  Stopping OSX relay (we started it)..."
-    kill "$OSX_PID" 2>/dev/null || true
-  else
-    echo "  OSX relay: pre-existing — left running ✅"
-  fi
+  # Stop nodes we started (only if --restore-on-exit or default behavior)
+  if [ "$RESTORE_ON_EXIT" = "1" ]; then
+    if [ "$STARTED_OSX" = "1" ] && [ -n "${OSX_PID:-}" ]; then
+      echo "  Stopping OSX relay (restore-on-exit)..."
+      kill "$OSX_PID" 2>/dev/null || true
+    else
+      echo "  OSX relay: pre-existing — left running ✅"
+    fi
 
-  if [ "$STARTED_ANDROID_APP" = "1" ] && [ "$ANDROID_AVAILABLE" = "1" ]; then
-    echo "  Stopping Android app (we started it)..."
-    adb -s "$ADB_SERIAL" shell am force-stop com.scmessenger.android >/dev/null 2>&1 || true
-  else
-    echo "  Android: pre-existing — left running ✅"
-  fi
+    if [ "$STARTED_ANDROID_APP" = "1" ] && [ "$ANDROID_AVAILABLE" = "1" ]; then
+      echo "  Stopping Android app (restore-on-exit)..."
+      adb -s "$ADB_SERIAL" shell am force-stop com.scmessenger.android >/dev/null 2>&1 || true
+    else
+      echo "  Android: pre-existing — left running ✅"
+    fi
 
-  if [ "$STARTED_IOS_DEV_APP" = "1" ] && [ -n "${IOS_DEVICE_UDID:-}" ]; then
-    echo "  Stopping iOS Device app (we started it)..."
-    xcrun devicectl device process terminate \
-      --device "$IOS_DEVICE_UDID" \
-      --bundle-id "$BUNDLE_ID" 2>/dev/null || true
-  else
-    [ -n "${IOS_DEVICE_UDID:-}" ] && echo "  iOS Device: pre-existing — left running ✅"
-  fi
+    if [ "$STARTED_IOS_DEV_APP" = "1" ] && [ -n "${IOS_DEVICE_UDID:-}" ]; then
+      echo "  Stopping iOS Device app (restore-on-exit)..."
+      xcrun devicectl device process terminate \
+        --device "$IOS_DEVICE_UDID" \
+        --bundle-id "$BUNDLE_ID" 2>/dev/null || true
+    else
+      [ -n "${IOS_DEVICE_UDID:-}" ] && echo "  iOS Device: pre-existing — left running ✅"
+    fi
 
-  if [ "$STARTED_IOS_SIM_APP" = "1" ] && [ -n "${IOS_SIM_UDID:-}" ]; then
-    echo "  Stopping iOS Sim app (we started it)..."
-    xcrun simctl terminate "$IOS_SIM_UDID" "$BUNDLE_ID" 2>/dev/null || true
+    if [ "$STARTED_IOS_SIM_APP" = "1" ] && [ -n "${IOS_SIM_UDID:-}" ]; then
+      echo "  Stopping iOS Sim app (restore-on-exit)..."
+      xcrun simctl terminate "$IOS_SIM_UDID" "$BUNDLE_ID" 2>/dev/null || true
+    else
+      [ -n "${IOS_SIM_UDID:-}" ] && echo "  iOS Sim: pre-existing — left running ✅"
+    fi
   else
-    [ -n "${IOS_SIM_UDID:-}" ] && echo "  iOS Sim: pre-existing — left running ✅"
+    echo "  restore-on-exit disabled: leaving all started nodes running ✅"
   fi
 
   echo ""
 
   # ── Post-run analysis ──────────────────────────────────────────────────────
-  echo "╔════════════════════════════════════════════════════════╗"
-  echo "║   Post-Run Mesh Analysis                               ║"
-  echo "╚════════════════════════════════════════════════════════╝"
+  echo "╔══════════════════════════════════════════════════════════════╗"
+  echo "║   Post-Run Mesh Analysis                                    ║"
+  echo "╚══════════════════════════════════════════════════════════════╝"
   echo ""
 
-  local LOGDIR_SNAP="$LOGDIR"
+  LOGDIR_SNAP="$LOGDIR"
   if command -v python3 >/dev/null 2>&1; then
     python3 - "$LOGDIR_SNAP" <<'PY'
 import os, re, sys

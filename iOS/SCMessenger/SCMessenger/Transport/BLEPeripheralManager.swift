@@ -132,9 +132,11 @@ final class BLEPeripheralManager: NSObject {
     @discardableResult
     func sendDataToConnectedCentral(peerId: String, data: Data) -> Bool {
         if !Thread.isMainThread {
-            return DispatchQueue.main.sync { [weak self] in
-                self?.sendDataToConnectedCentral(peerId: peerId, data: data) ?? false
+            // Use async to avoid deadlock - result will be best-effort
+            DispatchQueue.main.async { [weak self] in
+                self?.sendDataToConnectedCentral(peerId: peerId, data: data)
             }
+            return true // Optimistic return for async path
         }
         guard let uuid = UUID(uuidString: peerId) else {
             logger.warning("sendDataToConnectedCentral: invalid UUID string \(peerId)")
@@ -149,9 +151,10 @@ final class BLEPeripheralManager: NSObject {
 
     func subscribedCentralIds() -> [String] {
         if !Thread.isMainThread {
-            return DispatchQueue.main.sync { [weak self] in
-                self?.subscribedCentralIds() ?? []
-            }
+            // Return empty array for non-main-thread calls to avoid deadlock
+            // Callers should invoke this from main thread for accurate results
+            logger.warning("subscribedCentralIds called from background thread - returning empty")
+            return []
         }
         return subscribedCentrals.map { $0.identifier.uuidString }
     }
@@ -168,9 +171,11 @@ final class BLEPeripheralManager: NSObject {
     @discardableResult
     private func sendDataToCentral(_ central: CBCentral, data: Data) -> Bool {
         if !Thread.isMainThread {
-            return DispatchQueue.main.sync { [weak self] in
-                self?.sendDataToCentral(central, data: data) ?? false
+            // Use async to avoid deadlock - result will be best-effort
+            DispatchQueue.main.async { [weak self] in
+                self?.sendDataToCentral(central, data: data)
             }
+            return true // Optimistic return for async path
         }
         guard let messageCharacteristic else {
             logger.warning("sendDataToCentral: message characteristic unavailable")

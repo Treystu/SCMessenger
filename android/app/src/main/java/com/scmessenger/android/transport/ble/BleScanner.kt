@@ -134,6 +134,49 @@ class BleScanner(
             Timber.e("BLE Scan failed with error code: $errorCode")
             scanFailures.incrementAndGet()
             isScanning = false
+            
+            // Retry logic for scan failures
+            // Error code 1 = SCAN_FAILED_ALREADY_STARTED (common on Android 12+)
+            // Error code 2 = SCAN_FAILED_APPLICATION_REGISTRATION_FAILED
+            // Error code 3 = SCAN_FAILED_INTERNAL_ERROR
+            // Error code 4 = SCAN_FAILED_FEATURE_UNSUPPORTED
+            when (errorCode) {
+                1 -> {
+                    // SCAN_FAILED_ALREADY_STARTED - stop and retry after delay
+                    Timber.w("BLE scan already started, stopping and retrying in 2s")
+                    handler.postDelayed({
+                        if (!isScanning) {
+                            try {
+                                scanner?.stopScan(this)
+                            } catch (_: Exception) {}
+                            startScanning()
+                        }
+                    }, 2000)
+                }
+                2, 3 -> {
+                    // Internal/registration errors - retry with exponential backoff
+                    val retryDelay = minOf(5000L * (1 shl minOf(scanFailures.get(), 4)), 60000L)
+                    Timber.w("BLE scan failed with error $errorCode, retrying in ${retryDelay}ms")
+                    handler.postDelayed({
+                        if (!isScanning) {
+                            startScanning()
+                        }
+                    }, retryDelay)
+                }
+                4 -> {
+                    // Feature unsupported - don't retry
+                    Timber.e("BLE scanning not supported on this device")
+                }
+                else -> {
+                    // Unknown error - retry after delay
+                    Timber.w("BLE scan failed with unknown error $errorCode, retrying in 5s")
+                    handler.postDelayed({
+                        if (!isScanning) {
+                            startScanning()
+                        }
+                    }, 5000)
+                }
+            }
         }
     }
 
@@ -186,7 +229,16 @@ class BleScanner(
             Timber.w("Bluetooth Scanner not available")
             return
         }
-        if (isScanning) return
+        if (isScanning) {
+            Timber.d("BLE scan already in progress, skipping duplicate start")
+            return
+        }
+        
+        // Check if Bluetooth is enabled
+        if (bluetoothAdapter?.isEnabled != true) {
+            Timber.w("Bluetooth is not enabled, cannot start scanning")
+            return
+        }
 
         advertisementsSeen.set(0)
         fallbackScanEnabled = false
@@ -194,6 +246,13 @@ class BleScanner(
         lastMatchedAdvertisementAtMs.set(0L)
 
         try {
+            // Stop any existing scan first to avoid SCAN_FAILED_ALREADY_STARTED
+            try {
+                scanner.stopScan(scanCallback)
+            } catch (_: Exception) {
+                // Ignore errors from stopping non-existent scan
+            }
+            
             scanner.startScan(currentFilters(), buildScanSettings(), scanCallback)
             isScanning = true
             Timber.i("BLE Scanning started (background=$isBackgroundMode, fallback=$fallbackScanEnabled)")
@@ -331,6 +390,8 @@ class BleScanner(
             Timber.v("BLE scan window started")
         } catch (e: Exception) {
             Timber.e(e, "Failed to restart BLE scan")
+            // Set isScanning to false so retry logic can trigger
+            isScanning = false
         }
     }
 
@@ -344,6 +405,16 @@ class BleScanner(
         } catch (e: Exception) {
             Timber.e(e, "Failed to stop BLE scan window")
         }
+    }
+    
+    /**
+     * Force restart scanning after a failure.
+     * This is called when scan fails and we need to recover.
+     */
+    fun forceRestartScanning() {
+        Timber.i("Force restarting BLE scanning")
+        isScanning = false
+        startScanning()
     }
 
     @SuppressLint("MissingPermission")

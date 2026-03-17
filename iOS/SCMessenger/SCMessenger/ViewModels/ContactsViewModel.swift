@@ -175,30 +175,40 @@ final class ContactsViewModel {
 
     func loadContacts() {
         isLoading = true
-        do {
-            let rawContacts = try repository?.getContacts() ?? []
-            contacts = deduplicateByPublicKey(rawContacts)
-            error = nil
-        } catch {
-            self.error = error.localizedDescription
+        Task { @MainActor in
+            do {
+                let rawContacts = try await Task.detached {
+                    try await self.repository?.getContacts() ?? []
+                }.value
+                self.contacts = self.deduplicateByPublicKey(rawContacts)
+                self.error = nil
+            } catch {
+                self.error = error.localizedDescription
+            }
+            self.isLoading = false
+            self.refreshNearbyFilter()
         }
-        isLoading = false
-        refreshNearbyFilter()
     }
 
     func addContact(_ contact: Contact) throws {
         try repository?.addContact(contact)
-        loadContacts()
+        Task { @MainActor in
+            loadContacts()
+        }
     }
 
     func removeContact(peerId: String) throws {
         try repository?.removeContact(peerId: peerId)
-        loadContacts()
+        Task { @MainActor in
+            loadContacts()
+        }
     }
 
     func setLocalNickname(peerId: String, nickname: String?) throws {
         try repository?.setLocalNickname(peerId: peerId, nickname: nickname)
-        loadContacts()
+        Task { @MainActor in
+            loadContacts()
+        }
     }
 
     func deleteContacts(at offsets: IndexSet) {

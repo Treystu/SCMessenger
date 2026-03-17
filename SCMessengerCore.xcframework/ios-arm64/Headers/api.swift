@@ -1276,6 +1276,8 @@ public protocol IronCoreProtocol : AnyObject {
     
     func blockedCount() throws  -> UInt32
     
+    func classifyNotification(message: NotificationMessageContext, uiState: NotificationUiState, settings: MeshSettings)  -> NotificationDecision
+    
     func contactsManager()  -> ContactManager
     
     func exportIdentityBackup() throws  -> String
@@ -1429,6 +1431,16 @@ open func blockPeer(peerId: String, reason: String?)throws  {try rustCallWithErr
 open func blockedCount()throws  -> UInt32 {
     return try  FfiConverterUInt32.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_ironcore_blocked_count(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func classifyNotification(message: NotificationMessageContext, uiState: NotificationUiState, settings: MeshSettings) -> NotificationDecision {
+    return try!  FfiConverterTypeNotificationDecision.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_ironcore_classify_notification(self.uniffiClonePointer(),
+        FfiConverterTypeNotificationMessageContext.lower(message),
+        FfiConverterTypeNotificationUiState.lower(uiState),
+        FfiConverterTypeMeshSettings.lower(settings),$0
     )
 })
 }
@@ -3329,10 +3341,17 @@ public struct MeshSettings {
     public var coverTrafficEnabled: Bool
     public var messagePaddingEnabled: Bool
     public var timingObfuscationEnabled: Bool
+    public var notificationsEnabled: Bool
+    public var notifyDmEnabled: Bool
+    public var notifyDmRequestEnabled: Bool
+    public var notifyDmInForeground: Bool
+    public var notifyDmRequestInForeground: Bool
+    public var soundEnabled: Bool
+    public var badgeEnabled: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(relayEnabled: Bool, maxRelayBudget: UInt32, batteryFloor: UInt8, bleEnabled: Bool, wifiAwareEnabled: Bool, wifiDirectEnabled: Bool, internetEnabled: Bool, discoveryMode: DiscoveryMode, onionRouting: Bool, coverTrafficEnabled: Bool, messagePaddingEnabled: Bool, timingObfuscationEnabled: Bool) {
+    public init(relayEnabled: Bool, maxRelayBudget: UInt32, batteryFloor: UInt8, bleEnabled: Bool, wifiAwareEnabled: Bool, wifiDirectEnabled: Bool, internetEnabled: Bool, discoveryMode: DiscoveryMode, onionRouting: Bool, coverTrafficEnabled: Bool, messagePaddingEnabled: Bool, timingObfuscationEnabled: Bool, notificationsEnabled: Bool, notifyDmEnabled: Bool, notifyDmRequestEnabled: Bool, notifyDmInForeground: Bool, notifyDmRequestInForeground: Bool, soundEnabled: Bool, badgeEnabled: Bool) {
         self.relayEnabled = relayEnabled
         self.maxRelayBudget = maxRelayBudget
         self.batteryFloor = batteryFloor
@@ -3345,6 +3364,13 @@ public struct MeshSettings {
         self.coverTrafficEnabled = coverTrafficEnabled
         self.messagePaddingEnabled = messagePaddingEnabled
         self.timingObfuscationEnabled = timingObfuscationEnabled
+        self.notificationsEnabled = notificationsEnabled
+        self.notifyDmEnabled = notifyDmEnabled
+        self.notifyDmRequestEnabled = notifyDmRequestEnabled
+        self.notifyDmInForeground = notifyDmInForeground
+        self.notifyDmRequestInForeground = notifyDmRequestInForeground
+        self.soundEnabled = soundEnabled
+        self.badgeEnabled = badgeEnabled
     }
 }
 
@@ -3388,6 +3414,27 @@ extension MeshSettings: Equatable, Hashable {
         if lhs.timingObfuscationEnabled != rhs.timingObfuscationEnabled {
             return false
         }
+        if lhs.notificationsEnabled != rhs.notificationsEnabled {
+            return false
+        }
+        if lhs.notifyDmEnabled != rhs.notifyDmEnabled {
+            return false
+        }
+        if lhs.notifyDmRequestEnabled != rhs.notifyDmRequestEnabled {
+            return false
+        }
+        if lhs.notifyDmInForeground != rhs.notifyDmInForeground {
+            return false
+        }
+        if lhs.notifyDmRequestInForeground != rhs.notifyDmRequestInForeground {
+            return false
+        }
+        if lhs.soundEnabled != rhs.soundEnabled {
+            return false
+        }
+        if lhs.badgeEnabled != rhs.badgeEnabled {
+            return false
+        }
         return true
     }
 
@@ -3404,6 +3451,13 @@ extension MeshSettings: Equatable, Hashable {
         hasher.combine(coverTrafficEnabled)
         hasher.combine(messagePaddingEnabled)
         hasher.combine(timingObfuscationEnabled)
+        hasher.combine(notificationsEnabled)
+        hasher.combine(notifyDmEnabled)
+        hasher.combine(notifyDmRequestEnabled)
+        hasher.combine(notifyDmInForeground)
+        hasher.combine(notifyDmRequestInForeground)
+        hasher.combine(soundEnabled)
+        hasher.combine(badgeEnabled)
     }
 }
 
@@ -3423,7 +3477,14 @@ public struct FfiConverterTypeMeshSettings: FfiConverterRustBuffer {
                 onionRouting: FfiConverterBool.read(from: &buf), 
                 coverTrafficEnabled: FfiConverterBool.read(from: &buf), 
                 messagePaddingEnabled: FfiConverterBool.read(from: &buf), 
-                timingObfuscationEnabled: FfiConverterBool.read(from: &buf)
+                timingObfuscationEnabled: FfiConverterBool.read(from: &buf), 
+                notificationsEnabled: FfiConverterBool.read(from: &buf), 
+                notifyDmEnabled: FfiConverterBool.read(from: &buf), 
+                notifyDmRequestEnabled: FfiConverterBool.read(from: &buf), 
+                notifyDmInForeground: FfiConverterBool.read(from: &buf), 
+                notifyDmRequestInForeground: FfiConverterBool.read(from: &buf), 
+                soundEnabled: FfiConverterBool.read(from: &buf), 
+                badgeEnabled: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -3440,6 +3501,13 @@ public struct FfiConverterTypeMeshSettings: FfiConverterRustBuffer {
         FfiConverterBool.write(value.coverTrafficEnabled, into: &buf)
         FfiConverterBool.write(value.messagePaddingEnabled, into: &buf)
         FfiConverterBool.write(value.timingObfuscationEnabled, into: &buf)
+        FfiConverterBool.write(value.notificationsEnabled, into: &buf)
+        FfiConverterBool.write(value.notifyDmEnabled, into: &buf)
+        FfiConverterBool.write(value.notifyDmRequestEnabled, into: &buf)
+        FfiConverterBool.write(value.notifyDmInForeground, into: &buf)
+        FfiConverterBool.write(value.notifyDmRequestInForeground, into: &buf)
+        FfiConverterBool.write(value.soundEnabled, into: &buf)
+        FfiConverterBool.write(value.badgeEnabled, into: &buf)
     }
 }
 
@@ -3547,6 +3615,273 @@ public func FfiConverterTypeMessageRecord_lift(_ buf: RustBuffer) throws -> Mess
 
 public func FfiConverterTypeMessageRecord_lower(_ value: MessageRecord) -> RustBuffer {
     return FfiConverterTypeMessageRecord.lower(value)
+}
+
+
+public struct NotificationDecision {
+    public var kind: NotificationKind
+    public var conversationId: String
+    public var senderPeerId: String
+    public var messageId: String
+    public var shouldAlert: Bool
+    public var suppressionReason: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: NotificationKind, conversationId: String, senderPeerId: String, messageId: String, shouldAlert: Bool, suppressionReason: String?) {
+        self.kind = kind
+        self.conversationId = conversationId
+        self.senderPeerId = senderPeerId
+        self.messageId = messageId
+        self.shouldAlert = shouldAlert
+        self.suppressionReason = suppressionReason
+    }
+}
+
+
+
+extension NotificationDecision: Equatable, Hashable {
+    public static func ==(lhs: NotificationDecision, rhs: NotificationDecision) -> Bool {
+        if lhs.kind != rhs.kind {
+            return false
+        }
+        if lhs.conversationId != rhs.conversationId {
+            return false
+        }
+        if lhs.senderPeerId != rhs.senderPeerId {
+            return false
+        }
+        if lhs.messageId != rhs.messageId {
+            return false
+        }
+        if lhs.shouldAlert != rhs.shouldAlert {
+            return false
+        }
+        if lhs.suppressionReason != rhs.suppressionReason {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(kind)
+        hasher.combine(conversationId)
+        hasher.combine(senderPeerId)
+        hasher.combine(messageId)
+        hasher.combine(shouldAlert)
+        hasher.combine(suppressionReason)
+    }
+}
+
+
+public struct FfiConverterTypeNotificationDecision: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NotificationDecision {
+        return
+            try NotificationDecision(
+                kind: FfiConverterTypeNotificationKind.read(from: &buf), 
+                conversationId: FfiConverterString.read(from: &buf), 
+                senderPeerId: FfiConverterString.read(from: &buf), 
+                messageId: FfiConverterString.read(from: &buf), 
+                shouldAlert: FfiConverterBool.read(from: &buf), 
+                suppressionReason: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NotificationDecision, into buf: inout [UInt8]) {
+        FfiConverterTypeNotificationKind.write(value.kind, into: &buf)
+        FfiConverterString.write(value.conversationId, into: &buf)
+        FfiConverterString.write(value.senderPeerId, into: &buf)
+        FfiConverterString.write(value.messageId, into: &buf)
+        FfiConverterBool.write(value.shouldAlert, into: &buf)
+        FfiConverterOptionString.write(value.suppressionReason, into: &buf)
+    }
+}
+
+
+public func FfiConverterTypeNotificationDecision_lift(_ buf: RustBuffer) throws -> NotificationDecision {
+    return try FfiConverterTypeNotificationDecision.lift(buf)
+}
+
+public func FfiConverterTypeNotificationDecision_lower(_ value: NotificationDecision) -> RustBuffer {
+    return FfiConverterTypeNotificationDecision.lower(value)
+}
+
+
+public struct NotificationMessageContext {
+    public var conversationId: String?
+    public var senderPeerId: String
+    public var messageId: String
+    public var explicitDmRequest: Bool?
+    public var senderIsKnownContact: Bool
+    public var hasExistingConversation: Bool
+    public var isSelfOriginated: Bool
+    public var isDuplicate: Bool
+    public var alreadySeen: Bool
+    public var isBlocked: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(conversationId: String?, senderPeerId: String, messageId: String, explicitDmRequest: Bool?, senderIsKnownContact: Bool, hasExistingConversation: Bool, isSelfOriginated: Bool, isDuplicate: Bool, alreadySeen: Bool, isBlocked: Bool) {
+        self.conversationId = conversationId
+        self.senderPeerId = senderPeerId
+        self.messageId = messageId
+        self.explicitDmRequest = explicitDmRequest
+        self.senderIsKnownContact = senderIsKnownContact
+        self.hasExistingConversation = hasExistingConversation
+        self.isSelfOriginated = isSelfOriginated
+        self.isDuplicate = isDuplicate
+        self.alreadySeen = alreadySeen
+        self.isBlocked = isBlocked
+    }
+}
+
+
+
+extension NotificationMessageContext: Equatable, Hashable {
+    public static func ==(lhs: NotificationMessageContext, rhs: NotificationMessageContext) -> Bool {
+        if lhs.conversationId != rhs.conversationId {
+            return false
+        }
+        if lhs.senderPeerId != rhs.senderPeerId {
+            return false
+        }
+        if lhs.messageId != rhs.messageId {
+            return false
+        }
+        if lhs.explicitDmRequest != rhs.explicitDmRequest {
+            return false
+        }
+        if lhs.senderIsKnownContact != rhs.senderIsKnownContact {
+            return false
+        }
+        if lhs.hasExistingConversation != rhs.hasExistingConversation {
+            return false
+        }
+        if lhs.isSelfOriginated != rhs.isSelfOriginated {
+            return false
+        }
+        if lhs.isDuplicate != rhs.isDuplicate {
+            return false
+        }
+        if lhs.alreadySeen != rhs.alreadySeen {
+            return false
+        }
+        if lhs.isBlocked != rhs.isBlocked {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(conversationId)
+        hasher.combine(senderPeerId)
+        hasher.combine(messageId)
+        hasher.combine(explicitDmRequest)
+        hasher.combine(senderIsKnownContact)
+        hasher.combine(hasExistingConversation)
+        hasher.combine(isSelfOriginated)
+        hasher.combine(isDuplicate)
+        hasher.combine(alreadySeen)
+        hasher.combine(isBlocked)
+    }
+}
+
+
+public struct FfiConverterTypeNotificationMessageContext: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NotificationMessageContext {
+        return
+            try NotificationMessageContext(
+                conversationId: FfiConverterOptionString.read(from: &buf), 
+                senderPeerId: FfiConverterString.read(from: &buf), 
+                messageId: FfiConverterString.read(from: &buf), 
+                explicitDmRequest: FfiConverterOptionBool.read(from: &buf), 
+                senderIsKnownContact: FfiConverterBool.read(from: &buf), 
+                hasExistingConversation: FfiConverterBool.read(from: &buf), 
+                isSelfOriginated: FfiConverterBool.read(from: &buf), 
+                isDuplicate: FfiConverterBool.read(from: &buf), 
+                alreadySeen: FfiConverterBool.read(from: &buf), 
+                isBlocked: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NotificationMessageContext, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.conversationId, into: &buf)
+        FfiConverterString.write(value.senderPeerId, into: &buf)
+        FfiConverterString.write(value.messageId, into: &buf)
+        FfiConverterOptionBool.write(value.explicitDmRequest, into: &buf)
+        FfiConverterBool.write(value.senderIsKnownContact, into: &buf)
+        FfiConverterBool.write(value.hasExistingConversation, into: &buf)
+        FfiConverterBool.write(value.isSelfOriginated, into: &buf)
+        FfiConverterBool.write(value.isDuplicate, into: &buf)
+        FfiConverterBool.write(value.alreadySeen, into: &buf)
+        FfiConverterBool.write(value.isBlocked, into: &buf)
+    }
+}
+
+
+public func FfiConverterTypeNotificationMessageContext_lift(_ buf: RustBuffer) throws -> NotificationMessageContext {
+    return try FfiConverterTypeNotificationMessageContext.lift(buf)
+}
+
+public func FfiConverterTypeNotificationMessageContext_lower(_ value: NotificationMessageContext) -> RustBuffer {
+    return FfiConverterTypeNotificationMessageContext.lower(value)
+}
+
+
+public struct NotificationUiState {
+    public var appInForeground: Bool
+    public var activeConversationId: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(appInForeground: Bool, activeConversationId: String?) {
+        self.appInForeground = appInForeground
+        self.activeConversationId = activeConversationId
+    }
+}
+
+
+
+extension NotificationUiState: Equatable, Hashable {
+    public static func ==(lhs: NotificationUiState, rhs: NotificationUiState) -> Bool {
+        if lhs.appInForeground != rhs.appInForeground {
+            return false
+        }
+        if lhs.activeConversationId != rhs.activeConversationId {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(appInForeground)
+        hasher.combine(activeConversationId)
+    }
+}
+
+
+public struct FfiConverterTypeNotificationUiState: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NotificationUiState {
+        return
+            try NotificationUiState(
+                appInForeground: FfiConverterBool.read(from: &buf), 
+                activeConversationId: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NotificationUiState, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.appInForeground, into: &buf)
+        FfiConverterOptionString.write(value.activeConversationId, into: &buf)
+    }
+}
+
+
+public func FfiConverterTypeNotificationUiState_lift(_ buf: RustBuffer) throws -> NotificationUiState {
+    return try FfiConverterTypeNotificationUiState.lift(buf)
+}
+
+public func FfiConverterTypeNotificationUiState_lower(_ value: NotificationUiState) -> RustBuffer {
+    return FfiConverterTypeNotificationUiState.lower(value)
 }
 
 
@@ -4321,6 +4656,68 @@ extension MotionState: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum NotificationKind {
+    
+    case directMessage
+    case directMessageRequest
+    case none
+}
+
+
+public struct FfiConverterTypeNotificationKind: FfiConverterRustBuffer {
+    typealias SwiftType = NotificationKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NotificationKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .directMessage
+        
+        case 2: return .directMessageRequest
+        
+        case 3: return .none
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NotificationKind, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .directMessage:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .directMessageRequest:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .none:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+public func FfiConverterTypeNotificationKind_lift(_ buf: RustBuffer) throws -> NotificationKind {
+    return try FfiConverterTypeNotificationKind.lift(buf)
+}
+
+public func FfiConverterTypeNotificationKind_lower(_ value: NotificationKind) -> RustBuffer {
+    return FfiConverterTypeNotificationKind.lower(value)
+}
+
+
+
+extension NotificationKind: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum ServiceState {
     
     case stopped
@@ -4854,6 +5251,27 @@ fileprivate struct FfiConverterOptionUInt64: FfiConverterRustBuffer {
     }
 }
 
+fileprivate struct FfiConverterOptionBool: FfiConverterRustBuffer {
+    typealias SwiftType = Bool?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterBool.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterBool.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
 fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
@@ -5254,6 +5672,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_blocked_count() != 34648) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_classify_notification() != 60206) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_contacts_manager() != 24902) {

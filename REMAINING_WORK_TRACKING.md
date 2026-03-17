@@ -15,10 +15,26 @@ Completed in this pass:
 2. [x] Tightened `AGENTS.md` so edited-target build verification is mandatory whenever code, bindings, build wiring, or runtime-affecting scripts change.
 3. [x] Mirrored the same closeout rules in `.github/copilot-instructions.md` to keep Codex/Copilot policy aligned.
 4. [x] Updated the active canonical doc chain to reflect that documentation sync and build verification are release-governance requirements rather than optional cleanup.
+5. [x] **Enhanced Mesh Log Visualizer Visibility**: Broadened recognition for BLE and Local Transport (Multipeer, Wifi-Direct, etc.) logs across iOS and Android. Improved PeerID extraction and tag-based fallbacks.
 
 Remaining governance expectation:
 
 1. [ ] Enforce these rules on every future change-bearing run and record exceptions only with exact blocking command output and rationale.
+
+## BLE Log Visibility Improvements (2026-03-16)
+
+Completed in this pass:
+
+1. [x] **Log Visualizer (`mesh.html`)**: Broadened BLE detection keywords and refined own-identity parsing.
+2. [x] **Run Script (`run5.sh`)**: Added proactive "Seeding node identities" step to inject identity markers for already-running nodes.
+3. [x] **iOS Logging**: Expanded log stream predicates to capture `com.scmessenger` subsystem logs.
+
+## GCP Node Nickname Update (2026-03-16)
+
+Completed in this pass:
+
+1. [x] **CLI Node Name Sync**: Updated `cmd_relay` to sync the `--name` argument (if provided) to the `IronCore` identity nickname.
+2. [x] **Deployment Command**: Added `--name GCP-headless` to the relay startup command in `scripts/deploy_gcp_node.sh`.
 
 Owner policy constraints (2026-02-23):
 
@@ -38,13 +54,18 @@ Completed in this pass:
 3. [x] Added `docs/WS14_HOURLY_AUTOMATION_PROMPT.md` and repointed the paused automation to a WS14-only, one-phase-per-run model.
 4. [x] Locked future hourly behavior to branch-only execution, one WS14 phase per run, and no unrelated bug absorption.
 
-Remaining WS14 automation execution steps:
+WS14 execution steps (2026-03-15 HST):
 
 1. [x] Resume WS14 on the writable continuation branch `codex/ws14-hourly-20260314-0301`, rebased onto the prepared WS14 stream baseline.
 2. [x] Implement WS14.1 only and update `docs/WS14_AUTOMATION_HANDOFF.md` from the repo-owned branch lane.
 3. [x] Close the WS14.1 phase gate so the continuation branch can move forward.
 4. [x] Implement WS14.2 iOS DM vs DM Request notifications, request-inbox routing, and settings parity on the active branch.
-5. [ ] Implement WS14.3 Android notification channels/actions/routing/suppression parity.
+5. [x] Implement WS14.3 Android notification channels/actions/routing/suppression parity.
+6. [x] Implement WS14.4 WASM browser notification wiring.
+7. [x] Implement WS14.5 Hybrid remote interface prep (endpoint registration APIs).
+8. [x] Complete WS14.6 Verification, docs, release gating.
+
+**WS14 STATUS: COMPLETE** — All phases implemented and verified.
 
 ## WS13.1 Tight-Pair Kickoff (2026-03-10 UTC)
 

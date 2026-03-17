@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SCMessenger Mesh Topology Visualizer</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        :root {
+            --bg: #020617;
+            --node-bg: #1e293b;
+            --text: #f1f5f9;
+            --accent: #a855f7;
+            --glass: rgba(15, 23, 42, 0.9);
+            --border: rgba(255, 255, 255, 0.1);
+            
+            /* Transport Colors */
+            --color-ble: #3b82f6;      /* Blue */
+            --color-wifi: #22c55e;     /* Green */
+            --color-relay: #f59e0b;    /* Amber */
+            --color-direct: #a855f7;   /* Purple */
+            --color-unknown: #64748b;  /* Slate */
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: "JetBrains Mono", monospace;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 20px 40px;
+            background: linear-gradient(to bottom, var(--glass), transparent);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        header * { pointer-events: auto; }
+
+        .title-group h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 900;
+            letter-spacing: -0.05em;
+            background: linear-gradient(135deg, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .controls {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .status-pill {
+            padding: 6px 14px;
+            background: var(--glass);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 10px #10b981;
+        }
+
+        .btn-fullscreen {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: 800;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        #mesh-svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* Tooltip */
+        #tooltip {
+            position: fixed;
+            background: var(--glass);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            padding: 12px;
+            border-radius: 8px;
+            pointer-events: none;
+            opacity: 0;
+            z-index: 1000;
+            font-size: 0.8rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        /* Node Styles */
+        .node-circle {
+            fill: var(--node-bg);
+            stroke: var(--border);
+            stroke-width: 2;
+            transition: all 0.3s;
+        }
+
+        .node-label {
+            font-size: 12px;
+            font-weight: 900;
+            fill: white;
+            text-anchor: middle;
+            pointer-events: none;
+            text-transform: uppercase;
+        }
+
+        .node-id {
+            font-size: 8px;
+            fill: #94a3b8;
+            text-anchor: middle;
+            pointer-events: none;
+        }
+
+        .node-activity {
+            font-size: 7px;
+            fill: #64748b;
+            text-anchor: middle;
+            pointer-events: none;
+            font-style: italic;
+        }
+
+        /* Link Styles */
+        .link-path {
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            transition: stroke-opacity 1s, stroke-width 0.3s;
+            stroke-opacity: 0.15;
+            cursor: pointer;
+        }
+
+        .link-path.active {
+            stroke-opacity: 0.8;
+        }
+
+        .link-pulse {
+            fill: none;
+            stroke-width: 5;
+            stroke-linecap: round;
+            stroke-opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Legend */
+        #legend {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            background: var(--glass);
+            border: 1px solid var(--border);
+            padding: 16px;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+
+        .platform-badge {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.1);
+            margin-top: 4px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div id="tooltip"></div>
+    <header>
+        <div class="header-left">
+            <div class="title-group">
+                <h1>Mesh Topology</h1>
+                <div class="status-pill">
+                    <div id="connection-dot" class="status-dot"></div>
+                    <span id="connection-status">LIVE STREAMING</span>
+                </div>
+            </div>
+        </div>
+        <div class="controls">
+            <button class="btn-fullscreen" style="background: rgba(255,255,255,0.1);" onclick="location.href='/'">LOG SANKEY</button>
+        </div>
+    </header>
+
+    <div id="canvas-container">
+        <svg id="mesh-svg"></svg>
+        
+        <div id="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: var(--color-ble);"></div>
+                <span>Bluetooth (BLE)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: var(--color-wifi);"></div>
+                <span>WiFi Direct / MPC</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: var(--color-relay);"></div>
+                <span>Relay (Circuit)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: var(--color-direct);"></div>
+                <span>Direct (QUIC/P2P)</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const svg = d3.select("#mesh-svg");
+        const gLinks = svg.append("g").attr("class", "links-layer");
+        const gPulses = svg.append("g").attr("class", "pulses-layer");
+        const gNodes = svg.append("g").attr("class", "nodes-layer");
+        
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const radius = Math.min(width, height) * 0.35;
+
+        // Node Definitions
+        const NODE_CONFIGS = [
+            { id: "GCP", name: "GCP Relay", description: "Headless Relay (Cloud)", caps: ["relay", "direct"] },
+            { id: "OSX", name: "OSX Relay", description: "Local Headless Relay", caps: ["relay", "direct"] },
+            { id: "Android", name: "Android", description: "Pixel 6a Full Node", caps: ["ble", "wifi", "relay", "direct"] },
+            { id: "iOS-Dev", name: "iOS Device", description: "Physical Device Full Node", caps: ["ble", "wifi", "relay", "direct"] },
+            { id: "Sim", name: "iOS Sim", description: "iPhone Simulator Full Node", caps: ["wifi", "relay", "direct"] }
+        ];
+
+        // Map platform IDs to peer IDs
+        const platformToPeer = new Map();
+        const peerToPlatform = new Map();
+
+        // Mappings that persist even if identity logs are sparse (Seeding from previous runs)
+        const ID_SEED = {
+            "OSX": "12D3KooWHpmuhytgzLcM4nj1hZvN5b4crB1wka3LCNfKRCd7yHj9",
+            "Android": "12D3KooWN8kn7CzkY2KGWQfEMD3FJsLw25JpWvvNUDKGW8yNroKz",
+            "iOS-Dev": "12D3KooWCitizuothXVuqeGShBywNtQ2H8j3sxFap8TLHSYpounv",
+            "GCP": "12D3KooWHdTdBQ1utHmLn1VAwhKoJvh54oo3xDvaJkcgGNowqouc",
+            "Sim": "12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw"
+        };
+        
+        // Initialize seeds
+        Object.entries(ID_SEED).forEach(([node, id]) => {
+            platformToPeer.set(node, id);
+            peerToPlatform.set(id, node);
+        });
+
+        // State for links
+        const linkState = new Map();
+
+        // Transport Metadata
+        const TRANSPORTS = {
+            ble: { color: "#3b82f6", label: "BLE" },
+            wifi: { color: "#22c55e", label: "WiFi" },
+            relay: { color: "#f59e0b", label: "Relay" },
+            direct: { color: "#a855f7", label: "Direct" }
+        };
+
+        function initNodes() {
+            NODE_CONFIGS.forEach((d, i) => {
+                const angle = (i * 2 * Math.PI / NODE_CONFIGS.length) - (Math.PI / 2);
+                d.x = centerX + radius * Math.cos(angle);
+                d.y = centerY + radius * Math.sin(angle);
+            });
+
+            const nodes = gNodes.selectAll(".node")
+                .data(NODE_CONFIGS)
+                .enter().append("g")
+                .attr("class", "node")
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+
+            nodes.append("circle")
+                .attr("class", "node-circle")
+                .attr("r", 40)
+                .on("mouseover", showNodeTooltip)
+                .on("mouseout", hideTooltip);
+
+            nodes.append("text")
+                .attr("class", "node-label")
+                .attr("y", -10)
+                .text(d => d.name);
+
+            nodes.append("text")
+                .attr("class", "node-id")
+                .attr("y", 10)
+                .text(d => {
+                    const seed = platformToPeer.get(d.id);
+                    return seed ? `ID: ${seed.substring(0, 14)}...` : "ID: SEARCHING...";
+                });
+
+            nodes.append("text")
+                .attr("class", "node-activity")
+                .attr("y", 30)
+                .text("No log activity yet...");
+            
+            // If seeded, show tentative check
+            NODE_CONFIGS.forEach(d => {
+                const seed = platformToPeer.get(d.id);
+                if (seed) {
+                    console.log(`[MESH] Seeded ${d.id} -> ${seed}`);
+                    updateNodeId(d.id, seed);
+                }
+            });
+        }
+
+        function showNodeTooltip(event, d) {
+            const tooltip = d3.select("#tooltip");
+            const peerId = platformToPeer.get(d.id) || "Not yet identified";
+            tooltip.style("opacity", 1)
+                .html(`
+                    <div style="font-weight:900; color:var(--accent);">${d.name}</div>
+                    <div style="font-size:10px; margin-bottom:8px;">${d.description}</div>
+                    <div style="font-family:monospace; font-size:9px; background:rgba(0,0,0,0.3); padding:4px; border-radius:4px;">
+                        ${peerId}
+                    </div>
+                `)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 10) + "px");
+        }
+
+        function hideTooltip() {
+            d3.select("#tooltip").style("opacity", 0);
+        }
+
+        function getLinkKey(src, tgt, transport) {
+            const [a, b] = [src, tgt].sort();
+            return `${a}<->${b}:${transport}`;
+        }
+
+        function updateLink(src, tgt, transport) {
+            if (!src || !tgt || !transport) return;
+            const key = getLinkKey(src, tgt, transport);
+            
+            if (!linkState.has(key)) {
+                // Create link visualization
+                const srcNode = NODE_CONFIGS.find(n => n.id === src);
+                const tgtNode = NODE_CONFIGS.find(n => n.id === tgt);
+                if (!srcNode || !tgtNode) return;
+
+                // Transport Offset to avoid overlaps
+                const transportIdx = Object.keys(TRANSPORTS).indexOf(transport);
+                const offset = (transportIdx - 1.5) * 6;
+
+                const pathData = generateCurvedPath(srcNode, tgtNode, offset);
+
+                const link = gLinks.append("path")
+                    .attr("class", `link-path ${transport}`)
+                    .attr("d", pathData)
+                    .attr("stroke", TRANSPORTS[transport].color)
+                    .on("mouseover", (e) => showLinkTooltip(e, src, tgt, transport))
+                    .on("mouseout", hideTooltip);
+
+                const pulse = gPulses.append("path")
+                    .attr("class", "link-pulse")
+                    .attr("d", pathData)
+                    .attr("stroke", TRANSPORTS[transport].color);
+
+                linkState.set(key, { 
+                    link, 
+                    pulse, 
+                    lastAction: Date.now(),
+                    src,
+                    tgt,
+                    transport
+                });
+            }
+
+            const state = linkState.get(key);
+            state.lastAction = Date.now();
+            
+            // Pulse effect
+            state.pulse.interrupt()
+                .attr("stroke-opacity", 1)
+                .attr("stroke-width", 8)
+                .transition()
+                .duration(800)
+                .attr("stroke-opacity", 0)
+                .attr("stroke-width", 2);
+
+            state.link.classed("active", true);
+        }
+
+        function generateCurvedPath(s, t, offset) {
+            // Find vector
+            const dx = t.x - s.x;
+            const dy = t.y - s.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            // Normal vector
+            const nx = -dy / dist;
+            const ny = dx / dist;
+            
+            // Midpoint with offset
+            const mx = (s.x + t.x) / 2 + nx * offset * 5;
+            const my = (s.y + t.y) / 2 + ny * offset * 5;
+            
+            return `M${s.x},${s.y} Q${mx},${my} ${t.x},${t.y}`;
+        }
+
+        function showLinkTooltip(event, src, tgt, transport) {
+            const tooltip = d3.select("#tooltip");
+            tooltip.style("opacity", 1)
+                .html(`
+                    <div style="font-weight:900; color:${TRANSPORTS[transport].color};">${TRANSPORTS[transport].label} Link</div>
+                    <div style="font-size:10px;">${src} ↔ ${tgt}</div>
+                `)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 10) + "px");
+        }
+
+        // Logic to extract peer IDs and active connections from logs
+        function processMeshLog(log) {
+            let { source, msg, levelTag, peerIds, raw } = log;
+            if (!peerIds) {
+                const idMatch = (raw || msg || "").match(/12D3KooW[a-zA-Z0-9]{40,60}/g);
+                peerIds = idMatch ? Array.from(new Set(idMatch)) : [];
+            }
+            
+            // Normalize sources
+            if (source === "Android-Mesh" || source === "Android") source = "Android";
+            if (source === "iOS-Dev" || source === "iOS-Device" || source === "iOS-Direct") source = "iOS-Dev";
+            if (source === "Sim" || source === "ios-sim") source = "Sim";
+            
+            const lowerTag = (levelTag || "").toLowerCase();
+            const lowerMsg = (msg || "").toLowerCase();
+            const fullText = (source + " " + lowerTag + " " + lowerMsg + " " + (raw || "").toLowerCase());
+
+            // 1. Identify Own Peer ID (STRICT ONLY)
+            if (peerIds.length > 0) {
+                const id = peerIds[0];
+
+                // ONLY map if we are 100% sure it's the node's OWN identity
+                // Added: libp2pPeerId (Android), SwarmBridge (iOS), peer_identified (sometimes local)
+                const isExplicitOwn = fullText.match(/starting\s+swarm|local_peer_id\s*=|own_identity|sc_identity_own|identity_beacon|initialized\s+core\s+for\s+peer\s+id|peer\s+id:\s+12D3|libp2pPeerId\s*=|SwarmBridge\s+with\s+peer\s+id/i);
+                
+                if (isExplicitOwn) {
+                    platformToPeer.set(source, id);
+                    peerToPlatform.set(id, source);
+                    updateNodeId(source, id);
+                }
+
+                // 2. Identify Connections & Handshakes (Map EXISTING IDs to links)
+                peerIds.forEach(targetId => {
+                    const otherPlatform = peerToPlatform.get(targetId);
+                    if (otherPlatform && otherPlatform !== source) {
+                        // Connection events
+                        if (fullText.match(/connected|discovered|identified|dialing|ack\s+from|delivery|received|sent/i)) {
+                            let transport = detectTransport(fullText);
+                            updateLink(source, otherPlatform, transport);
+                        }
+                    }
+                });
+            }
+
+            // 3. Traffic Pulse (Even without PeerID, show activity)
+            if (fullText.match(/delivery|received|sent|connected|ack/i)) {
+                updateNodeActivity(source, msg);
+            }
+
+            // 4. Special Harness Mapping (Definitive status ticks)
+            if (source === "Harness" && peerIds.length > 0) {
+                const platforms = ["GCP", "OSX", "Android", "iOS-Dev", "Sim"];
+                platforms.forEach(p => {
+                    const searchRegex = new RegExp(`${p.toLowerCase().replace("-", "")}.*12D3`, "i");
+                    if (fullText.match(searchRegex)) {
+                        const foundId = peerIds.find(pid => raw.includes(pid));
+                        if (foundId) {
+                            platformToPeer.set(p, foundId);
+                            peerToPlatform.set(foundId, p);
+                            updateNodeId(p, foundId);
+                        }
+                    }
+                });
+            }
+        }
+
+        function updateNodeId(nodeId, peerId) {
+            console.log(`[MESH] Mapping ${nodeId} -> ${peerId}`);
+            const node = gNodes.selectAll(".node").filter(d => d.id === nodeId);
+            
+            // Highlight the node name to show it's identified
+            node.select(".node-label")
+                .text(d => `${d.id} ✓`)
+                .style("fill", "#10b981");
+
+            node.select(".node-id")
+                .text(`ID: ${peerId.substring(0, 14)}...`)
+                .style("fill", "#6ee7b7");
+        }
+
+        function updateNodeActivity(nodeId, msg) {
+            const node = gNodes.selectAll(".node").filter(d => d.id === nodeId);
+            
+            // Heartbeat animation
+            node.select("circle")
+                .transition().duration(200)
+                .attr("r", 50)
+                .transition().duration(500)
+                .attr("r", 40);
+
+            // Update status line
+            let status = msg.substring(0, 40);
+            if (msg.length > 40) status += "...";
+            node.select(".node-activity")
+                .text(status)
+                .style("opacity", 1)
+                .transition().delay(5000).duration(2000)
+                .style("opacity", 0.5);
+        }
+
+        function detectTransport(msg) {
+            const text = msg.toLowerCase();
+            if (text.includes("medium=ble") || text.includes("cbperipheral") || text.includes("ble") || text.includes("bluetooth") || text.includes("ble_ops") || text.includes("identity beacon")) return "ble";
+            if (text.includes("medium=wifi") || text.includes("multipeer") || text.includes("wifi-direct") || text.includes("wifi direct")) return "wifi";
+            if (text.includes("medium=relay") || text.includes("p2p-circuit") || text.includes("relay-circuit") || text.includes("via relay")) return "relay";
+            if (text.includes("phase=direct") || text.includes("direct delivery")) return "direct";
+            return "direct"; // Default fallback
+        }
+
+        // Maintain link fade
+        setInterval(() => {
+            const now = Date.now();
+            linkState.forEach((state, key) => {
+                const age = now - state.lastAction;
+                if (age > 10000) { // 10 seconds of silence -> fade
+                    state.link.classed("active", false);
+                }
+            });
+        }, 2000);
+
+
+        // Web Socket Integration
+        const connect = () => {
+            const ws = new WebSocket(`${location.protocol.replace("http", "ws")}//${location.host}`);
+            ws.onmessage = (e) => {
+                processMeshLog(JSON.parse(e.data));
+            };
+            ws.onopen = () => {
+                d3.select("#connection-dot").style("background", "#10b981").style("box-shadow", "0 0 10px #10b981");
+                d3.select("#connection-status").text("LIVE STREAMING");
+            };
+            ws.onclose = () => {
+                d3.select("#connection-dot").style("background", "#ef4444").style("box-shadow", "0 0 10px #ef4444");
+                d3.select("#connection-status").text("DISCONNECTED - REKICKING...");
+                setTimeout(connect, 3000);
+            };
+        };
+
+        initNodes();
+        connect();
+
+        window.onresize = () => location.reload();
+    </script>
+</body>
+</html>

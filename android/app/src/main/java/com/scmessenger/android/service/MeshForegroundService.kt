@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -14,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.scmessenger.android.R
 import com.scmessenger.android.ui.MainActivity
+import com.scmessenger.android.utils.NotificationHelper
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -129,10 +131,10 @@ class MeshForegroundService : Service() {
             // Wire CoreDelegate callbacks to MeshEventBus
             wireCoreDelegate()
 
-            // Listen for incoming messages and show notifications
+            // Listen for incoming messages and show notifications (WS14: with classification)
             serviceScope.launch {
                 meshRepository.incomingMessages.collect { message ->
-                    showMessageNotification(message)
+                    showMessageNotificationWithClassification(message)
                 }
             }
 
@@ -369,32 +371,73 @@ class MeshForegroundService : Service() {
         }
     }
 
-    private fun showMessageNotification(message: uniffi.api.MessageRecord) {
-        val notificationManager = getSystemService(NotificationManager::class.java)
-
-        // Intent that opens chat
-        val chatIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            // Ideally put extra "peerId" -> message.peerId
-            putExtra("peerId", message.peerId)
+    /**
+     * WS14: Show notification with DM vs DM Request classification.
+     * Uses NotificationHelper for proper channel routing and settings.
+     */
+    private fun showMessageNotificationWithClassification(message: uniffi.api.MessageRecord) {
+        // Get contact state for classification
+        val contact = try {
+            meshRepository.getContact(message.peerId)
+        } catch (e: Exception) {
+            null
         }
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            message.peerId.hashCode(),
-            chatIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        val isKnownContact = contact != null
+        
+        // Check if conversation exists
+        val hasExistingConversation = try {
+            meshRepository.hasConversationWith(message.peerId)
+        } catch (e: Exception) {
+            false
+        }
+
+        // Get UI state for foreground suppression
+        val appInForeground = isAppInForeground()
+        val activeConversationId = getActiveConversationId()
+
+        // Get nickname from contact if available
+        val nickname = contact?.nickname ?: contact?.localNickname
+
+        // Use NotificationHelper with WS14 classification
+        // Note: explicitDmRequest is not available in MessageRecord; classification will infer from contact state
+        NotificationHelper.showMessageNotification(
+            context = this,
+            peerId = message.peerId,
+            messageId = message.id,
+            content = message.content,
+            nickname = nickname,
+            timestamp = message.timestamp.toLong(),
+            isKnownContact = isKnownContact,
+            hasExistingConversation = hasExistingConversation,
+            appInForeground = appInForeground,
+            activeConversationId = activeConversationId,
+            explicitDmRequest = null
         )
+    }
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Message from " + message.peerId.take(8))
-            .setContentText(message.content)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .build()
+    /**
+     * Check if app is in foreground.
+     */
+    private fun isAppInForeground(): Boolean {
+        // Simplified check - in production would use ProcessLifecycleOwner
+        return try {
+            val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            val runningAppProcesses = activityManager.runningAppProcesses
+            runningAppProcesses?.any {
+                it.processName == packageName &&
+                it.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+            } ?: false
+        } catch (e: Exception) {
+            false
+        }
+    }
 
-        notificationManager.notify(message.id.hashCode(), notification)
+    /**
+     * Get currently active conversation ID.
+     */
+    private fun getActiveConversationId(): String? {
+        // In production, would track this via activity lifecycle or event bus
+        return null
     }
 
     private fun createNotificationChannel() {
