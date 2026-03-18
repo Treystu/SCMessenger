@@ -14,10 +14,25 @@ pub mod local;
 pub mod neighborhood;
 pub mod global;
 pub mod engine;
+pub mod timeout_budget;
+pub mod negative_cache;
+pub mod resume_prefetch;
+pub mod adaptive_ttl;
+pub mod optimized_engine;
 
 pub use local::{LocalCell, PeerInfo, PeerStatus, TransportType, PeerId, CellSummary, PeerEvent};
 pub use neighborhood::{NeighborhoodTable, GatewayInfo, NeighborhoodSummary, NeighborhoodGossip};
 pub use global::{GlobalRoutes, RouteAdvertisement, RouteRequest};
 pub use engine::{
     RoutingEngine, RoutingDecision, NextHop, RoutingLayer, RoutingMaintenance, RoutingSummary,
+};
+pub use timeout_budget::{TimeoutBudget, DiscoveryPhase, BudgetSummary};
+pub use negative_cache::{NegativeCache, NegativeCacheStats};
+pub use resume_prefetch::{
+    ResumePrefetchManager, PrefetchConfig, PrefetchedRoute, PrefetchStatus, PrefetchStats,
+    FrequentPeer,
+};
+pub use adaptive_ttl::{AdaptiveTTLManager, ActivityHistory};
+pub use optimized_engine::{
+    OptimizedRoutingEngine, OptimizedRoutingMaintenance,
 };

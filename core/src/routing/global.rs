@@ -77,8 +77,8 @@ impl GlobalRoutes {
     pub fn new() -> Self {
         GlobalRoutes {
             routes: HashMap::new(),
-            max_routes_per_hint: 3,      // Keep up to 3 routes per destination
-            max_total_routes: 10000,      // Absolute cap to prevent memory issues
+            max_routes_per_hint: 3,  // Keep up to 3 routes per destination
+            max_total_routes: 10000, // Absolute cap to prevent memory issues
             local_advertisements: Vec::new(),
             pending_requests: HashMap::new(),
         }
@@ -106,7 +106,10 @@ impl GlobalRoutes {
             return false;
         }
 
-        let routes_for_hint = self.routes.entry(ad.destination_hint).or_insert_with(Vec::new);
+        let routes_for_hint = self
+            .routes
+            .entry(ad.destination_hint)
+            .or_insert_with(Vec::new);
 
         // Check if we already have this exact route (same next_hop, same or newer sequence)
         if let Some(existing) = routes_for_hint.iter().find(|r| r.next_hop == ad.next_hop) {
@@ -115,7 +118,10 @@ impl GlobalRoutes {
                 return false;
             }
             // Replace the old route with this newer one
-            if let Some(pos) = routes_for_hint.iter().position(|r| r.next_hop == ad.next_hop) {
+            if let Some(pos) = routes_for_hint
+                .iter()
+                .position(|r| r.next_hop == ad.next_hop)
+            {
                 routes_for_hint[pos] = ad;
             }
             return true;
@@ -131,7 +137,10 @@ impl GlobalRoutes {
                 }
                 // Secondary: lowest reliability
                 if (a.reliability - b.reliability).abs() > 0.01 {
-                    return a.reliability.partial_cmp(&b.reliability).unwrap_or(std::cmp::Ordering::Equal);
+                    return a
+                        .reliability
+                        .partial_cmp(&b.reliability)
+                        .unwrap_or(std::cmp::Ordering::Equal);
                 }
                 // Tertiary: oldest
                 a.last_confirmed.cmp(&b.last_confirmed)
@@ -244,7 +253,12 @@ impl GlobalRoutes {
     ///
     /// Called periodically to update what this cell advertises to the global network.
     /// Typically called after local cell or neighborhood state changes.
-    pub fn update_local_advertisements(&mut self, reachable_hints: Vec<[u8; 4]>, local_id: &PeerId, now: u64) {
+    pub fn update_local_advertisements(
+        &mut self,
+        reachable_hints: Vec<[u8; 4]>,
+        local_id: &PeerId,
+        now: u64,
+    ) {
         self.local_advertisements.clear();
 
         for hint in reachable_hints {
@@ -287,9 +301,8 @@ impl GlobalRoutes {
 
         // Also clean up old route requests (older than 5 minutes)
         let max_request_age = 300; // 5 minutes
-        self.pending_requests.retain(|_, req| {
-            now.saturating_sub(req.requested_at) <= max_request_age
-        });
+        self.pending_requests
+            .retain(|_, req| now.saturating_sub(req.requested_at) <= max_request_age);
 
         removed
     }
