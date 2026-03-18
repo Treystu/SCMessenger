@@ -10,9 +10,9 @@
 //! 3. **Layer 3 (CMN)**: Check global routes if neighborhood misses
 //! 4. **Store-and-Carry**: No known route — hold until one appears or request discovery
 
+use super::global::GlobalRoutes;
 use super::local::{LocalCell, PeerId, TransportType};
 use super::neighborhood::NeighborhoodTable;
-use super::global::GlobalRoutes;
 
 /// Where to send a message next
 #[derive(Debug, Clone)]
@@ -144,7 +144,11 @@ impl RoutingEngine {
         if !local_peers.is_empty() {
             // Found direct peer(s)
             let best_peer = local_peers[0]; // Already sorted by reliability in LocalCell
-            let transport = best_peer.transports.first().copied().unwrap_or(TransportType::BLE);
+            let transport = best_peer
+                .transports
+                .first()
+                .copied()
+                .unwrap_or(TransportType::BLE);
 
             return RoutingDecision {
                 message_id: *message_id,
@@ -169,7 +173,8 @@ impl RoutingEngine {
                     transport: gateway_info.transport,
                     hops_remaining: gateway_info.hops_away,
                 },
-                alternatives: self.collect_alternative_hops(recipient_hint, RoutingLayer::Neighborhood),
+                alternatives: self
+                    .collect_alternative_hops(recipient_hint, RoutingLayer::Neighborhood),
                 decided_by: RoutingLayer::Neighborhood,
                 confidence: 0.85_f64 - (gateway_info.hops_away as f64 * 0.05), // Confidence decreases with hops
             };
@@ -233,7 +238,8 @@ impl RoutingEngine {
 
         // Collect additional alternative paths based on redundancy level
         if redundancy > 1 {
-            decision.alternatives = self.collect_alternative_hops_count(recipient_hint, redundancy - 1);
+            decision.alternatives =
+                self.collect_alternative_hops_count(recipient_hint, redundancy - 1);
         }
 
         decision
@@ -286,8 +292,14 @@ impl RoutingEngine {
     pub fn tick(&mut self, now: u64) -> RoutingMaintenance {
         // Layer 1: Process peer status changes
         let events = self.local.tick(now);
-        let peers_promoted = events.iter().filter(|e| matches!(e, super::local::PeerEvent::PeerBecameActive(_))).count();
-        let peers_demoted = events.iter().filter(|e| matches!(e, super::local::PeerEvent::PeerBecameStale(_))).count();
+        let peers_promoted = events
+            .iter()
+            .filter(|e| matches!(e, super::local::PeerEvent::PeerBecameActive(_)))
+            .count();
+        let peers_demoted = events
+            .iter()
+            .filter(|e| matches!(e, super::local::PeerEvent::PeerBecameStale(_)))
+            .count();
 
         // Layer 2: Cleanup stale gateways
         let stale_gateways_removed = self.neighborhood.cleanup(now);
@@ -562,7 +574,10 @@ mod tests {
         };
 
         match hop {
-            NextHop::Direct { peer_id: p, transport: t } => {
+            NextHop::Direct {
+                peer_id: p,
+                transport: t,
+            } => {
                 assert_eq!(p, peer_id);
                 assert_eq!(t, TransportType::BLE);
             }

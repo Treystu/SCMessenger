@@ -5,6 +5,7 @@
 
 pub mod bootstrap;
 pub mod client;
+pub mod delegate_prewarm;
 pub mod findmy;
 pub mod invite;
 pub mod peer_exchange;
@@ -13,6 +14,10 @@ pub mod server;
 
 pub use bootstrap::{BootstrapManager, BootstrapMethod, InvitePayload, SeedPeer};
 pub use client::RelayClient;
+pub use delegate_prewarm::{
+    DelegateInfo, DelegatePrewarmConfig, DelegatePrewarmManager, DelegatePrewarmStats,
+    WarmConnection,
+};
 pub use findmy::{FindMyBeaconManager, FindMyConfig, WakeUpPayload};
 pub use invite::{InviteChain, InviteSystem, InviteToken};
 pub use peer_exchange::{PeerExchangeManager, RelayPeerInfo};

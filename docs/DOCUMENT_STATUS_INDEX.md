@@ -51,11 +51,13 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 
 ## 3) Active supporting audits and execution plans
 
-| Document                                                | Status | Purpose                                                                 |
-| ------------------------------------------------------- | ------ | ----------------------------------------------------------------------- |
-| `docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md` | Active | Planning-only GitHub/repo operating-model audit and execution blueprint |
-| `docs/global_viability_audit.md`                        | Active | Supporting viability audit; context for execution, not canonical truth  |
-| `docs/implementation_cheatsheet_3.4.2026.md`            | Active | Supporting implementation reference derived from audit findings         |
+| Document                                                     | Status | Purpose                                                                 |
+| ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------- |
+| `docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md`      | Active | Planning-only GitHub/repo operating-model audit and execution blueprint |
+| `docs/global_viability_audit.md`                             | Active | Supporting viability audit; context for execution, not canonical truth  |
+| `docs/implementation_cheatsheet_3.4.2026.md`                 | Active | Supporting implementation reference derived from audit findings         |
+| `docs/DEEP_ARCHITECTURAL_REASONING_DHT_OPTIMIZATION.md`      | Active | Deep architectural analysis for DHT peer discovery latency optimization |
+| `docs/SPRINT_PLAN_OPTIMIZATION_BUNDLE.md`                    | Active | Sprint plan for optimization bundle (contact lookup, transport, sync, discovery, pagination) |
 
 ---
 

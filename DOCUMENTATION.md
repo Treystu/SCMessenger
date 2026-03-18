@@ -40,6 +40,7 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 - [GitHub + Repo Realignment Audit (First Pass)](docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md)
 - [Global Viability Audit](docs/global_viability_audit.md)
 - [Implementation Cheat Sheet (2026-03-04)](docs/implementation_cheatsheet_3.4.2026.md)
+- [Deep Architectural Reasoning: DHT Optimization](docs/DEEP_ARCHITECTURAL_REASONING_DHT_OPTIMIZATION.md)
 
 ## Release Docs
 

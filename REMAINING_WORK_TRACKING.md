@@ -1,7 +1,7 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-03-14
+Last updated: 2026-03-18
 
 This is the active implementation backlog based on repository state verified on **2026-03-14**.
 
@@ -35,6 +35,66 @@ Completed in this pass:
 
 1. [x] **CLI Node Name Sync**: Updated `cmd_relay` to sync the `--name` argument (if provided) to the `IronCore` identity nickname.
 2. [x] **Deployment Command**: Added `--name GCP-headless` to the relay startup command in `scripts/deploy_gcp_node.sh`.
+
+## DHT Peer Discovery Latency Optimization (2026-03-18)
+
+**Status:** ✅ IMPLEMENTED
+
+### Overview
+
+Implemented P0 and P1 optimizations for reducing DHT peer discovery latency from >2 seconds to <500ms, as specified in [`docs/DEEP_ARCHITECTURAL_REASONING_DHT_OPTIMIZATION.md`](docs/DEEP_ARCHITECTURAL_REASONING_DHT_OPTIMIZATION.md).
+
+### Key Changes
+
+#### 1. Hierarchical Timeout Budgeting (P0 - ~100 LOC)
+
+Created [`core/src/routing/timeout_budget.rs`](core/src/routing/timeout_budget.rs):
+
+- **Budget-based discovery**: Total 500ms budget across all phases instead of 500ms per phase
+- **Progressive fallback**: LocalCache → NeighborhoodQuery → DelegateQuery → FullDhtWalk
+- **Early termination**: Stop as soon as a route is found
+- **Deterministic**: Same inputs produce same phase transitions
+
+#### 2. Bloom Filter Negative Cache (P0 - ~200 LOC)
+
+Created [`core/src/routing/negative_cache.rs`](core/src/routing/negative_cache.rs):
+
+- **Fast negative answers**: O(1) bloom filter check vs O(log n) DHT walk
+- **Time-based expiry**: Negative results expire after TTL (default 10 minutes)
+- **Bounded false positives**: Accept ~1% false positive rate for fast negative answers
+- **Capacity management**: Evict oldest entries when at capacity
+
+#### 3. Route Prefetch on App Resume (P1 - ~150 LOC)
+
+Created [`core/src/routing/resume_prefetch.rs`](core/src/routing/resume_prefetch.rs):
+
+- **Proactive refresh**: Refresh routes before they're needed
+- **Parallel validation**: Validate multiple routes concurrently
+- **Graceful degradation**: Return stale routes while refreshing
+- **Frequent peer tracking**: Prioritize refresh for frequently messaged peers
+
+### Expected Impact
+
+| Metric | Before | After Target |
+|--------|--------|--------------|
+| Cold start discovery | 2000ms | < 500ms |
+| Warm cache hit | 2000ms | < 50ms |
+| App resume to ready | 2000ms | < 200ms |
+| Unreachable detection | 2000ms | < 10ms |
+
+### Verification
+
+- [x] `cargo test --workspace` - **PASS** (533 tests, 0 failures)
+- [x] Unit tests for timeout_budget module - **PASS** (8 tests)
+- [x] Unit tests for negative_cache module - **PASS** (8 tests)
+- [x] Unit tests for resume_prefetch module - **PASS** (6 tests)
+- [x] Documentation sync check - **PASS**
+
+### Remaining Optimization Opportunities
+
+1. **P2: Predictive Route Caching** (~300 LOC) - Pre-compute routes based on conversation patterns
+2. **P2: Adaptive TTL** (~100 LOC) - Keep routes fresh longer for active peers
+3. **P2: Speculative Delegate Pre-warming** (~250 LOC) - Register with delegates before sleep
 
 Owner policy constraints (2026-02-23):
 

@@ -73,7 +73,7 @@ impl NeighborhoodTable {
         Self {
             gateways: HashMap::new(),
             summaries: Vec::new(),
-            max_staleness: 3600,  // 1 hour
+            max_staleness: 3600, // 1 hour
             max_gateways: 100,
             max_hops: 4,
         }
@@ -136,21 +136,19 @@ impl NeighborhoodTable {
 
     /// Get best gateway for a hint (lowest hops, highest reliability)
     pub fn best_gateway_for_hint(&self, hint: &[u8; 4]) -> Option<&GatewayInfo> {
-        self.gateways_for_hint(hint)
-            .into_iter()
-            .min_by(|a, b| {
-                // Primary sort: fewest hops
-                match a.hops_away.cmp(&b.hops_away) {
-                    std::cmp::Ordering::Equal => {
-                        // Secondary sort: highest reliability
-                        b.cell_summary
-                            .avg_reliability
-                            .partial_cmp(&a.cell_summary.avg_reliability)
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    }
-                    other => other,
+        self.gateways_for_hint(hint).into_iter().min_by(|a, b| {
+            // Primary sort: fewest hops
+            match a.hops_away.cmp(&b.hops_away) {
+                std::cmp::Ordering::Equal => {
+                    // Secondary sort: highest reliability
+                    b.cell_summary
+                        .avg_reliability
+                        .partial_cmp(&a.cell_summary.avg_reliability)
+                        .unwrap_or(std::cmp::Ordering::Equal)
                 }
-            })
+                other => other,
+            }
+        })
     }
 
     /// Process incoming gossip from a peer (they share their neighborhood knowledge)
@@ -176,11 +174,9 @@ impl NeighborhoodTable {
             // Only accept if still within our limits
             if our_hops <= self.max_hops {
                 // Find or create summary entry
-                if let Some(existing) = self
-                    .summaries
-                    .iter_mut()
-                    .find(|s| s.hop_count == our_hops && s.reachable_hints == neighbor_summary.reachable_hints)
-                {
+                if let Some(existing) = self.summaries.iter_mut().find(|s| {
+                    s.hop_count == our_hops && s.reachable_hints == neighbor_summary.reachable_hints
+                }) {
                     // Update if fresher
                     if gossip.timestamp > existing.timestamp {
                         *existing = NeighborhoodSummary {
@@ -243,10 +239,12 @@ impl NeighborhoodTable {
         let initial_count = self.gateways.len();
 
         // Remove stale gateways
-        self.gateways.retain(|_, gateway| now - gateway.last_updated <= self.max_staleness);
+        self.gateways
+            .retain(|_, gateway| now - gateway.last_updated <= self.max_staleness);
 
         // Remove stale neighborhood summaries
-        self.summaries.retain(|summary| now - summary.timestamp <= self.max_staleness);
+        self.summaries
+            .retain(|summary| now - summary.timestamp <= self.max_staleness);
 
         let evicted = initial_count - self.gateways.len();
         evicted
@@ -463,12 +461,7 @@ mod tests {
         let mut summary_high = make_cell_summary(vec![hint]);
         summary_high.avg_reliability = 0.9;
 
-        table.update_gateway(
-            gateway_low_reliability,
-            summary_low,
-            1,
-            TransportType::TCP,
-        );
+        table.update_gateway(gateway_low_reliability, summary_low, 1, TransportType::TCP);
         table.update_gateway(
             gateway_high_reliability,
             summary_high,
@@ -552,7 +545,12 @@ mod tests {
         let mut table = NeighborhoodTable::with_max_staleness(100);
         let gateway_id = make_peer_id(1);
 
-        table.update_gateway(gateway_id, make_cell_summary(vec![make_hint(100)]), 1, TransportType::TCP);
+        table.update_gateway(
+            gateway_id,
+            make_cell_summary(vec![make_hint(100)]),
+            1,
+            TransportType::TCP,
+        );
 
         assert_eq!(table.gateway_count(), 1);
 
@@ -639,21 +637,44 @@ mod tests {
         let gateway3 = make_peer_id(3);
         let gateway4 = make_peer_id(4);
 
-        table.update_gateway(gateway1, make_cell_summary(vec![make_hint(1)]), 1, TransportType::TCP);
+        table.update_gateway(
+            gateway1,
+            make_cell_summary(vec![make_hint(1)]),
+            1,
+            TransportType::TCP,
+        );
         // Manually backdate gateway1 to make it the stalest
         if let Some(g) = table.gateways.get_mut(&gateway1) {
             g.last_updated -= 1000;
         }
-        table.update_gateway(gateway2, make_cell_summary(vec![make_hint(2)]), 1, TransportType::TCP);
-        table.update_gateway(gateway3, make_cell_summary(vec![make_hint(3)]), 1, TransportType::TCP);
+        table.update_gateway(
+            gateway2,
+            make_cell_summary(vec![make_hint(2)]),
+            1,
+            TransportType::TCP,
+        );
+        table.update_gateway(
+            gateway3,
+            make_cell_summary(vec![make_hint(3)]),
+            1,
+            TransportType::TCP,
+        );
 
         assert_eq!(table.gateway_count(), 3);
 
         // Adding 4th gateway should evict gateway1 (the stalest)
-        table.update_gateway(gateway4, make_cell_summary(vec![make_hint(4)]), 1, TransportType::TCP);
+        table.update_gateway(
+            gateway4,
+            make_cell_summary(vec![make_hint(4)]),
+            1,
+            TransportType::TCP,
+        );
 
         assert_eq!(table.gateway_count(), 3);
-        assert!(table.all_gateways().iter().any(|g| g.gateway_id == gateway4));
+        assert!(table
+            .all_gateways()
+            .iter()
+            .any(|g| g.gateway_id == gateway4));
     }
 
     #[test]

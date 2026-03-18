@@ -102,8 +102,8 @@ impl LocalCell {
         Self {
             local_id,
             peers: HashMap::new(),
-            active_timeout: 300,  // 5 minutes
-            stale_timeout: 1800,  // 30 minutes
+            active_timeout: 300, // 5 minutes
+            stale_timeout: 1800, // 30 minutes
             max_peers: 1000,
         }
     }
@@ -175,7 +175,12 @@ impl LocalCell {
     }
 
     /// Record a successful sync with timing
-    pub fn record_sync(&mut self, peer_id: &PeerId, sync_duration_ms: u64, messages_exchanged: u32) {
+    pub fn record_sync(
+        &mut self,
+        peer_id: &PeerId,
+        sync_duration_ms: u64,
+        messages_exchanged: u32,
+    ) {
         if let Some(peer) = self.peers.get_mut(peer_id) {
             let old_avg = peer.avg_sync_ms;
             let old_count = peer.sync_count;
@@ -219,7 +224,11 @@ impl LocalCell {
             .values()
             .filter(|p| matches!(p.status, PeerStatus::Active { .. }))
             .collect();
-        peers.sort_by(|a, b| b.reliability_score.partial_cmp(&a.reliability_score).unwrap());
+        peers.sort_by(|a, b| {
+            b.reliability_score
+                .partial_cmp(&a.reliability_score)
+                .unwrap()
+        });
         peers
     }
 
@@ -227,9 +236,7 @@ impl LocalCell {
     pub fn gateway_peers(&self) -> Vec<&PeerInfo> {
         self.peers
             .values()
-            .filter(|p| {
-                p.is_gateway && matches!(p.status, PeerStatus::Active { .. })
-            })
+            .filter(|p| p.is_gateway && matches!(p.status, PeerStatus::Active { .. }))
             .collect()
     }
 
@@ -329,7 +336,11 @@ impl LocalCell {
         let peer_to_evict = *self
             .peers
             .values()
-            .min_by(|a, b| a.reliability_score.partial_cmp(&b.reliability_score).unwrap())
+            .min_by(|a, b| {
+                a.reliability_score
+                    .partial_cmp(&b.reliability_score)
+                    .unwrap()
+            })
             .map(|p| &p.peer_id)
             .unwrap();
 
