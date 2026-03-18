@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B79068C822FE4194ABC46890 /* SmartTransportRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26843792FCDC4F8089378862 /* SmartTransportRouter.swift */; };
 		DDAA70022F77700100387CC8 /* LocalTransportFallback.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDAA70012F77700100387CC8 /* LocalTransportFallback.swift */; };
 		DDEB56C42F3FE0BD00387CC8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DDEB56BE2F3FE0BD00387CC8 /* Assets.xcassets */; };
 		DDEB56C62F3FE0BD00387CC8 /* JoinMeshView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56BB2F3FE0BD00387CC8 /* JoinMeshView.swift */; };
@@ -41,6 +42,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		26843792FCDC4F8089378862 /* SmartTransportRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartTransportRouter.swift; sourceTree = "<group>"; };
 		DDAA70012F77700100387CC8 /* LocalTransportFallback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTransportFallback.swift; sourceTree = "<group>"; };
 		DDEB56422F3FDFC500387CC8 /* SCMessenger.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SCMessenger.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DDEB56952F3FE0BD00387CC8 /* MeshRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshRepository.swift; sourceTree = "<group>"; };
@@ -149,6 +151,7 @@
 		DDEB56A92F3FE0BD00387CC8 /* Transport */ = {
 			isa = PBXGroup;
 			children = (
+				26843792FCDC4F8089378862 /* SmartTransportRouter.swift */,
 				DDEB56A42F3FE0BD00387CC8 /* BLECentralManager.swift */,
 				DDEB56A52F3FE0BD00387CC8 /* BLEL2CAPManager.swift */,
 				DDEB56A62F3FE0BD00387CC8 /* BLEPeripheralManager.swift */,
@@ -362,6 +365,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B79068C822FE4194ABC46890 /* SmartTransportRouter.swift in Sources */,
 				DDEB56C62F3FE0BD00387CC8 /* JoinMeshView.swift in Sources */,
 				DDEB56C72F3FE0BD00387CC8 /* OnboardingFlow.swift in Sources */,
 				DDEB56C82F3FE0BD00387CC8 /* MeshRepository.swift in Sources */,

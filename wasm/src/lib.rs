@@ -594,7 +594,9 @@ impl IronCore {
         let ui_state: WasmNotificationUiState = serde_wasm_bindgen::from_value(js_ui_state)
             .map_err(|e| js_value_from_str(&format!("Invalid notification UI state: {}", e)))?;
         let settings: scmessenger_core::MeshSettings = self.settings.lock().clone().into();
-        let decision = self.inner.classify_notification(message.into(), ui_state.into(), settings);
+        let decision = self
+            .inner
+            .classify_notification(message.into(), ui_state.into(), settings);
         serde_wasm_bindgen::to_value(&WasmNotificationDecision::from(decision))
             .map_err(|e| js_value_from_str(&format!("Failed to serialize decision: {}", e)))
     }

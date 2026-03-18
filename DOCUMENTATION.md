@@ -103,7 +103,7 @@ Custom modes, rules, and skills for optimized agent workflows:
 ## Operations and Setup
 
 - [Install](INSTALL.md)
-- [Quick Connect](QUICKCONNECT.md)
+- [Quick Connect](docs/historical/plans/QUICKCONNECT.md)
 - [Docker](docker/README.md)
 - [GCP Deploy](GCP_DEPLOY_GUIDE.md)
 - [Relay Operator Guide](docs/RELAY_OPERATOR_GUIDE.md)

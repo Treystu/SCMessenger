@@ -1395,7 +1395,7 @@ final class MeshRepository {
         // Smart deduplication: check if this is a duplicate and track time variance
         let dedupResult = smartTransportRouter?.checkAndRecordMessage(
             messageId: messageId,
-            transport: .core // Default transport for incoming messages
+            transport: .internet // Default transport for incoming messages
         )
         
         if let existing = try? historyManager?.get(id: messageId),
@@ -1404,7 +1404,7 @@ final class MeshRepository {
             
             // Log duplicate with time variance for mesh enhancement
             if let dedup = dedupResult, dedup.isDuplicate, let timeVariance = dedup.timeVarianceMs {
-                logDiagnostic("msg_duplicate msg=\(messageId) time_variance_ms=\(timeVariance) first_transport=\(dedup.firstTransport?.rawValue ?? "unknown") duplicate_count=\(smartTransportRouter?.getDedupStats(messageId: messageId)?.duplicateCount ?? 0)")
+                logDiagnostic("msg_duplicate msg=\(messageId) time_variance_ms=\(timeVariance) first_transport=\(dedup.firstTransport?.rawValue ?? "unknown") duplicate_count=\(self.smartTransportRouter?.getDedupStats(messageId: messageId)?.duplicateCount ?? 0)")
             }
             
             sendDeliveryReceiptAsync(
@@ -3848,9 +3848,9 @@ final class MeshRepository {
                 addresses: addresses,
                 traceMessageId: traceMessageId,
                 attemptContext: attemptContext,
-                tryMultipeer: { multipeerAddr in
+                tryMultipeer: { [self] multipeerAddr in
                     guard let transport = multipeerTransport else {
-                        logger.debug("tryMultipeerDelivery: multipeerTransport is null")
+                        self.logger.debug("tryMultipeerDelivery: multipeerTransport is null")
                         return false
                     }
                     do {
@@ -3876,8 +3876,8 @@ final class MeshRepository {
                         return false
                     }
                 },
-                tryBle: { bleAddr in
-                    logger.debug("tryBleDelivery: given blePeerId=\(bleAddr)")
+                tryBle: { [self] bleAddr in
+                    self.logger.debug("tryBleDelivery: given blePeerId=\(bleAddr)")
                     let sendTargets = ([bleAddr] + connectedBlePeerIds)
                         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                         .filter { !$0.isEmpty }
@@ -3939,10 +3939,10 @@ final class MeshRepository {
                     )
                     return false
                 },
-                tryCore: { corePeerId in
+                tryCore: { [self] corePeerId in
                     // Core transport attempt (libp2p/internet relay)
-                    guard let swarmBridge else {
-                        logDeliveryAttempt(
+                    guard let swarmBridge = self.swarmBridge else {
+                        self.logDeliveryAttempt(
                             messageId: traceMessageId,
                             medium: "core",
                             phase: "smart_router",
@@ -3952,14 +3952,14 @@ final class MeshRepository {
                         return false
                     }
                     
-                    let dialCandidates = buildDialCandidatesForPeer(
+                    let dialCandidates = self.buildDialCandidatesForPeer(
                         routePeerId: corePeerId,
                         rawAddresses: addresses,
                         includeRelayCircuits: true
                     )
                     if !dialCandidates.isEmpty {
-                        connectToPeer(corePeerId, addresses: dialCandidates)
-                        _ = await awaitPeerConnection(peerId: corePeerId)
+                        self.connectToPeer(corePeerId, addresses: dialCandidates)
+                        _ = await self.awaitPeerConnection(peerId: corePeerId)
                     }
                     
                     let sendError = swarmBridge.sendMessageStatus(
@@ -3970,7 +3970,7 @@ final class MeshRepository {
                     )
                     
                     if sendError == nil {
-                        logDeliveryAttempt(
+                        self.logDeliveryAttempt(
                             messageId: traceMessageId,
                             medium: "core",
                             phase: "smart_router",
@@ -3979,7 +3979,7 @@ final class MeshRepository {
                         )
                         return true
                     } else {
-                        logDeliveryAttempt(
+                        self.logDeliveryAttempt(
                             messageId: traceMessageId,
                             medium: "core",
                             phase: "smart_router",
@@ -4088,7 +4088,7 @@ final class MeshRepository {
                 }
             )
             smartResult = TransportDeliveryResult(
-                transport: localFallback.acked ? (localFallback.multipeerAcked ? .multipeer : .ble) : .core,
+                transport: localFallback.acked ? (localFallback.multipeerAcked ? .multipeer : .ble) : .internet,
                 success: localFallback.acked,
                 latencyMs: 0,
                 error: localFallback.acked ? nil : "legacy_fallback_failed",

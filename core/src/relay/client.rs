@@ -1,7 +1,11 @@
 //! Relay Client — connects to relay peers and synchronizes messages
+//!
+//! AND-CELLULAR-001: Added QUIC/UDP transport fallback for cellular networks
+//! where TCP connections are often blocked by carrier-level port filtering.
 
 use super::protocol::{RelayCapability, RelayMessage, PROTOCOL_VERSION};
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
@@ -9,6 +13,15 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::timeout;
+
+/// Transport type for relay connections
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransportType {
+    /// TCP transport (traditional, may be blocked on cellular)
+    Tcp,
+    /// QUIC/UDP transport (better for cellular networks)
+    Quic,
+}
 
 /// Relay client configuration
 #[derive(Debug, Clone)]
@@ -23,6 +36,10 @@ pub struct RelayClientConfig {
     /// A stalled relay or half-open TCP connection will be detected within this
     /// window rather than hanging indefinitely.
     pub io_timeout: Duration,
+    /// AND-CELLULAR-001: Enable QUIC/UDP fallback for cellular networks
+    pub enable_quic_fallback: bool,
+    /// AND-CELLULAR-001: QUIC port to try (default: 9002)
+    pub quic_port: u16,
 }
 
 impl Default for RelayClientConfig {
@@ -32,6 +49,9 @@ impl Default for RelayClientConfig {
             reconnect_interval: Duration::from_secs(5),
             pull_interval: Duration::from_secs(30),
             io_timeout: Duration::from_secs(10),
+            // AND-CELLULAR-001: Enable QUIC fallback by default for cellular compatibility
+            enable_quic_fallback: true,
+            quic_port: 9002,
         }
     }
 }
@@ -62,6 +82,8 @@ pub struct RelayConnection {
     pub relay_capabilities: Option<RelayCapability>,
     /// Last time we were successfully connected
     pub last_connected_at: Option<u64>,
+    /// AND-CELLULAR-001: Transport type used for this connection
+    pub transport_type: TransportType,
 }
 
 impl RelayConnection {
@@ -73,6 +95,19 @@ impl RelayConnection {
             relay_peer_id: None,
             relay_capabilities: None,
             last_connected_at: None,
+            transport_type: TransportType::Tcp,
+        }
+    }
+
+    /// Create a new relay connection with specific transport type
+    pub fn with_transport(address: String, transport_type: TransportType) -> Self {
+        Self {
+            address,
+            state: ConnectionState::Disconnected,
+            relay_peer_id: None,
+            relay_capabilities: None,
+            last_connected_at: None,
+            transport_type,
         }
     }
 
@@ -126,8 +161,10 @@ pub struct RelayClient {
     connections: Arc<RwLock<Vec<RelayConnection>>>,
     /// Last pull timestamp per relay address
     last_pull: Arc<RwLock<HashMap<String, u64>>>,
-    /// Active network sockets by relay address
+    /// Active network sockets by relay address (TCP)
     sockets: Arc<RwLock<HashMap<String, Arc<Mutex<TcpStream>>>>>,
+    /// AND-CELLULAR-001: QUIC connections by relay address
+    quic_connections: Arc<RwLock<HashMap<String, Arc<Mutex<quinn::Connection>>>>>,
 }
 
 impl RelayClient {
@@ -140,6 +177,7 @@ impl RelayClient {
             connections: Arc::new(RwLock::new(Vec::new())),
             last_pull: Arc::new(RwLock::new(HashMap::new())),
             sockets: Arc::new(RwLock::new(HashMap::new())),
+            quic_connections: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -158,11 +196,49 @@ impl RelayClient {
     }
 
     /// Connect to a specific relay
+    /// AND-CELLULAR-001: Added QUIC fallback for cellular networks
     pub async fn connect(
         &self,
         relay_address: String,
     ) -> Result<RelayConnection, RelayClientError> {
-        let mut connection = RelayConnection::new(relay_address.clone());
+        // Try TCP first
+        match self.connect_tcp(relay_address.clone()).await {
+            Ok(conn) => Ok(conn),
+            Err(tcp_err) => {
+                tracing::warn!("TCP connection to {} failed: {}", relay_address, tcp_err);
+
+                // Try QUIC fallback if enabled
+                if self.config.enable_quic_fallback {
+                    tracing::info!("Attempting QUIC fallback for {}", relay_address);
+                    match self.connect_quic(relay_address.clone()).await {
+                        Ok(conn) => {
+                            tracing::info!("QUIC connection to {} succeeded", relay_address);
+                            Ok(conn)
+                        }
+                        Err(quic_err) => {
+                            tracing::error!(
+                                "Both TCP and QUIC failed for {}: tcp={}, quic={}",
+                                relay_address,
+                                tcp_err,
+                                quic_err
+                            );
+                            Err(quic_err)
+                        }
+                    }
+                } else {
+                    Err(tcp_err)
+                }
+            }
+        }
+    }
+
+    /// Connect via TCP transport
+    async fn connect_tcp(
+        &self,
+        relay_address: String,
+    ) -> Result<RelayConnection, RelayClientError> {
+        let mut connection =
+            RelayConnection::with_transport(relay_address.clone(), TransportType::Tcp);
         connection.set_state(ConnectionState::Connecting);
         let dial_addr = relay_address
             .strip_prefix("tcp://")
@@ -184,6 +260,109 @@ impl RelayClient {
             .write()
             .await
             .insert(relay_address, Arc::clone(&stream));
+        Ok(connection)
+    }
+
+    /// AND-CELLULAR-001: Connect via QUIC/UDP transport for cellular networks
+    async fn connect_quic(
+        &self,
+        relay_address: String,
+    ) -> Result<RelayConnection, RelayClientError> {
+        let mut connection =
+            RelayConnection::with_transport(relay_address.clone(), TransportType::Quic);
+        connection.set_state(ConnectionState::Connecting);
+
+        // Parse address and replace port with QUIC port
+        let dial_addr = relay_address
+            .strip_prefix("tcp://")
+            .unwrap_or(&relay_address)
+            .to_string();
+
+        let socket_addr: SocketAddr = dial_addr
+            .parse()
+            .map_err(|e| RelayClientError::ConnectionFailed(format!("Invalid address: {}", e)))?;
+
+        // Use configured QUIC port or default
+        let quic_addr = SocketAddr::new(socket_addr.ip(), self.config.quic_port);
+
+        // Create QUIC endpoint
+        let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap()).map_err(|e| {
+            RelayClientError::ConnectionFailed(format!("QUIC endpoint error: {}", e))
+        })?;
+
+        // Configure QUIC client - use platform verifier for system certificates
+        let client_config = quinn::ClientConfig::try_with_platform_verifier().map_err(|e| {
+            RelayClientError::ConnectionFailed(format!("QUIC verifier error: {}", e))
+        })?;
+        endpoint.set_default_client_config(client_config);
+
+        // Connect via QUIC - endpoint.connect() returns Result<Connecting, ConnectError>
+        let quic_conn = timeout(self.config.io_timeout, async {
+            let connecting = endpoint.connect(quic_addr, "relay").map_err(|e| {
+                RelayClientError::ConnectionFailed(format!("QUIC connect error: {}", e))
+            })?;
+            connecting.await.map_err(|e| {
+                RelayClientError::ConnectionFailed(format!("QUIC connect await error: {}", e))
+            })
+        })
+        .await
+        .map_err(|_| RelayClientError::IoTimeout(self.config.io_timeout))??;
+
+        connection.set_state(ConnectionState::Handshaking);
+
+        // Open a bidirectional stream for handshake
+        let (mut send, mut recv) = quic_conn
+            .open_bi()
+            .await
+            .map_err(|e| RelayClientError::ConnectionFailed(format!("QUIC stream error: {}", e)))?;
+
+        // Send handshake
+        let handshake = self.create_handshake();
+        let payload = handshake
+            .to_bytes()
+            .map_err(|e| RelayClientError::SerializationError(e.to_string()))?;
+
+        let len = payload.len() as u32;
+        tokio::io::AsyncWriteExt::write_all(&mut send, &len.to_be_bytes())
+            .await
+            .map_err(|e| RelayClientError::ConnectionFailed(format!("QUIC write error: {}", e)))?;
+        tokio::io::AsyncWriteExt::write_all(&mut send, &payload)
+            .await
+            .map_err(|e| RelayClientError::ConnectionFailed(format!("QUIC write error: {}", e)))?;
+        // finish() is synchronous in quinn - it signals we're done writing
+        send.finish()
+            .map_err(|e| RelayClientError::ConnectionFailed(format!("QUIC finish error: {}", e)))?;
+
+        // Read response
+        let mut len_buf = [0u8; 4];
+        tokio::io::AsyncReadExt::read_exact(&mut recv, &mut len_buf)
+            .await
+            .map_err(|e| RelayClientError::ConnectionFailed(format!("QUIC read error: {}", e)))?;
+        let response_len = u32::from_be_bytes(len_buf) as usize;
+
+        if response_len == 0 || response_len > (16 * 1024 * 1024) {
+            return Err(RelayClientError::MessageError(
+                "Invalid response frame length".to_string(),
+            ));
+        }
+
+        let mut response_buf = vec![0u8; response_len];
+        tokio::io::AsyncReadExt::read_exact(&mut recv, &mut response_buf)
+            .await
+            .map_err(|e| RelayClientError::ConnectionFailed(format!("QUIC read error: {}", e)))?;
+
+        let response = RelayMessage::from_bytes(&response_buf)
+            .map_err(|e| RelayClientError::SerializationError(e.to_string()))?;
+
+        self.complete_handshake(&mut connection, response)?;
+
+        // Store QUIC connection
+        let quic_conn = Arc::new(Mutex::new(quic_conn));
+        self.quic_connections
+            .write()
+            .await
+            .insert(relay_address, quic_conn);
+
         Ok(connection)
     }
 

@@ -600,6 +600,7 @@ fn log_route_decision(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[allow(clippy::too_many_arguments)]
 fn dispatch_ranked_route(
     swarm: &mut libp2p::Swarm<IronCoreBehaviour>,
     route: &RankedRoute,

@@ -6,7 +6,9 @@ tmp/*
 # SCMessenger Runtime
 *.log
 *.logarchive
+*.logcat
 system_logs.*
+*.pid
 .scm.pid
 ds_store
 .DS_Store
@@ -24,6 +26,10 @@ logs/*
 
 # Temporary migration/debug inventories
 docs/_ios_*
+ios_apps_data/
+ios_container/
+contact_mismatch_debug/
+validation_logs_*/
 
 # IDEs
 .idea/

@@ -1,7 +1,7 @@
 # SCMessenger Master Bug Tracker
 
 **Status:** Active
-**Last Updated:** 2026-03-16
+**Last Updated:** 2026-03-16 (Log Audit Completed)
 **Purpose:** Centralized tracking of all known bugs, issues, and risks across the SCMessenger codebase.
 
 > **Note:** This tracker consolidates issues from all documentation sources. For detailed implementation plans, see [`docs/implementation_cheatsheet_3.4.2026.md`](docs/implementation_cheatsheet_3.4.2026.md). For edge-case scenarios, see [`docs/EDGE_CASE_READINESS_MATRIX.md`](docs/EDGE_CASE_READINESS_MATRIX.md).
@@ -68,22 +68,41 @@ Fresh install should have zero pre-existing messages.
 | Field | Value |
 |-------|-------|
 | **ID** | AND-RELAY-CONTACTS-001 |
-| **Status** | 🔴 Open |
+| **Status** | 🟢 Fixed |
 | **Priority** | P2 |
 | **Platform** | Android |
 | **Phase** | v0.2.1 |
 | **First Seen** | 2026-03-14 |
-| **Last Verified** | 2026-03-14 |
+| **Last Verified** | 2026-03-16 |
+| **Last Fixed** | 2026-03-16 |
 | **Source** | `REMAINING_WORK_TRACKING.md` |
 
 **Symptom:**
 Relay server (external relay peer) auto-discovered and shown with nickname "peer-93a35a87" in user contact list.
 
 **Root Cause:**
-Relay peers are being treated as regular mesh peers and auto-created as contacts during discovery.
+Inconsistent relay filtering between `onPeerDiscovered` and `onPeerIdentified` callbacks. The `onPeerIdentified` callback properly checked `!isBootstrapRelayPeer(peerId)` before calling `upsertFederatedContact`, but `onPeerDiscovered` was missing this check.
 
-**Fix Required:**
-Design decision + implementation to filter or tag relay peers appropriately.
+**Fix Applied:**
+Added relay peer filtering to `onPeerDiscovered` callback in [`MeshRepository.kt:568-580`](android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:568-580):
+
+1. Wrapped `upsertFederatedContact` call with `if (!isRelay)` check
+2. Added Timber logging for both relay-skipped and contact-created paths
+3. Now consistent with `onPeerIdentified` behavior (lines 694-708)
+
+**How the Fix Works:**
+- The `isRelay` variable is already computed at line 513 via `isBootstrapRelayPeer(peerId)`
+- The fix adds a conditional check before `upsertFederatedContact` to skip relay peers
+- Relay peers are infrastructure nodes (like `12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw`) and should not appear as user contacts
+- This brings `onPeerDiscovered` in line with the existing `onPeerIdentified` relay filtering
+
+**Verification:**
+1. Relay peers identified via `isBootstrapRelayPeer()` will no longer be auto-created as contacts
+2. The existing relay filtering in `onPeerIdentified` (lines 694-708) remains intact
+3. Normal mesh peers (non-relay) will continue to be auto-created as contacts
+4. Logging provides visibility into which peers are being filtered vs. created
+
+**Status:** Resolved
 
 ---
 
@@ -118,24 +137,44 @@ Multiple code paths requesting same permissions without deduplication.
 | Field | Value |
 |-------|-------|
 | **ID** | AND-STALE-PEER-001 |
-| **Status** | 🔴 Open |
+| **Status** | ✅ Closed |
 | **Priority** | P2 |
 | **Platform** | Android |
 | **Phase** | v0.2.1 |
 | **First Seen** | 2026-03-14 |
-| **Last Verified** | 2026-03-14 |
+| **Last Verified** | 2026-03-16 |
+| **Last Fixed** | 2026-03-16 |
 | **Source** | `REMAINING_WORK_TRACKING.md` |
 
 **Symptom:**
 Discovered peer continues showing in UI for 6+ seconds after discovery is stopped.
 
 **Root Cause:**
-Async discovery lifecycle or UI refresh batching.
+The `ContactsViewModel` only removed peers from the nearby list when individual disconnect events were received via `MeshEventBus.peerEvents`. When the mesh service stopped, no immediate cleanup occurred - peers remained visible until the 5-second grace period expired for each peer's disconnect event, which could arrive late or not at all.
 
-**Fix Required:**
-- Profile Nearby Discovery stop propagation timing
-- Ensure immediate UI removal of peers when discovery stops
-- Remove stale peer cache entries synchronously
+**Fix Applied:**
+Added service state observation in [`ContactsViewModel.kt`](android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt:91-99) to clear nearby peers immediately when the mesh service stops:
+
+1. Added `observeServiceState()` call in `init` block ([`ContactsViewModel.kt:94`](android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt:94))
+2. Implemented `observeServiceState()` function ([`ContactsViewModel.kt:366-388`](android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt:366)) that:
+   - Observes `meshRepository.serviceState` flow
+   - When state becomes `STOPPED`, cancels all pending removal jobs
+   - Clears `_nearbyPeers.value` immediately
+   - Logs the cleanup action
+
+**How the Fix Works:**
+- When the mesh service stops (e.g., user toggles off, app goes to background), the `serviceState` flow emits `STOPPED`
+- The `observeServiceState()` collector detects this and immediately clears all nearby peers
+- This ensures peers disappear from the UI instantly when discovery stops, rather than waiting for individual disconnect events
+
+**Verification:**
+1. Start mesh service and discover nearby peers
+2. Stop mesh service
+3. Verify nearby peers disappear immediately from the Contacts screen
+4. Restart mesh service
+5. Verify stale peers do not reappear
+
+**Status:** Resolved
 
 ---
 
@@ -144,12 +183,13 @@ Async discovery lifecycle or UI refresh batching.
 | Field | Value |
 |-------|-------|
 | **ID** | AND-CONTACT-DUP-001 |
-| **Status** | 🟡 In Progress |
+| **Status** | 🟢 Fixed |
 | **Priority** | P1 |
 | **Platform** | Android |
 | **Phase** | WS13.6 |
 | **First Seen** | 2026-03-14 |
 | **Last Verified** | 2026-03-14 |
+| **Last Fixed** | 2026-03-16 |
 | **Source** | `V0.2.0_RESIDUAL_RISK_REGISTER.md` (R-WS13.6-01) |
 
 **Symptom:**
@@ -160,9 +200,24 @@ Duplicate `onPeerIdentified` callbacks for same peer ID during discovery.
 - Contact creation callback not idempotent
 - No deduplication logic on peer promotion callback
 
-**Fix Required:**
-- Implement idempotent contact upsert (not insert)
-- Add unique constraint on peer_id in contacts table
+**Fix Applied:**
+Implemented idempotent contact upsert with synchronization to prevent race conditions:
+
+1. Added `contactUpsertMutex` to synchronize contact upsert operations ([`MeshRepository.kt:189`](android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:189))
+2. Made `upsertFederatedContact` a `suspend` function and wrapped with `contactUpsertMutex.withLock { ... }` ([`MeshRepository.kt:5008-5103`](android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:5008-5103))
+3. Added comprehensive documentation explaining the fix
+
+**How the Fix Works:**
+- The mutex ensures atomic contact lookup and creation, preventing concurrent peer identification callbacks from creating duplicate contacts
+- When a peer is identified multiple times with slightly different signatures (e.g., different listen addresses), the mutex serializes access so that:
+  - First call creates the contact
+  - Subsequent calls find the existing contact and update it (not create a new one)
+- The existing merge logic (lines 5049-5052) handles cases where contacts exist with different peer IDs but same public key
+
+**Verification:**
+- Code review confirms the fix addresses the root cause
+- The `peerIdentifiedDedupCache` (lines 590-598) still provides primary deduplication for identical callbacks
+- The mutex provides secondary protection against race conditions when callbacks have different signatures
 
 ---
 
@@ -369,12 +424,13 @@ Messages may "disappear" from UI due to missing state updates. UI may only show 
 | Field | Value |
 |-------|-------|
 | **ID** | IOS-CONV-DEL-001 |
-| **Status** | 🔴 Open |
+| **Status** | 🟢 Fixed |
 | **Priority** | P1 |
 | **Platform** | iOS |
 | **Phase** | v0.2.0 |
 | **First Seen** | 2026-03-10 |
-| **Last Verified** | 2026-03-10 |
+| **Last Verified** | 2026-03-16 |
+| **Last Fixed** | 2026-03-16 |
 | **Source** | `IOS_ISSUES_2026-03-10.md` |
 
 **Symptom:**
@@ -383,9 +439,34 @@ User deletes a conversation in iOS app, but conversation reappears almost immedi
 **Root Cause:**
 History sync from other device restores messages. Deletion not calling `remove_conversation()` on history manager.
 
-**Fix Required:**
-- Verify it calls `historyManager.removeConversation(peerId)`
-- Implement deletion marker or suppress deleted conversations
+**Fix Applied:**
+Implemented deleted conversation tracking to prevent history sync from restoring deleted conversations:
+
+1. Added `deletedConversationPeerIds: Set<String>` property to track deleted conversations ([`MeshRepository.swift:167`](iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift:167))
+2. Added `deletedConversationsKey` for UserDefaults persistence ([`MeshRepository.swift:169`](iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift:169))
+3. Added helper methods:
+   - `markConversationAsDeleted(peerId:)` - marks conversation as deleted and persists ([`MeshRepository.swift:2934-2938`](iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift:2934))
+   - `isConversationDeleted(peerId:)` - checks if conversation was deleted ([`MeshRepository.swift:2941-2943`](iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift:2941))
+   - `loadDeletedConversations()` - loads tracking from UserDefaults ([`MeshRepository.swift:2946-2953`](iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift:2946))
+   - `saveDeletedConversations()` - persists tracking to UserDefaults ([`MeshRepository.swift:2956-2958`](iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift:2956))
+4. Modified `clearConversation(peerId:)` to call `markConversationAsDeleted()` after clearing history ([`MeshRepository.swift:2927`](iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift:2927))
+5. Added `loadDeletedConversations()` call in `init()` to restore tracking on app launch ([`MeshRepository.swift:425`](iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift:425))
+6. Added check in history sync data handler to skip messages from deleted conversations ([`MeshRepository.swift:1452-1457`](iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift:1452))
+
+**How the Fix Works:**
+- When user deletes a conversation, the peer ID is added to `deletedConversationPeerIds` and persisted to UserDefaults
+- When history sync data arrives from another device, the handler checks if the conversation was deleted
+- If deleted, the sync data is skipped (delivery receipt still sent to maintain protocol)
+- Tracking persists across app restarts via UserDefaults
+
+**Verification:**
+1. Delete a conversation on Device A
+2. Send messages from Device B to Device A
+3. Verify Device A does not show the deleted conversation or its messages
+4. Restart Device A app
+5. Verify deleted conversation does not reappear
+
+**Status:** Resolved
 
 ---
 
@@ -893,20 +974,180 @@ Changed to `record.peer_id.eq_ignore_ascii_case(peer)` in `core/src/store/histor
 
 ---
 
+## Log Audit Findings - New Issues (2026-03-16)
+
+### AND-NO-ROUTE-001: No Route Candidates Available for Outbox Retry
+
+| Field | Value |
+|-------|-------|
+| **ID** | AND-NO-ROUTE-001 |
+| **Status** | 🔴 Open |
+| **Priority** | P1 |
+| **Platform** | Android |
+| **Phase** | v0.2.0 |
+| **First Seen** | 2026-03-15 |
+| **Last Verified** | 2026-03-15 |
+| **Source** | `android/Google-Pixel-6a-Android-16_2026-03-15_230131.logcat` |
+
+**Symptom:**
+Delivery attempts fail with `reason=no_route_candidates route_fallback=null ble_only=false` during outbox retry. Messages remain stuck in pending/stored state indefinitely.
+
+**Log Evidence:**
+```
+delivery_attempt msg=c5cc98c5-46fd-4e26-8258-e6187d42c9f5 medium=core phase=direct outcome=failed detail=ctx=outbox_retry reason=no_route_candidates route_fallback=null ble_only=false
+```
+
+**Root Cause Analysis:**
+The `buildRoutePeerCandidates()` function at [`MeshRepository.kt:5215-5237`](android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:5215) returns an empty list when:
+1. `discoverRoutePeersForPublicKey(recipientPublicKey)` returns no matches (peer not in discovered peers cache)
+2. Contact notes contain no valid routing hints
+3. `cachedRoutePeerId` is null or invalid
+4. The peer ID fails `PeerIdValidator.isLibp2pPeerId()` validation
+
+The empty candidates list propagates to [`attemptDirectSwarmDelivery()`](android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:3500) which logs the `no_route_candidates` error at line 3934-3944.
+
+**Relationship to Existing Issues:**
+- **AND-CELLULAR-001**: Root cause when cellular network blocks relay connections
+- **CROSS-RELAY-001**: Root cause when relay server is unreachable
+- **AND-STALE-PEER-001**: Related - stale peer data may cause invalid route candidates
+
+**Implementation Plan:**
+
+| Step | Action | LOC | File |
+|------|--------|-----|------|
+| 1 | Add diagnostic logging to `buildRoutePeerCandidates()` showing why each source failed | ~15 LOC | MeshRepository.kt:5215 |
+| 2 | Store last-known-good `routePeerId` in contact notes on successful delivery | ~10 LOC | MeshRepository.kt:2703 |
+| 3 | Add fallback to last-known-good route when fresh discovery returns empty | ~15 LOC | MeshRepository.kt:5241 |
+| 4 | Emit user-visible "Connecting..." status when `no_route_candidates` occurs | ~10 LOC | MeshRepository.kt:3934 |
+| **Total** | | **~50 LOC** | |
+
+**Verification:**
+1. Send message to peer while device is offline
+2. Verify `no_route_candidates` log includes diagnostic context (discovery empty, notes empty, etc.)
+3. Go online and verify last-known-good route is attempted first
+4. Verify UI shows "Connecting..." status during route discovery
+
+---
+
+### AND-BLE-WRITE-001: BLE GATT Characteristic Write Failed (Error 241)
+
+| Field | Value |
+|-------|-------|
+| **ID** | AND-BLE-WRITE-001 |
+| **Status** | 🔴 Open |
+| **Priority** | P2 |
+| **Platform** | Android |
+| **Phase** | v0.2.0 |
+| **First Seen** | 2026-03-15 |
+| **Last Verified** | 2026-03-15 |
+| **Source** | `logs/5mesh/20260315_140825/android.log` |
+
+**Symptom:**
+BLE GATT characteristic write fails with error code 241 (0xF1) to peer MAC address `49:EF:29:90:53:FF`.
+
+**Log Evidence:**
+```
+03-15 14:06:54.407 11650 11662 E BleGattClient$gattCallback: Characteristic write failed to 49:EF:29:90:53:FF: 241
+```
+
+**Root Cause Analysis:**
+Error 241 (0xF1) in Android BLE GATT maps to `GATT_READ_NOT_PERMITTED` (0x02) with additional flags, or more commonly indicates:
+1. **Connection state invalid**: GATT connection dropped between write queue and execution
+2. **Characteristic not found**: Service discovery incomplete when write attempted
+3. **Write type mismatch**: Attempting write-with-response on notify-only characteristic
+4. **MTU overflow**: Payload exceeds negotiated MTU (517 in this log)
+
+The error occurs in [`BleGattClient.gattCallback`](android/app/src/main/java/com/scmessenger/android/transport/ble/BleGattClient.kt) during characteristic write operations.
+
+**Relationship to Existing Issues:**
+- **AND-BLE-001**: Related - stale BLE peer targeting
+- **BLE-FRESH-001**: Related - stale MAC address in telemetry
+
+**Implementation Plan:**
+
+| Step | Action | LOC | File |
+|------|--------|-----|------|
+| 1 | Add GATT connection state check before write attempt | ~10 LOC | BleGattClient.kt |
+| 2 | Add error code mapping for diagnostic logging (241 → human-readable) | ~15 LOC | BleGattClient.kt |
+| 3 | Implement retry with exponential backoff for transient GATT errors | ~20 LOC | BleGattClient.kt |
+| 4 | Add MTU validation before payload write | ~10 LOC | BleGattClient.kt |
+| **Total** | | **~55 LOC** | |
+
+**Verification:**
+1. Connect to iOS device via BLE
+2. Send large message payload
+3. Verify error 241 is logged with human-readable description
+4. Verify automatic retry succeeds on second attempt
+5. Verify MTU overflow is detected before write attempt
+
+---
+
+### AND-HISTORY-SYNC-001: History Sync Race Condition
+
+| Field | Value |
+|-------|-------|
+| **ID** | AND-HISTORY-SYNC-001 |
+| **Status** | 🔴 Open |
+| **Priority** | P2 |
+| **Platform** | Android |
+| **Phase** | v0.2.0 |
+| **First Seen** | 2026-03-15 |
+| **Last Verified** | 2026-03-15 |
+| **Source** | `logs/5mesh/20260315_141333/android.log`, `LOG_AUDIT_2026-03-15.md` |
+
+**Symptom:**
+Multiple coroutines attempting to sync history simultaneously. Log shows `sendHistorySyncIfNeeded: already in progress` followed by `shouldSend=false`.
+
+**Log Evidence:**
+```
+03-13 04:13:37.534 26825 28591 W MeshRepository: sendHistorySyncIfNeeded called for 12D3KooWKkga5cewGSmxtpEaSNk8YRovjb47BVTpsi25gxcs26Lr
+03-13 04:13:37.534 26825 28591 W MeshRepository: sendHistorySyncIfNeeded shouldSend=false for 12D3KooWKkga5cewGSmxtpEaSNk8YRovjb47BVTpsi25gxcs26Lr (age=29764ms)
+```
+
+**Root Cause Analysis:**
+The `sendHistorySyncIfNeeded()` function is called from multiple entry points:
+1. [`onPeerIdentified`](android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:694) callback (WiFi + relay + BLE transports each trigger)
+2. [`onPeerDiscovered`](android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:568) callback
+3. [`onConnected`](android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt) callback
+
+Each transport's peer identification triggers a separate coroutine, all racing to call `sendHistorySyncIfNeeded()`. The current guard (`historySyncSentPeers` set) prevents duplicate sends but wastes coroutine resources.
+
+**Relationship to Existing Issues:**
+- **AND-CONTACT-DUP-001**: Same root cause - multiple transport callbacks
+- **AND-RELAY-CONTACTS-001**: Same root cause - duplicate peer identification
+
+**Implementation Plan:**
+
+| Step | Action | LOC | File |
+|------|--------|-----|------|
+| 1 | Add `historySyncMutex` per peer ID to serialize sync attempts | ~10 LOC | MeshRepository.kt:189 |
+| 2 | Make `sendHistorySyncIfNeeded()` suspend and wrap with mutex | ~15 LOC | MeshRepository.kt |
+| 3 | Add completion callback so waiting coroutines get result | ~10 LOC | MeshRepository.kt |
+| 4 | Add metrics counter for concurrent sync attempts prevented | ~5 LOC | MeshRepository.kt |
+| **Total** | | **~40 LOC** | |
+
+**Verification:**
+1. Start mesh service with 3 transports active
+2. Verify only ONE `sendHistorySyncIfNeeded` execution per peer
+3. Verify subsequent calls log "waiting for in-progress sync" instead of duplicate attempts
+4. Verify sync completes successfully on first attempt
+
+---
+
 ## Summary Statistics
 
 | Status | Count |
 |--------|-------|
-| 🔴 Open | 30 |
+| 🔴 Open | 32 |
 | 🟡 In Progress | 1 |
-| ✅ Closed | 12 |
-| **Total** | **43** |
+| ✅ Closed | 13 |
+| **Total** | **46** |
 
 | Priority | Open Count |
 |----------|------------|
 | P0 | 8 |
-| P1 | 12 |
-| P2 | 10 |
+| P1 | 13 |
+| P2 | 11 |
 
 ---
 
