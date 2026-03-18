@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 import timber.log.Timber
 import kotlinx.coroutines.flow.filter
@@ -184,6 +186,9 @@ open class MeshRepository(private val context: Context) {
     private var maintenanceJob: kotlinx.coroutines.Job? = null
     private val pendingOutboxFile = File(storagePath, "pending_outbox.json")
     private val pendingOutboxFlushMutex = kotlinx.coroutines.sync.Mutex()
+    // P1: Mutex to synchronize contact upsert operations and prevent duplicate contact creation
+    // during concurrent peer identification callbacks (AND-CONTACT-DUP-001)
+    private val contactUpsertMutex = kotlinx.coroutines.sync.Mutex()
     private val receiptAwaitSeconds: Long = 8L
     private val pendingOutboxMaxAttempts: Int = 720
     private val pendingOutboxMaxAgeSeconds: Long = 7L * 24L * 60L * 60L
@@ -562,6 +567,8 @@ open class MeshRepository(private val context: Context) {
                                 listeners = relayHints,
                                 knownPublicKey = transportIdentity.publicKey
                             )
+                            // Don't auto-create contacts for relay peers - they are infrastructure, not user contacts
+                            if (!isRelay) {
                                 upsertFederatedContact(
                                     canonicalPeerId = transportIdentity.canonicalPeerId,
                                     publicKey = transportIdentity.publicKey,
@@ -570,6 +577,10 @@ open class MeshRepository(private val context: Context) {
                                     listeners = relayHints,
                                     createIfMissing = false
                                 )
+                                Timber.d("Auto-created/updated contact for discovered peer: ${transportIdentity.canonicalPeerId}")
+                            } else {
+                                Timber.d("Skipping contact creation for relay peer in onPeerDiscovered: $peerId")
+                            }
                             try { contactManager?.updateLastSeen(transportIdentity.canonicalPeerId) } catch (_: Exception) { }
                             try { contactManager?.updateLastSeen(peerId) } catch (_: Exception) { }
                             if (!isRelay && relayHints.isNotEmpty()) {
@@ -955,16 +966,18 @@ open class MeshRepository(private val context: Context) {
                         }
 
                         if (normalizedSenderKey != null) {
-                            upsertFederatedContact(
-                                canonicalPeerId = canonicalPeerId,
-                                publicKey = normalizedSenderKey,
-                                nickname = knownNickname,
-                                libp2pPeerId = routePeerId,
-                                wifiPeerId = routeWifiPeerId,
-                                listeners = hintedDialCandidates,
-                                deviceId = verifiedHints?.deviceId,
-                                createIfMissing = false
-                            )
+                            repoScope.launch {
+                                upsertFederatedContact(
+                                    canonicalPeerId = canonicalPeerId,
+                                    publicKey = normalizedSenderKey,
+                                    nickname = knownNickname,
+                                    libp2pPeerId = routePeerId,
+                                    wifiPeerId = routeWifiPeerId,
+                                    listeners = hintedDialCandidates,
+                                    deviceId = verifiedHints?.deviceId,
+                                    createIfMissing = false
+                                )
+                            }
                             val discoveredNickname = prepopulateDiscoveryNickname(
                                 nickname = knownNickname,
                                 peerId = canonicalPeerId,
@@ -1851,15 +1864,17 @@ open class MeshRepository(private val context: Context) {
             routePeerId?.let {
                 try { contactManager?.updateLastSeen(it) } catch (_: Exception) { }
             }
-            upsertFederatedContact(
-                canonicalPeerId = identityId,
-                publicKey = publicKeyHex,
-                nickname = rawNickname.takeIf { it.isNotBlank() },
-                libp2pPeerId = routePeerId,
-                listeners = listenersStrings,
-                blePeerId = blePeerId,
-                createIfMissing = false
-            )
+            repoScope.launch {
+                upsertFederatedContact(
+                    canonicalPeerId = identityId,
+                    publicKey = publicKeyHex,
+                    nickname = rawNickname.takeIf { it.isNotBlank() },
+                    libp2pPeerId = routePeerId,
+                    listeners = listenersStrings,
+                    blePeerId = blePeerId,
+                    createIfMissing = false
+                )
+            }
 
             if (!routePeerId.isNullOrEmpty() && listenersStrings.isNotEmpty()) {
                 connectToPeer(routePeerId, listenersStrings)
@@ -4109,6 +4124,18 @@ open class MeshRepository(private val context: Context) {
                 if (item.terminalFailureCode != null) {
                     continue
                 }
+                // AND-DELIVERY-001: Enforce maximum retry limit to prevent infinite retries
+                if (item.attemptCount >= pendingOutboxMaxAttempts) {
+                    Timber.w("Dropping message ${item.historyRecordId} after ${item.attemptCount} attempts (max=$pendingOutboxMaxAttempts)")
+                    logDeliveryState(
+                        messageId = item.historyRecordId,
+                        state = "failed",
+                        detail = "dropped_pending_outbox reason=max_attempts_exceeded attempt=${item.attemptCount}"
+                    )
+                    iterator.remove()
+                    updated = true
+                    continue
+                }
                 if (item.nextAttemptAtEpochSec > now) continue
                 if (isMessageDeliveredLocally(item.historyRecordId)) {
                     iterator.remove()
@@ -4977,7 +5004,20 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
-    private fun upsertFederatedContact(
+    /**
+     * Upserts a federated contact with synchronization to prevent duplicate creation.
+     *
+     * This function is synchronized using contactUpsertMutex to prevent race conditions
+     * where concurrent peer identification callbacks could create duplicate contacts
+     * for the same peer (AND-CONTACT-DUP-001).
+     *
+     * The function:
+     * 1. Acquires the mutex lock to ensure atomic contact lookup and creation
+     * 2. Checks for existing contacts by both public key and peer ID
+     * 3. Merges duplicates if found by both key and ID but with different peer IDs
+     * 4. Creates or updates the contact with resolved identity information
+     */
+    private suspend fun upsertFederatedContact(
         canonicalPeerId: String,
         publicKey: String,
         nickname: String?,
@@ -4988,89 +5028,91 @@ open class MeshRepository(private val context: Context) {
         deviceId: String? = null,
         createIfMissing: Boolean = true
     ) {
-        val normalizedPeerId = canonicalPeerId.trim()
-        val normalizedKey = normalizePublicKey(publicKey) ?: return
-        if (normalizedPeerId.isEmpty()) return
+        contactUpsertMutex.withLock {
+            val normalizedPeerId = canonicalPeerId.trim()
+            val normalizedKey = normalizePublicKey(publicKey) ?: return@withLock
+            if (normalizedPeerId.isEmpty()) return@withLock
 
-        val routePeer = libp2pPeerId?.trim()?.takeIf { it.isNotEmpty() }
-        if (!routePeer.isNullOrBlank() && isBootstrapRelayPeer(routePeer)) return
+            val routePeer = libp2pPeerId?.trim()?.takeIf { it.isNotEmpty() }
+            if (!routePeer.isNullOrBlank() && isBootstrapRelayPeer(routePeer)) return@withLock
 
-        val contacts = try {
-            contactManager?.list().orEmpty()
-        } catch (e: Exception) {
-            Timber.d("Failed to list contacts for federation upsert: ${e.message}")
-            return
-        }
+            val contacts = try {
+                contactManager?.list().orEmpty()
+            } catch (e: Exception) {
+                Timber.d("Failed to list contacts for federation upsert: ${e.message}")
+                return@withLock
+            }
 
-        val existingByKey = contacts.firstOrNull { normalizePublicKey(it.publicKey) == normalizedKey }
-        val existingById = contacts.firstOrNull { it.peerId == normalizedPeerId }
+            val existingByKey = contacts.firstOrNull { normalizePublicKey(it.publicKey) == normalizedKey }
+            val existingById = contacts.firstOrNull { it.peerId == normalizedPeerId }
 
-        // Auth guard: for an existing canonical peerId, only accept federated updates
-        // when the source public key is consistent with the stored contact key.
-        if (existingById != null && normalizePublicKey(existingById.publicKey) != normalizedKey) {
-            Timber.w(
-                "Rejected federated nickname update for $normalizedPeerId: key mismatch " +
-                    "(stored=${existingById.publicKey.take(8)}..., incoming=${normalizedKey.take(8)}...)"
+            // Auth guard: for an existing canonical peerId, only accept federated updates
+            // when the source public key is consistent with the stored contact key.
+            if (existingById != null && normalizePublicKey(existingById.publicKey) != normalizedKey) {
+                Timber.w(
+                    "Rejected federated nickname update for $normalizedPeerId: key mismatch " +
+                        "(stored=${existingById.publicKey.take(8)}..., incoming=${normalizedKey.take(8)}...)"
+                )
+                return@withLock
+            }
+
+            // If we found them by key but they have a different PeerID now,
+            // we should merge them to prevent duplicates.
+            if (existingByKey != null && existingById != null && existingByKey.peerId != existingById.peerId) {
+                Timber.i("Merging duplicate identities for key ${normalizedKey.take(8)}...: ${existingById.peerId} -> ${existingByKey.peerId}")
+                try { contactManager?.remove(existingById.peerId) } catch (_: Exception) {}
+            }
+
+            val existing = existingByKey ?: existingById
+            if (existing == null && !createIfMissing) {
+                return@withLock
+            }
+
+            var notes = existing?.notes
+            if (!routePeer.isNullOrBlank()) {
+                notes = appendRoutingHint(notes = notes, key = "libp2p_peer_id", value = routePeer)
+            }
+            val normalizedBle = blePeerId?.trim()?.takeIf { it.isNotEmpty() }
+            if (!normalizedBle.isNullOrBlank()) {
+                notes = appendRoutingHint(notes = notes, key = "ble_peer_id", value = normalizedBle)
+            }
+            val normalizedWifi = wifiPeerId?.trim()?.takeIf { it.isNotEmpty() }
+            if (!normalizedWifi.isNullOrBlank()) {
+                notes = appendRoutingHint(notes = notes, key = "wifi_peer_id", value = normalizedWifi)
+            }
+            notes = upsertRoutingListeners(notes, normalizeOutboundListenerHints(listeners))
+
+            val now = (System.currentTimeMillis() / 1000).toULong()
+            val resolvedPeerId = existing?.peerId ?: normalizedPeerId
+            val resolvedPublicKey = existingByKey?.publicKey ?: normalizedKey
+            val incomingNickname = normalizeNickname(nickname)
+            val resolvedNickname = selectAuthoritativeNickname(incomingNickname, existing?.nickname)
+            val resolvedLocalNickname = normalizeNickname(existing?.localNickname)
+
+            val updated = uniffi.api.Contact(
+                peerId = resolvedPeerId,
+                nickname = resolvedNickname,
+                localNickname = resolvedLocalNickname,
+                publicKey = resolvedPublicKey,
+                addedAt = existing?.addedAt ?: now,
+                lastSeen = now,
+                notes = notes,
+                lastKnownDeviceId = deviceId?.trim()?.takeIf { it.isNotEmpty() } ?: existing?.lastKnownDeviceId
             )
-            return
-        }
 
-        // If we found them by key but they have a different PeerID now,
-        // we should merge them to prevent duplicates.
-        if (existingByKey != null && existingById != null && existingByKey.peerId != existingById.peerId) {
-            Timber.i("Merging duplicate identities for key ${normalizedKey.take(8)}...: ${existingById.peerId} -> ${existingByKey.peerId}")
-            try { contactManager?.remove(existingById.peerId) } catch (_: Exception) {}
-        }
+            try {
+                contactManager?.add(updated)
+            } catch (e: Exception) {
+                Timber.d("Failed to upsert federated contact for $resolvedPeerId: ${e.message}")
+            }
 
-        val existing = existingByKey ?: existingById
-        if (existing == null && !createIfMissing) {
-            return
+            annotateIdentityInLedger(
+                routePeerId = routePeer,
+                listeners = listeners,
+                publicKey = resolvedPublicKey,
+                nickname = resolvedNickname
+            )
         }
-
-        var notes = existing?.notes
-        if (!routePeer.isNullOrBlank()) {
-            notes = appendRoutingHint(notes = notes, key = "libp2p_peer_id", value = routePeer)
-        }
-        val normalizedBle = blePeerId?.trim()?.takeIf { it.isNotEmpty() }
-        if (!normalizedBle.isNullOrBlank()) {
-            notes = appendRoutingHint(notes = notes, key = "ble_peer_id", value = normalizedBle)
-        }
-        val normalizedWifi = wifiPeerId?.trim()?.takeIf { it.isNotEmpty() }
-        if (!normalizedWifi.isNullOrBlank()) {
-            notes = appendRoutingHint(notes = notes, key = "wifi_peer_id", value = normalizedWifi)
-        }
-        notes = upsertRoutingListeners(notes, normalizeOutboundListenerHints(listeners))
-
-        val now = (System.currentTimeMillis() / 1000).toULong()
-        val resolvedPeerId = existing?.peerId ?: normalizedPeerId
-        val resolvedPublicKey = existingByKey?.publicKey ?: normalizedKey
-        val incomingNickname = normalizeNickname(nickname)
-        val resolvedNickname = selectAuthoritativeNickname(incomingNickname, existing?.nickname)
-        val resolvedLocalNickname = normalizeNickname(existing?.localNickname)
-
-        val updated = uniffi.api.Contact(
-            peerId = resolvedPeerId,
-            nickname = resolvedNickname,
-            localNickname = resolvedLocalNickname,
-            publicKey = resolvedPublicKey,
-            addedAt = existing?.addedAt ?: now,
-            lastSeen = now,
-            notes = notes,
-            lastKnownDeviceId = deviceId?.trim()?.takeIf { it.isNotEmpty() } ?: existing?.lastKnownDeviceId
-        )
-
-        try {
-            contactManager?.add(updated)
-        } catch (e: Exception) {
-            Timber.d("Failed to upsert federated contact for $resolvedPeerId: ${e.message}")
-        }
-
-        annotateIdentityInLedger(
-            routePeerId = routePeer,
-            listeners = listeners,
-            publicKey = resolvedPublicKey,
-            nickname = resolvedNickname
-        )
     }
 
     private fun upsertRoutingListeners(notes: String?, listeners: List<String>): String? {

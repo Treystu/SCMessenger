@@ -9,13 +9,6 @@
 import Foundation
 import os
 
-/// Transport types available for message delivery
-enum TransportType: String, CaseIterable, Codable {
-    case multipeer = "multipeer"
-    case ble = "ble"
-    case core = "core"  // libp2p/internet relay
-}
-
 /// Result of a transport delivery attempt
 struct TransportDeliveryResult {
     let transport: TransportType
@@ -261,14 +254,14 @@ final class SmartTransportRouter {
             availableTransports.append((.ble, bleTarget, { await tryBle(bleTarget) }))
         }
         
-        if let coreTarget = routePeerCandidates.first?.trimmingCharacters(in: .whitespacesAndNewlines), !coreTarget.isEmpty {
-            availableTransports.append((.core, coreTarget, { await tryCore(coreTarget) }))
+        if let internetTarget = routePeerCandidates.first?.trimmingCharacters(in: .whitespacesAndNewlines), !internetTarget.isEmpty {
+            availableTransports.append((.internet, internetTarget, { await tryCore(internetTarget) }))
         }
         
         guard !availableTransports.isEmpty else {
             logger.warning("No available transports for peer \(peerId.prefix(8))")
             return TransportDeliveryResult(
-                transport: .core,
+                transport: .internet,
                 success: false,
                 latencyMs: 0,
                 error: "no_available_transports",
@@ -365,7 +358,7 @@ final class SmartTransportRouter {
             }
             logger.error("✗ All transports failed for peer \(peerId.prefix(8))")
             return TransportDeliveryResult(
-                transport: .core,
+                transport: .internet,
                 success: false,
                 latencyMs: latencyMs,
                 error: "all_transports_failed",

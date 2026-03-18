@@ -91,6 +91,7 @@ class ContactsViewModel @Inject constructor(
     init {
         loadContacts()
         observeNearbyPeers()
+        observeServiceState()
         viewModelScope.launch {
             // Contacts can open after discovery already happened; replay cached identities
             // so Nearby stays aligned with Dashboard/Settings discovery state.
@@ -359,6 +360,30 @@ class ContactsViewModel @Inject constructor(
                 it.libp2pPeerId?.let { libp -> PeerIdValidator.isSame(libp, peerId) } ?: false
             }
             pendingNearbyRemovalJobs.remove(peerId)
+        }
+    }
+
+    /**
+     * Observe mesh service state and clear nearby peers immediately when service stops.
+     * This fixes AND-STALE-PEER-001: Gratuitous Nearby Entries Persistence.
+     *
+     * When the mesh service stops (e.g., user toggles off, app goes to background),
+     * nearby peers should be removed immediately rather than waiting for individual
+     * disconnect events that may arrive late or not at all.
+     */
+    private fun observeServiceState() {
+        viewModelScope.launch {
+            meshRepository.serviceState.collect { state ->
+                if (state == uniffi.api.ServiceState.STOPPED) {
+                    // Cancel all pending removal jobs
+                    pendingNearbyRemovalJobs.values.forEach { it.cancel() }
+                    pendingNearbyRemovalJobs.clear()
+                    
+                    // Clear nearby peers immediately
+                    _nearbyPeers.value = emptyList()
+                    Timber.d("Cleared all nearby peers on service stop")
+                }
+            }
         }
     }
 

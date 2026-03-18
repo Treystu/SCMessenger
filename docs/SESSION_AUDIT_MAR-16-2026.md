@@ -262,3 +262,43 @@ You are working on the SCMessenger project, a cross-platform mesh messaging app.
 This audit document has been created at `docs/SESSION_AUDIT_MAR-16-2026.md`.
 
 No other documentation updates were needed as this is an audit of a previous session, not a change to the codebase.
+
+---
+
+## Build Verification Update (March 17, 2026)
+
+### Summary
+Verified and fixed build issues across all platforms (Rust core, iOS, Android).
+
+### Rust Core Fixes
+- Fixed QUIC API compatibility with quinn 0.11:
+  - Changed `with_native_roots()` to `try_with_platform_verifier()` with proper error handling
+  - Fixed async handling of `endpoint.connect()` by wrapping in async block
+  - Changed `send.finish().await` to `send.finish()` (synchronous in quinn)
+- Added `#[allow(clippy::too_many_arguments)]` to `dispatch_ranked_route` function
+- Applied `cargo fmt` to fix formatting issues
+
+### iOS Fixes
+- Fixed `TransportType` enum references: changed `.core` to `.internet`
+- Fixed closure capture issues by adding `[self]` capture lists
+- Fixed explicit `self.` references in closures
+- Fixed guard statement syntax for `swarmBridge`
+
+### Android Fixes
+- Fixed suspend function calls from non-suspend contexts by wrapping in `repoScope.launch`
+- Added missing imports for `Mutex` and `withLock`
+
+### Build Verification Results
+```
+✅ Rust: All tests passed
+✅ Rust: Formatting clean
+✅ Rust: Clippy clean
+✅ Android: Build successful
+✅ iOS: Build verified
+✅ ALL PLATFORMS BUILD SUCCESSFULLY
+```
+
+### Files Modified
+- `core/src/relay/client.rs` - QUIC API fixes
+- `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift` - TransportType and closure fixes
+- `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` - Suspend function fixes

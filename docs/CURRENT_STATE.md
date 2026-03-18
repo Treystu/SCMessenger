@@ -208,7 +208,7 @@ Build compiles cleanly, app launches on simulator successfully
 
 **Audit Date:** 2026-03-15 14:14 HST
 **Sources:** `scripts/android_live.log`, `scripts/ios_live.log`
-**Full Report:** [`LOG_AUDIT_2026-03-15.md`](../LOG_AUDIT_2026-03-15.md)
+**Full Report:** [`LOG_AUDIT_2026-03-15.md`](historical/audits/LOG_AUDIT_2026-03-15.md)
 
 ### Critical Issues Confirmed via Logs
 

@@ -10,6 +10,8 @@
 #   ./scripts/deploy_to_device.sh android     # Build & deploy to connected Android device
 #   ./scripts/deploy_to_device.sh ios          # Build & deploy to connected iOS device
 #   ./scripts/deploy_to_device.sh both         # Build & deploy to both
+# Environment variables:
+#   DRY_RUN — preview actions without executing (default: 0)
 # =============================================================================
 
 set -euo pipefail
@@ -21,9 +23,19 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+DRY_RUN="${DRY_RUN:-0}"
+
 log_info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
 log_warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
+
+dry_run() {
+  if [ "$DRY_RUN" = "1" ]; then
+    echo "[DRY-RUN] Would execute: $*"
+    return 0
+  fi
+  "$@"
+}
 
 deploy_android() {
     log_info "=== Android Clean Build & Deploy ==="

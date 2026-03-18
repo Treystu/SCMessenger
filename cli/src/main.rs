@@ -1518,8 +1518,9 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     let _ = core.initialize_identity();
     let network_keypair = load_or_create_headless_network_keypair(&storage_path, &core)?;
     let local_peer_id = network_keypair.public().to_peer_id();
-    let display_name =
-        node_name.clone().unwrap_or_else(|| format!("relay-{}", &local_peer_id.to_string()[..8]));
+    let display_name = node_name
+        .clone()
+        .unwrap_or_else(|| format!("relay-{}", &local_peer_id.to_string()[..8]));
 
     // Sync nickname to IronCore identity if provided
     if let Some(ref name) = node_name {

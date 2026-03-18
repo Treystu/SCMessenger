@@ -557,6 +557,13 @@ log "Step ID: $STEP_ID"
 log "Update each attempt: $UPDATE_EACH"
 log "Deploy mobile each attempt: $DEPLOY_MOBILE"
 
+# Pre-flight gate
+phase "Pre-Flight Validation"
+if ! "$SCRIPT_DIR/preflight.sh" 2>&1 | tee "$SESSION_DIR/preflight.log"; then
+  echo "Pre-flight checks failed. Aborting verification loop." >&2
+  exit 1
+fi
+
 final_status=1
 successful_attempt=""
 

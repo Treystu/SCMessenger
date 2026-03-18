@@ -40,6 +40,9 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 | `docs/TESTING_GUIDE.md`                               | Active | Validation commands and expected outcomes                      |
 | `docs/EDGE_CASE_READINESS_MATRIX.md`                  | Active | Extreme environment readiness and hardening backlog            |
 | `scripts/README.md`                                   | Active | Canonical launch/debug/5-node script operations guide          |
+| `docs/SCRIPT_SANITY_CHECK_PROMPT.md`                  | Active | Agentic prompt for sanity-checking debug/test/verify scripts   |
+| `docs/SCRIPT_IMPLEMENTATION_PLAN.md`                  | Active | Step-by-step plan for script improvements (less-capable model) |
+| `docs/SCRIPT_HYGIENE_GUIDELINES.md`                   | Active | Script quality, reliability, and maintainability standards     |
 | `docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md` | Active | Release synchronization and tagging checklist                  |
 | `docs/releases/RELEASE_NOTES_V0.2.0_DRAFT.md`         | Active | v0.2.0 draft release notes                                     |
 | `docs/releases/RELEASE_NOTES_V0.1.2_GH.md`            | Active | v0.1.2 GitHub release notes draft                              |

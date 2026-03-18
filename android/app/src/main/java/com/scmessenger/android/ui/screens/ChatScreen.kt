@@ -208,27 +208,38 @@ fun ChatScreen(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                IconButton(
+                // AND-SEND-BTN-001: Use FloatingActionButton for reliable click handling
+                // IconButton with background modifier can have click detection issues in Material3
+                FloatingActionButton(
                     onClick = {
+                        Timber.d("SEND_BUTTON_CLICKED: inputText.length=${inputText.length}")
                         val messageToSend = inputText.trim()
                         if (messageToSend.isNotEmpty()) {
                             Timber.d("SEND: Clearing input immediately for instant feedback")
                             inputText = ""
                             coroutineScope.launch {
-                                val success = viewModel.sendMessage(conversationId, messageToSend)
-                                Timber.d("SEND: Message sent, success=$success")
-                                listState.animateScrollToItem(chatMessages.size)
+                                try {
+                                    val success = viewModel.sendMessage(conversationId, messageToSend)
+                                    Timber.d("SEND: Message sent, success=$success")
+                                    if (success) {
+                                        listState.animateScrollToItem(chatMessages.size)
+                                    }
+                                } catch (e: Exception) {
+                                    Timber.e(e, "SEND: Failed to send message")
+                                }
                             }
+                        } else {
+                            Timber.w("SEND: Attempted to send empty message")
                         }
                     },
-                    modifier = Modifier
-                        .background(MaterialTheme.colorScheme.primary, CircleShape)
-                        .size(48.dp)
+                    modifier = Modifier.size(48.dp),
+                    containerColor = if (inputText.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = if (inputText.isNotBlank()) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                 ) {
                     Icon(
                         imageVector = Icons.Default.Send,
-                        contentDescription = "Send",
-                        tint = MaterialTheme.colorScheme.onPrimary
+                        contentDescription = "Send message",
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
