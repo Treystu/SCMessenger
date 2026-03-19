@@ -5,46 +5,51 @@ Last updated: 2026-03-19
 
 ---
 
-## 2026-03-19 v0.2.1 Release Complete: Full Notification Implementation
+## 2026-03-19 v0.1.9 Stable Baseline: Notification Implementation Requires Verification
 
-**Status:** ✅ RELEASED
+**Status:** ⚠️ NEEDS VERIFICATION
 
 ### Summary
 
-Successfully delivered v0.2.1 with complete notification functionality across all platforms. All WS14 phases completed and verified.
+Regressed from v0.2.1 to v0.1.9 to establish stable baseline. While notification implementation code exists and WS14 phases are documented as complete, comprehensive testing is needed to verify real-world functionality before advancing versions.
 
-### What Was Delivered
+### Current Situation
 
-1. **Complete Local Notifications** (iOS, Android, WASM):
-   - Direct message notifications with smart classification
-   - Message request notifications for unknown senders
-   - Cross-platform settings parity
-   - Tap routing to conversations or requests inbox
+**Documentation vs Reality Gap**: The codebase contains notification implementation that passes automated tests, but the actual user-facing functionality needs thorough verification to ensure it works as desired in real-world scenarios.
 
-2. **Core Infrastructure**:
-   - Shared notification classification contract in Rust core
-   - UniFFI/WASM bindings for cross-platform consistency
-   - Hybrid remote push interface prepared (endpoints, registry)
+### Priority Work Items
 
-3. **Platform-Specific Enhancements**:
-   - iOS: Complete `NotificationManager.swift` with UNUserNotificationCenter
-   - Android: Notification channels, actions, proper classification
-   - WASM: Browser Notification API integration with service worker bridge
+#### 1. **Notification Functionality Verification** (HIGH PRIORITY)
+- [ ] **Real-world notification testing** on physical devices (iOS, Android)  
+- [ ] **End-to-end message flow with notifications** verification
+- [ ] **Settings integration** - verify notification toggles work correctly
+- [ ] **Tap routing behavior** - test conversation/requests inbox navigation
+- [ ] **Background/foreground handling** - verify notification behavior in both states
+- [ ] **Cross-platform consistency** - ensure iOS/Android behave similarly
 
-4. **Quality Assurance**:
-   - All 520+ tests passing
-   - Build verification across all targets
-   - Documentation sync verification
-   - Cross-platform parity testing
+#### 2. **Core Stability Validation** (HIGH PRIORITY)
+- [ ] **Message delivery reliability** under various network conditions
+- [ ] **Transport layer stability** testing
+- [ ] **Contact persistence** verification
+- [ ] **Basic messaging workflows** end-to-end validation
 
-### Release Impact
+#### 3. **Platform-Specific Issues** (MEDIUM PRIORITY)
+- [ ] **iOS notification permissions** flow testing
+- [ ] **Android notification channels** behavior verification  
+- [ ] **WASM browser notifications** testing across browsers
 
-The app now has production-ready local notifications across all platforms. Users will receive proper notifications for:
-- Direct messages from known contacts
-- Message requests from unknown senders
-- Smart routing based on message context
+### Implementation Status (Documented vs Verified)
 
-Remote push notifications (APNs/FCM/Web Push) interfaces are prepared but backend implementation deferred to future releases.
+| Component | Code Status | Documentation | Real Testing | Notes |
+|-----------|-------------|---------------|--------------|-------|
+| Core notification policy | ✅ Exists | ✅ Complete | ❓ Needs verification | `core/src/notification.rs` |
+| iOS notifications | ✅ Exists | ✅ Complete | ❓ Needs verification | `NotificationManager.swift` |
+| Android notifications | ✅ Exists | ✅ Complete | ❓ Needs verification | `NotificationHelper.kt` |
+| WASM notifications | ✅ Exists | ✅ Complete | ❓ Needs verification | Browser API integration |
+| Settings integration | ✅ Exists | ✅ Complete | ❓ Needs verification | Cross-platform parity |
+
+### Approach
+**Comprehensive real-world testing before any version advancement.** Focus on proving functionality works as users expect, not just that tests pass.
 
 **Status:** ✅ COMPLETED
 

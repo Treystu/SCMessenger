@@ -240,7 +240,7 @@ struct MeshDashboardView: View {
             await MainActor.run {
                 self.peersByKey = deduped
             }
-        }.value
+        }
     }
 
     private func handlePeerEvent(_ event: MeshEventBus.PeerEvent) {
@@ -514,7 +514,6 @@ struct MeshDashboardView: View {
         }
         return .unknown
     }
-}
 
 struct ServiceStatusCard: View {
     let stats: ServiceStats?

@@ -158,21 +158,21 @@ fileprivate protocol FfiConverter {
     associatedtype FfiType
     associatedtype SwiftType
 
-    nonisolated(unsafe) static func lift(_ value: FfiType) throws -> SwiftType
-    nonisolated(unsafe) static func lower(_ value: SwiftType) -> FfiType
-    nonisolated(unsafe) static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType
-    nonisolated(unsafe) static func write(_ value: SwiftType, into buf: inout [UInt8])
+    nonisolated static func lift(_ value: FfiType) throws -> SwiftType
+    nonisolated static func lower(_ value: SwiftType) -> FfiType
+    nonisolated static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType
+    nonisolated static func write(_ value: SwiftType, into buf: inout [UInt8])
 }
 
 // Types conforming to `Primitive` pass themselves directly over the FFI.
 fileprivate protocol FfiConverterPrimitive: FfiConverter where FfiType == SwiftType { }
 
 extension FfiConverterPrimitive {
-    public nonisolated(unsafe) static func lift(_ value: FfiType) throws -> SwiftType {
+    public nonisolated static func lift(_ value: FfiType) throws -> SwiftType {
         return value
     }
 
-    public nonisolated(unsafe) static func lower(_ value: SwiftType) -> FfiType {
+    public nonisolated static func lower(_ value: SwiftType) -> FfiType {
         return value
     }
 }
@@ -182,7 +182,7 @@ extension FfiConverterPrimitive {
 fileprivate protocol FfiConverterRustBuffer: FfiConverter where FfiType == RustBuffer {}
 
 extension FfiConverterRustBuffer {
-    public nonisolated(unsafe) static func lift(_ buf: RustBuffer) throws -> SwiftType {
+    public nonisolated static func lift(_ buf: RustBuffer) throws -> SwiftType {
         var reader = createReader(data: Data(rustBuffer: buf))
         let value = try read(from: &reader)
         if hasRemaining(reader) {
@@ -192,7 +192,7 @@ extension FfiConverterRustBuffer {
         return value
     }
 
-    public nonisolated(unsafe) static func lower(_ value: SwiftType) -> RustBuffer {
+    public nonisolated static func lower(_ value: SwiftType) -> RustBuffer {
           var writer = createWriter()
           write(value, into: &writer)
           return RustBuffer(bytes: writer)

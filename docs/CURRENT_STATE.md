@@ -3,50 +3,48 @@
 Status: Active
 Last updated: 2026-03-19
 
-Last verified: **2026-03-19** (v0.2.1 release - Complete WS14 notification implementation)
-Last iOS build: **2026-03-19** (iOS build successful, v0.2.1 with full notifications)
+Last verified: **2026-03-19** (v0.1.9 stable baseline - regressed from premature v0.2.1)
+Last iOS build: **2026-03-19** (iOS build successful, v0.1.9 stable baseline)
 
 ---
 
-## 2026-03-19 v0.2.1 Release: Complete Notification Implementation
+## 2026-03-19 v0.1.9 Release: Stable Baseline After Regression
 
-**Status:** ✅ RELEASED
+**Status:** ✅ STABLE BASELINE
 
 ### Overview
 
-Successfully released v0.2.1 with complete notification support across iOS, Android, and WASM platforms. All WS14 phases completed and verified with 520+ tests passing.
+Regressed from v0.2.1 to v0.1.9 to establish stable baseline. While notification implementation exists and WS14 phases are documented as complete, real-world functionality needs thorough verification before advancing to 0.2.x series.
 
-### Key Features Delivered
+### Current Status
 
-- **Full Local Notification Support**: DM and DM Request notifications working on all platforms
-- **Smart Classification**: Core notification contract with automatic message type detection
-- **Cross-Platform Parity**: Consistent notification behavior and settings across iOS, Android, WASM
-- **Hybrid Remote Interface**: Endpoint registry prepared for future APNs/FCM/Web Push integration
-- **Smart Routing**: Notification taps route to conversations or requests inbox appropriately
+- **Stable Foundation**: Core messaging, builds, and basic transport working
+- **Notification Code Exists**: Implementation present but needs comprehensive testing
+- **Documentation vs Reality Gap**: WS14 marked complete but functionality requires validation
+- **Focus**: Stability and reliability over feature completion
 
-### WS14 Completion Summary
+### What Works (Verified)
+- Core messaging functionality 
+- Cross-platform builds (iOS, Android, WASM)
+- Basic transport layer
+- All automated tests passing (520+)
 
-All WS14 phases completed:
-- ✅ WS14.1: Core notification policy and classification
-- ✅ WS14.2: iOS notification completion  
-- ✅ WS14.3: Android notification completion
-- ✅ WS14.4: WASM notification wiring
-- ✅ WS14.5: Hybrid remote interface prep
-- ✅ WS14.6: Verification, docs, and release gating
+### What Needs Verification  
+- Complete notification flow testing (iOS, Android, WASM)
+- Real-world message delivery with notifications
+- Cross-platform notification behavior consistency
+- Settings integration functionality
+- Notification tap routing behavior
+- Background/foreground notification handling
 
-### Release Details
+### Release Strategy
+**Stability first, features second.** Will re-evaluate notification completeness through comprehensive real-world testing before next version advancement.
 
-- **Version**: v0.2.1 (versionCode 6 for Android, build 5 for iOS)
-- **GitHub Release**: https://github.com/Treystu/SCMessenger/releases/tag/v0.2.1
-- **Tests**: All 520+ tests passing
-- **Platforms**: iOS, Android, WASM all verified
-
-### Next Steps
-
-With notifications complete, the app is ready for broader testing and adoption. Future work may include:
-- Remote push notification backend implementation
-- Enhanced notification customization
-- Group notification support (out of current scope)
+### Version Details
+- **Current Version**: v0.1.9 
+- **GitHub Release**: https://github.com/Treystu/SCMessenger/releases/tag/v0.1.9
+- **Android**: versionCode 7, versionName '0.1.9'
+- **iOS**: CFBundleShortVersionString 0.1.9, CFBundleVersion 6
 
 ---
 
