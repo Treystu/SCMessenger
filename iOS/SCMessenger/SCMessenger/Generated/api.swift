@@ -860,7 +860,7 @@ open class ContactManager:
     }
 public convenience init(storagePath: String)throws  {
     let pointer =
-        try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+        try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_constructor_contactmanager_new(
         FfiConverterString.lower(storagePath),$0
     )
@@ -879,7 +879,7 @@ public convenience init(storagePath: String)throws  {
     
 
     
-open func add(contact: Contact)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func add(contact: Contact)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_contactmanager_add(self.uniffiClonePointer(),
         FfiConverterTypeContact.lower(contact),$0
     )
@@ -900,7 +900,7 @@ open func flush() {try! rustCall() {
 }
     
 open func get(peerId: String)throws  -> Contact? {
-    return try  FfiConverterOptionTypeContact.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterOptionTypeContact.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_contactmanager_get(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),$0
     )
@@ -908,13 +908,13 @@ open func get(peerId: String)throws  -> Contact? {
 }
     
 open func list()throws  -> [Contact] {
-    return try  FfiConverterSequenceTypeContact.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterSequenceTypeContact.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_contactmanager_list(self.uniffiClonePointer(),$0
     )
 })
 }
     
-open func remove(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func remove(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_contactmanager_remove(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),$0
     )
@@ -922,14 +922,14 @@ open func remove(peerId: String)throws  {try rustCallWithError(FfiConverterTypeI
 }
     
 open func search(query: String)throws  -> [Contact] {
-    return try  FfiConverterSequenceTypeContact.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterSequenceTypeContact.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_contactmanager_search(self.uniffiClonePointer(),
         FfiConverterString.lower(query),$0
     )
 })
 }
     
-open func setLocalNickname(peerId: String, nickname: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func setLocalNickname(peerId: String, nickname: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_contactmanager_set_local_nickname(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),
         FfiConverterOptionString.lower(nickname),$0
@@ -937,7 +937,7 @@ open func setLocalNickname(peerId: String, nickname: String?)throws  {try rustCa
 }
 }
     
-open func setNickname(peerId: String, nickname: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func setNickname(peerId: String, nickname: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_contactmanager_set_nickname(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),
         FfiConverterOptionString.lower(nickname),$0
@@ -948,7 +948,7 @@ open func setNickname(peerId: String, nickname: String?)throws  {try rustCallWit
     /**
      * Update the last known device ID for a contact (WS13.2)
      */
-open func updateDeviceId(peerId: String, deviceId: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func updateDeviceId(peerId: String, deviceId: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_contactmanager_update_device_id(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),
         FfiConverterOptionString.lower(deviceId),$0
@@ -956,7 +956,7 @@ open func updateDeviceId(peerId: String, deviceId: String?)throws  {try rustCall
 }
 }
     
-open func updateLastSeen(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func updateLastSeen(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_contactmanager_update_last_seen(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),$0
     )
@@ -1083,7 +1083,7 @@ open class HistoryManager:
     }
 public convenience init(storagePath: String)throws  {
     let pointer =
-        try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+        try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_constructor_historymanager_new(
         FfiConverterString.lower(storagePath),$0
     )
@@ -1102,20 +1102,20 @@ public convenience init(storagePath: String)throws  {
     
 
     
-open func add(record: MessageRecord)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func add(record: MessageRecord)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_historymanager_add(self.uniffiClonePointer(),
         FfiConverterTypeMessageRecord.lower(record),$0
     )
 }
 }
     
-open func clear()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func clear()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_historymanager_clear(self.uniffiClonePointer(),$0
     )
 }
 }
     
-open func clearConversation(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func clearConversation(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_historymanager_clear_conversation(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),$0
     )
@@ -1123,7 +1123,7 @@ open func clearConversation(peerId: String)throws  {try rustCallWithError(FfiCon
 }
     
 open func conversation(peerId: String, limit: UInt32)throws  -> [MessageRecord] {
-    return try  FfiConverterSequenceTypeMessageRecord.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterSequenceTypeMessageRecord.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_historymanager_conversation(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),
         FfiConverterUInt32.lower(limit),$0
@@ -1138,7 +1138,7 @@ open func count() -> UInt32 {
 })
 }
     
-open func delete(id: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func delete(id: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_historymanager_delete(self.uniffiClonePointer(),
         FfiConverterString.lower(id),$0
     )
@@ -1150,7 +1150,7 @@ open func delete(id: String)throws  {try rustCallWithError(FfiConverterTypeIronC
      * Returns the number of pruned records.
      */
 open func enforceRetention(maxMessages: UInt32)throws  -> UInt32 {
-    return try  FfiConverterUInt32.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterUInt32.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_historymanager_enforce_retention(self.uniffiClonePointer(),
         FfiConverterUInt32.lower(maxMessages),$0
     )
@@ -1164,14 +1164,14 @@ open func flush() {try! rustCall() {
 }
     
 open func get(id: String)throws  -> MessageRecord? {
-    return try  FfiConverterOptionTypeMessageRecord.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterOptionTypeMessageRecord.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_historymanager_get(self.uniffiClonePointer(),
         FfiConverterString.lower(id),$0
     )
 })
 }
     
-open func markDelivered(id: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func markDelivered(id: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_historymanager_mark_delivered(self.uniffiClonePointer(),
         FfiConverterString.lower(id),$0
     )
@@ -1183,7 +1183,7 @@ open func markDelivered(id: String)throws  {try rustCallWithError(FfiConverterTy
      * Returns the number of pruned records.
      */
 open func pruneBefore(beforeTimestamp: UInt64)throws  -> UInt32 {
-    return try  FfiConverterUInt32.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterUInt32.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_historymanager_prune_before(self.uniffiClonePointer(),
         FfiConverterUInt64.lower(beforeTimestamp),$0
     )
@@ -1191,7 +1191,7 @@ open func pruneBefore(beforeTimestamp: UInt64)throws  -> UInt32 {
 }
     
 open func recent(peerFilter: String?, limit: UInt32)throws  -> [MessageRecord] {
-    return try  FfiConverterSequenceTypeMessageRecord.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterSequenceTypeMessageRecord.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_historymanager_recent(self.uniffiClonePointer(),
         FfiConverterOptionString.lower(peerFilter),
         FfiConverterUInt32.lower(limit),$0
@@ -1199,7 +1199,7 @@ open func recent(peerFilter: String?, limit: UInt32)throws  -> [MessageRecord] {
 })
 }
     
-open func removeConversation(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func removeConversation(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_historymanager_remove_conversation(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),$0
     )
@@ -1207,7 +1207,7 @@ open func removeConversation(peerId: String)throws  {try rustCallWithError(FfiCo
 }
     
 open func search(query: String, limit: UInt32)throws  -> [MessageRecord] {
-    return try  FfiConverterSequenceTypeMessageRecord.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterSequenceTypeMessageRecord.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_historymanager_search(self.uniffiClonePointer(),
         FfiConverterString.lower(query),
         FfiConverterUInt32.lower(limit),$0
@@ -1216,7 +1216,7 @@ open func search(query: String, limit: UInt32)throws  -> [MessageRecord] {
 }
     
 open func stats()throws  -> HistoryStats {
-    return try  FfiConverterTypeHistoryStats.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterTypeHistoryStats.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_historymanager_stats(self.uniffiClonePointer(),$0
     )
 })
@@ -1420,7 +1420,7 @@ public static func withStorage(storagePath: String) -> IronCore {
     
 
     
-open func blockPeer(peerId: String, reason: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func blockPeer(peerId: String, reason: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_block_peer(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),
         FfiConverterOptionString.lower(reason),$0
@@ -1429,7 +1429,7 @@ open func blockPeer(peerId: String, reason: String?)throws  {try rustCallWithErr
 }
     
 open func blockedCount()throws  -> UInt32 {
-    return try  FfiConverterUInt32.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterUInt32.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_blocked_count(self.uniffiClonePointer(),$0
     )
 })
@@ -1453,21 +1453,21 @@ open func contactsManager() -> ContactManager {
 }
     
 open func exportIdentityBackup()throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_export_identity_backup(self.uniffiClonePointer(),$0
     )
 })
 }
     
 open func exportLogs()throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_export_logs(self.uniffiClonePointer(),$0
     )
 })
 }
     
 open func extractPublicKeyFromPeerId(peerId: String)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_extract_public_key_from_peer_id(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),$0
     )
@@ -1516,7 +1516,7 @@ open func historyManager() -> HistoryManager {
 })
 }
     
-open func importIdentityBackup(backup: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func importIdentityBackup(backup: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_import_identity_backup(self.uniffiClonePointer(),
         FfiConverterString.lower(backup),$0
     )
@@ -1530,14 +1530,14 @@ open func inboxCount() -> UInt32 {
 })
 }
     
-open func initializeIdentity()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func initializeIdentity()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_initialize_identity(self.uniffiClonePointer(),$0
     )
 }
 }
     
 open func isPeerBlocked(peerId: String)throws  -> Bool {
-    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_is_peer_blocked(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),$0
     )
@@ -1552,7 +1552,7 @@ open func isRunning() -> Bool {
 }
     
 open func listBlockedPeers()throws  -> [BlockedIdentity] {
-    return try  FfiConverterSequenceTypeBlockedIdentity.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterSequenceTypeBlockedIdentity.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_list_blocked_peers(self.uniffiClonePointer(),$0
     )
 })
@@ -1573,7 +1573,7 @@ open func outboxCount() -> UInt32 {
 })
 }
     
-open func performMaintenance()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func performMaintenance()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_perform_maintenance(self.uniffiClonePointer(),$0
     )
 }
@@ -1585,7 +1585,7 @@ open func performMaintenance()throws  {try rustCallWithError(FfiConverterTypeIro
      * `size_bytes` controls payload size (16-1024); values outside range are clamped.
      */
 open func prepareCoverTraffic(sizeBytes: UInt32)throws  -> Data {
-    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_prepare_cover_traffic(self.uniffiClonePointer(),
         FfiConverterUInt32.lower(sizeBytes),$0
     )
@@ -1593,7 +1593,7 @@ open func prepareCoverTraffic(sizeBytes: UInt32)throws  -> Data {
 }
     
 open func prepareMessage(recipientPublicKeyHex: String, text: String)throws  -> Data {
-    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_prepare_message(self.uniffiClonePointer(),
         FfiConverterString.lower(recipientPublicKeyHex),
         FfiConverterString.lower(text),$0
@@ -1602,7 +1602,7 @@ open func prepareMessage(recipientPublicKeyHex: String, text: String)throws  -> 
 }
     
 open func prepareMessageWithId(recipientPublicKeyHex: String, text: String)throws  -> PreparedMessage {
-    return try  FfiConverterTypePreparedMessage.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterTypePreparedMessage.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_prepare_message_with_id(self.uniffiClonePointer(),
         FfiConverterString.lower(recipientPublicKeyHex),
         FfiConverterString.lower(text),$0
@@ -1611,7 +1611,7 @@ open func prepareMessageWithId(recipientPublicKeyHex: String, text: String)throw
 }
     
 open func prepareReceipt(recipientPublicKeyHex: String, messageId: String)throws  -> Data {
-    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_prepare_receipt(self.uniffiClonePointer(),
         FfiConverterString.lower(recipientPublicKeyHex),
         FfiConverterString.lower(messageId),$0
@@ -1631,7 +1631,7 @@ open func recordLog(line: String) {try! rustCall() {
      * This is the primary ID resolution function for cross-platform identity unification.
      */
 open func resolveIdentity(anyId: String)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_resolve_identity(self.uniffiClonePointer(),
         FfiConverterString.lower(anyId),$0
     )
@@ -1642,7 +1642,7 @@ open func resolveIdentity(anyId: String)throws  -> String {
      * Resolve any ID format to canonical identity_id (Blake3 hash of public key).
      */
 open func resolveToIdentityId(anyId: String)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_resolve_to_identity_id(self.uniffiClonePointer(),
         FfiConverterString.lower(anyId),$0
     )
@@ -1656,7 +1656,7 @@ open func setDelegate(delegate: CoreDelegate?) {try! rustCall() {
 }
 }
     
-open func setNickname(nickname: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func setNickname(nickname: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_set_nickname(self.uniffiClonePointer(),
         FfiConverterString.lower(nickname),$0
     )
@@ -1664,14 +1664,14 @@ open func setNickname(nickname: String)throws  {try rustCallWithError(FfiConvert
 }
     
 open func signData(data: Data)throws  -> SignatureResult {
-    return try  FfiConverterTypeSignatureResult.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterTypeSignatureResult.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_sign_data(self.uniffiClonePointer(),
         FfiConverterData.lower(data),$0
     )
 })
 }
     
-open func start()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func start()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_start(self.uniffiClonePointer(),$0
     )
 }
@@ -1683,7 +1683,7 @@ open func stop() {try! rustCall() {
 }
 }
     
-open func unblockPeer(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func unblockPeer(peerId: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_unblock_peer(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),$0
     )
@@ -1699,7 +1699,7 @@ open func updateDiskStats(totalBytes: UInt64, freeBytes: UInt64) {try! rustCall(
 }
     
 open func verifySignature(data: Data, signature: Data, publicKeyHex: String)throws  -> Bool {
-    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ironcore_verify_signature(self.uniffiClonePointer(),
         FfiConverterData.lower(data),
         FfiConverterData.lower(signature),
@@ -1859,7 +1859,7 @@ open func getPreferredRelays(limit: UInt32) -> [LedgerEntry] {
 })
 }
     
-open func load()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func load()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ledgermanager_load(self.uniffiClonePointer(),$0
     )
 }
@@ -1880,7 +1880,7 @@ open func recordFailure(multiaddr: String) {try! rustCall() {
 }
 }
     
-open func save()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func save()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_ledgermanager_save(self.uniffiClonePointer(),$0
     )
 }
@@ -2175,13 +2175,13 @@ open func setRelayBudget(messagesPerHour: UInt32) {try! rustCall() {
 }
 }
     
-open func start()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func start()throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_meshservice_start(self.uniffiClonePointer(),$0
     )
 }
 }
     
-open func startSwarm(listenAddr: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func startSwarm(listenAddr: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_meshservice_start_swarm(self.uniffiClonePointer(),
         FfiConverterString.lower(listenAddr),$0
     )
@@ -2318,20 +2318,20 @@ open func defaultSettings() -> MeshSettings {
 }
     
 open func load()throws  -> MeshSettings {
-    return try  FfiConverterTypeMeshSettings.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+    return try  FfiConverterTypeMeshSettings.lift(try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_meshsettingsmanager_load(self.uniffiClonePointer(),$0
     )
 })
 }
     
-open func save(settings: MeshSettings)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func save(settings: MeshSettings)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_meshsettingsmanager_save(self.uniffiClonePointer(),
         FfiConverterTypeMeshSettings.lower(settings),$0
     )
 }
 }
     
-open func validate(settings: MeshSettings)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func validate(settings: MeshSettings)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_meshsettingsmanager_validate(self.uniffiClonePointer(),
         FfiConverterTypeMeshSettings.lower(settings),$0
     )
@@ -2462,7 +2462,7 @@ public convenience init() {
     
 
     
-open func dial(multiaddr: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func dial(multiaddr: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_swarmbridge_dial(self.uniffiClonePointer(),
         FfiConverterString.lower(multiaddr),$0
     )
@@ -2497,7 +2497,7 @@ open func getTopics() -> [String] {
 })
 }
     
-open func publishTopic(topic: String, data: Data)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func publishTopic(topic: String, data: Data)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_swarmbridge_publish_topic(self.uniffiClonePointer(),
         FfiConverterString.lower(topic),
         FfiConverterData.lower(data),$0
@@ -2505,7 +2505,7 @@ open func publishTopic(topic: String, data: Data)throws  {try rustCallWithError(
 }
 }
     
-open func sendMessage(peerId: String, data: Data, recipientIdentityId: String?, intendedDeviceId: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func sendMessage(peerId: String, data: Data, recipientIdentityId: String?, intendedDeviceId: String?)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_swarmbridge_send_message(self.uniffiClonePointer(),
         FfiConverterString.lower(peerId),
         FfiConverterData.lower(data),
@@ -2526,7 +2526,7 @@ open func sendMessageStatus(peerId: String, data: Data, recipientIdentityId: Str
 })
 }
     
-open func sendToAllPeers(data: Data)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func sendToAllPeers(data: Data)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_swarmbridge_send_to_all_peers(self.uniffiClonePointer(),
         FfiConverterData.lower(data),$0
     )
@@ -2539,14 +2539,14 @@ open func shutdown() {try! rustCall() {
 }
 }
     
-open func subscribeTopic(topic: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func subscribeTopic(topic: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_swarmbridge_subscribe_topic(self.uniffiClonePointer(),
         FfiConverterString.lower(topic),$0
     )
 }
 }
     
-open func unsubscribeTopic(topic: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func unsubscribeTopic(topic: String)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift {
     uniffi_scmessenger_core_fn_method_swarmbridge_unsubscribe_topic(self.uniffiClonePointer(),
         FfiConverterString.lower(topic),$0
     )

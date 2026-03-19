@@ -120,7 +120,7 @@ struct MeshDashboardView: View {
                 var contactsByNickname: [String: Contact] = [:]
 
                 contacts.forEach { contact in
-                if let routePeerId = parseRoutingLibp2pPeerId(from: contact.notes) {
+                if let routePeerId = await parseRoutingLibp2pPeerId(from: contact.notes) {
                     if contactsByRoutePeerId[routePeerId] == nil {
                         contactsByRoutePeerId[routePeerId] = contact
                     }
@@ -138,8 +138,8 @@ struct MeshDashboardView: View {
                 let now = Date()
 
                 for contact in contacts {
-                let isRelay = repository.isKnownRelay(contact.peerId)
-                let routePeerId = parseRoutingLibp2pPeerId(from: contact.notes)
+                let isRelay = await repository.isKnownRelay(contact.peerId)
+                let routePeerId = await parseRoutingLibp2pPeerId(from: contact.notes)
 
             var existing = merged[contact.peerId]
             if existing == nil {
@@ -168,7 +168,7 @@ struct MeshDashboardView: View {
                 libp2pPeerId: routePeerId ?? existing?.libp2pPeerId,
                 blePeerId: existing?.blePeerId,
                 transport: existing?.transport ?? .unknown,
-                isOnline: isRecent(contact.lastSeen) || isRecentlyOnline(existing),
+                isOnline: await isRecent(contact.lastSeen) || await isRecentlyOnline(existing),
                 isRelay: isRelay,
                 isFull: classifyPeerAsFull(
                     peerId: contact.peerId,
@@ -177,11 +177,11 @@ struct MeshDashboardView: View {
                     localNickname: contact.localNickname,
                     isRelay: isRelay
                 ),
-                lastSeen: existing?.lastSeen ?? dateFromEpoch(contact.lastSeen) ?? now
+                lastSeen: existing?.lastSeen ?? await dateFromEpoch(contact.lastSeen) ?? now
             )
             }
 
-        if let entries = try await repository.getDialableAddresses() {
+        let entries = try await repository.getDialableAddresses()
             for entry in entries {
                 guard let routePeerId = entry.peerId?.trimmingCharacters(in: .whitespacesAndNewlines),
                       !routePeerId.isEmpty else { continue }
@@ -195,7 +195,7 @@ struct MeshDashboardView: View {
                                      (entryNickname.flatMap { nn in nn.isEmpty ? nil : contactsByNickname[nn] })
 
                 let canonicalPeerId = matchedContact?.peerId ?? routePeerId
-                let relay = repository.isKnownRelay(routePeerId) || repository.isKnownRelay(canonicalPeerId)
+                let relay = await repository.isKnownRelay(routePeerId) || await repository.isKnownRelay(canonicalPeerId)
 
                 var existing = merged[canonicalPeerId]
                 if existing == nil, let pk = matchedContact?.publicKey ?? entryPublicKey, !pk.isEmpty {
@@ -222,7 +222,7 @@ struct MeshDashboardView: View {
                     libp2pPeerId: routePeerId,
                     blePeerId: existing?.blePeerId,
                     transport: transportFromMultiaddr(entry.multiaddr),
-                    isOnline: isRecent(entry.lastSeen) || isRecentlyOnline(existing),
+                    isOnline: await isRecent(entry.lastSeen) || await isRecentlyOnline(existing),
                     isRelay: relay,
                     isFull: classifyPeerAsFull(
                         peerId: canonicalPeerId,
@@ -236,10 +236,9 @@ struct MeshDashboardView: View {
                 }
             }
 
-            let deduped = self.deduplicatePeersByIdentityAndAliases(Array(merged.values))
+            let deduped = await self.deduplicatePeersByIdentityAndAliases(Array(merged.values))
             await MainActor.run {
                 self.peersByKey = deduped
-            }
             }
         }.value
     }

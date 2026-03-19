@@ -439,7 +439,7 @@ struct ChatView: View {
                         proxy.scrollTo("bottom", anchor: .bottom)
                     }
                 }
-                .onChange(of: viewModel?.messages.count) { newCount in
+                .onChange(of: viewModel?.messages.count) { oldCount, newCount in
                     // Only auto-scroll when a *new* message arrives (count increases),
                     // NOT on delivery-state updates which keep the same count.
                     guard let newCount, newCount > 0 else { return }
