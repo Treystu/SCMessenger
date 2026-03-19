@@ -1720,9 +1720,6 @@ final class MeshRepository {
                     recipientIdentityId: recipientPublicKey
                 )
                 self.logVerbose("History sync request sent to \(normalizedRoute)")
-            } catch {
-                self.logger.error("History sync request exception: \(error.localizedDescription)")
-                self.historySyncSentPeers.removeValue(forKey: normalizedRoute)
             }
         }
     }
@@ -1799,8 +1796,6 @@ final class MeshRepository {
                     }
                 }
                 self.logVerbose("History sync data sent to \(canonicalPeerId) (\(sentBatches)/\(batches.count) batches, \(recentMsgs.count) items total)")
-            } catch {
-                self.logger.error("Failed sending history sync data: \(error)")
             }
         }
     }
@@ -3031,7 +3026,7 @@ final class MeshRepository {
     /// Handle libp2p transport identity updates from the Rust core.
     /// Transport peer IDs are route hints, not user/contact identities.
     func handleTransportPeerDiscovered(peerId: String) {
-        let trimmed = PeerIdValidator.normalize(peerId)
+        let _ = PeerIdValidator.normalize(peerId)
         let selfLibp2p = ironCore?.getIdentityInfo().libp2pPeerId?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if let selfLibp2p, !selfLibp2p.isEmpty, selfLibp2p == peerId {
@@ -3783,7 +3778,7 @@ final class MeshRepository {
                 medium: "ble-only",
                 phase: "mode",
                 outcome: "enabled",
-                detail: "ctx=\(attemptContext) route_candidates=\(routePeerCandidates.count)"
+                detail: "ctx=" + (attemptContext ?? "") + ", route_candidates=" + String(routePeerCandidates.count)
             )
             if !(multipeerPeerId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
                 logDeliveryAttempt(
@@ -3791,7 +3786,7 @@ final class MeshRepository {
                     medium: "multipeer",
                     phase: "ble_only",
                     outcome: "blocked",
-                    detail: "ctx=\(attemptContext) reason=strict_ble_only_mode"
+                    detail: "ctx=" + (attemptContext ?? "") + ", reason=strict_ble_only_mode"
                 )
             }
             if !routePeerCandidates.isEmpty || !addresses.isEmpty {
@@ -3800,7 +3795,7 @@ final class MeshRepository {
                     medium: "core",
                     phase: "ble_only",
                     outcome: "blocked",
-                    detail: "ctx=\(attemptContext) reason=strict_ble_only_mode"
+                    detail: "ctx=" + (attemptContext ?? "") + ", reason=strict_ble_only_mode"
                 )
             }
         }
@@ -3871,7 +3866,7 @@ final class MeshRepository {
                             medium: "multipeer",
                             phase: "smart_router",
                             outcome: "failed",
-                            detail: "ctx=\(attemptContext) target=\(multipeerAddr) reason=\(error.localizedDescription)"
+                            detail: "ctx=\(attemptContext) target=\(multipeerAddr) reason=\(String(describing: error.localizedDescription))"
                         )
                         return false
                     }
@@ -3919,7 +3914,7 @@ final class MeshRepository {
                                         medium: "ble",
                                         phase: "smart_router",
                                         outcome: "accepted",
-                                        detail: "ctx=\(attemptContext) role=central requested_target=\(bleAddr) target=\(target)"
+                                        detail: "ctx=\(attemptContext) role=central requested_target=\(String(describing: bleAddr)) target=\(String(describing: target))"
                                     )
                                     return true
                                 }
@@ -3984,7 +3979,7 @@ final class MeshRepository {
                             medium: "core",
                             phase: "smart_router",
                             outcome: "failed",
-                            detail: "ctx=\(attemptContext) route=\(corePeerId) reason=\(sendError ?? "unknown")"
+                            detail: "ctx=\(attemptContext) route=\(String(describing: corePeerId)) reason=\(String(describing: sendError ?? "unknown"))"
                         )
                         return false
                     }
@@ -4018,7 +4013,7 @@ final class MeshRepository {
                             medium: "multipeer",
                             phase: "local_fallback",
                             outcome: "failed",
-                            detail: "ctx=\(attemptContext) target=\(multipeerAddr) reason=\(error.localizedDescription)"
+                            detail: "ctx=\(attemptContext) target=\(multipeerAddr) reason=\(String(describing: error.localizedDescription))"
                         )
                         return false
                     }
@@ -4066,7 +4061,7 @@ final class MeshRepository {
                                         medium: "ble",
                                         phase: "local_fallback",
                                         outcome: "accepted",
-                                        detail: "ctx=\(attemptContext) role=central requested_target=\(bleAddr) target=\(target)"
+                                        detail: "ctx=\(attemptContext) role=central requested_target=\(String(describing: bleAddr)) target=\(String(describing: target))"
                                     )
                                     return true
                                 }
@@ -4179,13 +4174,13 @@ final class MeshRepository {
                     intendedDeviceId: intendedDeviceId
                 )
                 guard sendError == nil else {
-                    logger.warning("Core-routed delivery failed for \(routePeerId): \(sendError ?? "unknown"); trying alternative transports")
+                    logger.warning("Core-routed delivery failed for \(String(describing: routePeerId)): \(String(describing: sendError ?? "unknown")); trying alternative transports")
                     logDeliveryAttempt(
                         messageId: traceMessageId,
                         medium: "core",
                         phase: "direct",
                         outcome: "failed",
-                        detail: "ctx=\(attemptContext) route=\(routePeerId) reason=\(sendError ?? "unknown")"
+                        detail: "ctx=\(attemptContext) route=\(String(describing: routePeerId)) reason=\(String(describing: sendError ?? "unknown"))"
                     )
                     if isTerminalIdentityFailure(sendError) {
                         return DeliveryAttemptResult(
@@ -4273,7 +4268,7 @@ final class MeshRepository {
                     // Track failure for circuit breaker (LOG-AUDIT-001 fix)
                     self.consecutiveDeliveryFailures[peerKey] = (self.consecutiveDeliveryFailures[peerKey] ?? 0) + 1
                     self.lastFailureTime[peerKey] = Date()
-                    logger.info("Delivery failure tracked: peer=\(peerKey) consecutive=\(self.consecutiveDeliveryFailures[peerKey] ?? 0)")
+                    logger.info("Delivery failure tracked: peer=\(String(describing: peerKey)) consecutive=\(self.consecutiveDeliveryFailures[peerKey] ?? 0)")
                     
                     if isTerminalIdentityFailure(sendError) {
                         return DeliveryAttemptResult(

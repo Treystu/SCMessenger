@@ -383,10 +383,11 @@ class BleScanner(
 
     @SuppressLint("MissingPermission")
     private fun startScanningInternal() {
-        if (scanner == null) return
+        if (scanner == null || isScanning) return
 
         try {
             scanner.startScan(currentFilters(), buildScanSettings(), scanCallback)
+            isScanning = true
             Timber.v("BLE scan window started")
         } catch (e: Exception) {
             Timber.e(e, "Failed to restart BLE scan")

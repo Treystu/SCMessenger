@@ -19,10 +19,12 @@ gcloud compute ssh scmessenger-bootstrap --zone=us-central1-a --tunnel-through-i
 " 2>&1 | grep -v "^WARNING:" | grep -v "^bash:" || true
 
 # Start new container with correct command
+# Expose both TCP 9001 and UDP 9001 for QUIC (cellular NAT traversal)
 gcloud compute ssh scmessenger-bootstrap --zone=us-central1-a --tunnel-through-iap --command="
     sudo docker run -d --restart=unless-stopped \
         --name scmessenger-relay \
-        -p 9001:9001 \
+        -p 9001:9001/tcp \
+        -p 9001:9001/udp \
         -p 9000:9000 \
         us-central1-docker.pkg.dev/scmessenger-bootstrapnode/scmessenger-repo/scmessenger-cli:latest \
         scm relay --listen /ip4/0.0.0.0/tcp/9001 --http-port 9000 --name GCP-headless
@@ -37,5 +39,6 @@ echo -e "${GREEN}═════════════════════
 echo -e "${GREEN}  GCP Relay Node Updated successfully!                    ${NC}"
 echo -e "${GREEN}  Container: scmessenger-relay                            ${NC}"
 echo -e "${GREEN}  Running: scm relay --listen /ip4/0.0.0.0/tcp/9001      ${NC}"
-echo -e "${GREEN}  Ports: 9000 (HTTP), 9001 (libp2p)                      ${NC}"
+echo -e "${GREEN}  Ports: 9000 (HTTP), 9001/tcp (libp2p), 9001/udp (QUIC) ${NC}"
+echo -e "${GREEN}  QUIC enabled for cellular NAT traversal                 ${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"

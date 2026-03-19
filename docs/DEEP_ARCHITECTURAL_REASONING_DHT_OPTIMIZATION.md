@@ -13,15 +13,15 @@ This document provides a comprehensive prompt for optimizing DHT-based peer disc
 
 ### User Constraints (Interview Results)
 
-| Constraint | Value | Implication |
-|------------|-------|-------------|
-| Infrastructure | Self-hosted hardware | No cloud costs, limited CPU/memory |
-| Scale | Global, worldwide | Need efficient DHT routing for 10K+ peers |
-| Cost concerns | All (bandwidth, compute, storage) | Bandwidth is primary constraint |
-| Latency target | 2-5 seconds (best: <2s) | Aggressive optimization needed |
-| Architecture | Headless nodes = relays/delegates | These are "always online" nodes |
-| Wake mechanism | Push notifications | Can reduce DHT polling |
-| Relay model | All phones relay for others | Sovereign, no-cost communication |
+| Constraint     | Value                             | Implication                               |
+| -------------- | --------------------------------- | ----------------------------------------- |
+| Infrastructure | Self-hosted hardware              | No cloud costs, limited CPU/memory        |
+| Scale          | Global, worldwide                 | Need efficient DHT routing for 10K+ peers |
+| Cost concerns  | All (bandwidth, compute, storage) | Bandwidth is primary constraint           |
+| Latency target | 2-5 seconds (best: <2s)           | Aggressive optimization needed            |
+| Architecture   | Headless nodes = relays/delegates | These are "always online" nodes           |
+| Wake mechanism | Push notifications                | Can reduce DHT polling                    |
+| Relay model    | All phones relay for others       | Sovereign, no-cost communication          |
 
 ---
 
@@ -59,14 +59,14 @@ User sends message to Peer X
 
 ### Why It's Expensive
 
-| Cost Factor | Current Behavior | Impact |
-|-------------|------------------|--------|
-| Kademlia alpha | 8 concurrent queries | 8x message overhead per hop |
-| Timeout per query | 500ms default | Cascading timeouts on sleeping peers |
-| Route TTL | Fixed 3600s | Stale routes cause re-discovery |
-| No predictive caching | Reactive only | Discovery triggered by first message |
-| No negative cache | Re-query unknown peers | Wasted lookups on unreachable peers |
-| No parallel paths | Sequential fallback | Each transport tried one at a time |
+| Cost Factor           | Current Behavior       | Impact                               |
+| --------------------- | ---------------------- | ------------------------------------ |
+| Kademlia alpha        | 8 concurrent queries   | 8x message overhead per hop          |
+| Timeout per query     | 500ms default          | Cascading timeouts on sleeping peers |
+| Route TTL             | Fixed 3600s            | Stale routes cause re-discovery      |
+| No predictive caching | Reactive only          | Discovery triggered by first message |
+| No negative cache     | Re-query unknown peers | Wasted lookups on unreachable peers  |
+| No parallel paths     | Sequential fallback    | Each transport tried one at a time   |
 
 ---
 
@@ -77,6 +77,7 @@ User sends message to Peer X
 **PHIL-001, PHIL-003:** Identity and cryptographic authority must remain in Rust core. Any optimization cannot introduce centralized coordination or break the trust model.
 
 **Implications:**
+
 - Caches must be local-only (no shared cache servers)
 - Predictions must be derived from local observation
 - No central "peer location service"
@@ -86,6 +87,7 @@ User sends message to Peer X
 **PHIL-004:** First-run consent explains security/privacy boundaries.
 
 **Implications:**
+
 - Route caching reveals communication patterns to the local device
 - Predictive prefetching must not leak metadata to the network
 - Bloom filters for negative caches must not reveal who you're NOT messaging
@@ -95,6 +97,7 @@ User sends message to Peer X
 **PHIL-005:** Bounded retention prevents unbounded growth.
 
 **Implications:**
+
 - Prefetching must be batched and opportunistic
 - Background DHT maintenance must respect OS power management
 - Adaptive scan intervals based on device state
@@ -104,6 +107,7 @@ User sends message to Peer X
 **PHIL-006, PHIL-010:** Critical behavior must be identical across Android, iOS, Web.
 
 **Implications:**
+
 - Optimization logic must be in Rust core, not platform-specific
 - Cache invalidation must be deterministic
 - Timing-dependent behavior must be testable
@@ -141,14 +145,16 @@ User sends message to Peer X
 **Critical Architecture Detail (User Clarification):** Headless/no-identity nodes are NOT designated to any specific user. All users can use any node to relay, as all nodes are full relay nodes. Headless nodes are just presumed to be more viable (more reliable, always online).
 
 **Implications:**
+
 1. **Shared infrastructure**: Any user can use any headless node as a relay/delegate
 2. **No assignment needed**: No need to "assign" delegates to specific users
 3. **Natural DHT routing**: Headless nodes are just "better" relay nodes (more reliable)
-4. **Simplified wake protocol**: Any headless node can wake any sleeping peer
+4. **Simplified wake protocol**: Any node can wake any sleeping peer
 5. **Democratic access**: All nodes (mobile and headless) are full relay nodes
 
 **Why headless nodes are "more viable":**
-- **Always online**: No battery constraints, no OS sleep
+
+- **Presumed Always online**: No battery constraints, no OS sleep
 - **Cheap to run**: Self-hosted hardware, no cloud costs
 - **No privacy concerns**: No user data, just routing
 - **Predictable**: Stable network addresses for DHT routing
@@ -219,7 +225,7 @@ impl SharedDelegateRegistry {
     pub fn register_headless_node(&mut self, info: HeadlessNodeInfo) {
         self.headless_nodes.insert(info.peer_id, info);
     }
-    
+
     /// Find best available headless nodes for any user
     /// No user-specific assignment - all users share the same pool
     pub fn find_best_delegates(&self, count: usize) -> Vec<PeerId> {
@@ -233,10 +239,10 @@ impl SharedDelegateRegistry {
             .take(count)
             .map(|n| n.peer_id)
             .collect();
-        
+
         candidates
     }
-    
+
     /// Wake a sleeping peer via any available headless node
     pub async fn wake_peer_via_delegate(
         &mut self,
@@ -245,12 +251,12 @@ impl SharedDelegateRegistry {
     ) -> Result<(), WakeError> {
         // 1. Find any available headless node
         let delegates = self.find_best_delegates(3);
-        
+
         // 2. Send wake request to each delegate (parallel)
         let wake_futures: Vec<_> = delegates.iter()
             .map(|delegate| self.send_wake_request(delegate, target_peer, message_id))
             .collect();
-        
+
         // 3. Return as soon as one delegate acknowledges
         let results = futures::future::select_all(wake_futures).await;
         Ok(())
@@ -292,21 +298,21 @@ impl PushWakeupManager {
     pub async fn wake_peer(&mut self, peer_id: &PeerId, message_id: &str) -> Result<(), PushError> {
         let token = self.push_tokens.get(peer_id)
             .ok_or(PushError::NoToken)?;
-        
+
         // Send lightweight wake signal (no message content)
         let wake_signal = WakeSignal {
             action: "WAKE_P2P",
             message_id: message_id.to_string(),
             timestamp: current_timestamp(),
         };
-        
+
         match token.platform {
             PushPlatform::Fcm => self.send_fcm(token, wake_signal).await,
             PushPlatform::Apns => self.send_apns(token, wake_signal).await,
             PushPlatform::WebPush => self.send_webpush(token, wake_signal).await,
         }
     }
-    
+
     /// Register push token for a peer
     pub fn register_token(&mut self, peer_id: PeerId, token: String, platform: PushPlatform) {
         self.push_tokens.insert(peer_id, PushToken {
@@ -347,12 +353,12 @@ impl SleepPreparationManager {
     ) -> Result<(), SleepError> {
         // 1. Find 2-3 best available headless nodes (shared infrastructure)
         let delegates = self.delegate_registry.find_best_delegates(3);
-        
+
         if delegates.is_empty() {
             tracing::warn!("No headless delegates available for sleep registration");
             return Err(SleepError::NoDelegatesAvailable);
         }
-        
+
         // 2. Register with each delegate (parallel)
         let registration_futures: Vec<_> = delegates.iter()
             .map(|delegate_id| {
@@ -362,28 +368,28 @@ impl SleepPreparationManager {
                     platform: platform.clone(),
                     wakeup_protocol: "/sc/wakeup/1.0.0",
                 };
-                
+
                 swarm.send_message(
                     delegate_id,
                     serialize_registration(registration)
                 )
             })
             .collect();
-        
+
         // Wait for at least one delegate to acknowledge
         let results = futures::future::join_all(registration_futures).await;
         let success_count = results.iter().filter(|r| r.is_ok()).count();
-        
+
         if success_count == 0 {
             return Err(SleepError::RegistrationFailed);
         }
-        
+
         // 3. Update DHT provider records to point to delegates
         swarm.update_provider_record(
             &swarm.local_peer_id(),
             delegates.iter().map(|d| d.to_string()).collect()
         ).await?;
-        
+
         tracing::info!("Registered with {}/{} delegates for sleep", success_count, delegates.len());
         Ok(())
     }
@@ -436,12 +442,12 @@ impl CostAwareDiscovery {
         timeout: Duration,
     ) -> Result<DiscoveryResult, DiscoveryError> {
         let start = Instant::now();
-        
+
         // Phase 1: Local cache (< 10ms)
         if let Some(route) = self.local_cache.get(target) {
             return Ok(DiscoveryResult::from_cache(route));
         }
-        
+
         // Phase 2: Delegate queries (< 500ms)
         let remaining = timeout - start.elapsed();
         if remaining > Duration::from_millis(100) {
@@ -449,14 +455,14 @@ impl CostAwareDiscovery {
                 return Ok(DiscoveryResult::from_delegate(route));
             }
         }
-        
+
         // Phase 3: Push wakeup (< 100ms to send)
         let remaining = timeout - start.elapsed();
         if remaining > Duration::from_millis(50) {
             self.push_wakeup.wake_peer(target, "discovery").await?;
             // Don't wait for response - let delegate handle delivery
         }
-        
+
         // Phase 4: DHT walk (last resort, expensive)
         let remaining = timeout - start.elapsed();
         if remaining > Duration::from_millis(200) {
@@ -464,7 +470,7 @@ impl CostAwareDiscovery {
                 return Ok(DiscoveryResult::from_dht(route));
             }
         }
-        
+
         Err(DiscoveryError::Timeout)
     }
 }
@@ -498,7 +504,7 @@ impl PredictiveRouteCache {
         // Update conversation graph for future predictions
         // "User X frequently messages User Y at this time of day"
     }
-    
+
     /// Called during idle time - refresh routes for predicted recipients
     pub fn prefetch_routes(&mut self, routing_engine: &RoutingEngine) {
         // Predict who will be messaged next based on:
@@ -507,7 +513,7 @@ impl PredictiveRouteCache {
         // - App foreground/background state
         // Pre-fetch routes for top-N predicted recipients
     }
-    
+
     /// Called when looking up a route - return cached if fresh
     pub fn get_route(&mut self, hint: &[u8; 4]) -> Option<&Vec<RouteAdvertisement>> {
         // Check if we have a fresh cached route
@@ -518,6 +524,7 @@ impl PredictiveRouteCache {
 ```
 
 **Latency Reduction:**
+
 - Before: 2000ms (full DHT walk on first message)
 - After: 10ms (cache hit) or 100ms (background refresh in progress)
 
@@ -553,7 +560,7 @@ pub enum DiscoveryPhase {
 impl TimeoutBudget {
     pub fn next_phase(&mut self) -> Option<DiscoveryPhase> {
         let remaining = self.total_budget.saturating_sub(self.elapsed);
-        
+
         match self.phase {
             DiscoveryPhase::LocalCache if remaining.as_millis() > 50 => {
                 self.phase = DiscoveryPhase::NeighborhoodQuery;
@@ -574,6 +581,7 @@ impl TimeoutBudget {
 ```
 
 **Latency Reduction:**
+
 - Before: 500ms per phase × 4 phases = 2000ms worst case
 - After: 500ms total budget with early termination on success
 
@@ -606,13 +614,13 @@ impl NegativeCache {
         }
         false
     }
-    
+
     /// Record that we confirmed a peer is unreachable
     pub fn record_unreachable(&mut self, peer: PeerId) {
         self.unreachable_filter.insert(&peer);
         self.unreachable_times.insert(peer, Instant::now());
     }
-    
+
     /// Record that a peer became reachable (clear negative)
     pub fn clear_unreachable(&mut self, peer: &PeerId) {
         // Note: Bloom filters can't truly delete, but we update the timestamp
@@ -623,6 +631,7 @@ impl NegativeCache {
 ```
 
 **Latency Reduction:**
+
 - Before: 2000ms DHT walk for unreachable peer
 - After: 1ms bloom filter check → return StoreAndCarry immediately
 
@@ -659,7 +668,7 @@ impl DelegatePrewarmManager {
         // 3. Send "I'm going to sleep, please wake me" registration
         // 4. Keep connections warm with periodic pings
     }
-    
+
     /// Called when app comes to foreground
     pub async fn refresh_delegate_routes(&mut self, routing_engine: &mut RoutingEngine) {
         // 1. Re-validate all delegate routes
@@ -670,6 +679,7 @@ impl DelegatePrewarmManager {
 ```
 
 **Latency Reduction:**
+
 - Before: 1000ms (discover delegate + connect + register)
 - After: 0ms (already connected and registered)
 
@@ -695,16 +705,16 @@ impl ResumePrefetchManager {
     /// Called on app resume (iOS/Android lifecycle event)
     pub async fn on_app_resume(&mut self, routing_engine: &mut RoutingEngine) {
         self.prefetch_in_progress = true;
-        
+
         // 1. Immediately re-validate cached routes (parallel)
         let validation_futures: Vec<_> = self.cached_routes.iter()
             .map(|(hint, route)| self.validate_route(hint, route))
             .collect();
-        
+
         // 2. Wait for first N validations, then mark ready
         // 3. Continue background refresh for remaining routes
     }
-    
+
     /// Get a route immediately if available (even if slightly stale)
     pub fn get_route_early(&self, hint: &[u8; 4]) -> Option<&RouteAdvertisement> {
         // Return cached route even if > max_route_age
@@ -714,6 +724,7 @@ impl ResumePrefetchManager {
 ```
 
 **Latency Reduction:**
+
 - Before: 2000ms on first message after resume
 - After: 10ms (route already refreshed during resume)
 
@@ -760,7 +771,7 @@ impl AdaptiveTTLManager {
         // Inactive peer: short TTL (re-discover if needed)
         self.base_ttl // e.g., 1800s
     }
-    
+
     /// Record message activity
     pub fn record_activity(&mut self, peer: PeerId) {
         // Update recent message count
@@ -770,6 +781,7 @@ impl AdaptiveTTLManager {
 ```
 
 **Latency Reduction:**
+
 - Before: 2000ms re-discovery when stale route expires
 - After: Route stays fresh for active peers, no re-discovery needed
 
@@ -777,14 +789,14 @@ impl AdaptiveTTLManager {
 
 ## Implementation Priority Matrix
 
-| Strategy | Latency Reduction | Implementation Effort | Risk | Priority |
-|----------|-------------------|----------------------|------|----------|
-| Hierarchical Timeout Budgeting | -300ms | Low (~100 LOC) | Low | **P0** |
-| Bloom Filter Negative Cache | -200ms | Medium (~200 LOC) | Low | **P0** |
-| Route Prefetch on Resume | -500ms | Medium (~150 LOC) | Medium | **P1** |
-| Predictive Route Caching | -500ms | High (~300 LOC) | Medium | **P1** |
-| Adaptive TTL | -300ms | Low (~100 LOC) | Low | **P2** |
-| Speculative Delegate Pre-warming | -1000ms | High (~250 LOC) | High | **P2** |
+| Strategy                         | Latency Reduction | Implementation Effort | Risk   | Priority |
+| -------------------------------- | ----------------- | --------------------- | ------ | -------- |
+| Hierarchical Timeout Budgeting   | -300ms            | Low (~100 LOC)        | Low    | **P0**   |
+| Bloom Filter Negative Cache      | -200ms            | Medium (~200 LOC)     | Low    | **P0**   |
+| Route Prefetch on Resume         | -500ms            | Medium (~150 LOC)     | Medium | **P1**   |
+| Predictive Route Caching         | -500ms            | High (~300 LOC)       | Medium | **P1**   |
+| Adaptive TTL                     | -300ms            | Low (~100 LOC)        | Low    | **P2**   |
+| Speculative Delegate Pre-warming | -1000ms           | High (~250 LOC)       | High   | **P2**   |
 
 ---
 
@@ -847,16 +859,19 @@ cargo bench --bench dht_discovery -- --baseline before --baseline after
 ## Cross-Platform Considerations
 
 ### iOS Specific
+
 - Background fetch window: ~30 seconds for prefetch
 - Push notification delegate: Pre-register before sleep
 - BLE background modes: Limited to specific use cases
 
 ### Android Specific
+
 - Doze mode: Batch DHT maintenance during maintenance windows
 - Foreground service: Can run continuous discovery
 - Battery optimization: Respect system power hints
 
 ### WASM/Web Specific
+
 - Service Worker: Cache routes in browser storage
 - Page lifecycle: Prefetch on page visibility change
 - IndexedDB: Persistent route cache across sessions
@@ -865,12 +880,12 @@ cargo bench --bench dht_discovery -- --baseline before --baseline after
 
 ## Risk Assessment
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Predictive cache wrong | Medium | Low (fallback to DHT) | Confidence threshold + fallback |
-| Bloom filter false positives | Low | Medium (miss reachable peer) | Conservative TTL + periodic clear |
-| Prefetch wastes bandwidth | Medium | Low (background, rate-limited) | Adaptive based on network state |
-| Delegate pre-warming fails | Low | High (no wake path) | Multiple delegate redundancy |
+| Risk                         | Likelihood | Impact                         | Mitigation                        |
+| ---------------------------- | ---------- | ------------------------------ | --------------------------------- |
+| Predictive cache wrong       | Medium     | Low (fallback to DHT)          | Confidence threshold + fallback   |
+| Bloom filter false positives | Low        | Medium (miss reachable peer)   | Conservative TTL + periodic clear |
+| Prefetch wastes bandwidth    | Medium     | Low (background, rate-limited) | Adaptive based on network state   |
+| Delegate pre-warming fails   | Low        | High (no wake path)            | Multiple delegate redundancy      |
 
 ---
 
@@ -906,10 +921,11 @@ let kad_config = kad::Config::default()
 ```
 
 **Analysis:**
+
 - Alpha=8 is aggressive (good for latency) but high bandwidth
 - 5-second query timeout is too long for mobile (should be 500ms total budget)
 - Replication factor=5 is reasonable for redundancy
 
 ---
 
-*Document generated for Deep Architectural Reasoning prompt - SCMessenger DHT Optimization*
+_Document generated for Deep Architectural Reasoning prompt - SCMessenger DHT Optimization_

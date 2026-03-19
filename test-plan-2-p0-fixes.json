@@ -1,0 +1,105 @@
+{
+  "task": "Fix AND-CELLULAR-001 and CROSS-RELAY-001 (P0)",
+  "sub_tasks": [
+    {
+      "name": "Diagnose AND-CELLULAR-001",
+      "scope": "Identify why Android cellular message sending fails",
+      "objectives": [
+        "Analyze logs and code to find the root cause"
+      ],
+      "dependencies": [],
+      "expected_outcomes": [
+        "Root cause identified and documented"
+      ],
+      "constraints": [
+        "Must not affect identity and message history"
+      ]
+    },
+    {
+      "name": "Diagnose CROSS-RELAY-001",
+      "scope": "Identify why cross-platform relay circuit delivery fails",
+      "objectives": [
+        "Analyze logs and code to find the root cause"
+      ],
+      "dependencies": [],
+      "expected_outcomes": [
+        "Root cause identified and documented"
+      ],
+      "constraints": [
+        "Must not affect identity and message history"
+      ]
+    },
+    {
+      "name": "Implement Fix for AND-CELLULAR-001",
+      "scope": "Apply the necessary fixes to enable Android cellular message sending",
+      "objectives": [
+        "Add QUIC/UDP endpoints for GCP relay and OSX relay",
+        "Update Android bootstrap configuration"
+      ],
+      "dependencies": ["Diagnose AND-CELLULAR-001"],
+      "expected_outcomes": [
+        "Fixes applied and documented"
+      ],
+      "constraints": [
+        "Must follow coding standards and best practices"
+      ]
+    },
+    {
+      "name": "Implement Fix for CROSS-RELAY-001",
+      "scope": "Apply the necessary fixes to enable cross-platform relay circuit delivery",
+      "objectives": [
+        "Add QUIC/UDP endpoints for GCP relay",
+        "Update iOS bootstrap configuration"
+      ],
+      "dependencies": ["Diagnose CROSS-RELAY-001"],
+      "expected_outcomes": [
+        "Fixes applied and documented"
+      ],
+      "constraints": [
+        "Must follow coding standards and best practices"
+      ]
+    },
+    {
+      "name": "Test Fix for AND-CELLULAR-001",
+      "scope": "Verify that the fixes work as expected for Android cellular message sending",
+      "objectives": [
+        "Run tests to ensure Android cellular message sending works"
+      ],
+      "dependencies": ["Implement Fix for AND-CELLULAR-001"],
+      "expected_outcomes": [
+        "Tests passing and Android cellular message sending functional"
+      ],
+      "constraints": [
+        "Must achieve at least 90% test coverage"
+      ]
+    },
+    {
+      "name": "Test Fix for CROSS-RELAY-001",
+      "scope": "Verify that the fixes work as expected for cross-platform relay circuit delivery",
+      "objectives": [
+        "Run tests to ensure cross-platform relay circuit delivery works"
+      ],
+      "dependencies": ["Implement Fix for CROSS-RELAY-001"],
+      "expected_outcomes": [
+        "Tests passing and cross-platform relay circuit delivery functional"
+      ],
+      "constraints": [
+        "Must achieve at least 90% test coverage"
+      ]
+    },
+    {
+      "name": "Document Fixes",
+      "scope": "Update documentation to reflect the fixes",
+      "objectives": [
+        "Ensure documentation is accurate and up-to-date"
+      ],
+      "dependencies": ["Test Fix for AND-CELLULAR-001", "Test Fix for CROSS-RELAY-001"],
+      "expected_outcomes": [
+        "Updated documentation"
+      ],
+      "constraints": [
+        "Must follow documentation standards"
+      ]
+    }
+  ]
+}

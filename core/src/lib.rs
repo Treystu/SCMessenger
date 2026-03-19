@@ -12,9 +12,12 @@ pub mod message;
 pub mod notification;
 pub mod notification_defaults;
 pub mod privacy;
-pub mod relay;
 pub mod store;
 pub mod transport;
+
+// Relay module requires quinn which is not available on WASM
+#[cfg(not(target_arch = "wasm32"))]
+pub mod relay;
 
 // Mobile bridge modules
 #[cfg(not(target_arch = "wasm32"))]
@@ -54,6 +57,78 @@ pub use mobile_bridge::*;
 // UniFFI scaffolding - clippy warnings in generated code
 #[cfg(not(target_arch = "wasm32"))]
 uniffi::include_scaffolding!("api");
+
+// ============================================================================
+// WASM-SPECIFIC TYPES (not available on mobile/native)
+// ============================================================================
+
+/// Mesh settings for WASM targets
+#[cfg(target_arch = "wasm32")]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct MeshSettings {
+    pub relay_enabled: bool,
+    pub max_relay_budget: u32,
+    pub battery_floor: u8,
+    pub ble_enabled: bool,
+    pub wifi_aware_enabled: bool,
+    pub wifi_direct_enabled: bool,
+    pub internet_enabled: bool,
+    pub discovery_mode: DiscoveryMode,
+    pub onion_routing: bool,
+    pub cover_traffic_enabled: bool,
+    pub message_padding_enabled: bool,
+    pub timing_obfuscation_enabled: bool,
+    pub notifications_enabled: bool,
+    pub notify_dm_enabled: bool,
+    pub notify_dm_request_enabled: bool,
+    pub notify_dm_in_foreground: bool,
+    pub notify_dm_request_in_foreground: bool,
+    pub sound_enabled: bool,
+    pub badge_enabled: bool,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum DiscoveryMode {
+    Normal,
+    Aggressive,
+    Paranoid,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl Default for DiscoveryMode {
+    fn default() -> Self {
+        DiscoveryMode::Normal
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl Default for MeshSettings {
+    fn default() -> Self {
+        Self {
+            relay_enabled: true,
+            max_relay_budget: 200,
+            battery_floor: 20,
+            ble_enabled: true,
+            wifi_aware_enabled: true,
+            wifi_direct_enabled: true,
+            internet_enabled: true,
+            discovery_mode: DiscoveryMode::Normal,
+            onion_routing: false,
+            cover_traffic_enabled: false,
+            message_padding_enabled: false,
+            timing_obfuscation_enabled: false,
+            notifications_enabled: true,
+            notify_dm_enabled: true,
+            notify_dm_request_enabled: true,
+            notify_dm_in_foreground: false,
+            notify_dm_request_in_foreground: true,
+            sound_enabled: true,
+            badge_enabled: true,
+        }
+    }
+}
 
 // ============================================================================
 // ERROR TYPES
@@ -1528,7 +1603,8 @@ impl IronCore {
         self.blocked_manager.is_blocked(&peer_id, None)
     }
 
-    /// List all blocked peers
+    /// List all blocked peers (mobile bridge only - not available on WASM)
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn list_blocked_peers(
         &self,
     ) -> Result<Vec<crate::blocked_bridge::BlockedIdentity>, IronCoreError> {

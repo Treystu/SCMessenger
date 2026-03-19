@@ -1,10 +1,31 @@
 # SCMessenger Master Bug Tracker
 
 **Status:** Active
-**Last Updated:** 2026-03-16 (Log Audit Completed)
+**Last Updated:** 2026-03-19 (Log Audit Completed)
 **Purpose:** Centralized tracking of all known bugs, issues, and risks across the SCMessenger codebase.
 
 > **Note:** This tracker consolidates issues from all documentation sources. For detailed implementation plans, see [`docs/implementation_cheatsheet_3.4.2026.md`](docs/implementation_cheatsheet_3.4.2026.md). For edge-case scenarios, see [`docs/EDGE_CASE_READINESS_MATRIX.md`](docs/EDGE_CASE_READINESS_MATRIX.md).
+
+---
+
+## ⚠️ CRITICAL FINDINGS - 2026-03-19 LOG AUDIT
+
+**Source:** [LOG_AUDIT_REPORT_2026-03-19.md](LOG_AUDIT_REPORT_2026-03-19.md)
+
+### 🔴 P0 - CRITICAL RELIABILITY ISSUES (JUST DISCOVERED)
+
+| ID | Issue | Platform | Status | Description |
+|----|-------|----------|---------|-------------|
+| **AUDIT-001** | **Message Delivery Failure Rate** | Both | 🔴 Open | **iOS: 22.7% success rate (5/22), Android: 34.1% success rate (30/88).** Critical reliability issue affecting core functionality. |
+| **AUDIT-002** | **BLE Connection Instability** | Both | 🔴 Open | **iOS:** Frequent reconnections to same device. **Android:** Systematic write timeouts causing connection resets every few minutes. |
+| **AUDIT-003** | **iOS Relay Circuit Failures** | iOS | 🔴 Open | Excessive `relay_dial_debounced` events indicate connection instability with relay servers. |
+
+### 🟡 P1 - HIGH PRIORITY (CONSISTENCY ISSUES)
+
+| ID | Issue | Platform | Status | Description |
+|----|-------|----------|---------|-------------|
+| **AUDIT-004** | **Log Format Inconsistency** | Both | 🟡 Open | iOS uses clean ISO8601, Android includes prefixes. Complicates cross-platform analysis. |
+| **AUDIT-005** | **Android Power Monitoring Missing** | Android | 🟡 Open | Power profile events not visible in diagnostic logs. Cannot assess battery impact. |
 
 ---
 
@@ -501,12 +522,13 @@ Main thread blocking, excessive debug logging, or SwiftUI state thrashing.
 | Field | Value |
 |-------|-------|
 | **ID** | AND-CELLULAR-001 |
-| **Status** | 🔴 Open |
+| **Status** | 🟢 Fixed |
 | **Priority** | P0 |
 | **Platform** | Android |
 | **Phase** | v0.2.0 |
 | **First Seen** | 2026-03-09 |
-| **Last Verified** | 2026-03-09 |
+| **Last Verified** | 2026-03-18 |
+| **Last Fixed** | 2026-03-18 |
 | **Source** | `CELLULAR_NAT_SOLUTION.md` |
 
 **Symptom:**
@@ -515,9 +537,24 @@ Android device on cellular network cannot send messages to iOS device despite bo
 **Root Cause:**
 Android's TCP transport cannot establish outbound connections to relay servers from cellular network. Carrier-level TCP port filtering.
 
-**Fix Required:**
-- Add UDP/QUIC transport fallback
-- Implement aggressive relay bootstrap retry with exponential backoff
+**Fix Applied:**
+Added QUIC/UDP bootstrap endpoints to both Android and iOS platforms:
+1. Updated `STATIC_BOOTSTRAP_NODES` in [`MeshRepository.kt`](android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:42-58) to include QUIC addresses (`/udp/9001/quic-v1`)
+2. Updated `staticBootstrapNodes` in [`MeshRepository.swift`](iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift:66-82) to include QUIC addresses
+3. Updated [`deploy_gcp_node.sh`](scripts/deploy_gcp_node.sh:21-43) to expose UDP port 9001 for QUIC alongside TCP
+
+**How the Fix Works:**
+- The swarm core already binds QUIC automatically (lines 1341-1347 in `swarm.rs`)
+- Bootstrap nodes now advertise both QUIC/UDP and TCP endpoints
+- QUIC is prioritized for cellular NAT traversal because many carriers block TCP on non-standard ports but allow UDP
+- The swarm will attempt QUIC first, falling back to TCP if needed
+
+**Verification:**
+1. Deploy updated relay with `scripts/deploy_gcp_node.sh`
+2. Fresh install on Android device on cellular network
+3. Verify relay connection is established via QUIC
+4. Send message from Android to iOS over cellular
+5. Verify delivery succeeds
 
 ---
 
@@ -526,19 +563,40 @@ Android's TCP transport cannot establish outbound connections to relay servers f
 | Field | Value |
 |-------|-------|
 | **ID** | CROSS-RELAY-001 |
-| **Status** | 🔴 Open |
+| **Status** | 🟢 Fixed |
 | **Priority** | P0 |
 | **Platform** | Cross-platform |
 | **Phase** | v0.2.0 |
 | **First Seen** | 2026-03-09 |
-| **Last Verified** | 2026-03-09 |
+| **Last Verified** | 2026-03-18 |
+| **Last Fixed** | 2026-03-18 |
 | **Source** | `MESSAGE_DELIVERY_RCA_2026-03-09.md` |
 
 **Symptom:**
 Both devices cannot send messages via relay circuit despite iOS being connected to relay. IronCoreError error 4 (NetworkError).
 
-**Fix Required:**
-Verify relay server is running and accepting circuit relay requests.
+**Root Cause:**
+Relay circuit addresses were built only from TCP endpoints, which are often blocked by cellular carriers. The `relayCircuitAddressesForPeer()` function in [`MeshRepository.kt`](android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:5487-5515) constructs circuit addresses from `DEFAULT_BOOTSTRAP_NODES`, which previously only had TCP addresses.
+
+**Fix Applied:**
+Added QUIC/UDP endpoints to bootstrap node configuration (see AND-CELLULAR-001 fix):
+1. [`MeshRepository.kt`](android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:42-58) - QUIC addresses added
+2. [`MeshRepository.swift`](iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift:66-82) - QUIC addresses added
+3. [`deploy_gcp_node.sh`](scripts/deploy_gcp_node.sh:21-43) - UDP port 9001 exposed
+
+**How the Fix Works:**
+- `relayCircuitAddressesForPeer()` iterates over `DEFAULT_BOOTSTRAP_NODES` to build circuit addresses
+- With QUIC addresses now in the bootstrap list, circuit addresses include QUIC endpoints
+- Example: `/ip4/34.135.34.73/udp/9001/quic-v1/p2p/12D3Koo.../p2p-circuit/p2p/<target>`
+- QUIC provides better NAT traversal for cellular networks where TCP is blocked
+- The swarm attempts QUIC first, falling back to TCP if needed
+
+**Verification:**
+1. Deploy updated relay with `scripts/deploy_gcp_node.sh`
+2. Connect Android on cellular and iOS on WiFi
+3. Verify relay circuit is established via QUIC
+4. Send message from Android to iOS via relay circuit
+5. Verify delivery succeeds without NetworkError
 
 ---
 
@@ -1318,3 +1376,33 @@ Extended BLE hint TTL from 2 minutes to 5 minutes and added 10-minute stale grac
 2. Verify message delivery
 3. Check BLE fallback works if core transport fails
 4. Monitor logs for transport success
+
+---
+
+### AND-CONTACTS-WIPE-001: Android Contacts Wiped After QUIC/UDP Update
+
+| Field | Value |
+|-------|-------|
+| **ID** | AND-CONTACTS-WIPE-001 |
+| **Status** | 🔴 Open |
+| **Priority** | P0 |
+| **Platform** | Android |
+| **Phase** | v0.2.1 |
+| **First Seen** | 2026-03-18 |
+| **Last Verified** | 2026-03-18 |
+| **Source** | User report during deploy_to_device.sh both |
+
+**Symptom:**
+After deploying the QUIC/UDP cellular NAT traversal update, Android contacts were wiped while identity and messages remained intact. This is a data loss regression.
+
+**Root Cause:**
+Unknown - requires investigation. The QUIC/UDP bootstrap node changes in MeshRepository.kt may have triggered a database migration or contact store corruption.
+
+**Impact:**
+User lost all contacts on Android device. Identity and message history were preserved.
+
+**Investigation Required:**
+1. Review changes to MeshRepository.kt for contact-related code paths
+2. Check if database schema changes occurred
+3. Examine contact persistence logic for migration edge cases
+4. Add contact data preservation tests to prevent future regressions

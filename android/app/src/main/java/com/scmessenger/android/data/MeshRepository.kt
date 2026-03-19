@@ -41,11 +41,20 @@ open class MeshRepository(private val context: Context) {
         private const val IDENTITY_BACKUP_KEY = "identity_backup_v1"
         /** Static fallback bootstrap nodes for NAT traversal and internet roaming.
          *  These are used if env override and remote fetch both fail/are absent.
-         *  Priority order: GCP relay (cloud) → OSX relay (home/local backup). */
+         *  Priority order: QUIC/UDP (cellular-friendly) → TCP (WiFi/enterprise).
+         *
+         *  QUIC is prioritized for cellular NAT traversal because many carriers
+         *  block TCP on non-standard ports but allow UDP. The swarm automatically
+         *  binds both TCP and QUIC listeners, so we advertise both endpoints.
+         */
         private val STATIC_BOOTSTRAP_NODES: List<String> = listOf(
-            // GCP relay — primary cloud node
+            // GCP relay — QUIC/UDP (cellular-friendly, primary)
+            "/ip4/34.135.34.73/udp/9001/quic-v1/p2p/12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw",
+            // GCP relay — TCP (fallback for WiFi/enterprise networks)
             "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw",
-            // OSX home relay — secondary backup (this machine, port 9010)
+            // OSX home relay — QUIC/UDP (cellular-friendly)
+            "/ip4/104.28.216.43/udp/9010/quic-v1/p2p/12D3KooWHpmuhytgzLcM4nj1hZvN5b4crB1wka3LCNfKRCd7yHj9",
+            // OSX home relay — TCP (fallback)
             "/ip4/104.28.216.43/tcp/9010/p2p/12D3KooWHpmuhytgzLcM4nj1hZvN5b4crB1wka3LCNfKRCd7yHj9"
         )
 
@@ -401,6 +410,10 @@ open class MeshRepository(private val context: Context) {
             // BLE MACs and stale libp2p_peer_id entries that now cause endless
             // retry loops to unreachable peers.
             migrateStaleRoutingHints()
+
+            // One-time migration: repair contacts with truncated/invalid public keys
+            // that were stored before validation was added (March 2026).
+            migrateTruncatedPublicKeys()
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize managers")
         }
@@ -448,6 +461,78 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
+    /**
+     * Migration: Repair contacts with truncated/invalid public keys.
+     *
+     * Before March 2026, addContact() had no validation, so contacts could be stored
+     * with truncated keys (e.g., 8 chars like "f669fb0f" instead of 64-char hex).
+     * This caused BLE decryption failures when receiving messages from those peers.
+     *
+     * This migration:
+     * 1. Finds contacts with invalid public keys
+     * 2. Attempts to repair them from discovered peers or BLE identity beacons
+     * 3. If repair fails, keeps the contact but logs a warning (user can re-pair)
+     */
+    private fun migrateTruncatedPublicKeys() {
+        try {
+            val prefs = context.getSharedPreferences("mesh_migrations", android.content.Context.MODE_PRIVATE)
+            if (prefs.getBoolean("v2_truncated_key_migration", false)) return
+
+            val contacts = contactManager?.list().orEmpty()
+            var repaired = 0
+            var unrepaired = 0
+
+            for (contact in contacts) {
+                val rawKey = contact.publicKey ?: continue
+                val trimmedKey = rawKey.trim()
+
+                // Skip contacts that already have valid keys
+                if (trimmedKey.length == 64 && trimmedKey.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
+                    continue
+                }
+
+                Timber.w("Migration: Found contact with invalid key (${trimmedKey.length} chars): ${contact.peerId.take(8)}...")
+
+                // Try to find a matching discovered peer with a valid key
+                val discoveredPeer = _discoveredPeers.value.entries.firstOrNull { (key, info) ->
+                    // Match by peerId or by partial key match
+                    info.peerId == contact.peerId ||
+                    key.startsWith(trimmedKey) ||
+                    trimmedKey.startsWith(key.take(8))
+                }
+
+                val discoveredKey = discoveredPeer?.value?.publicKey?.trim()
+                if (discoveredKey != null && discoveredKey.length == 64 && discoveredKey.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
+                    // Repair the contact with the valid key
+                    Timber.i("Migration: Repairing contact ${contact.peerId.take(8)} with full key from discovered peer")
+                    contactManager?.add(uniffi.api.Contact(
+                        peerId = contact.peerId,
+                        nickname = contact.nickname,
+                        localNickname = contact.localNickname,
+                        publicKey = discoveredKey,  // Use the repaired key
+                        addedAt = contact.addedAt,
+                        lastSeen = contact.lastSeen,
+                        notes = contact.notes,
+                        lastKnownDeviceId = contact.lastKnownDeviceId
+                    ))
+                    repaired++
+                } else {
+                    // Can't repair - keep contact but log warning
+                    // User will need to re-pair with this peer to get the full key
+                    Timber.w("Migration: Cannot repair contact ${contact.peerId.take(8)} - no discovered peer with valid key. User must re-pair.")
+                    unrepaired++
+                }
+            }
+
+            prefs.edit().putBoolean("v2_truncated_key_migration", true).apply()
+            if (repaired > 0 || unrepaired > 0) {
+                Timber.i("Truncated key migration: repaired=$repaired unrepaired=$unrepaired")
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Truncated key migration failed (non-fatal)")
+        }
+    }
+
     // ========================================================================
     // MESH SERVICE LIFECYCLE
     // ========================================================================
@@ -485,6 +570,10 @@ open class MeshRepository(private val context: Context) {
                 _serviceState.value = uniffi.api.ServiceState.STOPPED
                 return
             }
+
+            // Initialize SmartTransportRouter for intelligent transport selection
+            smartTransportRouter = com.scmessenger.android.transport.SmartTransportRouter()
+            Timber.i("SmartTransportRouter initialized for intelligent transport selection")
 
             // P0: One-time migration to unify legacy IDs (libp2p, etc) into canonical Identity IDs (hash)
             migrateToCanonicalIds()
@@ -689,6 +778,55 @@ open class MeshRepository(private val context: Context) {
                                 try { contactManager?.updateLastSeen(peerId) } catch (_: Exception) { }
                             } else {
                                 Timber.d("Transport identity unavailable for $peerId")
+                                // FIX: Auto-create contact even when transportIdentity is null
+                                // This happens on fresh install when no contact exists yet
+                                if (!isBootstrapRelayPeer(peerId) && !isHeadless) {
+                                    val extractedKey = try {
+                                        ironCore?.extractPublicKeyFromPeerId(peerId)
+                                    } catch (_: Exception) { null }
+
+                                    if (extractedKey != null) {
+                                        val normalizedKey = normalizePublicKey(extractedKey)
+                                        if (normalizedKey != null) {
+                                            // ID-STANDARDIZATION-002: Check for existing contact before auto-creating
+                                            val existingContact = try {
+                                                contactManager?.list()?.firstOrNull {
+                                                    normalizePublicKey(it.publicKey) == normalizedKey
+                                                }
+                                            } catch (e: Exception) {
+                                                null
+                                            }
+                                            
+                                            if (existingContact != null) {
+                                                Timber.i("Contact already exists for public key ${normalizedKey.take(8)}... (peerId=${existingContact.peerId}), skipping auto-creation")
+                                                // Update last seen for existing contact
+                                                try { contactManager?.updateLastSeen(existingContact.peerId) } catch (_: Exception) {}
+                                            } else {
+                                                // ID-STANDARDIZATION-003: Use proper canonical ID resolution
+                                                val canonicalId = try {
+                                                    validateAndStandardizeId(peerId, "auto-contact-creation")
+                                                } catch (e: Exception) {
+                                                    Timber.w("Using fallback peerId for contact creation: ${e.message}")
+                                                    PeerIdValidator.normalize(peerId)
+                                                }
+                                                
+                                                Timber.i("Auto-creating contact for newly discovered peer: $peerId -> $canonicalId (extracted key: ${normalizedKey.take(8)}...)")
+                                                repoScope.launch {
+                                                    upsertFederatedContact(
+                                                        canonicalPeerId = canonicalId,
+                                                        publicKey = normalizedKey,
+                                                        nickname = null,
+                                                        libp2pPeerId = peerId,
+                                                        listeners = dialCandidates,
+                                                        createIfMissing = true
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        Timber.w("Could not extract public key from peer $peerId for auto-contact creation")
+                                    }
+                                }
                             }
                             emitConnectedIfChanged(
                                 peerId = peerId,
@@ -775,6 +913,14 @@ open class MeshRepository(private val context: Context) {
                     data: ByteArray
                 ) {
                     Timber.i("Message from $senderId: $messageId")
+                    logDeliveryAttempt(
+                        messageId = messageId,
+                        medium = "core",
+                        phase = "rx",
+                        outcome = "received",
+                        detail = "sender=$senderId",
+                        callerContext = "onMessageReceived"
+                    )
                     try {
                         // Check if relay/messaging is enabled (bidirectional control)
                         // Treat null/missing settings as disabled (fail-safe)
@@ -1112,6 +1258,14 @@ open class MeshRepository(private val context: Context) {
                             delivered = true
                         )
                         historyManager?.add(record)
+                        logDeliveryAttempt(
+                            messageId = messageId,
+                            medium = "core",
+                            phase = "rx",
+                            outcome = "processed",
+                            detail = "stored_in_history sender=$senderId",
+                            callerContext = "onMessageReceived_processing"
+                        )
 
                         // Emit for notifications and UI updates
                         repoScope.launch {
@@ -2278,22 +2432,72 @@ open class MeshRepository(private val context: Context) {
      * @param id Any ID format (public_key_hex, identity_id, or libp2p_peer_id)
      * @return Canonical identity_id (Blake3 hash of public key)
      */
+    /**
+     * ID-STANDARDIZATION-001: Comprehensive ID sanity check
+     * Validates that an ID is consistent and can be properly resolved
+     */
+    private fun validateAndStandardizeId(id: String, operation: String): String {
+        if (id.isBlank()) {
+            throw IllegalArgumentException("ID cannot be blank for operation: $operation")
+        }
+        
+        val trimmed = id.trim()
+        val canonicalId = canonicalContactId(trimmed)
+        
+        // Additional validation: Check if this ID maps to multiple contacts (ambiguity check)
+        try {
+            val contacts = contactManager?.list().orEmpty()
+            val matchingContacts = contacts.filter {
+                val contactId = canonicalContactId(it.peerId)
+                PeerIdValidator.isSame(contactId, canonicalId)
+            }
+            
+            if (matchingContacts.size > 1) {
+                Timber.w("ID_AMBIGUITY: Operation '$operation' on ID '$trimmed' matches ${matchingContacts.size} contacts:")
+                matchingContacts.forEach { contact ->
+                    Timber.w("  - Contact: ${contact.peerId} (key=${contact.publicKey?.take(8)})")
+                }
+                // In case of ambiguity, prefer the first one but log the issue
+            }
+        } catch (e: Exception) {
+            Timber.w("ID_VALIDATION: Could not check contact ambiguity for '$trimmed': ${e.message}")
+        }
+        
+        return canonicalId
+    }
+
     private fun canonicalContactId(id: String): String {
         val trimmed = id.trim()
         if (trimmed.isEmpty()) return trimmed
         
+        // ID-STANDARDIZATION-001: Comprehensive ID resolution with sanity checks
+        Timber.d("ID_RESOLUTION: Input ID '$trimmed' (length=${trimmed.length})")
+        
         // If it's already a 64-char hex identity ID, normalize and return
         if (PeerIdValidator.isIdentityId(trimmed)) {
-            return PeerIdValidator.normalize(trimmed)
+            val normalized = PeerIdValidator.normalize(trimmed)
+            Timber.d("ID_RESOLUTION: Already identity_id, returning normalized: ${normalized.take(8)}...")
+            return normalized
         }
         
         // Try to resolve to canonical identity_id via IronCore
-        return try {
-            ironCore?.resolveToIdentityId(trimmed)
+        try {
+            val resolvedIdentityId = ironCore?.resolveToIdentityId(trimmed)
+            if (resolvedIdentityId != null) {
+                val normalized = PeerIdValidator.normalize(resolvedIdentityId)
+                Timber.d("ID_RESOLUTION: Resolved '$trimmed' -> identity_id: ${normalized.take(8)}...")
+                return normalized
+            } else {
+                Timber.w("ID_RESOLUTION: IronCore returned null for '$trimmed'")
+            }
         } catch (e: Exception) {
-            Timber.d("Failed to resolve ID '$trimmed' to identity_id: ${e.message}")
-            null
-        } ?: PeerIdValidator.normalize(trimmed)
+            Timber.w("ID_RESOLUTION: Failed to resolve ID '$trimmed' to identity_id: ${e.message}")
+        }
+        
+        // Fallback: Normalize the input ID (libp2p peer ID or other format)
+        val normalizedFallback = PeerIdValidator.normalize(trimmed)
+        Timber.d("ID_RESOLUTION: Fallback to normalized input: ${normalizedFallback.take(16)}...")
+        return normalizedFallback
     }
     
     /**
@@ -2305,6 +2509,21 @@ open class MeshRepository(private val context: Context) {
     }
 
     fun addContact(contact: uniffi.api.Contact) {
+        // CRITICAL: Validate public key before storing
+        val trimmedKey = contact.publicKey?.trim()
+        if (trimmedKey.isNullOrEmpty()) {
+            Timber.e("addContact rejected: public key is empty for peer ${contact.peerId}")
+            return
+        }
+        if (trimmedKey.length != 64) {
+            Timber.e("addContact rejected: public key has invalid length ${trimmedKey.length} (expected 64) for peer ${contact.peerId}")
+            return
+        }
+        if (!trimmedKey.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
+            Timber.e("addContact rejected: public key contains invalid characters for peer ${contact.peerId}")
+            return
+        }
+
         val canonical = canonicalId(contact.peerId)
         val finalContact = if (canonical != contact.peerId) {
             uniffi.api.Contact(
@@ -2691,6 +2910,18 @@ open class MeshRepository(private val context: Context) {
                         historyManager?.flush()
                         repoScope.launch { _messageUpdates.emit(reconciledRecord) }
                         Timber.d("SEND_MSG: Reconciled message ID: $initialMessageId -> $realMessageId")
+                        
+                        // AND-MSG-DISAPPEAR-001: Verify message was actually stored
+                        val storedMessage = try {
+                            historyManager?.get(realMessageId)
+                        } catch (e: Exception) {
+                            null
+                        }
+                        if (storedMessage == null) {
+                            Timber.e("CRITICAL: Message $realMessageId was not found in history after storage!")
+                        } else {
+                            Timber.d("SEND_MSG: Verified message stored in history: ${realMessageId.take(8)}...")
+                        }
                     } catch (e: Exception) {
                         Timber.w(e, "Failed to reconcile message ID; delivery tracking may be unreliable")
                     }
@@ -2906,9 +3137,15 @@ open class MeshRepository(private val context: Context) {
     }
 
     fun clearConversation(peerId: String) {
-        val canonical = canonicalId(peerId)
-        historyManager?.clearConversation(canonical)
-        Timber.i("Conversation cleared: $canonical")
+        // ID-STANDARDIZATION-001: Use comprehensive ID validation for deletion operations
+        try {
+            val validatedId = validateAndStandardizeId(peerId, "clearConversation")
+            historyManager?.clearConversation(validatedId)
+            Timber.i("Conversation cleared: $validatedId")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to clear conversation due to ID validation error")
+            throw e
+        }
     }
 
     fun getHistoryStats(): uniffi.api.HistoryStats? {
@@ -3947,12 +4184,31 @@ open class MeshRepository(private val context: Context) {
             .distinct()
 
         if (sanitizedCandidates.isEmpty()) {
+            // AND-NO-ROUTE-001: Add diagnostic context for empty route candidates
+            val diagnosticDetails = buildString {
+                append("ctx=$attemptContext ")
+                append("route_fallback=$wifiPeerId ")
+                append("ble_only=${localAcked} ")
+                
+                // Analyze why candidates might be empty (using available parameters)
+                val discoveryCount = discoverRoutePeersForPublicKey(recipientIdentityId).size
+                val candidatesCount = routePeerCandidates.size
+                val listenersCount = listeners.size
+                
+                append("discovery=$discoveryCount ")
+                append("input_candidates=$candidatesCount ")
+                append("listeners=$listenersCount ")
+                append("recipient_id=${recipientIdentityId?.take(8) ?: "null"}")
+                append("intended_device=${intendedDeviceId?.take(8) ?: "null"}")
+            }
+            
             logDeliveryAttempt(
                 messageId = traceMessageId,
                 medium = "core",
                 phase = "direct",
                 outcome = "failed",
-                detail = "ctx=$attemptContext reason=no_route_candidates route_fallback=$wifiPeerId ble_only=${localAcked}"
+                detail = "reason=no_route_candidates $diagnosticDetails",
+                callerContext = "attemptDirectSwarmDelivery"
             )
             // No core routes - don't mark as delivered even if BLE succeeded
             return DeliveryAttemptResult(acked = false, routePeerId = wifiPeerId)
@@ -4939,8 +5195,13 @@ open class MeshRepository(private val context: Context) {
             return null
         }
 
+        // Always use the libp2p peer ID as the canonical peer ID to ensure
+        // consistent identity across all transports and prevent duplicate threads.
+        // The public key is used for cryptographic verification, but the libp2p
+        // peer ID is the stable, transport-layer identifier that should be used
+        // for contact lookup and message routing.
         return TransportIdentityResolution(
-            canonicalPeerId = canonicalContact.peerId,
+            canonicalPeerId = libp2pPeerId,
             publicKey = normalizedKey,
             nickname = canonicalContact.nickname?.takeIf { it.isNotBlank() },
             localNickname = canonicalContact.localNickname?.takeIf { it.isNotBlank() }
@@ -5847,12 +6108,18 @@ open class MeshRepository(private val context: Context) {
         medium: String,
         phase: String,
         outcome: String,
-        detail: String
+        detail: String,
+        callerContext: String? = null
     ) {
         val msg = messageId?.takeIf { it.isNotBlank() }
         if (msg == null) {
-            Timber.w("delivery_attempt msg=unknown (messageId was null or blank) medium=%s phase=%s outcome=%s detail=%s",
-                medium, phase, outcome, detail)
+            val contextInfo = callerContext?.takeIf { it.isNotBlank() } ?: "unknown_caller"
+            Timber.w("delivery_attempt msg=unknown (messageId was null or blank) medium=%s phase=%s outcome=%s detail=%s caller=%s",
+                medium, phase, outcome, detail, contextInfo)
+            // AND-DELIVERY-001: Add stack trace for debugging message ID loss
+            if (medium != "receipt" && phase != "rx") {  // Skip for expected receipt cases
+                Timber.w(IllegalStateException("Message ID tracking lost"), "Stack trace for msg=unknown")
+            }
         }
         Timber.i(
             "delivery_attempt msg=%s medium=%s phase=%s outcome=%s detail=%s",

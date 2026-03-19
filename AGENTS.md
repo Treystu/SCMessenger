@@ -1,9 +1,23 @@
 # AGENTS.md
 
 Status: Active
-Last updated: 2026-03-13
+Last updated: 2026-03-19
 
 Repository-scoped instructions for Codex agents.
+
+## ⚠️ MANDATORY: Log Extraction Standard
+
+**All AI agents MUST read and follow:** `LOG_EXTRACTION_STANDARD.md`
+
+When working with iOS or Android logs:
+- ✅ **iOS:** Use `ios_extractor.py` (mandatory)
+- ✅ **Android:** Use `adb_extractor.py` (mandatory)
+- ❌ **Do NOT** create ad-hoc log extraction commands
+- ❌ **Do NOT** ask users to manually run adb logcat or idevicesyslog
+
+See `LOG_EXTRACTION_STANDARD.md` for complete requirements.
+
+---
 
 ## Core rule: Documentation sync is mandatory on every run
 

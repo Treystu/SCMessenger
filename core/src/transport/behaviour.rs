@@ -20,8 +20,10 @@ use libp2p::{
     autonat, dcutr, gossipsub, identify, kad, ping, relay,
     request_response::{self, ProtocolSupport},
     swarm::{behaviour::toggle::Toggle, NetworkBehaviour},
-    upnp, StreamProtocol,
+    StreamProtocol,
 };
+#[cfg(not(target_arch = "wasm32"))]
+use libp2p::upnp;
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -61,6 +63,7 @@ pub struct IronCoreBehaviour {
     /// Peer identification — advertises relay capability
     pub identify: identify::Behaviour,
     /// UPnP port mapping
+    #[cfg(not(target_arch = "wasm32"))]
     pub upnp: upnp::tokio::Behaviour,
 }
 
@@ -494,6 +497,7 @@ impl IronCoreBehaviour {
                     peer_id
                 )),
         );
+        #[cfg(not(target_arch = "wasm32"))]
         let upnp = upnp::tokio::Behaviour::default();
 
         // Relay server - all nodes act as relays for NAT traversal
@@ -515,6 +519,7 @@ impl IronCoreBehaviour {
             #[cfg(not(target_arch = "wasm32"))]
             mdns,
             identify,
+            #[cfg(not(target_arch = "wasm32"))]
             upnp,
         })
     }

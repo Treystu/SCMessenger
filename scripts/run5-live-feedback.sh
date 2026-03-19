@@ -46,6 +46,9 @@ Options:
 
 Environment overrides:
   OUTPUT_ROOT, RUN5_SCRIPT
+  IOS_DIAG_PULL_ATTEMPTS (default: 3) - Number of iOS diagnostics pull attempts
+  IOS_DIAG_STABILITY_MAX_DELTA_BYTES (default: 256) - Max size delta for stable capture
+  IOS_DIAG_COPY_TIMEOUT (default: 60) - Timeout in seconds for individual copy attempts
 USAGE
 }
 
@@ -255,13 +258,16 @@ PY
     local attempt_file="${out_file}.attempt${attempt}"
     rm -f "$attempt_file"
 
-    if xcrun devicectl device copy from \
+    # Add timeout to prevent hanging on large file transfers (IOS-DIAG-001 fix)
+    if timeout ${IOS_DIAG_COPY_TIMEOUT:-60} xcrun devicectl device copy from \
         --device "$device_id" \
         --domain-type appDataContainer \
         --domain-identifier SovereignCommunications.SCMessenger \
         --source Documents/mesh_diagnostics.log \
         --destination "$attempt_file" >>"$stderr_file" 2>&1; then
       :
+    else
+      echo "iOS diagnostics copy timed out after ${IOS_DIAG_COPY_TIMEOUT:-60} seconds" >> "$stderr_file"
     fi
 
     if [ ! -s "$attempt_file" ]; then

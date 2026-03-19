@@ -74,3 +74,13 @@ node_modules/
 # Temporary files - use /tmp/ at repo root for session work
 /tmp/
 tmp/
+
+# Log extraction archives (auto-managed by rotation)
+ios_logs_archive/
+android_logs_archive/
+
+# Current log outputs
+live_ios_log.log
+ios_diagnostic_snapshot.log
+live_logcat.log
+diagnostic_snapshots/

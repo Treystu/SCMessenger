@@ -11,6 +11,7 @@ Current release line: **v0.2.0 is the active alpha baseline** for this repositor
 
 - Documentation hub: `DOCUMENTATION.md`
 - Documentation lifecycle/status map: `docs/DOCUMENT_STATUS_INDEX.md`
+- **Log extraction standard: `LOG_EXTRACTION_STANDARD.md` ⚠️ MANDATORY for iOS/Android**
 - Full repo context map: `docs/REPO_CONTEXT.md`
 - Verified current state: `docs/CURRENT_STATE.md`
 - Active gap backlog: `REMAINING_WORK_TRACKING.md`

@@ -1,4 +1,7 @@
+#[cfg(not(target_arch = "wasm32"))]
 use crate::mobile_bridge::MeshSettings;
+#[cfg(target_arch = "wasm32")]
+use crate::MeshSettings;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

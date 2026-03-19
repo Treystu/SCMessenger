@@ -37,6 +37,13 @@ impl BlockedIdentity {
         }
     }
 
+    /// Create a full relay capability (for WASM compatibility)
+    /// This is a stub implementation for WASM targets where relay functionality
+    /// is not available but the type is used for compatibility.
+    pub fn full_relay() -> Self {
+        Self::new("relay-stub".to_string())
+    }
+
     /// Block a specific device of this identity
     /// TODO: Requires device ID infrastructure
     pub fn with_device_id(mut self, device_id: String) -> Self {

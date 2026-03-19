@@ -3,6 +3,7 @@
 **Session Log**: `docs/roo_task_mar-16-2026_5-17-28-pm.md`
 **Auditor**: Roo (AI Agent)
 **Date**: 2026-03-17
+**Log Extraction Standard**: `LOG_EXTRACTION_STANDARD.md`
 
 ---
 
@@ -30,6 +31,7 @@ The session attempted to implement smart transport selection with 500ms timeout 
 ### 3. Documentation Updated
 - Updated docs/CURRENT_STATE.md with new section documenting the changes
 - Docs sync check passed
+- Added reference to `LOG_EXTRACTION_STANDARD.md` for future sessions
 
 ### Why iOS Succeeded
 - Codebase was well-structured and followed existing patterns

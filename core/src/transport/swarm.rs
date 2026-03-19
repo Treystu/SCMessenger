@@ -1274,12 +1274,24 @@ pub async fn start_swarm_with_config(
     headless: bool,
 ) -> Result<SwarmHandle> {
     #[cfg(target_arch = "wasm32")]
-    let _ = &multiport_config;
-    #[cfg(target_arch = "wasm32")]
-    let _ = &storage_path;
-    #[cfg(target_arch = "wasm32")]
-    let _ = headless;
-
+    {
+        let _ = &keypair;
+        let _ = &listen_addr;
+        let _ = &event_tx;
+        let _ = &multiport_config;
+        let _ = &bootstrap_addrs;
+        let _ = &storage_path;
+        let _ = headless;
+        
+        // Declare reported_peer_discoveries for WASM scope (used in event handlers below)
+        let mut reported_peer_discoveries: std::collections::HashSet<PeerId> = std::collections::HashSet::new();
+        
+        // WASM stub: Real swarm networking requires tokio/quic which aren't available in browsers.
+        // Use WasmTransport for browser-based P2P instead.
+        Err(anyhow::anyhow!(
+            "Swarm networking is not supported in WASM. Use WasmTransport for browser-based P2P."
+        ))
+    }
     #[cfg(not(target_arch = "wasm32"))]
     {
         let local_peer_id = keypair.public().to_peer_id();
@@ -1415,9 +1427,8 @@ pub async fn start_swarm_with_config(
 
         // P0.12: Deduplicate bridge events to prevent UI freezing and bridge spam
         // We track the last reported 'PeerIdentified' and 'PeerDiscovered' state.
-        let mut reported_peer_info: HashMap<PeerId, (String, Vec<Multiaddr>)> = HashMap::new();
-        let mut reported_peer_discoveries: std::collections::HashSet<PeerId> =
-            std::collections::HashSet::new();
+        let _reported_peer_info: HashMap<PeerId, (String, Vec<Multiaddr>)> = HashMap::new();
+        let _reported_peer_discoveries: HashSet<PeerId> = HashSet::new();
 
         tracing::info!("=== OWN_IDENTITY: {} ===", local_peer_id);
 
@@ -1506,6 +1517,12 @@ pub async fn start_swarm_with_config(
             let mut relay_count_this_hour: u32 = 0;
             let mut relay_hour_start = std::time::Instant::now();
             let mut relay_guardrails = RelayAbuseGuardrails::new();
+
+            // P0.12: Deduplicate bridge events to prevent UI freezing and bridge spam
+            // We track the last reported 'PeerIdentified' and 'PeerDiscovered' state.
+            let mut reported_peer_info: HashMap<PeerId, (String, Vec<Multiaddr>)> = HashMap::new();
+            let mut reported_peer_discoveries: std::collections::HashSet<PeerId> =
+                std::collections::HashSet::new();
 
             // Check for pending relay reconnects frequently
             let mut relay_reconnect_interval = tokio::time::interval(Duration::from_secs(5));

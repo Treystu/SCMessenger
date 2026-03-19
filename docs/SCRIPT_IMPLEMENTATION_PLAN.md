@@ -2,13 +2,14 @@
 
 Status: Active  
 Last updated: 2026-03-16  
-Purpose: Step-by-step implementation instructions for improving the deployment → log capture → analysis → iteration workflow. Designed for execution by a less-capable model.
+Purpose: Step-by-step implementation instructions for improving the deployment → log capture → analysis → iteration workflow.
 
 ---
 
 ## Prerequisites
 
 Before executing any step:
+
 1. Read `docs/SCRIPT_SANITY_CHECK_PROMPT.md` for full context
 2. Read `docs/TESTING_GUIDE.md` for testing pyramid understanding
 3. Verify you are on a feature branch (never edit on `main`)
@@ -19,10 +20,12 @@ Before executing any step:
 ## Phase 1: Pre-Flight Validation Improvements
 
 ### Step 1.1: Create Unified Pre-Flight Check Script
+
 **File**: `scripts/preflight.sh`  
 **Action**: create  
 **Rationale**: No single script validates all prerequisites before a debug session. Scattered device detection logic leads to inconsistent error handling.  
 **Implementation**:
+
 ```bash
 #!/usr/bin/env bash
 # scripts/preflight.sh — Unified pre-flight validation for SCMessenger debug sessions
@@ -73,7 +76,7 @@ else
     [ -n "$endpoint" ] || continue
     adb connect "$endpoint" >/dev/null 2>&1 || true
   done < <(adb mdns services 2>/dev/null | awk '/_adb-tls-connect\._tcp/ {print $NF}')
-  
+
   if adb devices 2>/dev/null | awk 'NR>1 && $2=="device" {print $1; exit}' | grep -q .; then
     ANDROID_SERIAL=$(adb devices -l | awk 'NR>1 && $2=="device"{print $1; exit}')
     check_pass "Wireless device reconnected: $ANDROID_SERIAL"
@@ -147,7 +150,7 @@ if [ -d "$LOG_ROOT" ]; then
   LOG_SIZE=$(du -sh "$LOG_ROOT" 2>/dev/null | awk '{print $1}')
   LOG_COUNT=$(find "$LOG_ROOT" -name "*.log" -o -name "*.txt" 2>/dev/null | wc -l | tr -d ' ')
   check_pass "Log directory: $LOG_SIZE, $LOG_COUNT files"
-  
+
   # Warn if logs are consuming too much space
   LOG_SIZE_KB=$(du -sk "$LOG_ROOT" 2>/dev/null | awk '{print $1}')
   if [ "$LOG_SIZE_KB" -gt 1048576 ]; then
@@ -179,22 +182,27 @@ echo ""
 echo -e "${GREEN}PRE-FLIGHT PASSED${NC} — all checks green"
 exit 0
 ```
+
 **Verification**:
+
 ```bash
 chmod +x scripts/preflight.sh
 ./scripts/preflight.sh
 # Should show all checks with pass/warn/fail status
 # Exit code 1 if any failures, 0 otherwise
 ```
+
 **LOC Estimate**: ~130 LOC
 
 ---
 
 ### Step 1.2: Add Pre-Flight Gate to `run5-live-feedback.sh`
+
 **File**: `scripts/run5-live-feedback.sh`  
 **Action**: modify  
 **Rationale**: The live verification loop should fail fast if prerequisites aren't met, rather than failing mid-session.  
 **Implementation**: Add after line 111 (after the `phase()` function definition):
+
 ```bash
 # Pre-flight gate
 phase "Pre-Flight Validation"
@@ -203,11 +211,14 @@ if ! "$SCRIPT_DIR/preflight.sh"; then
   exit 1
 fi
 ```
+
 **Verification**:
+
 ```bash
 ./scripts/run5-live-feedback.sh --step=test --time=1
 # Should run preflight.sh before any deployment
 ```
+
 **LOC Estimate**: ~5 LOC
 
 ---
@@ -215,10 +226,12 @@ fi
 ## Phase 2: Log Capture Standardization
 
 ### Step 2.1: Create Unified Log Capture Script
+
 **File**: `scripts/capture_logs.sh`  
 **Action**: create  
 **Rationale**: Multiple log capture scripts (`capture_both_logs.sh`, `comprehensive_log_capture.sh`, `live-smoke.sh`) have overlapping but inconsistent logic. A single canonical script reduces maintenance burden.  
 **Implementation**:
+
 ```bash
 #!/usr/bin/env bash
 # scripts/capture_logs.sh — Unified log capture for all SCMessenger nodes
@@ -329,22 +342,27 @@ done
 echo ""
 echo "Log files saved to: $LOGDIR"
 ```
+
 **Verification**:
+
 ```bash
 chmod +x scripts/capture_logs.sh
 DURATION_SEC=10 ./scripts/capture_logs.sh
 # Should capture logs from all connected devices for 10 seconds
 # Should produce summary with line counts and error counts
 ```
+
 **LOC Estimate**: ~110 LOC
 
 ---
 
 ### Step 2.2: Add Structured Log Markers
+
 **File**: `scripts/capture_logs.sh`  
 **Action**: modify  
 **Rationale**: Inject sync markers into all device logs to enable cross-platform correlation.  
 **Implementation**: Add before capture starts:
+
 ```bash
 # Inject sync marker for cross-platform correlation
 SYNC_MARKER="=== CAPTURE_START: $TIMESTAMP ==="
@@ -353,6 +371,7 @@ if [ -n "$ANDROID_SERIAL" ]; then
   echo "$SYNC_MARKER" | adb -s "$ANDROID_SERIAL" logcat -b main -T 1 2>/dev/null || true
 fi
 ```
+
 **Verification**: Check that log files contain the sync marker near the beginning  
 **LOC Estimate**: ~5 LOC
 
@@ -361,10 +380,12 @@ fi
 ## Phase 3: Analysis Improvements
 
 ### Step 3.1: Enhance `check_logs.py` with Severity Classification
+
 **File**: `scripts/check_logs.py`  
 **Action**: modify  
 **Rationale**: The current script shows raw counts but doesn't classify issues by severity or affected component.  
 **Implementation**: Add after line 134 (before the visibility matrix section):
+
 ```python
 # === Severity Classification ===
 print()
@@ -383,7 +404,7 @@ for name, content in contents.items():
     critical = len(CRITICAL_PAT.findall(content))
     errors = len(ERROR_PAT_CLASS.findall(content))
     warnings = len(WARN_PAT_CLASS.findall(content))
-    
+
     icon = '🔴' if crashes > 0 else ('🟠' if critical > 0 else ('🟡' if errors > 5 else '🟢'))
     print(f"  {icon} {name:<10} crashes={crashes} critical={critical} errors={errors} warnings={warnings}")
 
@@ -409,20 +430,25 @@ for name, content in contents.items():
         if comp_errors > 0:
             print(f"    {comp_name}: {comp_errors} events")
 ```
+
 **Verification**:
+
 ```bash
 python3 scripts/check_logs.py scripts/logs_20260310_020758/
 # Should show severity classification and component breakdown
 ```
+
 **LOC Estimate**: ~35 LOC
 
 ---
 
 ### Step 3.2: Create Automated Triage Script
+
 **File**: `scripts/triage.sh`  
 **Action**: create  
 **Rationale**: No script automatically classifies issues and suggests next actions. This reduces manual analysis time.  
 **Implementation**:
+
 ```bash
 #!/usr/bin/env bash
 # scripts/triage.sh — Automated issue triage from log directory
@@ -550,12 +576,15 @@ else
 fi
 echo "══════════════════════════════════════════════════════════════"
 ```
+
 **Verification**:
+
 ```bash
 chmod +x scripts/triage.sh
 ./scripts/triage.sh scripts/logs_20260310_020758/
 # Should produce categorized issue report with recommended actions
 ```
+
 **LOC Estimate**: ~120 LOC
 
 ---
@@ -563,10 +592,12 @@ chmod +x scripts/triage.sh
 ## Phase 4: Workflow Integration
 
 ### Step 4.1: Create Unified Debug Session Script
+
 **File**: `scripts/debug-session.sh`  
 **Action**: create  
 **Rationale**: No single entry point orchestrates the full debug lifecycle. This script ties together preflight, deploy, capture, analysis, and triage.  
 **Implementation**:
+
 ```bash
 #!/usr/bin/env bash
 # scripts/debug-session.sh — Unified debug session orchestrator
@@ -644,13 +675,16 @@ echo "  - Run specific verifiers if issues detected:"
 echo "    ./scripts/verify_relay_flap_regression.sh $SESSION_DIR/logs/ios-device.log"
 echo "    ./scripts/verify_ble_only_pairing.sh $SESSION_DIR/logs/android.log $SESSION_DIR/logs/ios-device.log"
 ```
+
 **Verification**:
+
 ```bash
 chmod +x scripts/debug-session.sh
 STEP_ID=test-run DEPLOY=0 DURATION_SEC=15 ./scripts/debug-session.sh
 # Should run full lifecycle: preflight → capture → analysis → triage
 # Should produce organized output in logs/debug-session/test-run/<timestamp>/
 ```
+
 **LOC Estimate**: ~80 LOC
 
 ---
@@ -658,10 +692,12 @@ STEP_ID=test-run DEPLOY=0 DURATION_SEC=15 ./scripts/debug-session.sh
 ## Phase 5: Cleanup and Maintenance
 
 ### Step 5.1: Enhance `prune_sim_logs.sh` with Safety Checks
+
 **File**: `scripts/prune_sim_logs.sh`  
 **Action**: modify  
 **Rationale**: The current pruning script may delete active log files. Add safety checks to preserve recent logs.  
 **Implementation**: Add safety check at the beginning:
+
 ```bash
 # Safety: preserve logs from the last 24 hours
 KEEP_HOURS="${KEEP_HOURS:-24}"
@@ -674,16 +710,19 @@ if [ -L "$LATEST_LINK" ]; then
   echo "Preserving latest run: $LATEST_TARGET"
 fi
 ```
+
 **Verification**: Run with `--dry-run` flag to see what would be deleted before actual deletion  
 **LOC Estimate**: ~15 LOC
 
 ---
 
 ### Step 5.2: Add `--dry-run` Mode to All Scripts
+
 **File**: Multiple scripts  
 **Action**: modify  
 **Rationale**: Scripts that modify state (deploy, prune, install) should support `--dry-run` for safe testing.  
 **Implementation Pattern** (apply to each script):
+
 ```bash
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -698,6 +737,7 @@ dry_run() {
 # Replace direct command calls with:
 # dry_run command args...
 ```
+
 **Verification**: Run each modified script with `DRY_RUN=1` and verify no state changes occur  
 **LOC Estimate**: ~10 LOC per script, ~50 LOC total across 5 scripts
 
@@ -736,11 +776,11 @@ After all steps are complete:
 
 ## Total LOC Estimate
 
-| Category | New Files | Modified Files | Total LOC |
-|----------|-----------|----------------|-----------|
-| Pre-flight | 130 (preflight.sh) | 5 (run5-live-feedback.sh) | 135 |
-| Log capture | 110 (capture_logs.sh) | 5 (sync markers) | 115 |
-| Analysis | 35 (check_logs.py) | 120 (triage.sh) | 155 |
-| Integration | 80 (debug-session.sh) | — | 80 |
-| Cleanup | — | 65 (prune + dry-run) | 65 |
-| **Total** | **455** | **95** | **~550 LOC** |
+| Category    | New Files             | Modified Files            | Total LOC    |
+| ----------- | --------------------- | ------------------------- | ------------ |
+| Pre-flight  | 130 (preflight.sh)    | 5 (run5-live-feedback.sh) | 135          |
+| Log capture | 110 (capture_logs.sh) | 5 (sync markers)          | 115          |
+| Analysis    | 35 (check_logs.py)    | 120 (triage.sh)           | 155          |
+| Integration | 80 (debug-session.sh) | —                         | 80           |
+| Cleanup     | —                     | 65 (prune + dry-run)      | 65           |
+| **Total**   | **455**               | **95**                    | **~550 LOC** |

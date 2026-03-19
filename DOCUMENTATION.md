@@ -1,7 +1,7 @@
 # SCMessenger Documentation Hub
 
 Status: Active
-Last updated: 2026-03-14 (WS14.2-IOS-NOTIFICATIONS + WS14-AUTOMATION-RESET + WS13.6-COMPLETION)
+Last updated: 2026-03-19 (Log Audit Critical Findings)
 
 This is the primary documentation entrypoint.
 
@@ -9,10 +9,18 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 
 - [Document Status Index](docs/DOCUMENT_STATUS_INDEX.md)
 
+## ⚠️ URGENT - LOG AUDIT CRITICAL FINDINGS
+
+- **[Log Audit Report 2026-03-19](LOG_AUDIT_REPORT_2026-03-19.md) 🔴 CRITICAL**
+- **[Master Bug Tracker](MASTER_BUG_TRACKER.md) 🔴 UPDATED**
+
+**Key Issues Found:** 65-75% message delivery failure rate, BLE connection instability, relay circuit issues
+
 ## Active Canonical Docs (Read First)
 
 - [Repository Overview](README.md)
 - [Repository Context](docs/REPO_CONTEXT.md)
+- **[Log Extraction Standard](LOG_EXTRACTION_STANDARD.md) ⚠️ MANDATORY for iOS/Android**
 - [Current Verified State](docs/CURRENT_STATE.md)
 - [Active Backlog](REMAINING_WORK_TRACKING.md)
 - [WS12.29 Known Issues + Burndown Plan](docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md)

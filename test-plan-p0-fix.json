@@ -1,0 +1,62 @@
+{
+  "task": "Fix AND-CONTACTS-WIPE-001 (P0): Android contacts wiped after update",
+  "sub_tasks": [
+    {
+      "name": "Diagnose Root Cause",
+      "scope": "Identify why contacts are wiped after update",
+      "objectives": [
+        "Analyze logs and code to find the root cause"
+      ],
+      "dependencies": [],
+      "expected_outcomes": [
+        "Root cause identified and documented"
+      ],
+      "constraints": [
+        "Must not affect identity and message history"
+      ]
+    },
+    {
+      "name": "Implement Fix",
+      "scope": "Apply the necessary fixes to prevent contacts from being wiped",
+      "objectives": [
+        "Add fallback auto-contact creation in onPeerIdentified callback",
+        "Update iOS bootstrap config to include OSX relay"
+      ],
+      "dependencies": ["Diagnose Root Cause"],
+      "expected_outcomes": [
+        "Fixes applied and documented"
+      ],
+      "constraints": [
+        "Must follow coding standards and best practices"
+      ]
+    },
+    {
+      "name": "Test Fix",
+      "scope": "Verify that the fixes work as expected",
+      "objectives": [
+        "Run tests to ensure contacts are not wiped after update"
+      ],
+      "dependencies": ["Implement Fix"],
+      "expected_outcomes": [
+        "Tests passing and contacts preserved"
+      ],
+      "constraints": [
+        "Must achieve at least 90% test coverage"
+      ]
+    },
+    {
+      "name": "Document Fix",
+      "scope": "Update documentation to reflect the fixes",
+      "objectives": [
+        "Ensure documentation is accurate and up-to-date"
+      ],
+      "dependencies": ["Test Fix"],
+      "expected_outcomes": [
+        "Updated documentation"
+      ],
+      "constraints": [
+        "Must follow documentation standards"
+      ]
+    }
+  ]
+}

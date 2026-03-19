@@ -49,20 +49,33 @@ This document standardizes ID usage, eliminates case sensitivity issues, and add
 
 ## Unification Rules
 
-### Primary Identifier: Public Key
-**ALL identity operations MUST use `public_key_hex` as the canonical identifier.**
+### Primary Identifier: libp2p PeerId (for Contact Storage and UI)
+**Contact storage and UI routing MUST use `libp2p_peer_id` as the canonical contact identifier.**
 
-1. **Contacts:** Store and query by `public_key`
-2. **Messages:** Route by `public_key`, resolve transport via PeerId lookup
-3. **Blocking:** Block by `public_key` (identity-level)
-4. **Encryption:** Use `public_key` for recipient lookup
+1. **Contacts:** Store and query by `peer_id` (libp2p PeerId)
+2. **Messages:** Route by `peer_id`, resolve transport via PeerId
+3. **Blocking:** Block by `peer_id` (identity-level)
+4. **Encryption:** Use `public_key` for cryptographic operations
 
 ### Transport Resolution
-**PeerId is ONLY used for transport routing, never for identity.**
+**libp2p PeerId IS the canonical identifier for contacts and message routing.**
 
-1. Maintain `public_key -> PeerId` mapping in memory
-2. Resolve PeerId to public_key on message receipt
-3. Use PeerId only for libp2p dial operations
+1. Store `public_key` as a separate field for cryptographic verification
+2. Use `peer_id` (libp2p PeerId) as the primary contact identifier
+3. Use PeerId for all libp2p dial operations and message routing
+
+### Why libp2p PeerId as Primary?
+- **Stable:** Derived from the Ed25519 keypair,不变 across sessions
+- **Transport-native:** Used directly by libp2p for routing
+- **User-visible:** Shorter format (base58) than full public key (64-char hex)
+- **Prevents duplicates:** Single canonical ID prevents multiple threads for same peer
+
+### Historical Note
+Prior to this fix (2026-03-18), contacts could be stored with either:
+- `peer_id = public_key_hex` (64-char hex)
+- `peer_id = libp2p_peer_id` (base58 "12D3KooW...")
+
+This caused duplicate message threads when the same peer was identified using different ID formats. The fix ensures `libp2p_peer_id` is always used as the canonical contact identifier.
 
 ### Display Names
 **Use nickname for all UI display, fallback to truncated public_key.**

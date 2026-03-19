@@ -29,9 +29,9 @@ UPDATE_APPS=0
 RESTORE_ON_EXIT=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    -t=*|--time=*)      DURATION_MIN="${1#*=}" ;;
-    -u|--update)        UPDATE_APPS=1 ;;
-    --restore-on-exit)  RESTORE_ON_EXIT=1 ;;
+    -t=*|--time=*)      DURATION_MIN="${1#*=}"; shift ;;
+    -u|--update)        UPDATE_APPS=1; shift ;;
+    --restore-on-exit)  RESTORE_ON_EXIT=1; shift ;;
     -h|--help)
       head -20 "$0" | grep -E "^#" | sed 's/^# \?//'
       exit 0

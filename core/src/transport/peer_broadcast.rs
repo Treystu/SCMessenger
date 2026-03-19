@@ -7,8 +7,11 @@ use libp2p::PeerId;
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// Import from local relay module
+// Import from local relay module (not available on WASM)
+#[cfg(not(target_arch = "wasm32"))]
 use crate::relay::protocol::{RelayCapability, RelayMessage, RelayPeerInfoMessage};
+#[cfg(target_arch = "wasm32")]
+use crate::store::blocked::BlockedIdentity as RelayCapability;
 
 /// Tracks connected peers and handles broadcasting
 pub struct PeerBroadcaster {
@@ -63,6 +66,7 @@ impl PeerBroadcaster {
     }
 
     /// Create a PeerJoined message for a newly connected peer
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn create_peer_joined_message(&self, peer_id: &PeerId) -> Option<RelayMessage> {
         let info = self.connected_peers.get(peer_id)?;
         let now = SystemTime::now()
@@ -82,6 +86,7 @@ impl PeerBroadcaster {
     }
 
     /// Create a PeerLeft message for a disconnected peer
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn create_peer_left_message(peer_id: &PeerId) -> RelayMessage {
         RelayMessage::PeerLeft {
             peer_id: peer_id.to_string(),
@@ -89,6 +94,7 @@ impl PeerBroadcaster {
     }
 
     /// Create a PeerListResponse with all currently connected peers
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn create_peer_list_response(&self) -> RelayMessage {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)

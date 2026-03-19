@@ -98,8 +98,8 @@ struct MeshDashboardView: View {
 
     private func loadDashboardDataAsync() async {
         await Task.detached {
-            self.repository.updateStats()
-            let updatedStats = self.repository.serviceStats
+            await self.repository.updateStats()
+            let updatedStats = await self.repository.serviceStats
             await MainActor.run {
                 self.stats = updatedStats
             }
@@ -110,36 +110,36 @@ struct MeshDashboardView: View {
         await Task.detached(priority: .userInitiated) {
             let contacts: [Contact]
             do {
-                contacts = try await MainActor.run { try self.repository.getContacts() }
+                contacts = try await self.repository.getContacts()
             } catch {
                 contacts = []
             }
-        let contactsByPeerId = Dictionary(uniqueKeysWithValues: contacts.map { ($0.peerId, $0) })
-        var contactsByRoutePeerId: [String: Contact] = [:]
-        var contactsByPublicKey: [String: Contact] = [:]
-        var contactsByNickname: [String: Contact] = [:]
+                let contactsByPeerId = Dictionary(uniqueKeysWithValues: contacts.map { ($0.peerId, $0) })
+                var contactsByRoutePeerId: [String: Contact] = [:]
+                var contactsByPublicKey: [String: Contact] = [:]
+                var contactsByNickname: [String: Contact] = [:]
 
-        contacts.forEach { contact in
-            if let routePeerId = parseRoutingLibp2pPeerId(from: contact.notes) {
-                if contactsByRoutePeerId[routePeerId] == nil {
-                    contactsByRoutePeerId[routePeerId] = contact
+                contacts.forEach { contact in
+                if let routePeerId = parseRoutingLibp2pPeerId(from: contact.notes) {
+                    if contactsByRoutePeerId[routePeerId] == nil {
+                        contactsByRoutePeerId[routePeerId] = contact
+                    }
                 }
-            }
-            let pk = contact.publicKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !pk.isEmpty {
-                contactsByPublicKey[pk] = contact
-            }
-            if let nn = contact.nickname?.trimmingCharacters(in: .whitespacesAndNewlines), !nn.isEmpty {
-                contactsByNickname[nn] = contact
-            }
-        }
+                let pk = contact.publicKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !pk.isEmpty {
+                    contactsByPublicKey[pk] = contact
+                }
+                if let nn = contact.nickname?.trimmingCharacters(in: .whitespacesAndNewlines), !nn.isEmpty {
+                    contactsByNickname[nn] = contact
+                }
+                }
 
-        var merged = peersByKey
-        let now = Date()
+                var merged = peersByKey
+                let now = Date()
 
-        for contact in contacts {
-            let isRelay = repository.isKnownRelay(contact.peerId)
-            let routePeerId = parseRoutingLibp2pPeerId(from: contact.notes)
+                for contact in contacts {
+                let isRelay = repository.isKnownRelay(contact.peerId)
+                let routePeerId = parseRoutingLibp2pPeerId(from: contact.notes)
 
             var existing = merged[contact.peerId]
             if existing == nil {
@@ -179,9 +179,9 @@ struct MeshDashboardView: View {
                 ),
                 lastSeen: existing?.lastSeen ?? dateFromEpoch(contact.lastSeen) ?? now
             )
-        }
+            }
 
-        if let entries = try? repository.getDialableAddresses() {
+        if let entries = try await repository.getDialableAddresses() {
             for entry in entries {
                 guard let routePeerId = entry.peerId?.trimmingCharacters(in: .whitespacesAndNewlines),
                       !routePeerId.isEmpty else { continue }
@@ -211,7 +211,7 @@ struct MeshDashboardView: View {
                     }
                 }
 
-                let lastSeenDate = dateFromEpoch(entry.lastSeen) ?? existing?.lastSeen ?? now
+                let lastSeenDate = await dateFromEpoch(entry.lastSeen) ?? existing?.lastSeen ?? now
 
                 merged[canonicalPeerId] = DashboardPeer(
                     id: canonicalPeerId,
@@ -233,12 +233,13 @@ struct MeshDashboardView: View {
                     ),
                     lastSeen: lastSeenDate
                 )
+                }
             }
-        }
 
             let deduped = self.deduplicatePeersByIdentityAndAliases(Array(merged.values))
             await MainActor.run {
                 self.peersByKey = deduped
+            }
             }
         }.value
     }

@@ -85,6 +85,8 @@ final class ChatViewModel {
                     self.error = "Could not encrypt message — this contact may have an invalid public key. Try re-adding them using their identity export."
                 case .Internal(let message):
                     self.error = "Internal Error: \(message)"
+                case .Blocked(let message):
+                    self.error = "Blocked: \(message)"
                 case .AlreadyRunning(let message):
                     self.error = "Already Running: \(message)"
                 @unknown default:

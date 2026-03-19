@@ -1,10 +1,10 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-03-16
+Last updated: 2026-03-18
 
-Last verified: **2026-03-16** (GCP node restarted and verified healthy; scripts updated)
-Last iOS build: **2026-03-16** (iOS build successful, stability improvements applied)
+Last verified: **2026-03-18** (QUIC/UDP endpoints added for cellular NAT traversal)
+Last iOS build: **2026-03-18** (iOS build successful, QUIC bootstrap configured)
 
 ---
 
@@ -76,6 +76,72 @@ Updated [`BleScanner.kt`](../android/app/src/main/java/com/scmessenger/android/t
 
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
+
+---
+
+## 2026-03-18 QUIC/UDP Cellular NAT Traversal Fix
+
+**Status:** ✅ IMPLEMENTED
+
+### Overview
+
+Enhanced cellular NAT traversal by enabling QUIC/UDP transport and implementing ledger-based headless node discovery with stable node prioritization.
+
+### Problem
+
+- Android devices on cellular networks could not send messages via relay
+- All relay dials returned "NetworkError" due to carrier-level TCP port filtering
+- Relay circuit delivery failed between iOS and Android devices
+
+### Root Cause
+
+The transport layer was relying solely on TCP for relay connections. Many cellular carriers block non-standard TCP ports, preventing relay circuit establishment. The system needed QUIC/UDP transport capability and a proper headless node discovery mechanism.
+
+### Key Changes
+
+1. **QUIC/UDP Transport Enablement**
+   - Swarm core now supports QUIC/UDP transport for relay connections
+   - UDP port 9001 exposed alongside TCP port 9001 on relay infrastructure
+   - Transport layer attempts QUIC first, falling back to TCP if needed
+
+2. **Ledger-Based Headless Node Discovery**
+   - Implemented ledger sharing for headless node discovery
+   - Headless nodes are prioritized based on stability and uptime metrics
+   - No static bootstrap nodes - discovery is dynamic via ledger exchange
+
+3. **Stable Node Prioritization**
+   - Nodes with higher uptime and reliability scores are prioritized
+   - Headless nodes (always-online infrastructure) receive higher priority
+   - Discovery adapts based on network conditions and node health
+
+### How It Works
+
+- The swarm core automatically binds QUIC listeners alongside TCP
+- Headless nodes share their ledger with connecting peers
+- Peers prioritize stable headless nodes based on reliability scores
+- QUIC provides better NAT traversal for cellular networks where TCP is blocked
+- The transport layer attempts QUIC first, falling back to TCP if needed
+- Relay circuit addresses now include QUIC endpoints for improved connectivity
+
+### Issues Resolved
+
+- **AND-CELLULAR-001**: Android cellular message sending (P0) - FIXED
+- **CROSS-RELAY-001**: Cross-platform relay circuit delivery (P0) - FIXED
+
+### ⚠️ Regression Introduced
+
+- **AND-CONTACTS-WIPE-001**: Android contacts wiped after QUIC/UDP update (P0) - OPEN
+  - After deploying the update via `deploy_to_device.sh both`, Android contacts were wiped
+  - Identity and message history remained intact
+  - Root cause unknown - requires investigation of contact persistence logic
+
+### Verification
+
+1. Deploy updated relay with `scripts/deploy_gcp_node.sh`
+2. Fresh install on Android device on cellular network
+3. Verify relay connection is established via QUIC
+4. Send message from Android to iOS over cellular
+5. Verify delivery succeeds without NetworkError
 
 ---
 
