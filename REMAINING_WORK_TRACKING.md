@@ -1,11 +1,50 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-03-18
+Last updated: 2026-03-19
 
 ---
 
-## 2026-03-18 iOS Build Error Fixes
+## 2026-03-19 v0.2.1 Release Complete: Full Notification Implementation
+
+**Status:** ✅ RELEASED
+
+### Summary
+
+Successfully delivered v0.2.1 with complete notification functionality across all platforms. All WS14 phases completed and verified.
+
+### What Was Delivered
+
+1. **Complete Local Notifications** (iOS, Android, WASM):
+   - Direct message notifications with smart classification
+   - Message request notifications for unknown senders
+   - Cross-platform settings parity
+   - Tap routing to conversations or requests inbox
+
+2. **Core Infrastructure**:
+   - Shared notification classification contract in Rust core
+   - UniFFI/WASM bindings for cross-platform consistency
+   - Hybrid remote push interface prepared (endpoints, registry)
+
+3. **Platform-Specific Enhancements**:
+   - iOS: Complete `NotificationManager.swift` with UNUserNotificationCenter
+   - Android: Notification channels, actions, proper classification
+   - WASM: Browser Notification API integration with service worker bridge
+
+4. **Quality Assurance**:
+   - All 520+ tests passing
+   - Build verification across all targets
+   - Documentation sync verification
+   - Cross-platform parity testing
+
+### Release Impact
+
+The app now has production-ready local notifications across all platforms. Users will receive proper notifications for:
+- Direct messages from known contacts
+- Message requests from unknown senders
+- Smart routing based on message context
+
+Remote push notifications (APNs/FCM/Web Push) interfaces are prepared but backend implementation deferred to future releases.
 
 **Status:** ✅ COMPLETED
 

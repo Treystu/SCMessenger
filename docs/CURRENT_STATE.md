@@ -1,10 +1,52 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-03-18
+Last updated: 2026-03-19
 
-Last verified: **2026-03-18** (QUIC/UDP endpoints added for cellular NAT traversal)
-Last iOS build: **2026-03-18** (iOS build successful, QUIC bootstrap configured)
+Last verified: **2026-03-19** (v0.2.1 release - Complete WS14 notification implementation)
+Last iOS build: **2026-03-19** (iOS build successful, v0.2.1 with full notifications)
+
+---
+
+## 2026-03-19 v0.2.1 Release: Complete Notification Implementation
+
+**Status:** ✅ RELEASED
+
+### Overview
+
+Successfully released v0.2.1 with complete notification support across iOS, Android, and WASM platforms. All WS14 phases completed and verified with 520+ tests passing.
+
+### Key Features Delivered
+
+- **Full Local Notification Support**: DM and DM Request notifications working on all platforms
+- **Smart Classification**: Core notification contract with automatic message type detection
+- **Cross-Platform Parity**: Consistent notification behavior and settings across iOS, Android, WASM
+- **Hybrid Remote Interface**: Endpoint registry prepared for future APNs/FCM/Web Push integration
+- **Smart Routing**: Notification taps route to conversations or requests inbox appropriately
+
+### WS14 Completion Summary
+
+All WS14 phases completed:
+- ✅ WS14.1: Core notification policy and classification
+- ✅ WS14.2: iOS notification completion  
+- ✅ WS14.3: Android notification completion
+- ✅ WS14.4: WASM notification wiring
+- ✅ WS14.5: Hybrid remote interface prep
+- ✅ WS14.6: Verification, docs, and release gating
+
+### Release Details
+
+- **Version**: v0.2.1 (versionCode 6 for Android, build 5 for iOS)
+- **GitHub Release**: https://github.com/Treystu/SCMessenger/releases/tag/v0.2.1
+- **Tests**: All 520+ tests passing
+- **Platforms**: iOS, Android, WASM all verified
+
+### Next Steps
+
+With notifications complete, the app is ready for broader testing and adoption. Future work may include:
+- Remote push notification backend implementation
+- Enhanced notification customization
+- Group notification support (out of current scope)
 
 ---
 

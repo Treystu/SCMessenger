@@ -3617,7 +3617,7 @@ dependencies = [
 
 [[package]]
 name = "scmessenger-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3647,7 +3647,7 @@ dependencies = [
 
 [[package]]
 name = "scmessenger-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3692,7 +3692,7 @@ dependencies = [
 
 [[package]]
 name = "scmessenger-mobile"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "scmessenger-core",
  "uniffi",
@@ -3700,7 +3700,7 @@ dependencies = [
 
 [[package]]
 name = "scmessenger-wasm"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "console_error_panic_hook",
  "futures",
