@@ -107,39 +107,39 @@ struct MeshDashboardView: View {
     }
 
     private func refreshPeersFromRepositoryAsync() async {
-        await Task.detached(priority: .userInitiated) {
-            let contacts: [Contact]
-            do {
-                contacts = try await self.repository.getContacts()
-            } catch {
-                contacts = []
+        let contacts: [Contact]
+        do {
+            contacts = try await repository.getContacts()
+        } catch {
+            contacts = []
+        }
+        
+        let contactsByPeerId = Dictionary(uniqueKeysWithValues: contacts.map { ($0.peerId, $0) })
+        var contactsByRoutePeerId: [String: Contact] = [:]
+        var contactsByPublicKey: [String: Contact] = [:]
+        var contactsByNickname: [String: Contact] = [:]
+
+        for contact in contacts {
+            let routePeerId = parseRoutingLibp2pPeerId(from: contact.notes)
+            if contactsByRoutePeerId[routePeerId] == nil {
+                contactsByRoutePeerId[routePeerId] = contact
             }
-                let contactsByPeerId = Dictionary(uniqueKeysWithValues: contacts.map { ($0.peerId, $0) })
-                var contactsByRoutePeerId: [String: Contact] = [:]
-                var contactsByPublicKey: [String: Contact] = [:]
-                var contactsByNickname: [String: Contact] = [:]
+            
+            let pk = contact.publicKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !pk.isEmpty {
+                contactsByPublicKey[pk] = contact
+            }
+            if let nn = contact.nickname?.trimmingCharacters(in: .whitespacesAndNewlines), !nn.isEmpty {
+                contactsByNickname[nn] = contact
+            }
+        }
 
-                contacts.forEach { contact in
-                if let routePeerId = await parseRoutingLibp2pPeerId(from: contact.notes) {
-                    if contactsByRoutePeerId[routePeerId] == nil {
-                        contactsByRoutePeerId[routePeerId] = contact
-                    }
-                }
-                let pk = contact.publicKey.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !pk.isEmpty {
-                    contactsByPublicKey[pk] = contact
-                }
-                if let nn = contact.nickname?.trimmingCharacters(in: .whitespacesAndNewlines), !nn.isEmpty {
-                    contactsByNickname[nn] = contact
-                }
-                }
+        var merged = peersByKey
+        let now = Date()
 
-                var merged = peersByKey
-                let now = Date()
-
-                for contact in contacts {
-                let isRelay = await repository.isKnownRelay(contact.peerId)
-                let routePeerId = await parseRoutingLibp2pPeerId(from: contact.notes)
+        for contact in contacts {
+            let isRelay = repository.isKnownRelay(contact.peerId)
+            let routePeerId = parseRoutingLibp2pPeerId(from: contact.notes)
 
             var existing = merged[contact.peerId]
             if existing == nil {
@@ -168,7 +168,7 @@ struct MeshDashboardView: View {
                 libp2pPeerId: routePeerId ?? existing?.libp2pPeerId,
                 blePeerId: existing?.blePeerId,
                 transport: existing?.transport ?? .unknown,
-                isOnline: await isRecent(contact.lastSeen) || await isRecentlyOnline(existing),
+                isOnline: isRecent(contact.lastSeen) || isRecentlyOnline(existing),
                 isRelay: isRelay,
                 isFull: classifyPeerAsFull(
                     peerId: contact.peerId,
@@ -177,69 +177,67 @@ struct MeshDashboardView: View {
                     localNickname: contact.localNickname,
                     isRelay: isRelay
                 ),
-                lastSeen: existing?.lastSeen ?? await dateFromEpoch(contact.lastSeen) ?? now
+                lastSeen: existing?.lastSeen ?? dateFromEpoch(contact.lastSeen) ?? now
             )
-            }
+        }
 
         let entries = try await repository.getDialableAddresses()
-            for entry in entries {
-                guard let routePeerId = entry.peerId?.trimmingCharacters(in: .whitespacesAndNewlines),
-                      !routePeerId.isEmpty else { continue }
+        for entry in entries {
+            guard let routePeerId = entry.peerId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !routePeerId.isEmpty else { continue }
 
-                let entryPublicKey = entry.publicKey?.trimmingCharacters(in: .whitespacesAndNewlines)
-                let entryNickname = entry.nickname?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let entryPublicKey = entry.publicKey?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let entryNickname = entry.nickname?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-                let matchedContact = contactsByPeerId[routePeerId] ??
-                                     contactsByRoutePeerId[routePeerId] ??
-                                     (entryPublicKey.flatMap { pk in pk.isEmpty ? nil : contactsByPublicKey[pk] }) ??
-                                     (entryNickname.flatMap { nn in nn.isEmpty ? nil : contactsByNickname[nn] })
+            let matchedContact = contactsByPeerId[routePeerId] ??
+                                 contactsByRoutePeerId[routePeerId] ??
+                                 (entryPublicKey.flatMap { pk in pk.isEmpty ? nil : contactsByPublicKey[pk] }) ??
+                                 (entryNickname.flatMap { nn in nn.isEmpty ? nil : contactsByNickname[nn] })
 
-                let canonicalPeerId = matchedContact?.peerId ?? routePeerId
-                let relay = await repository.isKnownRelay(routePeerId) || await repository.isKnownRelay(canonicalPeerId)
+            let canonicalPeerId = matchedContact?.peerId ?? routePeerId
+            let relay = repository.isKnownRelay(routePeerId) || repository.isKnownRelay(canonicalPeerId)
 
-                var existing = merged[canonicalPeerId]
-                if existing == nil, let pk = matchedContact?.publicKey ?? entryPublicKey, !pk.isEmpty {
-                    existing = merged.values.first(where: { $0.publicKey == pk })
-                    if let oldId = existing?.id, oldId != canonicalPeerId {
-                        merged.removeValue(forKey: oldId)
-                    }
+            var existing = merged[canonicalPeerId]
+            if existing == nil, let pk = matchedContact?.publicKey ?? entryPublicKey, !pk.isEmpty {
+                existing = merged.values.first(where: { $0.publicKey == pk })
+                if let oldId = existing?.id, oldId != canonicalPeerId {
+                    merged.removeValue(forKey: oldId)
                 }
-                if existing == nil, let nn = matchedContact?.nickname ?? entryNickname, !nn.isEmpty {
-                    existing = merged.values.first(where: { $0.nickname == nn })
-                    if let oldId = existing?.id, oldId != canonicalPeerId {
-                        merged.removeValue(forKey: oldId)
-                    }
+            }
+            if existing == nil, let nn = matchedContact?.nickname ?? entryNickname, !nn.isEmpty {
+                existing = merged.values.first(where: { $0.nickname == nn })
+                if let oldId = existing?.id, oldId != canonicalPeerId {
+                    merged.removeValue(forKey: oldId)
                 }
+            }
 
-                let lastSeenDate = await dateFromEpoch(entry.lastSeen) ?? existing?.lastSeen ?? now
+            let lastSeenDate = dateFromEpoch(entry.lastSeen) ?? existing?.lastSeen ?? now
 
-                merged[canonicalPeerId] = DashboardPeer(
-                    id: canonicalPeerId,
+            merged[canonicalPeerId] = DashboardPeer(
+                id: canonicalPeerId,
+                peerId: canonicalPeerId,
+                publicKey: matchedContact?.publicKey ?? entryPublicKey ?? existing?.publicKey,
+                nickname: matchedContact?.nickname ?? entryNickname ?? existing?.nickname,
+                localNickname: matchedContact?.localNickname ?? existing?.localNickname,
+                libp2pPeerId: routePeerId,
+                blePeerId: existing?.blePeerId,
+                transport: transportFromMultiaddr(entry.multiaddr),
+                isOnline: isRecent(entry.lastSeen) || isRecentlyOnline(existing),
+                isRelay: relay,
+                isFull: classifyPeerAsFull(
                     peerId: canonicalPeerId,
                     publicKey: matchedContact?.publicKey ?? entryPublicKey ?? existing?.publicKey,
                     nickname: matchedContact?.nickname ?? entryNickname ?? existing?.nickname,
                     localNickname: matchedContact?.localNickname ?? existing?.localNickname,
-                    libp2pPeerId: routePeerId,
-                    blePeerId: existing?.blePeerId,
-                    transport: transportFromMultiaddr(entry.multiaddr),
-                    isOnline: await isRecent(entry.lastSeen) || await isRecentlyOnline(existing),
-                    isRelay: relay,
-                    isFull: classifyPeerAsFull(
-                        peerId: canonicalPeerId,
-                        publicKey: matchedContact?.publicKey ?? entryPublicKey ?? existing?.publicKey,
-                        nickname: matchedContact?.nickname ?? entryNickname ?? existing?.nickname,
-                        localNickname: matchedContact?.localNickname ?? existing?.localNickname,
-                        isRelay: relay
-                    ),
-                    lastSeen: lastSeenDate
-                )
-                }
-            }
+                    isRelay: relay
+                ),
+                lastSeen: lastSeenDate
+            )
+        }
 
-            let deduped = await self.deduplicatePeersByIdentityAndAliases(Array(merged.values))
-            await MainActor.run {
-                self.peersByKey = deduped
-            }
+        let deduped = deduplicatePeersByIdentityAndAliases(Array(merged.values))
+        await MainActor.run {
+            self.peersByKey = deduped
         }
     }
 
@@ -723,11 +721,5 @@ struct RelayStatsSection: View {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .binary
         return formatter.string(fromByteCount: Int64(bytes))
-    }
-}
-
-private extension String {
-    var nilIfEmpty: String? {
-        isEmpty ? nil : self
     }
 }
