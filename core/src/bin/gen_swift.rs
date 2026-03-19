@@ -67,6 +67,22 @@ fn main() {
                 "public static func lower(_ value: SwiftType) -> RustBuffer",
                 "public nonisolated(unsafe) static func lower(_ value: SwiftType) -> RustBuffer",
             ),
+            (
+                "FfiConverterTypeIronCoreError.lift",
+                "try FfiConverterTypeIronCoreError.lift",
+            ),
+            (
+                "try FfiConverterTypeIronCoreError.lift",
+                "try rustCallWithError(FfiConverterTypeIronCoreError.lift",
+            ),
+            (
+                "rustCallWithError(FfiConverterTypeIronCoreError.lift",
+                "rustCallWithError { try FfiConverterTypeIronCoreError.lift",
+            ),
+            (
+                "try rustCallWithError { try FfiConverterTypeIronCoreError.lift",
+                "try rustCallWithError(FfiConverterTypeIronCoreError.lift",
+            ),
         ];
 
         for (from, to) in replacements {

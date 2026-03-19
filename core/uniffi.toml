@@ -10,3 +10,5 @@ android_cleaner = true
 [bindings.swift]
 module_name = "SCMessengerCore"
 ffi_module_name = "scmessenger_core"
+# Enable Swift concurrency support
+swift_concurrency = true
