@@ -3068,8 +3068,19 @@ open class MeshRepository(private val context: Context) {
 
     // Identity Management
     fun isIdentityInitialized(): Boolean {
-        ensureServiceInitialized()
-        return ironCore?.getIdentityInfo()?.initialized == true
+        // Check if we have an identity backup first (fast path)
+        if (identityBackupPrefs.contains(IDENTITY_BACKUP_KEY)) {
+            return true
+        }
+        
+        // Only start service if we already have it running or explicitly need it
+        if (meshService?.getState() == uniffi.api.ServiceState.RUNNING && ironCore != null) {
+            return ironCore?.getIdentityInfo()?.initialized == true
+        }
+        
+        // If service is not running, check if identity files exist on disk
+        val identityFile = File(storagePath, "identity.db")
+        return identityFile.exists()
     }
 
     fun hasRequiredRuntimePermissions(): Boolean = hasAllPermissions(Permissions.required)

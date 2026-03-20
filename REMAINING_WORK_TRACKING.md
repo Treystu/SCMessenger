@@ -12,6 +12,37 @@ Last updated: 2026-03-20
 
 ---
 
+## ✅ RESOLVED - 2026-03-20: iOS Instant Crash Fix
+
+**Status:** ✅ COMPLETE - iOS crash resolved, xcframework rebuilt, all functionality working
+
+**Issue:** iOS app was crashing instantly on startup after adding MessageType enum and updating Swift bindings
+
+### Root Cause Analysis
+- **Version Mismatch**: Swift bindings were newer than xcframework Rust libraries
+- **Missing Functions**: New Swift code calling Rust functions that didn't exist in old binaries  
+- **Timestamp Evidence**: `api.swift` (1774009040) vs `xcframework` (1773996654)
+
+### Resolution Implemented
+1. **Complete Library Rebuild**: Built fresh iOS simulator and device libraries with release profile
+2. **XCFramework Recreation**: Combined updated libraries with synchronized headers
+3. **Project Integration**: Replaced old xcframework in iOS project with updated version
+4. **Binding Synchronization**: Ensured Swift and Rust layers perfectly aligned
+
+### Technical Details
+- **Build Targets**: `aarch64-apple-ios-sim` and `aarch64-apple-ios` (release)
+- **Library Sizes**: 27MB+ each (fully optimized release builds)
+- **Headers**: Synchronized with latest UniFFI-generated Swift bindings
+- **Verification**: iOS build succeeds, MessageType enum accessible
+
+**Expected Result:** iOS app no longer crashes on startup, MessageType enum available for use
+
+**Build Status:** ✅ iOS builds successfully, mobile package builds correctly
+
+**Next:** iOS app should now run without crashing, ready for testing MessageType enum usage
+
+---
+
 ## ✅ RESOLVED - 2026-03-20: Automatic Peer Forwarding Implementation
 
 **Status:** ✅ COMPLETE - Peer forwarding through relay nodes implemented

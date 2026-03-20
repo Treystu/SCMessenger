@@ -860,7 +860,7 @@ open class ContactManager:
     }
 public convenience init(storagePath: String)throws  {
     let pointer =
-        try rustCallWithError(try FfiConverterTypeIronCoreError.lift) {
+        try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_constructor_contactmanager_new(
         FfiConverterString.lower(storagePath),$0
     )
@@ -879,7 +879,7 @@ public convenience init(storagePath: String)throws  {
     
 
     
-open func add(contact: Contact)throws  {try rustCallWithError { try FfiConverterTypeIronCoreError.lift) {
+open func add(contact: Contact)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_contactmanager_add(self.uniffiClonePointer(),
         FfiConverterTypeContact.lower(contact),$0
     )
@@ -4574,6 +4574,64 @@ public func FfiConverterTypeMessageDirection_lower(_ value: MessageDirection) ->
 
 
 extension MessageDirection: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Type of message content
+ */
+
+public enum MessageType {
+    
+    case text
+    case receipt
+}
+
+
+public struct FfiConverterTypeMessageType: FfiConverterRustBuffer {
+    typealias SwiftType = MessageType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MessageType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .text
+        
+        case 2: return .receipt
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MessageType, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .text:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .receipt:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+public func FfiConverterTypeMessageType_lift(_ buf: RustBuffer) throws -> MessageType {
+    return try FfiConverterTypeMessageType.lift(buf)
+}
+
+public func FfiConverterTypeMessageType_lower(_ value: MessageType) -> RustBuffer {
+    return FfiConverterTypeMessageType.lower(value)
+}
+
+
+
+extension MessageType: Equatable, Hashable {}
 
 
 
