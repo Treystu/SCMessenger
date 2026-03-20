@@ -33,7 +33,7 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-uniffi_bindgen = { version = "0.27.3", optional = true, features = ["clap"] }
+uniffi_bindgen = { version = "0.27.3", optional = true }
 camino = { version = "1", optional = true }
 
 # Additional dependencies

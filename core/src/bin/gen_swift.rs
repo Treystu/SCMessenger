@@ -2,7 +2,7 @@
 fn main() {
     use camino::Utf8Path;
     use std::fs;
-    use uniffi::SwiftBindingGenerator;
+    use uniffi_bindgen::bindings::swift::gen_swift::SwiftBindingGenerator;
 
     // Use CARGO_MANIFEST_DIR to resolve paths correctly regardless of working directory
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
@@ -66,22 +66,6 @@ fn main() {
             (
                 "public static func lower(_ value: SwiftType) -> RustBuffer",
                 "public nonisolated(unsafe) static func lower(_ value: SwiftType) -> RustBuffer",
-            ),
-            (
-                "FfiConverterTypeIronCoreError.lift",
-                "try FfiConverterTypeIronCoreError.lift",
-            ),
-            (
-                "try FfiConverterTypeIronCoreError.lift",
-                "try rustCallWithError(FfiConverterTypeIronCoreError.lift",
-            ),
-            (
-                "rustCallWithError(FfiConverterTypeIronCoreError.lift",
-                "rustCallWithError { try FfiConverterTypeIronCoreError.lift",
-            ),
-            (
-                "try rustCallWithError { try FfiConverterTypeIronCoreError.lift",
-                "try rustCallWithError(FfiConverterTypeIronCoreError.lift",
             ),
         ];
 

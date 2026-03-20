@@ -2,7 +2,7 @@
 fn main() {
     use camino::Utf8Path;
     use std::fs;
-    use uniffi::KotlinBindingGenerator;
+    use uniffi_bindgen::bindings::kotlin::gen_kotlin::KotlinBindingGenerator;
 
     // Use CARGO_MANIFEST_DIR to resolve paths correctly regardless of working directory
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());

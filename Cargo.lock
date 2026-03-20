@@ -4592,7 +4592,6 @@ dependencies = [
  "askama 0.12.1",
  "camino",
  "cargo_metadata 0.15.4",
- "clap",
  "fs-err",
  "glob",
  "goblin",
