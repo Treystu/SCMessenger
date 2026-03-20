@@ -45,6 +45,12 @@ final class BLECentralManager: NSObject {
     // Characteristics cache (names match Android BleGattServer)
     private var messageCharacteristics: [UUID: CBCharacteristic] = [:] // Write: central → peripheral
     private var syncCharacteristics: [UUID: CBCharacteristic] = [:]    // Notify: peripheral → central
+    
+    // Connection state monitoring and auto-reconnection
+    private var connectionRetries: [UUID: Int] = [:]
+    private var reconnectionTimers: [UUID: Timer] = [:]
+    private let maxReconnectionAttempts = 3
+    private let reconnectionDelay: TimeInterval = 2.0
 
     init(meshRepository: MeshRepository) {
         self.meshRepository = meshRepository
@@ -103,13 +109,20 @@ final class BLECentralManager: NSObject {
         guard let peripheral = connectedPeripherals[peripheralId] else {
             if let discovered = discoveredPeripherals[peripheralId] {
                 logger.warning("Cannot send: peripheral \(peripheralId) not connected, reconnecting")
-                centralManager.connect(discovered, options: nil)
+                attemptReconnection(to: discovered)
                 appendRepositoryDiagnostic("ble_central_reconnect_requested id=\(peripheralId)")
             } else {
                 logger.error("Cannot send: peripheral \(peripheralId) not connected and not discovered")
             }
             return false
         }
+        
+        // Validate connection state before proceeding
+        guard validateConnectionState(for: peripheral) else {
+            attemptReconnection(to: peripheral)
+            return false
+        }
+        
         guard messageCharacteristics[peripheralId] != nil else {
             logger.warning("Cannot send: Message characteristic missing for \(peripheralId), rediscovering")
             peripheral.discoverServices([MeshBLEConstants.serviceUUID])
@@ -138,6 +151,80 @@ final class BLECentralManager: NSObject {
         Task { @MainActor in
             meshRepository?.appendDiagnostic(message)
         }
+    }
+    
+    // MARK: - Connection State Monitoring and Auto-Reconnection
+    
+    private func attemptReconnection(to peripheral: CBPeripheral) {
+        let peripheralId = peripheral.identifier
+        
+        // Cancel any existing reconnection timer
+        reconnectionTimers[peripheralId]?.invalidate()
+        reconnectionTimers.removeValue(forKey: peripheralId)
+        
+        // Increment retry count
+        let retryCount = (connectionRetries[peripheralId] ?? 0) + 1
+        connectionRetries[peripheralId] = retryCount
+        
+        if retryCount > maxReconnectionAttempts {
+            logger.warning("Max reconnection attempts (\\(maxReconnectionAttempts)) reached for \\(peripheralId), giving up")
+            connectionRetries.removeValue(forKey: peripheralId)
+            return
+        }
+        
+        logger.info("Attempting reconnection \\(retryCount)/\\(maxReconnectionAttempts) to \\(peripheralId)")
+        appendRepositoryDiagnostic("ble_central_reconnect_attempt attempt=\\$retryCount id=\\$peripheralId")
+        
+        // Attempt immediate connection
+        centralManager.connect(peripheral, options: nil)
+        
+        // Schedule next retry if this fails
+        scheduleReconnectionRetry(for: peripheral)
+    }
+    
+    private func scheduleReconnectionRetry(for peripheral: CBPeripheral) {
+        let peripheralId = peripheral.identifier
+        
+        // Cancel any existing timer first
+        reconnectionTimers[peripheralId]?.invalidate()
+        
+        // Schedule retry with exponential backoff
+        let retryDelay = reconnectionDelay * pow(2.0, Double(connectionRetries[peripheralId] ?? 1))
+        
+        let timer = Timer.scheduledTimer(withTimeInterval: retryDelay, repeats: false) { [weak self] _ in
+            guard let self = self else { return }
+            
+            // Check if we're still not connected
+            if self.connectedPeripherals[peripheralId] == nil {
+                let currentRetryCount = self.connectionRetries[peripheralId] ?? 0
+                if currentRetryCount <= self.maxReconnectionAttempts {
+                    self.logger.info("Reconnection retry \\(currentRetryCount) for \\(peripheralId)")
+                    self.centralManager.connect(peripheral, options: nil)
+                    self.scheduleReconnectionRetry(for: peripheral) // Schedule next retry if needed
+                }
+            } else {
+                // Connected successfully, clean up
+                self.cleanupReconnectionState(for: peripheralId)
+            }
+        }
+        
+        reconnectionTimers[peripheralId] = timer
+        logger.debug("Scheduled reconnection retry in \\(retryDelay)s for \\(peripheralId)")
+    }
+    
+    private func cleanupReconnectionState(for peripheralId: UUID) {
+        reconnectionTimers[peripheralId]?.invalidate()
+        reconnectionTimers.removeValue(forKey: peripheralId)
+        connectionRetries.removeValue(forKey: peripheralId)
+        logger.debug("Cleaned up reconnection state for \\(peripheralId)")
+    }
+    
+    private func validateConnectionState(for peripheral: CBPeripheral) -> Bool {
+        if peripheral.state != .connected {
+            logger.warning("Peripheral \\(peripheral.identifier) not in connected state: \\(peripheral.state.rawValue)")
+            return false
+        }
+        return true
     }
 
     private func enqueueFragment(_ fragment: Data, for peripheralId: UUID) {
@@ -310,6 +397,17 @@ extension BLECentralManager: CBCentralManagerDelegate {
         // re-discovery and reconnection on the next scan result — without this,
         // the 5-second dedup window prevents reconnecting after a brief drop.
         peerCache.removeValue(forKey: peripheral.identifier)
+        
+        // Attempt automatic reconnection unless it was intentional disconnection
+        if error != nil || !wasIntentionalDisconnect(peripheral: peripheral) {
+            attemptReconnection(to: peripheral)
+        }
+    }
+    
+    private func wasIntentionalDisconnect(peripheral: CBPeripheral) -> Bool {
+        // In a real implementation, you would track intentional disconnections
+        // For now, we'll assume all disconnections with errors are unintentional
+        return false
     }
 
     func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
@@ -482,5 +580,128 @@ extension BLECentralManager: CBPeripheralDelegate {
             pendingWrites[peripheralId]?.removeFirst()
             enqueueFragment(next, for: peripheralId)
         }
+    }
+
+    func validateConnection(to peripheralId: UUID) -> Bool {
+        guard let peripheral = connectedPeripherals[peripheralId] else {
+            logger.warning("BLE connection validation failed: peripheral not found for id=\\(peripheralId)")
+            return false
+        }
+
+        // Check if peripheral is still connected
+        if peripheral.state != .connected {
+            logger.warning("BLE connection validation failed: peripheral not in connected state (state=\\(peripheral.state.rawValue))")
+            return false
+        }
+
+        // Check if we have the required characteristics
+        guard let messageChar = messageCharacteristics[peripheralId],
+              let syncChar = syncCharacteristics[peripheralId] else {
+            logger.warning("BLE connection validation failed: missing required characteristics")
+            return false
+        }
+
+        // Attempt to read a characteristic to validate the connection
+        do {
+            let readSuccess = try readCharacteristic(peripheral, characteristic: messageChar)
+            if !readSuccess {
+                logger.warning("BLE connection validation failed: characteristic read failed")
+                return false
+            }
+            
+            logger.debug("BLE connection validation successful for \\(peripheralId)")
+            return true
+        } catch {
+            logger.error("BLE connection validation failed: \\(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private func readCharacteristic(_ peripheral: CBPeripheral, characteristic: CBCharacteristic) throws -> Bool {
+        // Create a semaphore to wait for the read to complete
+        let semaphore = DispatchSemaphore(value: 0)
+        var readSuccess = false
+        var readError: Error? = nil
+
+        // Set up a temporary callback
+        let originalDelegate = peripheral.delegate
+        
+        // This is a simplified approach - in a real implementation, you'd want to
+        // use a more robust mechanism for handling async callbacks
+        DispatchQueue.main.async {
+            peripheral.readValue(for: characteristic)
+        }
+
+        // Wait for the read to complete (with timeout)
+        let timeoutResult = semaphore.wait(timeout: .now() + .seconds(5))
+        
+        if timeoutResult == .timedOut {
+            logger.warning("Characteristic read timed out")
+            return false
+        }
+
+        return readSuccess
+    }
+    
+    // MARK: - Enhanced Error Handling
+    
+    private func handleBleError(_ error: Error?, operation: String, peripheralId: UUID? = nil) {
+        var errorMessage = "BLE error in \\(operation)"
+        if let peripheralId = peripheralId {
+            errorMessage += " for peripheral \\(peripheralId)"
+        }
+        
+        if let error = error {
+            errorMessage += ": \\(error.localizedDescription)"
+            
+            // Handle specific BLE error codes
+            let nsError = error as NSError
+            switch nsError.code {
+            case CBError.connectionFailed.rawValue:
+                errorMessage += " (Connection Failed)"
+                if let peripheralId = peripheralId, let peripheral = discoveredPeripherals[peripheralId] {
+                    attemptReconnection(to: peripheral)
+                }
+            
+            case CBError.peripheralDisconnected.rawValue:
+                errorMessage += " (Peripheral Disconnected)"
+                // Disconnection is handled by didDisconnectPeripheral
+                
+            case CBError.connectionTimeout.rawValue:
+                errorMessage += " (Connection Timeout)"
+                if let peripheralId = peripheralId, let peripheral = discoveredPeripherals[peripheralId] {
+                    attemptReconnection(to: peripheral)
+                }
+                
+            case CBError.operationCancelled.rawValue:
+                errorMessage += " (Operation Cancelled)"
+                // This is expected during cleanup
+                
+            default:
+                errorMessage += " (Code: \\(nsError.code))"
+                
+                // For unknown errors, attempt reconnection if it's a connection-related operation
+                if operation.contains("connect") || operation.contains("send") {
+                    if let peripheralId = peripheralId, let peripheral = discoveredPeripherals[peripheralId] {
+                        attemptReconnection(to: peripheral)
+                    }
+                }
+            }
+        } else {
+            errorMessage += " (unknown error)"
+        }
+        
+        logger.error("Error: {\(errorMessage)}")
+        appendRepositoryDiagnostic("ble_error operation=\\$operation error=\\$errorMessage")
+    }
+    
+    private func logBleWarning(_ message: String, operation: String, peripheralId: UUID? = nil) {
+        var fullMessage = "BLE warning in \\(operation): \\(message)"
+        if let peripheralId = peripheralId {
+            fullMessage += " (peripheral: \\(peripheralId))"
+        }
+        
+        logger.warning("Warning: {\(fullMessage)}")
+        appendRepositoryDiagnostic("ble_warning operation=\\$operation message=\\$message")
     }
 }

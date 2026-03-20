@@ -120,6 +120,7 @@ Custom modes, rules, and skills for optimized agent workflows:
 - [NAT Traversal Guide](docs/NAT_TRAVERSAL_GUIDE.md)
 - [Scripts Operations Guide](scripts/README.md)
 - [Log Mincing / Exploratory Analysis](scripts/mince_logs.py)
+- **[Log Correlation & Validation Agent](tmp/session_logs/README.md) ⚡ NEW** - Comprehensive log analysis and documentation synchronization validator
 
 ## Mixed and Historical Context
 

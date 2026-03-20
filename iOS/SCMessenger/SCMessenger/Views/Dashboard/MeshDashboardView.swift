@@ -109,7 +109,7 @@ struct MeshDashboardView: View {
     private func refreshPeersFromRepositoryAsync() async {
         let contacts: [Contact]
         do {
-            contacts = try await repository.getContacts()
+            contacts = try repository.getContacts()
         } catch {
             contacts = []
         }
@@ -120,9 +120,10 @@ struct MeshDashboardView: View {
         var contactsByNickname: [String: Contact] = [:]
 
         for contact in contacts {
-            let routePeerId = parseRoutingLibp2pPeerId(from: contact.notes)
-            if contactsByRoutePeerId[routePeerId] == nil {
-                contactsByRoutePeerId[routePeerId] = contact
+            if let routePeerId = parseRoutingLibp2pPeerId(from: contact.notes) {
+                if contactsByRoutePeerId[routePeerId] == nil {
+                    contactsByRoutePeerId[routePeerId] = contact
+                }
             }
             
             let pk = contact.publicKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -181,7 +182,13 @@ struct MeshDashboardView: View {
             )
         }
 
-        let entries = try await repository.getDialableAddresses()
+        let entries: [LedgerEntry]
+        do {
+            entries = try repository.getDialableAddresses()
+        } catch {
+            entries = []
+        }
+        
         for entry in entries {
             guard let routePeerId = entry.peerId?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !routePeerId.isEmpty else { continue }
@@ -558,6 +565,7 @@ struct ServiceStatusCard: View {
         return "\(hours)h \(minutes)m"
     }
 }
+}
 
 struct DiscoveredNodesSection: View {
     let peers: [DashboardPeer]
@@ -721,5 +729,11 @@ struct RelayStatsSection: View {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .binary
         return formatter.string(fromByteCount: Int64(bytes))
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        return isEmpty ? nil : self
     }
 }

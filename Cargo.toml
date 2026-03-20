@@ -6,7 +6,7 @@ members = ["core", "mobile", "cli", "wasm"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.9"
+version = "0.2.1"
 edition = "2021"
 license = "MIT"
 authors = ["SC Team"]
@@ -61,7 +61,7 @@ zeroize = { version = "1.6", features = ["derive"] }
 sled = "0.34"
 
 # UniFFI for mobile bindings
-uniffi = { version = "0.27", features = ["cli"] }
+uniffi = { version = "0.31", features = ["cli"] }
 
 # WASM bindings
 wasm-bindgen = "0.2"

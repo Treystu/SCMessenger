@@ -813,53 +813,6 @@ def main():
         print(f"\n[ERROR] Unexpected error: {e}")
         extractor.cleanup()
         sys.exit(1)
-            
-        extractor.verify_app_running()  # Warning only, not fatal
-        
-        # Phase 2.1: Live Logcat Stream
-        logcat_file = extractor.start_live_logcat_stream()
-        time.sleep(1)  # Brief delay for subprocess to start
-        
-        if not extractor.verify_live_stream(logcat_file):
-            print("\n[WARNING] Stream verification uncertain, but continuing...")
-            
-        # Phase 2.2: Diagnostic Snapshots
-        pulled_files = extractor.pull_diagnostic_snapshots()
-        
-        if not extractor.verify_snapshots(pulled_files):
-            print("\n[WARNING] Snapshot verification failed")
-            
-        # Keep logcat running for additional capture time
-        print("\n[Logcat] Continuing to capture for 10 more seconds...")
-        time.sleep(10)
-        
-        # Generate summary
-        extractor.generate_summary(pulled_files)
-        
-        print("\n[Success] ✓ Log extraction completed successfully")
-        print(f"[Info] Logcat stream is still running in background")
-        print(f"[Info] Press Ctrl+C to stop, or let it continue capturing")
-        
-        # Keep running until user interrupts
-        print("\n[Monitoring] Live capture active... (Ctrl+C to stop)")
-        while True:
-            time.sleep(5)
-            if extractor.logcat_process.poll() is not None:
-                print("\n[Info] Logcat process ended")
-                break
-                
-    except KeyboardInterrupt:
-        print("\n\n[Interrupt] Received Ctrl+C, shutting down...")
-    except Exception as e:
-        print(f"\n[ERROR] Unexpected error: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
-    finally:
-        if logcat_file:
-            logcat_file.close()
-        extractor.cleanup()
-        print("\n[Cleanup] ✓ All processes terminated")
         
 if __name__ == "__main__":
     main()

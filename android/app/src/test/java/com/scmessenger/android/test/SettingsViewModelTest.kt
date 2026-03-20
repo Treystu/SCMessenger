@@ -42,7 +42,14 @@ class SettingsViewModelTest {
         onionRouting = false,
         coverTrafficEnabled = false,
         messagePaddingEnabled = false,
-        timingObfuscationEnabled = false
+        timingObfuscationEnabled = false,
+        notificationsEnabled = true,
+        notifyDmEnabled = true,
+        notifyDmRequestEnabled = true,
+        notifyDmInForeground = true,
+        notifyDmRequestInForeground = true,
+        soundEnabled = true,
+        badgeEnabled = true
     )
 
     @Before

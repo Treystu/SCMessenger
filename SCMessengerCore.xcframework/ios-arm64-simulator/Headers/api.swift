@@ -860,7 +860,7 @@ open class ContactManager:
     }
 public convenience init(storagePath: String)throws  {
     let pointer =
-        try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+        try rustCallWithError(try FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_constructor_contactmanager_new(
         FfiConverterString.lower(storagePath),$0
     )
@@ -879,7 +879,7 @@ public convenience init(storagePath: String)throws  {
     
 
     
-open func add(contact: Contact)throws  {try rustCallWithError(FfiConverterTypeIronCoreError.lift) {
+open func add(contact: Contact)throws  {try rustCallWithError { try FfiConverterTypeIronCoreError.lift) {
     uniffi_scmessenger_core_fn_method_contactmanager_add(self.uniffiClonePointer(),
         FfiConverterTypeContact.lower(contact),$0
     )

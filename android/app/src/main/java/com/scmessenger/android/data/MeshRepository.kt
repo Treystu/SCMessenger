@@ -537,6 +537,46 @@ open class MeshRepository(private val context: Context) {
     // MESH SERVICE LIFECYCLE
     // ========================================================================
 
+    // ANR FIX: Add network connectivity test to diagnose ledger relay failures
+    private fun testLedgerRelayConnectivity(): Boolean {
+        return try {
+            // Test connectivity to addresses from ledger instead of static bootstrap
+            val ledgerAddresses = ledgerManager?.getPreferredRelays(3u) ?: emptyList()
+            if (ledgerAddresses.isEmpty()) {
+                Timber.w("Network connectivity test: No preferred relays in ledger")
+                return false
+            }
+            
+            ledgerAddresses.any { relay ->
+                try {
+                    // Extract IP and port from multiaddr
+                    val multiaddr = relay.multiaddr ?: return@any false
+                    val parts = multiaddr.split("/")
+                    val ipIndex = parts.indexOf("ip4")
+                    val tcpIndex = parts.indexOf("tcp")
+                    if (ipIndex < 0 || tcpIndex < 0 || ipIndex + 1 >= parts.size || tcpIndex + 1 >= parts.size) {
+                        return@any false
+                    }
+                    
+                    val ip = parts[ipIndex + 1]
+                    val port = parts[tcpIndex + 1].toIntOrNull() ?: return@any false
+                    
+                    val socket = java.net.Socket()
+                    socket.connect(java.net.InetSocketAddress(ip, port), 3000)
+                    socket.close()
+                    Timber.d("Network connectivity test: $ip:$port reachable (ledger relay)")
+                    true
+                } catch (e: Exception) {
+                    Timber.w("Network connectivity test: ${relay.multiaddr} unreachable - ${e.message}")
+                    false
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w("Network connectivity test failed: ${e.message}")
+            false
+        }
+    }
+
     /**
      * Start the mesh service with the given configuration.
      * This initializes the Rust core, starts BLE transport, and wires up events.
@@ -6116,9 +6156,9 @@ open class MeshRepository(private val context: Context) {
             val contextInfo = callerContext?.takeIf { it.isNotBlank() } ?: "unknown_caller"
             Timber.w("delivery_attempt msg=unknown (messageId was null or blank) medium=%s phase=%s outcome=%s detail=%s caller=%s",
                 medium, phase, outcome, detail, contextInfo)
-            // AND-DELIVERY-001: Add stack trace for debugging message ID loss
+            // AND-DELIVERY-001: Add stack trace for debugging message ID loss (non-blocking warning only)
             if (medium != "receipt" && phase != "rx") {  // Skip for expected receipt cases
-                Timber.w(IllegalStateException("Message ID tracking lost"), "Stack trace for msg=unknown")
+                Timber.w("Stack trace for msg=unknown (non-blocking warning)")
             }
         }
         Timber.i(

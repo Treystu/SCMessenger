@@ -32,6 +32,9 @@ class BleAdvertiser(private val context: Context) {
 
     private var isAdvertising = false
     private var currentIdentityData: ByteArray? = null
+    
+    // ANR FIX: Add failure counter for exponential backoff
+    private var advertiseFailureCount = 0
 
     // Rotation management
     private var rotationIntervalMs: Long = 0L  // 0 = no rotation
@@ -46,11 +49,47 @@ class BleAdvertiser(private val context: Context) {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
             Timber.i("BLE Advertising started successfully")
             isAdvertising = true
+            // ANR FIX: Reset failure counter on success
+            advertiseFailureCount = 0
         }
 
         override fun onStartFailure(errorCode: Int) {
             Timber.e("BLE Advertising failed with error: $errorCode")
             isAdvertising = false
+            
+            // ANR FIX: Implement exponential backoff for advertising failures
+            advertiseFailureCount++
+            val backoffMs = minOf(1000L * (1L shl advertiseFailureCount), 30000L) // Cap at 30s
+            
+            when (errorCode) {
+                ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> {
+                    Timber.w("BLE advertising failed: Too many advertisers, will retry in ${backoffMs}ms")
+                }
+                ADVERTISE_FAILED_ALREADY_STARTED -> {
+                    Timber.w("BLE advertising failed: Already started, stopping first")
+                    stopAdvertising()
+                    return
+                }
+                ADVERTISE_FAILED_DATA_TOO_LARGE -> {
+                    Timber.w("BLE advertising failed: Data too large, falling back to GATT-only mode")
+                    return // Don't retry for data size errors
+                }
+                ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> {
+                    Timber.w("BLE advertising failed: Feature unsupported on this device")
+                    return // Don't retry for unsupported features
+                }
+                else -> {
+                    Timber.w("BLE advertising failed: Error $errorCode, will retry in ${backoffMs}ms")
+                }
+            }
+            
+            // Schedule retry after backoff delay
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                if (!isAdvertising && advertiseFailureCount <= 5) { // Max 5 retries
+                    Timber.d("Retrying BLE advertising (attempt ${advertiseFailureCount + 1})")
+                    startAdvertising()
+                }
+            }, backoffMs)
         }
     }
 

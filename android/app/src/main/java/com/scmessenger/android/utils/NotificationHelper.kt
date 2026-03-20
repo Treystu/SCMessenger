@@ -48,6 +48,16 @@ object NotificationHelper {
     // Notification IDs
     const val NOTIFICATION_ID_FOREGROUND_SERVICE = 1001
     private const val NOTIFICATION_ID_MESSAGE_BASE = 2000
+    
+    // Notification tracking for diagnostics
+    private val notificationStats = mutableMapOf<String, Int>(
+        "total" to 0,
+        "dm" to 0,
+        "dm_request" to 0,
+        "suppressed_foreground" to 0,
+        "suppressed_dnd" to 0,
+        "suppressed_settings" to 0
+    )
     private const val NOTIFICATION_ID_REQUEST_BASE = 2500
     private const val NOTIFICATION_ID_MESH_STATUS = 3000
     private const val NOTIFICATION_ID_PEER_EVENT = 4000
@@ -220,20 +230,35 @@ object NotificationHelper {
         activeConversationId: String? = null,
         explicitDmRequest: Boolean? = null
     ) {
+        // Track total notification attempt
+        trackNotificationEvent("total")
+        
+        // Log notification attempt with classification details
+        Timber.i("Processing notification - peerId=$peerId, messageId=$messageId, isKnownContact=$isKnownContact, hasExistingConversation=$hasExistingConversation, explicitDmRequest=$explicitDmRequest, appInForeground=$appInForeground")
+
         // Check global notifications enabled
         if (!notificationsEnabled) {
-            Timber.d("Notifications disabled, skipping")
+            trackNotificationEvent("suppressed_settings")
+            Timber.w("Notifications disabled globally, skipping notification for peerId=$peerId")
             return
         }
 
         // Check DND
         if (isDndEnabled(context)) {
-            Timber.d("DND enabled, skipping notification")
+            trackNotificationEvent("suppressed_dnd")
+            Timber.w("DND enabled, skipping notification for peerId=$peerId")
             return
         }
 
         // WS14: Classify as DM or DM Request
         val isDmRequest = classifyAsDmRequest(isKnownContact, hasExistingConversation, explicitDmRequest)
+        Timber.i("Notification classified as ${if (isDmRequest) "DM_REQUEST" else "DM"} for peerId=$peerId")
+        
+        if (isDmRequest) {
+            trackNotificationEvent("dm_request")
+        } else {
+            trackNotificationEvent("dm")
+        }
         
         // Check per-kind settings
         if (isDmRequest && !notifyDmRequestEnabled) {
@@ -252,7 +277,8 @@ object NotificationHelper {
         if (isActiveConversation) {
             val allowForeground = if (isDmRequest) notifyDmRequestInForeground else notifyDmInForeground
             if (!allowForeground) {
-                Timber.d("Foreground conversation active, suppressing notification")
+                trackNotificationEvent("suppressed_foreground")
+                Timber.w("Foreground conversation active, suppressing notification for peerId=$peerId (DM=${!isDmRequest}, DM_REQUEST=$isDmRequest)")
                 return
             }
         }
@@ -398,9 +424,10 @@ object NotificationHelper {
             NOTIFICATION_ID_MESSAGE_BASE + peerId.hashCode()
         }
         try {
+            Timber.i("Displaying notification - peerId=$peerId, notificationId=$notificationId, type=${if (isDmRequest) "DM_REQUEST" else "DM"}")
             NotificationManagerCompat.from(context).notify(notificationId, notification)
         } catch (e: SecurityException) {
-            Timber.e(e, "Security exception while posting message notification")
+            Timber.e(e, "Security exception while posting message notification for peerId=$peerId")
             return
         }
 
@@ -577,6 +604,29 @@ object NotificationHelper {
     private fun isDndEnabled(context: Context): Boolean {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         return notificationManager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
+    }
+    
+    /**
+     * Track notification event for diagnostics
+     */
+    private fun trackNotificationEvent(type: String) {
+        notificationStats[type] = (notificationStats[type] ?: 0) + 1
+        Timber.d("Notification event tracked: $type (total: ${notificationStats[type]})")
+    }
+    
+    /**
+     * Get notification statistics summary
+     */
+    fun getNotificationStats(): String {
+        return notificationStats.entries.joinToString(", ") { (key, value) -> "$key=$value" }
+    }
+    
+    /**
+     * Reset notification statistics
+     */
+    fun resetNotificationStats() {
+        notificationStats.keys.forEach { notificationStats[it] = 0 }
+        Timber.d("Notification statistics reset")
     }
 
     private fun hasNotificationPermission(context: Context): Boolean {

@@ -15,7 +15,7 @@ buildscript {
         
         // Application
         versionCode = 7
-        versionName = '0.1.9'
+        versionName = '0.2.1'
     }
     
     repositories {

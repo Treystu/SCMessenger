@@ -45,6 +45,12 @@ final class BLEPeripheralManager: NSObject {
     // Reassembly buffers per central
     private var reassemblyBuffers: [UUID: [Int: Data]] = [:]
     private var expectedFragments: [UUID: Int] = [:]
+    
+    // Connection state monitoring and auto-reconnection
+    private var connectionRetries: [UUID: Int] = [:]
+    private var reconnectionTimers: [UUID: Timer] = [:]
+    private let maxReconnectionAttempts = 3
+    private let reconnectionDelay: TimeInterval = 2.0
 
     init(meshRepository: MeshRepository) {
         self.meshRepository = meshRepository
@@ -167,6 +173,101 @@ final class BLEPeripheralManager: NSObject {
             meshRepository?.appendDiagnostic(message)
         }
     }
+    
+    // MARK: - Connection State Monitoring and Auto-Reconnection
+    
+    private func attemptReconnection(to central: CBCentral) {
+        let centralId = central.identifier
+        
+        // Cancel any existing reconnection timer
+        reconnectionTimers[centralId]?.invalidate()
+        reconnectionTimers.removeValue(forKey: centralId)
+        
+        // Increment retry count
+        let retryCount = (connectionRetries[centralId] ?? 0) + 1
+        connectionRetries[centralId] = retryCount
+        
+        if retryCount > maxReconnectionAttempts {
+            logger.warning("Max reconnection attempts (\\(maxReconnectionAttempts)) reached for central \\(centralId), giving up")
+            connectionRetries.removeValue(forKey: centralId)
+            return
+        }
+        
+        logger.info("Attempting reconnection \\(retryCount)/\\(maxReconnectionAttempts) to central \\(centralId)")
+        appendRepositoryDiagnostic("ble_peripheral_reconnect_attempt attempt=\\$retryCount central=\\$centralId")
+        
+        // For peripheral role, we can't initiate connections directly
+        // Instead, we ensure we're advertising so the central can reconnect
+        ensureAdvertisingForReconnection()
+        
+        // Schedule next retry if this fails
+        scheduleReconnectionRetry(for: central)
+    }
+    
+    private func scheduleReconnectionRetry(for central: CBCentral) {
+        let centralId = central.identifier
+        
+        // Cancel any existing timer first
+        reconnectionTimers[centralId]?.invalidate()
+        
+        // Schedule retry with exponential backoff
+        let retryDelay = reconnectionDelay * pow(2.0, Double(connectionRetries[centralId] ?? 1))
+        
+        let timer = Timer.scheduledTimer(withTimeInterval: retryDelay, repeats: false) { [weak self] _ in
+            guard let self = self else { return }
+            
+            // Check if central is still not subscribed
+            if !self.subscribedCentrals.contains(where: { $0.identifier == centralId }) {
+                let currentRetryCount = self.connectionRetries[centralId] ?? 0
+                if currentRetryCount <= self.maxReconnectionAttempts {
+                    self.logger.info("Reconnection retry \\(currentRetryCount) for central \\(centralId)")
+                    self.ensureAdvertisingForReconnection()
+                    self.scheduleReconnectionRetry(for: central) // Schedule next retry if needed
+                }
+            } else {
+                // Central reconnected successfully, clean up
+                self.cleanupReconnectionState(for: centralId)
+            }
+        }
+        
+        reconnectionTimers[centralId] = timer
+        logger.debug("Scheduled reconnection retry in \\(retryDelay)s for central \\(centralId)")
+    }
+    
+    private func cleanupReconnectionState(for centralId: UUID) {
+        reconnectionTimers[centralId]?.invalidate()
+        reconnectionTimers.removeValue(forKey: centralId)
+        connectionRetries.removeValue(forKey: centralId)
+        logger.debug("Cleaned up reconnection state for central \\(centralId)")
+    }
+    
+    private func ensureAdvertisingForReconnection() {
+        if !isAdvertising {
+            logger.info("Ensuring advertising is active for reconnection")
+            // Restart advertising to ensure visibility
+            peripheralManager.stopAdvertising()
+            if let service = meshService {
+                let advertisementData: [String: Any] = [
+                    CBAdvertisementDataServiceUUIDsKey: [service.uuid],
+                    CBAdvertisementDataLocalNameKey: "SCMessenger"
+                ]
+                peripheralManager.startAdvertising(advertisementData)
+                isAdvertising = true
+            }
+        }
+    }
+    
+    private func validateCentralConnection(_ central: CBCentral) -> Bool {
+        // For peripheral role, we can't directly check connection state
+        // Instead, we check if the central is still subscribed
+        let isSubscribed = subscribedCentrals.contains(where: { $0.identifier == central.identifier })
+        
+        if !isSubscribed {
+            logger.warning("Central \\(central.identifier) not subscribed")
+            return false
+        }
+        return true
+    }
 
     @discardableResult
     private func sendDataToCentral(_ central: CBCentral, data: Data) -> Bool {
@@ -177,6 +278,13 @@ final class BLEPeripheralManager: NSObject {
             }
             return true // Optimistic return for async path
         }
+        
+        // Validate central connection state
+        guard validateCentralConnection(central) else {
+            attemptReconnection(to: central)
+            return false
+        }
+        
         guard let messageCharacteristic else {
             logger.warning("sendDataToCentral: message characteristic unavailable")
             return false
@@ -491,6 +599,11 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
         logger.info("Central \(central.identifier) unsubscribed from \(characteristic.uuid.shortUUID)")
         subscribedCentrals.removeAll(where: { $0.identifier == central.identifier })
         pendingNotifications.removeAll(where: { $0.central.identifier == central.identifier })
+        
+        // Attempt reconnection for unintentional unsubscriptions
+        // In a real implementation, you might want to distinguish between
+        // intentional and unintentional unsubscriptions
+        attemptReconnection(to: central)
     }
 
     func peripheralManager(_ peripheral: CBPeripheralManager, willRestoreState dict: [String: Any]) {

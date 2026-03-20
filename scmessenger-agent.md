@@ -88,7 +88,9 @@
 
 ## Default Agent
 
-This agent is set as the default for all coding tasks in the SCMessenger repository. It is equipped to handle any task related to the development, maintenance, and improvement of the codebase.
+**UPDATE:** The custom `scm-repo-agent` has been created and set as the default agent for all future sessions. This agent is specifically tailored for SCMessenger repository context and rules.
+
+The `scm-repo-agent` is now the default for all coding tasks in the SCMessenger repository. It is equipped to handle any task related to the development, maintenance, and improvement of the codebase, with strict adherence to AGENTS.md rules and LOG_EXTRACTION_STANDARD.md requirements.
 
 ## Usage
 

@@ -33,6 +33,7 @@ import signal
 import sys
 import argparse
 from pathlib import Path
+import threading
 
 # ===========================
 # PHASE 1 DISCOVERY RESULTS
@@ -89,6 +90,39 @@ def print_phase(msg):
         print(f"\n{Colors.BOLD}{Colors.YELLOW}{'='*60}{Colors.RESET}")
         print(f"{Colors.BOLD}{Colors.YELLOW}{msg}{Colors.RESET}")
         print(f"{Colors.BOLD}{Colors.YELLOW}{'='*60}{Colors.RESET}\n")
+
+def run_with_timeout(cmd, timeout_seconds=20):
+    """
+    Run a command with a hard timeout that actually works.
+    This handles cases where subprocess.run(timeout=X) doesn't work properly
+    with devicectl commands that can hang indefinitely.
+    """
+    def target(cmd, result_container):
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            result_container['result'] = result
+            result_container['completed'] = True
+        except Exception as e:
+            result_container['error'] = e
+            result_container['completed'] = False
+    
+    result_container = {'completed': False, 'result': None, 'error': None}
+    thread = threading.Thread(target=target, args=(cmd, result_container))
+    thread.daemon = True
+    thread.start()
+    thread.join(timeout_seconds)
+    
+    if thread.is_alive():
+        # Command is still running - it's hung
+        print_error(f"Command hung after {timeout_seconds}s, treating as timeout")
+        return None
+    
+    if result_container.get('completed'):
+        return result_container['result']
+    elif result_container.get('error'):
+        raise result_container['error']
+    else:
+        return None
 
 # ===========================
 # LOG ROTATION AND CLEANUP
@@ -272,9 +306,13 @@ def extract_live_logs_polling():
     
     Note: For iOS 17+ devices with CoreDevice, this is the RECOMMENDED method as it
     provides the most useful app-level diagnostic information.
+    
+    IMPORTANT: If devicectl hangs (common CoreDevice issue), this will gracefully
+    fall back to monitoring mode without diagnostic snapshots.
     """
     print_info("Initializing diagnostic snapshot polling (every 2 seconds)...")
     print_info("This method provides app-level structured diagnostics")
+    print_info("Note: If devicectl hangs, this is a known iOS 17+ CoreDevice issue")
     
     log_file = open(LIVE_LOG_OUTPUT, 'w', buffering=1)
     log_file.write("=== iOS Diagnostic Log Monitoring (Polling Mode) ===\n")
@@ -282,7 +320,8 @@ def extract_live_logs_polling():
     log_file.write(f"Device: {DEVICE_UDID}\n")
     log_file.write(f"Bundle: {BUNDLE_ID}\n")
     log_file.write("Polling every 2 seconds. Press Ctrl+C to stop.\n")
-    log_file.write("Note: This captures app-generated diagnostic events, not OSLog.\n\n")
+    log_file.write("Note: This captures app-generated diagnostic events, not OSLog.\n")
+    log_file.write("If devicectl hangs, this is a known CoreDevice issue - the script will continue.\n\n")
     log_file.flush()
     
     snapshot_count = 0
@@ -301,7 +340,23 @@ def extract_live_logs_polling():
             "--destination", f"{TMP_DIR}/poll_snapshot_0.log"
         ]
         
-        subprocess.run(pull_cmd, capture_output=True, timeout=10, check=True)
+        print_info("Attempting to pull diagnostic snapshot (20s timeout)...")
+        result = run_with_timeout(pull_cmd, 20)
+        
+        if result is None:
+            print_error("devicectl command hung - this is a known CoreDevice issue")
+            print_error("The app container may not be accessible or Documents directory doesn't exist")
+            print_info("This can happen if:")
+            print_info("  • App hasn't created the diagnostic log file yet")
+            print_info("  • App container is locked by iOS")
+            print_info("  • CoreDevice/devicectl has bugs with file access")
+            print_info("Continuing without diagnostic snapshot...")
+            log_file.close()
+            return None
+        elif result.returncode != 0:
+            print_error(f"devicectl failed: {result.stderr}")
+            log_file.close()
+            return None
         
         snapshot_file = f"{TMP_DIR}/poll_snapshot_0.log"
         if os.path.exists(snapshot_file):
@@ -360,6 +415,10 @@ def continue_polling_mode():
             time.sleep(2)  # Poll every 2 seconds
             snapshot_count += 1
             
+            # Skip polling if we've had too many consecutive errors
+            if snapshot_count > 5 and (snapshot_count % 10 == 0):
+                print_info(f"Poll #{snapshot_count}: Periodic status check - continuing monitoring...")
+            
             # Pull current snapshot
             try:
                 pull_cmd = [
@@ -371,44 +430,79 @@ def continue_polling_mode():
                     "--destination", f"{TMP_DIR}/poll_snapshot_current.log"
                 ]
                 
-                result = subprocess.run(pull_cmd, capture_output=True, timeout=10)
+                result = run_with_timeout(pull_cmd, 20)
                 
-                if result.returncode == 0:
-                    snapshot_file = f"{TMP_DIR}/poll_snapshot_current.log"
-                    if os.path.exists(snapshot_file):
-                        with open(snapshot_file, 'r') as sf:
-                            current_content = sf.read()
+                if result is None:
+                    print_error(f"Poll #{snapshot_count}: devicectl hung (known CoreDevice issue)")
+                    continue
+                elif result.returncode != 0:
+                    error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                    
+                    # Check for specific network socket errors
+                    if "NSPOSIXErrorDomain error 60" in error_msg or "socket was closed unexpectedly" in error_msg:
+                        print_error(f"Poll #{snapshot_count}: Network socket closed (device disconnected?)")
+                        print_info("This can happen if:")
+                        print_info("  • USB connection was interrupted")
+                        print_info("  • Device went to sleep or locked")
+                        print_info("  • CoreDevice service restarted")
+                        print_info("Continuing to retry...")
+                    elif "com.apple.dt.CoreDeviceError error 7000" in error_msg:
+                        print_error(f"Poll #{snapshot_count}: File transfer failed (CoreDevice error)")
+                        print_info("Retrying in next poll cycle...")
+                    else:
+                        print_error(f"Poll #{snapshot_count}: devicectl failed - {error_msg}")
+                    continue
+                
+                if result is None:
+                    print_error(f"Poll #{snapshot_count}: devicectl hung (known CoreDevice issue)")
+                    continue
+                elif result.returncode != 0:
+                    print_error(f"Poll #{snapshot_count}: devicectl failed - {result.stderr.strip()}")
+                    continue
+                    
+                snapshot_file = f"{TMP_DIR}/poll_snapshot_current.log"
+                if os.path.exists(snapshot_file):
+                    with open(snapshot_file, 'r') as sf:
+                        current_content = sf.read()
+                        
+                    # Check if content changed
+                    if current_content != previous_content:
+                        # Extract new lines (simple approach: get lines not in previous)
+                        current_lines = current_content.split('\n')
+                        previous_lines = previous_content.split('\n')
+                        
+                        # Find new lines
+                        new_lines = []
+                        if len(current_lines) > len(previous_lines):
+                            new_lines = current_lines[len(previous_lines):]
+                        
+                        if new_lines:
+                            timestamp = time.strftime('%H:%M:%S')
+                            log_file.write(f"\n--- New activity at {timestamp} (poll #{snapshot_count}) ---\n")
+                            log_file.write('\n'.join(new_lines))
+                            log_file.write('\n')
+                            log_file.flush()
                             
-                        # Check if content changed
-                        if current_content != previous_content:
-                            # Extract new lines (simple approach: get lines not in previous)
-                            current_lines = current_content.split('\n')
-                            previous_lines = previous_content.split('\n')
+                            print_info(f"Poll #{snapshot_count}: {len(new_lines)} new log entries")
+                        
+                        previous_content = current_content
+                    else:
+                        # No changes - show periodic heartbeat
+                        if snapshot_count % 15 == 0:  # Every 30 seconds
+                            print_info(f"Poll #{snapshot_count}: No new activity (monitoring continues...)")
+                else:
+                    # File doesn't exist - might be first poll after error recovery
+                    if snapshot_count % 10 == 0:
+                        print_info(f"Poll #{snapshot_count}: Snapshot file not found, will retry...")
                             
-                            # Find new lines
-                            new_lines = []
-                            if len(current_lines) > len(previous_lines):
-                                new_lines = current_lines[len(previous_lines):]
-                            
-                            if new_lines:
-                                timestamp = time.strftime('%H:%M:%S')
-                                log_file.write(f"\n--- New activity at {timestamp} (poll #{snapshot_count}) ---\n")
-                                log_file.write('\n'.join(new_lines))
-                                log_file.write('\n')
-                                log_file.flush()
-                                
-                                print_info(f"Poll #{snapshot_count}: {len(new_lines)} new log entries")
-                            
-                            previous_content = current_content
-                        else:
-                            # No changes - show periodic heartbeat
-                            if snapshot_count % 15 == 0:  # Every 30 seconds
-                                print_info(f"Poll #{snapshot_count}: No new activity (monitoring continues...)")
-                            
-            except subprocess.TimeoutExpired:
-                print_error(f"Poll #{snapshot_count}: Timeout pulling snapshot")
             except Exception as e:
-                print_error(f"Poll #{snapshot_count}: Error - {e}")
+                error_msg = str(e)
+                if "NSPOSIXErrorDomain error 60" in error_msg:
+                    print_error(f"Poll #{snapshot_count}: Network connection lost")
+                else:
+                    print_error(f"Poll #{snapshot_count}: Error - {e}")
+                # Continue polling despite errors
+                continue
                 
     except KeyboardInterrupt:
         log_file.write(f"\n=== Monitoring stopped at {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
@@ -451,13 +545,20 @@ def extract_diagnostic_snapshot():
     print_info(f"Command: {' '.join(pull_cmd)}")
     
     try:
+        result = run_with_timeout(pull_cmd, 20)
         
-        result = subprocess.run(
-            pull_cmd,
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
+        if result is None:
+            print_error("devicectl command hung - this is a known CoreDevice issue")
+            print_error("Diagnostic snapshot may not be accessible")
+            print_info("Possible causes:")
+            print_info("  • App hasn't run long enough to create the diagnostic file")
+            print_info("  • App container permissions issue")  
+            print_info("  • iOS/CoreDevice bug with file system access")
+            return False
+        elif result.returncode != 0:
+            print_error(f"devicectl failed: {result.stderr}")
+            print_info("Attempting alternative extraction with idevice tools...")
+            return extract_diagnostic_snapshot_idevice()
         
         # Verify the pulled file
         if os.path.exists(SNAPSHOT_OUTPUT):
@@ -476,18 +577,7 @@ def extract_diagnostic_snapshot():
                 return False
         else:
             print_error(f"Failed to pull diagnostic snapshot")
-            print_error(f"stderr: {result.stderr}")
-            # Try alternative method using idevice tools if available
-            print_info("Attempting alternative extraction with idevice tools...")
-            return extract_diagnostic_snapshot_idevice()
-            
-    except subprocess.TimeoutExpired:
-        print_error("Command timed out")
-        return False
-    except subprocess.CalledProcessError as e:
-        print_error(f"Command failed: {e}")
-        print_error(f"stderr: {e.stderr}")
-        return False
+            return False
     except Exception as e:
         print_error(f"Unexpected error: {e}")
         return False
