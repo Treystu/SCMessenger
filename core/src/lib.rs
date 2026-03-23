@@ -7,11 +7,13 @@
 // If the answer is no, it doesn't belong in Phase 0.
 
 pub mod crypto;
+pub mod drift;
 pub mod identity;
 pub mod message;
 pub mod notification;
 pub mod notification_defaults;
 pub mod privacy;
+pub mod routing;
 pub mod store;
 pub mod transport;
 

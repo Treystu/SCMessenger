@@ -9,14 +9,14 @@
 //! This engine replaces the basic RoutingEngine with optimized discovery paths.
 
 use super::engine::*;
-use super::global::GlobalRoutes;
+use super::global::{GlobalRoutes, RouteAdvertisement};
 use super::local::{LocalCell, PeerId};
 use super::neighborhood::NeighborhoodTable;
-use super::timeout_budget::{TimeoutBudget, DiscoveryPhase};
-use super::negative_cache::NegativeCache;
-use super::resume_prefetch::ResumePrefetchManager;
+use super::timeout_budget::{TimeoutBudget, DiscoveryPhase, BudgetSummary};
+use super::negative_cache::{NegativeCache, NegativeCacheStats};
+use super::resume_prefetch::{ResumePrefetchManager, PrefetchStats};
 use super::adaptive_ttl::AdaptiveTTLManager;
-use std::time::{Duration, Instant};
+use std::time::{Duration};
 
 // For peer ID string conversion
 use hex;

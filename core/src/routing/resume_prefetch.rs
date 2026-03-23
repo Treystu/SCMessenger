@@ -416,11 +416,19 @@ impl Default for ResumePrefetchManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::RngCore;
+
+    fn create_test_peer_id() -> PeerId {
+        // routing::PeerId is [u8; 32], not libp2p::PeerId
+        let mut id = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut id);
+        id
+    }
 
     fn create_test_route(hint: [u8; 4], hop_count: u8) -> RouteAdvertisement {
         RouteAdvertisement {
             destination_hint: hint,
-            next_hop: PeerId::random(),
+            next_hop: create_test_peer_id(),
             hop_count,
             reliability: 0.95,
             last_confirmed: std::time::SystemTime::now()
@@ -439,7 +447,7 @@ mod tests {
         let route = create_test_route(hint, 2);
 
         // Simulate going to background with a route
-        manager.on_app_background(vec![(PeerId::random(), hint, route)]);
+        manager.on_app_background(vec![(create_test_peer_id(), hint, route)]);
 
         // Resume and get hints to refresh
         let hints = manager.on_app_resume();
@@ -453,7 +461,7 @@ mod tests {
         let hint = [1, 2, 3, 4];
         let route = create_test_route(hint, 2);
 
-        manager.on_app_background(vec![(PeerId::random(), hint, route.clone())]);
+        manager.on_app_background(vec![(create_test_peer_id(), hint, route.clone())]);
         manager.on_app_resume();
 
         // Should be able to get route immediately
@@ -468,7 +476,7 @@ mod tests {
         let hint = [1, 2, 3, 4];
         let route = create_test_route(hint, 2);
 
-        manager.on_app_background(vec![(PeerId::random(), hint, route)]);
+        manager.on_app_background(vec![(create_test_peer_id(), hint, route)]);
         manager.on_app_resume();
 
         // Update with new route
@@ -484,7 +492,7 @@ mod tests {
     #[test]
     fn test_frequent_peer_tracking() {
         let mut manager = ResumePrefetchManager::with_defaults();
-        let peer_id = PeerId::random();
+        let peer_id = create_test_peer_id();
         let hint = [1, 2, 3, 4];
 
         // Record multiple messages
@@ -506,8 +514,8 @@ mod tests {
         let route2 = create_test_route(hint2, 3);
 
         manager.on_app_background(vec![
-            (PeerId::random(), hint1, route1),
-            (PeerId::random(), hint2, route2),
+            (create_test_peer_id(), hint1, route1),
+            (create_test_peer_id(), hint2, route2),
         ]);
 
         let stats = manager.stats();
@@ -517,7 +525,7 @@ mod tests {
     #[test]
     fn test_frequent_peer_decay() {
         let mut manager = ResumePrefetchManager::with_defaults();
-        let peer_id = PeerId::random();
+        let peer_id = create_test_peer_id();
         let hint = [1, 2, 3, 4];
 
         // Record messages

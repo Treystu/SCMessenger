@@ -38,6 +38,8 @@ camino = { version = "1", optional = true }
 
 # Additional dependencies
 parking_lot = "0.12"
+crc32fast = "1.3"
+lz4_flex = { version = "0.11", default-features = false, features = ["std"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 uuid = { workspace = true, features = ["js"] }
