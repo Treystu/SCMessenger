@@ -25,9 +25,10 @@ rm -rf iOS/SCMessengerCore.xcframework
 cp -R SCMessengerCore.xcframework iOS/SCMessengerCore.xcframework
 
 echo "Copying generated Swift bindings to iOS project..."
-cp core/target/generated-sources/uniffi/swift/api.swift iOS/SCMessenger/SCMessenger/Generated/api.swift
-cp core/target/generated-sources/uniffi/swift/apiFFI.h iOS/SCMessenger/SCMessenger/Generated/apiFFI.h
-cp core/target/generated-sources/uniffi/swift/apiFFI.modulemap iOS/SCMessenger/SCMessenger/Generated/apiFFI.modulemap || true
+# UniFFI 0.31 uses different filenames
+cp core/target/generated-sources/uniffi/swift/SCMessengerCore.swift iOS/SCMessenger/SCMessenger/Generated/api.swift
+cp core/target/generated-sources/uniffi/swift/scmessenger_core.h iOS/SCMessenger/SCMessenger/Generated/apiFFI.h
+cp core/target/generated-sources/uniffi/swift/api.modulemap iOS/SCMessenger/SCMessenger/Generated/apiFFI.modulemap || true
 
 echo "Patching api.swift to remove nonisolated(unsafe) to fix Swift concurrency compilation errors..."
 python3 -c "

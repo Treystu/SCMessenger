@@ -50,9 +50,9 @@ typedef void (*UniffiRustFutureContinuationCallback)(uint64_t, int8_t
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_FREE
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_FREE
-typedef void (*UniffiForeignFutureFree)(uint64_t
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_DROPPED_CALLBACK
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_DROPPED_CALLBACK
+typedef void (*UniffiForeignFutureDroppedCallback)(uint64_t
     );
 
 #endif
@@ -62,192 +62,184 @@ typedef void (*UniffiCallbackInterfaceFree)(uint64_t
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE
-typedef struct UniffiForeignFuture {
-    uint64_t handle;
-    UniffiForeignFutureFree _Nonnull free;
-} UniffiForeignFuture;
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_CLONE
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_CLONE
+typedef uint64_t (*UniffiCallbackInterfaceClone)(uint64_t
+    );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U8
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U8
-typedef struct UniffiForeignFutureStructU8 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_DROPPED_CALLBACK_STRUCT
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_DROPPED_CALLBACK_STRUCT
+typedef struct UniffiForeignFutureDroppedCallbackStruct {
+    uint64_t handle;
+    UniffiForeignFutureDroppedCallback _Nonnull free;
+} UniffiForeignFutureDroppedCallbackStruct;
+
+#endif
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U8
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U8
+typedef struct UniffiForeignFutureResultU8 {
     uint8_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructU8;
+} UniffiForeignFutureResultU8;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U8
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U8
-typedef void (*UniffiForeignFutureCompleteU8)(uint64_t, UniffiForeignFutureStructU8
+typedef void (*UniffiForeignFutureCompleteU8)(uint64_t, UniffiForeignFutureResultU8
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I8
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I8
-typedef struct UniffiForeignFutureStructI8 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I8
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I8
+typedef struct UniffiForeignFutureResultI8 {
     int8_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructI8;
+} UniffiForeignFutureResultI8;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I8
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I8
-typedef void (*UniffiForeignFutureCompleteI8)(uint64_t, UniffiForeignFutureStructI8
+typedef void (*UniffiForeignFutureCompleteI8)(uint64_t, UniffiForeignFutureResultI8
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U16
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U16
-typedef struct UniffiForeignFutureStructU16 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U16
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U16
+typedef struct UniffiForeignFutureResultU16 {
     uint16_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructU16;
+} UniffiForeignFutureResultU16;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U16
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U16
-typedef void (*UniffiForeignFutureCompleteU16)(uint64_t, UniffiForeignFutureStructU16
+typedef void (*UniffiForeignFutureCompleteU16)(uint64_t, UniffiForeignFutureResultU16
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I16
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I16
-typedef struct UniffiForeignFutureStructI16 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I16
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I16
+typedef struct UniffiForeignFutureResultI16 {
     int16_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructI16;
+} UniffiForeignFutureResultI16;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I16
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I16
-typedef void (*UniffiForeignFutureCompleteI16)(uint64_t, UniffiForeignFutureStructI16
+typedef void (*UniffiForeignFutureCompleteI16)(uint64_t, UniffiForeignFutureResultI16
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U32
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U32
-typedef struct UniffiForeignFutureStructU32 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U32
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U32
+typedef struct UniffiForeignFutureResultU32 {
     uint32_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructU32;
+} UniffiForeignFutureResultU32;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U32
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U32
-typedef void (*UniffiForeignFutureCompleteU32)(uint64_t, UniffiForeignFutureStructU32
+typedef void (*UniffiForeignFutureCompleteU32)(uint64_t, UniffiForeignFutureResultU32
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I32
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I32
-typedef struct UniffiForeignFutureStructI32 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I32
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I32
+typedef struct UniffiForeignFutureResultI32 {
     int32_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructI32;
+} UniffiForeignFutureResultI32;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I32
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I32
-typedef void (*UniffiForeignFutureCompleteI32)(uint64_t, UniffiForeignFutureStructI32
+typedef void (*UniffiForeignFutureCompleteI32)(uint64_t, UniffiForeignFutureResultI32
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U64
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U64
-typedef struct UniffiForeignFutureStructU64 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U64
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U64
+typedef struct UniffiForeignFutureResultU64 {
     uint64_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructU64;
+} UniffiForeignFutureResultU64;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U64
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U64
-typedef void (*UniffiForeignFutureCompleteU64)(uint64_t, UniffiForeignFutureStructU64
+typedef void (*UniffiForeignFutureCompleteU64)(uint64_t, UniffiForeignFutureResultU64
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I64
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I64
-typedef struct UniffiForeignFutureStructI64 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I64
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I64
+typedef struct UniffiForeignFutureResultI64 {
     int64_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructI64;
+} UniffiForeignFutureResultI64;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I64
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I64
-typedef void (*UniffiForeignFutureCompleteI64)(uint64_t, UniffiForeignFutureStructI64
+typedef void (*UniffiForeignFutureCompleteI64)(uint64_t, UniffiForeignFutureResultI64
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_F32
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_F32
-typedef struct UniffiForeignFutureStructF32 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_F32
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_F32
+typedef struct UniffiForeignFutureResultF32 {
     float returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructF32;
+} UniffiForeignFutureResultF32;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_F32
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_F32
-typedef void (*UniffiForeignFutureCompleteF32)(uint64_t, UniffiForeignFutureStructF32
+typedef void (*UniffiForeignFutureCompleteF32)(uint64_t, UniffiForeignFutureResultF32
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_F64
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_F64
-typedef struct UniffiForeignFutureStructF64 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_F64
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_F64
+typedef struct UniffiForeignFutureResultF64 {
     double returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructF64;
+} UniffiForeignFutureResultF64;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_F64
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_F64
-typedef void (*UniffiForeignFutureCompleteF64)(uint64_t, UniffiForeignFutureStructF64
+typedef void (*UniffiForeignFutureCompleteF64)(uint64_t, UniffiForeignFutureResultF64
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_POINTER
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_POINTER
-typedef struct UniffiForeignFutureStructPointer {
-    void*_Nonnull returnValue;
-    RustCallStatus callStatus;
-} UniffiForeignFutureStructPointer;
-
-#endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_POINTER
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_POINTER
-typedef void (*UniffiForeignFutureCompletePointer)(uint64_t, UniffiForeignFutureStructPointer
-    );
-
-#endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_RUST_BUFFER
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_RUST_BUFFER
-typedef struct UniffiForeignFutureStructRustBuffer {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_RUST_BUFFER
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_RUST_BUFFER
+typedef struct UniffiForeignFutureResultRustBuffer {
     RustBuffer returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructRustBuffer;
+} UniffiForeignFutureResultRustBuffer;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_RUST_BUFFER
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_RUST_BUFFER
-typedef void (*UniffiForeignFutureCompleteRustBuffer)(uint64_t, UniffiForeignFutureStructRustBuffer
+typedef void (*UniffiForeignFutureCompleteRustBuffer)(uint64_t, UniffiForeignFutureResultRustBuffer
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_VOID
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_VOID
-typedef struct UniffiForeignFutureStructVoid {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_VOID
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_VOID
+typedef struct UniffiForeignFutureResultVoid {
     RustCallStatus callStatus;
-} UniffiForeignFutureStructVoid;
+} UniffiForeignFutureResultVoid;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_VOID
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_VOID
-typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureStructVoid
+typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureResultVoid
     );
 
 #endif
@@ -338,18 +330,21 @@ typedef void (*UniffiCallbackInterfacePlatformBridgeMethod6)(uint64_t, RustBuffe
 #ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_CORE_DELEGATE
 #define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_CORE_DELEGATE
 typedef struct UniffiVTableCallbackInterfaceCoreDelegate {
+    UniffiCallbackInterfaceFree _Nonnull uniffiFree;
+    UniffiCallbackInterfaceClone _Nonnull uniffiClone;
     UniffiCallbackInterfaceCoreDelegateMethod0 _Nonnull onPeerDiscovered;
     UniffiCallbackInterfaceCoreDelegateMethod1 _Nonnull onPeerDisconnected;
     UniffiCallbackInterfaceCoreDelegateMethod2 _Nonnull onPeerIdentified;
     UniffiCallbackInterfaceCoreDelegateMethod3 _Nonnull onMessageReceived;
     UniffiCallbackInterfaceCoreDelegateMethod4 _Nonnull onReceiptReceived;
-    UniffiCallbackInterfaceFree _Nonnull uniffiFree;
 } UniffiVTableCallbackInterfaceCoreDelegate;
 
 #endif
 #ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_PLATFORM_BRIDGE
 #define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_PLATFORM_BRIDGE
 typedef struct UniffiVTableCallbackInterfacePlatformBridge {
+    UniffiCallbackInterfaceFree _Nonnull uniffiFree;
+    UniffiCallbackInterfaceClone _Nonnull uniffiClone;
     UniffiCallbackInterfacePlatformBridgeMethod0 _Nonnull onBatteryChanged;
     UniffiCallbackInterfacePlatformBridgeMethod1 _Nonnull onNetworkChanged;
     UniffiCallbackInterfacePlatformBridgeMethod2 _Nonnull onMotionChanged;
@@ -357,741 +352,740 @@ typedef struct UniffiVTableCallbackInterfacePlatformBridge {
     UniffiCallbackInterfacePlatformBridgeMethod4 _Nonnull onEnteringBackground;
     UniffiCallbackInterfacePlatformBridgeMethod5 _Nonnull onEnteringForeground;
     UniffiCallbackInterfacePlatformBridgeMethod6 _Nonnull sendBlePacket;
-    UniffiCallbackInterfaceFree _Nonnull uniffiFree;
 } UniffiVTableCallbackInterfacePlatformBridge;
 
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_AUTOADJUSTENGINE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_AUTOADJUSTENGINE
-void*_Nonnull uniffi_scmessenger_core_fn_clone_autoadjustengine(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_clone_autoadjustengine(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_AUTOADJUSTENGINE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_AUTOADJUSTENGINE
-void uniffi_scmessenger_core_fn_free_autoadjustengine(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_free_autoadjustengine(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_AUTOADJUSTENGINE_NEW
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_AUTOADJUSTENGINE_NEW
-void*_Nonnull uniffi_scmessenger_core_fn_constructor_autoadjustengine_new(RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_constructor_autoadjustengine_new(RustCallStatus *_Nonnull out_status
     
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_AUTOADJUSTENGINE_CLEAR_OVERRIDES
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_AUTOADJUSTENGINE_CLEAR_OVERRIDES
-void uniffi_scmessenger_core_fn_method_autoadjustengine_clear_overrides(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_autoadjustengine_clear_overrides(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_AUTOADJUSTENGINE_COMPUTE_BLE_ADJUSTMENT
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_AUTOADJUSTENGINE_COMPUTE_BLE_ADJUSTMENT
-RustBuffer uniffi_scmessenger_core_fn_method_autoadjustengine_compute_ble_adjustment(void*_Nonnull ptr, RustBuffer profile, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_autoadjustengine_compute_ble_adjustment(uint64_t ptr, RustBuffer profile, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_AUTOADJUSTENGINE_COMPUTE_PROFILE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_AUTOADJUSTENGINE_COMPUTE_PROFILE
-RustBuffer uniffi_scmessenger_core_fn_method_autoadjustengine_compute_profile(void*_Nonnull ptr, RustBuffer device, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_autoadjustengine_compute_profile(uint64_t ptr, RustBuffer device, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_AUTOADJUSTENGINE_COMPUTE_RELAY_ADJUSTMENT
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_AUTOADJUSTENGINE_COMPUTE_RELAY_ADJUSTMENT
-RustBuffer uniffi_scmessenger_core_fn_method_autoadjustengine_compute_relay_adjustment(void*_Nonnull ptr, RustBuffer profile, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_autoadjustengine_compute_relay_adjustment(uint64_t ptr, RustBuffer profile, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_AUTOADJUSTENGINE_OVERRIDE_BLE_SCAN_INTERVAL
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_AUTOADJUSTENGINE_OVERRIDE_BLE_SCAN_INTERVAL
-void uniffi_scmessenger_core_fn_method_autoadjustengine_override_ble_scan_interval(void*_Nonnull ptr, uint32_t interval_ms, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_autoadjustengine_override_ble_scan_interval(uint64_t ptr, uint32_t interval_ms, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_AUTOADJUSTENGINE_OVERRIDE_RELAY_MAX_PER_HOUR
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_AUTOADJUSTENGINE_OVERRIDE_RELAY_MAX_PER_HOUR
-void uniffi_scmessenger_core_fn_method_autoadjustengine_override_relay_max_per_hour(void*_Nonnull ptr, uint32_t max, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_autoadjustengine_override_relay_max_per_hour(uint64_t ptr, uint32_t max, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_BOOTSTRAPRESOLVER
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_BOOTSTRAPRESOLVER
-void*_Nonnull uniffi_scmessenger_core_fn_clone_bootstrapresolver(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_clone_bootstrapresolver(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_BOOTSTRAPRESOLVER
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_BOOTSTRAPRESOLVER
-void uniffi_scmessenger_core_fn_free_bootstrapresolver(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_free_bootstrapresolver(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_BOOTSTRAPRESOLVER_NEW
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_BOOTSTRAPRESOLVER_NEW
-void*_Nonnull uniffi_scmessenger_core_fn_constructor_bootstrapresolver_new(RustBuffer config, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_constructor_bootstrapresolver_new(RustBuffer config, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_BOOTSTRAPRESOLVER_RESOLVE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_BOOTSTRAPRESOLVER_RESOLVE
-RustBuffer uniffi_scmessenger_core_fn_method_bootstrapresolver_resolve(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_bootstrapresolver_resolve(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_BOOTSTRAPRESOLVER_STATIC_FALLBACK
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_BOOTSTRAPRESOLVER_STATIC_FALLBACK
-RustBuffer uniffi_scmessenger_core_fn_method_bootstrapresolver_static_fallback(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_bootstrapresolver_static_fallback(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_CONTACTMANAGER
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_CONTACTMANAGER
-void*_Nonnull uniffi_scmessenger_core_fn_clone_contactmanager(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_clone_contactmanager(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_CONTACTMANAGER
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_CONTACTMANAGER
-void uniffi_scmessenger_core_fn_free_contactmanager(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_free_contactmanager(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_CONTACTMANAGER_NEW
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_CONTACTMANAGER_NEW
-void*_Nonnull uniffi_scmessenger_core_fn_constructor_contactmanager_new(RustBuffer storage_path, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_constructor_contactmanager_new(RustBuffer storage_path, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_ADD
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_ADD
-void uniffi_scmessenger_core_fn_method_contactmanager_add(void*_Nonnull ptr, RustBuffer contact, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_contactmanager_add(uint64_t ptr, RustBuffer contact, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_COUNT
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_COUNT
-uint32_t uniffi_scmessenger_core_fn_method_contactmanager_count(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint32_t uniffi_scmessenger_core_fn_method_contactmanager_count(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_FLUSH
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_FLUSH
-void uniffi_scmessenger_core_fn_method_contactmanager_flush(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_contactmanager_flush(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_GET
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_GET
-RustBuffer uniffi_scmessenger_core_fn_method_contactmanager_get(void*_Nonnull ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_contactmanager_get(uint64_t ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_LIST
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_LIST
-RustBuffer uniffi_scmessenger_core_fn_method_contactmanager_list(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_contactmanager_list(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_REMOVE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_REMOVE
-void uniffi_scmessenger_core_fn_method_contactmanager_remove(void*_Nonnull ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_contactmanager_remove(uint64_t ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_SEARCH
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_SEARCH
-RustBuffer uniffi_scmessenger_core_fn_method_contactmanager_search(void*_Nonnull ptr, RustBuffer query, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_contactmanager_search(uint64_t ptr, RustBuffer query, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_SET_LOCAL_NICKNAME
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_SET_LOCAL_NICKNAME
-void uniffi_scmessenger_core_fn_method_contactmanager_set_local_nickname(void*_Nonnull ptr, RustBuffer peer_id, RustBuffer nickname, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_contactmanager_set_local_nickname(uint64_t ptr, RustBuffer peer_id, RustBuffer nickname, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_SET_NICKNAME
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_SET_NICKNAME
-void uniffi_scmessenger_core_fn_method_contactmanager_set_nickname(void*_Nonnull ptr, RustBuffer peer_id, RustBuffer nickname, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_contactmanager_set_nickname(uint64_t ptr, RustBuffer peer_id, RustBuffer nickname, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_UPDATE_DEVICE_ID
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_UPDATE_DEVICE_ID
-void uniffi_scmessenger_core_fn_method_contactmanager_update_device_id(void*_Nonnull ptr, RustBuffer peer_id, RustBuffer device_id, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_contactmanager_update_device_id(uint64_t ptr, RustBuffer peer_id, RustBuffer device_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_UPDATE_LAST_SEEN
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_CONTACTMANAGER_UPDATE_LAST_SEEN
-void uniffi_scmessenger_core_fn_method_contactmanager_update_last_seen(void*_Nonnull ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_contactmanager_update_last_seen(uint64_t ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_HISTORYMANAGER
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_HISTORYMANAGER
-void*_Nonnull uniffi_scmessenger_core_fn_clone_historymanager(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_clone_historymanager(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_HISTORYMANAGER
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_HISTORYMANAGER
-void uniffi_scmessenger_core_fn_free_historymanager(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_free_historymanager(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_HISTORYMANAGER_NEW
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_HISTORYMANAGER_NEW
-void*_Nonnull uniffi_scmessenger_core_fn_constructor_historymanager_new(RustBuffer storage_path, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_constructor_historymanager_new(RustBuffer storage_path, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_ADD
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_ADD
-void uniffi_scmessenger_core_fn_method_historymanager_add(void*_Nonnull ptr, RustBuffer record, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_historymanager_add(uint64_t ptr, RustBuffer record, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_CLEAR
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_CLEAR
-void uniffi_scmessenger_core_fn_method_historymanager_clear(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_historymanager_clear(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_CLEAR_CONVERSATION
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_CLEAR_CONVERSATION
-void uniffi_scmessenger_core_fn_method_historymanager_clear_conversation(void*_Nonnull ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_historymanager_clear_conversation(uint64_t ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_CONVERSATION
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_CONVERSATION
-RustBuffer uniffi_scmessenger_core_fn_method_historymanager_conversation(void*_Nonnull ptr, RustBuffer peer_id, uint32_t limit, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_historymanager_conversation(uint64_t ptr, RustBuffer peer_id, uint32_t limit, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_COUNT
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_COUNT
-uint32_t uniffi_scmessenger_core_fn_method_historymanager_count(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint32_t uniffi_scmessenger_core_fn_method_historymanager_count(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_DELETE
-void uniffi_scmessenger_core_fn_method_historymanager_delete(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_historymanager_delete(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_ENFORCE_RETENTION
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_ENFORCE_RETENTION
-uint32_t uniffi_scmessenger_core_fn_method_historymanager_enforce_retention(void*_Nonnull ptr, uint32_t max_messages, RustCallStatus *_Nonnull out_status
+uint32_t uniffi_scmessenger_core_fn_method_historymanager_enforce_retention(uint64_t ptr, uint32_t max_messages, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_FLUSH
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_FLUSH
-void uniffi_scmessenger_core_fn_method_historymanager_flush(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_historymanager_flush(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_GET
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_GET
-RustBuffer uniffi_scmessenger_core_fn_method_historymanager_get(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_historymanager_get(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_MARK_DELIVERED
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_MARK_DELIVERED
-void uniffi_scmessenger_core_fn_method_historymanager_mark_delivered(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_historymanager_mark_delivered(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_PRUNE_BEFORE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_PRUNE_BEFORE
-uint32_t uniffi_scmessenger_core_fn_method_historymanager_prune_before(void*_Nonnull ptr, uint64_t before_timestamp, RustCallStatus *_Nonnull out_status
+uint32_t uniffi_scmessenger_core_fn_method_historymanager_prune_before(uint64_t ptr, uint64_t before_timestamp, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_RECENT
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_RECENT
-RustBuffer uniffi_scmessenger_core_fn_method_historymanager_recent(void*_Nonnull ptr, RustBuffer peer_filter, uint32_t limit, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_historymanager_recent(uint64_t ptr, RustBuffer peer_filter, uint32_t limit, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_REMOVE_CONVERSATION
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_REMOVE_CONVERSATION
-void uniffi_scmessenger_core_fn_method_historymanager_remove_conversation(void*_Nonnull ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_historymanager_remove_conversation(uint64_t ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_SEARCH
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_SEARCH
-RustBuffer uniffi_scmessenger_core_fn_method_historymanager_search(void*_Nonnull ptr, RustBuffer query, uint32_t limit, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_historymanager_search(uint64_t ptr, RustBuffer query, uint32_t limit, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_STATS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_HISTORYMANAGER_STATS
-RustBuffer uniffi_scmessenger_core_fn_method_historymanager_stats(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_historymanager_stats(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_IRONCORE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_IRONCORE
-void*_Nonnull uniffi_scmessenger_core_fn_clone_ironcore(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_clone_ironcore(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_IRONCORE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_IRONCORE
-void uniffi_scmessenger_core_fn_free_ironcore(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_free_ironcore(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_IRONCORE_NEW
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_IRONCORE_NEW
-void*_Nonnull uniffi_scmessenger_core_fn_constructor_ironcore_new(RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_constructor_ironcore_new(RustCallStatus *_Nonnull out_status
     
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_IRONCORE_WITH_STORAGE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_IRONCORE_WITH_STORAGE
-void*_Nonnull uniffi_scmessenger_core_fn_constructor_ironcore_with_storage(RustBuffer storage_path, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_constructor_ironcore_with_storage(RustBuffer storage_path, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_BLOCK_PEER
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_BLOCK_PEER
-void uniffi_scmessenger_core_fn_method_ironcore_block_peer(void*_Nonnull ptr, RustBuffer peer_id, RustBuffer reason, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_ironcore_block_peer(uint64_t ptr, RustBuffer peer_id, RustBuffer reason, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_BLOCKED_COUNT
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_BLOCKED_COUNT
-uint32_t uniffi_scmessenger_core_fn_method_ironcore_blocked_count(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint32_t uniffi_scmessenger_core_fn_method_ironcore_blocked_count(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_CLASSIFY_NOTIFICATION
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_CLASSIFY_NOTIFICATION
-RustBuffer uniffi_scmessenger_core_fn_method_ironcore_classify_notification(void*_Nonnull ptr, RustBuffer message, RustBuffer ui_state, RustBuffer settings, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_classify_notification(uint64_t ptr, RustBuffer message, RustBuffer ui_state, RustBuffer settings, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_CONTACTS_MANAGER
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_CONTACTS_MANAGER
-void*_Nonnull uniffi_scmessenger_core_fn_method_ironcore_contacts_manager(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_method_ironcore_contacts_manager(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_EXPORT_IDENTITY_BACKUP
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_EXPORT_IDENTITY_BACKUP
-RustBuffer uniffi_scmessenger_core_fn_method_ironcore_export_identity_backup(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_export_identity_backup(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_EXPORT_LOGS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_EXPORT_LOGS
-RustBuffer uniffi_scmessenger_core_fn_method_ironcore_export_logs(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_export_logs(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_EXTRACT_PUBLIC_KEY_FROM_PEER_ID
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_EXTRACT_PUBLIC_KEY_FROM_PEER_ID
-RustBuffer uniffi_scmessenger_core_fn_method_ironcore_extract_public_key_from_peer_id(void*_Nonnull ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_extract_public_key_from_peer_id(uint64_t ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_GET_DEVICE_ID
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_GET_DEVICE_ID
-RustBuffer uniffi_scmessenger_core_fn_method_ironcore_get_device_id(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_get_device_id(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_GET_IDENTITY_INFO
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_GET_IDENTITY_INFO
-RustBuffer uniffi_scmessenger_core_fn_method_ironcore_get_identity_info(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_get_identity_info(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_GET_REGISTRATION_STATE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_GET_REGISTRATION_STATE
-RustBuffer uniffi_scmessenger_core_fn_method_ironcore_get_registration_state(void*_Nonnull ptr, RustBuffer identity_id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_get_registration_state(uint64_t ptr, RustBuffer identity_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_GET_SENIORITY_TIMESTAMP
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_GET_SENIORITY_TIMESTAMP
-RustBuffer uniffi_scmessenger_core_fn_method_ironcore_get_seniority_timestamp(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_get_seniority_timestamp(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_HISTORY_MANAGER
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_HISTORY_MANAGER
-void*_Nonnull uniffi_scmessenger_core_fn_method_ironcore_history_manager(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_method_ironcore_history_manager(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_IMPORT_IDENTITY_BACKUP
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_IMPORT_IDENTITY_BACKUP
-void uniffi_scmessenger_core_fn_method_ironcore_import_identity_backup(void*_Nonnull ptr, RustBuffer backup, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_ironcore_import_identity_backup(uint64_t ptr, RustBuffer backup, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_INBOX_COUNT
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_INBOX_COUNT
-uint32_t uniffi_scmessenger_core_fn_method_ironcore_inbox_count(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint32_t uniffi_scmessenger_core_fn_method_ironcore_inbox_count(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_INITIALIZE_IDENTITY
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_INITIALIZE_IDENTITY
-void uniffi_scmessenger_core_fn_method_ironcore_initialize_identity(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_ironcore_initialize_identity(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_IS_PEER_BLOCKED
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_IS_PEER_BLOCKED
-int8_t uniffi_scmessenger_core_fn_method_ironcore_is_peer_blocked(void*_Nonnull ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
+int8_t uniffi_scmessenger_core_fn_method_ironcore_is_peer_blocked(uint64_t ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_IS_RUNNING
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_IS_RUNNING
-int8_t uniffi_scmessenger_core_fn_method_ironcore_is_running(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+int8_t uniffi_scmessenger_core_fn_method_ironcore_is_running(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_LIST_BLOCKED_PEERS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_LIST_BLOCKED_PEERS
-RustBuffer uniffi_scmessenger_core_fn_method_ironcore_list_blocked_peers(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_list_blocked_peers(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_MARK_MESSAGE_SENT
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_MARK_MESSAGE_SENT
-int8_t uniffi_scmessenger_core_fn_method_ironcore_mark_message_sent(void*_Nonnull ptr, RustBuffer message_id, RustCallStatus *_Nonnull out_status
+int8_t uniffi_scmessenger_core_fn_method_ironcore_mark_message_sent(uint64_t ptr, RustBuffer message_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_OUTBOX_COUNT
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_OUTBOX_COUNT
-uint32_t uniffi_scmessenger_core_fn_method_ironcore_outbox_count(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint32_t uniffi_scmessenger_core_fn_method_ironcore_outbox_count(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_PERFORM_MAINTENANCE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_PERFORM_MAINTENANCE
-void uniffi_scmessenger_core_fn_method_ironcore_perform_maintenance(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_ironcore_perform_maintenance(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_PREPARE_COVER_TRAFFIC
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_PREPARE_COVER_TRAFFIC
-RustBuffer uniffi_scmessenger_core_fn_method_ironcore_prepare_cover_traffic(void*_Nonnull ptr, uint32_t size_bytes, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_prepare_cover_traffic(uint64_t ptr, uint32_t size_bytes, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_PREPARE_MESSAGE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_PREPARE_MESSAGE
-RustBuffer uniffi_scmessenger_core_fn_method_ironcore_prepare_message(void*_Nonnull ptr, RustBuffer recipient_public_key_hex, RustBuffer text, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_prepare_message(uint64_t ptr, RustBuffer recipient_public_key_hex, RustBuffer text, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_PREPARE_MESSAGE_WITH_ID
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_PREPARE_MESSAGE_WITH_ID
-RustBuffer uniffi_scmessenger_core_fn_method_ironcore_prepare_message_with_id(void*_Nonnull ptr, RustBuffer recipient_public_key_hex, RustBuffer text, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_prepare_message_with_id(uint64_t ptr, RustBuffer recipient_public_key_hex, RustBuffer text, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_PREPARE_RECEIPT
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_PREPARE_RECEIPT
-RustBuffer uniffi_scmessenger_core_fn_method_ironcore_prepare_receipt(void*_Nonnull ptr, RustBuffer recipient_public_key_hex, RustBuffer message_id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_prepare_receipt(uint64_t ptr, RustBuffer recipient_public_key_hex, RustBuffer message_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_RECORD_LOG
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_RECORD_LOG
-void uniffi_scmessenger_core_fn_method_ironcore_record_log(void*_Nonnull ptr, RustBuffer line, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_ironcore_record_log(uint64_t ptr, RustBuffer line, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_RESOLVE_IDENTITY
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_RESOLVE_IDENTITY
-RustBuffer uniffi_scmessenger_core_fn_method_ironcore_resolve_identity(void*_Nonnull ptr, RustBuffer any_id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_resolve_identity(uint64_t ptr, RustBuffer any_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_RESOLVE_TO_IDENTITY_ID
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_RESOLVE_TO_IDENTITY_ID
-RustBuffer uniffi_scmessenger_core_fn_method_ironcore_resolve_to_identity_id(void*_Nonnull ptr, RustBuffer any_id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_resolve_to_identity_id(uint64_t ptr, RustBuffer any_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_SET_DELEGATE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_SET_DELEGATE
-void uniffi_scmessenger_core_fn_method_ironcore_set_delegate(void*_Nonnull ptr, RustBuffer delegate, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_ironcore_set_delegate(uint64_t ptr, RustBuffer delegate, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_SET_NICKNAME
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_SET_NICKNAME
-void uniffi_scmessenger_core_fn_method_ironcore_set_nickname(void*_Nonnull ptr, RustBuffer nickname, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_ironcore_set_nickname(uint64_t ptr, RustBuffer nickname, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_SIGN_DATA
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_SIGN_DATA
-RustBuffer uniffi_scmessenger_core_fn_method_ironcore_sign_data(void*_Nonnull ptr, RustBuffer data, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ironcore_sign_data(uint64_t ptr, RustBuffer data, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_START
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_START
-void uniffi_scmessenger_core_fn_method_ironcore_start(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_ironcore_start(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_STOP
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_STOP
-void uniffi_scmessenger_core_fn_method_ironcore_stop(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_ironcore_stop(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_UNBLOCK_PEER
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_UNBLOCK_PEER
-void uniffi_scmessenger_core_fn_method_ironcore_unblock_peer(void*_Nonnull ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_ironcore_unblock_peer(uint64_t ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_UPDATE_DISK_STATS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_UPDATE_DISK_STATS
-void uniffi_scmessenger_core_fn_method_ironcore_update_disk_stats(void*_Nonnull ptr, uint64_t total_bytes, uint64_t free_bytes, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_ironcore_update_disk_stats(uint64_t ptr, uint64_t total_bytes, uint64_t free_bytes, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_VERIFY_SIGNATURE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_IRONCORE_VERIFY_SIGNATURE
-int8_t uniffi_scmessenger_core_fn_method_ironcore_verify_signature(void*_Nonnull ptr, RustBuffer data, RustBuffer signature, RustBuffer public_key_hex, RustCallStatus *_Nonnull out_status
+int8_t uniffi_scmessenger_core_fn_method_ironcore_verify_signature(uint64_t ptr, RustBuffer data, RustBuffer signature, RustBuffer public_key_hex, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_LEDGERMANAGER
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_LEDGERMANAGER
-void*_Nonnull uniffi_scmessenger_core_fn_clone_ledgermanager(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_clone_ledgermanager(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_LEDGERMANAGER
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_LEDGERMANAGER
-void uniffi_scmessenger_core_fn_free_ledgermanager(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_free_ledgermanager(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_LEDGERMANAGER_NEW
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_LEDGERMANAGER_NEW
-void*_Nonnull uniffi_scmessenger_core_fn_constructor_ledgermanager_new(RustBuffer storage_path, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_constructor_ledgermanager_new(RustBuffer storage_path, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_ALL_KNOWN_TOPICS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_ALL_KNOWN_TOPICS
-RustBuffer uniffi_scmessenger_core_fn_method_ledgermanager_all_known_topics(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ledgermanager_all_known_topics(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_ANNOTATE_IDENTITY
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_ANNOTATE_IDENTITY
-void uniffi_scmessenger_core_fn_method_ledgermanager_annotate_identity(void*_Nonnull ptr, RustBuffer multiaddr, RustBuffer peer_id, RustBuffer public_key, RustBuffer nickname, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_ledgermanager_annotate_identity(uint64_t ptr, RustBuffer multiaddr, RustBuffer peer_id, RustBuffer public_key, RustBuffer nickname, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_DIALABLE_ADDRESSES
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_DIALABLE_ADDRESSES
-RustBuffer uniffi_scmessenger_core_fn_method_ledgermanager_dialable_addresses(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ledgermanager_dialable_addresses(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_GET_PREFERRED_RELAYS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_GET_PREFERRED_RELAYS
-RustBuffer uniffi_scmessenger_core_fn_method_ledgermanager_get_preferred_relays(void*_Nonnull ptr, uint32_t limit, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ledgermanager_get_preferred_relays(uint64_t ptr, uint32_t limit, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_LOAD
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_LOAD
-void uniffi_scmessenger_core_fn_method_ledgermanager_load(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_ledgermanager_load(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_RECORD_CONNECTION
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_RECORD_CONNECTION
-void uniffi_scmessenger_core_fn_method_ledgermanager_record_connection(void*_Nonnull ptr, RustBuffer multiaddr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_ledgermanager_record_connection(uint64_t ptr, RustBuffer multiaddr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_RECORD_FAILURE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_RECORD_FAILURE
-void uniffi_scmessenger_core_fn_method_ledgermanager_record_failure(void*_Nonnull ptr, RustBuffer multiaddr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_ledgermanager_record_failure(uint64_t ptr, RustBuffer multiaddr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_SAVE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_SAVE
-void uniffi_scmessenger_core_fn_method_ledgermanager_save(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_ledgermanager_save(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_SUMMARY
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_LEDGERMANAGER_SUMMARY
-RustBuffer uniffi_scmessenger_core_fn_method_ledgermanager_summary(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_ledgermanager_summary(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_MESHSERVICE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_MESHSERVICE
-void*_Nonnull uniffi_scmessenger_core_fn_clone_meshservice(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_clone_meshservice(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_MESHSERVICE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_MESHSERVICE
-void uniffi_scmessenger_core_fn_free_meshservice(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_free_meshservice(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_MESHSERVICE_NEW
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_MESHSERVICE_NEW
-void*_Nonnull uniffi_scmessenger_core_fn_constructor_meshservice_new(RustBuffer config, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_constructor_meshservice_new(RustBuffer config, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_MESHSERVICE_WITH_STORAGE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_MESHSERVICE_WITH_STORAGE
-void*_Nonnull uniffi_scmessenger_core_fn_constructor_meshservice_with_storage(RustBuffer config, RustBuffer storage_path, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_constructor_meshservice_with_storage(RustBuffer config, RustBuffer storage_path, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_EXPORT_DIAGNOSTICS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_EXPORT_DIAGNOSTICS
-RustBuffer uniffi_scmessenger_core_fn_method_meshservice_export_diagnostics(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_meshservice_export_diagnostics(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_GET_CONNECTION_PATH_STATE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_GET_CONNECTION_PATH_STATE
-RustBuffer uniffi_scmessenger_core_fn_method_meshservice_get_connection_path_state(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_meshservice_get_connection_path_state(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_GET_CORE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_GET_CORE
-RustBuffer uniffi_scmessenger_core_fn_method_meshservice_get_core(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_meshservice_get_core(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_GET_NAT_STATUS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_GET_NAT_STATUS
-RustBuffer uniffi_scmessenger_core_fn_method_meshservice_get_nat_status(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_meshservice_get_nat_status(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_GET_STATE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_GET_STATE
-RustBuffer uniffi_scmessenger_core_fn_method_meshservice_get_state(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_meshservice_get_state(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_GET_STATS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_GET_STATS
-RustBuffer uniffi_scmessenger_core_fn_method_meshservice_get_stats(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_meshservice_get_stats(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_GET_SWARM_BRIDGE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_GET_SWARM_BRIDGE
-void*_Nonnull uniffi_scmessenger_core_fn_method_meshservice_get_swarm_bridge(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_method_meshservice_get_swarm_bridge(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_ON_DATA_RECEIVED
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_ON_DATA_RECEIVED
-void uniffi_scmessenger_core_fn_method_meshservice_on_data_received(void*_Nonnull ptr, RustBuffer peer_id, RustBuffer data, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_meshservice_on_data_received(uint64_t ptr, RustBuffer peer_id, RustBuffer data, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_ON_PEER_DISCONNECTED
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_ON_PEER_DISCONNECTED
-void uniffi_scmessenger_core_fn_method_meshservice_on_peer_disconnected(void*_Nonnull ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_meshservice_on_peer_disconnected(uint64_t ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_ON_PEER_DISCOVERED
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_ON_PEER_DISCOVERED
-void uniffi_scmessenger_core_fn_method_meshservice_on_peer_discovered(void*_Nonnull ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_meshservice_on_peer_discovered(uint64_t ptr, RustBuffer peer_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_PAUSE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_PAUSE
-void uniffi_scmessenger_core_fn_method_meshservice_pause(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_meshservice_pause(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_RESET_STATS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_RESET_STATS
-void uniffi_scmessenger_core_fn_method_meshservice_reset_stats(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_meshservice_reset_stats(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_RESUME
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_RESUME
-void uniffi_scmessenger_core_fn_method_meshservice_resume(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_meshservice_resume(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_SET_BOOTSTRAP_NODES
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_SET_BOOTSTRAP_NODES
-void uniffi_scmessenger_core_fn_method_meshservice_set_bootstrap_nodes(void*_Nonnull ptr, RustBuffer addrs, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_meshservice_set_bootstrap_nodes(uint64_t ptr, RustBuffer addrs, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_SET_PLATFORM_BRIDGE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_SET_PLATFORM_BRIDGE
-void uniffi_scmessenger_core_fn_method_meshservice_set_platform_bridge(void*_Nonnull ptr, RustBuffer bridge, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_meshservice_set_platform_bridge(uint64_t ptr, RustBuffer bridge, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_SET_RELAY_BUDGET
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_SET_RELAY_BUDGET
-void uniffi_scmessenger_core_fn_method_meshservice_set_relay_budget(void*_Nonnull ptr, uint32_t messages_per_hour, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_meshservice_set_relay_budget(uint64_t ptr, uint32_t messages_per_hour, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_START
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_START
-void uniffi_scmessenger_core_fn_method_meshservice_start(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_meshservice_start(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_START_SWARM
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_START_SWARM
-void uniffi_scmessenger_core_fn_method_meshservice_start_swarm(void*_Nonnull ptr, RustBuffer listen_addr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_meshservice_start_swarm(uint64_t ptr, RustBuffer listen_addr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_STOP
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_STOP
-void uniffi_scmessenger_core_fn_method_meshservice_stop(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_meshservice_stop(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_UPDATE_DEVICE_STATE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSERVICE_UPDATE_DEVICE_STATE
-void uniffi_scmessenger_core_fn_method_meshservice_update_device_state(void*_Nonnull ptr, RustBuffer profile, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_meshservice_update_device_state(uint64_t ptr, RustBuffer profile, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_MESHSETTINGSMANAGER
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_MESHSETTINGSMANAGER
-void*_Nonnull uniffi_scmessenger_core_fn_clone_meshsettingsmanager(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_clone_meshsettingsmanager(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_MESHSETTINGSMANAGER
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_MESHSETTINGSMANAGER
-void uniffi_scmessenger_core_fn_free_meshsettingsmanager(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_free_meshsettingsmanager(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_MESHSETTINGSMANAGER_NEW
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_MESHSETTINGSMANAGER_NEW
-void*_Nonnull uniffi_scmessenger_core_fn_constructor_meshsettingsmanager_new(RustBuffer storage_path, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_constructor_meshsettingsmanager_new(RustBuffer storage_path, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSETTINGSMANAGER_DEFAULT_SETTINGS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSETTINGSMANAGER_DEFAULT_SETTINGS
-RustBuffer uniffi_scmessenger_core_fn_method_meshsettingsmanager_default_settings(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_meshsettingsmanager_default_settings(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSETTINGSMANAGER_LOAD
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSETTINGSMANAGER_LOAD
-RustBuffer uniffi_scmessenger_core_fn_method_meshsettingsmanager_load(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_meshsettingsmanager_load(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSETTINGSMANAGER_SAVE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSETTINGSMANAGER_SAVE
-void uniffi_scmessenger_core_fn_method_meshsettingsmanager_save(void*_Nonnull ptr, RustBuffer settings, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_meshsettingsmanager_save(uint64_t ptr, RustBuffer settings, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSETTINGSMANAGER_VALIDATE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_MESHSETTINGSMANAGER_VALIDATE
-void uniffi_scmessenger_core_fn_method_meshsettingsmanager_validate(void*_Nonnull ptr, RustBuffer settings, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_meshsettingsmanager_validate(uint64_t ptr, RustBuffer settings, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_SWARMBRIDGE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CLONE_SWARMBRIDGE
-void*_Nonnull uniffi_scmessenger_core_fn_clone_swarmbridge(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_clone_swarmbridge(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_SWARMBRIDGE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FREE_SWARMBRIDGE
-void uniffi_scmessenger_core_fn_free_swarmbridge(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_free_swarmbridge(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_SWARMBRIDGE_NEW
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_CONSTRUCTOR_SWARMBRIDGE_NEW
-void*_Nonnull uniffi_scmessenger_core_fn_constructor_swarmbridge_new(RustCallStatus *_Nonnull out_status
+uint64_t uniffi_scmessenger_core_fn_constructor_swarmbridge_new(RustCallStatus *_Nonnull out_status
     
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_DIAL
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_DIAL
-void uniffi_scmessenger_core_fn_method_swarmbridge_dial(void*_Nonnull ptr, RustBuffer multiaddr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_swarmbridge_dial(uint64_t ptr, RustBuffer multiaddr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_GET_EXTERNAL_ADDRESSES
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_GET_EXTERNAL_ADDRESSES
-RustBuffer uniffi_scmessenger_core_fn_method_swarmbridge_get_external_addresses(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_swarmbridge_get_external_addresses(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_GET_LISTENERS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_GET_LISTENERS
-RustBuffer uniffi_scmessenger_core_fn_method_swarmbridge_get_listeners(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_swarmbridge_get_listeners(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_GET_PEERS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_GET_PEERS
-RustBuffer uniffi_scmessenger_core_fn_method_swarmbridge_get_peers(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_swarmbridge_get_peers(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_GET_TOPICS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_GET_TOPICS
-RustBuffer uniffi_scmessenger_core_fn_method_swarmbridge_get_topics(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_swarmbridge_get_topics(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_PUBLISH_TOPIC
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_PUBLISH_TOPIC
-void uniffi_scmessenger_core_fn_method_swarmbridge_publish_topic(void*_Nonnull ptr, RustBuffer topic, RustBuffer data, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_swarmbridge_publish_topic(uint64_t ptr, RustBuffer topic, RustBuffer data, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_SEND_MESSAGE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_SEND_MESSAGE
-void uniffi_scmessenger_core_fn_method_swarmbridge_send_message(void*_Nonnull ptr, RustBuffer peer_id, RustBuffer data, RustBuffer recipient_identity_id, RustBuffer intended_device_id, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_swarmbridge_send_message(uint64_t ptr, RustBuffer peer_id, RustBuffer data, RustBuffer recipient_identity_id, RustBuffer intended_device_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_SEND_MESSAGE_STATUS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_SEND_MESSAGE_STATUS
-RustBuffer uniffi_scmessenger_core_fn_method_swarmbridge_send_message_status(void*_Nonnull ptr, RustBuffer peer_id, RustBuffer data, RustBuffer recipient_identity_id, RustBuffer intended_device_id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_scmessenger_core_fn_method_swarmbridge_send_message_status(uint64_t ptr, RustBuffer peer_id, RustBuffer data, RustBuffer recipient_identity_id, RustBuffer intended_device_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_SEND_TO_ALL_PEERS
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_SEND_TO_ALL_PEERS
-void uniffi_scmessenger_core_fn_method_swarmbridge_send_to_all_peers(void*_Nonnull ptr, RustBuffer data, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_swarmbridge_send_to_all_peers(uint64_t ptr, RustBuffer data, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_SHUTDOWN
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_SHUTDOWN
-void uniffi_scmessenger_core_fn_method_swarmbridge_shutdown(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_swarmbridge_shutdown(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_SUBSCRIBE_TOPIC
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_SUBSCRIBE_TOPIC
-void uniffi_scmessenger_core_fn_method_swarmbridge_subscribe_topic(void*_Nonnull ptr, RustBuffer topic, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_swarmbridge_subscribe_topic(uint64_t ptr, RustBuffer topic, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_UNSUBSCRIBE_TOPIC
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_METHOD_SWARMBRIDGE_UNSUBSCRIBE_TOPIC
-void uniffi_scmessenger_core_fn_method_swarmbridge_unsubscribe_topic(void*_Nonnull ptr, RustBuffer topic, RustCallStatus *_Nonnull out_status
+void uniffi_scmessenger_core_fn_method_swarmbridge_unsubscribe_topic(uint64_t ptr, RustBuffer topic, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_INIT_CALLBACK_VTABLE_COREDELEGATE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_INIT_CALLBACK_VTABLE_COREDELEGATE
-void uniffi_scmessenger_core_fn_init_callback_vtable_coredelegate(UniffiVTableCallbackInterfaceCoreDelegate* _Nonnull vtable
+void uniffi_scmessenger_core_fn_init_callback_vtable_coredelegate(const UniffiVTableCallbackInterfaceCoreDelegate* _Nonnull vtable
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_INIT_CALLBACK_VTABLE_PLATFORMBRIDGE
 #define UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_INIT_CALLBACK_VTABLE_PLATFORMBRIDGE
-void uniffi_scmessenger_core_fn_init_callback_vtable_platformbridge(UniffiVTableCallbackInterfacePlatformBridge* _Nonnull vtable
+void uniffi_scmessenger_core_fn_init_callback_vtable_platformbridge(const UniffiVTableCallbackInterfacePlatformBridge* _Nonnull vtable
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCMESSENGER_CORE_FN_FUNC_BLOCKED_IDENTITY_NEW
@@ -1332,26 +1326,6 @@ void ffi_scmessenger_core_rust_future_free_f64(uint64_t handle
 #ifndef UNIFFI_FFIDEF_FFI_SCMESSENGER_CORE_RUST_FUTURE_COMPLETE_F64
 #define UNIFFI_FFIDEF_FFI_SCMESSENGER_CORE_RUST_FUTURE_COMPLETE_F64
 double ffi_scmessenger_core_rust_future_complete_f64(uint64_t handle, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_FFI_SCMESSENGER_CORE_RUST_FUTURE_POLL_POINTER
-#define UNIFFI_FFIDEF_FFI_SCMESSENGER_CORE_RUST_FUTURE_POLL_POINTER
-void ffi_scmessenger_core_rust_future_poll_pointer(uint64_t handle, UniffiRustFutureContinuationCallback _Nonnull callback, uint64_t callback_data
-);
-#endif
-#ifndef UNIFFI_FFIDEF_FFI_SCMESSENGER_CORE_RUST_FUTURE_CANCEL_POINTER
-#define UNIFFI_FFIDEF_FFI_SCMESSENGER_CORE_RUST_FUTURE_CANCEL_POINTER
-void ffi_scmessenger_core_rust_future_cancel_pointer(uint64_t handle
-);
-#endif
-#ifndef UNIFFI_FFIDEF_FFI_SCMESSENGER_CORE_RUST_FUTURE_FREE_POINTER
-#define UNIFFI_FFIDEF_FFI_SCMESSENGER_CORE_RUST_FUTURE_FREE_POINTER
-void ffi_scmessenger_core_rust_future_free_pointer(uint64_t handle
-);
-#endif
-#ifndef UNIFFI_FFIDEF_FFI_SCMESSENGER_CORE_RUST_FUTURE_COMPLETE_POINTER
-#define UNIFFI_FFIDEF_FFI_SCMESSENGER_CORE_RUST_FUTURE_COMPLETE_POINTER
-void*_Nonnull ffi_scmessenger_core_rust_future_complete_pointer(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_FFI_SCMESSENGER_CORE_RUST_FUTURE_POLL_RUST_BUFFER

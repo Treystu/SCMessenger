@@ -225,8 +225,8 @@ task buildRustAndroid(type: Exec) {
         # Copy libraries to expected locations
         echo "Copying libraries..."
         mkdir -p core/target/android-libs/arm64-v8a core/target/android-libs/x86_64
-        cp target/aarch64-linux-android/\${RUST_DIR}/libscmessenger_core.so core/target/android-libs/arm64-v8a/libuniffi_api.so
-        cp target/x86_64-linux-android/\${RUST_DIR}/libscmessenger_core.so core/target/android-libs/x86_64/libuniffi_api.so
+        cp target/aarch64-linux-android/\${RUST_DIR}/libscmessenger_core.so core/target/android-libs/arm64-v8a/libscmessenger_core.so
+        cp target/x86_64-linux-android/\${RUST_DIR}/libscmessenger_core.so core/target/android-libs/x86_64/libscmessenger_core.so
         
         echo "Rust libraries built and copied successfully!"
     """
@@ -246,10 +246,12 @@ task generateUniFFIBindings(type: Exec) {
     
     // Use sh to invoke cargo to ensure it's found in PATH (fixes issue on some environments)
     // We also source $HOME/.cargo/env if it exists to be extra safe, though sh usually picks it up if configured in profile
+    // Unset RUSTFLAGS to avoid Android-specific linker flags affecting macOS builds
     commandLine 'sh', '-c', '''
         if [ -f "$HOME/.cargo/env" ]; then
             source "$HOME/.cargo/env"
         fi
+        unset RUSTFLAGS
         cargo run --bin gen_kotlin --features gen-bindings
     '''
     

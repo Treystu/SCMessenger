@@ -1,30 +1,33 @@
 #[cfg(feature = "gen-bindings")]
 fn main() {
-    use camino::Utf8Path;
+    use camino::Utf8PathBuf;
     use std::fs;
-    use uniffi_bindgen::bindings::swift::gen_swift::SwiftBindingGenerator;
+    use uniffi_bindgen::bindings::{generate, GenerateOptions, TargetLanguage};
 
     // Use CARGO_MANIFEST_DIR to resolve paths correctly regardless of working directory
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let manifest_path = Utf8Path::new(&manifest_dir);
+    let manifest_path = Utf8PathBuf::from(manifest_dir);
 
     let udl_file = manifest_path.join("src/api.udl");
     let config_file = manifest_path.join("uniffi.toml");
     let out_dir = manifest_path.join("target/generated-sources/uniffi/swift");
 
-    // Pass config file to avoid "missing field `package`" error (issue #42)
-    let config = config_file.exists().then_some(config_file.as_path());
+    // Create output directory if it doesn't exist
+    std::fs::create_dir_all(&out_dir).expect("Failed to create output directory");
 
-    uniffi_bindgen::generate_bindings(
-        udl_file.as_path(),
-        config,
-        SwiftBindingGenerator,
-        Some(out_dir.as_path()),
-        None,
-        None,
-        false,
-    )
-    .expect("Failed to generate Swift bindings. Check core/uniffi.toml and core/src/api.udl");
+    // Use the new uniffi_bindgen 0.31 API
+    let options = GenerateOptions {
+        languages: vec![TargetLanguage::Swift],
+        source: udl_file,
+        out_dir: out_dir.clone(),
+        config_override: config_file.exists().then_some(config_file),
+        format: false,
+        crate_filter: None,
+        metadata_no_deps: false,
+    };
+
+    generate(options)
+        .expect("Failed to generate Swift bindings. Check core/uniffi.toml and core/src/api.udl");
 
     // Keep generated Swift bindings compatible with targets that default to
     // MainActor isolation (Swift 6 strict concurrency). UniFFI helper
