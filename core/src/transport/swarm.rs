@@ -1282,15 +1282,12 @@ pub async fn start_swarm_with_config(
         let _ = &bootstrap_addrs;
         let _ = &storage_path;
         let _ = headless;
-        
-        // Declare reported_peer_discoveries for WASM scope (used in event handlers below)
-        let mut reported_peer_discoveries: std::collections::HashSet<PeerId> = std::collections::HashSet::new();
-        
+
         // WASM stub: Real swarm networking requires tokio/quic which aren't available in browsers.
         // Use WasmTransport for browser-based P2P instead.
-        Err(anyhow::anyhow!(
+        return Err(anyhow::anyhow!(
             "Swarm networking is not supported in WASM. Use WasmTransport for browser-based P2P."
-        ))
+        ));
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -3295,6 +3292,7 @@ pub async fn start_swarm_with_config(
         let mut last_custody_pull: f64 = js_sys::Date::now();
         let mut seen_delivery_convergence_markers: HashSet<String> = HashSet::new();
         let bootstrap_addrs_clone = bootstrap_addrs;
+        let mut reported_peer_discoveries: HashSet<PeerId> = HashSet::new();
 
         wasm_bindgen_futures::spawn_local(async move {
             loop {

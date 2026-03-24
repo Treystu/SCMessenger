@@ -94,7 +94,7 @@ pub struct MeshSettings {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum DiscoveryMode {
     Normal,
-    Aggressive,
+    Cautious,
     Paranoid,
 }
 
