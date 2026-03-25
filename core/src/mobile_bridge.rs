@@ -136,6 +136,7 @@ pub struct MeshService {
     core: std::sync::Arc<Mutex<Option<crate::IronCore>>>,
     platform_bridge: std::sync::Arc<Mutex<Option<Box<dyn PlatformBridge>>>>,
     storage_path: Option<String>,
+    log_directory: Option<String>,
     swarm_bridge: std::sync::Arc<SwarmBridge>,
     bootstrap_addrs: Mutex<Vec<String>>,
     nat_status: std::sync::Arc<Mutex<String>>,
@@ -157,6 +158,7 @@ impl MeshService {
             core: std::sync::Arc::new(Mutex::new(None)),
             platform_bridge: std::sync::Arc::new(Mutex::new(None)),
             storage_path: None,
+            log_directory: None,
             swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
             bootstrap_addrs: Mutex::new(Vec::new()),
             nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
@@ -176,6 +178,27 @@ impl MeshService {
             core: std::sync::Arc::new(Mutex::new(None)),
             platform_bridge: std::sync::Arc::new(Mutex::new(None)),
             storage_path: Some(storage_path),
+            log_directory: None,
+            swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
+            bootstrap_addrs: Mutex::new(Vec::new()),
+            nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
+            relay_budget: std::sync::Arc::new(Mutex::new(200)),
+            swarm_headless_mode: std::sync::Arc::new(Mutex::new(None)),
+            current_device_profile: Mutex::new(None),
+            device_state: RwLock::new(None),
+        }
+    }
+
+    /// Create MeshService with persistent storage and structured tracing
+    pub fn with_storage_and_logs(config: MeshServiceConfig, storage_path: String, log_directory: String) -> Self {
+        Self {
+            _config: Mutex::new(config),
+            state: Mutex::new(ServiceState::Stopped),
+            stats: Mutex::new(ServiceStats::default()),
+            core: std::sync::Arc::new(Mutex::new(None)),
+            platform_bridge: std::sync::Arc::new(Mutex::new(None)),
+            storage_path: Some(storage_path),
+            log_directory: Some(log_directory),
             swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
             bootstrap_addrs: Mutex::new(Vec::new()),
             nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
@@ -197,7 +220,13 @@ impl MeshService {
         drop(state);
 
         // Initialize IronCore
-        let core = if let Some(ref path) = self.storage_path {
+        let core = if let Some(ref log_dir) = self.log_directory {
+            if let Some(ref path) = self.storage_path {
+                crate::IronCore::with_storage_and_logs(path.clone(), log_dir.clone())
+            } else {
+                crate::IronCore::new()
+            }
+        } else if let Some(ref path) = self.storage_path {
             crate::IronCore::with_storage(path.clone())
         } else {
             crate::IronCore::new()

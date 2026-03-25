@@ -303,6 +303,15 @@ impl TransportManager {
     pub fn send_to_peer(&self, peer_id: [u8; 32], data: Vec<u8>, priority: u8) -> Result<SendResult, TransportError> {
         let best = self.best_transport_for_peer(peer_id)?;
 
+        // Structured tracing: Log transport handoff to hardware layer
+        tracing::info!(
+            event = "transport_handoff",
+            peer_id = %hex::encode(&peer_id),
+            transport = %best,
+            priority = priority,
+            payload_size = data.len()
+        );
+
         let mut outgoing = self.outgoing.write();
         outgoing.enqueue(PendingSend {
             peer_id,

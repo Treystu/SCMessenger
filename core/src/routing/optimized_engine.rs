@@ -101,6 +101,17 @@ impl OptimizedRoutingEngine {
         
         let mut decision = self.base_engine.route_message(recipient_hint, message_id, priority, now);
         
+        // Structured tracing: Log routing decision
+        tracing::info!(
+            event = "routing_decision",
+            message_id = %hex::encode(message_id),
+            recipient_hint = %hex::encode(recipient_hint),
+            priority = priority,
+            next_hop = ?decision.primary,
+            decided_by = ?decision.decided_by,
+            confidence = decision.confidence
+        );
+        
         // Apply adaptive TTL to the decision (P2 optimization)
         if let NextHop::GlobalRoute { next_hop_id, .. } = decision.primary {
             let peer_id_str = hex::encode(next_hop_id);

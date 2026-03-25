@@ -405,6 +405,11 @@ open class MeshRepository(private val context: Context) {
             Timber.i("all_managers_init_success")
             Timber.i("All managers initialized successfully")
 
+            // REGRESSION FIX: Migrate contacts from old location to new database
+            // Old: storagePath/contacts/ (sled dir)
+            // New: storagePath/contacts.db/ (sled dir)
+            migrateContactsFromOldLocation()
+
             // One-time migration: clear stale routing hints inherited from
             // pre-fix builds.  The old appendRoutingHint accumulated duplicate
             // BLE MACs and stale libp2p_peer_id entries that now cause endless
@@ -416,6 +421,73 @@ open class MeshRepository(private val context: Context) {
             migrateTruncatedPublicKeys()
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize managers")
+        }
+    }
+
+    /**
+     * REGRESSION FIX (2026-03-24): Migrate contacts from old storage location.
+     * 
+     * Issue: UniFFI contract update changed ContactManager to use "contacts.db/" 
+     * instead of "contacts/", causing contacts to disappear after app update.
+     * 
+     * Solution: Copy sled database files from old to new location at file system level.
+     */
+    private fun migrateContactsFromOldLocation() {
+        try {
+            val prefs = context.getSharedPreferences("mesh_migrations", android.content.Context.MODE_PRIVATE)
+            if (prefs.getBoolean("v2_contacts_db_migration", false)) {
+                return
+            }
+
+            val oldDir = java.io.File(storagePath, "contacts")
+            val newDir = java.io.File(storagePath, "contacts.db")
+            
+            if (!oldDir.exists() || !oldDir.isDirectory) {
+                Timber.d("Old contacts directory not found, skipping migration")
+                prefs.edit().putBoolean("v2_contacts_db_migration", true).apply()
+                return
+            }
+
+            val oldDb = java.io.File(oldDir, "db")
+            if (!oldDb.exists() || oldDb.length() == 0L) {
+                Timber.d("Old contacts database empty or missing, skipping migration")
+                prefs.edit().putBoolean("v2_contacts_db_migration", true).apply()
+                return
+            }
+
+            // Check if new database is empty (never been written to, or just initialized)
+            val newDb = java.io.File(newDir, "db")
+            val newDbSize = if (newDb.exists()) newDb.length() else 0L
+            
+            // Only migrate if old DB has data and new DB is small/empty
+            if (oldDb.length() > newDbSize + 10000) { // Old DB has significantly more data
+                Timber.i("🔧 MIGRATION: Copying contacts from old location (${oldDb.length()} bytes)")
+                
+                // Copy all sled files
+                oldDir.listFiles()?.forEach { file ->
+                    if (file.isFile) {
+                        val dest = java.io.File(newDir, file.name)
+                        try {
+                            file.copyTo(dest, overwrite = true)
+                            Timber.d("Copied ${file.name} (${file.length()} bytes)")
+                        } catch (e: Exception) {
+                            Timber.e(e, "Failed to copy ${file.name}")
+                        }
+                    }
+                }
+                
+                Timber.i("🔧 MIGRATION: Contacts migrated successfully")
+            } else {
+                Timber.d("New database already has data, skipping migration")
+            }
+
+            prefs.edit().putBoolean("v2_contacts_db_migration", true).apply()
+
+        } catch (e: Exception) {
+            Timber.e(e, "Contacts migration failed")
+            // Mark as complete even if failed to avoid retry loops
+            context.getSharedPreferences("mesh_migrations", android.content.Context.MODE_PRIVATE)
+                .edit().putBoolean("v2_contacts_db_migration", true).apply()
         }
     }
 
@@ -597,7 +669,8 @@ open class MeshRepository(private val context: Context) {
             Timber.d("Starting MeshService...")
             if (meshService == null) {
                 // Recreate service instance after stop/failure so start is always clean.
-                meshService = uniffi.api.MeshService.withStorage(config, storagePath)
+                val logsDir = context.filesDir.absolutePath + "/logs"
+                meshService = uniffi.api.MeshService.withStorageAndLogs(config, storagePath, logsDir)
             }
 
             // 1. Start the Rust Core service

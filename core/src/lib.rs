@@ -517,22 +517,41 @@ fn init_uniffi_history_manager(
 impl IronCore {
     /// Create a new Iron Core instance with in-memory storage
     pub fn new() -> Self {
-        Self::init(None)
+        Self::init(None, None)
     }
 
     /// Create Iron Core with persistent storage at the given path
     pub fn with_storage(storage_path: String) -> Self {
-        Self::init(Some(storage_path))
+        Self::init(Some(storage_path), None)
     }
 
-    fn init(storage_path: Option<String>) -> Self {
-        // Initialize tracing (idempotent)
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(
-                tracing_subscriber::EnvFilter::try_from_default_env()
-                    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-            )
-            .try_init();
+    /// Create Iron Core with persistent storage and structured tracing
+    pub fn with_storage_and_logs(storage_path: String, log_directory: String) -> Self {
+        Self::init(Some(storage_path), Some(log_directory))
+    }
+
+    fn init(storage_path: Option<String>, log_directory: Option<String>) -> Self {
+        // Initialize tracing: file-based if log_directory provided, stdout otherwise
+        if let Some(log_dir) = log_directory {
+            if let Err(e) = store::tracing_init::init_file_tracing(&log_dir) {
+                eprintln!("Failed to initialize file tracing: {}", e);
+                // Fallback to stdout tracing
+                let _ = tracing_subscriber::fmt()
+                    .with_env_filter(
+                        tracing_subscriber::EnvFilter::try_from_default_env()
+                            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+                    )
+                    .try_init();
+            }
+        } else {
+            // Initialize tracing (idempotent, mobile-safe with try_init)
+            let _ = tracing_subscriber::fmt()
+                .with_env_filter(
+                    tracing_subscriber::EnvFilter::try_from_default_env()
+                        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+                )
+                .try_init();
+        }
 
         #[allow(unused_variables)]
         let storage_ready = if let Some(path) = &storage_path {
@@ -1200,6 +1219,20 @@ impl IronCore {
         let msg = Message::text(sender_id, recipient_key_trimmed.clone(), &text);
         let message_id = msg.id.clone();
 
+        // Structured tracing: Create span for packet lifecycle
+        let span = tracing::info_span!(
+            "packet_lifecycle",
+            message_id = %message_id,
+            recipient = %recipient_key_trimmed
+        );
+        let _guard = span.enter();
+
+        tracing::info!(
+            event = "message_created",
+            payload_size = text.len(),
+            timestamp = msg.timestamp
+        );
+
         // Auto-save to history (Outgoing)
         let history = self.history.write();
         let local_ts = std::time::SystemTime::now()
@@ -1475,6 +1508,12 @@ impl IronCore {
                     );
                 } else {
                     if matches!(receipt.status, message::DeliveryStatus::Delivered) {
+                        tracing::info!(
+                            event = "receipt_verified",
+                            message_id = %receipt.message_id,
+                            sender_identity = %expected_sender_identity,
+                            status = "delivered"
+                        );
                         let _ = self.mark_message_sent(receipt.message_id.clone());
                         let _ = self
                             .history

@@ -85,6 +85,8 @@ interface IronCore {
     constructor();
     [Name=with_storage]
     constructor(string storage_path);
+    [Name=with_storage_and_logs]
+    constructor(string storage_path, string log_directory);
 
     // Lifecycle
     [Throws=IronCoreError]
@@ -246,6 +248,8 @@ interface MeshService {
     constructor(MeshServiceConfig config);
     [Name=with_storage]
     constructor(MeshServiceConfig config, string storage_path);
+    [Name=with_storage_and_logs]
+    constructor(MeshServiceConfig config, string storage_path, string log_directory);
 
     [Throws=IronCoreError]
     void start();

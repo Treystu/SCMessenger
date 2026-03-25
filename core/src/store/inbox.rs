@@ -80,7 +80,7 @@ impl Inbox {
 
     /// Record a received message. Returns false if duplicate.
     pub fn receive(&mut self, msg: ReceivedMessage) -> bool {
-        match &mut self.backend {
+        let is_new = match &mut self.backend {
             InboxBackend::Memory {
                 seen_ids,
                 seen_order,
@@ -104,7 +104,7 @@ impl Inbox {
                 }
 
                 // Store message
-                messages.entry(msg.sender_id.clone()).or_default().push(msg);
+                messages.entry(msg.sender_id.clone()).or_default().push(msg.clone());
                 *total += 1;
 
                 true // New message
@@ -152,7 +152,18 @@ impl Inbox {
 
                 true // New message
             }
+        };
+
+        if is_new {
+            tracing::info!(
+                event = "inbox_receive",
+                message_id = %msg.message_id,
+                sender_id = %msg.sender_id,
+                received_at = msg.received_at
+            );
         }
+
+        is_new
     }
 
     /// Get all messages from a specific sender

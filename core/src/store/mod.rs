@@ -9,6 +9,7 @@ pub mod logs;
 pub mod outbox;
 pub mod relay_custody;
 pub mod storage;
+pub mod tracing_init;
 
 pub use backend::StorageBackend;
 // Note: BlockedIdentity/BlockedManager exported through blocked_bridge for UniFFI

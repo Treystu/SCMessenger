@@ -579,8 +579,9 @@ final class MeshRepository {
         statusEvents.send(.serviceStateChanged(.starting))
 
         do {
-            // Create mesh service with persistent storage
-            meshService = MeshService.withStorage(config: config, storagePath: storagePath)
+            // Create mesh service with persistent storage and structured tracing
+            let logsDir = storagePath + "/logs"
+            meshService = MeshService.withStorageAndLogs(config: config, storagePath: storagePath, logDirectory: logsDir)
 
             // Start service first — IronCore is created during start()
             try meshService?.start()

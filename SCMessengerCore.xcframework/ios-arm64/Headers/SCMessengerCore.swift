@@ -1577,6 +1577,15 @@ public static func withStorage(storagePath: String) -> IronCore  {
 })
 }
     
+public static func withStorageAndLogs(storagePath: String, logDirectory: String) -> IronCore  {
+    return try!  FfiConverterTypeIronCore_lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_constructor_ironcore_with_storage_and_logs(
+        FfiConverterString.lower(storagePath),
+        FfiConverterString.lower(logDirectory),$0
+    )
+})
+}
+    
 
     
 open func blockPeer(peerId: String, reason: String?)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
@@ -2278,6 +2287,16 @@ public static func withStorage(config: MeshServiceConfig, storagePath: String) -
     uniffi_scmessenger_core_fn_constructor_meshservice_with_storage(
         FfiConverterTypeMeshServiceConfig_lower(config),
         FfiConverterString.lower(storagePath),$0
+    )
+})
+}
+    
+public static func withStorageAndLogs(config: MeshServiceConfig, storagePath: String, logDirectory: String) -> MeshService  {
+    return try!  FfiConverterTypeMeshService_lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_constructor_meshservice_with_storage_and_logs(
+        FfiConverterTypeMeshServiceConfig_lower(config),
+        FfiConverterString.lower(storagePath),
+        FfiConverterString.lower(logDirectory),$0
     )
 })
 }
@@ -6205,6 +6224,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_scmessenger_core_checksum_constructor_ironcore_with_storage() != 29028) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_constructor_ironcore_with_storage_and_logs() != 22286) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_constructor_ledgermanager_new() != 9786) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -6212,6 +6234,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_constructor_meshservice_with_storage() != 62603) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_constructor_meshservice_with_storage_and_logs() != 10176) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_constructor_meshsettingsmanager_new() != 7856) {

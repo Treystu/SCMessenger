@@ -66,6 +66,16 @@ impl Outbox {
 
     /// Queue a message for delivery
     pub fn enqueue(&mut self, msg: QueuedMessage) -> std::result::Result<(), String> {
+        // Structured tracing: Log outbox enqueue event
+        tracing::info!(
+            event = "outbox_enqueue",
+            message_id = %msg.message_id,
+            recipient_id = %msg.recipient_id,
+            queued_at = msg.queued_at,
+            attempts = msg.attempts,
+            payload_size = msg.envelope_data.len()
+        );
+
         match &mut self.backend {
             OutboxBackend::Memory { queues, total } => {
                 if *total >= MAX_TOTAL_QUEUED {
@@ -146,7 +156,7 @@ impl Outbox {
 
     /// Remove a specific message by ID (after successful delivery)
     pub fn remove(&mut self, message_id: &str) -> bool {
-        match &mut self.backend {
+        let result = match &mut self.backend {
             OutboxBackend::Memory { queues, total } => {
                 for queue in queues.values_mut() {
                     if let Some(pos) = queue.iter().position(|m| m.message_id == message_id) {
@@ -172,7 +182,17 @@ impl Outbox {
                 }
                 false
             }
+        };
+
+        if result {
+            tracing::info!(
+                event = "outbox_dequeue",
+                message_id = %message_id,
+                reason = "delivery_confirmed"
+            );
         }
+
+        result
     }
 
     /// Drain all messages for a peer (for batch delivery)
