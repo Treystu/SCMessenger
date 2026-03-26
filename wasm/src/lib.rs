@@ -702,6 +702,180 @@ impl IronCore {
             inner: self.inner.history_store_manager(),
         }
     }
+
+    // ── Identity Resolution ──────────────────────────────────────────────
+
+    /// Resolve any identifier format (peer ID, identity hash, public key hex)
+    /// to the canonical public_key_hex.
+    #[wasm_bindgen(js_name = resolveIdentity)]
+    pub fn resolve_identity(&self, any_id: String) -> Result<String, JsValue> {
+        self.inner
+            .resolve_identity(any_id)
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
+    }
+
+    /// Resolve any identifier format to the identity_id (Blake3 hash).
+    #[wasm_bindgen(js_name = resolveToIdentityId)]
+    pub fn resolve_to_identity_id(&self, any_id: String) -> Result<String, JsValue> {
+        self.inner
+            .resolve_to_identity_id(any_id)
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
+    }
+
+    // ── Blocking ─────────────────────────────────────────────────────────
+
+    /// Block a peer by ID, with an optional reason string.
+    #[wasm_bindgen(js_name = blockPeer)]
+    pub fn block_peer(&self, peer_id: String, reason: Option<String>) -> Result<(), JsValue> {
+        self.inner
+            .block_peer(peer_id, reason)
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
+    }
+
+    /// Unblock a previously blocked peer.
+    #[wasm_bindgen(js_name = unblockPeer)]
+    pub fn unblock_peer(&self, peer_id: String) -> Result<(), JsValue> {
+        self.inner
+            .unblock_peer(peer_id)
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
+    }
+
+    /// Check whether a peer is currently blocked.
+    #[wasm_bindgen(js_name = isPeerBlocked)]
+    pub fn is_peer_blocked(&self, peer_id: String) -> Result<bool, JsValue> {
+        self.inner
+            .is_peer_blocked(peer_id)
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
+    }
+
+    /// List all blocked peers. Returns a JS array of BlockedIdentity objects.
+    #[wasm_bindgen(js_name = listBlockedPeers)]
+    pub fn list_blocked_peers(&self) -> Result<js_sys::Array, JsValue> {
+        let list = self
+            .inner
+            .list_blocked_peers()
+            .map_err(|e| js_value_from_str(&format!("{}", e)))?;
+        let array = js_sys::Array::new();
+        for item in list {
+            let obj = js_sys::Object::new();
+            js_sys::Reflect::set(
+                &obj,
+                &JsValue::from_str("peerId"),
+                &JsValue::from_str(&item.peer_id),
+            )
+            .unwrap();
+            if let Some(ref did) = item.device_id {
+                js_sys::Reflect::set(
+                    &obj,
+                    &JsValue::from_str("deviceId"),
+                    &JsValue::from_str(did),
+                )
+                .unwrap();
+            }
+            js_sys::Reflect::set(
+                &obj,
+                &JsValue::from_str("blockedAt"),
+                &JsValue::from_f64(item.blocked_at as f64),
+            )
+            .unwrap();
+            if let Some(ref reason) = item.reason {
+                js_sys::Reflect::set(
+                    &obj,
+                    &JsValue::from_str("reason"),
+                    &JsValue::from_str(reason),
+                )
+                .unwrap();
+            }
+            if let Some(ref notes) = item.notes {
+                js_sys::Reflect::set(
+                    &obj,
+                    &JsValue::from_str("notes"),
+                    &JsValue::from_str(notes),
+                )
+                .unwrap();
+            }
+            array.push(&obj);
+        }
+        Ok(array)
+    }
+
+    /// Get the count of blocked peers.
+    #[wasm_bindgen(js_name = blockedCount)]
+    pub fn blocked_count(&self) -> Result<u32, JsValue> {
+        self.inner
+            .blocked_count()
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
+    }
+
+    // ── Device & Registration ────────────────────────────────────────────
+
+    /// Get the installation-local device ID (UUIDv4).
+    #[wasm_bindgen(js_name = getDeviceId)]
+    pub fn get_device_id(&self) -> Option<String> {
+        self.inner.get_device_id()
+    }
+
+    /// Get the seniority timestamp for this installation.
+    #[wasm_bindgen(js_name = getSeniorityTimestamp)]
+    pub fn get_seniority_timestamp(&self) -> Option<u64> {
+        self.inner.get_seniority_timestamp()
+    }
+
+    /// Get the registration state for a given identity.
+    #[wasm_bindgen(js_name = getRegistrationState)]
+    pub fn get_registration_state(&self, identity_id: String) -> JsValue {
+        let info = self.inner.get_registration_state(identity_id);
+        serde_wasm_bindgen::to_value(&WasmRegistrationStateInfo {
+            state: info.state,
+            device_id: info.device_id,
+            seniority_timestamp: info.seniority_timestamp,
+        })
+        .unwrap()
+    }
+
+    // ── Maintenance & Logging ────────────────────────────────────────────
+
+    /// Perform storage maintenance (quota enforcement, cleanup).
+    #[wasm_bindgen(js_name = performMaintenance)]
+    pub fn perform_maintenance(&self) -> Result<(), JsValue> {
+        self.inner
+            .perform_maintenance()
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
+    }
+
+    /// Update disk usage statistics for quota enforcement.
+    #[wasm_bindgen(js_name = updateDiskStats)]
+    pub fn update_disk_stats(&self, total_bytes: u64, free_bytes: u64) {
+        self.inner.update_disk_stats(total_bytes, free_bytes);
+    }
+
+    /// Record a log line into the core log manager.
+    #[wasm_bindgen(js_name = recordLog)]
+    pub fn record_log(&self, line: String) {
+        self.inner.record_log(line);
+    }
+
+    /// Export all recorded log entries as a single string.
+    #[wasm_bindgen(js_name = exportLogs)]
+    pub fn export_logs(&self) -> Result<String, JsValue> {
+        self.inner
+            .export_logs()
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
+    }
+
+    // ── Peer Notifications ───────────────────────────────────────────────
+
+    /// Notify the core that a peer was discovered on the network.
+    #[wasm_bindgen(js_name = notifyPeerDiscovered)]
+    pub fn notify_peer_discovered(&self, peer_id: String) {
+        self.inner.notify_peer_discovered(peer_id);
+    }
+
+    /// Notify the core that a peer disconnected from the network.
+    #[wasm_bindgen(js_name = notifyPeerDisconnected)]
+    pub fn notify_peer_disconnected(&self, peer_id: String) {
+        self.inner.notify_peer_disconnected(peer_id);
+    }
 }
 
 #[wasm_bindgen]
@@ -763,6 +937,58 @@ impl WasmContactManager {
         self.inner
             .set_local_nickname(peer_id, nickname)
             .map_err(|e| js_value_from_str(&format!("{:?}", e)))
+    }
+
+    /// Search contacts by query string (matches peer_id, nickname, notes).
+    #[wasm_bindgen(js_name = search)]
+    pub fn search(&self, query: String) -> Result<js_sys::Array, JsValue> {
+        let results = self
+            .inner
+            .search(query)
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))?;
+        let array = js_sys::Array::new();
+        for item in results {
+            array.push(&serde_wasm_bindgen::to_value(&item).unwrap());
+        }
+        Ok(array)
+    }
+
+    /// Set the federated (broadcast) nickname for a contact.
+    #[wasm_bindgen(js_name = setNickname)]
+    pub fn set_nickname(
+        &self,
+        peer_id: String,
+        nickname: Option<String>,
+    ) -> Result<(), JsValue> {
+        self.inner
+            .set_nickname(peer_id, nickname)
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))
+    }
+
+    /// Update the last-seen timestamp for a contact.
+    #[wasm_bindgen(js_name = updateLastSeen)]
+    pub fn update_last_seen(&self, peer_id: String) -> Result<(), JsValue> {
+        self.inner
+            .update_last_seen(peer_id)
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))
+    }
+
+    /// Update the last known device ID for a contact.
+    #[wasm_bindgen(js_name = updateDeviceId)]
+    pub fn update_device_id(
+        &self,
+        peer_id: String,
+        device_id: Option<String>,
+    ) -> Result<(), JsValue> {
+        self.inner
+            .update_last_known_device_id(peer_id, device_id)
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))
+    }
+
+    /// Flush contact data to persistent storage.
+    #[wasm_bindgen(js_name = flush)]
+    pub fn flush(&self) {
+        self.inner.flush();
     }
 }
 
@@ -860,6 +1086,68 @@ impl WasmHistoryManager {
         self.inner
             .prune_before(before_timestamp)
             .map_err(|e| js_value_from_str(&format!("{:?}", e)))
+    }
+
+    /// Get a single message record by ID.
+    #[wasm_bindgen(js_name = get)]
+    pub fn get(&self, id: String) -> Result<JsValue, JsValue> {
+        let record = self
+            .inner
+            .get(id)
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))?;
+        Ok(serde_wasm_bindgen::to_value(&record).unwrap())
+    }
+
+    /// Search message history by query string.
+    #[wasm_bindgen(js_name = search)]
+    pub fn search(&self, query: String, limit: u32) -> Result<js_sys::Array, JsValue> {
+        let records = self
+            .inner
+            .search(query, limit)
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))?;
+        let array = js_sys::Array::new();
+        for rec in records {
+            array.push(&serde_wasm_bindgen::to_value(&rec).unwrap());
+        }
+        Ok(array)
+    }
+
+    /// Mark a message as delivered by ID.
+    #[wasm_bindgen(js_name = markDelivered)]
+    pub fn mark_delivered(&self, id: String) -> Result<(), JsValue> {
+        self.inner
+            .mark_delivered(id)
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))
+    }
+
+    /// Clear all messages in a conversation with a specific peer.
+    #[wasm_bindgen(js_name = clearConversation)]
+    pub fn clear_conversation(&self, peer_id: String) -> Result<(), JsValue> {
+        self.inner
+            .remove_conversation(peer_id)
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))
+    }
+
+    /// Delete a single message by ID.
+    #[wasm_bindgen(js_name = delete)]
+    pub fn delete(&self, id: String) -> Result<(), JsValue> {
+        self.inner
+            .delete(id)
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))
+    }
+
+    /// Remove an entire conversation with a peer.
+    #[wasm_bindgen(js_name = removeConversation)]
+    pub fn remove_conversation(&self, peer_id: String) -> Result<(), JsValue> {
+        self.inner
+            .remove_conversation(peer_id)
+            .map_err(|e| js_value_from_str(&format!("{:?}", e)))
+    }
+
+    /// Flush history data to persistent storage.
+    #[wasm_bindgen(js_name = flush)]
+    pub fn flush(&self) {
+        self.inner.flush();
     }
 }
 
@@ -1103,6 +1391,14 @@ impl From<SignatureResult> for WasmSignatureResult {
             public_key_hex: sig.public_key_hex,
         }
     }
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmRegistrationStateInfo {
+    state: String,
+    device_id: Option<String>,
+    seniority_timestamp: Option<u64>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
