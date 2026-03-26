@@ -763,28 +763,28 @@ impl IronCore {
                 &JsValue::from_str("peerId"),
                 &JsValue::from_str(&item.peer_id),
             )
-            .unwrap();
+            .map_err(|e| js_value_from_str(&format!("Failed to set peerId: {:?}", e)))?;
             if let Some(ref did) = item.device_id {
                 js_sys::Reflect::set(
                     &obj,
                     &JsValue::from_str("deviceId"),
                     &JsValue::from_str(did),
                 )
-                .unwrap();
+                .map_err(|e| js_value_from_str(&format!("Failed to set deviceId: {:?}", e)))?;
             }
             js_sys::Reflect::set(
                 &obj,
                 &JsValue::from_str("blockedAt"),
                 &JsValue::from_f64(item.blocked_at as f64),
             )
-            .unwrap();
+            .map_err(|e| js_value_from_str(&format!("Failed to set blockedAt: {:?}", e)))?;
             if let Some(ref reason) = item.reason {
                 js_sys::Reflect::set(
                     &obj,
                     &JsValue::from_str("reason"),
                     &JsValue::from_str(reason),
                 )
-                .unwrap();
+                .map_err(|e| js_value_from_str(&format!("Failed to set reason: {:?}", e)))?;
             }
             if let Some(ref notes) = item.notes {
                 js_sys::Reflect::set(
@@ -792,7 +792,7 @@ impl IronCore {
                     &JsValue::from_str("notes"),
                     &JsValue::from_str(notes),
                 )
-                .unwrap();
+                .map_err(|e| js_value_from_str(&format!("Failed to set notes: {:?}", e)))?;
             }
             array.push(&obj);
         }
@@ -1121,6 +1121,7 @@ impl WasmHistoryManager {
     }
 
     /// Clear all messages in a conversation with a specific peer.
+    /// Alias: this is equivalent to `removeConversation` in the core API.
     #[wasm_bindgen(js_name = clearConversation)]
     pub fn clear_conversation(&self, peer_id: String) -> Result<(), JsValue> {
         self.inner
@@ -1133,14 +1134,6 @@ impl WasmHistoryManager {
     pub fn delete(&self, id: String) -> Result<(), JsValue> {
         self.inner
             .delete(id)
-            .map_err(|e| js_value_from_str(&format!("{:?}", e)))
-    }
-
-    /// Remove an entire conversation with a peer.
-    #[wasm_bindgen(js_name = removeConversation)]
-    pub fn remove_conversation(&self, peer_id: String) -> Result<(), JsValue> {
-        self.inner
-            .remove_conversation(peer_id)
             .map_err(|e| js_value_from_str(&format!("{:?}", e)))
     }
 
