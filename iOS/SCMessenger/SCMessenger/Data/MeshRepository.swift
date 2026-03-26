@@ -2848,6 +2848,91 @@ final class MeshRepository {
         return historyManager.count()
     }
 
+    // MARK: - Blocking
+
+    /// Block a peer by ID with an optional reason.
+    func blockPeer(peerId: String, reason: String? = nil) throws {
+        guard let ironCore = ironCore else {
+            throw MeshError.notInitialized("IronCore not initialized")
+        }
+        try ironCore.blockPeer(peerId: peerId, reason: reason)
+        logger.info("✓ Blocked peer: \(peerId)")
+    }
+
+    /// Unblock a previously blocked peer.
+    func unblockPeer(peerId: String) throws {
+        guard let ironCore = ironCore else {
+            throw MeshError.notInitialized("IronCore not initialized")
+        }
+        try ironCore.unblockPeer(peerId: peerId)
+        logger.info("✓ Unblocked peer: \(peerId)")
+    }
+
+    /// Check whether a peer is currently blocked.
+    func isPeerBlocked(peerId: String) throws -> Bool {
+        guard let ironCore = ironCore else {
+            throw MeshError.notInitialized("IronCore not initialized")
+        }
+        return try ironCore.isPeerBlocked(peerId: peerId)
+    }
+
+    /// List all blocked peers.
+    func listBlockedPeers() throws -> [BlockedIdentity] {
+        guard let ironCore = ironCore else {
+            throw MeshError.notInitialized("IronCore not initialized")
+        }
+        return try ironCore.listBlockedPeers()
+    }
+
+    /// Get the count of blocked peers.
+    func blockedCount() throws -> UInt32 {
+        guard let ironCore = ironCore else {
+            throw MeshError.notInitialized("IronCore not initialized")
+        }
+        return try ironCore.blockedCount()
+    }
+
+    // MARK: - History Retention
+
+    /// Delete a single message by ID.
+    func deleteMessage(id: String) throws {
+        guard let historyManager = historyManager else {
+            throw MeshError.notInitialized("HistoryManager not initialized")
+        }
+        try historyManager.delete(id: id)
+        logger.info("✓ Deleted message: \(id)")
+    }
+
+    /// Enforce message retention by keeping only the newest N messages.
+    /// Returns the number of messages pruned.
+    func enforceRetention(maxMessages: UInt32) throws -> UInt32 {
+        guard let historyManager = historyManager else {
+            throw MeshError.notInitialized("HistoryManager not initialized")
+        }
+        let pruned = try historyManager.enforceRetention(maxMessages: maxMessages)
+        logger.info("✓ Retention enforced: kept \(maxMessages), pruned \(pruned)")
+        return pruned
+    }
+
+    /// Prune messages older than the given Unix timestamp.
+    /// Returns the number of messages pruned.
+    func pruneBefore(timestamp: UInt64) throws -> UInt32 {
+        guard let historyManager = historyManager else {
+            throw MeshError.notInitialized("HistoryManager not initialized")
+        }
+        let pruned = try historyManager.pruneBefore(beforeTimestamp: timestamp)
+        logger.info("✓ Pruned \(pruned) messages before timestamp \(timestamp)")
+        return pruned
+    }
+
+    /// Resolve any identifier format to the canonical public key hex.
+    func resolveIdentity(anyId: String) throws -> String {
+        guard let ironCore = ironCore else {
+            throw MeshError.notInitialized("IronCore not initialized")
+        }
+        return try ironCore.resolveIdentity(anyId: anyId)
+    }
+
     // MARK: - Platform Reporting
 
     func reportBattery(pct: UInt8, charging: Bool) {
