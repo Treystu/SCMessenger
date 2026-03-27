@@ -575,13 +575,33 @@ impl IronCore {
             .await
             .map_err(|e| js_value_from_str(&format!("Failed to get peers: {}", e)))?;
 
+        let mut sent_count: usize = 0;
+        let mut failures: Vec<String> = Vec::new();
+
         for peer_id in peers {
-            if let Err(e) = handle.send_message(peer_id, data.clone(), None, None).await {
-                tracing::warn!("Failed to send to peer {}: {}", peer_id, e);
+            match handle
+                .send_message(peer_id, data.clone(), None, None)
+                .await
+            {
+                Ok(()) => {
+                    sent_count += 1;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to send to peer {}: {}", peer_id, e);
+                    failures.push(format!("{}: {}", peer_id, e));
+                }
             }
         }
 
-        Ok(())
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(js_value_from_str(&format!(
+                "Failed to send to some peers. Sent to {} peers successfully. Failures: [{}]",
+                sent_count,
+                failures.join(", ")
+            )))
+        }
     }
 
     /// Get current swarm listeners.
