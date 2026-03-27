@@ -1,105 +1,192 @@
-> **Component Status Notice (2026-02-23)**
-> This document contains mixed current and historical components; do not classify the entire file as deprecated.
-> Section-level policy: `[Current]` = verified, `[Historical]` = context-only, `[Needs Revalidation]` = not yet rechecked.
-> If a section has no marker, treat it as `[Needs Revalidation]`.
-> Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md, docs/REPO_CONTEXT.md, docs/GLOBAL_ROLLOUT_PLAN.md, and DOCUMENTATION.md.
+Status: Active
+Last updated: 2026-03-26
 
-# Feature Parity & Audit
+# Feature Parity & Cross-Platform Function Audit
 
-This document tracks the implementation status of key features across all SCMessenger platforms (CLI, iOS, Android, Web/WASM, Core).
-It serves as an audit log and a roadmap for ensuring full cross-platform functionality.
+This document tracks the implementation status of all core API functions across
+SCMessenger platforms (Core/Rust, CLI, iOS, Android, Web/WASM). It serves as the
+canonical parity audit and gap tracker.
 
-## [Current] Section Action Outcome (2026-02-23)
+Canonical baseline references: docs/CURRENT_STATE.md, REMAINING_WORK_TRACKING.md,
+docs/REPO_CONTEXT.md, and DOCUMENTATION.md.
 
-- `move`: active parity gaps and priorities are maintained in `REMAINING_WORK_TRACKING.md`.
-- `move`: verified runtime status is maintained in `docs/CURRENT_STATE.md`.
-- `rewrite`: this file remains as a historical parity audit reference and process context.
-- `delete/replace`: do not use this file as launch-gate truth; canonical chain owns current-state decisions.
+---
 
-## [Needs Revalidation] Feature Status Matrix
+## [Current] Complete Function Parity Matrix (2026-03-26)
 
-| Feature                   | Core (Rust) | CLI | iOS | Android | Web/WASM | Notes                                                                                |
-| :------------------------ | :---------: | :-: | :-: | :-----: | :------: | :----------------------------------------------------------------------------------- |
-| **Identity Management**   |     ✅      | ✅  | ✅  |   ✅    |    ⚠️    | Core implements basic identity. Web requires crypto WASM.                            |
-| **Identity Export**       |     ✅      | ✅  | ✅  |   ✅    |    ⚠️    | CLI displays full info. Mobile implements "Copy Full Export" button. Web pending.    |
-| **Identity Import**       |     N/A     | ✅  | ✅  |   ✅    |    ⚠️    | "Add Contact from Export" fully implemented with "Add & Chat" parity on Mobile.      |
-| **Peer Discovery (BLE)**  |     N/A     | N/A | ✅  |   ✅    |   N/A    | UUIDs unified (was broken). See UNIFICATION_PLAN.md.                                 |
-| **Peer Discovery (WIFI)** |     N/A     | N/A | ❌  |   ✅    |   N/A    | Android implements WiFi Direct/Aware. iOS pending Multipeer Connectivity or similar. |
-| **Peer Discovery (mDNS)** |     ✅      | ✅  | ❌  |   ❌    |    ❌    | Core supports mDNS. CLI uses it. Mobile integration via SwarmBridge is pending.      |
-| **Relay/Messaging**       |     ✅      | ✅  | ✅  |   ✅    |    ⚠️    | Core logic shared. Mobile uses `MeshService`. Parity checks enforce relay enabled.   |
-| **Ledger (Reputation)**   |     ✅      | ✅  | ✅  |   ✅    |    ⚠️    | Core implements Ledger. All platforms use it via UniFFI.                             |
-| **Swarm (TCP/IP)**        |     ✅      | ✅  | ❌  |   ❌    |    ❌    | CLI runs full `libp2p` Swarm. Mobile uses native transports + `IronCore` logic.      |
+Legend: ✅ = Wired & callable | ⚠️ = Partially wired | ❌ = Not wired | N/A = Not applicable
 
-## [Needs Revalidation] Implementation Audit
+### IronCore Methods
 
-### [Needs Revalidation] 1. Identity Export & Import
+| Function                     | Core | CLI | Android | iOS | WASM | Notes |
+|:-----------------------------|:----:|:---:|:-------:|:---:|:----:|:------|
+| `initializeIdentity`        | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `getIdentityInfo`           | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `setNickname`               | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `getDeviceId`               | ✅   | ❌  | ❌      | ❌  | ✅   | WS13 device ID; WASM wired 2026-03-26 |
+| `getSeniorityTimestamp`      | ✅   | ❌  | ❌      | ❌  | ✅   | WS13 seniority; WASM wired 2026-03-26 |
+| `getRegistrationState`       | ✅   | ❌  | ❌      | ❌  | ✅   | WS13 registration; WASM wired 2026-03-26 |
+| `exportIdentityBackup`      | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `importIdentityBackup`      | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `signData`                   | ✅   | ❌  | ❌      | ❌  | ✅   | Crypto utility; no mobile UI |
+| `verifySignature`            | ✅   | ❌  | ❌      | ❌  | ✅   | Crypto utility; no mobile UI |
+| `extractPublicKeyFromPeerId` | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `resolveIdentity`           | ✅   | ✅  | ✅      | ✅  | ✅   | iOS wired 2026-03-26; WASM wired 2026-03-26 |
+| `resolveToIdentityId`       | ✅   | ✅  | ✅      | ✅  | ✅   | WASM wired 2026-03-26 |
+| `prepareMessage`            | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `prepareMessageWithId`      | ✅   | ❌  | ✅      | ✅  | ✅   | CLI uses `prepareMessage` |
+| `prepareReceipt`            | ✅   | ❌  | ✅      | ✅  | ✅   | CLI has no receipt support |
+| `prepareCoverTraffic`       | ✅   | ❌  | ✅      | ❌  | ✅   | Android sends cover traffic periodically |
+| `receiveMessage`            | ✅   | ✅  | ❌      | ❌  | ✅   | Mobile decrypts via delegate callback path |
+| `markMessageSent`           | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `outboxCount`               | ✅   | ✅  | ✅      | ❌  | ✅   | |
+| `inboxCount`                | ✅   | ✅  | ❌      | ❌  | ✅   | |
+| `classifyNotification`      | ✅   | N/A | ✅      | ✅  | ✅   | |
+| `blockPeer`                 | ✅   | ❌  | ✅      | ✅  | ✅   | iOS wired 2026-03-26; WASM wired 2026-03-26 |
+| `unblockPeer`               | ✅   | ❌  | ✅      | ✅  | ✅   | iOS wired 2026-03-26; WASM wired 2026-03-26 |
+| `isPeerBlocked`             | ✅   | ❌  | ✅      | ✅  | ✅   | iOS wired 2026-03-26; WASM wired 2026-03-26 |
+| `listBlockedPeers`          | ✅   | ❌  | ✅      | ✅  | ✅   | iOS wired 2026-03-26; WASM wired 2026-03-26 |
+| `blockedCount`              | ✅   | ❌  | ✅      | ✅  | ✅   | iOS wired 2026-03-26; WASM wired 2026-03-26 |
+| `setDelegate`               | ✅   | N/A | ✅      | ✅  | ❌   | WASM uses polling via `drainReceivedMessages` |
+| `contactsManager`           | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `historyManager`            | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `updateDiskStats`           | ✅   | N/A | ✅      | ✅  | ✅   | WASM wired 2026-03-26 |
+| `performMaintenance`        | ✅   | N/A | ✅      | ✅  | ✅   | WASM wired 2026-03-26 |
+| `recordLog`                 | ✅   | N/A | ❌      | ✅  | ✅   | WASM wired 2026-03-26 |
+| `exportLogs`                | ✅   | N/A | ❌      | ❌  | ✅   | WASM wired 2026-03-26 |
+| `notifyPeerDiscovered`      | ✅   | ✅  | ✅      | ✅  | ✅   | WASM wired 2026-03-26 |
+| `notifyPeerDisconnected`    | ✅   | ✅  | ✅      | ✅  | ✅   | WASM wired 2026-03-26 |
 
-**Goal:** Provide comprehensive identity information for debugging and manual connection configuration.
+### ContactManager Methods
 
-- **Core:** `api.udl` exposes `IdentityInfo` (ID, Key, Nickname). `IronCore` implements `get_identity_info()`.
-- **CLI:** `main.rs` implements `print_full_identity` helper. Displays ID, Key, Nickname, Listeners (IP/Port), and Relays.
-- **iOS:** `MeshRepository.swift` exposes `getIdentityExportString` (auto-replaces 0.0.0.0 with LAN IP). UI has "Copy Full Identity Export". `AddContactView` supports pasting export to auto-fill, connect, and optionally "Add & Chat".
-- **Android:** `SettingsViewModel.kt` exposes `getIdentityExportString` (auto-replaces 0.0.0.0 with LAN IP). UI has "Copy Full Identity Export". `AddContactDialog` supports pasting export to auto-fill, connect, and optionally "Add & Chat".
-- **Web:** Pending implementation.
+| Function            | Core | CLI | Android | iOS | WASM | Notes |
+|:--------------------|:----:|:---:|:-------:|:---:|:----:|:------|
+| `add`               | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `get`               | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `remove`            | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `list`              | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `search`            | ✅   | ✅  | ✅      | ✅  | ✅   | WASM wired 2026-03-26 |
+| `setNickname`       | ✅   | ❌  | ✅      | ✅  | ✅   | Federated nickname; WASM wired 2026-03-26 |
+| `setLocalNickname`  | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `updateLastSeen`    | ✅   | N/A | ✅      | ✅  | ✅   | WASM wired 2026-03-26 |
+| `updateDeviceId`    | ✅   | N/A | ❌      | ❌  | ✅   | WS13 device ID; WASM wired 2026-03-26 |
+| `count`             | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `flush`             | ✅   | N/A | ✅      | ✅  | ✅   | WASM wired 2026-03-26 |
 
-### [Needs Revalidation] 2. Direct Connection Info
+### HistoryManager Methods
 
-**Goal:** Allow users to connect directly to a peer via IP/Port.
+| Function             | Core | CLI | Android | iOS | WASM | Notes |
+|:---------------------|:----:|:---:|:-------:|:---:|:----:|:------|
+| `add`                | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `get`                | ✅   | ❌  | ✅      | ✅  | ✅   | WASM wired 2026-03-26 |
+| `recent`             | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `conversation`       | ✅   | ❌  | ✅      | ✅  | ✅   | |
+| `removeConversation` | ✅   | ❌  | ✅      | ❌  | ✅   | WASM wired 2026-03-26 |
+| `search`             | ✅   | ❌  | ✅      | ✅  | ✅   | WASM wired 2026-03-26 |
+| `markDelivered`      | ✅   | ❌  | ✅      | ✅  | ✅   | WASM wired 2026-03-26 |
+| `clear`              | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `clearConversation`  | ✅   | ❌  | ✅      | ✅  | ✅   | WASM wired 2026-03-26 |
+| `delete`             | ✅   | ❌  | ✅      | ✅  | ✅   | iOS wired 2026-03-26; WASM wired 2026-03-26 |
+| `stats`              | ✅   | ❌  | ✅      | ✅  | ✅   | |
+| `count`              | ✅   | ❌  | ✅      | ✅  | ✅   | |
+| `enforceRetention`   | ✅   | ✅  | ✅      | ✅  | ✅   | iOS+Android wired 2026-03-26 |
+| `pruneBefore`        | ✅   | ✅  | ✅      | ✅  | ✅   | iOS+Android wired 2026-03-26 |
+| `flush`              | ✅   | N/A | ✅      | ✅  | ✅   | WASM wired 2026-03-26 |
 
-- **Mobile:** Partially supported.
-  - Mobile apps prioritize BLE/WiFi Direct (ZeroConf).
-  - They do _not_ currently expose an IPv4/IPv6 listener for other peers to dial directly over the internet/LAN (unless via Relay).
-  - Future Plan: Enable `SwarmBridge` to start a TCP/Quic listener on mobile if `internet_enabled` is true.
+### MeshService / SwarmBridge Methods
 
-### [Needs Revalidation] 3. Real-time Chat Updates (Reactive UI)
+| Function                | Core | CLI | Android | iOS | WASM | Notes |
+|:------------------------|:----:|:---:|:-------:|:---:|:----:|:------|
+| `start` / `startSwarm`  | ✅   | ✅  | ✅      | ✅  | ✅   | WASM uses `startSwarm` |
+| `stop`                  | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `pause` / `resume`      | ✅   | N/A | ✅      | ✅  | N/A  | Mobile lifecycle |
+| `sendMessage`           | ✅   | ✅  | ✅      | ✅  | ✅   | WASM via `sendPreparedEnvelope` |
+| `getPeers`              | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `getListeners`          | ✅   | ✅  | ✅      | ✅  | ❌   | WASM N/A (browser) |
+| `getExternalAddresses`  | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `subscribeTopic`        | ✅   | N/A | ✅      | ✅  | ❌   | |
+| `unsubscribeTopic`      | ✅   | N/A | ✅      | ✅  | ❌   | |
+| `publishTopic`          | ✅   | N/A | ✅      | ✅  | ❌   | |
+| `sendToAllPeers`        | ✅   | ✅  | ✅      | ❌  | ❌   | |
+| `dial`                  | ✅   | ✅  | ✅      | ✅  | ❌   | |
+| `shutdown`              | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `getConnectionPathState` | ✅  | ✅  | ✅      | ✅  | ✅   | |
+| `getNatStatus`          | ✅   | ✅  | ✅      | ✅  | ❌   | |
+| `exportDiagnostics`     | ✅   | ✅  | ✅      | ✅  | ✅   | |
 
-**Goal:** Ensure sent and received messages reflect instantly in the chat and conversation list views.
+### AutoAdjustEngine / Settings / Ledger / Bootstrap
 
-- **Core:** `api.udl` exposes `MessageRecord` and `MessageDirection`.
-- **Android:** `MeshRepository.kt` uses `MutableSharedFlow` (`messageUpdates`) to broadcast all message events. `ChatViewModel.kt` and `ConversationsViewModel.kt` subscribe to this flow for real-time reactive updates.
-- **iOS:** `MeshRepository.swift` renamed `incomingMessages` to `messageUpdates` and now emits both sent and received messages. `ChatViewModel.swift` and `ConversationListView` subscribe to this stream via Combine, achieving parity with Android's reactive behavior.
+| Function                  | Core | CLI | Android | iOS | WASM | Notes |
+|:--------------------------|:----:|:---:|:-------:|:---:|:----:|:------|
+| `computeProfile`          | ✅   | N/A | ✅      | ✅  | ❌   | Mobile power management |
+| `computeBleAdjustment`    | ✅   | N/A | ✅      | ✅  | N/A  | |
+| `computeRelayAdjustment`  | ✅   | N/A | ✅      | ✅  | N/A  | |
+| `overrideBleScanInterval` | ✅   | N/A | ✅      | ✅  | N/A  | |
+| `overrideRelayMaxPerHour` | ✅   | N/A | ✅      | ✅  | N/A  | |
+| `clearOverrides`          | ✅   | N/A | ✅      | ✅  | N/A  | |
+| `loadSettings`            | ✅   | N/A | ✅      | ✅  | ⚠️   | WASM has internal settings only |
+| `saveSettings`            | ✅   | N/A | ✅      | ✅  | ⚠️   | |
+| `validateSettings`        | ✅   | N/A | ✅      | ✅  | ❌   | |
+| `defaultSettings`         | ✅   | N/A | ✅      | ✅  | ✅   | |
+| `BootstrapResolver`       | ✅   | ✅  | ✅      | ✅  | ❌   | WASM takes bootstrap addrs directly |
+| `LedgerManager`           | ✅   | ✅  | ✅      | ✅  | ❌   | |
 
-### [Needs Revalidation] 4. Settings Parity (Unified 2026-02-17)
+### Transport Layer (Platform-Specific)
 
-**Goal:** Full feature parity for all settings between iOS and Android.
+| Feature                  | Core | CLI | Android | iOS | WASM | Notes |
+|:-------------------------|:----:|:---:|:-------:|:---:|:----:|:------|
+| BLE (L2CAP/GATT)        | N/A  | N/A | ✅      | ✅  | N/A  | |
+| WiFi Direct              | N/A  | N/A | ✅      | ❌  | N/A  | Android only |
+| WiFi Aware               | N/A  | N/A | ✅      | ❌  | N/A  | Android only |
+| Multipeer Connectivity   | N/A  | N/A | N/A     | ✅  | N/A  | iOS only |
+| mDNS Discovery           | ✅   | ✅  | ✅      | ✅  | N/A  | |
+| TCP/QUIC (libp2p)        | ✅   | ✅  | ❌      | ❌  | ❌   | CLI only; mobile uses native |
+| WebSocket/WebRTC         | ✅   | ❌  | N/A     | N/A | ⚠️   | WASM partial |
 
-- **Completed Items:**
-  - iOS: Service Control, Transport Toggles, Relay Budget slider, Battery Floor slider, Onion Routing, Privacy by Design notice, placeholder privacy features, App Preferences, Info section, Power Settings (AutoAdjust, BLE interval/relay overrides)
-  - Android: BLE Identity Rotation toggle, BLE rotation interval display
-- **Reference:** See `UNIFICATION_PLAN.md` for detailed audit.
+---
 
-### [Needs Revalidation] 5. BLE UUID Unification (Fixed 2026-02-17)
+## [Current] Remaining Parity Gaps
 
-**Goal:** Ensure iOS and Android can discover each other via BLE.
+### Critical (blocking for parity)
+- **CLI missing blocking commands**: `block`, `unblock`, `list-blocked` CLI subcommands
+- **iOS missing `prepareCoverTraffic`**: Android sends periodic cover traffic; iOS does not
+- **iOS missing `sendToAllPeers`**: Android can broadcast to all; iOS only sends to specific peers
 
-- **Problem:** iOS used Nordic UART Service UUIDs; Android used custom UUIDs. Cross-platform BLE discovery was completely broken.
-- **Fix:** Unified all UUIDs on Android's custom range (`0000DF01-04`).
-- **Files Changed:** `MeshBLEConstants.swift`, `BLECentralManager.swift`, `BLEPeripheralManager.swift`
-- **Reference:** See `UNIFICATION_PLAN.md` for before/after UUID table.
+### Medium (functional but incomplete)
+- **Android/iOS missing `signData`/`verifySignature`**: Crypto utilities not exposed to mobile UI
+- **Android/iOS missing `getDeviceId`/`getSeniorityTimestamp`/`getRegistrationState`**: WS13 device management not exposed to mobile
+- **Android missing `recordLog`**: Not using core log manager
+- **iOS/Android missing `exportLogs`**: Core log export not wired
+- **WASM missing `LedgerManager`**: No reputation tracking in browser
+- **WASM missing `setDelegate`**: Uses polling model instead
 
-## [Needs Revalidation] Rollout Process & Regression Prevention
+### Low (design differences, not bugs)
+- **WASM missing topic management**: Topics not yet relevant for browser
+- **WASM missing `getListeners`/`getNatStatus`**: Browser networking is different
+- **Mobile missing `receiveMessage`**: Mobile decrypts via delegate callback path, not direct call
+- **CLI missing `prepareMessageWithId`/`prepareReceipt`**: CLI uses simpler message flow
+
+---
+
+## Rollout Process & Regression Prevention
 
 To ensure consistent feature rollout and prevent regressions:
 
-1.  **Core First:** Implement logic in Rust `core/src`. Verify with `cargo test`.
-2.  **API Definition:** Expose new functionality in `core/src/api.udl`.
-3.  **CLI Verification:** Update CLI to use new Core features. This verifies the Rust logic in a real app context.
-4.  **Bindings Generation:** Run `uniffi-bindgen` (wrapped in platform build scripts) to generate Swift/Kotlin bindings.
-5.  **Platform Data Layer:**
-    - **iOS:** Update `MeshRepository.swift` to expose the new UniFFI methods.
-    - **Android:** Update `MeshRepository.kt` to expose the new UniFFI methods.
-6.  **Platform ViewModels:** Update ViewModels to format/prepare data for the UI.
-7.  **UI Implementation:**
-    - **iOS:** SwiftUI Views.
-    - **Android:** Jetpack Compose Screens.
-8.  **Parity Check:** Verify that the feature behaves identically (or appropriately for the platform) on all apps.
-9.  **Documentation:** Update this file and `FEATURE_WORKFLOW.md`.
+1. **Core First:** Implement logic in Rust `core/src`. Verify with `cargo test`.
+2. **API Definition:** Expose new functionality in `core/src/api.udl`.
+3. **CLI Verification:** Update CLI to use new Core features.
+4. **Bindings Generation:** Run `uniffi-bindgen` to generate Swift/Kotlin bindings.
+5. **Platform Data Layer:** Update `MeshRepository.swift` (iOS) and `MeshRepository.kt` (Android).
+6. **Platform ViewModels:** Format/prepare data for the UI.
+7. **UI Implementation:** SwiftUI (iOS), Jetpack Compose (Android).
+8. **Parity Check:** Verify identical behavior on all platforms.
+9. **Documentation:** Update this file.
 
-### [Needs Revalidation] Regression Prevention Checklist
+### Regression Prevention Checklist
 
 - Does the new feature break existing identity/storage?
 - Is the feature flag/setting persisted correctly?
-- Does the UI handle empty/null states (e.g., no relay connected)?
+- Does the UI handle empty/null states?
 - Are mobile-specific constraints (background execution, battery) respected?
 
 ---
@@ -111,22 +198,6 @@ Android contacts screen lacks feature parity with iOS for:
 1. Swipe-to-delete gesture
 2. Nickname editing after contact creation
 3. Long-press context menu
-
-### iOS Implementation (Reference)
-- **Swipe-to-Delete**: `.onDelete` modifier on ForEach in List
-- **Nickname Editing**: TextField in add contact sheet, can edit anytime
-- **Display Priority**: localNickname > federated nickname > peerId
-
-### Android Current State
-- **Delete**: Delete button only (no swipe)
-- **Nickname**: Can set on add, cannot edit later
-- **Display**: Correctly shows localNickname > nickname > peerId
-
-### Implementation Required
-1. Add `SwipeToDismissBox` to ContactItem for swipe-to-delete
-2. Add long-press detection with dropdown menu
-3. Add "Edit Nickname" dialog
-4. Wire to `setLocalNickname` core API
 
 ### Priority
 P1 - Core UX parity required for alpha

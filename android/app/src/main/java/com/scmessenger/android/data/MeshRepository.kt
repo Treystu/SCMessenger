@@ -3280,6 +3280,34 @@ open class MeshRepository(private val context: Context) {
         return historyManager?.count() ?: 0u
     }
 
+    // ── History Retention ────────────────────────────────────────────────
+
+    /**
+     * Enforce message retention by keeping only the newest [maxMessages] messages.
+     * Returns the number of messages pruned.
+     */
+    fun enforceRetention(maxMessages: UInt): UInt {
+        return try {
+            historyManager?.enforceRetention(maxMessages = maxMessages) ?: 0u
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to enforce retention")
+            0u
+        }
+    }
+
+    /**
+     * Prune messages older than the given Unix timestamp (seconds).
+     * Returns the number of messages pruned.
+     */
+    fun pruneBefore(beforeTimestamp: ULong): UInt {
+        return try {
+            historyManager?.pruneBefore(beforeTimestamp = beforeTimestamp) ?: 0u
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to prune history")
+            0u
+        }
+    }
+
     /**
      * Resets all application data, including identity, contacts, history, and preferences.
      * WARNING: This is destructive and permanent.
