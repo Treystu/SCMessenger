@@ -3,7 +3,6 @@
 /// A grow-only set (G-Set) CRDT implementation that guarantees
 /// conflict-free merging in mesh networks where any two nodes
 /// can meet and synchronize their message stores.
-
 use std::collections::HashMap;
 
 /// Maximum messages in the store
@@ -183,7 +182,8 @@ impl MeshStore {
             .unwrap_or_default()
             .as_secs() as u32;
         let before = self.messages.len();
-        self.messages.retain(|_, e| e.ttl_expiry == 0 || e.ttl_expiry > now);
+        self.messages
+            .retain(|_, e| e.ttl_expiry == 0 || e.ttl_expiry > now);
         before - self.messages.len()
     }
 

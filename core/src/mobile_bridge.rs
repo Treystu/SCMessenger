@@ -190,7 +190,11 @@ impl MeshService {
     }
 
     /// Create MeshService with persistent storage and structured tracing
-    pub fn with_storage_and_logs(config: MeshServiceConfig, storage_path: String, log_directory: String) -> Self {
+    pub fn with_storage_and_logs(
+        config: MeshServiceConfig,
+        storage_path: String,
+        log_directory: String,
+    ) -> Self {
         Self {
             _config: Mutex::new(config),
             state: Mutex::new(ServiceState::Stopped),

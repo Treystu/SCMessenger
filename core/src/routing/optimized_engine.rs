@@ -8,15 +8,15 @@
 //!
 //! This engine replaces the basic RoutingEngine with optimized discovery paths.
 
+use super::adaptive_ttl::AdaptiveTTLManager;
 use super::engine::*;
 use super::global::{GlobalRoutes, RouteAdvertisement};
 use super::local::{LocalCell, PeerId};
-use super::neighborhood::NeighborhoodTable;
-use super::timeout_budget::{TimeoutBudget, DiscoveryPhase, BudgetSummary};
 use super::negative_cache::{NegativeCache, NegativeCacheStats};
-use super::resume_prefetch::{ResumePrefetchManager, PrefetchStats};
-use super::adaptive_ttl::AdaptiveTTLManager;
-use std::time::{Duration};
+use super::neighborhood::NeighborhoodTable;
+use super::resume_prefetch::{PrefetchStats, ResumePrefetchManager};
+use super::timeout_budget::{BudgetSummary, DiscoveryPhase, TimeoutBudget};
+use std::time::Duration;
 
 // For peer ID string conversion
 use hex;
@@ -98,9 +98,11 @@ impl OptimizedRoutingEngine {
 
         // Phase 2: Hierarchical discovery with timeout budgeting (P0 optimization)
         self.start_discovery_if_needed();
-        
-        let mut decision = self.base_engine.route_message(recipient_hint, message_id, priority, now);
-        
+
+        let mut decision =
+            self.base_engine
+                .route_message(recipient_hint, message_id, priority, now);
+
         // Structured tracing: Log routing decision
         tracing::info!(
             event = "routing_decision",
@@ -111,7 +113,7 @@ impl OptimizedRoutingEngine {
             decided_by = ?decision.decided_by,
             confidence = decision.confidence
         );
-        
+
         // Apply adaptive TTL to the decision (P2 optimization)
         if let NextHop::GlobalRoute { next_hop_id, .. } = decision.primary {
             let peer_id_str = hex::encode(next_hop_id);
@@ -134,7 +136,7 @@ impl OptimizedRoutingEngine {
         if self.discovery_in_progress {
             return;
         }
-        
+
         self.discovery_in_progress = true;
         self.current_phase = DiscoveryPhase::LocalCache;
         self.timeout_budget = TimeoutBudget::default_500ms();
@@ -145,7 +147,7 @@ impl OptimizedRoutingEngine {
         if !self.discovery_in_progress {
             return None;
         }
-        
+
         let next_phase = self.timeout_budget.advance();
         if let Some(phase) = next_phase {
             self.current_phase = phase;
@@ -220,7 +222,10 @@ impl OptimizedRoutingEngine {
     }
 
     /// Called when app goes to background
-    pub fn on_app_background(&mut self, current_routes: Vec<(PeerId, [u8; 4], RouteAdvertisement)>) {
+    pub fn on_app_background(
+        &mut self,
+        current_routes: Vec<(PeerId, [u8; 4], RouteAdvertisement)>,
+    ) {
         self.prefetch_manager.on_app_background(current_routes);
     }
 
@@ -305,12 +310,12 @@ mod tests {
 
         // Record a peer as unreachable
         engine.record_unreachable_peer("peer1");
-        
+
         // Should be detected as unreachable
         let target_hint = make_hint(99);
         let msg_id = make_message_id(1);
         let decision = engine.route_message_optimized(&target_hint, &msg_id, 50, 1000);
-        
+
         // This test is simplified - in reality we'd need to mock the peer_id_str generation
         assert_eq!(decision.decided_by, RoutingLayer::StoreAndCarry);
     }
@@ -324,14 +329,14 @@ mod tests {
         // Start discovery
         engine.start_discovery_if_needed();
         assert!(engine.is_discovery_in_progress());
-        
+
         // Advance through phases
         let phase1 = engine.advance_discovery_phase();
         assert!(phase1.is_some());
-        
+
         let phase2 = engine.advance_discovery_phase();
         assert!(phase2.is_some());
-        
+
         // Eventually should complete
         let phase3 = engine.advance_discovery_phase();
         let phase4 = engine.advance_discovery_phase();
@@ -355,9 +360,9 @@ mod tests {
             sequence: 1,
             ttl: 3600,
         };
-        
+
         engine.on_app_background(vec![(make_peer_id(2), make_hint(99), route)]);
-        
+
         // Simulate resuming
         let hints = engine.on_app_resume();
         assert_eq!(hints.len(), 1);
@@ -371,7 +376,7 @@ mod tests {
 
         // Record activity for a peer
         engine.record_message_activity("peer1");
-        
+
         // Should have activity recorded
         let ttl = engine.adaptive_ttl().calculate_ttl("peer1");
         assert!(ttl > Duration::from_secs(0));
@@ -386,10 +391,10 @@ mod tests {
         // Record some unreachable peers and activity
         engine.record_unreachable_peer("peer1");
         engine.record_message_activity("peer2");
-        
+
         // Run maintenance
         let maint = engine.tick(1000);
-        
+
         // Should have cleaned up appropriately
         assert_eq!(maint.adaptive_ttl_entries_cleaned, 0); // Nothing old enough to clean
     }

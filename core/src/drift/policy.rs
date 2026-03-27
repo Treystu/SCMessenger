@@ -95,15 +95,15 @@ impl PolicyEngine {
 
     /// Get the RelayConfig to apply to the RelayEngine
     pub fn to_relay_config(&self) -> RelayConfig {
-        let battery_floor = self
-            .battery_floor_override
-            .unwrap_or_else(|| match self.current_profile {
-                RelayProfile::Maximum => 10,
-                RelayProfile::High => 15,
-                RelayProfile::Standard => 20,
-                RelayProfile::Reduced => 30,
-                RelayProfile::Minimal => 50,
-            });
+        let battery_floor =
+            self.battery_floor_override
+                .unwrap_or_else(|| match self.current_profile {
+                    RelayProfile::Maximum => 10,
+                    RelayProfile::High => 15,
+                    RelayProfile::Standard => 20,
+                    RelayProfile::Reduced => 30,
+                    RelayProfile::Minimal => 50,
+                });
 
         RelayConfig {
             max_relay_per_hour: self.relay_budget_per_hour(),
@@ -177,12 +177,7 @@ impl Default for PolicyEngine {
 mod tests {
     use super::*;
 
-    fn make_device_state(
-        battery: u8,
-        charging: bool,
-        wifi: bool,
-        moving: bool,
-    ) -> DeviceState {
+    fn make_device_state(battery: u8, charging: bool, wifi: bool, moving: bool) -> DeviceState {
         DeviceState {
             battery_percent: battery,
             is_charging: charging,
@@ -405,10 +400,7 @@ mod tests {
 
         // This should fail — enforces coupling
         let result = engine.set_relay_budget_override(Some(0));
-        assert!(matches!(
-            result,
-            Err(PolicyError::RelayBudgetCannotBeZero)
-        ));
+        assert!(matches!(result, Err(PolicyError::RelayBudgetCannotBeZero)));
 
         // Budget should not have changed
         assert_eq!(engine.relay_budget_per_hour(), 1000);

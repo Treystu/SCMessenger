@@ -16,14 +16,14 @@ use super::reflection::{AddressReflectionRequest, AddressReflectionResponse};
 use crate::identity::IdentityKeys;
 #[cfg(not(target_arch = "wasm32"))]
 use libp2p::mdns;
+#[cfg(not(target_arch = "wasm32"))]
+use libp2p::upnp;
 use libp2p::{
     autonat, dcutr, gossipsub, identify, kad, ping, relay,
     request_response::{self, ProtocolSupport},
     swarm::{behaviour::toggle::Toggle, NetworkBehaviour},
     StreamProtocol,
 };
-#[cfg(not(target_arch = "wasm32"))]
-use libp2p::upnp;
 use std::time::Duration;
 use uuid::Uuid;
 

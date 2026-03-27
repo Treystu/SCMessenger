@@ -493,6 +493,161 @@ impl IronCore {
         Ok(payload.to_string())
     }
 
+    // ── Topic Management ─────────────────────────────────────────────────
+
+    /// Subscribe to a gossipsub topic.
+    #[wasm_bindgen(js_name = subscribeTopic)]
+    pub async fn subscribe_topic(&self, topic: String) -> Result<(), JsValue> {
+        let handle = self
+            .swarm_handle
+            .lock()
+            .clone()
+            .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
+
+        handle
+            .subscribe_topic(topic)
+            .await
+            .map_err(|e| js_value_from_str(&format!("Failed to subscribe topic: {}", e)))
+    }
+
+    /// Unsubscribe from a gossipsub topic.
+    #[wasm_bindgen(js_name = unsubscribeTopic)]
+    pub async fn unsubscribe_topic(&self, topic: String) -> Result<(), JsValue> {
+        let handle = self
+            .swarm_handle
+            .lock()
+            .clone()
+            .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
+
+        handle
+            .unsubscribe_topic(topic)
+            .await
+            .map_err(|e| js_value_from_str(&format!("Failed to unsubscribe topic: {}", e)))
+    }
+
+    /// Publish data to a gossipsub topic.
+    #[wasm_bindgen(js_name = publishTopic)]
+    pub async fn publish_topic(&self, topic: String, data: Vec<u8>) -> Result<(), JsValue> {
+        let handle = self
+            .swarm_handle
+            .lock()
+            .clone()
+            .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
+
+        handle
+            .publish_topic(topic, data)
+            .await
+            .map_err(|e| js_value_from_str(&format!("Failed to publish topic: {}", e)))
+    }
+
+    // ── Network Operations ───────────────────────────────────────────────
+
+    /// Dial a remote peer by multiaddr.
+    #[wasm_bindgen(js_name = dial)]
+    pub async fn dial(&self, multiaddr: String) -> Result<(), JsValue> {
+        let handle = self
+            .swarm_handle
+            .lock()
+            .clone()
+            .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
+
+        let addr: Multiaddr = multiaddr
+            .parse()
+            .map_err(|e| js_value_from_str(&format!("Invalid multiaddr: {}", e)))?;
+
+        handle
+            .dial(addr)
+            .await
+            .map_err(|e| js_value_from_str(&format!("Failed to dial: {}", e)))
+    }
+
+    /// Send data to all currently connected peers.
+    #[wasm_bindgen(js_name = sendToAllPeers)]
+    pub async fn send_to_all_peers(&self, data: Vec<u8>) -> Result<(), JsValue> {
+        let handle = self
+            .swarm_handle
+            .lock()
+            .clone()
+            .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
+
+        let peers = handle
+            .get_peers()
+            .await
+            .map_err(|e| js_value_from_str(&format!("Failed to get peers: {}", e)))?;
+
+        let mut sent_count: usize = 0;
+        let mut failures: Vec<String> = Vec::new();
+
+        for peer_id in peers {
+            match handle
+                .send_message(peer_id, data.clone(), None, None)
+                .await
+            {
+                Ok(()) => {
+                    sent_count += 1;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to send to peer {}: {}", peer_id, e);
+                    failures.push(format!("{}: {}", peer_id, e));
+                }
+            }
+        }
+
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(js_value_from_str(&format!(
+                "Failed to send to some peers. Sent to {} peers successfully. Failures: [{}]",
+                sent_count,
+                failures.join(", ")
+            )))
+        }
+    }
+
+    /// Get current swarm listeners.
+    #[wasm_bindgen(js_name = getListeners)]
+    pub async fn get_listeners(&self) -> Result<JsValue, JsValue> {
+        let handle = self
+            .swarm_handle
+            .lock()
+            .clone()
+            .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
+
+        let listeners = handle
+            .get_listeners()
+            .await
+            .map_err(|e| js_value_from_str(&format!("Failed to get listeners: {}", e)))?;
+
+        let listener_strings: Vec<String> = listeners.into_iter().map(|a| a.to_string()).collect();
+        serde_wasm_bindgen::to_value(&listener_strings)
+            .map_err(|e| js_value_from_str(&format!("Failed to serialize listeners: {}", e)))
+    }
+
+    /// Get the NAT status. In browser environments this always returns "unknown".
+    #[wasm_bindgen(js_name = getNatStatus)]
+    pub fn get_nat_status(&self) -> String {
+        "unknown".to_string()
+    }
+
+    /// Validate the given settings against invariant rules.
+    #[wasm_bindgen(js_name = validateSettings)]
+    pub fn validate_settings(&self, js_settings: JsValue) -> Result<(), JsValue> {
+        let wasm_settings: WasmMeshSettings = serde_wasm_bindgen::from_value(js_settings)
+            .map_err(|e| js_value_from_str(&format!("Invalid settings: {}", e)))?;
+        let settings: MeshSettings = wasm_settings.into();
+
+        if let Some(ref mgr) = self.settings_manager {
+            mgr.validate(settings)
+                .map_err(|e| js_value_from_str(&format!("Validation failed: {:?}", e)))?;
+        } else {
+            return Err(js_value_from_str(
+                "Validation failed: settings manager not initialized",
+            ));
+        }
+
+        Ok(())
+    }
+
     /// DEPRECATED shim for pre-0.1.2 clients.
     ///
     /// This maps a relay URL to a libp2p websocket multiaddr and starts the
@@ -787,12 +942,8 @@ impl IronCore {
                 .map_err(|e| js_value_from_str(&format!("Failed to set reason: {:?}", e)))?;
             }
             if let Some(ref notes) = item.notes {
-                js_sys::Reflect::set(
-                    &obj,
-                    &JsValue::from_str("notes"),
-                    &JsValue::from_str(notes),
-                )
-                .map_err(|e| js_value_from_str(&format!("Failed to set notes: {:?}", e)))?;
+                js_sys::Reflect::set(&obj, &JsValue::from_str("notes"), &JsValue::from_str(notes))
+                    .map_err(|e| js_value_from_str(&format!("Failed to set notes: {:?}", e)))?;
             }
             array.push(&obj);
         }
@@ -955,11 +1106,7 @@ impl WasmContactManager {
 
     /// Set the federated (broadcast) nickname for a contact.
     #[wasm_bindgen(js_name = setNickname)]
-    pub fn set_nickname(
-        &self,
-        peer_id: String,
-        nickname: Option<String>,
-    ) -> Result<(), JsValue> {
+    pub fn set_nickname(&self, peer_id: String, nickname: Option<String>) -> Result<(), JsValue> {
         self.inner
             .set_nickname(peer_id, nickname)
             .map_err(|e| js_value_from_str(&format!("{:?}", e)))

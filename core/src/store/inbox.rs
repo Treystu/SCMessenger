@@ -104,7 +104,10 @@ impl Inbox {
                 }
 
                 // Store message
-                messages.entry(msg.sender_id.clone()).or_default().push(msg.clone());
+                messages
+                    .entry(msg.sender_id.clone())
+                    .or_default()
+                    .push(msg.clone());
                 *total += 1;
 
                 true // New message

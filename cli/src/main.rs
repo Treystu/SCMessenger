@@ -149,8 +149,45 @@ enum Commands {
     HistoryPruneBefore { before_timestamp: u64 },
     /// Stop the running node
     Stop,
+    /// Manage peer blocking
+    Block {
+        #[command(subcommand)]
+        action: BlockAction,
+    },
+    /// Get a single history message by ID
+    HistoryGet { id: String },
+    /// Show history statistics
+    HistoryStats,
+    /// Show total history message count
+    HistoryCount,
+    /// Mark a history message as delivered
+    HistoryMarkDelivered { id: String },
+    /// Clear conversation history with a specific peer
+    HistoryClearConversation { peer: String },
+    /// Remove an entire conversation (alias for clear-conversation)
+    HistoryRemoveConversation { peer: String },
+    /// Delete a single history message by ID
+    HistoryDelete { id: String },
     /// Run self-tests
     Test,
+}
+
+#[derive(Subcommand)]
+enum BlockAction {
+    /// Block a peer
+    Add {
+        peer_id: String,
+        #[arg(short, long)]
+        reason: Option<String>,
+    },
+    /// Unblock a peer
+    Remove { peer_id: String },
+    /// List all blocked peers
+    List,
+    /// Check if a peer is blocked
+    Check { peer_id: String },
+    /// Show total blocked count
+    Count,
 }
 
 #[derive(Subcommand)]
@@ -171,6 +208,28 @@ enum IdentityAction {
     },
     SetName {
         name: String,
+    },
+    /// Show the local device ID (WS13)
+    DeviceId,
+    /// Show the seniority timestamp (WS13)
+    Seniority,
+    /// Show registration state for an identity
+    RegistrationState {
+        identity_id: String,
+    },
+    /// Sign arbitrary data with the local identity key
+    SignData {
+        /// Hex-encoded data to sign
+        data_hex: String,
+    },
+    /// Verify a signature against data and a public key
+    VerifySignature {
+        /// Hex-encoded data
+        data_hex: String,
+        /// Hex-encoded signature
+        signature_hex: String,
+        /// Hex-encoded Ed25519 public key
+        public_key_hex: String,
     },
 }
 
@@ -193,6 +252,13 @@ enum ContactAction {
         query: String,
     },
     SetLocalNickname {
+        contact: String,
+        nickname: Option<String>,
+        #[arg(long)]
+        clear: bool,
+    },
+    /// Set the federated (broadcast) nickname for a contact
+    SetNickname {
         contact: String,
         nickname: Option<String>,
         #[arg(long)]
@@ -286,6 +352,16 @@ async fn main() -> Result<()> {
         Commands::HistoryPruneBefore { before_timestamp } => {
             cmd_history_prune_before(before_timestamp).await
         }
+        Commands::Block { action } => cmd_block(action).await,
+        Commands::HistoryGet { id } => cmd_history_get(id).await,
+        Commands::HistoryStats => cmd_history_stats().await,
+        Commands::HistoryCount => cmd_history_count().await,
+        Commands::HistoryMarkDelivered { id } => cmd_history_mark_delivered(id).await,
+        Commands::HistoryClearConversation { peer }
+        | Commands::HistoryRemoveConversation { peer } => {
+            cmd_history_clear_conversation(peer).await
+        }
+        Commands::HistoryDelete { id } => cmd_history_delete(id).await,
         Commands::Test => cmd_test().await,
     }
 }
@@ -413,6 +489,55 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
                 "  Public Key:  {}",
                 info.public_key_hex.unwrap_or_default().bright_yellow()
             );
+        }
+        Some(IdentityAction::DeviceId) => match core.get_device_id() {
+            Some(id) => println!("Device ID: {}", id.bright_cyan()),
+            None => println!(
+                "{}",
+                "No device ID available (identity not initialized?)".dimmed()
+            ),
+        },
+        Some(IdentityAction::Seniority) => match core.get_seniority_timestamp() {
+            Some(ts) => println!("Seniority Timestamp: {} ({})", ts, format_timestamp(ts)),
+            None => println!("{}", "No seniority timestamp available".dimmed()),
+        },
+        Some(IdentityAction::RegistrationState { identity_id }) => {
+            let state = core.get_registration_state(identity_id.clone());
+            println!("{}", "Registration State".bold());
+            println!("  Identity:   {}", identity_id.bright_cyan());
+            println!("  State:      {}", state.state);
+            if let Some(device_id) = state.device_id {
+                println!("  Device ID:  {}", device_id);
+            }
+            if let Some(ts) = state.seniority_timestamp {
+                println!("  Seniority:  {} ({})", ts, format_timestamp(ts));
+            }
+        }
+        Some(IdentityAction::SignData { data_hex }) => {
+            let data = hex::decode(&data_hex).context("Invalid hex data")?;
+            let result = core.sign_data(data).context("Failed to sign data")?;
+            println!("{}", "Signature Result".bold());
+            println!(
+                "  Signature:  {}",
+                hex::encode(&result.signature).bright_yellow()
+            );
+            println!("  Public Key: {}", result.public_key_hex.bright_cyan());
+        }
+        Some(IdentityAction::VerifySignature {
+            data_hex,
+            signature_hex,
+            public_key_hex,
+        }) => {
+            let data = hex::decode(&data_hex).context("Invalid hex data")?;
+            let signature = hex::decode(&signature_hex).context("Invalid hex signature")?;
+            let valid = core
+                .verify_signature(data, signature, public_key_hex)
+                .context("Failed to verify signature")?;
+            if valid {
+                println!("{} Signature is valid", "✓".green());
+            } else {
+                println!("{} Signature is INVALID", "✗".red());
+            }
         }
     }
 
@@ -664,6 +789,39 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                 }
 
                 ContactAction::Add { .. } => unreachable!(),
+                ContactAction::SetNickname {
+                    contact: query,
+                    nickname,
+                    clear,
+                } => {
+                    if clear && nickname.is_some() {
+                        anyhow::bail!("Use either <nickname> or --clear, not both");
+                    }
+
+                    let contact = find_contact(&contacts, &query)?;
+                    let nick = if clear { None } else { nickname };
+                    contacts
+                        .set_nickname(contact.peer_id.clone(), nick.clone())
+                        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+
+                    match nick {
+                        Some(name) => {
+                            println!(
+                                "{} Federated nickname set for {} -> {}",
+                                "✓".green(),
+                                contact.peer_id.dimmed(),
+                                name.bright_cyan()
+                            );
+                        }
+                        None => {
+                            println!(
+                                "{} Federated nickname cleared for {}",
+                                "✓".green(),
+                                contact.peer_id.dimmed()
+                            );
+                        }
+                    }
+                }
             }
         }
     }
@@ -2077,6 +2235,176 @@ async fn cmd_history_prune_before(before_timestamp: u64) -> Result<()> {
         pruned,
         before_timestamp
     );
+    Ok(())
+}
+
+async fn cmd_block(action: BlockAction) -> Result<()> {
+    let data_dir = config::Config::data_dir()?;
+    let storage_path = data_dir.join("storage");
+    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    core.initialize_identity()
+        .context("Failed to load identity")?;
+
+    match action {
+        BlockAction::Add { peer_id, reason } => {
+            core.block_peer(peer_id.clone(), reason.clone())
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            println!("{} Blocked peer: {}", "✓".green(), peer_id.bright_cyan());
+            if let Some(r) = reason {
+                println!("  Reason: {}", r.dimmed());
+            }
+        }
+        BlockAction::Remove { peer_id } => {
+            core.unblock_peer(peer_id.clone())
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            println!("{} Unblocked peer: {}", "✓".green(), peer_id.bright_cyan());
+        }
+        BlockAction::List => {
+            let list = core
+                .list_blocked_peers()
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            if list.is_empty() {
+                println!("{}", "No blocked peers.".dimmed());
+            } else {
+                println!("{} ({} total)", "Blocked Peers".bold(), list.len());
+                println!();
+                for item in list {
+                    println!("  {} {}", "•".bright_red(), item.peer_id.bright_cyan());
+                    println!(
+                        "    Blocked at: {}",
+                        format_timestamp(item.blocked_at).dimmed()
+                    );
+                    if let Some(ref reason) = item.reason {
+                        println!("    Reason: {}", reason.dimmed());
+                    }
+                }
+            }
+        }
+        BlockAction::Check { peer_id } => {
+            let blocked = core
+                .is_peer_blocked(peer_id.clone())
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            if blocked {
+                println!("{} {} is blocked", "✗".red(), peer_id.bright_cyan());
+            } else {
+                println!("{} {} is NOT blocked", "✓".green(), peer_id.bright_cyan());
+            }
+        }
+        BlockAction::Count => {
+            let count = core.blocked_count().map_err(|e| anyhow::anyhow!("{}", e))?;
+            println!("Blocked peers: {}", count);
+        }
+    }
+
+    Ok(())
+}
+
+async fn cmd_history_get(id: String) -> Result<()> {
+    let data_dir = config::Config::data_dir()?;
+    let storage_path = data_dir.join("storage");
+    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let history = core.history_store_manager();
+
+    match history.get(id.clone()) {
+        Ok(Some(msg)) => {
+            let direction = match msg.direction {
+                MessageDirection::Sent => "→ Sent",
+                MessageDirection::Received => "← Received",
+            };
+            println!("{}", "Message Details".bold());
+            println!("  ID:        {}", msg.id.bright_cyan());
+            println!("  Direction: {}", direction);
+            println!("  Peer:      {}", msg.peer_id);
+            println!("  Time:      {}", format_timestamp(msg.timestamp));
+            println!("  Delivered: {}", msg.delivered);
+            println!("  Content:   {}", msg.content);
+        }
+        Ok(None) => {
+            println!("{} Message not found: {}", "⚠".yellow(), id.dimmed());
+        }
+        Err(e) => {
+            anyhow::bail!("Failed to retrieve message: {:?}", e);
+        }
+    }
+
+    Ok(())
+}
+
+async fn cmd_history_stats() -> Result<()> {
+    let data_dir = config::Config::data_dir()?;
+    let storage_path = data_dir.join("storage");
+    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let history = core.history_store_manager();
+    let stats = history.stats().map_err(|e| anyhow::anyhow!("{:?}", e))?;
+
+    println!("{}", "History Statistics".bold());
+    println!("  Total:       {}", stats.total_messages);
+    println!("  Sent:        {}", stats.sent_count);
+    println!("  Received:    {}", stats.received_count);
+    println!("  Undelivered: {}", stats.undelivered_count);
+
+    Ok(())
+}
+
+async fn cmd_history_count() -> Result<()> {
+    let data_dir = config::Config::data_dir()?;
+    let storage_path = data_dir.join("storage");
+    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let history = core.history_store_manager();
+    println!("History count: {}", history.count());
+    Ok(())
+}
+
+async fn cmd_history_mark_delivered(id: String) -> Result<()> {
+    let data_dir = config::Config::data_dir()?;
+    let storage_path = data_dir.join("storage");
+    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let history = core.history_store_manager();
+    history
+        .mark_delivered(id.clone())
+        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+    println!(
+        "{} Marked message as delivered: {}",
+        "✓".green(),
+        id.bright_cyan()
+    );
+    Ok(())
+}
+
+async fn cmd_history_clear_conversation(peer: String) -> Result<()> {
+    let data_dir = config::Config::data_dir()?;
+    let storage_path = data_dir.join("storage");
+    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let history = core.history_store_manager();
+
+    // Try to resolve peer name to peer_id via contacts
+    let contacts = core.contacts_store_manager();
+    let peer_id = if let Ok(contact) = find_contact(&contacts, &peer) {
+        contact.peer_id
+    } else {
+        peer.clone()
+    };
+
+    history
+        .remove_conversation(peer_id.clone())
+        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+    println!(
+        "{} Cleared conversation with {}",
+        "✓".green(),
+        peer_id.bright_cyan()
+    );
+    Ok(())
+}
+
+async fn cmd_history_delete(id: String) -> Result<()> {
+    let data_dir = config::Config::data_dir()?;
+    let storage_path = data_dir.join("storage");
+    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let history = core.history_store_manager();
+    history
+        .delete(id.clone())
+        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+    println!("{} Deleted message: {}", "✓".green(), id.bright_cyan());
     Ok(())
 }
 

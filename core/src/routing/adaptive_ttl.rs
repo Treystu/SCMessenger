@@ -91,15 +91,16 @@ impl AdaptiveTTLManager {
     pub fn with_defaults() -> Self {
         Self::new(
             Duration::from_secs(1800), // 30 minutes base
-            Duration::from_secs(7200),  // 2 hours max
-            Duration::from_secs(3600),  // 1 hour half-life
+            Duration::from_secs(7200), // 2 hours max
+            Duration::from_secs(3600), // 1 hour half-life
         )
     }
 
     /// Calculate TTL for a peer based on activity
     pub fn calculate_ttl(&mut self, peer_id: &str) -> Duration {
         // Get or create activity history
-        let activity = self.peer_activity
+        let activity = self
+            .peer_activity
             .entry(peer_id.to_string())
             .or_insert_with(ActivityHistory::new);
 
@@ -112,7 +113,8 @@ impl AdaptiveTTLManager {
 
     /// Record message activity for a peer
     pub fn record_activity(&mut self, peer_id: &str) {
-        let activity = self.peer_activity
+        let activity = self
+            .peer_activity
             .entry(peer_id.to_string())
             .or_insert_with(ActivityHistory::new);
         activity.record_message();
@@ -127,9 +129,8 @@ impl AdaptiveTTLManager {
     /// Clean up old entries
     pub fn cleanup(&mut self, max_age: Duration) -> usize {
         let before = self.peer_activity.len();
-        self.peer_activity.retain(|_, activity| {
-            activity.last_message.elapsed() < max_age
-        });
+        self.peer_activity
+            .retain(|_, activity| activity.last_message.elapsed() < max_age);
         before - self.peer_activity.len()
     }
 
@@ -171,12 +172,12 @@ mod tests {
     #[test]
     fn test_active_peer_ttl() {
         let mut manager = AdaptiveTTLManager::with_defaults();
-        
+
         // Record multiple messages
         for _ in 0..15 {
             manager.record_activity("peer1");
         }
-        
+
         let ttl = manager.calculate_ttl("peer1");
         assert_eq!(ttl, Duration::from_secs(7200));
     }
@@ -184,12 +185,12 @@ mod tests {
     #[test]
     fn test_moderate_peer_ttl() {
         let mut manager = AdaptiveTTLManager::with_defaults();
-        
+
         // Record moderate activity
         for _ in 0..5 {
             manager.record_activity("peer1");
         }
-        
+
         let ttl = manager.calculate_ttl("peer1");
         assert_eq!(ttl, Duration::from_secs(3600));
     }
@@ -201,14 +202,14 @@ mod tests {
             Duration::from_secs(400),
             Duration::from_secs(100), // Fast decay for testing
         );
-        
+
         // Record activity
         manager.record_activity("peer1");
         let ttl_before = manager.calculate_ttl("peer1");
-        
+
         // Wait for decay
         std::thread::sleep(Duration::from_millis(200));
-        
+
         let ttl_after = manager.calculate_ttl("peer1");
         assert!(ttl_after < ttl_before);
     }
@@ -216,13 +217,13 @@ mod tests {
     #[test]
     fn test_cleanup_old_entries() {
         let mut manager = AdaptiveTTLManager::with_defaults();
-        
+
         // Add some activity
         manager.record_activity("peer1");
         manager.record_activity("peer2");
-        
+
         assert_eq!(manager.len(), 2);
-        
+
         // Clean up with very short max age
         let removed = manager.cleanup(Duration::from_nanos(1));
         assert_eq!(removed, 2);

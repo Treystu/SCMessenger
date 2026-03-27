@@ -2892,6 +2892,73 @@ final class MeshRepository {
         return try ironCore.blockedCount()
     }
 
+    // MARK: - Crypto Utilities
+
+    /// Sign arbitrary data with the local identity key.
+    func signData(data: Data) throws -> SignatureResult {
+        guard let ironCore = ironCore else {
+            throw MeshError.notInitialized("IronCore not initialized")
+        }
+        return try ironCore.signData(data: data)
+    }
+
+    /// Verify a signature against data and a public key.
+    func verifySignature(data: Data, signature: Data, publicKeyHex: String) throws -> Bool {
+        guard let ironCore = ironCore else {
+            throw MeshError.notInitialized("IronCore not initialized")
+        }
+        return try ironCore.verifySignature(data: data, signature: signature, publicKeyHex: publicKeyHex)
+    }
+
+    // MARK: - WS13 Device Management
+
+    /// Get the local device ID (WS13).
+    func getDeviceId() -> String? {
+        return ironCore?.getDeviceId()
+    }
+
+    /// Get the seniority timestamp for this installation (WS13).
+    func getSeniorityTimestamp() -> UInt64? {
+        return ironCore?.getSeniorityTimestamp()
+    }
+
+    /// Get the registration state for a given identity (WS13).
+    func getRegistrationState(identityId: String) -> RegistrationStateInfo? {
+        return ironCore?.getRegistrationState(identityId: identityId)
+    }
+
+    // MARK: - Logging
+
+    /// Export all recorded log entries as a single string.
+    func exportLogs() throws -> String {
+        guard let ironCore = ironCore else {
+            throw MeshError.notInitialized("IronCore not initialized")
+        }
+        return try ironCore.exportLogs()
+    }
+
+    // MARK: - Queue Counts
+
+    /// Get the number of messages in the outbox queue.
+    func outboxCount() -> UInt32 {
+        return ironCore?.outboxCount() ?? 0
+    }
+
+    /// Get the number of messages in the inbox queue.
+    func inboxCount() -> UInt32 {
+        return ironCore?.inboxCount() ?? 0
+    }
+
+    // MARK: - Contact Device ID (WS13)
+
+    /// Update the last known device ID for a contact (WS13.2).
+    func updateContactDeviceId(peerId: String, deviceId: String?) throws {
+        guard let contactManager = contactManager else {
+            throw MeshError.notInitialized("ContactManager not initialized")
+        }
+        try contactManager.updateDeviceId(peerId: peerId, deviceId: deviceId)
+    }
+
     // MARK: - History Retention
 
     /// Delete a single message by ID.

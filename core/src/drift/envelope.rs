@@ -18,7 +18,6 @@
 /// [64] signature
 /// [2]  ciphertext_len (LE u16)
 /// [N]  ciphertext
-
 use super::{DriftError, DRIFT_VERSION};
 
 /// Drift Protocol Envelope — compact binary format for mesh relay
@@ -463,10 +462,7 @@ mod tests {
         data[1] = 0x99; // Invalid type
 
         let result = DriftEnvelope::from_bytes(&data);
-        assert!(matches!(
-            result,
-            Err(DriftError::InvalidEnvelopeType(0x99))
-        ));
+        assert!(matches!(result, Err(DriftError::InvalidEnvelopeType(0x99))));
     }
 
     #[test]
