@@ -2785,6 +2785,80 @@ open class MeshRepository(private val context: Context) {
     }
 
     // ========================================================================
+    // CRYPTO UTILITIES
+    // ========================================================================
+
+    fun signData(data: ByteArray): uniffi.api.SignatureResult? {
+        ensureServiceInitialized()
+        return try {
+            ironCore?.signData(data.toList())
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to sign data")
+            null
+        }
+    }
+
+    fun verifySignature(data: ByteArray, signature: ByteArray, publicKeyHex: String): Boolean {
+        ensureServiceInitialized()
+        return try {
+            ironCore?.verifySignature(data.toList(), signature.toList(), publicKeyHex) ?: false
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to verify signature")
+            false
+        }
+    }
+
+    // ========================================================================
+    // WS13 DEVICE MANAGEMENT
+    // ========================================================================
+
+    fun getDeviceId(): String? {
+        return ironCore?.getDeviceId()
+    }
+
+    fun getSeniorityTimestamp(): ULong? {
+        return ironCore?.getSeniorityTimestamp()
+    }
+
+    fun getRegistrationState(identityId: String): uniffi.api.RegistrationStateInfo? {
+        return ironCore?.getRegistrationState(identityId)
+    }
+
+    // ========================================================================
+    // LOGGING
+    // ========================================================================
+
+    fun exportLogs(): String? {
+        return try {
+            ironCore?.exportLogs()
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to export logs")
+            null
+        }
+    }
+
+    // ========================================================================
+    // QUEUE COUNTS
+    // ========================================================================
+
+    fun getInboxCount(): UInt {
+        return ironCore?.inboxCount() ?: 0u
+    }
+
+    // ========================================================================
+    // CONTACT DEVICE ID (WS13)
+    // ========================================================================
+
+    fun updateContactDeviceId(peerId: String, deviceId: String?) {
+        try {
+            contactManager?.updateDeviceId(peerId, deviceId)
+            Timber.i("Updated device ID for $peerId: $deviceId")
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to update device ID for $peerId")
+        }
+    }
+
+    // ========================================================================
     // MESSAGE HISTORY
     // ========================================================================
 

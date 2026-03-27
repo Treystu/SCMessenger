@@ -10,29 +10,27 @@
 //! message availability. Gateway peers act as connectors to neighboring cells, whose
 //! summaries are aggregated and gossipped through the network.
 
-pub mod local;
-pub mod neighborhood;
-pub mod global;
-pub mod engine;
-pub mod timeout_budget;
-pub mod negative_cache;
-pub mod resume_prefetch;
 pub mod adaptive_ttl;
+pub mod engine;
+pub mod global;
+pub mod local;
+pub mod negative_cache;
+pub mod neighborhood;
 pub mod optimized_engine;
+pub mod resume_prefetch;
+pub mod timeout_budget;
 
-pub use local::{LocalCell, PeerInfo, PeerStatus, TransportType, PeerId, CellSummary, PeerEvent};
-pub use neighborhood::{NeighborhoodTable, GatewayInfo, NeighborhoodSummary, NeighborhoodGossip};
-pub use global::{GlobalRoutes, RouteAdvertisement, RouteRequest};
+pub use adaptive_ttl::{ActivityHistory, AdaptiveTTLManager};
 pub use engine::{
-    RoutingEngine, RoutingDecision, NextHop, RoutingLayer, RoutingMaintenance, RoutingSummary,
+    NextHop, RoutingDecision, RoutingEngine, RoutingLayer, RoutingMaintenance, RoutingSummary,
 };
-pub use timeout_budget::{TimeoutBudget, DiscoveryPhase, BudgetSummary};
+pub use global::{GlobalRoutes, RouteAdvertisement, RouteRequest};
+pub use local::{CellSummary, LocalCell, PeerEvent, PeerId, PeerInfo, PeerStatus, TransportType};
 pub use negative_cache::{NegativeCache, NegativeCacheStats};
+pub use neighborhood::{GatewayInfo, NeighborhoodGossip, NeighborhoodSummary, NeighborhoodTable};
+pub use optimized_engine::{OptimizedRoutingEngine, OptimizedRoutingMaintenance};
 pub use resume_prefetch::{
-    ResumePrefetchManager, PrefetchConfig, PrefetchedRoute, PrefetchStatus, PrefetchStats,
-    FrequentPeer,
+    FrequentPeer, PrefetchConfig, PrefetchStats, PrefetchStatus, PrefetchedRoute,
+    ResumePrefetchManager,
 };
-pub use adaptive_ttl::{AdaptiveTTLManager, ActivityHistory};
-pub use optimized_engine::{
-    OptimizedRoutingEngine, OptimizedRoutingMaintenance,
-};
+pub use timeout_budget::{BudgetSummary, DiscoveryPhase, TimeoutBudget};

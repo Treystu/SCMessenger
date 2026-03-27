@@ -299,8 +299,8 @@ impl RelayEngine {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::envelope::EnvelopeType;
+    use super::*;
 
     fn make_test_envelope(
         message_id: [u8; 16],

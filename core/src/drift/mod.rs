@@ -19,19 +19,19 @@
 pub mod compress;
 pub mod envelope;
 pub mod frame;
-pub mod store;
-pub mod sketch;
-pub mod sync;
-pub mod relay;
 pub mod policy;
+pub mod relay;
+pub mod sketch;
+pub mod store;
+pub mod sync;
 
 pub use envelope::{DriftEnvelope, EnvelopeType};
-pub use frame::{DriftFrame, FrameType, FRAME_READ_TIMEOUT, FRAME_MAX_PAYLOAD};
-pub use store::{MeshStore, MessageId, StoredEnvelope};
+pub use frame::{DriftFrame, FrameType, FRAME_MAX_PAYLOAD, FRAME_READ_TIMEOUT};
+pub use policy::{DeviceState, PolicyEngine, PolicyError, RelayProfile};
+pub use relay::{DropReason, NetworkState, RelayConfig, RelayDecision, RelayEngine, RelayError};
 pub use sketch::IBLT;
-pub use sync::{SyncMessage, SyncSession, SyncState, merge_envelopes};
-pub use relay::{RelayEngine, RelayConfig, NetworkState, RelayDecision, DropReason, RelayError};
-pub use policy::{PolicyEngine, DeviceState, RelayProfile, PolicyError};
+pub use store::{MeshStore, MessageId, StoredEnvelope};
+pub use sync::{merge_envelopes, SyncMessage, SyncSession, SyncState};
 
 use thiserror::Error;
 

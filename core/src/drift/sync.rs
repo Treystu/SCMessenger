@@ -6,9 +6,9 @@
 //! 3. Initiator: Compute difference from response, send SyncComplete with their missing envelopes
 //! 4. Both sides merge received envelopes into their stores
 
+use super::frame::FrameType;
 use super::sketch::IBLT;
 use super::store::{MeshStore, MessageId, StoredEnvelope};
-use super::frame::FrameType;
 use crate::drift::DriftError;
 use bincode;
 
@@ -43,8 +43,7 @@ impl SyncMessage {
 
     /// Deserialize SyncMessage from bytes
     pub fn from_bytes(data: &[u8]) -> Result<Self, DriftError> {
-        bincode::deserialize(data)
-            .map_err(|e| DriftError::DecompressionFailed(e.to_string()))
+        bincode::deserialize(data).map_err(|e| DriftError::DecompressionFailed(e.to_string()))
     }
 
     /// Get the discriminant as a frame type hint
@@ -203,9 +202,9 @@ impl SyncSession {
         let missing_envelopes: Vec<Vec<u8>> = they_have_not
             .iter()
             .filter_map(|msg_id| {
-                store.get(msg_id).and_then(|env| {
-                    bincode::serialize(env).ok()
-                })
+                store
+                    .get(msg_id)
+                    .and_then(|env| bincode::serialize(env).ok())
             })
             .collect();
 
@@ -278,9 +277,9 @@ impl SyncSession {
         let missing_envelopes: Vec<Vec<u8>> = we_have_only
             .iter()
             .filter_map(|msg_id| {
-                store.get(msg_id).and_then(|env| {
-                    bincode::serialize(env).ok()
-                })
+                store
+                    .get(msg_id)
+                    .and_then(|env| bincode::serialize(env).ok())
             })
             .collect();
 

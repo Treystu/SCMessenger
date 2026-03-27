@@ -1,5 +1,4 @@
 /// Drift Frame — transport layer framing with length and CRC32
-
 use super::DriftError;
 use crc32fast::Hasher;
 
@@ -189,7 +188,9 @@ impl DriftFrame {
         timeout(FRAME_READ_TIMEOUT, async {
             // Read length header (2 bytes)
             let mut len_buf = [0u8; 2];
-            reader.read_exact(&mut len_buf).await
+            reader
+                .read_exact(&mut len_buf)
+                .await
                 .map_err(|e| DriftError::IoError(e.to_string()))?;
 
             let length = u16::from_le_bytes(len_buf) as usize;
@@ -205,7 +206,9 @@ impl DriftFrame {
             // Read remaining: type + payload + CRC32
             let remaining = length + 4; // length field value + 4 bytes CRC32
             let mut rest = vec![0u8; remaining];
-            reader.read_exact(&mut rest).await
+            reader
+                .read_exact(&mut rest)
+                .await
                 .map_err(|e| DriftError::IoError(e.to_string()))?;
 
             // Reassemble full frame buffer and parse
@@ -250,10 +253,7 @@ mod tests {
         let bytes = original.to_bytes().unwrap();
 
         // Check structure: 2 (length) + 1 (type) + payload + 4 (CRC32)
-        assert_eq!(
-            bytes.len(),
-            2 + 1 + original.payload.len() + 4
-        );
+        assert_eq!(bytes.len(), 2 + 1 + original.payload.len() + 4);
 
         let restored = DriftFrame::from_bytes(&bytes).unwrap();
         assert_eq!(original, restored);

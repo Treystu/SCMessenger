@@ -84,7 +84,10 @@ impl IBLT {
     /// Create an IBLT with explicit cell count (for testing and advanced usage)
     pub fn with_cells(num_cells: usize) -> Self {
         let cells = vec![IBLTCell::new(); num_cells.max(1)];
-        Self { cells, num_cells: num_cells.max(1) }
+        Self {
+            cells,
+            num_cells: num_cells.max(1),
+        }
     }
 
     /// Hash a key to one of the k cell indices
@@ -96,8 +99,7 @@ impl IBLT {
         let digest = hasher.finalize();
         let bytes = digest.as_bytes();
         let value = u64::from_le_bytes([
-            bytes[0], bytes[1], bytes[2], bytes[3],
-            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
         ]);
         (value as usize) % self.num_cells
     }

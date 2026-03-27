@@ -1,5 +1,4 @@
 /// LZ4 compression wrapper for Drift Protocol payloads
-
 use super::DriftError;
 
 /// Compress data using LZ4 with size prepend
@@ -81,7 +80,11 @@ mod tests {
     #[test]
     fn test_compress_random_data() {
         // Random data may not compress well
-        let original: Vec<u8> = (0..1000).map(|i| (i % 256) as u8).cycle().take(1000).collect();
+        let original: Vec<u8> = (0..1000)
+            .map(|i| (i % 256) as u8)
+            .cycle()
+            .take(1000)
+            .collect();
         let compressed = compress(&original);
         let decompressed = decompress(&compressed).unwrap();
 
