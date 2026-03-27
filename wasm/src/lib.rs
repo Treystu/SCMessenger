@@ -640,10 +640,9 @@ impl IronCore {
             mgr.validate(settings)
                 .map_err(|e| js_value_from_str(&format!("Validation failed: {:?}", e)))?;
         } else {
-            // Inline validation when no storage manager
-            let mgr = MeshSettingsManager::new(String::new());
-            mgr.validate(settings)
-                .map_err(|e| js_value_from_str(&format!("Validation failed: {:?}", e)))?;
+            return Err(js_value_from_str(
+                "Validation failed: settings manager not initialized",
+            ));
         }
 
         Ok(())
