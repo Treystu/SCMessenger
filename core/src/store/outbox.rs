@@ -66,7 +66,14 @@ impl Outbox {
 
     /// Queue a message for delivery
     pub fn enqueue(&mut self, msg: QueuedMessage) -> std::result::Result<(), String> {
-        // Structured tracing: Log outbox enqueue event
+        // Structured tracing: packet lifecycle span for message correlation
+        let _span = tracing::info_span!(
+            "packet_lifecycle",
+            message_id = %msg.message_id,
+            recipient = %msg.recipient_id
+        )
+        .entered();
+
         tracing::info!(
             event = "outbox_enqueue",
             message_id = %msg.message_id,

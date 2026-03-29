@@ -18,7 +18,11 @@ pub enum DeliveryStatus {
     Sent,
     /// Message delivered to recipient's device
     Delivered,
-    /// Message read by recipient
+    /// Deprecated: retained for backward-compatible deserialization of receipts
+    /// from older peers. Treated as no-op (mapped to `Delivered` in processing).
+    #[deprecated(
+        note = "Zero-Status Architecture: Read receipts are no longer emitted or displayed"
+    )]
     Read,
     /// Delivery failed
     Failed(String),
@@ -44,7 +48,7 @@ pub struct Message {
     pub timestamp: u64,
 }
 
-/// A delivery/read receipt
+/// A delivery receipt
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Receipt {
     /// ID of the message this receipt is for
@@ -141,18 +145,6 @@ impl Receipt {
         Self {
             message_id,
             status: DeliveryStatus::Delivered,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-        }
-    }
-
-    /// Create a read receipt
-    pub fn read(message_id: String) -> Self {
-        Self {
-            message_id,
-            status: DeliveryStatus::Read,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()

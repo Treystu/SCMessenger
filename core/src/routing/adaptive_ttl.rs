@@ -58,7 +58,7 @@ impl ActivityHistory {
     pub fn decay(&mut self, half_life: Duration, base_ttl: Duration, max_ttl: Duration) {
         let elapsed = self.last_message.elapsed();
         let decay_factor = 0.5_f64.powf(elapsed.as_secs_f64() / half_life.as_secs_f64());
-        self.recent_messages = (self.recent_messages as f64 * decay_factor) as u32;
+        self.recent_messages = (self.recent_messages as f64 * decay_factor).round() as u32;
         self.adaptive_ttl = self.calculate_ttl(base_ttl, max_ttl);
     }
 }
@@ -200,14 +200,18 @@ mod tests {
         let mut manager = AdaptiveTTLManager::new(
             Duration::from_secs(100),
             Duration::from_secs(400),
-            Duration::from_secs(100), // Fast decay for testing
+            Duration::from_millis(50), // Very short half-life for test
         );
 
-        // Record activity
-        manager.record_activity("peer1");
-        let ttl_before = manager.calculate_ttl("peer1");
+        // Record enough activity to reach the maximum TTL tier (>10 messages)
+        for _ in 0..15 {
+            manager.record_activity("peer1");
+        }
 
-        // Wait for decay
+        let ttl_before = manager.calculate_ttl("peer1");
+        assert_eq!(ttl_before, Duration::from_secs(400)); // Max tier
+
+        // Wait long enough for significant decay (4 half-lives at 50ms each)
         std::thread::sleep(Duration::from_millis(200));
 
         let ttl_after = manager.calculate_ttl("peer1");

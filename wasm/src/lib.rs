@@ -579,10 +579,7 @@ impl IronCore {
         let mut failures: Vec<String> = Vec::new();
 
         for peer_id in peers {
-            match handle
-                .send_message(peer_id, data.clone(), None, None)
-                .await
-            {
+            match handle.send_message(peer_id, data.clone(), None, None).await {
                 Ok(()) => {
                     sent_count += 1;
                 }

@@ -1446,10 +1446,11 @@ impl IronCore {
 
         // Final receipt transitions delivery state in-core so all platform
         // adapters observe coherent outbox/history state.
-        let mut receipt_event: Option<(String, &'static str)> = None;
-        let mut receipt_handled = false;
+        // Zero-Status Architecture: Receipt processing is internal only — the Core
+        // never emits delivery status events across the FFI boundary.
+        let mut is_receipt_message = false;
         if msg.message_type == message::MessageType::Receipt {
-            receipt_handled = true;
+            is_receipt_message = true;
             if let Ok(receipt) = bincode::deserialize::<message::Receipt>(&msg.payload) {
                 let log_receipt_ignore = |message_id: &str, reason: &str| {
                     let err_msg = format!(
@@ -1507,7 +1508,14 @@ impl IronCore {
                         "sender identity does not match outbound recipient",
                     );
                 } else {
-                    if matches!(receipt.status, message::DeliveryStatus::Delivered) {
+                    // Backward compat: legacy Read receipts from older peers are
+                    // treated as Delivered so they still clear the outbox/history.
+                    #[allow(deprecated)]
+                    let is_delivered_or_read = matches!(
+                        receipt.status,
+                        message::DeliveryStatus::Delivered | message::DeliveryStatus::Read
+                    );
+                    if is_delivered_or_read {
                         tracing::info!(
                             event = "receipt_verified",
                             message_id = %receipt.message_id,
@@ -1520,22 +1528,16 @@ impl IronCore {
                             .read()
                             .mark_delivered(receipt.message_id.clone());
                     }
-                    let status_str = match receipt.status {
-                        message::DeliveryStatus::Sent => "sent",
-                        message::DeliveryStatus::Delivered => "delivered",
-                        message::DeliveryStatus::Read => "read",
-                        message::DeliveryStatus::Failed(_) => "failed",
-                    };
-                    receipt_event = Some((receipt.message_id, status_str));
                 }
             }
         }
 
         // Notify delegate
+        // Zero-Status Architecture: Receipt processing is internal only.
+        // The Core never emits delivery status events across the FFI boundary.
+        // on_receipt_received is intentionally suppressed to decouple the UI.
         if let Some(delegate) = self.delegate.read().as_ref() {
-            if let Some((message_id, status)) = receipt_event {
-                delegate.on_receipt_received(message_id, status.to_string());
-            } else if !receipt_handled {
+            if !is_receipt_message {
                 delegate.on_message_received(
                     msg.sender_id.clone(),
                     sender_pub_key_hex,

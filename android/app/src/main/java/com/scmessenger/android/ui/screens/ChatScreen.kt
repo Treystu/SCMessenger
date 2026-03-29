@@ -22,8 +22,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.scmessenger.android.ui.chat.DeliveryStatePresentation
-import com.scmessenger.android.ui.chat.DeliveryStateSurface
 import com.scmessenger.android.utils.toEpochMillis
 import com.scmessenger.android.ui.viewmodels.ConversationsViewModel
 import kotlinx.coroutines.launch
@@ -44,7 +42,6 @@ fun ChatScreen(
         // MSG-ORDER-001: Sort strictly by sender-assigned timestamp to ensure consistent ordering across platforms
         messages.filter { it.peerId == conversationId }.sortedBy { it.senderTimestamp }
     }
-    val nowEpochSec = System.currentTimeMillis() / 1000
 
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -167,7 +164,6 @@ fun ChatScreen(
             }
 
             // Messages List
-            StateLegendCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -178,13 +174,9 @@ fun ChatScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(chatMessages) { message ->
-                    val deliveryState = remember(message.id, message.delivered, nowEpochSec) {
-                        viewModel.resolveDeliveryState(message, nowEpochSec)
-                    }
                     MessageBubble(
                         message = message,
-                        isMe = message.direction == uniffi.api.MessageDirection.SENT,
-                        deliveryState = deliveryState
+                        isMe = message.direction == uniffi.api.MessageDirection.SENT
                     )
                 }
             }
@@ -304,8 +296,7 @@ fun ChatScreen(
 @Composable
 fun MessageBubble(
     message: uniffi.api.MessageRecord,
-    isMe: Boolean,
-    deliveryState: DeliveryStatePresentation
+    isMe: Boolean
 ) {
     val bubbleColor = if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val textColor = if (isMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -328,47 +319,13 @@ fun MessageBubble(
                 style = MaterialTheme.typography.bodyLarge
             )
         }
+        // Zero-Status Architecture: show only sender-assigned timestamp, no delivery state.
         Text(
-            text = formatTimestamp(message.timestamp),
+            text = formatTimestamp(message.senderTimestamp),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline,
             modifier = Modifier.padding(top = 4.dp, start = 4.dp, end = 4.dp)
         )
-        if (isMe) {
-            Text(
-                text = deliveryState.label,
-                style = MaterialTheme.typography.labelSmall,
-                color = when (deliveryState.state) {
-                    DeliveryStateSurface.DELIVERED -> MaterialTheme.colorScheme.primary
-                    DeliveryStateSurface.FORWARDING -> MaterialTheme.colorScheme.tertiary
-                    DeliveryStateSurface.REJECTED -> MaterialTheme.colorScheme.error
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun StateLegendCard(modifier: Modifier = Modifier) {
-    Card(modifier = modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = "Delivery states",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "pending: first attempt in progress • stored: queued for retry • forwarding: retry active • rejected: identity no longer valid • delivered: receipt confirmed",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
 

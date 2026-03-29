@@ -1,16 +1,11 @@
 package com.scmessenger.android.ui.chat
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -22,8 +17,8 @@ import java.util.*
 /**
  * Message bubble component for chat UI.
  *
- * Displays sent/received messages with delivery status indicators,
- * timestamps, and appropriate styling based on message direction.
+ * Zero-Status Architecture: displays only message content (text)
+ * and the sender-assigned message timestamp (`senderTimestamp`). No delivery status indicators.
  */
 @Composable
 fun MessageBubble(
@@ -68,54 +63,19 @@ fun MessageBubble(
                 }
             }
 
-            // Timestamp and status
-            Row(
-                modifier = Modifier.padding(top = 4.dp, start = 8.dp, end = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = formatTimestamp(message.timestamp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Normal
-                )
-
-                // Delivery status for sent messages
-                if (isSent) {
-                    DeliveryStatusIndicator(delivered = message.delivered)
-                }
-            }
+            // senderTimestamp: the time the message was saved to local storage for sending
+            Text(
+                text = formatTimestamp(message.senderTimestamp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Normal,
+                modifier = Modifier.padding(top = 4.dp, start = 8.dp, end = 8.dp)
+            )
         }
 
         if (isSent) {
             Spacer(modifier = Modifier.width(48.dp))
         }
-    }
-}
-
-/**
- * Delivery status indicator icon.
- */
-@Composable
-private fun DeliveryStatusIndicator(
-    delivered: Boolean,
-    modifier: Modifier = Modifier
-) {
-    if (delivered) {
-        Icon(
-            imageVector = Icons.Default.Check,
-            contentDescription = "Delivered",
-            modifier = modifier.size(14.dp),
-            tint = StatusSuccess.copy(alpha = 0.7f)
-        )
-    } else {
-        Icon(
-            imageVector = Icons.Default.Clear,
-            contentDescription = "Pending",
-            modifier = modifier.size(14.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-        )
     }
 }
 

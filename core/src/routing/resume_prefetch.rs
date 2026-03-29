@@ -175,7 +175,7 @@ impl FrequentPeer {
     fn decay(&mut self, half_life: Duration) {
         let elapsed = self.last_message.elapsed();
         let decay_factor = 0.5_f64.powf(elapsed.as_secs_f64() / half_life.as_secs_f64());
-        self.message_count = (self.message_count as f64 * decay_factor) as u32;
+        self.message_count = (self.message_count as f64 * decay_factor).round() as u32;
         self.priority = (self.message_count * 10).min(100);
     }
 }
@@ -339,6 +339,14 @@ impl ResumePrefetchManager {
     ///
     /// Updates the frequent peers list for future prefetch prioritization.
     pub fn record_message(&mut self, peer_id: PeerId, hint: [u8; 4]) {
+        // Decay old peers first so accumulated inactivity is properly applied
+        // before recording the new message (which resets last_message to now).
+        let half_life = Duration::from_secs(3600); // 1 hour half-life
+        self.frequent_peers.retain_mut(|p| {
+            p.decay(half_life);
+            p.message_count > 0
+        });
+
         if let Some(peer) = self
             .frequent_peers
             .iter_mut()
@@ -348,13 +356,6 @@ impl ResumePrefetchManager {
         } else {
             self.frequent_peers.push(FrequentPeer::new(peer_id, hint));
         }
-
-        // Decay old peers and remove very inactive ones
-        let half_life = Duration::from_secs(3600); // 1 hour half-life
-        self.frequent_peers
-            .iter_mut()
-            .for_each(|p| p.decay(half_life));
-        self.frequent_peers.retain(|p| p.message_count > 0);
 
         // Sort by priority for efficient lookup
         self.frequent_peers
