@@ -1446,7 +1446,8 @@ impl IronCore {
 
         // Final receipt transitions delivery state in-core so all platform
         // adapters observe coherent outbox/history state.
-        let mut receipt_event: Option<(String, &'static str)> = None;
+        // Zero-Status Architecture: Receipt processing is internal only — the Core
+        // never emits delivery status events across the FFI boundary.
         let mut receipt_handled = false;
         if msg.message_type == message::MessageType::Receipt {
             receipt_handled = true;
@@ -1506,36 +1507,28 @@ impl IronCore {
                         &receipt.message_id,
                         "sender identity does not match outbound recipient",
                     );
-                } else {
-                    if matches!(receipt.status, message::DeliveryStatus::Delivered) {
-                        tracing::info!(
-                            event = "receipt_verified",
-                            message_id = %receipt.message_id,
-                            sender_identity = %expected_sender_identity,
-                            status = "delivered"
-                        );
-                        let _ = self.mark_message_sent(receipt.message_id.clone());
-                        let _ = self
-                            .history
-                            .read()
-                            .mark_delivered(receipt.message_id.clone());
-                    }
-                    let status_str = match receipt.status {
-                        message::DeliveryStatus::Sent => "sent",
-                        message::DeliveryStatus::Delivered => "delivered",
-                        message::DeliveryStatus::Read => "read",
-                        message::DeliveryStatus::Failed(_) => "failed",
-                    };
-                    receipt_event = Some((receipt.message_id, status_str));
+                } else if matches!(receipt.status, message::DeliveryStatus::Delivered) {
+                    tracing::info!(
+                        event = "receipt_verified",
+                        message_id = %receipt.message_id,
+                        sender_identity = %expected_sender_identity,
+                        status = "delivered"
+                    );
+                    let _ = self.mark_message_sent(receipt.message_id.clone());
+                    let _ = self
+                        .history
+                        .read()
+                        .mark_delivered(receipt.message_id.clone());
                 }
             }
         }
 
         // Notify delegate
+        // Zero-Status Architecture: Receipt processing is internal only.
+        // The Core never emits delivery status events across the FFI boundary.
+        // on_receipt_received is intentionally suppressed to decouple the UI.
         if let Some(delegate) = self.delegate.read().as_ref() {
-            if let Some((message_id, status)) = receipt_event {
-                delegate.on_receipt_received(message_id, status.to_string());
-            } else if !receipt_handled {
+            if !receipt_handled {
                 delegate.on_message_received(
                     msg.sender_id.clone(),
                     sender_pub_key_hex,
