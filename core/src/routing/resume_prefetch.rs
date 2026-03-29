@@ -342,10 +342,10 @@ impl ResumePrefetchManager {
         // Decay old peers first so accumulated inactivity is properly applied
         // before recording the new message (which resets last_message to now).
         let half_life = Duration::from_secs(3600); // 1 hour half-life
-        self.frequent_peers
-            .iter_mut()
-            .for_each(|p| p.decay(half_life));
-        self.frequent_peers.retain(|p| p.message_count > 0);
+        self.frequent_peers.retain_mut(|p| {
+            p.decay(half_life);
+            p.message_count > 0
+        });
 
         if let Some(peer) = self
             .frequent_peers
