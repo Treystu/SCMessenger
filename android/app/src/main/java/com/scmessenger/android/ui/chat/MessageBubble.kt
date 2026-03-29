@@ -17,8 +17,8 @@ import java.util.*
 /**
  * Message bubble component for chat UI.
  *
- * Zero-Status Architecture: displays only sender identity, payload (text),
- * and local timestamp of creation. No delivery status indicators.
+ * Zero-Status Architecture: displays only message content (text)
+ * and sent timestamp. No delivery status indicators.
  */
 @Composable
 fun MessageBubble(

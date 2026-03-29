@@ -1448,9 +1448,9 @@ impl IronCore {
         // adapters observe coherent outbox/history state.
         // Zero-Status Architecture: Receipt processing is internal only — the Core
         // never emits delivery status events across the FFI boundary.
-        let mut receipt_handled = false;
+        let mut is_receipt_message = false;
         if msg.message_type == message::MessageType::Receipt {
-            receipt_handled = true;
+            is_receipt_message = true;
             if let Ok(receipt) = bincode::deserialize::<message::Receipt>(&msg.payload) {
                 let log_receipt_ignore = |message_id: &str, reason: &str| {
                     let err_msg = format!(
@@ -1528,7 +1528,7 @@ impl IronCore {
         // The Core never emits delivery status events across the FFI boundary.
         // on_receipt_received is intentionally suppressed to decouple the UI.
         if let Some(delegate) = self.delegate.read().as_ref() {
-            if !receipt_handled {
+            if !is_receipt_message {
                 delegate.on_message_received(
                     msg.sender_id.clone(),
                     sender_pub_key_hex,
