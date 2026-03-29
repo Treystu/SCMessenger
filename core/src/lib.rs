@@ -1507,18 +1507,27 @@ impl IronCore {
                         &receipt.message_id,
                         "sender identity does not match outbound recipient",
                     );
-                } else if matches!(receipt.status, message::DeliveryStatus::Delivered) {
-                    tracing::info!(
-                        event = "receipt_verified",
-                        message_id = %receipt.message_id,
-                        sender_identity = %expected_sender_identity,
-                        status = "delivered"
+                } else {
+                    // Backward compat: legacy Read receipts from older peers are
+                    // treated as Delivered so they still clear the outbox/history.
+                    #[allow(deprecated)]
+                    let is_delivered_or_read = matches!(
+                        receipt.status,
+                        message::DeliveryStatus::Delivered | message::DeliveryStatus::Read
                     );
-                    let _ = self.mark_message_sent(receipt.message_id.clone());
-                    let _ = self
-                        .history
-                        .read()
-                        .mark_delivered(receipt.message_id.clone());
+                    if is_delivered_or_read {
+                        tracing::info!(
+                            event = "receipt_verified",
+                            message_id = %receipt.message_id,
+                            sender_identity = %expected_sender_identity,
+                            status = "delivered"
+                        );
+                        let _ = self.mark_message_sent(receipt.message_id.clone());
+                        let _ = self
+                            .history
+                            .read()
+                            .mark_delivered(receipt.message_id.clone());
+                    }
                 }
             }
         }

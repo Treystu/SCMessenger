@@ -18,6 +18,12 @@ pub enum DeliveryStatus {
     Sent,
     /// Message delivered to recipient's device
     Delivered,
+    /// Deprecated: retained for backward-compatible deserialization of receipts
+    /// from older peers. Treated as no-op (mapped to `Delivered` in processing).
+    #[deprecated(
+        note = "Zero-Status Architecture: Read receipts are no longer emitted or displayed"
+    )]
+    Read,
     /// Delivery failed
     Failed(String),
 }

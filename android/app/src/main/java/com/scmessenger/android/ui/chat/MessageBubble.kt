@@ -18,7 +18,8 @@ import java.util.*
  * Message bubble component for chat UI.
  *
  * Zero-Status Architecture: displays only message content (text)
- * and sent timestamp. No delivery status indicators.
+ * and the sender-assigned message timestamp (`senderTimestamp`, with fallback
+ * to local `timestamp` for legacy records). No delivery status indicators.
  */
 @Composable
 fun MessageBubble(
@@ -63,9 +64,10 @@ fun MessageBubble(
                 }
             }
 
-            // Timestamp only — no delivery status
+            // Fall back to local timestamp for legacy records where senderTimestamp is zero.
+            val effectiveTimestamp = if (message.senderTimestamp > 0uL) message.senderTimestamp else message.timestamp
             Text(
-                text = formatTimestamp(message.senderTimestamp),
+                text = formatTimestamp(effectiveTimestamp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Normal,

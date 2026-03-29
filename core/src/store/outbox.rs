@@ -70,7 +70,7 @@ impl Outbox {
         let _span = tracing::info_span!(
             "packet_lifecycle",
             message_id = %msg.message_id,
-            recipient_id = %msg.recipient_id
+            recipient = %msg.recipient_id
         )
         .entered();
 

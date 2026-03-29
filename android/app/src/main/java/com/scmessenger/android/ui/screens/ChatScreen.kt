@@ -319,9 +319,11 @@ fun MessageBubble(
                 style = MaterialTheme.typography.bodyLarge
             )
         }
-        // Zero-Status Architecture: show only sent timestamp, no delivery state
+        // Zero-Status Architecture: show only sender-assigned timestamp, no delivery state.
+        // Fall back to local timestamp when senderTimestamp is not set (legacy records).
+        val effectiveTimestamp = if (message.senderTimestamp > 0uL) message.senderTimestamp else message.timestamp
         Text(
-            text = formatTimestamp(message.senderTimestamp),
+            text = formatTimestamp(effectiveTimestamp),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline,
             modifier = Modifier.padding(top = 4.dp, start = 4.dp, end = 4.dp)

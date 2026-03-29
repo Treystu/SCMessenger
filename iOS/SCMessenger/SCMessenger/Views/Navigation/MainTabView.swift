@@ -487,8 +487,9 @@ struct ChatView: View {
     }
 }
 
-/// Zero-Status Architecture: displays only sender identity, payload (text),
-/// and local timestamp of creation. No delivery status indicators.
+/// Zero-Status Architecture: displays only message content (text)
+/// and sender-assigned timestamp (`senderTimestamp`, with fallback to local
+/// `timestamp` for legacy records where `senderTimestamp` is zero). No delivery status indicators.
 struct MessageBubble: View {
     let message: MessageRecord
 
@@ -504,8 +505,10 @@ struct MessageBubble: View {
                 Text(message.content)
                     .font(Theme.bodyMedium)
 
-                // Use senderTimestamp for unified timestamp ordering (sent time)
-                let msgDate = Date(timeIntervalSince1970: Double(message.senderTimestamp))
+                // Use senderTimestamp for unified timestamp ordering (sent time),
+                // but fall back to local timestamp when senderTimestamp is not set.
+                let ts = message.senderTimestamp > 0 ? message.senderTimestamp : message.timestamp
+                let msgDate = Date(timeIntervalSince1970: Double(ts))
                 Text(formatMessageDate(msgDate))
                     .font(Theme.labelSmall)
                     .foregroundStyle(isSent ? Theme.onPrimaryContainer.opacity(0.8) : Theme.onSurface.opacity(0.8))
