@@ -1,9 +1,62 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-03-23
+Last updated: 2026-03-30
 
-Last verified: **2026-03-23** (drift/routing modules wired, WASM build issue documented)
+Last verified: **2026-03-30** (v0.2.1 contact block state machine complete, all PR review comments resolved, alpha rollout plan created)
+
+---
+
+## 2026-03-30: v0.2.1 Contact Block State Machine & Alpha Rollout Readiness
+
+**Status:** ✅ IMPLEMENTATION COMPLETE — READY FOR ALPHA ROLLOUT
+
+### Overview
+
+The v0.2.1 contact block/unblock/delete state machine is fully implemented and all PR review comments have been resolved. The alpha rollout plan (`docs/V0.2.1_ALPHA_ROLLOUT_PLAN.md`) is complete with Android and iOS build/deploy/test instructions.
+
+### v0.2.1 Block State Machine
+
+Three strict states are now enforced end-to-end:
+
+1. **Blocked-only (evidentiary retention)**: Messages from blocked peers are received, decrypted, and persisted with `hidden: true` in both core and mobile bridge history stores. Normal UI queries filter them out. The delegate callback is suppressed so no notification fires.
+
+2. **Unblock (restore visibility)**: Removes the block record and calls `unhide_messages_for_peer()` in both core and mobile bridge stores. All previously hidden messages immediately become visible in UI queries.
+
+3. **Blocked + Deleted (cascade purge)**: Sets `is_deleted: true` on the block record, purges all history from both stores, removes the contact from both stores, and rejects future ingress payloads with `Err(IronCoreError::Blocked)`.
+
+### Changes Made (2026-03-30)
+
+1. **Core Rust** (`core/src/store/blocked.rs`, `core/src/store/history.rs`, `core/src/mobile_bridge.rs`, `core/src/lib.rs`):
+   - `BlockedIdentity.is_deleted: bool` with serde default for backward compatibility
+   - `MessageRecord.hidden: bool` with serde default for backward compatibility
+   - `block_and_delete()`, `is_blocked_and_deleted()`, `blocked_only_peer_ids()` on `BlockedManager`
+   - `recent_including_hidden()`, `unhide_messages_for_peer()` on both `HistoryManager` variants
+   - `receive_message()` ingress: blocked+deleted → `Err(Blocked)`; blocked-only → store hidden + write to mobile bridge + suppress delegate
+   - `unblock_peer()` → unhide in both stores
+   - `block_and_delete_peer()` → purge history + remove contact from both stores
+
+2. **UniFFI / WASM** (`core/src/api.udl`, `core/src/blocked_bridge.rs`, `wasm/src/lib.rs`):
+   - `is_deleted` exposed in BlockedIdentity dictionary and WASM JS bindings
+   - Bridge `From` impls now preserve `is_deleted` state in both directions
+
+3. **Android** (`android/.../MeshRepository.kt`):
+   - `sendHistorySyncIfNeeded()` gates on identity readiness (R-WS13.5-01 closed)
+
+4. **Integration Tests** (`core/tests/integration_contact_block.rs`):
+   - 3 scenarios verified: hidden retention, unblock restores, cascade purge + ingress reject
+
+### Verification
+
+```bash
+cargo build --workspace    # ✅ pass
+cargo test --workspace     # ✅ 670+ pass, 0 fail
+./scripts/docs_sync_check.sh  # ✅ PASS
+```
+
+### Alpha Rollout
+
+See `docs/V0.2.1_ALPHA_ROLLOUT_PLAN.md` for complete pre-rollout checklist, build instructions, and rollout procedures for Android and iOS.
 
 ---
 
