@@ -200,8 +200,7 @@ impl HistoryManager {
             if record.hidden && record.peer_id.eq_ignore_ascii_case(peer_id) {
                 record.hidden = false;
                 let key = format!("msg_{}", record.id);
-                let updated =
-                    serde_json::to_vec(&record).map_err(|_| IronCoreError::Internal)?;
+                let updated = serde_json::to_vec(&record).map_err(|_| IronCoreError::Internal)?;
                 self.backend
                     .put(key.as_bytes(), &updated)
                     .map_err(|_| IronCoreError::StorageError)?;

@@ -6,6 +6,12 @@ cd "$DIR"
 
 echo "Verifying iOS workspace build..."
 
+# Generate bindings if the canonical generated files are missing.
+if [ ! -f "../iOS/SCMessenger/SCMessenger/Generated/api.swift" ]; then
+  echo "Generated bindings missing — running copy-bindings.sh..."
+  bash "../iOS/copy-bindings.sh"
+fi
+
 bash "../iOS/assert-generated-path.sh"
 
 # Deterministic simulator destination without provisioning requirements.

@@ -115,9 +115,7 @@ fn test_blocked_message_persisted_but_hidden() {
     );
 
     // 1c. The recent() query across all peers must also exclude hidden messages.
-    let all_recent = history
-        .recent(None, 100)
-        .expect("recent must succeed");
+    let all_recent = history.recent(None, 100).expect("recent must succeed");
 
     let alice_visible: Vec<_> = all_recent
         .iter()

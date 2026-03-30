@@ -103,7 +103,11 @@ impl BlockedManager {
     /// This sets `is_deleted = true` on the block record so that the ingress
     /// layer knows to drop all future payloads without persisting them, and so
     /// that the caller can trigger a cascade purge of existing stored messages.
-    pub fn block_and_delete(&self, peer_id: String, reason: Option<String>) -> Result<(), IronCoreError> {
+    pub fn block_and_delete(
+        &self,
+        peer_id: String,
+        reason: Option<String>,
+    ) -> Result<(), IronCoreError> {
         let mut blocked = BlockedIdentity::new(peer_id);
         blocked.is_deleted = true;
         if let Some(r) = reason {
@@ -204,10 +208,7 @@ impl BlockedManager {
     ///
     /// Returns `true` only when `is_deleted = true` on the block record.
     /// Blocked-only peers (where `is_deleted = false`) return `false`.
-    pub fn is_blocked_and_deleted(
-        &self,
-        peer_id: &str,
-    ) -> Result<bool, IronCoreError> {
+    pub fn is_blocked_and_deleted(&self, peer_id: &str) -> Result<bool, IronCoreError> {
         let key = format!("blocked:{}", peer_id);
         if let Some(data) = self
             .backend
@@ -226,7 +227,9 @@ impl BlockedManager {
     ///
     /// Used by the query layer to filter messages from blocked peers out of UI
     /// results without purging them (evidentiary retention).
-    pub fn blocked_only_peer_ids(&self) -> Result<std::collections::HashSet<String>, IronCoreError> {
+    pub fn blocked_only_peer_ids(
+        &self,
+    ) -> Result<std::collections::HashSet<String>, IronCoreError> {
         let list = self.list()?;
         Ok(list
             .into_iter()

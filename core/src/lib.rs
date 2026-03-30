@@ -1415,8 +1415,7 @@ impl IronCore {
         // Ingress filtering: check blocked state for this sender BEFORE dedup or
         // history persistence.  We derive the sender identity id the same way the
         // history record does (Blake3 hash of the envelope sender public key).
-        let sender_identity_id =
-            hex::encode(blake3::hash(&envelope.sender_public_key).as_bytes());
+        let sender_identity_id = hex::encode(blake3::hash(&envelope.sender_public_key).as_bytes());
 
         // Helper: check blocked state against both the identity id (Blake3 hash)
         // and the raw sender_id embedded in the message, since the two can differ
@@ -1471,10 +1470,20 @@ impl IronCore {
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs();
+                // For blocked-only (hidden) messages, use the derived sender_identity_id
+                // as the peer_id so that unhide_messages_for_peer() — which is keyed by
+                // the same identifier used in block()/unblock() — can reliably match.
+                // For non-blocked messages, continue using msg.sender_id which is
+                // typically identical (both derive from Blake3 of the sender public key).
+                let record_peer_id = if is_blocked_only {
+                    sender_identity_id.clone()
+                } else {
+                    msg.sender_id.clone()
+                };
                 let _ = self.history.read().add(store::MessageRecord {
                     id: msg.id.clone(),
                     direction: store::MessageDirection::Received,
-                    peer_id: msg.sender_id.clone(),
+                    peer_id: record_peer_id.clone(),
                     content: text.clone(),
                     timestamp: local_ts,
                     sender_timestamp: msg.timestamp,
@@ -1493,7 +1502,7 @@ impl IronCore {
                     let mobile_record = crate::mobile_bridge::MessageRecord {
                         id: msg.id.clone(),
                         direction: crate::mobile_bridge::MessageDirection::Received,
-                        peer_id: msg.sender_id.clone(),
+                        peer_id: record_peer_id,
                         content: text,
                         timestamp: local_ts,
                         sender_timestamp: msg.timestamp,
@@ -1729,7 +1738,9 @@ impl IronCore {
         // apps see the restored messages immediately.
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let _ = self.history_bridge_manager.unhide_messages_for_peer(&peer_id);
+            let _ = self
+                .history_bridge_manager
+                .unhide_messages_for_peer(&peer_id);
         }
         Ok(())
     }
@@ -1755,9 +1766,7 @@ impl IronCore {
             .block_and_delete(peer_id.clone(), reason)?;
         // 2. Purge all existing stored messages for this peer from core history.
         //    Propagate storage errors so callers know when the purge is incomplete.
-        self.history
-            .read()
-            .remove_conversation(peer_id.clone())?;
+        self.history.read().remove_conversation(peer_id.clone())?;
         // Also purge from the mobile bridge history (sled-based).
         #[cfg(not(target_arch = "wasm32"))]
         {

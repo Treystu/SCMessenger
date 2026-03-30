@@ -1312,7 +1312,8 @@ open class MeshRepository(private val context: Context) {
                                             content = obj.getString("txt"),
                                             timestamp = obj.getLong("ts").toULong(),
                                             senderTimestamp = obj.getLong("sts").toULong(),
-                                            delivered = obj.getBoolean("del")
+                                            delivered = obj.getBoolean("del"),
+                                            hidden = false
                                         )
                                         historyManager?.add(record)
                                         repoScope.launch { _messageUpdates.emit(record) }
@@ -1368,7 +1369,8 @@ open class MeshRepository(private val context: Context) {
                             content = content,
                             timestamp = canonicalTimestamp,
                             senderTimestamp = senderTimestamp,
-                            delivered = true
+                            delivered = true,
+                            hidden = false
                         )
                         historyManager?.add(record)
                         logDeliveryAttempt(
@@ -2806,7 +2808,7 @@ open class MeshRepository(private val context: Context) {
     fun signData(data: ByteArray): uniffi.api.SignatureResult? {
         ensureServiceInitialized()
         return try {
-            ironCore?.signData(data.toList())
+            ironCore?.signData(data)
         } catch (e: Exception) {
             Timber.e(e, "Failed to sign data")
             null
@@ -2816,7 +2818,7 @@ open class MeshRepository(private val context: Context) {
     fun verifySignature(data: ByteArray, signature: ByteArray, publicKeyHex: String): Boolean {
         ensureServiceInitialized()
         return try {
-            ironCore?.verifySignature(data.toList(), signature.toList(), publicKeyHex) ?: false
+            ironCore?.verifySignature(data, signature, publicKeyHex) ?: false
         } catch (e: Exception) {
             Timber.e(e, "Failed to verify signature")
             false
@@ -3018,7 +3020,8 @@ open class MeshRepository(private val context: Context) {
                 content = content,
                 timestamp = now,
                 senderTimestamp = now,
-                delivered = false
+                delivered = false,
+                hidden = false
             )
 
             try {
@@ -3106,7 +3109,8 @@ open class MeshRepository(private val context: Context) {
                             content = content,
                             timestamp = now,
                             senderTimestamp = now,
-                            delivered = false
+                            delivered = false,
+                            hidden = false
                         )
                         historyManager?.add(reconciledRecord)
                         historyManager?.flush()

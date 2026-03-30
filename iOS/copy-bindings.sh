@@ -27,16 +27,29 @@ if [ -d "$legacy_dir" ]; then
 fi
 
 echo "4. Copying files..."
-cp target/generated-sources/uniffi/swift/api.swift "$canonical_dir/api.swift"
-cp target/generated-sources/uniffi/swift/apiFFI.h "$canonical_dir/apiFFI.h"
-cp target/generated-sources/uniffi/swift/apiFFI.modulemap "$canonical_dir/apiFFI.modulemap"
+# UniFFI names outputs after the module_name in uniffi.toml.  Map them to the
+# canonical names expected by the Xcode project (api.swift, apiFFI.h, apiFFI.modulemap).
+swift_src="target/generated-sources/uniffi/swift"
+if [ -f "$swift_src/SCMessengerCore.swift" ]; then
+  cp "$swift_src/SCMessengerCore.swift" "$canonical_dir/api.swift"
+  cp "$swift_src/scmessenger_core.h"   "$canonical_dir/apiFFI.h"
+  cp "$swift_src/scmessenger_core.modulemap" "$canonical_dir/apiFFI.modulemap"
+elif [ -f "$swift_src/api.swift" ]; then
+  cp "$swift_src/api.swift"            "$canonical_dir/api.swift"
+  cp "$swift_src/apiFFI.h"             "$canonical_dir/apiFFI.h"
+  cp "$swift_src/apiFFI.modulemap"     "$canonical_dir/apiFFI.modulemap"
+else
+  echo "error: no generated Swift bindings found in $swift_src"
+  ls -la "$swift_src/" 2>/dev/null || true
+  exit 1
+fi
 
 echo "✓ Swift bindings copied successfully"
 echo
 echo "Files copied to:"
 echo "  - iOS/SCMessenger/SCMessenger/Generated/"
 echo "  - legacy generated path removed: $legacy_removed"
-echo "  - api.swift ($(wc -l < target/generated-sources/uniffi/swift/api.swift) lines)"
+echo "  - api.swift ($(wc -l < "$canonical_dir/api.swift") lines)"
 echo "  - apiFFI.h"
 echo "  - apiFFI.modulemap"
 

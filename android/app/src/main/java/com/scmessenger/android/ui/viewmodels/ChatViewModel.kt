@@ -166,7 +166,8 @@ class ChatViewModel @Inject constructor(
                     content = content,
                     timestamp = (System.currentTimeMillis() / 1000).toULong(),
                     senderTimestamp = (System.currentTimeMillis() / 1000).toULong(),
-                    delivered = false
+                    delivered = false,
+                    hidden = false
                 )
 
                 // Add to UI immediately
@@ -337,7 +338,8 @@ class ChatViewModel @Inject constructor(
                     content = msg.content,
                     timestamp = msg.timestamp,
                     senderTimestamp = msg.senderTimestamp,
-                    delivered = delivered
+                    delivered = delivered,
+                    hidden = msg.hidden
                 )
             } else {
                 msg
