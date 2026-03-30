@@ -630,6 +630,7 @@ dictionary BlockedIdentity {
     u64 blocked_at;
     string? reason;
     string? notes;
+    boolean is_deleted;
 };
 
 namespace api {

@@ -1439,12 +1439,12 @@ impl IronCore {
                 .is_blocked(&msg.sender_id, None)
                 .unwrap_or(false);
 
-        // Blocked + Deleted: drop the payload entirely — do not store, do not
-        // invoke the delegate, do not dedup-register.
+        // Blocked + Deleted: reject the payload entirely — do not store, do not
+        // invoke the delegate, do not dedup-register.  Returning an error
+        // prevents callers (CLI, WASM, mobile) from surfacing the decrypted
+        // content, which is the correct ingress-drop semantic.
         if sender_is_blocked_deleted {
-            // Return the (already decrypted) message so callers can confirm
-            // receipt parsing succeeded, but the payload is silently dropped.
-            return Ok(msg);
+            return Err(IronCoreError::Blocked);
         }
 
         // Blocked-only: tag the history record as hidden for evidentiary retention.
@@ -1475,7 +1475,7 @@ impl IronCore {
                     id: msg.id.clone(),
                     direction: store::MessageDirection::Received,
                     peer_id: msg.sender_id.clone(),
-                    content: text,
+                    content: text.clone(),
                     timestamp: local_ts,
                     sender_timestamp: msg.timestamp,
                     delivered: true,
@@ -1483,6 +1483,25 @@ impl IronCore {
                     // The record is persisted but filtered from UI queries.
                     hidden: is_blocked_only,
                 });
+                // Also write to the mobile bridge history so that mobile apps
+                // (which query the sled-based HistoryManager) can restore hidden
+                // messages on unblock.  Without this, suppressing the delegate
+                // callback for blocked-only peers would leave the mobile bridge
+                // store empty, breaking the unblock-restore flow.
+                #[cfg(not(target_arch = "wasm32"))]
+                if is_blocked_only {
+                    let mobile_record = crate::mobile_bridge::MessageRecord {
+                        id: msg.id.clone(),
+                        direction: crate::mobile_bridge::MessageDirection::Received,
+                        peer_id: msg.sender_id.clone(),
+                        content: text,
+                        timestamp: local_ts,
+                        sender_timestamp: msg.timestamp,
+                        delivered: true,
+                        hidden: true,
+                    };
+                    let _ = self.history_bridge_manager.add(mobile_record);
+                }
             }
         }
 
@@ -1706,16 +1725,24 @@ impl IronCore {
                 );
             }
         }
+        // Also unhide in the mobile bridge history (sled-based) so that mobile
+        // apps see the restored messages immediately.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = self.history_bridge_manager.unhide_messages_for_peer(&peer_id);
+        }
         Ok(())
     }
 
     /// Block a peer AND delete them (cascade purge).
     ///
-    /// This performs two actions atomically from the caller's perspective:
+    /// This performs three actions atomically from the caller's perspective:
     /// 1. Marks the peer as `blocked + deleted` in the block store, causing the
-    ///    ingress layer to **drop** all future payloads without persisting them.
-    /// 2. **Purges** all existing stored messages for this peer from the history
-    ///    and removes the contact record.
+    ///    ingress layer to **reject** all future payloads without persisting them.
+    /// 2. **Purges** all existing stored messages for this peer from all history
+    ///    stores (core and mobile bridge).
+    /// 3. **Removes** the contact record from both core and mobile bridge contact
+    ///    stores.
     ///
     /// This is irreversible — purged messages cannot be recovered.
     pub fn block_and_delete_peer(
@@ -1723,14 +1750,27 @@ impl IronCore {
         peer_id: String,
         reason: Option<String>,
     ) -> Result<(), IronCoreError> {
-        // 1. Set blocked+deleted state so future ingress drops payloads.
+        // 1. Set blocked+deleted state so future ingress rejects payloads.
         self.blocked_manager
             .block_and_delete(peer_id.clone(), reason)?;
-        // 2. Purge all existing stored messages for this peer.
+        // 2. Purge all existing stored messages for this peer from core history.
         //    Propagate storage errors so callers know when the purge is incomplete.
         self.history
             .read()
             .remove_conversation(peer_id.clone())?;
+        // Also purge from the mobile bridge history (sled-based).
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = self
+                .history_bridge_manager
+                .remove_conversation(peer_id.clone());
+        }
+        // 3. Remove the contact record.
+        let _ = self.contacts.read().remove(peer_id.clone());
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = self.contacts_bridge_manager.remove(peer_id.clone());
+        }
         Ok(())
     }
 

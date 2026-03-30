@@ -245,15 +245,19 @@ fn test_block_and_delete_purges_messages_and_drops_future_payloads() {
         "cascade purge: all existing messages for the blocked+deleted peer must be removed"
     );
 
-    // 3b. Future payloads from Alice must be silently dropped at ingress.
-    //     Alice sends a second message — Bob's core must NOT persist it.
+    // 3b. Future payloads from Alice must be rejected at ingress.
+    //     Alice sends a second message — Bob's core must reject and NOT persist it.
     let envelope2 = alice
         .prepare_message(pubkey(&bob), "Should be dropped".to_string())
         .expect("prepare_message must succeed");
 
-    // receive_message should succeed (decrypt OK) but NOT store the payload.
-    bob.receive_message(envelope2)
-        .expect("receive_message must return Ok for blocked+deleted peer (crypto layer OK)");
+    // receive_message must return Err(Blocked) so callers cannot surface the
+    // decrypted content — this is the correct ingress-reject semantic.
+    let result = bob.receive_message(envelope2);
+    assert!(
+        result.is_err(),
+        "receive_message must return Err for blocked+deleted peer"
+    );
 
     let after_drop = history
         .recent_including_hidden(Some(alice_id.clone()), 100)

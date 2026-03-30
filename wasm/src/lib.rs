@@ -942,6 +942,12 @@ impl IronCore {
                 js_sys::Reflect::set(&obj, &JsValue::from_str("notes"), &JsValue::from_str(notes))
                     .map_err(|e| js_value_from_str(&format!("Failed to set notes: {:?}", e)))?;
             }
+            js_sys::Reflect::set(
+                &obj,
+                &JsValue::from_str("isDeleted"),
+                &JsValue::from_bool(item.is_deleted),
+            )
+            .map_err(|e| js_value_from_str(&format!("Failed to set isDeleted: {:?}", e)))?;
             array.push(&obj);
         }
         Ok(array)
