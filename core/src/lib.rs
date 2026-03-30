@@ -1247,6 +1247,7 @@ impl IronCore {
             timestamp: local_ts,
             sender_timestamp: msg.timestamp,
             delivered: false,
+            hidden: false,
         });
 
         // Serialize the message
@@ -1411,6 +1412,44 @@ impl IronCore {
             IronCoreError::Internal
         })?;
 
+        // Ingress filtering: check blocked state for this sender BEFORE dedup or
+        // history persistence.  We derive the sender identity id the same way the
+        // history record does (Blake3 hash of the envelope sender public key).
+        let sender_identity_id =
+            hex::encode(blake3::hash(&envelope.sender_public_key).as_bytes());
+
+        // Helper: check blocked state against both the identity id (Blake3 hash)
+        // and the raw sender_id embedded in the message, since the two can differ
+        // for legacy or cross-version peers.
+        let sender_is_blocked_deleted = self
+            .blocked_manager
+            .is_blocked_and_deleted(&sender_identity_id)
+            .unwrap_or(false)
+            || self
+                .blocked_manager
+                .is_blocked_and_deleted(&msg.sender_id)
+                .unwrap_or(false);
+
+        let sender_is_blocked = self
+            .blocked_manager
+            .is_blocked(&sender_identity_id, None)
+            .unwrap_or(false)
+            || self
+                .blocked_manager
+                .is_blocked(&msg.sender_id, None)
+                .unwrap_or(false);
+
+        // Blocked + Deleted: drop the payload entirely — do not store, do not
+        // invoke the delegate, do not dedup-register.
+        if sender_is_blocked_deleted {
+            // Return the (already decrypted) message so callers can confirm
+            // receipt parsing succeeded, but the payload is silently dropped.
+            return Ok(msg);
+        }
+
+        // Blocked-only: tag the history record as hidden for evidentiary retention.
+        let is_blocked_only = sender_is_blocked;
+
         // Dedup check
         let mut inbox = self.inbox.write();
         let is_new = inbox.receive(store::ReceivedMessage {
@@ -1440,6 +1479,9 @@ impl IronCore {
                     timestamp: local_ts,
                     sender_timestamp: msg.timestamp,
                     delivered: true,
+                    // Evidentiary retention: mark as hidden if sender is blocked.
+                    // The record is persisted but filtered from UI queries.
+                    hidden: is_blocked_only,
                 });
             }
         }
@@ -1536,8 +1578,12 @@ impl IronCore {
         // Zero-Status Architecture: Receipt processing is internal only.
         // The Core never emits delivery status events across the FFI boundary.
         // on_receipt_received is intentionally suppressed to decouple the UI.
+        //
+        // Evidentiary retention: blocked-only peer messages are stored hidden.
+        // The delegate is NOT invoked so the UI never surfaces a notification
+        // or tries to insert the message into the mobile-bridge history store.
         if let Some(delegate) = self.delegate.read().as_ref() {
-            if !is_receipt_message {
+            if !is_receipt_message && !is_blocked_only {
                 delegate.on_message_received(
                     msg.sender_id.clone(),
                     sender_pub_key_hex,
@@ -1636,9 +1682,56 @@ impl IronCore {
         self.blocked_manager.block(blocked)
     }
 
-    /// Unblock a peer
+    /// Unblock a peer and restore any evidentiary-retained messages to visible.
     pub fn unblock_peer(&self, peer_id: String) -> Result<(), IronCoreError> {
-        self.blocked_manager.unblock(peer_id, None)
+        self.blocked_manager.unblock(peer_id.clone(), None)?;
+        // Restore visibility of messages that were hidden during the block period.
+        // Log but do not fail the unblock operation if restoration encounters a
+        // storage error — the important state transition (unblock) has already
+        // succeeded and the user is no longer blocked.
+        match self.history.read().unhide_messages_for_peer(&peer_id) {
+            Ok(count) => {
+                tracing::info!(
+                    event = "unblock_messages_restored",
+                    peer_id = %peer_id,
+                    count = count,
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    event = "unblock_messages_restore_failed",
+                    peer_id = %peer_id,
+                    error = ?e,
+                    "failed to restore hidden messages after unblock; messages may remain hidden"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Block a peer AND delete them (cascade purge).
+    ///
+    /// This performs two actions atomically from the caller's perspective:
+    /// 1. Marks the peer as `blocked + deleted` in the block store, causing the
+    ///    ingress layer to **drop** all future payloads without persisting them.
+    /// 2. **Purges** all existing stored messages for this peer from the history
+    ///    and removes the contact record.
+    ///
+    /// This is irreversible — purged messages cannot be recovered.
+    pub fn block_and_delete_peer(
+        &self,
+        peer_id: String,
+        reason: Option<String>,
+    ) -> Result<(), IronCoreError> {
+        // 1. Set blocked+deleted state so future ingress drops payloads.
+        self.blocked_manager
+            .block_and_delete(peer_id.clone(), reason)?;
+        // 2. Purge all existing stored messages for this peer.
+        //    Propagate storage errors so callers know when the purge is incomplete.
+        self.history
+            .read()
+            .remove_conversation(peer_id.clone())?;
+        Ok(())
     }
 
     /// Check if a peer is blocked

@@ -1851,6 +1851,7 @@ mod tests {
             timestamp: 2,
             sender_timestamp: 2,
             delivered: false,
+            hidden: false,
         };
         history.add(outbound).unwrap();
 
@@ -1875,6 +1876,7 @@ mod tests {
             timestamp: 10,
             sender_timestamp: 10,
             delivered: false,
+            hidden: false,
         };
         let received = MessageRecord {
             id: "stats-recv".to_string(),
@@ -1884,6 +1886,7 @@ mod tests {
             timestamp: 11,
             sender_timestamp: 11,
             delivered: true,
+            hidden: false,
         };
 
         history.add(sent).unwrap();
