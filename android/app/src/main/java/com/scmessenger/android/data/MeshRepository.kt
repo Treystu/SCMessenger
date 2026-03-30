@@ -1694,9 +1694,24 @@ open class MeshRepository(private val context: Context) {
         Timber.w("sendHistorySyncIfNeeded called for $normalizedRoute")
         if (normalizedRoute.isEmpty() || isBootstrapRelayPeer(normalizedRoute)) return
 
-        // Check if core is initialized before attempting history sync
-        if (ironCore == null) {
+        // Gate on both IronCore instance availability AND identity readiness.
+        // A non-null IronCore with an un-initialized identity will throw
+        // IronCoreException.NotInitialized from prepareMessageWithId, producing
+        // noisy false-positive error logs on fresh-install startup.
+        val core = ironCore ?: run {
             Timber.w("sendHistorySyncIfNeeded: IronCore not initialized, skipping for $normalizedRoute")
+            return
+        }
+        val identityReady = try {
+            core.getIdentityInfo().identityId != null
+        } catch (_: uniffi.api.IronCoreException.NotInitialized) {
+            false
+        } catch (e: Exception) {
+            Timber.w(e, "sendHistorySyncIfNeeded: unexpected error checking identity readiness for $normalizedRoute")
+            false
+        }
+        if (!identityReady) {
+            Timber.w("sendHistorySyncIfNeeded: identity not ready yet, skipping for $normalizedRoute")
             return
         }
 

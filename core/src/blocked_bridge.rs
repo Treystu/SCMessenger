@@ -38,6 +38,7 @@ impl From<BlockedIdentity> for CoreBlockedIdentity {
             blocked_at: mobile.blocked_at,
             reason: mobile.reason,
             notes: mobile.notes,
+            is_deleted: false,
         }
     }
 }
