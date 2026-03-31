@@ -30,6 +30,7 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 - [v0.2.1 Tight Pair / WS13 Plan](docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md)
 - [v0.2.1 Residual Risk Register](docs/V0.2.1_RESIDUAL_RISK_REGISTER.md)
 - [v0.2.1 Alpha Rollout Plan](docs/V0.2.1_ALPHA_ROLLOUT_PLAN.md)
+- [**v0.2.1 Alpha Burndown (CI/tests/stubs/incomplete — comprehensive)**](docs/ALPHA_BURNDOWN_V0.2.1.md)
 - [WS14 Automation Handoff](docs/WS14_AUTOMATION_HANDOFF.md)
 - [WS14 Hourly Automation Prompt](docs/WS14_HOURLY_AUTOMATION_PROMPT.md)
 - [WS13.6 Compatibility & Migration Matrix](docs/WS13.6_COMPATIBILITY_MIGRATION_MATRIX.md)
