@@ -124,7 +124,7 @@ impl TimeoutBudget {
 
         // Check if there's enough budget for at least one more phase
         match self.phase.next() {
-            Some(next_phase) => {
+            Some(_) => {
                 // Need at least 10ms for the next phase to be meaningful
                 remaining.as_millis() >= 10
             }

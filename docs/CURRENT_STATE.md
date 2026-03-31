@@ -140,7 +140,7 @@ The `drift/` (~4.3K lines) and `routing/` (~4.6K lines) modules were present on 
 ### Known Issues
 
 - **3 test failures**: `routing::adaptive_ttl::tests::test_activity_decay`, `routing::resume_prefetch::tests::test_frequent_peer_tracking`, `routing::resume_prefetch::tests::test_frequent_peer_decay` - time-sensitive tests where `Instant::now()` doesn't advance between calls (pre-existing)
-- **WASM build**: Fails for `wasm32-unknown-unknown` target due to upstream bug in `uniffi_core 0.31.0` (Send bound issue in async futures for wasm32 single-threaded). Native builds work fine.
+- **WASM build**: ~~Fails for `wasm32-unknown-unknown` target due to upstream bug in `uniffi_core 0.31.0`~~ **Resolved** (2026-03-31): Added `wasm` feature to `core/Cargo.toml` that forwards `uniffi/wasm-unstable-single-threaded` to relax the `Send` bound on wasm32 single-threaded targets. CI now passes `--features wasm` when checking core for wasm32.
 
 ### Verification
 

@@ -24,6 +24,12 @@ pub struct ActivityHistory {
     pub adaptive_ttl: Duration,
 }
 
+impl Default for ActivityHistory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ActivityHistory {
     /// Create new activity history
     pub fn new() -> Self {

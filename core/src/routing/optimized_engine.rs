@@ -10,10 +10,9 @@
 
 use super::adaptive_ttl::AdaptiveTTLManager;
 use super::engine::*;
-use super::global::{GlobalRoutes, RouteAdvertisement};
-use super::local::{LocalCell, PeerId};
+use super::global::RouteAdvertisement;
+use super::local::PeerId;
 use super::negative_cache::{NegativeCache, NegativeCacheStats};
-use super::neighborhood::NeighborhoodTable;
 use super::resume_prefetch::{PrefetchStats, ResumePrefetchManager};
 use super::timeout_budget::{BudgetSummary, DiscoveryPhase, TimeoutBudget};
 use std::time::Duration;
@@ -34,8 +33,10 @@ pub struct OptimizedRoutingEngine {
     /// Adaptive TTL manager for activity-based route freshness
     adaptive_ttl: AdaptiveTTLManager,
     /// Our own peer ID
+    #[allow(dead_code)]
     local_id: PeerId,
     /// Our recipient hint
+    #[allow(dead_code)]
     local_hint: [u8; 4],
     /// Current discovery phase
     current_phase: DiscoveryPhase,
@@ -99,9 +100,9 @@ impl OptimizedRoutingEngine {
         // Phase 2: Hierarchical discovery with timeout budgeting (P0 optimization)
         self.start_discovery_if_needed();
 
-        let mut decision =
-            self.base_engine
-                .route_message(recipient_hint, message_id, priority, now);
+        let decision = self
+            .base_engine
+            .route_message(recipient_hint, message_id, priority, now);
 
         // Structured tracing: Log routing decision
         tracing::info!(
@@ -115,16 +116,22 @@ impl OptimizedRoutingEngine {
         );
 
         // Apply adaptive TTL to the decision (P2 optimization)
-        if let NextHop::GlobalRoute { next_hop_id, .. } = decision.primary {
-            let peer_id_str = hex::encode(next_hop_id);
-            let ttl = self.adaptive_ttl.calculate_ttl(&peer_id_str);
+        let peer_id_str = if let NextHop::GlobalRoute { next_hop_id, .. } = decision.primary {
+            let s = hex::encode(next_hop_id);
+            let _ttl = self.adaptive_ttl.calculate_ttl(&s);
             // In a real implementation, this would update the route's TTL
             // For now, we just track the activity
-            self.adaptive_ttl.record_activity(&peer_id_str);
-        }
+            self.adaptive_ttl.record_activity(&s);
+            s
+        } else {
+            String::new()
+        };
 
         // If we got StoreAndCarry and it's a high priority message, record as unreachable
-        if matches!(decision.primary, NextHop::StoreAndCarry) && priority >= 100 {
+        if matches!(decision.primary, NextHop::StoreAndCarry)
+            && priority >= 100
+            && !peer_id_str.is_empty()
+        {
             self.negative_cache.record_unreachable(peer_id_str);
         }
 

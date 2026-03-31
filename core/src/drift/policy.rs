@@ -95,15 +95,15 @@ impl PolicyEngine {
 
     /// Get the RelayConfig to apply to the RelayEngine
     pub fn to_relay_config(&self) -> RelayConfig {
-        let battery_floor =
-            self.battery_floor_override
-                .unwrap_or_else(|| match self.current_profile {
-                    RelayProfile::Maximum => 10,
-                    RelayProfile::High => 15,
-                    RelayProfile::Standard => 20,
-                    RelayProfile::Reduced => 30,
-                    RelayProfile::Minimal => 50,
-                });
+        let battery_floor = self
+            .battery_floor_override
+            .unwrap_or(match self.current_profile {
+                RelayProfile::Maximum => 10,
+                RelayProfile::High => 15,
+                RelayProfile::Standard => 20,
+                RelayProfile::Reduced => 30,
+                RelayProfile::Minimal => 50,
+            });
 
         RelayConfig {
             max_relay_per_hour: self.relay_budget_per_hour(),

@@ -71,7 +71,8 @@ class ConversationsViewModelTest {
             content = "Hello",
             timestamp = 1000uL,
             senderTimestamp = 1000uL,
-            delivered = true
+            delivered = true,
+            hidden = false
         )
         every { mockMeshRepository.getRecentMessages(any(), any()) } returns listOf(testMessage)
 

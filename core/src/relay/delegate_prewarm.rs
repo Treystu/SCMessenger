@@ -188,11 +188,13 @@ impl DelegatePrewarmManager {
 
         // 2. Establish connections to them NOW
         for delegate_id in best_delegates {
-            if !self.warm_connections.contains_key(&delegate_id) {
+            if let std::collections::hash_map::Entry::Vacant(e) =
+                self.warm_connections.entry(delegate_id)
+            {
                 // In a real implementation, this would establish the actual connection
                 // For now, we simulate it
                 let connection = WarmConnection::new(delegate_id);
-                self.warm_connections.insert(delegate_id, connection);
+                e.insert(connection);
                 self.registration_queue.push_back(delegate_id);
             }
         }

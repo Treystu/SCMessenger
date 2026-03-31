@@ -219,13 +219,7 @@ impl SyncSession {
             // Also return the parsed envelopes for immediate insertion if needed
             self.our_missing
                 .iter()
-                .filter_map(|msg_id| {
-                    if let Some(env) = store.get(msg_id) {
-                        Some(env.clone())
-                    } else {
-                        None
-                    }
-                })
+                .filter_map(|msg_id| store.get(msg_id).cloned())
                 .collect(),
         ))
     }

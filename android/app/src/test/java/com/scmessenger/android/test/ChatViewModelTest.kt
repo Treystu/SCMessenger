@@ -43,7 +43,8 @@ class ChatViewModelTest {
             content = "hello",
             timestamp = 1u,
             senderTimestamp = 1u,
-            delivered = delivered
+            delivered = delivered,
+            hidden = false
         )
     }
 

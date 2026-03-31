@@ -17,6 +17,7 @@ import os
 /// - CoreBluetooth background modes for mesh keepalive
 /// - Location services for optional background triggers
 @Observable
+@MainActor
 final class MeshBackgroundService {
     private let logger = Logger(subsystem: "com.scmessenger", category: "Background")
     private let meshRepository: MeshRepository
@@ -138,26 +139,29 @@ final class MeshBackgroundService {
 
         // Set expiration handler
         task.expirationHandler = { [weak self] in
-            self?.logger.warning("Background refresh expired, pausing service")
-            self?.meshRepository.pauseService()
+            Task { @MainActor in
+                self?.logger.warning("Background refresh expired, pausing service")
+                self?.meshRepository.pauseService()
+            }
         }
 
         // Perform quick sync operations
-        Task {
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
             do {
                 // Sync pending messages
-                try await meshRepository.syncPendingMessages()
+                try await self.meshRepository.syncPendingMessages()
 
                 // Update stats
-                meshRepository.updateStats()
+                self.meshRepository.updateStats()
 
                 // Discover nearby peers (quick scan)
-                try await meshRepository.quickPeerDiscovery()
+                try await self.meshRepository.quickPeerDiscovery()
 
                 task.setTaskCompleted(success: true)
-                logger.info("Background refresh completed successfully")
+                self.logger.info("Background refresh completed successfully")
             } catch {
-                logger.error("Background refresh failed: \(error.localizedDescription)")
+                self.logger.error("Background refresh failed: \(error.localizedDescription)")
                 task.setTaskCompleted(success: false)
             }
         }
@@ -173,26 +177,29 @@ final class MeshBackgroundService {
 
         // Set expiration handler
         task.expirationHandler = { [weak self] in
-            self?.logger.warning("Background processing expired, pausing service")
-            self?.meshRepository.pauseService()
+            Task { @MainActor in
+                self?.logger.warning("Background processing expired, pausing service")
+                self?.meshRepository.pauseService()
+            }
         }
 
         // Perform bulk operations
-        Task {
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
             do {
                 // Full sync with all known peers
-                try await meshRepository.performBulkSync()
+                try await self.meshRepository.performBulkSync()
 
                 // Cleanup old messages
-                try await meshRepository.cleanupOldMessages()
+                try await self.meshRepository.cleanupOldMessages()
 
                 // Update peer connection ledger
-                try await meshRepository.updatePeerLedger()
+                try await self.meshRepository.updatePeerLedger()
 
                 task.setTaskCompleted(success: true)
-                logger.info("Background processing completed successfully")
+                self.logger.info("Background processing completed successfully")
             } catch {
-                logger.error("Background processing failed: \(error.localizedDescription)")
+                self.logger.error("Background processing failed: \(error.localizedDescription)")
                 task.setTaskCompleted(success: false)
             }
         }
