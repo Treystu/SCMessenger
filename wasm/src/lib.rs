@@ -918,7 +918,7 @@ impl IronCore {
     pub fn list_blocked_peers(&self) -> Result<js_sys::Array, JsValue> {
         let list = self
             .inner
-            .list_blocked_peers()
+            .list_blocked_peers_raw()
             .map_err(|e| js_value_from_str(&format!("{}", e)))?;
         let array = js_sys::Array::new();
         for item in list {

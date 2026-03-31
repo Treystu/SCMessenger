@@ -1800,6 +1800,15 @@ impl IronCore {
             .collect())
     }
 
+    /// List all blocked peers — returns the core store type.
+    /// Available on all platforms including WASM (unlike `list_blocked_peers` which
+    /// returns the UniFFI bridge type and is gated to non-wasm32 targets).
+    pub fn list_blocked_peers_raw(
+        &self,
+    ) -> Result<Vec<store::blocked::BlockedIdentity>, IronCoreError> {
+        self.blocked_manager.list()
+    }
+
     /// Get count of blocked peers
     pub fn blocked_count(&self) -> Result<u32, IronCoreError> {
         self.blocked_manager.count().map(|c| c as u32)
