@@ -892,6 +892,19 @@ impl IronCore {
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
+    /// Block a peer AND delete all their stored messages (cascade purge).
+    /// Future payloads from this peer are dropped at the ingress layer.
+    #[wasm_bindgen(js_name = blockAndDeletePeer)]
+    pub fn block_and_delete_peer(
+        &self,
+        peer_id: String,
+        reason: Option<String>,
+    ) -> Result<(), JsValue> {
+        self.inner
+            .block_and_delete_peer(peer_id, reason)
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
+    }
+
     /// Check whether a peer is currently blocked.
     #[wasm_bindgen(js_name = isPeerBlocked)]
     pub fn is_peer_blocked(&self, peer_id: String) -> Result<bool, JsValue> {

@@ -182,6 +182,12 @@ enum BlockAction {
     },
     /// Unblock a peer
     Remove { peer_id: String },
+    /// Block a peer AND delete all their stored messages (cascade purge)
+    Delete {
+        peer_id: String,
+        #[arg(short, long)]
+        reason: Option<String>,
+    },
     /// List all blocked peers
     List,
     /// Check if a peer is blocked
@@ -2259,6 +2265,18 @@ async fn cmd_block(action: BlockAction) -> Result<()> {
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
             println!("{} Unblocked peer: {}", "✓".green(), peer_id.bright_cyan());
         }
+        BlockAction::Delete { peer_id, reason } => {
+            core.block_and_delete_peer(peer_id.clone(), reason.clone())
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            println!(
+                "{} Blocked and deleted peer: {} (messages purged)",
+                "✓".green(),
+                peer_id.bright_cyan()
+            );
+            if let Some(r) = reason {
+                println!("  Reason: {}", r.dimmed());
+            }
+        }
         BlockAction::List => {
             let list = core
                 .list_blocked_peers()
@@ -2269,7 +2287,17 @@ async fn cmd_block(action: BlockAction) -> Result<()> {
                 println!("{} ({} total)", "Blocked Peers".bold(), list.len());
                 println!();
                 for item in list {
-                    println!("  {} {}", "•".bright_red(), item.peer_id.bright_cyan());
+                    let status = if item.is_deleted {
+                        "blocked+deleted".bright_red()
+                    } else {
+                        "blocked".yellow()
+                    };
+                    println!(
+                        "  {} {} ({})",
+                        "•".bright_red(),
+                        item.peer_id.bright_cyan(),
+                        status
+                    );
                     println!(
                         "    Blocked at: {}",
                         format_timestamp(item.blocked_at).dimmed()

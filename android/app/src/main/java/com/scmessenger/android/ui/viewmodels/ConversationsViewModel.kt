@@ -254,6 +254,20 @@ class ConversationsViewModel @Inject constructor(
     }
 
     /**
+     * Block a peer AND delete all their stored messages (cascade purge).
+     */
+    fun blockAndDeletePeer(peerId: String, reason: String? = null) {
+        viewModelScope.launch {
+            try {
+                meshRepository.blockAndDeletePeer(peerId, reason)
+                Timber.i("Blocked and deleted peer: $peerId")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to block and delete peer: $peerId")
+            }
+        }
+    }
+
+    /**
      * Check if a peer is blocked
      */
     fun isBlocked(peerId: String): Boolean {

@@ -2771,6 +2771,20 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
+    /**
+     * Block a peer AND delete all their stored messages (cascade purge).
+     * Future payloads from this peer are dropped at the ingress layer.
+     */
+    fun blockAndDeletePeer(peerId: String, reason: String? = null) {
+        ensureServiceInitialized()
+        try {
+            ironCore?.blockAndDeletePeer(peerId, reason)
+            Timber.i("Blocked and deleted peer: $peerId (reason: $reason)")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to block and delete peer: $peerId")
+        }
+    }
+
     fun isBlocked(peerId: String): Boolean {
         ensureServiceInitialized()
         return try {

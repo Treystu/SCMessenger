@@ -44,8 +44,9 @@ Legend: ✅ = Wired & callable | ⚠️ = Partially wired | ❌ = Not wired | N/
 | `classifyNotification`      | ✅   | N/A | ✅      | ✅  | ✅   | |
 | `blockPeer`                 | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27 |
 | `unblockPeer`               | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27 |
+| `blockAndDeletePeer`        | ✅   | ✅  | ✅      | ✅  | ✅   | Wired across all platforms 2026-03-31 |
 | `isPeerBlocked`             | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27 |
-| `listBlockedPeers`          | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27 |
+| `listBlockedPeers`          | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27; includes `is_deleted` field |
 | `blockedCount`              | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27 |
 | `setDelegate`               | ✅   | N/A | ✅      | ✅  | N/A  | WASM uses polling via `drainReceivedMessages` |
 | `contactsManager`           | ✅   | ✅  | ✅      | ✅  | ✅   | |

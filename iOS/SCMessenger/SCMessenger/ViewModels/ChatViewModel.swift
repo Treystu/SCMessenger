@@ -55,7 +55,8 @@ final class ChatViewModel {
             content: content,
             timestamp: now,
             senderTimestamp: now,
-            delivered: false
+            delivered: false,
+            hidden: false
         )
         messages.append(optimisticMessage)
         messages.sort { a, b in

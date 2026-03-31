@@ -25,7 +25,36 @@ Three strict states are now enforced end-to-end:
 
 3. **Blocked + Deleted (cascade purge)**: Sets `is_deleted: true` on the block record, purges all history from both stores, removes the contact from both stores, and rejects future ingress payloads with `Err(IronCoreError::Blocked)`.
 
-### Changes Made (2026-03-30)
+### Cross-Platform API Wiring (2026-03-31)
+
+`blockAndDeletePeer()` is now wired across all platforms:
+
+| Platform | Location | Status |
+|----------|----------|--------|
+| Core     | `core/src/lib.rs:block_and_delete_peer()` | ✅ |
+| UDL      | `core/src/api.udl` → `block_and_delete_peer(string, string?)` | ✅ |
+| Android  | `MeshRepository.kt:blockAndDeletePeer()`, `ConversationsViewModel.kt:blockAndDeletePeer()` | ✅ |
+| iOS      | `MeshRepository.swift:blockAndDeletePeer()` | ✅ |
+| WASM     | `wasm/src/lib.rs:block_and_delete_peer()` → JS `blockAndDeletePeer` | ✅ |
+| CLI      | `cli/src/main.rs` → `block delete <peer_id>` | ✅ |
+
+### ID Mapping Audit (2026-03-31)
+
+All identifiers validated end-to-end:
+
+| ID Type | Format | Canonical? | Used for |
+|---------|--------|------------|----------|
+| `public_key_hex` | 64-char hex (Ed25519) | ✅ Primary | Encryption, contact exchange, persistence |
+| `identity_id` | 64-char hex (Blake3 of public key) | Display/History | Block store, history `peer_id`, UI display |
+| `libp2p_peer_id` | ~52-char Base58 (`12D3Koo...`) | Network only | Transport routing, peer discovery |
+| `device_id` | UUIDv4 | Installation-local | WS13 tight-pair routing |
+
+- Core block/unblock/unhide operations all use case-insensitive matching
+- Android `PeerIdValidator.normalize()` lowercases 64-char hex IDs; preserves libp2p Base58 case
+- iOS `resolveCanonicalPeerId()` maps incoming IDs to contact-store canonical form via public key match
+- Blocked-only message records use `sender_identity_id` (derived from envelope) for consistent block/unblock/unhide matching
+
+### Changes Made (2026-03-30–31)
 
 1. **Core Rust** (`core/src/store/blocked.rs`, `core/src/store/history.rs`, `core/src/mobile_bridge.rs`, `core/src/lib.rs`):
    - `BlockedIdentity.is_deleted: bool` with serde default for backward compatibility
@@ -35,15 +64,32 @@ Three strict states are now enforced end-to-end:
    - `receive_message()` ingress: blocked+deleted → `Err(Blocked)`; blocked-only → store hidden + write to mobile bridge + suppress delegate
    - `unblock_peer()` → unhide in both stores
    - `block_and_delete_peer()` → purge history + remove contact from both stores
+   - Peer ID normalization: blocked-only records use `sender_identity_id` for consistent unhide
 
 2. **UniFFI / WASM** (`core/src/api.udl`, `core/src/blocked_bridge.rs`, `wasm/src/lib.rs`):
    - `is_deleted` exposed in BlockedIdentity dictionary and WASM JS bindings
-   - Bridge `From` impls now preserve `is_deleted` state in both directions
+   - Bridge `From` impls preserve `is_deleted` state in both directions
+   - `blockAndDeletePeer` wired in WASM bindings
 
-3. **Android** (`android/.../MeshRepository.kt`):
+3. **Android** (`android/.../MeshRepository.kt`, `ChatViewModel.kt`, `ConversationsViewModel.kt`):
    - `sendHistorySyncIfNeeded()` gates on identity readiness (R-WS13.5-01 closed)
+   - `hidden = false` added to all 6 `MessageRecord()` constructors
+   - `ByteArray` type fix in `signData`/`verifySignature` calls
+   - `blockAndDeletePeer()` wired in MeshRepository and ConversationsViewModel
 
-4. **Integration Tests** (`core/tests/integration_contact_block.rs`):
+4. **iOS** (`MeshRepository.swift`, `ChatViewModel.swift`):
+   - `hidden: false` added to all 5 `MessageRecord()` constructors
+   - `blockAndDeletePeer()` wired in MeshRepository
+
+5. **CLI** (`cli/src/main.rs`):
+   - `block delete` subcommand for cascade block + purge
+   - `block list` shows `is_deleted` status per peer
+
+6. **iOS Binding Generation** (`copy-bindings.sh`, `gen_swift.rs`, `verify-test.sh`):
+   - Fixed UniFFI module_name config mismatch (SCMessengerCore.swift → api.swift)
+   - `verify-test.sh` auto-generates bindings if missing
+
+7. **Integration Tests** (`core/tests/integration_contact_block.rs`):
    - 3 scenarios verified: hidden retention, unblock restores, cascade purge + ingress reject
 
 ### Verification
