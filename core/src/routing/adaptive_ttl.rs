@@ -105,10 +105,7 @@ impl AdaptiveTTLManager {
     /// Calculate TTL for a peer based on activity
     pub fn calculate_ttl(&mut self, peer_id: &str) -> Duration {
         // Get or create activity history
-        let activity = self
-            .peer_activity
-            .entry(peer_id.to_string())
-            .or_insert_with(ActivityHistory::new);
+        let activity = self.peer_activity.entry(peer_id.to_string()).or_default();
 
         // Decay activity before calculating
         activity.decay(self.half_life, self.base_ttl, self.max_ttl);
@@ -119,10 +116,7 @@ impl AdaptiveTTLManager {
 
     /// Record message activity for a peer
     pub fn record_activity(&mut self, peer_id: &str) {
-        let activity = self
-            .peer_activity
-            .entry(peer_id.to_string())
-            .or_insert_with(ActivityHistory::new);
+        let activity = self.peer_activity.entry(peer_id.to_string()).or_default();
         activity.record_message();
         activity.adaptive_ttl = activity.calculate_ttl(self.base_ttl, self.max_ttl);
     }

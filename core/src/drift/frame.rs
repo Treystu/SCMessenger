@@ -179,6 +179,7 @@ impl DriftFrame {
     /// * `Ok(DriftFrame)` if a valid frame was read within the deadline
     /// * `Err(DriftError::Timeout)` if the deadline expired
     /// * `Err(DriftError::*)` for protocol/IO errors
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn read_with_timeout<R: tokio::io::AsyncReadExt + Unpin>(
         reader: &mut R,
     ) -> Result<Self, DriftError> {
