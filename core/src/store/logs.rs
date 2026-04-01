@@ -40,8 +40,8 @@ impl LogManager {
     }
 
     fn init_install_time(backend: &dyn StorageBackend) -> u64 {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
         let _ = backend.put(b"metadata_install_time", now.to_string().as_bytes());
@@ -49,8 +49,8 @@ impl LogManager {
     }
 
     pub fn record_log(&self, line: String) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
 

@@ -115,8 +115,8 @@ impl RelayEngine {
     /// Create a new relay engine
     pub fn new(local_public_key: &[u8; 32], config: RelayConfig) -> Self {
         let local_hint = DriftEnvelope::hint_from_public_key(local_public_key);
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
 
@@ -213,8 +213,8 @@ impl RelayEngine {
             ttl_expiry: envelope.ttl_expiry,
             hop_count: envelope.hop_count,
             priority: envelope.priority,
-            received_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            received_at: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
         };
@@ -283,8 +283,8 @@ impl RelayEngine {
 
     /// Check and reset rate limit if hour has passed
     fn check_rate_limit(&mut self) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
 
@@ -309,8 +309,8 @@ mod tests {
         priority: u8,
         expired: bool,
     ) -> DriftEnvelope {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as u32;
 
@@ -597,8 +597,8 @@ mod tests {
             ttl_expiry: expired.ttl_expiry,
             hop_count: expired.hop_count,
             priority: expired.priority,
-            received_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            received_at: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
         };

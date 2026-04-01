@@ -2,8 +2,8 @@
 
 use super::protocol::{RelayCapability, RelayPeerInfoMessage};
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
+use web_time::{SystemTime, UNIX_EPOCH};
 
 /// Peer exchange error types
 #[derive(Debug, Error)]
@@ -251,7 +251,7 @@ mod tests {
         let mut peer = test_peer("peer1");
         let old_last_seen = peer.last_seen;
 
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(web_time::Duration::from_millis(10));
         peer.mark_seen();
 
         assert!(peer.last_seen >= old_last_seen);
@@ -438,7 +438,7 @@ mod tests {
         manager.add_peer(test_peer("peer1")).ok();
         assert_eq!(manager.peer_count(), 1);
 
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(web_time::Duration::from_millis(10));
         manager.prune_stale();
 
         assert_eq!(manager.peer_count(), 0);

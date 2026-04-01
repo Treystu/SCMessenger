@@ -5,8 +5,8 @@ use parking_lot::RwLock;
 use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
+use web_time::{SystemTime, UNIX_EPOCH};
 
 /// Relay server configuration
 #[derive(Debug, Clone)]
@@ -424,7 +424,7 @@ mod tests {
         assert_eq!(stats.envelopes_stored, 1);
 
         // Sleep to ensure TTL passes
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(web_time::Duration::from_millis(10));
 
         server.cleanup_expired();
 

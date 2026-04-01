@@ -52,7 +52,7 @@ pub struct EscalationState {
     /// All available transports
     pub available_transports: Vec<TransportType>,
     /// Last escalation attempt timestamp
-    pub last_escalation_attempt: Option<std::time::SystemTime>,
+    pub last_escalation_attempt: Option<web_time::SystemTime>,
 }
 
 /// Manages transport escalation for all peers
@@ -130,7 +130,7 @@ impl EscalationEngine {
             .ok_or(EscalationError::NotPossible)?;
 
         state.current_transport = target;
-        state.last_escalation_attempt = Some(std::time::SystemTime::now());
+        state.last_escalation_attempt = Some(web_time::SystemTime::now());
 
         debug!(
             "Escalated peer {:x?} to {}",

@@ -1235,8 +1235,8 @@ impl IronCore {
 
         // Auto-save to history (Outgoing)
         let history = self.history.write();
-        let local_ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let local_ts = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
         let _ = history.add(store::MessageRecord {
@@ -1268,8 +1268,8 @@ impl IronCore {
                 message_id: message_id.clone(),
                 recipient_id: recipient_key_trimmed.clone(),
                 envelope_data: envelope_bytes.clone(),
-                queued_at: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
+                queued_at: web_time::SystemTime::now()
+                    .duration_since(web_time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs(),
                 attempts: 0,
@@ -1455,8 +1455,8 @@ impl IronCore {
             message_id: msg.id.clone(),
             sender_id: msg.sender_id.clone(),
             payload: msg.payload.clone(),
-            received_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            received_at: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
         });
@@ -1466,8 +1466,8 @@ impl IronCore {
         // Auto-save to history (Incoming)
         if is_new && msg.message_type == message::MessageType::Text {
             if let Some(text) = msg.text_content() {
-                let local_ts = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
+                let local_ts = web_time::SystemTime::now()
+                    .duration_since(web_time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs();
                 // For blocked-only (hidden) messages, use the derived sender_identity_id
@@ -1886,8 +1886,8 @@ mod tests {
         assert_eq!(info_after.public_key_hex.unwrap().len(), 64);
         let parsed_uuid = uuid::Uuid::parse_str(info_after.device_id.as_deref().unwrap()).unwrap();
         assert_eq!(parsed_uuid.get_version_num(), 4);
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
         let seniority = info_after.seniority_timestamp.unwrap();

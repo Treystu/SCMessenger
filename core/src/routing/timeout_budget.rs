@@ -11,7 +11,7 @@
 //! 3. **Progressive fallback**: Cheaper methods first, expensive last
 //! 4. **Deterministic**: Same inputs produce same phase transitions
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 /// Discovery phases in order of increasing cost
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

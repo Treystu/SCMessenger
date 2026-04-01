@@ -5,7 +5,7 @@ use crc32fast::Hasher;
 /// Maximum time to wait for a complete frame to arrive (Slow Loris mitigation).
 /// If a sender trickles bytes slower than this deadline, the connection is dropped
 /// to prevent transport slot exhaustion.
-pub const FRAME_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+pub const FRAME_READ_TIMEOUT: web_time::Duration = web_time::Duration::from_secs(5);
 
 /// Maximum allowed frame payload size (64 KB). Prevents memory exhaustion
 /// from a malicious length field claiming enormous payloads.

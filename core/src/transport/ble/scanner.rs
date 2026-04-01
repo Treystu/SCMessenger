@@ -5,7 +5,7 @@
 /// when battery is low to conserve power.
 
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
+use web_time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 /// BLE scanning configuration

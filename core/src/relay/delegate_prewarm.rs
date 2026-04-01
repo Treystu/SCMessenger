@@ -11,7 +11,7 @@
 //! 4. **Lifecycle-aware**: Hook into iOS/Android app lifecycle events
 
 use std::collections::{HashMap, VecDeque};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use libp2p::PeerId;
 

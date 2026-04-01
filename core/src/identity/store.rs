@@ -4,8 +4,8 @@ use super::IdentityKeys;
 use crate::store::backend::StorageBackend;
 use anyhow::Result;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
+use web_time::{SystemTime, UNIX_EPOCH};
 
 const IDENTITY_KEY: &[u8] = b"identity_keys";
 const NICKNAME_KEY: &[u8] = b"identity_nickname";
@@ -240,8 +240,8 @@ impl IdentityStore {
 mod tests {
     use super::*;
     use std::thread;
-    use std::time::Duration;
     use tempfile::tempdir;
+    use web_time::Duration;
 
     const MAX_REOPEN_ATTEMPTS: u64 = 10;
     const REOPEN_BACKOFF_BASE_MS: u64 = 25;

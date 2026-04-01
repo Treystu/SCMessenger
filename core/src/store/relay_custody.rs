@@ -1643,8 +1643,8 @@ fn filesystem_usage_bytes(_path: &std::path::Path) -> Option<(u64, u64)> {
 }
 
 fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
 }
@@ -1661,7 +1661,7 @@ fn message_key(destination_peer_id: &str, custody_id: &str) -> String {
 mod tests {
     use super::*;
     use std::sync::RwLock;
-    use std::time::Duration;
+    use web_time::Duration;
 
     #[derive(Default)]
     struct TestPressureProbe {

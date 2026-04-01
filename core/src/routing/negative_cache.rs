@@ -13,7 +13,7 @@
 //! 4. **Privacy-preserving**: Local-only cache, no network queries
 
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 /// A simple bloom filter implementation for peer unreachability
 ///

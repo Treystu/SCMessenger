@@ -12,7 +12,7 @@
 //! 4. **Lifecycle-aware**: Hook into iOS/Android app lifecycle events
 
 use std::collections::{HashMap, VecDeque};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use super::global::RouteAdvertisement;
 use super::local::PeerId;
@@ -434,8 +434,8 @@ mod tests {
             next_hop: create_test_peer_id(),
             hop_count,
             reliability: 0.95,
-            last_confirmed: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            last_confirmed: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
             sequence: 1,

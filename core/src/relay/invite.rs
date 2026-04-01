@@ -2,8 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
+use web_time::{SystemTime, UNIX_EPOCH};
 
 /// Invite system errors
 #[derive(Debug, Error)]
@@ -323,7 +323,7 @@ mod tests {
     fn test_invite_token_expiry_check() {
         let token = test_token().with_signature(vec![1, 2, 3]).with_expiry(0);
 
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(web_time::Duration::from_millis(10));
         assert!(!token.is_valid());
     }
 

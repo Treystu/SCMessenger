@@ -7,12 +7,12 @@ use super::protocol::{RelayCapability, RelayMessage, PROTOCOL_VERSION};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::timeout;
+use web_time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Transport type for relay connections
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

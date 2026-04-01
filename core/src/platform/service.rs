@@ -10,7 +10,7 @@ use crate::platform::auto_adjust::{AdjustmentProfile, DeviceState, SmartAutoAdju
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use web_time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 // ============================================================================

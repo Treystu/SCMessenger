@@ -11,7 +11,7 @@
 //! 4. **Decay over time**: Activity decays when no messages are exchanged
 
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 /// Activity history for a peer
 #[derive(Debug, Clone)]

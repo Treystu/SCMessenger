@@ -40,10 +40,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::net::SocketAddr;
-use std::time::SystemTime;
-#[cfg(not(target_arch = "wasm32"))]
-use std::time::{Duration, UNIX_EPOCH};
 use tokio::sync::mpsc;
+use web_time::SystemTime;
+#[cfg(not(target_arch = "wasm32"))]
+use web_time::{Duration, UNIX_EPOCH};
 
 /// Returns true if a Multiaddr is suitable for discovery (local or global).
 ///
@@ -362,17 +362,10 @@ where
 }
 
 fn marker_now_ms() -> u64 {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        js_sys::Date::now() as u64
-    }
+    web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
 }
 
 fn validate_delivery_convergence_marker_shape(
@@ -1307,7 +1300,7 @@ pub async fn start_swarm_with_config(
                     .expect("Failed to create network behaviour")
             })?
             .with_swarm_config(|cfg| {
-                cfg.with_idle_connection_timeout(std::time::Duration::from_secs(600))
+                cfg.with_idle_connection_timeout(web_time::Duration::from_secs(600))
                 // 10 min idle (was 5 min)
             })
             .build();
@@ -1473,7 +1466,7 @@ pub async fn start_swarm_with_config(
         let mut relay_peer_addrs: HashMap<PeerId, Vec<Multiaddr>> = HashMap::new();
 
         // Track relay reconnect backoff state: (peer_id, attempt_count, next_dial_at)
-        let mut relay_reconnect_pending: Vec<(PeerId, u32, std::time::Instant)> = Vec::new();
+        let mut relay_reconnect_pending: Vec<(PeerId, u32, web_time::Instant)> = Vec::new();
         let mut seen_delivery_convergence_markers: HashSet<String> = HashSet::new();
 
         // Auto-dial bootstrap nodes for cross-network discovery
@@ -1512,7 +1505,7 @@ pub async fn start_swarm_with_config(
             // Relay budget rate-limiting
             let mut relay_budget: u32 = 200;
             let mut relay_count_this_hour: u32 = 0;
-            let mut relay_hour_start = std::time::Instant::now();
+            let mut relay_hour_start = web_time::Instant::now();
             let mut relay_guardrails = RelayAbuseGuardrails::new();
 
             // P0.12: Deduplicate bridge events to prevent UI freezing and bridge spam
@@ -1626,7 +1619,7 @@ pub async fn start_swarm_with_config(
 
                     // P0.11: Relay reconnect backoff processing
                     _ = relay_reconnect_interval.tick() => {
-                        let now = std::time::Instant::now();
+                        let now = web_time::Instant::now();
                         let mut next_pending = Vec::new();
                         let connected_peers: HashSet<PeerId> = swarm.connected_peers().cloned().collect();
 
@@ -2040,9 +2033,9 @@ pub async fn start_swarm_with_config(
                                         tracing::info!("🔄 Relay request from {} for message {}", peer, request.message_id);
 
                                         // Enforce relay budget — reset counter hourly
-                                        if relay_hour_start.elapsed() >= std::time::Duration::from_secs(3600) {
+                                        if relay_hour_start.elapsed() >= web_time::Duration::from_secs(3600) {
                                             relay_count_this_hour = 0;
-                                            relay_hour_start = std::time::Instant::now();
+                                            relay_hour_start = web_time::Instant::now();
                                         }
 
                                         let now_ms = SystemTime::now()
@@ -2915,7 +2908,7 @@ pub async fn start_swarm_with_config(
                                         "🔄 Lost relay peer {}; cleared circuit reservation, scheduling reconnect",
                                         peer_id
                                     );
-                                    relay_reconnect_pending.push((peer_id, 0, std::time::Instant::now()));
+                                    relay_reconnect_pending.push((peer_id, 0, web_time::Instant::now()));
                                 }
 
                                 let _ = event_tx.send(SwarmEvent2::PeerDisconnected(peer_id)).await;
@@ -3182,7 +3175,7 @@ pub async fn start_swarm_with_config(
                     .expect("Failed to create network behaviour")
             })?
             .with_swarm_config(|cfg| {
-                cfg.with_idle_connection_timeout(std::time::Duration::from_secs(600))
+                cfg.with_idle_connection_timeout(web_time::Duration::from_secs(600))
             })
             .build();
 
@@ -3285,8 +3278,8 @@ pub async fn start_swarm_with_config(
         let mut relay_budget: u32 = 200;
         let mut relay_count_this_hour: u32 = 0;
         let mut relay_guardrails = RelayAbuseGuardrails::new();
-        // `std::time::Instant` panics on wasm32-unknown-unknown; use
-        // `js_sys::Date::now()` (f64 ms since epoch) instead.
+        // Use js_sys::Date::now() (f64 ms since epoch) for timing in the WASM
+        // event loop for consistency with the WASM-specific spawn_local pattern.
         let mut relay_hour_start: f64 = js_sys::Date::now();
         let mut last_bootstrap_redial: f64 = js_sys::Date::now();
         let mut last_custody_pull: f64 = js_sys::Date::now();

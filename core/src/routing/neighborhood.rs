@@ -10,7 +10,7 @@
 
 use super::local::{CellSummary, PeerId, TransportType};
 use std::collections::HashMap;
-use std::time::SystemTime;
+use web_time::SystemTime;
 
 /// Information about a gateway peer that connects to other cells
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

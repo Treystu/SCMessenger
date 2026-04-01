@@ -15,7 +15,7 @@ use super::local::PeerId;
 use super::negative_cache::{NegativeCache, NegativeCacheStats};
 use super::resume_prefetch::{PrefetchStats, ResumePrefetchManager};
 use super::timeout_budget::{BudgetSummary, DiscoveryPhase, TimeoutBudget};
-use std::time::Duration;
+use web_time::Duration;
 
 // For peer ID string conversion
 use hex;

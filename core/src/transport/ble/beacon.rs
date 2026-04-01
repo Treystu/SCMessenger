@@ -9,7 +9,7 @@ use chacha20poly1305::{
     aead::{Aead, KeyInit, Payload},
     XChaCha20Poly1305,
 };
-use std::time::{SystemTime, UNIX_EPOCH};
+use web_time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 /// BLE Beacon service UUID (0xDF01)

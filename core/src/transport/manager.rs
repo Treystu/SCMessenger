@@ -9,7 +9,7 @@ use crate::transport::abstraction::{
 use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use web_time::{Duration, SystemTime};
 use tracing::{debug, info, warn};
 
 /// State of a registered transport
@@ -940,7 +940,7 @@ mod tests {
             let mut last_seen = manager.peer_last_seen.write();
             last_seen.insert(
                 peer_id,
-                SystemTime::now() - std::time::Duration::from_secs(301),
+                SystemTime::now() - web_time::Duration::from_secs(301),
             );
         }
 

@@ -43,8 +43,8 @@ impl StoredEnvelope {
     /// - hop_count: fewer hops = closer to origin = higher value
     /// - ttl_remaining: messages about to expire get priority
     pub fn priority_score(&self) -> f64 {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as f64;
 
@@ -177,8 +177,8 @@ impl MeshStore {
     ///
     /// Returns the number of messages removed.
     pub fn remove_expired(&mut self) -> usize {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as u32;
         let before = self.messages.len();
@@ -234,8 +234,8 @@ mod tests {
             ttl_expiry,
             hop_count,
             priority,
-            received_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            received_at: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
         }
@@ -381,8 +381,8 @@ mod tests {
         let mut store = MeshStore::with_capacity(5);
 
         // Use a recent timestamp so recency factor doesn't dominate
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as u32;
 
@@ -411,8 +411,8 @@ mod tests {
 
     #[test]
     fn test_priority_score_newer_higher() {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as u32;
 
@@ -445,8 +445,8 @@ mod tests {
 
     #[test]
     fn test_priority_score_fewer_hops_higher() {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as u32;
 
@@ -477,8 +477,8 @@ mod tests {
 
     #[test]
     fn test_priority_score_explicit_priority() {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as u32;
 
@@ -511,8 +511,8 @@ mod tests {
     fn test_remove_expired_messages() {
         let mut store = MeshStore::new();
 
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as u32;
 
@@ -597,8 +597,8 @@ mod tests {
     fn test_by_priority_ordering() {
         let mut store = MeshStore::new();
 
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as u32;
 
@@ -684,8 +684,8 @@ mod tests {
         let mut store_b = MeshStore::with_capacity(3);
 
         // Use a recent timestamp so recency factor doesn't dominate
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as u32;
 

@@ -1303,7 +1303,7 @@ impl BootstrapResolver {
     /// Expects a JSON array of strings: `["/ip4/1.2.3.4/tcp/9001/p2p/..."]`
     #[cfg(not(target_arch = "wasm32"))]
     fn fetch_remote(&self, url: &str) -> Result<Vec<String>, String> {
-        let timeout = std::time::Duration::from_secs(self.config.fetch_timeout_secs as u64);
+        let timeout = web_time::Duration::from_secs(self.config.fetch_timeout_secs as u64);
         let resp = ureq::AgentBuilder::new()
             .timeout(timeout)
             .build()
@@ -2153,8 +2153,8 @@ impl SwarmBridge {
 }
 
 fn current_timestamp() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64
 }
@@ -2540,7 +2540,7 @@ mod tests {
         ledger.record_connection("/ip4/1.2.3.4/tcp/1000".to_string(), "peer1".to_string()); // Make it successful
 
         // Simulate time passing and another peer
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(web_time::Duration::from_millis(10));
         ledger.record_connection("/ip4/5.6.7.8/tcp/2000".to_string(), "peer2".to_string());
         ledger.record_connection("/ip4/5.6.7.8/tcp/2000".to_string(), "peer2".to_string());
 

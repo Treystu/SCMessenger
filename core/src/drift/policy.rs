@@ -183,8 +183,8 @@ mod tests {
             is_charging: charging,
             has_wifi: wifi,
             is_moving: moving,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            timestamp: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
         }

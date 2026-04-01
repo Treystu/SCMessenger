@@ -9,7 +9,7 @@
 //! - Gateway detection for Layer 2 gossip propagation
 
 use std::collections::HashMap;
-use std::time::SystemTime;
+use web_time::SystemTime;
 
 /// 32-byte Ed25519 public key as peer identifier
 pub type PeerId = [u8; 32];

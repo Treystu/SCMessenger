@@ -24,8 +24,8 @@ use libp2p::{
     swarm::{behaviour::toggle::Toggle, NetworkBehaviour},
     StreamProtocol,
 };
-use std::time::Duration;
 use uuid::Uuid;
+use web_time::Duration;
 
 /// The Iron Core network behaviour combining all protocols.
 #[derive(NetworkBehaviour)]
