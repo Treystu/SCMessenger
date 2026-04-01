@@ -3278,8 +3278,12 @@ pub async fn start_swarm_with_config(
         let mut relay_budget: u32 = 200;
         let mut relay_count_this_hour: u32 = 0;
         let mut relay_guardrails = RelayAbuseGuardrails::new();
-        // Use js_sys::Date::now() (f64 ms since epoch) for timing in the WASM
-        // event loop for consistency with the WASM-specific spawn_local pattern.
+        // This WASM-only event loop uses js_sys::Date::now() (f64 ms since
+        // epoch) for elapsed-time checks because the existing comparison logic
+        // (`now - start >= threshold_ms`) relies on f64 arithmetic.  web_time::Instant
+        // would also work here, but migrating would require restructuring all the
+        // timing comparisons with no functional benefit — the native path already
+        // uses web_time::Instant (see run_swarm above).
         let mut relay_hour_start: f64 = js_sys::Date::now();
         let mut last_bootstrap_redial: f64 = js_sys::Date::now();
         let mut last_custody_pull: f64 = js_sys::Date::now();
