@@ -830,13 +830,14 @@ open class MeshRepository(private val context: Context) {
                         // was discovered on the local network (typically via libp2p mDNS).
                         val lanAddrs = listenAddrs.filter { addr ->
                             val a = addr.trim()
-                            (a.startsWith("/ip4/192.168.") ||
+                            val isPrivateIp = a.startsWith("/ip4/192.168.") ||
                              a.startsWith("/ip4/10.") ||
-                             a.startsWith("/ip4/172.16.") || a.startsWith("/ip4/172.17.") ||
-                             a.startsWith("/ip4/172.18.") || a.startsWith("/ip4/172.19.") ||
-                             a.startsWith("/ip4/172.2") || a.startsWith("/ip4/172.30.") ||
-                             a.startsWith("/ip4/172.31.")) &&
-                            (a.contains("/tcp/") || a.contains("/udp/"))
+                             (a.startsWith("/ip4/172.") && run {
+                                 val parts = a.removePrefix("/ip4/").split(".")
+                                 val secondOctet = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                                 secondOctet in 16..31
+                             })
+                            isPrivateIp && (a.contains("/tcp/") || a.contains("/udp/"))
                         }
                         if (lanAddrs.isNotEmpty()) {
                             mdnsLanPeers[trimmedPeerId] = lanAddrs

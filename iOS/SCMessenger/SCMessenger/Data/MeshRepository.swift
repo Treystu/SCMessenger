@@ -3329,13 +3329,19 @@ final class MeshRepository {
         // was discovered on the local network (typically via libp2p mDNS).
         let lanAddrs = listenAddrs.filter { addr in
             let a = addr.trimmingCharacters(in: .whitespacesAndNewlines)
-            return (a.hasPrefix("/ip4/192.168.") ||
-                    a.hasPrefix("/ip4/10.") ||
-                    a.hasPrefix("/ip4/172.16.") || a.hasPrefix("/ip4/172.17.") ||
-                    a.hasPrefix("/ip4/172.18.") || a.hasPrefix("/ip4/172.19.") ||
-                    a.hasPrefix("/ip4/172.2") || a.hasPrefix("/ip4/172.30.") ||
-                    a.hasPrefix("/ip4/172.31.")) &&
-                   (a.contains("/tcp/") || a.contains("/udp/"))
+            let isPrivateIp: Bool = {
+                if a.hasPrefix("/ip4/192.168.") || a.hasPrefix("/ip4/10.") {
+                    return true
+                }
+                if a.hasPrefix("/ip4/172.") {
+                    let parts = a.dropFirst("/ip4/".count).split(separator: ".")
+                    if parts.count >= 2, let octet = Int(parts[1]) {
+                        return (16...31).contains(octet)
+                    }
+                }
+                return false
+            }()
+            return isPrivateIp && (a.contains("/tcp/") || a.contains("/udp/"))
         }
         if !lanAddrs.isEmpty {
             mdnsLanPeers[trimmedPeerId] = lanAddrs
@@ -4178,7 +4184,7 @@ final class MeshRepository {
                             medium: "tcp_mdns",
                             phase: "smart_router",
                             outcome: "failed",
-                            detail: "ctx=\(attemptContext) route=\(String(describing: lanPeerId)) reason=\(String(describing: sendError ?? "unknown"))"
+                            detail: "ctx=\(attemptContext) route=\(lanPeerId) reason=\(sendError ?? "unknown")"
                         )
                         return false
                     }
