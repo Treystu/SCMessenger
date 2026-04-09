@@ -112,6 +112,16 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
+      - name: Core Integration Tests (always-pass suite)
+        run: |
+          cargo test -p scmessenger-core --test integration_contact_block
+          cargo test -p scmessenger-core --test integration_e2e
+          cargo test -p scmessenger-core --test integration_ironcore_roundtrip
+          cargo test -p scmessenger-core --test integration_registration_protocol
+          cargo test -p scmessenger-core --test test_address_observation
+          cargo test -p scmessenger-core --test test_mesh_routing
+          cargo test -p scmessenger-core --test test_persistence_restart
+
       - name: WS12 Deterministic Offline/Partition Matrix
         run: |
           cargo test -p scmessenger-core --test integration_offline_partition_matrix
@@ -130,7 +140,7 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - name: Check Core wasm32 Swarm Build
-        run: cargo check -p scmessenger-core --target wasm32-unknown-unknown
+        run: cargo check -p scmessenger-core --features wasm --target wasm32-unknown-unknown
       - name: Check WASM Crate Build
         run: cargo check -p scmessenger-wasm --target wasm32-unknown-unknown
       - name: Install wasm-pack

@@ -5,7 +5,7 @@
 
 use libp2p::PeerId;
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
+use web_time::{SystemTime, UNIX_EPOCH};
 
 // Import from local relay module (not available on WASM)
 #[cfg(not(target_arch = "wasm32"))]

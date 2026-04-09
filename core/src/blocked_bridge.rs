@@ -16,6 +16,8 @@ pub struct BlockedIdentity {
     pub blocked_at: u64,
     pub reason: Option<String>,
     pub notes: Option<String>,
+    /// When true, the contact has been both blocked AND deleted (cascade purge).
+    pub is_deleted: bool,
 }
 
 impl From<CoreBlockedIdentity> for BlockedIdentity {
@@ -26,6 +28,7 @@ impl From<CoreBlockedIdentity> for BlockedIdentity {
             blocked_at: core.blocked_at,
             reason: core.reason,
             notes: core.notes,
+            is_deleted: core.is_deleted,
         }
     }
 }
@@ -38,6 +41,7 @@ impl From<BlockedIdentity> for CoreBlockedIdentity {
             blocked_at: mobile.blocked_at,
             reason: mobile.reason,
             notes: mobile.notes,
+            is_deleted: mobile.is_deleted,
         }
     }
 }

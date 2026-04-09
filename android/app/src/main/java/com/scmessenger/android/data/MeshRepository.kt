@@ -1312,7 +1312,8 @@ open class MeshRepository(private val context: Context) {
                                             content = obj.getString("txt"),
                                             timestamp = obj.getLong("ts").toULong(),
                                             senderTimestamp = obj.getLong("sts").toULong(),
-                                            delivered = obj.getBoolean("del")
+                                            delivered = obj.getBoolean("del"),
+                                            hidden = false
                                         )
                                         historyManager?.add(record)
                                         repoScope.launch { _messageUpdates.emit(record) }
@@ -1368,7 +1369,8 @@ open class MeshRepository(private val context: Context) {
                             content = content,
                             timestamp = canonicalTimestamp,
                             senderTimestamp = senderTimestamp,
-                            delivered = true
+                            delivered = true,
+                            hidden = false
                         )
                         historyManager?.add(record)
                         logDeliveryAttempt(
@@ -1694,9 +1696,24 @@ open class MeshRepository(private val context: Context) {
         Timber.w("sendHistorySyncIfNeeded called for $normalizedRoute")
         if (normalizedRoute.isEmpty() || isBootstrapRelayPeer(normalizedRoute)) return
 
-        // Check if core is initialized before attempting history sync
-        if (ironCore == null) {
+        // Gate on both IronCore instance availability AND identity readiness.
+        // A non-null IronCore with an un-initialized identity will throw
+        // IronCoreException.NotInitialized from prepareMessageWithId, producing
+        // noisy false-positive error logs on fresh-install startup.
+        val core = ironCore ?: run {
             Timber.w("sendHistorySyncIfNeeded: IronCore not initialized, skipping for $normalizedRoute")
+            return
+        }
+        val identityReady = try {
+            core.getIdentityInfo().identityId != null
+        } catch (_: uniffi.api.IronCoreException.NotInitialized) {
+            false
+        } catch (e: Exception) {
+            Timber.w(e, "sendHistorySyncIfNeeded: unexpected error checking identity readiness for $normalizedRoute")
+            false
+        }
+        if (!identityReady) {
+            Timber.w("sendHistorySyncIfNeeded: identity not ready yet, skipping for $normalizedRoute")
             return
         }
 
@@ -2754,6 +2771,20 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
+    /**
+     * Block a peer AND delete all their stored messages (cascade purge).
+     * Future payloads from this peer are dropped at the ingress layer.
+     */
+    fun blockAndDeletePeer(peerId: String, reason: String? = null) {
+        ensureServiceInitialized()
+        try {
+            ironCore?.blockAndDeletePeer(peerId, reason)
+            Timber.i("Blocked and deleted peer: $peerId (reason: $reason)")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to block and delete peer: $peerId")
+        }
+    }
+
     fun isBlocked(peerId: String): Boolean {
         ensureServiceInitialized()
         return try {
@@ -2791,7 +2822,7 @@ open class MeshRepository(private val context: Context) {
     fun signData(data: ByteArray): uniffi.api.SignatureResult? {
         ensureServiceInitialized()
         return try {
-            ironCore?.signData(data.toList())
+            ironCore?.signData(data)
         } catch (e: Exception) {
             Timber.e(e, "Failed to sign data")
             null
@@ -2801,7 +2832,7 @@ open class MeshRepository(private val context: Context) {
     fun verifySignature(data: ByteArray, signature: ByteArray, publicKeyHex: String): Boolean {
         ensureServiceInitialized()
         return try {
-            ironCore?.verifySignature(data.toList(), signature.toList(), publicKeyHex) ?: false
+            ironCore?.verifySignature(data, signature, publicKeyHex) ?: false
         } catch (e: Exception) {
             Timber.e(e, "Failed to verify signature")
             false
@@ -3003,7 +3034,8 @@ open class MeshRepository(private val context: Context) {
                 content = content,
                 timestamp = now,
                 senderTimestamp = now,
-                delivered = false
+                delivered = false,
+                hidden = false
             )
 
             try {
@@ -3091,7 +3123,8 @@ open class MeshRepository(private val context: Context) {
                             content = content,
                             timestamp = now,
                             senderTimestamp = now,
-                            delivered = false
+                            delivered = false,
+                            hidden = false
                         )
                         historyManager?.add(reconciledRecord)
                         historyManager?.flush()

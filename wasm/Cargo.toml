@@ -9,7 +9,7 @@ authors.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-scmessenger-core = { path = "../core" }
+scmessenger-core = { path = "../core", features = ["wasm"] }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
 js-sys = { workspace = true }
@@ -28,6 +28,7 @@ uniffi = { workspace = true, features = ["wasm-unstable-single-threaded"] }
 
 # WASM-specific dependencies
 console_error_panic_hook = "0.1"
+web-time = "1.1"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

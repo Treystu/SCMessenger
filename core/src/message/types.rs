@@ -98,8 +98,8 @@ impl Message {
             recipient_id,
             message_type: MessageType::Text,
             payload: text.as_bytes().to_vec(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            timestamp: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
         }
@@ -113,8 +113,8 @@ impl Message {
             recipient_id,
             message_type: MessageType::Receipt,
             payload: bincode::serialize(receipt).unwrap_or_default(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            timestamp: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
         }
@@ -131,8 +131,8 @@ impl Message {
 
     /// Check if message is recent (within threshold_secs)
     pub fn is_recent(&self, threshold_secs: u64) -> bool {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
         now.saturating_sub(self.timestamp) < threshold_secs
@@ -145,8 +145,8 @@ impl Receipt {
         Self {
             message_id,
             status: DeliveryStatus::Delivered,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            timestamp: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
         }

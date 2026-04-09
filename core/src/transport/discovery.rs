@@ -176,8 +176,8 @@ pub fn create_encrypted_beacon(
     node_public_key: &[u8; 32],
 ) -> Result<Vec<u8>, BeaconError> {
     // Get current epoch (15-minute windows since epoch)
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let now = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map_err(|e| BeaconError::EncryptionError(e.to_string()))?;
     let mesh_epoch = (now.as_secs() / (15 * 60)) as u32;
 
@@ -252,8 +252,8 @@ pub fn decrypt_beacon_with_period(
     let cipher = XChaCha20Poly1305::new(group_key.into());
 
     // Try decryption with various epoch guesses (current ± a few windows)
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let now = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map_err(|e| BeaconError::EncryptionError(e.to_string()))?;
     let current_epoch = (now.as_secs() / rotation_period_secs) as u32;
 

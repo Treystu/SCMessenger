@@ -23,6 +23,16 @@ pub struct BlockedIdentity {
     pub reason: Option<String>,
     /// Notes about this block
     pub notes: Option<String>,
+    /// When true, the contact has been both blocked AND deleted.
+    ///
+    /// Blocked-only (`is_deleted = false`): messages are still received and
+    /// persisted for evidentiary purposes, but filtered out of all UI queries.
+    ///
+    /// Blocked + Deleted (`is_deleted = true`): all existing stored messages
+    /// are purged and any future incoming network payloads are dropped at the
+    /// ingress layer without being persisted.
+    #[serde(default)]
+    pub is_deleted: bool,
 }
 
 impl BlockedIdentity {
@@ -34,6 +44,7 @@ impl BlockedIdentity {
             blocked_at: current_timestamp(),
             reason: None,
             notes: None,
+            is_deleted: false,
         }
     }
 
@@ -85,6 +96,24 @@ impl BlockedManager {
             .put(key.as_bytes(), &value)
             .map_err(|_| IronCoreError::StorageError)?;
         Ok(())
+    }
+
+    /// Block a peer AND mark them as deleted (cascade purge variant).
+    ///
+    /// This sets `is_deleted = true` on the block record so that the ingress
+    /// layer knows to drop all future payloads without persisting them, and so
+    /// that the caller can trigger a cascade purge of existing stored messages.
+    pub fn block_and_delete(
+        &self,
+        peer_id: String,
+        reason: Option<String>,
+    ) -> Result<(), IronCoreError> {
+        let mut blocked = BlockedIdentity::new(peer_id);
+        blocked.is_deleted = true;
+        if let Some(r) = reason {
+            blocked.reason = Some(r);
+        }
+        self.block(blocked)
     }
 
     /// Unblock a peer ID
@@ -174,11 +203,45 @@ impl BlockedManager {
     pub fn count(&self) -> Result<usize, IronCoreError> {
         Ok(self.list()?.len())
     }
+
+    /// Check if a peer is both blocked AND deleted (cascade purge state).
+    ///
+    /// Returns `true` only when `is_deleted = true` on the block record.
+    /// Blocked-only peers (where `is_deleted = false`) return `false`.
+    pub fn is_blocked_and_deleted(&self, peer_id: &str) -> Result<bool, IronCoreError> {
+        let key = format!("blocked:{}", peer_id);
+        if let Some(data) = self
+            .backend
+            .get(key.as_bytes())
+            .map_err(|_| IronCoreError::StorageError)?
+        {
+            let blocked: BlockedIdentity =
+                serde_json::from_slice(&data).map_err(|_| IronCoreError::Internal)?;
+            Ok(blocked.is_deleted)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Return the peer IDs of all blocked-only (not deleted) identities.
+    ///
+    /// Used by the query layer to filter messages from blocked peers out of UI
+    /// results without purging them (evidentiary retention).
+    pub fn blocked_only_peer_ids(
+        &self,
+    ) -> Result<std::collections::HashSet<String>, IronCoreError> {
+        let list = self.list()?;
+        Ok(list
+            .into_iter()
+            .filter(|b| !b.is_deleted)
+            .map(|b| b.peer_id)
+            .collect())
+    }
 }
 
 fn current_timestamp() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
 }

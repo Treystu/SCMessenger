@@ -9,7 +9,7 @@
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use web_time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Route reason: direct-first policy candidate.
 pub const ROUTE_REASON_DIRECT_FIRST: &str = "DIRECT_FIRST";

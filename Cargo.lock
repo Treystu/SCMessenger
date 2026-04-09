@@ -3690,6 +3690,7 @@ dependencies = [
  "ureq",
  "uuid",
  "wasm-bindgen-futures",
+ "web-time",
  "x25519-dalek",
  "zeroize",
 ]
@@ -3723,6 +3724,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
+ "web-time",
 ]
 
 [[package]]

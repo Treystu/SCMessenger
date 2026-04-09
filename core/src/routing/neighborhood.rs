@@ -10,7 +10,7 @@
 
 use super::local::{CellSummary, PeerId, TransportType};
 use std::collections::HashMap;
-use std::time::SystemTime;
+use web_time::SystemTime;
 
 /// Information about a gateway peer that connects to other cells
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -212,7 +212,7 @@ impl NeighborhoodTable {
         for gateway in self.gateways.values() {
             // Add each gateway as a neighborhood summary
             let summary = NeighborhoodSummary {
-                total_reachable: gateway.cell_summary.peer_count as u32,
+                total_reachable: gateway.cell_summary.peer_count,
                 reachable_hints: gateway.cell_summary.reachable_hints.clone(),
                 path_reliability: gateway.cell_summary.avg_reliability,
                 hop_count: gateway.hops_away,
@@ -246,8 +246,7 @@ impl NeighborhoodTable {
         self.summaries
             .retain(|summary| now - summary.timestamp <= self.max_staleness);
 
-        let evicted = initial_count - self.gateways.len();
-        evicted
+        initial_count - self.gateways.len()
     }
 
     /// Get all known gateways

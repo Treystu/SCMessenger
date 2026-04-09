@@ -14,7 +14,7 @@ use anyhow::Result;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use web_time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{debug, info, warn};
 
 /// Relay node stability metrics for priority calculation

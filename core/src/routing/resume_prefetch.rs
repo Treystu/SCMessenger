@@ -12,7 +12,7 @@
 //! 4. **Lifecycle-aware**: Hook into iOS/Android app lifecycle events
 
 use std::collections::{HashMap, VecDeque};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use super::global::RouteAdvertisement;
 use super::local::PeerId;
@@ -57,6 +57,7 @@ impl PrefetchedRoute {
     }
 
     /// Check if this route is still fresh
+    #[allow(dead_code)]
     fn is_fresh(&self, max_age: Duration) -> bool {
         self.last_validated.elapsed() < max_age
     }
@@ -73,6 +74,7 @@ impl PrefetchedRoute {
     }
 
     /// Mark as refreshing
+    #[allow(dead_code)]
     fn start_refresh(&mut self) {
         self.status = PrefetchStatus::Refreshing;
         self.refresh_attempts += 1;
@@ -210,7 +212,7 @@ impl ResumePrefetchManager {
         self.routes.clear();
 
         // Save current routes with their hints
-        for (peer_id, hint, route) in current_routes {
+        for (_peer_id, hint, route) in current_routes {
             // Calculate priority based on whether this is a frequent peer
             let priority = self
                 .frequent_peers
@@ -432,8 +434,8 @@ mod tests {
             next_hop: create_test_peer_id(),
             hop_count,
             reliability: 0.95,
-            last_confirmed: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            last_confirmed: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
             sequence: 1,

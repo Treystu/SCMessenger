@@ -11,7 +11,7 @@
 //! 3. **Progressive fallback**: Cheaper methods first, expensive last
 //! 4. **Deterministic**: Same inputs produce same phase transitions
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 /// Discovery phases in order of increasing cost
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -124,7 +124,7 @@ impl TimeoutBudget {
 
         // Check if there's enough budget for at least one more phase
         match self.phase.next() {
-            Some(next_phase) => {
+            Some(_) => {
                 // Need at least 10ms for the next phase to be meaningful
                 remaining.as_millis() >= 10
             }

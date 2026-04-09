@@ -32,7 +32,18 @@ fn main() {
     // Keep generated Swift bindings compatible with targets that default to
     // MainActor isolation (Swift 6 strict concurrency). UniFFI helper
     // converters must stay nonisolated so synchronous FFI call sites compile.
-    let generated_file = out_dir.join("api.swift");
+    // UniFFI names the generated Swift file after the module_name set in
+    // uniffi.toml.  Try the configured name first, then fall back to the
+    // legacy "api.swift" name for compatibility.
+    let generated_file = {
+        let module_file = out_dir.join("SCMessengerCore.swift");
+        let legacy_file = out_dir.join("api.swift");
+        if module_file.exists() {
+            module_file
+        } else {
+            legacy_file
+        }
+    };
     if generated_file.exists() {
         let mut content = fs::read_to_string(generated_file.as_std_path())
             .expect("Failed to read generated Swift bindings");

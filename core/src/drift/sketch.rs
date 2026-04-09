@@ -53,8 +53,8 @@ impl IBLTCell {
 
     /// XOR in a key (add to the cell)
     fn xor_in(&mut self, key: &MessageId) {
-        for i in 0..16 {
-            self.key_sum[i] ^= key[i];
+        for (i, byte) in key.iter().enumerate().take(16) {
+            self.key_sum[i] ^= byte;
         }
         let check = u32::from_le_bytes([key[0], key[1], key[2], key[3]]);
         self.key_check ^= check;

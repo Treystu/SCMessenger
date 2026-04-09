@@ -5,8 +5,8 @@
 
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use std::time::{Duration, SystemTime};
 use thiserror::Error;
+use web_time::{Duration, SystemTime};
 
 #[derive(Debug, Error)]
 pub enum CoverTrafficError {

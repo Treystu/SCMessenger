@@ -250,8 +250,8 @@ impl WasmMeshNode {
 
     fn update_relay_stats(&self) {
         let mut stats = self.relay_stats.write();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
@@ -274,8 +274,8 @@ impl WasmMeshNode {
     pub fn register_peer(&self, peer_id: String) -> Result<(), String> {
         self.transport.add_peer(peer_id.clone())?;
 
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
@@ -521,7 +521,7 @@ mod uuid {
     impl Uuid {
         pub fn new_v4() -> Self {
             // In test env, use deterministic ID. In WASM, use getrandom via web APIs
-            use std::time::{SystemTime, UNIX_EPOCH};
+            use web_time::{SystemTime, UNIX_EPOCH};
             let nanos = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map(|d| d.subsec_nanos())

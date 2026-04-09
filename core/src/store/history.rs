@@ -23,6 +23,11 @@ pub struct MessageRecord {
     #[serde(default)]
     pub sender_timestamp: u64,
     pub delivered: bool,
+    /// When `true` the message is from a blocked-only peer and is retained for
+    /// evidentiary purposes but must be filtered out of all UI-facing queries.
+    /// The flag is cleared when the peer is unblocked.
+    #[serde(default)]
+    pub hidden: bool,
 }
 
 impl MessageRecord {
@@ -46,6 +51,7 @@ impl MessageRecord {
             timestamp: ts,
             sender_timestamp: ts,
             delivered: false,
+            hidden: false,
         }
     }
 
@@ -59,13 +65,14 @@ impl MessageRecord {
             timestamp: current_timestamp(),
             sender_timestamp,
             delivered: true,
+            hidden: false,
         }
     }
 }
 
 fn current_timestamp() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .unwrap()
         .as_secs()
 }
@@ -117,6 +124,25 @@ impl HistoryManager {
         peer_filter: Option<String>,
         limit: u32,
     ) -> Result<Vec<MessageRecord>, IronCoreError> {
+        self.recent_internal(peer_filter, limit, false)
+    }
+
+    /// Like `recent()` but also returns messages that are hidden due to the
+    /// sender being blocked.  Used by administrative / evidentiary access paths.
+    pub fn recent_including_hidden(
+        &self,
+        peer_filter: Option<String>,
+        limit: u32,
+    ) -> Result<Vec<MessageRecord>, IronCoreError> {
+        self.recent_internal(peer_filter, limit, true)
+    }
+
+    fn recent_internal(
+        &self,
+        peer_filter: Option<String>,
+        limit: u32,
+        include_hidden: bool,
+    ) -> Result<Vec<MessageRecord>, IronCoreError> {
         let mut records = Vec::new();
         let all = self
             .backend
@@ -127,6 +153,11 @@ impl HistoryManager {
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| IronCoreError::Internal)?;
             let record = record.adjust_legacy_timestamps();
+
+            // Evidentiary retention: skip hidden messages in normal queries.
+            if record.hidden && !include_hidden {
+                continue;
+            }
 
             if let Some(ref peer) = peer_filter {
                 if record.peer_id.eq_ignore_ascii_case(peer) {
@@ -155,6 +186,30 @@ impl HistoryManager {
         self.recent(Some(peer_id), limit)
     }
 
+    /// Unhide all stored messages for a given peer (called on unblock).
+    pub fn unhide_messages_for_peer(&self, peer_id: &str) -> Result<u32, IronCoreError> {
+        let all = self
+            .backend
+            .scan_prefix(b"msg_")
+            .map_err(|_| IronCoreError::StorageError)?;
+
+        let mut count = 0u32;
+        for (_, value) in all {
+            let mut record: MessageRecord =
+                serde_json::from_slice(&value).map_err(|_| IronCoreError::Internal)?;
+            if record.hidden && record.peer_id.eq_ignore_ascii_case(peer_id) {
+                record.hidden = false;
+                let key = format!("msg_{}", record.id);
+                let updated = serde_json::to_vec(&record).map_err(|_| IronCoreError::Internal)?;
+                self.backend
+                    .put(key.as_bytes(), &updated)
+                    .map_err(|_| IronCoreError::StorageError)?;
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
     pub fn search(&self, query: String, limit: u32) -> Result<Vec<MessageRecord>, IronCoreError> {
         let query_lower = query.to_lowercase();
         let mut records = Vec::new();
@@ -167,6 +222,10 @@ impl HistoryManager {
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| IronCoreError::Internal)?;
             let record = record.adjust_legacy_timestamps();
+            // Evidentiary retention: skip hidden messages in search results.
+            if record.hidden {
+                continue;
+            }
             if record.content.to_lowercase().contains(&query_lower) {
                 records.push(record);
             }
@@ -343,6 +402,7 @@ mod tests {
             timestamp: 1000,
             sender_timestamp: 1000,
             delivered: false,
+            hidden: false,
         };
         history.add(record1.clone()).unwrap();
 
@@ -355,6 +415,7 @@ mod tests {
             timestamp: 2000,
             sender_timestamp: 2000,
             delivered: true,
+            hidden: false,
         };
         history.add(record2.clone()).unwrap();
 
@@ -391,6 +452,7 @@ mod tests {
             timestamp: 1000,
             sender_timestamp: 1000,
             delivered: false,
+            hidden: false,
         };
         history.add(record1).unwrap();
 
@@ -402,6 +464,7 @@ mod tests {
             timestamp: 2000,
             sender_timestamp: 2000,
             delivered: false,
+            hidden: false,
         };
         history.add(record2).unwrap();
 

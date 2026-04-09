@@ -155,6 +155,10 @@ interface IronCore {
     sequence<BlockedIdentity> list_blocked_peers();
     [Throws=IronCoreError]
     u32 blocked_count();
+    /// Block a peer AND delete all their stored messages (cascade purge).
+    /// Future payloads from this peer are dropped at the ingress layer.
+    [Throws=IronCoreError]
+    void block_and_delete_peer(string peer_id, string? reason);
 
     // Delegate
     void set_delegate(CoreDelegate? delegate);
@@ -484,6 +488,9 @@ dictionary MessageRecord {
     u64 timestamp;
     u64 sender_timestamp;
     boolean delivered;
+    /// When true, the message is from a blocked-only peer (evidentiary retention).
+    /// It is stored in the DB but hidden from all UI-facing queries.
+    boolean hidden;
 };
 
 dictionary HistoryStats {
@@ -623,6 +630,7 @@ dictionary BlockedIdentity {
     u64 blocked_at;
     string? reason;
     string? notes;
+    boolean is_deleted;
 };
 
 namespace api {

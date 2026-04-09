@@ -4,7 +4,7 @@
 // linking incoming and outgoing traffic by timing patterns.
 
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use web_time::Duration;
 
 /// Distribution type for jitter delays
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

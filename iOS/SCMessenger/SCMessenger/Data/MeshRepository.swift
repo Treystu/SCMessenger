@@ -1028,7 +1028,8 @@ final class MeshRepository {
             content: content,
             timestamp: UInt64(Date().timeIntervalSince1970),
             senderTimestamp: UInt64(Date().timeIntervalSince1970),
-            delivered: false
+            delivered: false,
+            hidden: false
         )
         try? historyManager?.add(record: messageRecord)
         historyManager?.flush()
@@ -1378,7 +1379,8 @@ final class MeshRepository {
                         content: obj["txt"] as? String ?? "",
                         timestamp: UInt64(obj["ts"] as? Int64 ?? 0),
                         senderTimestamp: UInt64(obj["sts"] as? Int64 ?? 0),
-                        delivered: obj["del"] as? Bool ?? false
+                        delivered: obj["del"] as? Bool ?? false,
+                        hidden: false
                     )
                     try? historyManager?.add(record: record)
                     messageUpdates.send(record)
@@ -1432,7 +1434,8 @@ final class MeshRepository {
             content: content,
             timestamp: canonicalTimestamp,
             senderTimestamp: senderTimestamp,
-            delivered: true
+            delivered: true,
+            hidden: false
         )
 
         try? historyManager?.add(record: messageRecord)
@@ -2866,6 +2869,16 @@ final class MeshRepository {
         }
         try ironCore.unblockPeer(peerId: peerId)
         logger.info("✓ Unblocked peer: \(peerId)")
+    }
+
+    /// Block a peer AND delete all their stored messages (cascade purge).
+    /// Future payloads from this peer are dropped at the ingress layer.
+    func blockAndDeletePeer(peerId: String, reason: String? = nil) throws {
+        guard let ironCore = ironCore else {
+            throw MeshError.notInitialized("IronCore not initialized")
+        }
+        try ironCore.blockAndDeletePeer(peerId: peerId, reason: reason)
+        logger.info("✓ Blocked and deleted peer: \(peerId)")
     }
 
     /// Check whether a peer is currently blocked.
@@ -6002,7 +6015,8 @@ final class MeshRepository {
                         content: msg.content,
                         timestamp: msg.timestamp,
                         senderTimestamp: msg.senderTimestamp,
-                        delivered: msg.delivered
+                        delivered: msg.delivered,
+                        hidden: msg.hidden
                     )
                     try historyManager.add(record: updatedMsg)
                     updatedCount += 1

@@ -1,8 +1,8 @@
 //! Bootstrap Protocol — helps new nodes join the network
 
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
+use web_time::{SystemTime, UNIX_EPOCH};
 
 /// Bootstrap error types
 #[derive(Debug, Error)]
@@ -322,7 +322,7 @@ mod tests {
         )
         .with_expiry(0);
 
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(web_time::Duration::from_millis(10));
         assert!(!payload.is_valid());
     }
 
@@ -426,7 +426,7 @@ mod tests {
         )
         .with_expiry(0);
 
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(web_time::Duration::from_millis(10));
 
         let result = manager.accept_invite(payload);
         assert!(result.is_err());

@@ -15,9 +15,9 @@ use libp2p::{Multiaddr, PeerId};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use tracing::{debug, info, warn};
+use web_time::{SystemTime, UNIX_EPOCH};
 
 // ============================================================================
 // ERROR TYPES

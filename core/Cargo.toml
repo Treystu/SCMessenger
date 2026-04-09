@@ -39,6 +39,7 @@ camino = { version = "1", optional = true }
 
 # Additional dependencies
 parking_lot = "0.12"
+web-time = "1.1"
 crc32fast = "1.3"
 lz4_flex = { version = "0.11", default-features = false, features = ["std"] }
 
@@ -77,6 +78,7 @@ uniffi = { workspace = true, features = ["build"] }
 [features]
 default = []
 gen-bindings = ["dep:uniffi_bindgen", "dep:camino"]
+wasm = ["uniffi/wasm-unstable-single-threaded"]
 
 [[bin]]
 name = "gen_kotlin"

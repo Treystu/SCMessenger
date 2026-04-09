@@ -94,8 +94,8 @@ impl PushNotificationHandler {
 
     /// Update last sync time
     fn set_last_sync(&self) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
 
@@ -104,8 +104,8 @@ impl PushNotificationHandler {
 
     /// Check if enough time has passed for another sync
     pub fn should_sync(&self) -> bool {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
 

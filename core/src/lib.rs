@@ -1235,8 +1235,8 @@ impl IronCore {
 
         // Auto-save to history (Outgoing)
         let history = self.history.write();
-        let local_ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let local_ts = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
         let _ = history.add(store::MessageRecord {
@@ -1247,6 +1247,7 @@ impl IronCore {
             timestamp: local_ts,
             sender_timestamp: msg.timestamp,
             delivered: false,
+            hidden: false,
         });
 
         // Serialize the message
@@ -1267,8 +1268,8 @@ impl IronCore {
                 message_id: message_id.clone(),
                 recipient_id: recipient_key_trimmed.clone(),
                 envelope_data: envelope_bytes.clone(),
-                queued_at: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
+                queued_at: web_time::SystemTime::now()
+                    .duration_since(web_time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs(),
                 attempts: 0,
@@ -1411,14 +1412,51 @@ impl IronCore {
             IronCoreError::Internal
         })?;
 
+        // Ingress filtering: check blocked state for this sender BEFORE dedup or
+        // history persistence.  We derive the sender identity id the same way the
+        // history record does (Blake3 hash of the envelope sender public key).
+        let sender_identity_id = hex::encode(blake3::hash(&envelope.sender_public_key).as_bytes());
+
+        // Helper: check blocked state against both the identity id (Blake3 hash)
+        // and the raw sender_id embedded in the message, since the two can differ
+        // for legacy or cross-version peers.
+        let sender_is_blocked_deleted = self
+            .blocked_manager
+            .is_blocked_and_deleted(&sender_identity_id)
+            .unwrap_or(false)
+            || self
+                .blocked_manager
+                .is_blocked_and_deleted(&msg.sender_id)
+                .unwrap_or(false);
+
+        let sender_is_blocked = self
+            .blocked_manager
+            .is_blocked(&sender_identity_id, None)
+            .unwrap_or(false)
+            || self
+                .blocked_manager
+                .is_blocked(&msg.sender_id, None)
+                .unwrap_or(false);
+
+        // Blocked + Deleted: reject the payload entirely — do not store, do not
+        // invoke the delegate, do not dedup-register.  Returning an error
+        // prevents callers (CLI, WASM, mobile) from surfacing the decrypted
+        // content, which is the correct ingress-drop semantic.
+        if sender_is_blocked_deleted {
+            return Err(IronCoreError::Blocked);
+        }
+
+        // Blocked-only: tag the history record as hidden for evidentiary retention.
+        let is_blocked_only = sender_is_blocked;
+
         // Dedup check
         let mut inbox = self.inbox.write();
         let is_new = inbox.receive(store::ReceivedMessage {
             message_id: msg.id.clone(),
             sender_id: msg.sender_id.clone(),
             payload: msg.payload.clone(),
-            received_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            received_at: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
         });
@@ -1428,19 +1466,51 @@ impl IronCore {
         // Auto-save to history (Incoming)
         if is_new && msg.message_type == message::MessageType::Text {
             if let Some(text) = msg.text_content() {
-                let local_ts = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
+                let local_ts = web_time::SystemTime::now()
+                    .duration_since(web_time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs();
+                // For blocked-only (hidden) messages, use the derived sender_identity_id
+                // as the peer_id so that unhide_messages_for_peer() — which is keyed by
+                // the same identifier used in block()/unblock() — can reliably match.
+                // For non-blocked messages, continue using msg.sender_id which is
+                // typically identical (both derive from Blake3 of the sender public key).
+                let record_peer_id = if is_blocked_only {
+                    sender_identity_id.clone()
+                } else {
+                    msg.sender_id.clone()
+                };
                 let _ = self.history.read().add(store::MessageRecord {
                     id: msg.id.clone(),
                     direction: store::MessageDirection::Received,
-                    peer_id: msg.sender_id.clone(),
-                    content: text,
+                    peer_id: record_peer_id.clone(),
+                    content: text.clone(),
                     timestamp: local_ts,
                     sender_timestamp: msg.timestamp,
                     delivered: true,
+                    // Evidentiary retention: mark as hidden if sender is blocked.
+                    // The record is persisted but filtered from UI queries.
+                    hidden: is_blocked_only,
                 });
+                // Also write to the mobile bridge history so that mobile apps
+                // (which query the sled-based HistoryManager) can restore hidden
+                // messages on unblock.  Without this, suppressing the delegate
+                // callback for blocked-only peers would leave the mobile bridge
+                // store empty, breaking the unblock-restore flow.
+                #[cfg(not(target_arch = "wasm32"))]
+                if is_blocked_only {
+                    let mobile_record = crate::mobile_bridge::MessageRecord {
+                        id: msg.id.clone(),
+                        direction: crate::mobile_bridge::MessageDirection::Received,
+                        peer_id: record_peer_id,
+                        content: text,
+                        timestamp: local_ts,
+                        sender_timestamp: msg.timestamp,
+                        delivered: true,
+                        hidden: true,
+                    };
+                    let _ = self.history_bridge_manager.add(mobile_record);
+                }
             }
         }
 
@@ -1536,8 +1606,12 @@ impl IronCore {
         // Zero-Status Architecture: Receipt processing is internal only.
         // The Core never emits delivery status events across the FFI boundary.
         // on_receipt_received is intentionally suppressed to decouple the UI.
+        //
+        // Evidentiary retention: blocked-only peer messages are stored hidden.
+        // The delegate is NOT invoked so the UI never surfaces a notification
+        // or tries to insert the message into the mobile-bridge history store.
         if let Some(delegate) = self.delegate.read().as_ref() {
-            if !is_receipt_message {
+            if !is_receipt_message && !is_blocked_only {
                 delegate.on_message_received(
                     msg.sender_id.clone(),
                     sender_pub_key_hex,
@@ -1636,9 +1710,77 @@ impl IronCore {
         self.blocked_manager.block(blocked)
     }
 
-    /// Unblock a peer
+    /// Unblock a peer and restore any evidentiary-retained messages to visible.
     pub fn unblock_peer(&self, peer_id: String) -> Result<(), IronCoreError> {
-        self.blocked_manager.unblock(peer_id, None)
+        self.blocked_manager.unblock(peer_id.clone(), None)?;
+        // Restore visibility of messages that were hidden during the block period.
+        // Log but do not fail the unblock operation if restoration encounters a
+        // storage error — the important state transition (unblock) has already
+        // succeeded and the user is no longer blocked.
+        match self.history.read().unhide_messages_for_peer(&peer_id) {
+            Ok(count) => {
+                tracing::info!(
+                    event = "unblock_messages_restored",
+                    peer_id = %peer_id,
+                    count = count,
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    event = "unblock_messages_restore_failed",
+                    peer_id = %peer_id,
+                    error = ?e,
+                    "failed to restore hidden messages after unblock; messages may remain hidden"
+                );
+            }
+        }
+        // Also unhide in the mobile bridge history (sled-based) so that mobile
+        // apps see the restored messages immediately.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = self
+                .history_bridge_manager
+                .unhide_messages_for_peer(&peer_id);
+        }
+        Ok(())
+    }
+
+    /// Block a peer AND delete them (cascade purge).
+    ///
+    /// This performs three actions atomically from the caller's perspective:
+    /// 1. Marks the peer as `blocked + deleted` in the block store, causing the
+    ///    ingress layer to **reject** all future payloads without persisting them.
+    /// 2. **Purges** all existing stored messages for this peer from all history
+    ///    stores (core and mobile bridge).
+    /// 3. **Removes** the contact record from both core and mobile bridge contact
+    ///    stores.
+    ///
+    /// This is irreversible — purged messages cannot be recovered.
+    pub fn block_and_delete_peer(
+        &self,
+        peer_id: String,
+        reason: Option<String>,
+    ) -> Result<(), IronCoreError> {
+        // 1. Set blocked+deleted state so future ingress rejects payloads.
+        self.blocked_manager
+            .block_and_delete(peer_id.clone(), reason)?;
+        // 2. Purge all existing stored messages for this peer from core history.
+        //    Propagate storage errors so callers know when the purge is incomplete.
+        self.history.read().remove_conversation(peer_id.clone())?;
+        // Also purge from the mobile bridge history (sled-based).
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = self
+                .history_bridge_manager
+                .remove_conversation(peer_id.clone());
+        }
+        // 3. Remove the contact record.
+        let _ = self.contacts.read().remove(peer_id.clone());
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = self.contacts_bridge_manager.remove(peer_id.clone());
+        }
+        Ok(())
     }
 
     /// Check if a peer is blocked
@@ -1656,6 +1798,15 @@ impl IronCore {
             .into_iter()
             .map(crate::blocked_bridge::BlockedIdentity::from)
             .collect())
+    }
+
+    /// List all blocked peers — returns the core store type.
+    /// Available on all platforms including WASM (unlike `list_blocked_peers` which
+    /// returns the UniFFI bridge type and is gated to non-wasm32 targets).
+    pub fn list_blocked_peers_raw(
+        &self,
+    ) -> Result<Vec<store::blocked::BlockedIdentity>, IronCoreError> {
+        self.blocked_manager.list()
     }
 
     /// Get count of blocked peers
@@ -1735,8 +1886,8 @@ mod tests {
         assert_eq!(info_after.public_key_hex.unwrap().len(), 64);
         let parsed_uuid = uuid::Uuid::parse_str(info_after.device_id.as_deref().unwrap()).unwrap();
         assert_eq!(parsed_uuid.get_version_num(), 4);
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
         let seniority = info_after.seniority_timestamp.unwrap();

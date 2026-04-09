@@ -106,10 +106,7 @@ impl GlobalRoutes {
             return false;
         }
 
-        let routes_for_hint = self
-            .routes
-            .entry(ad.destination_hint)
-            .or_insert_with(Vec::new);
+        let routes_for_hint = self.routes.entry(ad.destination_hint).or_default();
 
         // Check if we already have this exact route (same next_hop, same or newer sequence)
         if let Some(existing) = routes_for_hint.iter().find(|r| r.next_hop == ad.next_hop) {
@@ -336,7 +333,7 @@ impl GlobalRoutes {
 
     /// Check if we have any route for a destination hint
     pub fn has_route_for(&self, hint: &[u8; 4]) -> bool {
-        self.routes.get(hint).map_or(false, |r| !r.is_empty())
+        self.routes.get(hint).is_some_and(|r| !r.is_empty())
     }
 
     /// Number of unique destination hints we have routes for

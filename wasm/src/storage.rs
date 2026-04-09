@@ -72,8 +72,8 @@ impl StoredMessage {
             sender_id,
             recipient_hint,
             payload,
-            stored_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            stored_at: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0),
             read: false,

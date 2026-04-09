@@ -299,8 +299,8 @@ impl Outbox {
 
     /// Remove expired messages (older than max_age_secs)
     pub fn remove_expired(&mut self, max_age_secs: u64) -> usize {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
 
@@ -361,8 +361,8 @@ mod tests {
             message_id: id.to_string(),
             recipient_id: recipient.to_string(),
             envelope_data: vec![1, 2, 3],
-            queued_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            queued_at: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
             attempts: 0,

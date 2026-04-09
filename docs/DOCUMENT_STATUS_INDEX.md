@@ -67,6 +67,8 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 | ----------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------- |
 | `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md` | Active  | WS13 workstream is complete; keep as the device-model/reference source for WS14          |
 | `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`               | Active  | Residual-risk source of truth for active WS13/WS14 execution                             |
+| `docs/V0.2.1_ALPHA_ROLLOUT_PLAN.md`                   | Active  | Pre-rollout checklist, build/deploy instructions, and alpha test protocol for Android/iOS |
+| `docs/ALPHA_BURNDOWN_V0.2.1.md`                       | Active  | Comprehensive CI/test/stub/incomplete/dead-code audit for v0.2.1 alpha release sign-off  |
 | `docs/WS14_AUTOMATION_HANDOFF.md`                     | Active  | Repo-owned branch/phase ledger for the WS14 hourly automation stream                     |
 | `docs/WS14_HOURLY_AUTOMATION_PROMPT.md`               | Active  | Canonical WS14 hourly execution prompt and operating defaults                            |
 | `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`                | Planned | WS14 workstream for v0.2.1 DM + DM Request notifications (iOS/Android/WASM, hybrid mode) |

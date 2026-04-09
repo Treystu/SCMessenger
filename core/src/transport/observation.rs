@@ -6,7 +6,7 @@
 use libp2p::{Multiaddr, PeerId};
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::time::{SystemTime, UNIX_EPOCH};
+use web_time::{SystemTime, UNIX_EPOCH};
 
 /// Observation of our address from a peer
 #[derive(Debug, Clone)]

@@ -100,8 +100,8 @@ impl WasmStore {
             message_id,
             data,
             priority,
-            timestamp_ms: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            timestamp_ms: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
                 .unwrap_or(0),
             access_count: 0,

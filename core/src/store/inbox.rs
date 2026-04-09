@@ -272,8 +272,8 @@ mod tests {
             message_id: id.to_string(),
             sender_id: sender.to_string(),
             payload: payload.as_bytes().to_vec(),
-            received_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            received_at: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
         }

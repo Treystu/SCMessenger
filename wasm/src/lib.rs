@@ -892,6 +892,19 @@ impl IronCore {
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
+    /// Block a peer AND delete all their stored messages (cascade purge).
+    /// Future payloads from this peer are dropped at the ingress layer.
+    #[wasm_bindgen(js_name = blockAndDeletePeer)]
+    pub fn block_and_delete_peer(
+        &self,
+        peer_id: String,
+        reason: Option<String>,
+    ) -> Result<(), JsValue> {
+        self.inner
+            .block_and_delete_peer(peer_id, reason)
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
+    }
+
     /// Check whether a peer is currently blocked.
     #[wasm_bindgen(js_name = isPeerBlocked)]
     pub fn is_peer_blocked(&self, peer_id: String) -> Result<bool, JsValue> {
@@ -905,7 +918,7 @@ impl IronCore {
     pub fn list_blocked_peers(&self) -> Result<js_sys::Array, JsValue> {
         let list = self
             .inner
-            .list_blocked_peers()
+            .list_blocked_peers_raw()
             .map_err(|e| js_value_from_str(&format!("{}", e)))?;
         let array = js_sys::Array::new();
         for item in list {
@@ -942,6 +955,12 @@ impl IronCore {
                 js_sys::Reflect::set(&obj, &JsValue::from_str("notes"), &JsValue::from_str(notes))
                     .map_err(|e| js_value_from_str(&format!("Failed to set notes: {:?}", e)))?;
             }
+            js_sys::Reflect::set(
+                &obj,
+                &JsValue::from_str("isDeleted"),
+                &JsValue::from_bool(item.is_deleted),
+            )
+            .map_err(|e| js_value_from_str(&format!("Failed to set isDeleted: {:?}", e)))?;
             array.push(&obj);
         }
         Ok(array)
@@ -1851,6 +1870,7 @@ mod tests {
             timestamp: 2,
             sender_timestamp: 2,
             delivered: false,
+            hidden: false,
         };
         history.add(outbound).unwrap();
 
@@ -1875,6 +1895,7 @@ mod tests {
             timestamp: 10,
             sender_timestamp: 10,
             delivered: false,
+            hidden: false,
         };
         let received = MessageRecord {
             id: "stats-recv".to_string(),
@@ -1884,6 +1905,7 @@ mod tests {
             timestamp: 11,
             sender_timestamp: 11,
             delivered: true,
+            hidden: false,
         };
 
         history.add(sent).unwrap();
@@ -1897,8 +1919,8 @@ mod tests {
     }
 
     fn temp_storage_path(label: &str) -> String {
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let nonce = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
         let path = std::env::temp_dir().join(format!("scm-wasm-{}-{}", label, nonce));

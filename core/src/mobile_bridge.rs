@@ -1303,7 +1303,7 @@ impl BootstrapResolver {
     /// Expects a JSON array of strings: `["/ip4/1.2.3.4/tcp/9001/p2p/..."]`
     #[cfg(not(target_arch = "wasm32"))]
     fn fetch_remote(&self, url: &str) -> Result<Vec<String>, String> {
-        let timeout = std::time::Duration::from_secs(self.config.fetch_timeout_secs as u64);
+        let timeout = web_time::Duration::from_secs(self.config.fetch_timeout_secs as u64);
         let resp = ureq::AgentBuilder::new()
             .timeout(timeout)
             .build()
@@ -1339,6 +1339,11 @@ pub struct MessageRecord {
     #[serde(default)]
     pub sender_timestamp: u64,
     pub delivered: bool,
+    /// When `true` the message is from a blocked-only peer and is retained for
+    /// evidentiary purposes but must be filtered out of all UI-facing queries.
+    /// The flag is cleared when the peer is unblocked.
+    #[serde(default)]
+    pub hidden: bool,
 }
 
 impl MessageRecord {
@@ -1405,6 +1410,25 @@ impl HistoryManager {
         peer_filter: Option<String>,
         limit: u32,
     ) -> Result<Vec<MessageRecord>, crate::IronCoreError> {
+        self.recent_internal(peer_filter, limit, false)
+    }
+
+    /// Like `recent()` but also returns messages that are hidden due to the
+    /// sender being blocked.  Used by administrative / evidentiary access paths.
+    pub fn recent_including_hidden(
+        &self,
+        peer_filter: Option<String>,
+        limit: u32,
+    ) -> Result<Vec<MessageRecord>, crate::IronCoreError> {
+        self.recent_internal(peer_filter, limit, true)
+    }
+
+    fn recent_internal(
+        &self,
+        peer_filter: Option<String>,
+        limit: u32,
+        include_hidden: bool,
+    ) -> Result<Vec<MessageRecord>, crate::IronCoreError> {
         let db = self.db.lock().unwrap();
         let mut records = Vec::new();
 
@@ -1413,6 +1437,11 @@ impl HistoryManager {
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
             let record = record.adjust_legacy_timestamps();
+
+            // Evidentiary retention: skip hidden messages in normal queries.
+            if record.hidden && !include_hidden {
+                continue;
+            }
 
             if let Some(ref peer) = peer_filter {
                 if &record.peer_id == peer {
@@ -1451,7 +1480,7 @@ impl HistoryManager {
                 serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
             let record = record.adjust_legacy_timestamps();
 
-            if record.peer_id == peer_id {
+            if record.peer_id.eq_ignore_ascii_case(&peer_id) {
                 keys_to_remove.push(key);
             }
         }
@@ -1483,12 +1512,42 @@ impl HistoryManager {
                 serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
             let record = record.adjust_legacy_timestamps();
 
+            // Evidentiary retention: skip hidden messages in search results.
+            if record.hidden {
+                continue;
+            }
+
             if record.content.to_lowercase().contains(&query_lower) {
                 results.push(record);
             }
         }
 
         Ok(results)
+    }
+
+    /// Unhide all stored messages for a given peer (called on unblock).
+    pub fn unhide_messages_for_peer(&self, peer_id: &str) -> Result<u32, crate::IronCoreError> {
+        let db = self.db.lock().unwrap();
+        let mut to_update: Vec<(Vec<u8>, MessageRecord)> = Vec::new();
+
+        for item in db.iter() {
+            let (key, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
+            let record: MessageRecord =
+                serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
+            if record.hidden && record.peer_id.eq_ignore_ascii_case(peer_id) {
+                to_update.push((key.to_vec(), record));
+            }
+        }
+
+        let count = to_update.len() as u32;
+        for (key, mut record) in to_update {
+            record.hidden = false;
+            let updated =
+                serde_json::to_vec(&record).map_err(|_| crate::IronCoreError::Internal)?;
+            db.insert(key, updated)
+                .map_err(|_| crate::IronCoreError::StorageError)?;
+        }
+        Ok(count)
     }
 
     pub fn mark_delivered(&self, id: String) -> Result<(), crate::IronCoreError> {
@@ -2094,8 +2153,8 @@ impl SwarmBridge {
 }
 
 fn current_timestamp() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64
 }
@@ -2397,6 +2456,7 @@ mod tests {
                     timestamp: 1_777_000_000,
                     sender_timestamp: 1_777_000_000,
                     delivered: false,
+                    hidden: false,
                 })
                 .unwrap();
             history.mark_delivered("msg-persist-1".to_string()).unwrap();
@@ -2427,6 +2487,7 @@ mod tests {
                 timestamp: 100,
                 sender_timestamp: 100,
                 delivered: false,
+                hidden: false,
             })
             .unwrap();
         history
@@ -2438,6 +2499,7 @@ mod tests {
                 timestamp: 200,
                 sender_timestamp: 200,
                 delivered: false,
+                hidden: false,
             })
             .unwrap();
         history
@@ -2449,6 +2511,7 @@ mod tests {
                 timestamp: 300,
                 sender_timestamp: 300,
                 delivered: true,
+                hidden: false,
             })
             .unwrap();
 
@@ -2477,7 +2540,7 @@ mod tests {
         ledger.record_connection("/ip4/1.2.3.4/tcp/1000".to_string(), "peer1".to_string()); // Make it successful
 
         // Simulate time passing and another peer
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(web_time::Duration::from_millis(10));
         ledger.record_connection("/ip4/5.6.7.8/tcp/2000".to_string(), "peer2".to_string());
         ledger.record_connection("/ip4/5.6.7.8/tcp/2000".to_string(), "peer2".to_string());
 
