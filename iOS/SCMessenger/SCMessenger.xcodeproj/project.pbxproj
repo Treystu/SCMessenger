@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		B79068C822FE4194ABC46890 /* SmartTransportRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26843792FCDC4F8089378862 /* SmartTransportRouter.swift */; };
 		DDAA70022F77700100387CC8 /* LocalTransportFallback.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDAA70012F77700100387CC8 /* LocalTransportFallback.swift */; };
+		DDAA70042F77701100387CC8 /* mDNSServiceDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDAA70032F77701100387CC8 /* mDNSServiceDiscovery.swift */; };
 		DDEB56C42F3FE0BD00387CC8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DDEB56BE2F3FE0BD00387CC8 /* Assets.xcassets */; };
 		DDEB56C62F3FE0BD00387CC8 /* JoinMeshView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56BB2F3FE0BD00387CC8 /* JoinMeshView.swift */; };
 		DDEB56C72F3FE0BD00387CC8 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56B72F3FE0BD00387CC8 /* OnboardingFlow.swift */; };
@@ -44,6 +45,7 @@
 /* Begin PBXFileReference section */
 		26843792FCDC4F8089378862 /* SmartTransportRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartTransportRouter.swift; sourceTree = "<group>"; };
 		DDAA70012F77700100387CC8 /* LocalTransportFallback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTransportFallback.swift; sourceTree = "<group>"; };
+		DDAA70032F77701100387CC8 /* mDNSServiceDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = mDNSServiceDiscovery.swift; sourceTree = "<group>"; };
 		DDEB56422F3FDFC500387CC8 /* SCMessenger.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SCMessenger.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DDEB56952F3FE0BD00387CC8 /* MeshRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshRepository.swift; sourceTree = "<group>"; };
 		DDEB56962F3FE0BD00387CC8 /* TopicManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicManager.swift; sourceTree = "<group>"; };
@@ -158,6 +160,7 @@
 				DDEB56A72F3FE0BD00387CC8 /* MeshBLEConstants.swift */,
 				DDAA70012F77700100387CC8 /* LocalTransportFallback.swift */,
 				DDEB56A82F3FE0BD00387CC8 /* MultipeerTransport.swift */,
+				DDAA70032F77701100387CC8 /* mDNSServiceDiscovery.swift */,
 			);
 			path = Transport;
 			sourceTree = "<group>";
@@ -383,6 +386,7 @@
 				DDEB56D42F3FE0BD00387CC8 /* Theme.swift in Sources */,
 				DDEB56D52F3FE0BD00387CC8 /* MultipeerTransport.swift in Sources */,
 				DDAA70022F77700100387CC8 /* LocalTransportFallback.swift in Sources */,
+				DDAA70042F77701100387CC8 /* mDNSServiceDiscovery.swift in Sources */,
 				DDEB56D62F3FE0BD00387CC8 /* MainTabView.swift in Sources */,
 				DDEB56D72F3FE0BD00387CC8 /* CoreDelegateImpl.swift in Sources */,
 				DDEB56D82F3FE0BD00387CC8 /* OnboardingViewModel.swift in Sources */,
