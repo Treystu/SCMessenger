@@ -35,6 +35,10 @@ final class mDNSServiceDiscovery: NSObject {
     private let serviceType = "_scmessenger._tcp"
     private let serviceName = "SCMessenger"
 
+    /// Callback when a LAN peer's address is resolved (host + port).
+    /// The caller can construct a multiaddr and dial via SwarmBridge.
+    var onLanPeerResolved: ((String, Int32) -> Void)?
+
     init(meshRepository: MeshRepository?) {
         self.meshRepository = meshRepository
         super.init()
@@ -169,6 +173,13 @@ extension mDNSServiceDiscovery: NetServiceDelegate {
             repo?.handleTransportPeerDiscovered(peerId: peerId)
             // Also send to event bus for UI
             MeshEventBus.shared.peerEvents.send(.discovered(peerId: peerId))
+        }
+
+        // TCP/mDNS parity: Notify the resolved LAN address so the caller
+        // can generate a libp2p multiaddr and dial via SwarmBridge.
+        if host != "unknown" && port > 0 {
+            logger.info("mDNS: LAN peer resolved at \(host):\(port) — notifying for SwarmBridge dial")
+            onLanPeerResolved?(host, port)
         }
     }
 

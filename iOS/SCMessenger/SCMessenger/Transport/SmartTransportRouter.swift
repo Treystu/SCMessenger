@@ -233,12 +233,14 @@ final class SmartTransportRouter {
         envelopeData: Data,
         multipeerPeerId: String?,
         blePeerId: String?,
+        tcpMdnsPeerId: String?,
         routePeerCandidates: [String],
         addresses: [String],
         traceMessageId: String?,
         attemptContext: String?,
         tryMultipeer: @escaping (String) async -> Bool,
         tryBle: @escaping (String) async -> Bool,
+        tryTcpMdns: @escaping (String) async -> Bool,
         tryCore: @escaping (String) async -> Bool
     ) async -> TransportDeliveryResult {
         let startTime = Date()
@@ -252,6 +254,10 @@ final class SmartTransportRouter {
         
         if let bleTarget = blePeerId?.trimmingCharacters(in: .whitespacesAndNewlines), !bleTarget.isEmpty {
             availableTransports.append((.ble, bleTarget, { await tryBle(bleTarget) }))
+        }
+        
+        if let tcpMdnsTarget = tcpMdnsPeerId?.trimmingCharacters(in: .whitespacesAndNewlines), !tcpMdnsTarget.isEmpty {
+            availableTransports.append((.tcpMdns, tcpMdnsTarget, { await tryTcpMdns(tcpMdnsTarget) }))
         }
         
         if let internetTarget = routePeerCandidates.first?.trimmingCharacters(in: .whitespacesAndNewlines), !internetTarget.isEmpty {

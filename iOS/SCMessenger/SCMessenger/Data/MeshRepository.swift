@@ -153,6 +153,10 @@ final class MeshRepository {
     private var notificationAppInForeground = true
     private var notificationActiveConversationId: String?
 
+    // TCP/mDNS transport parity: Track peers discovered on LAN via libp2p mDNS.
+    // Key = libp2p PeerId, Value = array of LAN multiaddresses for direct TCP delivery.
+    private var mdnsLanPeers: [String: [String]] = [:]
+
     private enum RelayAvailabilityState: String {
         case stable
         case flapping
@@ -3320,6 +3324,26 @@ final class MeshRepository {
             return
         }
 
+        // TCP/mDNS parity: Detect LAN addresses (RFC1918) from listen_addrs.
+        // If any private-network TCP/QUIC address is present, this peer
+        // was discovered on the local network (typically via libp2p mDNS).
+        let lanAddrs = listenAddrs.filter { addr in
+            let a = addr.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (a.hasPrefix("/ip4/192.168.") ||
+                    a.hasPrefix("/ip4/10.") ||
+                    a.hasPrefix("/ip4/172.16.") || a.hasPrefix("/ip4/172.17.") ||
+                    a.hasPrefix("/ip4/172.18.") || a.hasPrefix("/ip4/172.19.") ||
+                    a.hasPrefix("/ip4/172.2") || a.hasPrefix("/ip4/172.30.") ||
+                    a.hasPrefix("/ip4/172.31.")) &&
+                   (a.contains("/tcp/") || a.contains("/udp/"))
+        }
+        if !lanAddrs.isEmpty {
+            mdnsLanPeers[trimmedPeerId] = lanAddrs
+            logger.info("TCP/mDNS: LAN peer detected \(trimmedPeerId) with \(lanAddrs.count) local addresses")
+        } else {
+            mdnsLanPeers.removeValue(forKey: trimmedPeerId)
+        }
+
         let dialCandidates = buildDialCandidatesForPeer(
             routePeerId: peerId,
             rawAddresses: listenAddrs,
@@ -3359,7 +3383,7 @@ final class MeshRepository {
                     canonicalPeerId: transportIdentity.canonicalPeerId,
                     publicKey: transportIdentity.publicKey,
                     nickname: discoveredNickname,
-                    transport: .internet,
+                    transport: mdnsLanPeers[trimmedPeerId] != nil ? .tcpMdns : .internet,
                     isFull: true,
                     isRelay: isBootstrapRelayPeer(peerId),
                     lastSeen: UInt64(Date().timeIntervalSince1970)
@@ -4005,6 +4029,10 @@ final class MeshRepository {
                 envelopeData: envelopeData,
                 multipeerPeerId: strictBleOnly ? nil : multipeerPeerId,
                 blePeerId: effectiveBlePeerId,
+                tcpMdnsPeerId: routePeerCandidates.first.flatMap { candidate in
+                    let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return mdnsLanPeers[trimmed] != nil ? trimmed : nil
+                },
                 routePeerCandidates: routePeerCandidates,
                 addresses: addresses,
                 traceMessageId: traceMessageId,
@@ -4099,6 +4127,61 @@ final class MeshRepository {
                         detail: "ctx=\(attemptContext) requested_target=\(bleAddr) reason=\(lastFailureReason) connected=\(connectedBlePeerIds.count)"
                     )
                     return false
+                },
+                tryTcpMdns: { [self] lanPeerId in
+                    // TCP/mDNS transport: Direct LAN delivery via libp2p TCP.
+                    // This peer was discovered via mDNS and has LAN addresses — skip relay.
+                    guard let swarmBridge = self.swarmBridge else {
+                        self.logDeliveryAttempt(
+                            messageId: traceMessageId,
+                            medium: "tcp_mdns",
+                            phase: "smart_router",
+                            outcome: "failed",
+                            detail: "ctx=\(attemptContext) reason=swarm_bridge_unavailable"
+                        )
+                        return false
+                    }
+
+                    // Dial LAN addresses directly (no relay circuits)
+                    let lanAddrs = self.mdnsLanPeers[lanPeerId] ?? []
+                    if !lanAddrs.isEmpty {
+                        let dialCandidates = self.buildDialCandidatesForPeer(
+                            routePeerId: lanPeerId,
+                            rawAddresses: lanAddrs,
+                            includeRelayCircuits: false
+                        )
+                        if !dialCandidates.isEmpty {
+                            self.connectToPeer(lanPeerId, addresses: dialCandidates)
+                            _ = await self.awaitPeerConnection(peerId: lanPeerId)
+                        }
+                    }
+
+                    let sendError = swarmBridge.sendMessageStatus(
+                        peerId: lanPeerId,
+                        data: envelopeData,
+                        recipientIdentityId: recipientIdentityId,
+                        intendedDeviceId: intendedDeviceId
+                    )
+
+                    if sendError == nil {
+                        self.logDeliveryAttempt(
+                            messageId: traceMessageId,
+                            medium: "tcp_mdns",
+                            phase: "smart_router",
+                            outcome: "success",
+                            detail: "ctx=\(attemptContext) route=\(lanPeerId) lan_addrs=\(lanAddrs.count)"
+                        )
+                        return true
+                    } else {
+                        self.logDeliveryAttempt(
+                            messageId: traceMessageId,
+                            medium: "tcp_mdns",
+                            phase: "smart_router",
+                            outcome: "failed",
+                            detail: "ctx=\(attemptContext) route=\(String(describing: lanPeerId)) reason=\(String(describing: sendError ?? "unknown"))"
+                        )
+                        return false
+                    }
                 },
                 tryCore: { [self] corePeerId in
                     // Core transport attempt (libp2p/internet relay)
