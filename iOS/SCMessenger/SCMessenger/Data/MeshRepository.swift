@@ -656,7 +656,8 @@ final class MeshRepository {
             let discovery = mDNSServiceDiscovery(meshRepository: self)
             discovery.onLanPeerResolved = { [weak self] peerId, host, port in
                 guard let self, let bridge = self.swarmBridge else { return }
-                let multiaddr = "/ip4/\(host)/tcp/\(port)"
+                let ipProto = host.contains(":") ? "ip6" : "ip4"
+                let multiaddr = "/\(ipProto)/\(host)/tcp/\(port)"
                 self.logger.info("mDNS: Dialing resolved LAN peer \(peerId) at \(multiaddr)")
                 do {
                     try bridge.dial(multiaddr: multiaddr)
@@ -732,10 +733,10 @@ final class MeshRepository {
         serviceState = .stopped
         statusEvents.send(.serviceStateChanged(.stopped))
 
-        bleCentralManager?.stopScanning()
-        blePeripheralManager?.stopAdvertising()
         mdnsDiscovery?.cleanup()
         mdnsDiscovery = nil
+        bleCentralManager?.stopScanning()
+        blePeripheralManager?.stopAdvertising()
         multipeerTransport?.disconnect()
         multipeerTransport = nil
 
