@@ -368,7 +368,8 @@ class SmartTransportRouter {
         Timber.tag(TAG).i("Racing ${availableTransports.count()} transports for peer ${peerId.take(8)}")
 
         val result = coroutineScope {
-            val winner = CompletableDeferred<Triple<TransportType, Boolean, Long>>()
+            // null = no winner yet; non-null = first successful transport result
+            val winner = CompletableDeferred<Triple<TransportType, Boolean, Long>?>()
 
             val jobs = availableTransports.map { transportAttempt ->
                 launch {
@@ -386,19 +387,19 @@ class SmartTransportRouter {
                 }
             }
 
-            // When all jobs finish without a success, unblock winner with a failure sentinel.
+            // When all jobs finish without a success, complete winner with null (no winner).
             // complete() is a no-op if winner was already completed by a successful transport.
             val waitJob = launch {
                 jobs.forEach { it.join() }
-                winner.complete(Triple(TransportType.CORE, false, 0L))
+                winner.complete(null)
             }
 
             val resolved = winner.await()
-            // cancelAndJoin ensures waitJob is fully stopped before we cancel individual jobs,
-            // avoiding a race between the waitJob's join() calls and our cancel() calls below.
+            // cancelAndJoin ensures waitJob and all transport jobs are fully stopped before
+            // we return, preventing any dangling coroutines.
             waitJob.cancelAndJoin()
-            jobs.forEach { it.cancel() }
-            if (resolved.second) resolved else null
+            jobs.forEach { it.cancelAndJoin() }
+            resolved
         }
 
         return if (result != null) {
