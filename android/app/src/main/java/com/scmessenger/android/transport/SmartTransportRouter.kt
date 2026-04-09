@@ -386,24 +386,19 @@ class SmartTransportRouter {
                 }
             }
 
-            // Await all jobs to finish (or the winner to be set), then cancel remaining work
-            val firstSuccess: Triple<TransportType, Boolean, Long>? = if (winner.isCompleted) {
-                winner.getCompleted()
-            } else {
-                // Race: cancel as soon as the first success arrives or all jobs finish
-                val waitJob = launch {
-                    jobs.forEach { it.join() }
-                    // All finished without success – complete with a sentinel failure value so
-                    // the select below can unblock.
-                    winner.complete(Triple(TransportType.CORE, false, 0L))
-                }
-                val resolved = winner.await()
-                waitJob.cancel()
-                jobs.forEach { it.cancel() }
-                if (resolved.second) resolved else null
+            // When all jobs finish without a success, unblock winner with a failure sentinel.
+            // complete() is a no-op if winner was already completed by a successful transport.
+            val waitJob = launch {
+                jobs.forEach { it.join() }
+                winner.complete(Triple(TransportType.CORE, false, 0L))
             }
 
-            firstSuccess
+            val resolved = winner.await()
+            // cancelAndJoin ensures waitJob is fully stopped before we cancel individual jobs,
+            // avoiding a race between the waitJob's join() calls and our cancel() calls below.
+            waitJob.cancelAndJoin()
+            jobs.forEach { it.cancel() }
+            if (resolved.second) resolved else null
         }
 
         return if (result != null) {
