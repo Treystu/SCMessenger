@@ -16,7 +16,8 @@ import timber.log.Timber
 class MdnsServiceDiscovery(
     private val context: Context,
     private val onPeerDiscovered: (peerId: String) -> Unit,
-    private val onDataReceived: (peerId: String, data: ByteArray) -> Unit
+    private val onDataReceived: (peerId: String, data: ByteArray) -> Unit,
+    private val onLanPeerResolved: ((peerId: String, host: String, port: Int) -> Unit)? = null
 ) {
     private var nsdManager: NsdManager? = null
     private var registrationListener: NsdManager.RegistrationListener? = null
@@ -191,6 +192,15 @@ class MdnsServiceDiscovery(
 
                 // Notify discovery
                 onPeerDiscovered(peerId)
+
+                // TCP/mDNS parity: Notify the resolved LAN address so the caller
+                // can generate a libp2p multiaddr and dial via SwarmBridge.
+                val host = serviceInfo.host?.hostAddress
+                val port = serviceInfo.port
+                if (host != null && port > 0) {
+                    Timber.i("mDNS: LAN peer resolved $peerId at $host:$port — notifying for SwarmBridge dial")
+                    onLanPeerResolved?.invoke(peerId, host, port)
+                }
             }
         }
 

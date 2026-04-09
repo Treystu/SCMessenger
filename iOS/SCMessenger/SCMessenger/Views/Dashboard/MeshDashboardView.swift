@@ -10,6 +10,7 @@ import SwiftUI
 struct DashboardPeer: Identifiable, Equatable {
     enum Transport: String {
         case ble = "BLE"
+        case tcpMdns = "TCP/mDNS"
         case internet = "Internet"
         case unknown = "Unknown"
     }
@@ -461,7 +462,8 @@ struct MeshDashboardView: View {
             if let primaryId = existingPrimary, var existing = deduped[primaryId] {
                 existing.isOnline = existing.isOnline || peer.isOnline
                 existing.lastSeen = max(existing.lastSeen, peer.lastSeen)
-                existing.transport = (existing.transport == .internet || peer.transport == .internet) ? .internet : existing.transport
+                existing.transport = (existing.transport == .tcpMdns || peer.transport == .tcpMdns) ? .tcpMdns :
+                    (existing.transport == .internet || peer.transport == .internet) ? .internet : existing.transport
                 existing.isRelay = existing.isRelay || peer.isRelay
                 existing.isFull = existing.isFull || peer.isFull
                 if existing.publicKey == nil { existing.publicKey = peer.publicKey }
@@ -513,6 +515,18 @@ struct MeshDashboardView: View {
         let trimmed = multiaddr.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.contains("/ble/") {
             return .ble
+        }
+        // Detect LAN-direct peers via RFC1918 private IP addresses
+        if (trimmed.contains("/tcp/") || trimmed.contains("/udp/")) {
+            if trimmed.hasPrefix("/ip4/192.168.") || trimmed.hasPrefix("/ip4/10.") {
+                return .tcpMdns
+            }
+            if trimmed.hasPrefix("/ip4/172.") {
+                let parts = trimmed.dropFirst("/ip4/".count).split(separator: ".")
+                if parts.count >= 2, let octet = Int(parts[1]), (16...31).contains(octet) {
+                    return .tcpMdns
+                }
+            }
         }
         if trimmed.contains("/ip4/") || trimmed.contains("/ip6/") || trimmed.contains("/p2p-circuit/") {
             return .internet
@@ -657,6 +671,7 @@ struct TransportStatusSection: View {
 
             TransportStatusRow(type: .multipeer, isActive: true)
             TransportStatusRow(type: .ble, isActive: true)
+            TransportStatusRow(type: .tcpMdns, isActive: repository.networkStatus.wifi)
             TransportStatusRow(type: .internet, isActive: repository.networkStatus.available)
         }
         .padding(Theme.spacingMedium)

@@ -111,7 +111,8 @@ final class MeshRepository {
     private var bleCentralManager: BLECentralManager?
     private var blePeripheralManager: BLEPeripheralManager?
     private var multipeerTransport: MultipeerTransport?
-    
+    private var mdnsDiscovery: mDNSServiceDiscovery?
+
     // Smart Transport Router (500ms timeout fallback + health tracking)
     private var smartTransportRouter: SmartTransportRouter?
 
@@ -152,6 +153,10 @@ final class MeshRepository {
     private let receiptSendMaxAttempts = 6
     private var notificationAppInForeground = true
     private var notificationActiveConversationId: String?
+
+    // TCP/mDNS transport parity: Track peers discovered on LAN via libp2p mDNS.
+    // Key = libp2p PeerId, Value = array of LAN multiaddresses for direct TCP delivery.
+    private var mdnsLanPeers: [String: [String]] = [:]
 
     private enum RelayAvailabilityState: String {
         case stable
@@ -646,6 +651,22 @@ final class MeshRepository {
             multipeerTransport?.startBrowsing()
             blePeripheralManager?.startAdvertising()
             bleCentralManager?.startScanning()
+
+            // Start mDNS/DNS-SD service discovery for cross-platform LAN peer resolution
+            let discovery = mDNSServiceDiscovery(meshRepository: self)
+            discovery.onLanPeerResolved = { [weak self] peerId, host, port in
+                guard let self, let bridge = self.swarmBridge else { return }
+                let ipProto = host.contains(":") ? "ip6" : "ip4"
+                let multiaddr = "/\(ipProto)/\(host)/tcp/\(port)"
+                self.logger.info("mDNS: Dialing resolved LAN peer \(peerId) at \(multiaddr)")
+                do {
+                    try bridge.dial(multiaddr: multiaddr)
+                } catch {
+                    self.logger.error("mDNS: Failed to dial \(multiaddr): \(error.localizedDescription)")
+                }
+            }
+            discovery.startBrowsing()
+            mdnsDiscovery = discovery
             applyPowerAdjustments(reason: "service_started")
             startPendingOutboxRetryLoop()
             startCoverTrafficLoopIfEnabled()
@@ -707,10 +728,13 @@ final class MeshRepository {
         historySyncSentPeers.removeAll()
         identityEmissionCache.removeAll()
         connectedEmissionCache.removeAll()
+        mdnsLanPeers.removeAll()
 
         serviceState = .stopped
         statusEvents.send(.serviceStateChanged(.stopped))
 
+        mdnsDiscovery?.cleanup()
+        mdnsDiscovery = nil
         bleCentralManager?.stopScanning()
         blePeripheralManager?.stopAdvertising()
         multipeerTransport?.disconnect()
@@ -3288,6 +3312,7 @@ final class MeshRepository {
             updateRelayAvailability(peerId: trimmedId, event: "disconnected")
         }
         connectedEmissionCache.removeValue(forKey: trimmedId)
+        mdnsLanPeers.removeValue(forKey: trimmedId)
         pruneDisconnectedPeer(peerId)
     }
 
@@ -3318,6 +3343,32 @@ final class MeshRepository {
         if let selfLibp2p, !selfLibp2p.isEmpty, selfLibp2p == peerId {
             logger.debug("Ignoring self transport identity: \(peerId)")
             return
+        }
+
+        // TCP/mDNS parity: Detect LAN addresses (RFC1918) from listen_addrs.
+        // If any private-network TCP/QUIC address is present, this peer
+        // was discovered on the local network (typically via libp2p mDNS).
+        let lanAddrs = listenAddrs.filter { addr in
+            let a = addr.trimmingCharacters(in: .whitespacesAndNewlines)
+            let isPrivateIp: Bool = {
+                if a.hasPrefix("/ip4/192.168.") || a.hasPrefix("/ip4/10.") {
+                    return true
+                }
+                if a.hasPrefix("/ip4/172.") {
+                    let parts = a.dropFirst("/ip4/".count).split(separator: ".")
+                    if parts.count >= 2, let octet = Int(parts[1]) {
+                        return (16...31).contains(octet)
+                    }
+                }
+                return false
+            }()
+            return isPrivateIp && (a.contains("/tcp/") || a.contains("/udp/"))
+        }
+        if !lanAddrs.isEmpty {
+            mdnsLanPeers[trimmedPeerId] = lanAddrs
+            logger.info("TCP/mDNS: LAN peer detected \(trimmedPeerId) with \(lanAddrs.count) local addresses")
+        } else {
+            mdnsLanPeers.removeValue(forKey: trimmedPeerId)
         }
 
         let dialCandidates = buildDialCandidatesForPeer(
@@ -3359,7 +3410,7 @@ final class MeshRepository {
                     canonicalPeerId: transportIdentity.canonicalPeerId,
                     publicKey: transportIdentity.publicKey,
                     nickname: discoveredNickname,
-                    transport: .internet,
+                    transport: mdnsLanPeers[trimmedPeerId] != nil ? .tcpMdns : .internet,
                     isFull: true,
                     isRelay: isBootstrapRelayPeer(peerId),
                     lastSeen: UInt64(Date().timeIntervalSince1970)
@@ -4005,6 +4056,10 @@ final class MeshRepository {
                 envelopeData: envelopeData,
                 multipeerPeerId: strictBleOnly ? nil : multipeerPeerId,
                 blePeerId: effectiveBlePeerId,
+                tcpMdnsPeerId: routePeerCandidates.first(where: { candidate in
+                    let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return !trimmed.isEmpty && (mdnsLanPeers[trimmed]?.isEmpty == false)
+                }).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) },
                 routePeerCandidates: routePeerCandidates,
                 addresses: addresses,
                 traceMessageId: traceMessageId,
@@ -4099,6 +4154,61 @@ final class MeshRepository {
                         detail: "ctx=\(attemptContext) requested_target=\(bleAddr) reason=\(lastFailureReason) connected=\(connectedBlePeerIds.count)"
                     )
                     return false
+                },
+                tryTcpMdns: { [self] lanPeerId in
+                    // TCP/mDNS transport: Direct LAN delivery via libp2p TCP.
+                    // This peer was discovered via mDNS and has LAN addresses — skip relay.
+                    guard let swarmBridge = self.swarmBridge else {
+                        self.logDeliveryAttempt(
+                            messageId: traceMessageId,
+                            medium: "tcp_mdns",
+                            phase: "smart_router",
+                            outcome: "failed",
+                            detail: "ctx=\(attemptContext) reason=swarm_bridge_unavailable"
+                        )
+                        return false
+                    }
+
+                    // Dial LAN addresses directly (no relay circuits)
+                    let lanAddrs = self.mdnsLanPeers[lanPeerId] ?? []
+                    if !lanAddrs.isEmpty {
+                        let dialCandidates = self.buildDialCandidatesForPeer(
+                            routePeerId: lanPeerId,
+                            rawAddresses: lanAddrs,
+                            includeRelayCircuits: false
+                        )
+                        if !dialCandidates.isEmpty {
+                            self.connectToPeer(lanPeerId, addresses: dialCandidates)
+                            _ = await self.awaitPeerConnection(peerId: lanPeerId)
+                        }
+                    }
+
+                    let sendError = swarmBridge.sendMessageStatus(
+                        peerId: lanPeerId,
+                        data: envelopeData,
+                        recipientIdentityId: recipientIdentityId,
+                        intendedDeviceId: intendedDeviceId
+                    )
+
+                    if sendError == nil {
+                        self.logDeliveryAttempt(
+                            messageId: traceMessageId,
+                            medium: "tcp_mdns",
+                            phase: "smart_router",
+                            outcome: "success",
+                            detail: "ctx=\(attemptContext) route=\(lanPeerId) lan_addrs=\(lanAddrs.count)"
+                        )
+                        return true
+                    } else {
+                        self.logDeliveryAttempt(
+                            messageId: traceMessageId,
+                            medium: "tcp_mdns",
+                            phase: "smart_router",
+                            outcome: "failed",
+                            detail: "ctx=\(attemptContext) route=\(lanPeerId) reason=\(sendError ?? "unknown")"
+                        )
+                        return false
+                    }
                 },
                 tryCore: { [self] corePeerId in
                     // Core transport attempt (libp2p/internet relay)

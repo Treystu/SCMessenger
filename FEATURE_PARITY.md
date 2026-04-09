@@ -1,5 +1,5 @@
 Status: Active
-Last updated: 2026-03-27
+Last updated: 2026-04-09
 
 # Feature Parity & Cross-Platform Function Audit
 
@@ -141,16 +141,20 @@ Legend: ✅ = Wired & callable | ⚠️ = Partially wired | ❌ = Not wired | N/
 | WiFi Aware               | N/A  | N/A | ✅      | N/A | N/A  | Android only |
 | Multipeer Connectivity   | N/A  | N/A | N/A     | ✅  | N/A  | iOS only |
 | mDNS Discovery           | ✅   | ✅  | ✅      | ✅  | N/A  | |
-| TCP/QUIC (libp2p)        | ✅   | ✅  | N/A     | N/A | N/A  | CLI only; mobile uses native |
+| TCP/QUIC (libp2p)        | ✅   | ✅  | ✅      | ✅  | N/A  | Mobile via SwarmBridge TCP_MDNS transport (2026-04-09) |
+| TCP/mDNS LAN delivery    | ✅   | ✅  | ✅      | ✅  | N/A  | SmartTransportRouter scores TCP_MDNS for LAN peers |
 | WebSocket/WebRTC         | ✅   | N/A | N/A     | N/A | ⚠️   | WASM partial |
 
 ---
 
 ## [Current] Remaining Parity Gaps
 
-### None — 100% feature parity achieved (2026-03-27)
+### None — 100% feature parity achieved (2026-03-27, transport parity 2026-04-09)
 
-All core API functions are now wired across all applicable platforms. The remaining
+All core API functions are now wired across all applicable platforms. TCP/mDNS transport
+parity was achieved on 2026-04-09: SmartTransportRouter on Android and iOS now includes
+a `TCP_MDNS` transport type that scores and routes LAN-discovered peers via libp2p TCP
+through SwarmBridge, separate from internet relay. The remaining
 items marked N/A are intentional design choices:
 
 - **`setDelegate` on WASM**: Browser uses polling via `drainReceivedMessages` instead

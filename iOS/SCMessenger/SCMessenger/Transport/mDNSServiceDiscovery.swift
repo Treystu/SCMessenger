@@ -35,6 +35,10 @@ final class mDNSServiceDiscovery: NSObject {
     private let serviceType = "_scmessenger._tcp"
     private let serviceName = "SCMessenger"
 
+    /// Callback when a LAN peer is resolved (`peerId`, `host`, `port`).
+    /// The caller can construct a peer-specific multiaddr and dial via SwarmBridge.
+    var onLanPeerResolved: ((String, String, Int32) -> Void)?
+
     init(meshRepository: MeshRepository?) {
         self.meshRepository = meshRepository
         super.init()
@@ -149,12 +153,12 @@ extension mDNSServiceDiscovery: NetServiceDelegate {
                 var sin = address.withUnsafeBytes { $0.load(as: sockaddr_in.self) }
                 inet_ntop(AF_INET, &sin.sin_addr, &buffer, socklen_t(INET_ADDRSTRLEN))
                 host = String(cString: buffer)
-                port = Int32(sin.sin_port)
+                port = Int32(UInt16(bigEndian: sin.sin_port))
             } else if firstSockaddr.sa_family == sa_family_t(AF_INET6) {
                 var sin6 = address.withUnsafeBytes { $0.load(as: sockaddr_in6.self) }
                 inet_ntop(AF_INET6, &sin6.sin6_addr, &buffer, socklen_t(INET6_ADDRSTRLEN))
                 host = String(cString: buffer)
-                port = Int32(sin6.sin6_port)
+                port = Int32(UInt16(bigEndian: sin6.sin6_port))
             }
         }
 
@@ -169,6 +173,13 @@ extension mDNSServiceDiscovery: NetServiceDelegate {
             repo?.handleTransportPeerDiscovered(peerId: peerId)
             // Also send to event bus for UI
             MeshEventBus.shared.peerEvents.send(.discovered(peerId: peerId))
+        }
+
+        // TCP/mDNS parity: Notify the resolved LAN address so the caller
+        // can generate a libp2p multiaddr and dial via SwarmBridge.
+        if host != "unknown" && port > 0 {
+            logger.info("mDNS: LAN peer resolved \(peerId) at \(host):\(port) — notifying for SwarmBridge dial")
+            onLanPeerResolved?(peerId, host, port)
         }
     }
 

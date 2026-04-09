@@ -71,5 +71,6 @@ final class MeshEventBus {
         case ble = "BLE"
         case multipeer = "Multipeer"
         case internet = "Internet"
+        case tcpMdns = "TCP/mDNS"
     }
 }

@@ -134,6 +134,7 @@ class DashboardViewModel @Inject constructor(
                         com.scmessenger.android.service.TransportType.WIFI_AWARE -> "WiFi Aware"
                         com.scmessenger.android.service.TransportType.WIFI_DIRECT -> "WiFi Direct"
                         com.scmessenger.android.service.TransportType.INTERNET -> "Internet"
+                        com.scmessenger.android.service.TransportType.TCP_MDNS -> "TCP/mDNS"
                     },
                     isOnline = isRecent(info.lastSeen),
                     isFull = info.isFull,

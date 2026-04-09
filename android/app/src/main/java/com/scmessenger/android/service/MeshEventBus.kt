@@ -139,7 +139,8 @@ enum class TransportType {
     BLE,
     WIFI_AWARE,
     WIFI_DIRECT,
-    INTERNET
+    INTERNET,
+    TCP_MDNS
 }
 
 /**

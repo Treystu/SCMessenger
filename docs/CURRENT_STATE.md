@@ -1,9 +1,44 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-03-30
+Last updated: 2026-04-09
 
-Last verified: **2026-03-30** (v0.2.1 contact block state machine complete, all PR review comments resolved, alpha rollout plan created)
+Last verified: **2026-04-09** (TCP/mDNS transport parity achieved across all platforms)
+
+---
+
+## 2026-04-09: TCP/mDNS Transport Parity
+
+**Status:** ✅ IMPLEMENTATION COMPLETE
+
+### Overview
+
+Full TCP/mDNS transport parity is now achieved across Android and iOS. Both platforms'
+`SmartTransportRouter` now includes a `TCP_MDNS` transport type that:
+
+1. **Detects LAN peers** — When the core's libp2p mDNS discovers a peer and the Identify
+   protocol reveals RFC1918 (private network) listen addresses, the mobile platform marks
+   the peer as LAN-reachable in `mdnsLanPeers`.
+
+2. **Scores TCP/mDNS separately** — `TCP_MDNS` is scored independently from `CORE`/`Internet`
+   in the SmartTransportRouter health system. LAN delivery typically achieves sub-10ms
+   latency, so TCP_MDNS naturally wins the scoring race.
+
+3. **Routes via SwarmBridge without relay** — The `tryTcpMdns` transport attempt dials
+   directly using LAN addresses (no relay circuits) and sends via `SwarmBridge.sendMessage()`.
+
+4. **Platform mDNS enhanced** — `MdnsServiceDiscovery` (Android) and `mDNSServiceDiscovery`
+   (iOS) now expose resolved LAN addresses via callbacks for SwarmBridge integration.
+
+### Cross-Platform Transport Matrix
+
+| Transport      | Android | iOS  | Notes |
+|----------------|---------|------|-------|
+| WiFi Direct    | ✅      | N/A  | Android only |
+| Multipeer      | N/A     | ✅   | iOS only |
+| BLE            | ✅      | ✅   | L2CAP/GATT |
+| TCP/mDNS (LAN) | ✅     | ✅   | NEW — via SwarmBridge |
+| Internet (Core) | ✅     | ✅   | Relay/bootstrap |
 
 ---
 

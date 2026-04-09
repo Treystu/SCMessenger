@@ -59,12 +59,14 @@ enum TransportType: String, CaseIterable {
     case multipeer = "Multipeer"
     case ble = "BLE"
     case internet = "Internet"
+    case tcpMdns = "TCP/mDNS"
 
     var icon: String {
         switch self {
         case .multipeer: return "wifi"
         case .ble: return "antenna.radiowaves.left.and.right"
         case .internet: return "network"
+        case .tcpMdns: return "link"
         }
     }
 }
