@@ -4152,11 +4152,12 @@ open class MeshRepository(private val context: Context) {
                 envelopeData = encryptedData,
                 wifiPeerId = if (strictBleOnly) null else wifiPeerId,
                 blePeerId = effectiveBlePeerId,
-                tcpMdnsPeerId = routePeerCandidates.firstOrNull()?.let { candidate ->
-                    // If any route peer candidate is a known mDNS LAN peer, offer TCP/mDNS path
-                    val trimmed = candidate.trim()
-                    if (mdnsLanPeers[trimmed]?.isNotEmpty() == true) trimmed else null
-                },
+                tcpMdnsPeerId = routePeerCandidates
+                    .firstOrNull { candidate ->
+                        val trimmed = candidate.trim()
+                        mdnsLanPeers[trimmed]?.isNotEmpty() == true
+                    }
+                    ?.trim(),
                 routePeerCandidates = routePeerCandidates,
                 listeners = listeners,
                 traceMessageId = traceMessageId,

@@ -17,7 +17,7 @@ class MdnsServiceDiscovery(
     private val context: Context,
     private val onPeerDiscovered: (peerId: String) -> Unit,
     private val onDataReceived: (peerId: String, data: ByteArray) -> Unit,
-    private val onLanPeerResolved: ((host: String, port: Int) -> Unit)? = null
+    private val onLanPeerResolved: ((peerId: String, host: String, port: Int) -> Unit)? = null
 ) {
     private var nsdManager: NsdManager? = null
     private var registrationListener: NsdManager.RegistrationListener? = null
@@ -198,8 +198,8 @@ class MdnsServiceDiscovery(
                 val host = serviceInfo.host?.hostAddress
                 val port = serviceInfo.port
                 if (host != null && port > 0) {
-                    Timber.i("mDNS: LAN peer resolved at $host:$port — notifying for SwarmBridge dial")
-                    onLanPeerResolved?.invoke(host, port)
+                    Timber.i("mDNS: LAN peer resolved $peerId at $host:$port — notifying for SwarmBridge dial")
+                    onLanPeerResolved?.invoke(peerId, host, port)
                 }
             }
         }

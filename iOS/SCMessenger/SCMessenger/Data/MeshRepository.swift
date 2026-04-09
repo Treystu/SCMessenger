@@ -4035,10 +4035,10 @@ final class MeshRepository {
                 envelopeData: envelopeData,
                 multipeerPeerId: strictBleOnly ? nil : multipeerPeerId,
                 blePeerId: effectiveBlePeerId,
-                tcpMdnsPeerId: routePeerCandidates.first.flatMap { candidate in
+                tcpMdnsPeerId: routePeerCandidates.first(where: { candidate in
                     let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
-                    return (mdnsLanPeers[trimmed]?.isEmpty == false) ? trimmed : nil
-                },
+                    return !trimmed.isEmpty && (mdnsLanPeers[trimmed]?.isEmpty == false)
+                }).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) },
                 routePeerCandidates: routePeerCandidates,
                 addresses: addresses,
                 traceMessageId: traceMessageId,

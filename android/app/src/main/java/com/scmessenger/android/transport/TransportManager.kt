@@ -202,6 +202,10 @@ class TransportManager(
                 // Handled by SwarmBridge, not here
                 false
             }
+            TransportType.TCP_MDNS -> {
+                // Handled by SwarmBridge via LAN TCP, not here
+                false
+            }
         }
     }
 
@@ -372,6 +376,9 @@ class TransportManager(
             TransportType.INTERNET -> {
                 // Handled separately by SwarmBridge
             }
+            TransportType.TCP_MDNS -> {
+                // Handled separately by SwarmBridge via LAN TCP
+            }
         }
     }
 
@@ -392,6 +399,9 @@ class TransportManager(
             }
             TransportType.INTERNET -> {
                 // Handled separately by SwarmBridge
+            }
+            TransportType.TCP_MDNS -> {
+                // Handled separately by SwarmBridge via LAN TCP
             }
         }
 

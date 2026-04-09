@@ -657,7 +657,7 @@ struct TransportStatusSection: View {
 
             TransportStatusRow(type: .multipeer, isActive: true)
             TransportStatusRow(type: .ble, isActive: true)
-            TransportStatusRow(type: .tcpMdns, isActive: repository.networkStatus.available)
+            TransportStatusRow(type: .tcpMdns, isActive: repository.networkStatus.wifi)
             TransportStatusRow(type: .internet, isActive: repository.networkStatus.available)
         }
         .padding(Theme.spacingMedium)
