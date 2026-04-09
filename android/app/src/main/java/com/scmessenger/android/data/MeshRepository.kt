@@ -237,6 +237,10 @@ open class MeshRepository(private val context: Context) {
     private val dialThrottleLogCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val dialThrottleLogIntervalMs = 300_000L
 
+    // TCP/mDNS transport parity: Track peers discovered on LAN via libp2p mDNS.
+    // Key = libp2p PeerId, Value = set of LAN multiaddresses for direct TCP delivery.
+    private val mdnsLanPeers = ConcurrentHashMap<String, List<String>>()
+
     // Core Delegate reference to prevent GC
     private var coreDelegate: uniffi.api.CoreDelegate? = null
 
@@ -821,6 +825,26 @@ open class MeshRepository(private val context: Context) {
                             return@launch
                         }
 
+                        // TCP/mDNS parity: Detect LAN addresses (RFC1918) from listen_addrs.
+                        // If any private-network TCP/QUIC address is present, this peer
+                        // was discovered on the local network (typically via libp2p mDNS).
+                        val lanAddrs = listenAddrs.filter { addr ->
+                            val a = addr.trim()
+                            (a.startsWith("/ip4/192.168.") ||
+                             a.startsWith("/ip4/10.") ||
+                             a.startsWith("/ip4/172.16.") || a.startsWith("/ip4/172.17.") ||
+                             a.startsWith("/ip4/172.18.") || a.startsWith("/ip4/172.19.") ||
+                             a.startsWith("/ip4/172.2") || a.startsWith("/ip4/172.30.") ||
+                             a.startsWith("/ip4/172.31.")) &&
+                            (a.contains("/tcp/") || a.contains("/udp/"))
+                        }
+                        if (lanAddrs.isNotEmpty()) {
+                            mdnsLanPeers[trimmedPeerId] = lanAddrs
+                            Timber.i("TCP/mDNS: LAN peer detected $trimmedPeerId with ${lanAddrs.size} local addresses")
+                        } else {
+                            mdnsLanPeers.remove(trimmedPeerId)
+                        }
+
 	                        val dialCandidates = buildDialCandidatesForPeer(
 	                            routePeerId = peerId,
 	                            rawAddresses = listenAddrs,
@@ -857,13 +881,17 @@ open class MeshRepository(private val context: Context) {
                             )
 
                             // Update discovery map
+                            val peerTransportType = if (mdnsLanPeers.containsKey(trimmedPeerId))
+                                com.scmessenger.android.service.TransportType.TCP_MDNS
+                            else
+                                com.scmessenger.android.service.TransportType.INTERNET
                             val discoveryInfo = PeerDiscoveryInfo(
                                 peerId = transportIdentity?.canonicalPeerId ?: peerId,
                                 publicKey = transportIdentity?.publicKey,
                                 nickname = discoveredNickname,
                                 localNickname = transportIdentity?.localNickname,
                                 libp2pPeerId = peerId,
-                                transport = com.scmessenger.android.service.TransportType.INTERNET,
+                                transport = peerTransportType,
                                 isFull = transportIdentity != null,
                                 isRelay = isBootstrapRelayPeer(peerId),
                                 lastSeen = System.currentTimeMillis().toULong() / 1000u
@@ -4123,6 +4151,10 @@ open class MeshRepository(private val context: Context) {
                 envelopeData = encryptedData,
                 wifiPeerId = if (strictBleOnly) null else wifiPeerId,
                 blePeerId = effectiveBlePeerId,
+                tcpMdnsPeerId = routePeerCandidates.firstOrNull()?.let { candidate ->
+                    // If any route peer candidate is a known mDNS LAN peer, offer TCP/mDNS path
+                    if (mdnsLanPeers.containsKey(candidate.trim())) candidate.trim() else null
+                },
                 routePeerCandidates = routePeerCandidates,
                 listeners = listeners,
                 traceMessageId = traceMessageId,
@@ -4233,6 +4265,61 @@ open class MeshRepository(private val context: Context) {
                         }
                     }
                     false
+                },
+                tryTcpMdns = { lanPeerId ->
+                    // TCP/mDNS transport: Direct LAN delivery via libp2p TCP.
+                    // This peer was discovered via mDNS and has LAN addresses — skip relay.
+                    val bridge = swarmBridge ?: run {
+                        logDeliveryAttempt(
+                            messageId = traceMessageId,
+                            medium = "tcp_mdns",
+                            phase = "smart_router",
+                            outcome = "failed",
+                            detail = "ctx=$attemptContext reason=swarm_bridge_unavailable"
+                        )
+                        return@attemptDelivery false
+                    }
+
+                    // Dial LAN addresses directly (no relay circuits)
+                    val lanAddrs = mdnsLanPeers[lanPeerId] ?: emptyList()
+                    if (lanAddrs.isNotEmpty()) {
+                        val dialCandidates = buildDialCandidatesForPeer(
+                            routePeerId = lanPeerId,
+                            rawAddresses = lanAddrs,
+                            includeRelayCircuits = false
+                        )
+                        if (dialCandidates.isNotEmpty()) {
+                            connectToPeer(lanPeerId, dialCandidates)
+                            awaitPeerConnection(lanPeerId, timeoutMs = 1000L)
+                        }
+                    }
+
+                    val directError = bridge.sendMessageStatus(
+                        lanPeerId,
+                        encryptedData,
+                        recipientIdentityId,
+                        intendedDeviceId
+                    )
+
+                    if (directError == null) {
+                        logDeliveryAttempt(
+                            messageId = traceMessageId,
+                            medium = "tcp_mdns",
+                            phase = "smart_router",
+                            outcome = "success",
+                            detail = "ctx=$attemptContext route=$lanPeerId lan_addrs=${lanAddrs.size}"
+                        )
+                        true
+                    } else {
+                        logDeliveryAttempt(
+                            messageId = traceMessageId,
+                            medium = "tcp_mdns",
+                            phase = "smart_router",
+                            outcome = "failed",
+                            detail = "ctx=$attemptContext route=$lanPeerId reason=$directError"
+                        )
+                        false
+                    }
                 },
                 tryCore = { corePeerId ->
                     // Core transport attempt (libp2p/internet relay)

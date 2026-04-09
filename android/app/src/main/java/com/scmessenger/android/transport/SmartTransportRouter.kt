@@ -27,7 +27,8 @@ class SmartTransportRouter {
     enum class TransportType(val value: String) {
         WIFI_DIRECT("wifi_direct"),
         BLE("ble"),
-        CORE("core"); // libp2p/internet relay
+        CORE("core"), // libp2p/internet relay
+        TCP_MDNS("tcp_mdns"); // LAN-direct via libp2p TCP (mDNS-discovered peers)
 
         companion object {
             fun fromValue(value: String): TransportType? {
@@ -281,12 +282,14 @@ class SmartTransportRouter {
         envelopeData: ByteArray,
         wifiPeerId: String?,
         blePeerId: String?,
+        tcpMdnsPeerId: String?,
         routePeerCandidates: List<String>,
         listeners: List<String>,
         traceMessageId: String?,
         attemptContext: String?,
         tryWifi: suspend (String) -> Boolean,
         tryBle: suspend (String) -> Boolean,
+        tryTcpMdns: suspend (String) -> Boolean,
         tryCore: suspend (String) -> Boolean
     ): TransportDeliveryResult {
         val startTime = System.currentTimeMillis()
@@ -308,6 +311,11 @@ class SmartTransportRouter {
         val bleTarget = blePeerId?.trim()?.takeIf { it.isNotEmpty() }
         if (bleTarget != null) {
             availableTransports.add(TransportAttempt(TransportType.BLE, bleTarget) { tryBle(bleTarget) })
+        }
+
+        val tcpMdnsTarget = tcpMdnsPeerId?.trim()?.takeIf { it.isNotEmpty() }
+        if (tcpMdnsTarget != null) {
+            availableTransports.add(TransportAttempt(TransportType.TCP_MDNS, tcpMdnsTarget) { tryTcpMdns(tcpMdnsTarget) })
         }
 
         val coreTarget = routePeerCandidates.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
