@@ -395,10 +395,10 @@ class SmartTransportRouter {
             }
 
             val resolved = winner.await()
-            // cancelAndJoin ensures waitJob and all transport jobs are fully stopped before
-            // we return, preventing any dangling coroutines.
-            waitJob.cancelAndJoin()
+            // Cancel transport jobs first (waitJob joins them), then cancel waitJob.
+            // This prevents waitJob from blocking on a job that hasn't been cancelled yet.
             jobs.forEach { it.cancelAndJoin() }
+            waitJob.cancelAndJoin()
             resolved
         }
 
