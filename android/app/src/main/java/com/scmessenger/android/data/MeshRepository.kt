@@ -1035,6 +1035,7 @@ open class MeshRepository(private val context: Context) {
                         if (canonicalId != peerId) {
                             pruneDisconnectedPeer(canonicalId)
                         }
+                        mdnsLanPeers.remove(trimmedPeerId)
 
                         emitDisconnectedIfChanged(
                             peerId = peerId
@@ -2451,6 +2452,7 @@ open class MeshRepository(private val context: Context) {
         historySyncSentPeers.clear()
         identityEmissionCache.clear()
         connectedEmissionCache.clear()
+        mdnsLanPeers.clear()
         
         // Clear discovered peers from UI on service stop
         _discoveredPeers.value = emptyMap()

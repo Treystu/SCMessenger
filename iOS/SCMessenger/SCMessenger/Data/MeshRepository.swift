@@ -711,6 +711,7 @@ final class MeshRepository {
         historySyncSentPeers.removeAll()
         identityEmissionCache.removeAll()
         connectedEmissionCache.removeAll()
+        mdnsLanPeers.removeAll()
 
         serviceState = .stopped
         statusEvents.send(.serviceStateChanged(.stopped))
@@ -3292,6 +3293,7 @@ final class MeshRepository {
             updateRelayAvailability(peerId: trimmedId, event: "disconnected")
         }
         connectedEmissionCache.removeValue(forKey: trimmedId)
+        mdnsLanPeers.removeValue(forKey: trimmedId)
         pruneDisconnectedPeer(peerId)
     }
 
