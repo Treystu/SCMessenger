@@ -368,8 +368,10 @@ class SmartTransportRouter {
         Timber.tag(TAG).i("Racing ${availableTransports.count()} transports for peer ${peerId.take(8)}")
 
         val result = coroutineScope {
-            val deferreds = availableTransports.map { transportAttempt ->
-                async {
+            val winner = CompletableDeferred<Triple<TransportType, Boolean, Long>>()
+
+            val jobs = availableTransports.map { transportAttempt ->
+                launch {
                     val transportStart = System.currentTimeMillis()
                     val success = try {
                         transportAttempt.attempt()
@@ -378,22 +380,28 @@ class SmartTransportRouter {
                         false
                     }
                     val latencyMs = System.currentTimeMillis() - transportStart
-                    Triple(transportAttempt.type, success, latencyMs)
+                    if (success) {
+                        winner.complete(Triple(transportAttempt.type, true, latencyMs))
+                    }
                 }
             }
 
-            // Wait for first successful result
-            var firstSuccess: Triple<TransportType, Boolean, Long>? = null
-            for (deferred in deferreds) {
-                val result = deferred.await()
-                if (result.second) {
-                    firstSuccess = result
-                    break
+            // Await all jobs to finish (or the winner to be set), then cancel remaining work
+            val firstSuccess: Triple<TransportType, Boolean, Long>? = if (winner.isCompleted) {
+                winner.getCompleted()
+            } else {
+                // Race: cancel as soon as the first success arrives or all jobs finish
+                val waitJob = launch {
+                    jobs.forEach { it.join() }
+                    // All finished without success – complete with a sentinel failure value so
+                    // the select below can unblock.
+                    winner.complete(Triple(TransportType.CORE, false, 0L))
                 }
+                val resolved = winner.await()
+                waitJob.cancel()
+                jobs.forEach { it.cancel() }
+                if (resolved.second) resolved else null
             }
-
-            // Cancel remaining coroutines
-            deferreds.forEach { it.cancel() }
 
             firstSuccess
         }
