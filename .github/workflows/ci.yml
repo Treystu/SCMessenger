@@ -17,7 +17,7 @@ jobs:
     name: Repo Hygiene / Path Governance
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Reject tracked lowercase ios/ entries
         run: |
           if git ls-files | rg -n "^ios/"; then
@@ -62,7 +62,7 @@ jobs:
     name: Repo Hygiene / Docs Sync
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Run documentation sync checks
@@ -88,7 +88,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -133,7 +133,7 @@ jobs:
     name: WASM / Web
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -158,7 +158,7 @@ jobs:
     name: Android
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
       - uses: dtolnay/rust-toolchain@stable
@@ -201,7 +201,7 @@ jobs:
     name: iOS
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
