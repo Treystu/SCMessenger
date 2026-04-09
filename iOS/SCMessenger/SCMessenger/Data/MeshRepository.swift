@@ -111,7 +111,8 @@ final class MeshRepository {
     private var bleCentralManager: BLECentralManager?
     private var blePeripheralManager: BLEPeripheralManager?
     private var multipeerTransport: MultipeerTransport?
-    
+    private var mdnsDiscovery: mDNSServiceDiscovery?
+
     // Smart Transport Router (500ms timeout fallback + health tracking)
     private var smartTransportRouter: SmartTransportRouter?
 
@@ -650,6 +651,21 @@ final class MeshRepository {
             multipeerTransport?.startBrowsing()
             blePeripheralManager?.startAdvertising()
             bleCentralManager?.startScanning()
+
+            // Start mDNS/DNS-SD service discovery for cross-platform LAN peer resolution
+            let discovery = mDNSServiceDiscovery(meshRepository: self)
+            discovery.onLanPeerResolved = { [weak self] peerId, host, port in
+                guard let self, let bridge = self.swarmBridge else { return }
+                let multiaddr = "/ip4/\(host)/tcp/\(port)"
+                self.logger.info("mDNS: Dialing resolved LAN peer \(peerId) at \(multiaddr)")
+                do {
+                    try bridge.dial(multiaddr: multiaddr)
+                } catch {
+                    self.logger.error("mDNS: Failed to dial \(multiaddr): \(error.localizedDescription)")
+                }
+            }
+            discovery.startBrowsing()
+            mdnsDiscovery = discovery
             applyPowerAdjustments(reason: "service_started")
             startPendingOutboxRetryLoop()
             startCoverTrafficLoopIfEnabled()
@@ -718,6 +734,8 @@ final class MeshRepository {
 
         bleCentralManager?.stopScanning()
         blePeripheralManager?.stopAdvertising()
+        mdnsDiscovery?.cleanup()
+        mdnsDiscovery = nil
         multipeerTransport?.disconnect()
         multipeerTransport = nil
 

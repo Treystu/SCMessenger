@@ -43,7 +43,7 @@ fun StatusIndicator(
             TransportType.WIFI_AWARE -> TransportWiFiAware
             TransportType.WIFI_DIRECT -> TransportWiFiDirect
             TransportType.INTERNET -> TransportInternet
-            TransportType.TCP_MDNS -> TransportInternet
+            TransportType.TCP_MDNS -> TransportWiFiDirect
         }
         else -> StatusOnline
     }
