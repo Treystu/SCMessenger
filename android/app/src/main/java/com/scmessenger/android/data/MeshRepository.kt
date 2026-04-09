@@ -4154,7 +4154,8 @@ open class MeshRepository(private val context: Context) {
                 blePeerId = effectiveBlePeerId,
                 tcpMdnsPeerId = routePeerCandidates.firstOrNull()?.let { candidate ->
                     // If any route peer candidate is a known mDNS LAN peer, offer TCP/mDNS path
-                    if (mdnsLanPeers.containsKey(candidate.trim())) candidate.trim() else null
+                    val trimmed = candidate.trim()
+                    if (mdnsLanPeers[trimmed]?.isNotEmpty() == true) trimmed else null
                 },
                 routePeerCandidates = routePeerCandidates,
                 listeners = listeners,

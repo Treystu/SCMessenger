@@ -4037,7 +4037,7 @@ final class MeshRepository {
                 blePeerId: effectiveBlePeerId,
                 tcpMdnsPeerId: routePeerCandidates.first.flatMap { candidate in
                     let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
-                    return mdnsLanPeers[trimmed] != nil ? trimmed : nil
+                    return (mdnsLanPeers[trimmed]?.isEmpty == false) ? trimmed : nil
                 },
                 routePeerCandidates: routePeerCandidates,
                 addresses: addresses,
