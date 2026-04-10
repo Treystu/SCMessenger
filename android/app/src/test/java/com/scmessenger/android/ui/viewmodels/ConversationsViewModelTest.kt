@@ -100,4 +100,53 @@ class ConversationsViewModelTest {
         verify(exactly = 1) { mockMeshRepository.clearConversation("peer-delete") }
         verify(exactly = 1) { mockMeshRepository.getRecentMessages(any(), any()) }
     }
+
+    @Test
+    fun `blockPeer delegates to repository`() = runTest {
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.blockPeer("blocked-peer", "Spam")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify { mockMeshRepository.blockPeer("blocked-peer", "Spam") }
+    }
+
+    @Test
+    fun `unblockPeer delegates to repository`() = runTest {
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.unblockPeer("blocked-peer")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify { mockMeshRepository.unblockPeer("blocked-peer") }
+    }
+
+    @Test
+    fun `blockAndDeletePeer delegates to repository`() = runTest {
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.blockAndDeletePeer("blocked-peer", "Abuse")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify { mockMeshRepository.blockAndDeletePeer("blocked-peer", "Abuse") }
+    }
+
+    @Test
+    fun `isBlocked delegates to repository and returns correct value`() = runTest {
+        every { mockMeshRepository.isBlocked("peer-blocked") } returns true
+        every { mockMeshRepository.isBlocked("peer-not-blocked") } returns false
+
+        assertTrue(viewModel.isBlocked("peer-blocked"))
+        assertFalse(viewModel.isBlocked("peer-not-blocked"))
+
+        verify { mockMeshRepository.isBlocked("peer-blocked") }
+        verify { mockMeshRepository.isBlocked("peer-not-blocked") }
+    }
+
+    @Test
+    fun `isBlocked returns false on exception`() = runTest {
+        every { mockMeshRepository.isBlocked("peer-error") } throws RuntimeException("Test error")
+
+        assertFalse(viewModel.isBlocked("peer-error"))
+    }
 }

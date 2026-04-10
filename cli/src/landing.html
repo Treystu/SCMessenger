@@ -535,16 +535,25 @@
           <div class="logo-mark">SC</div>
           <span class="logo-text">SCMessenger</span>
         </div>
-        <button
-          class="btn btn-primary btn-sm"
-          onclick="
+        <div style="display: flex; gap: 12px; align-items: center">
+          <a
+            href="/ui/"
+            class="btn btn-outline btn-sm"
+            style="color: var(--primary); border-color: var(--primary)"
+          >
+            Launch Messenger
+          </a>
+          <button
+            class="btn btn-primary btn-sm"
+            onclick="
             document
               .getElementById('install')
               .scrollIntoView({ behavior: 'smooth' })
           "
-        >
-          Join the Mesh
-        </button>
+          >
+            Join the Mesh
+          </button>
+        </div>
       </div>
     </header>
 

@@ -28,7 +28,9 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 | `AGENTS.md`                                           | Active | Codex run policy, including mandatory doc sync and edited-target build verification |
 | `docs/DOCUMENT_STATUS_INDEX.md`                       | Active | Lifecycle map (this file)                                      |
 | `docs/REPO_CONTEXT.md`                                | Active | Cross-component architecture and operating context             |
-| `docs/CURRENT_STATE.md`                               | Active | Verified current runtime/build state                           |
+| `docs/CURRENT_STATE.md`                               | Active | Verified current runtime/build state + ID management           |
+| `docs/ID_MANAGEMENT_ANALYSIS.md`                     | Active | Comprehensive ID system analysis and verification              |
+| `docs/DEVICE_PEER_RELATIONSHIP_ANALYSIS.md`          | Active | Device-peer binding and tight-pair enforcement analysis        |
 | `REMAINING_WORK_TRACKING.md`                          | Active | Backlog and active work tracking                               |
 | `docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`          | Active | Consolidated known-issues ledger and remediation sequence      |
 | `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`                 | Active | v0.2.0 milestone definition and sequencing                     |
@@ -46,6 +48,10 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 | `docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md` | Active | Release synchronization and tagging checklist                  |
 | `docs/releases/RELEASE_NOTES_V0.2.0_DRAFT.md`         | Active | v0.2.0 draft release notes                                     |
 | `docs/releases/RELEASE_NOTES_V0.1.2_GH.md`            | Active | v0.1.2 GitHub release notes draft                              |
+| `android/IMPLEMENTATION_STATUS.md`                     | Active | Android implementation status with privacy features section   |
+| `REMAINING_WORK_TRACKING.md`                          | Active | Backlog including privacy features removal resolution         |
+| `docs/CURRENT_STATE.md`                               | Active | Current state including privacy settings cleanup documentation |
+=======
 
 ---
 

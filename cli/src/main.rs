@@ -1045,6 +1045,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     println!("Landing Page:  http://0.0.0.0:{}", ws_port);
     println!("WebSocket:     ws://localhost:{}/ws", ws_port);
     println!("P2P Listener:  /ip4/0.0.0.0/tcp/{}", p2p_port);
+    println!("WASM Bridge:   /ip4/0.0.0.0/tcp/{}/ws", p2p_port + 1);
     println!("📒 {}", connection_ledger.summary());
     println!();
 
@@ -1090,6 +1091,14 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);
     let swarm_handle =
         transport::start_swarm(network_keypair, Some(listen_addr), event_tx, false).await?;
+
+    // ── WebSocket P2P Bridge for WASM ────────────────────────────────────
+    let ws_p2p_port = p2p_port + 1;
+    let ws_listen_addr: libp2p::Multiaddr = format!("/ip4/0.0.0.0/tcp/{}/ws", ws_p2p_port).parse()?;
+    match swarm_handle.listen(ws_listen_addr.clone()).await {
+        Ok(_) => println!("{} WebSocket P2P Bridge started on {}", "✓".green(), ws_listen_addr),
+        Err(e) => tracing::warn!("Failed to start WebSocket P2P bridge: {}", e),
+    }
 
     println!("{} Network started", "✓".green());
 

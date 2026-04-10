@@ -1286,22 +1286,20 @@ pub async fn start_swarm_with_config(
     {
         let local_peer_id = keypair.public().to_peer_id();
 
-        let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
+        let mut swarm: libp2p::Swarm<IronCoreBehaviour> = libp2p::SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
             .with_tcp(
                 libp2p::tcp::Config::default(),
                 libp2p::noise::Config::new,
                 libp2p::yamux::Config::default,
             )?
-            .with_quic()
             .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)?
             .with_behaviour(|key, relay_client| {
                 IronCoreBehaviour::new(key, relay_client, headless)
                     .expect("Failed to create network behaviour")
             })?
-            .with_swarm_config(|cfg| {
+            .with_swarm_config(|cfg: libp2p::swarm::Config| {
                 cfg.with_idle_connection_timeout(web_time::Duration::from_secs(600))
-                // 10 min idle (was 5 min)
             })
             .build();
 
@@ -1320,7 +1318,7 @@ pub async fn start_swarm_with_config(
                         bind_results.push(BindResult::Success { addr, port });
                     }
                     Err(e) => {
-                        let error = e.to_string();
+                        let error = format!("{}", e);
                         tracing::warn!("✗ Failed to bind to {} (port {}): {}", addr, port, error);
                         bind_results.push(BindResult::Failed { port, error });
                     }
@@ -2812,7 +2810,22 @@ pub async fn start_swarm_with_config(
                                 );
 
                                 // RELAY PEER DISCOVERY: Track peer and broadcast to others
-                                let addresses = vec![remote_addr.to_string()];
+                                // Start with the observed remote address.
+                                let mut addresses = vec![remote_addr.to_string()];
+
+                                // Enrich with circuit-relay addresses based on our own external exposure.
+                                // This is CRITICAL for browser nodes: it tells other mesh members (like Android)
+                                // that this peer is reachable THROUGH us.
+                                let local_peer_id = *swarm.local_peer_id();
+                                for ext_addr in swarm.external_addresses().cloned() {
+                                    // Construct: /.../p2p/<our-id>/p2p-circuit/p2p/<their-id>
+                                    let mut circuit_addr: Multiaddr = ext_addr;
+                                    circuit_addr.push(libp2p::multiaddr::Protocol::P2p(local_peer_id.into()));
+                                    circuit_addr.push(libp2p::multiaddr::Protocol::P2pCircuit);
+                                    circuit_addr.push(libp2p::multiaddr::Protocol::P2p(peer_id.into()));
+                                    addresses.push(circuit_addr.to_string());
+                                }
+
                                 peer_broadcaster.peer_connected(peer_id, addresses.clone());
 
                                 // Broadcast PeerJoined to all other connected peers
@@ -3036,7 +3049,10 @@ pub async fn start_swarm_with_config(
                                 tracing::debug!("📞 Dialing {} (promiscuous — accepting any PeerID)", addr);
                                 match swarm.dial(addr) {
                                     Ok(_) => { let _ = reply.send(Ok(())).await; }
-                                    Err(e) => { let _ = reply.send(Err(e.to_string())).await; }
+                                    Err(e) => {
+                                        let err_msg: String = format!("{}", e);
+                                        let _ = reply.send(Err(err_msg)).await;
+                                    }
                                 }
                             }
 
@@ -3051,7 +3067,7 @@ pub async fn start_swarm_with_config(
                                         let _ = reply.send(Ok("/ip4/0.0.0.0/tcp/0".parse().unwrap())).await;
                                     }
                                     Err(e) => {
-                                        let _ = reply.send(Err(e.to_string())).await;
+                                        let _ = reply.send(Err(format!("{}", e))).await;
                                     }
                                 }
                             }
@@ -3349,7 +3365,10 @@ pub async fn start_swarm_with_config(
                             SwarmCommand::Dial { addr, reply } => {
                                 match swarm.dial(addr) {
                                     Ok(_) => { let _ = reply.send(Ok(())).await; }
-                                    Err(e) => { let _ = reply.send(Err(e.to_string())).await; }
+                                    Err(e) => {
+                                        let err_msg: String = e.to_string();
+                                        let _ = reply.send(Err(err_msg)).await;
+                                    }
                                 }
                             }
                             SwarmCommand::GetPeers { reply } => {

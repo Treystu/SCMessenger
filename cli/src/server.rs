@@ -295,9 +295,21 @@ pub async fn start(
         })
         .boxed();
 
+    // 9. UI Static Assets (The Messenger App)
+    let ui_route = warp::path("ui")
+        .and(warp::fs::dir("ui"))
+        .boxed();
+
+    // 10. WASM Static Assets
+    let wasm_route = warp::path("wasm")
+        .and(warp::fs::dir("wasm"))
+        .boxed();
+
     // Combine all routes with CORS
     let cors = warp::cors().allow_any_origin();
     let routes = landing_route
+        .or(ui_route)
+        .or(wasm_route)
         .or(ws_route)
         .or(network_info_route)
         .or(join_bundle_route)

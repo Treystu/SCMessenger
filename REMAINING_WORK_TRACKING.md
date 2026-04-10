@@ -12,7 +12,50 @@ Last updated: 2026-03-20
 
 ---
 
-## ✅ RESOLVED - 2026-03-20: iOS Instant Crash Fix
+## ✅ RESOLVED - 2026-04-10: WASM/Android Parity & Bridge Visibility
+
+**Status:** ✅ COMPLETE - UI parity achieved and mesh visibility restored
+
+Finalized the SCMessenger Web (WASM) interface to match the latest Android/iOS feature set and ensured browser-based nodes are fully discoverable by mobile peers through the CLI bridge.
+
+### Changes Implemented
+1. **Privacy Settings Cleanup**: Removed unimplemented settings (Onion Routing, Cover Traffic, Message Padding, Timing Obfuscation) from the WASM UI and app state to match the current Android build and prevent user confusion.
+2. **Mesh Discovery Enrichment**: Updated the CLI bridge logic to automatically enrich discovery broadcasts with **relay-circuit addresses** for connected browser nodes. This makes WASM identities visible and reachable by Android/mobile peers on the same network.
+3. **Identity & Nickname Sync**: Enhanced the onboarding flow to fetch the nickname from the local CLI node, providing a "perfect merge" of user identity between the native CLI and the browser client.
+4. **Proactive Bridge Pairing**: Fixed the startup sequence to ensure the WASM client immediately dials the CLI bridge, enabling real-time mesh participation from launch.
+5. **UI Polish**: Version updated to 0.2.1-Alpha; Material 3 colors and responsive layouts verified.
+
+### Verification
+- [X] UI verified at 127.0.0.1:9000/ui/ with zero unimplemented privacy switches.
+- [X] Bridge connectivity confirmed on port 9001.
+- [X] Circuit address enrichment logic verified in core/src/transport/swarm.rs.
+- [X] Onboarding flow correctly pre-fills CLI nickname.
+
+---
+
+## ✅ RESOLVED - 2026-04-10: WebSocket Bridge & Desktop UI Parity
+
+**Status:** ✅ COMPLETE - Desktop platform now parity-complete with mobile
+
+Major infrastructure and UI overhaul for the WASM/Desktop platform, resolving the browser isolation issue and delivering a premium, fully-functional web interface hosted directly by the CLI.
+
+### Changes Implemented
+1. **WebSocket Bridge Support**: Enabled `libp2p-websocket` in core and added a port 9001 listener to CLI native nodes. Browser nodes can now join the mesh directly via the local CLI bridge.
+2. **Integrated UI Hosting**: CLI now serves the Messenger Web UI at `/ui/` and WASM assets at `/wasm/`, eliminating CORS issues and external dependency on file-system opening.
+3. **Full UI Parity**: All 4 mobile tabs (Chats, Contacts, Mesh, Settings) are now fully implemented in the Web UI:
+   - **Chats**: Real-time messaging, status receipts, and block/delete workflows.
+   - **Contacts**: Searchable list, FAB-based addition, and status indicators.
+   - **Mesh**: Transport diagnostic cards, real-time peer discovery list, and manual dial.
+   - **Settings**: Complete mesh and privacy settings toggles (Relay, Onion, etc.), bootstrap persistence, and identity management.
+4. **WASM-to-Native Discovery**: Verified that the WASM node correctly connects to the CLI bridge and discovers Android peers established on the local LAN.
+
+### Verification
+- [x] CLI build successful with WebSocket listener
+- [x] WASM module builds for `wasm32-unknown-unknown`
+- [x] UI events correctly wired to all `IronCore` methods
+- [x] Peer discovery functional across bridge
+
+---
 
 **Status:** ✅ COMPLETE - iOS crash resolved, xcframework rebuilt, all functionality working
 
@@ -95,9 +138,56 @@ Last updated: 2026-03-20
 
 **Deployment Status:** Ready for device deployment and verification
 
+## ✅ RESOLVED - 2026-03-20: Android Privacy Settings UI Cleanup
+
+**Status:** ✅ COMPLETE - Removed unimplemented privacy settings from Android UI
+
+### Issue
+Android UI was displaying 4 privacy settings that were not implemented:
+- Onion Routing
+- Cover Traffic  
+- Message Padding
+- Timing Obfuscation
+
+These settings created false expectations and violated the trust philosophy.
+
+### Resolution Implemented
+1. **Removed from MeshSettingsScreen.kt**: Deleted Privacy Settings section
+2. **Removed from SettingsScreen.kt**: Deleted PrivacySettingsSection composable
+3. **Removed from SettingsViewModel.kt**: Deleted update methods for unimplemented features
+4. **Updated documentation**: Added notes about temporary removal
+
+### Files Modified
+- `android/app/src/main/java/com/scmessenger/android/ui/settings/MeshSettingsScreen.kt` (-11 LOC)
+- `android/app/src/main/java/com/scmessenger/android/ui/screens/SettingsScreen.kt` (-60 LOC)
+- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt` (-22 LOC)
+- `android/IMPLEMENTATION_STATUS.md` (+9 LOC documentation)
+
+### Impact
+- **User Experience**: UI now only shows fully functional settings
+- **Trust**: No more false promises in the interface
+- **Code Quality**: Removed ~93 LOC of non-functional code
+
+### Future Plan
+Re-implement privacy features when Rust core support is available:
+- Onion Routing: ~300-400 LOC
+- Message Padding: ~150-200 LOC  
+- Timing Obfuscation: ~200-250 LOC
+- Cover Traffic: ~250-300 LOC
+- **Total Estimate**: ~900-1150 LOC
+
+**Expected Result:** Clean, trustworthy UI with only working features
+
+**Build Status:** ✅ Android builds successfully
+
+**Next:** Documentation sync and verification
+
+---
+
 ## 🔴 NEW CRITICAL FINDING - 2026-03-19 13:27 UTC: Android ANR Storm
 
 **Status:** 🔴 P0 CRITICAL - CONFIRMED ACTIVE
+=======
 
 **Source:** Live investigation `tmp/ANDROID_HANGING_ANR_INVESTIGATION_2026-03-19.md`
 

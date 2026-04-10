@@ -49,6 +49,15 @@ The following phases have been implemented and verified as building successfully
   - `ConversationsScreen.kt` exists (List view).
   - **Missing:** `ChatScreen.kt` (Detail view for actual messaging).
 
+## [Current] Privacy Features Status
+
+- **Privacy Settings UI**: Temporarily removed unimplemented privacy features
+  - **Removed:** Onion Routing, Cover Traffic, Message Padding, Timing Obfuscation
+  - **Reason:** These features were displayed in UI but not implemented in Rust core
+  - **Impact:** UI now only shows fully functional settings
+  - **Future Plan:** Re-implement when Rust core support is available (~900-1150 LOC estimated)
+=======
+
 ## [Needs Revalidation] ❌ Missing / To Do
 
 The following phases from the original plan are NOT yet implemented in the codebase:

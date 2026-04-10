@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.scmessenger.android.utils.toEpochMillis
 import com.scmessenger.android.ui.viewmodels.ConversationsViewModel
+import com.scmessenger.android.ui.viewmodels.ContactsViewModel
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.text.SimpleDateFormat
@@ -244,6 +245,7 @@ fun ChatScreen(
         if (peerInfo != null) {
             val (publicKey, suggestedNickname) = peerInfo
             var nickname by remember { mutableStateOf(suggestedNickname) }
+            val contactsViewModel: ContactsViewModel = hiltViewModel()
 
             AlertDialog(
                 onDismissRequest = { showAddContactDialog = false },
@@ -266,11 +268,13 @@ fun ChatScreen(
                         onClick = {
                             coroutineScope.launch {
                                 try {
-                                    // Add via ContactsViewModel - need to get it
-                                    // For now, add directly via repository
-                                    // TODO: Better integration with ContactsViewModel
+                                    contactsViewModel.addContact(
+                                        peerId = conversationId,
+                                        publicKey = publicKey,
+                                        nickname = nickname
+                                    )
                                     showAddContactDialog = false
-                                    // This will be handled by the user via Contacts screen
+                                    Timber.i("Contact added successfully via ContactsViewModel")
                                 } catch (e: Exception) {
                                     Timber.e(e, "Failed to add contact")
                                 }

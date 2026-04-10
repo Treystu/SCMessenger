@@ -1,8 +1,8 @@
 # Stubs and Unimplemented Functionality
 
-> **Last updated:** 2026-02-24
->
-> This file tracks previously-audited stubs/placeholders and their current resolution status.
+> **Last updated:** 2026-04-09
+
+This file tracks previously-audited stubs/placeholders and their current resolution status.
 
 ---
 
@@ -18,6 +18,7 @@
 | Chat typing indicator placeholder | S3 | Resolved |
 | UniFFI-generated TODO comments | S3 | Intentionally unchanged (generated code) |
 | BLE GATT static identity comment | S3 | Runtime-correct (no functional gap) |
+| Onion routing module | S3 | Documented as placeholder |
 
 ---
 
@@ -87,5 +88,6 @@
 
 1. UniFFI-generated TODO comments remain in generated artifacts by design and will regenerate.
 2. BLE GATT static default identity comment describes transient startup state that is overwritten correctly at runtime.
+3. Onion routing module is implemented but not integrated into the message path. It is documented as a placeholder in `docs/ALPHA_BURNDOWN_V0.2.1.md`.
 
 No remaining functional stubs from this audit are open.

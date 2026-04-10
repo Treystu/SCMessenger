@@ -22,8 +22,11 @@ import com.scmessenger.android.ui.viewmodels.SettingsViewModel
  * - Relay enable/disable and budget configuration
  * - Individual transport toggles (BLE, WiFi Aware, WiFi Direct, Internet)
  * - Discovery mode selection
- * - Onion routing (privacy feature)
+ * 
+ * Note: Privacy features (Onion Routing, Cover Traffic, Message Padding, Timing Obfuscation)
+ * have been temporarily removed as they require full implementation in the Rust core.
  */
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MeshSettingsScreen(
@@ -182,18 +185,7 @@ fun MeshSettingsScreen(
                     )
                 }
 
-                // Privacy Settings
-                SettingsSection(title = "Privacy Settings") {
-                    SwitchSetting(
-                        title = "Onion Routing",
-                        description = "Route messages through multiple hops for privacy",
-                        checked = currentSettings.onionRouting,
-                        onCheckedChange = {
-                            viewModel.updateSettings(currentSettings.copy(onionRouting = it))
-                        },
-                        enabled = !isSaving
-                    )
-                }
+
             } ?: Box(
                 modifier = Modifier.fillMaxWidth().height(200.dp),
                 contentAlignment = Alignment.Center

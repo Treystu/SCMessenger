@@ -1,5 +1,5 @@
 Status: Active
-Last updated: 2026-04-09
+Last updated: 2026-04-10
 
 # Feature Parity & Cross-Platform Function Audit
 
@@ -164,6 +164,30 @@ items marked N/A are intentional design choices:
 - **`computeProfile`/BLE adjustments on WASM**: Browser is always plugged in with no BLE
 - **Transport differences**: Platform-specific transport layers (BLE, WiFi Direct, Multipeer, etc.) are not cross-platform by design
 
+### Web UI Parity (2026-04-10)
+
+The Web/WASM UI (`ui/index.html` + `ui/app.js` + `ui/styles.css`) now provides full
+functional parity with the Android/iOS native apps for all non-transport features:
+
+| Android Screen        | Web UI Equivalent       | Status |
+|:----------------------|:------------------------|:------:|
+| ConversationsScreen   | Chats tab               | ✅     |
+| ChatScreen            | Chat overlay view       | ✅     |
+| ContactsScreen        | Contacts tab + FAB      | ✅     |
+| DashboardScreen       | Mesh tab                | ✅     |
+| SettingsScreen         | Settings tab            | ✅     |
+| OnboardingScreen      | First-run modal         | ✅     |
+| DiagnosticsScreen     | Connection path in Mesh | ✅     |
+| IdentityScreen        | Identity card (Settings)| ✅     |
+
+**Web UI features matching Android:**
+- Bottom navigation bar (Chats / Contacts / Mesh / Settings)
+- Conversation list with delete, stats (Total / Sent / Received / Delivered)
+- Chat view with message bubbles (sent/received), block/unblock, timestamp
+- Contact list with search, add (FAB), edit nickname, delete
+- Mesh dashboard: status card, peer count, transports, discovered nodes, uptime
+- Settings: service start/stop, identity section, mesh toggles, bootstrap config, blocked peers, data reset
+- All Material 3 dark theme tokens faithfully replicated
 ---
 
 ## Rollout Process & Regression Prevention

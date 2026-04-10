@@ -1,1982 +1,352 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SCMessenger | Sovereign Communication</title>
-    <style>
-      :root {
-        /* Colors */
-        --bg-dark: #0f172a;
-        --bg-card: #1e293b;
-        --bg-input: #334155;
-
-        --primary: #00ced1; /* Deep Cyan/Teal - Trust */
-        --primary-dim: rgba(0, 206, 209, 0.1);
-        --accent: #9d4edd; /* Electric Purple - Sovereignty */
-        --accent-dim: rgba(157, 78, 221, 0.1);
-
-        --success: #10b981;
-        --warning: #f59e0b;
-        --danger: #ef4444;
-
-        --text-main: #f8fafc;
-        --text-muted: #94a3b8;
-        --text-dim: #64748b;
-
-        --glass-bg: rgba(30, 41, 59, 0.65);
-        --glass-border: rgba(255, 255, 255, 0.08);
-        --glass-highlight: rgba(255, 255, 255, 0.03);
-        --glass-blur: blur(16px);
-
-        /* Spacing & Radius */
-        --radius-sm: 8px;
-        --radius-md: 12px;
-        --radius-lg: 16px;
-        --radius-full: 9999px;
-
-        /* Transitions */
-        --ease-out: cubic-bezier(0.215, 0.61, 0.355, 1);
-      }
-
-      /* Reset & Base */
-      * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-        outline: none;
-      }
-
-      body {
-        font-family:
-          "Inter",
-          -apple-system,
-          BlinkMacSystemFont,
-          "Segoe UI",
-          Roboto,
-          "Helvetica Neue",
-          Arial,
-          sans-serif;
-        background-color: var(--bg-dark);
-        color: var(--text-main);
-        height: 100vh;
-        overflow: hidden;
-        line-height: 1.5;
-        -webkit-font-smoothing: antialiased;
-      }
-
-      /* Typography */
-      h1,
-      h2,
-      h3 {
-        font-weight: 600;
-        letter-spacing: -0.02em;
-      }
-      .mono {
-        font-family:
-          "JetBrains Mono", "SF Mono", "Fira Code", "Roboto Mono", Menlo,
-          monospace;
-      }
-      .text-sm {
-        font-size: 0.875rem;
-      }
-      .text-xs {
-        font-size: 0.75rem;
-      }
-      .text-muted {
-        color: var(--text-muted);
-      }
-      .text-accent {
-        color: var(--accent);
-      }
-      .text-primary {
-        color: var(--primary);
-      }
-
-      /* Layout */
-      #app {
-        display: grid;
-        grid-template-columns: 280px 1fr;
-        grid-template-rows: 1fr 32px;
-        height: 100vh;
-        width: 100vw;
-        background:
-          radial-gradient(
-            circle at top right,
-            rgba(157, 78, 221, 0.15),
-            transparent 40%
-          ),
-          radial-gradient(
-            circle at bottom left,
-            rgba(0, 206, 209, 0.1),
-            transparent 40%
-          );
-      }
-
-      /* Glassmorphism Utilities */
-      .glass {
-        background: var(--glass-bg);
-        backdrop-filter: var(--glass-blur);
-        -webkit-backdrop-filter: var(--glass-blur);
-        border: 1px solid var(--glass-border);
-        box-shadow:
-          0 4px 6px -1px rgba(0, 0, 0, 0.1),
-          0 2px 4px -1px rgba(0, 0, 0, 0.06);
-      }
-
-      /* Sidebar */
-      #sidebar {
-        grid-row: 1 / 2;
-        border-right: 1px solid var(--glass-border);
-        display: flex;
-        flex-direction: column;
-        background: rgba(15, 23, 42, 0.6);
-      }
-
-      .sidebar-header {
-        padding: 20px;
-        border-bottom: 1px solid var(--glass-border);
-      }
-
-      .app-title {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        font-size: 1.1rem;
-        color: var(--text-main);
-      }
-
-      .title-wrapper {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-
-      .app-logo {
-        width: 32px;
-        height: 32px;
-        background: linear-gradient(135deg, var(--primary), var(--accent));
-        border-radius: 8px;
-        display: grid;
-        place-items: center;
-        font-weight: bold;
-        font-size: 14px;
-      }
-
-      .search-container {
-        padding: 12px 16px;
-      }
-
-      .search-input {
-        width: 100%;
-        background: var(--bg-input);
-        border: 1px solid transparent;
-        color: var(--text-main);
-        padding: 8px 12px;
-        border-radius: var(--radius-md);
-        transition: all 0.2s;
-      }
-
-      .search-input:focus {
-        border-color: var(--primary);
-        background: var(--bg-card);
-      }
-
-      #contact-list {
-        flex: 1;
-        overflow-y: auto;
-        padding: 8px;
-      }
-
-      .contact-item {
-        display: flex;
-        align-items: center;
-        padding: 10px;
-        border-radius: var(--radius-md);
-        cursor: pointer;
-        border: 1px solid transparent; /* Reserve space for border */
-        transition: all 0.2s var(--ease-out);
-        margin-bottom: 4px;
-      }
-
-      .contact-item:hover {
-        background: rgba(255, 255, 255, 0.03);
-        border-color: rgba(255, 255, 255, 0.05); /* Slight border on hover */
-      }
-
-      .contact-item.active {
-        background: var(--primary-dim);
-        border-color: rgba(0, 206, 209, 0.3);
-      }
-
-      .avatar {
-        width: 40px;
-        height: 40px;
-        border-radius: var(--radius-full);
-        background: var(--bg-input);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-right: 12px;
-        font-weight: 600;
-        position: relative;
-        flex-shrink: 0;
-        border: 1px solid var(--glass-border);
-        overflow: hidden;
-      }
-
-      .avatar img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-
-      /* Status Dot on Avatar */
-      .status-dot {
-        position: absolute;
-        bottom: 0;
-        right: 0;
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        border: 2px solid var(--bg-dark);
-      }
-      .status-online {
-        background: var(--success);
-        box-shadow: 0 0 4px var(--success);
-      }
-      .status-mesh {
-        background: var(--primary);
-      }
-      .status-offline {
-        background: var(--text-muted);
-      }
-
-      .contact-info {
-        flex: 1;
-        min-width: 0;
-      }
-
-      .contact-name {
-        font-weight: 500;
-        margin-bottom: 2px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .last-msg {
-        font-size: 0.75rem;
-        color: var(--text-muted);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .contact-meta {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        font-size: 0.7rem;
-        color: var(--text-dim);
-      }
-
-      .contact-actions {
-        margin-left: 8px;
-        opacity: 0;
-        transition: opacity 0.2s;
-        display: flex;
-        align-items: center;
-      }
-      .contact-item:hover .contact-actions {
-        opacity: 1;
-      }
-
-      .btn-icon-sm {
-        background: transparent;
-        border: none;
-        color: var(--text-muted);
-        cursor: pointer;
-        padding: 4px;
-        font-size: 1.4rem;
-        line-height: 1;
-        transition: color 0.1s;
-      }
-      .btn-icon-sm:hover {
-        color: var(--danger);
-      }
-
-      .unread-badge {
-        background: var(--accent);
-        color: white;
-        font-size: 0.7rem;
-        padding: 2px 6px;
-        border-radius: 10px;
-        margin-top: 4px;
-        font-weight: bold;
-      }
-
-      /* Main Chat Area */
-      #main {
-        grid-column: 2 / 3;
-        grid-row: 1 / 2;
-        display: flex;
-        flex-direction: column;
-        background: rgba(15, 23, 42, 0.3);
-        position: relative;
-      }
-
-      /* Empty State */
-      #empty-state {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        color: var(--text-muted);
-        text-align: center;
-        padding: 20px;
-      }
-
-      #empty-state h2 {
-        margin-bottom: 10px;
-        color: var(--text-main);
-      }
-
-      .logo-large {
-        width: 80px;
-        height: 80px;
-        background: linear-gradient(135deg, var(--primary), var(--accent));
-        border-radius: 20px;
-        margin-bottom: 24px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 40px;
-        box-shadow: 0 10px 30px rgba(0, 206, 209, 0.2);
-      }
-
-      /* Chat Components */
-      .chat-header {
-        padding: 16px 24px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border-bottom: 1px solid var(--glass-border);
-        z-index: 10;
-      }
-
-      .chat-header-info {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-
-      .peer-id-badge {
-        background: rgba(255, 255, 255, 0.05);
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 0.75rem;
-        cursor: pointer;
-      }
-      .peer-id-badge:hover {
-        background: rgba(255, 255, 255, 0.1);
-      }
-
-      #messages-container {
-        flex: 1;
-        overflow-y: auto;
-        padding: 20px 24px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        scroll-behavior: smooth;
-      }
-
-      .message-group {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        max-width: 70%;
-      }
-
-      .message-group.mine {
-        align-self: flex-end;
-        align-items: flex-end;
-      }
-
-      .message-group.theirs {
-        align-self: flex-start;
-        align-items: flex-start;
-      }
-
-      .message-bubble {
-        padding: 10px 16px;
-        border-radius: 18px;
-        font-size: 0.95rem;
-        position: relative;
-        word-wrap: break-word;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      }
-
-      .mine .message-bubble {
-        background: linear-gradient(135deg, var(--accent), #7b2cbf);
-        color: white;
-        border-bottom-right-radius: 4px;
-      }
-
-      .theirs .message-bubble {
-        background: var(--bg-card);
-        color: var(--text-main);
-        border-bottom-left-radius: 4px;
-        border: 1px solid var(--glass-border);
-      }
-
-      .message-meta {
-        font-size: 0.7rem;
-        margin-top: 4px;
-        opacity: 0.7;
-        display: flex;
-        gap: 4px;
-        align-items: center;
-      }
-
-      .mine .message-meta {
-        justify-content: flex-end;
-      }
-
-      /* Input Area */
-      .chat-input-area {
-        padding: 20px;
-        border-top: 1px solid var(--glass-border);
-        background: rgba(15, 23, 42, 0.8);
-      }
-
-      .input-wrapper {
-        display: flex;
-        gap: 10px;
-        background: var(--bg-input);
-        padding: 6px;
-        border-radius: 24px;
-        border: 1px solid transparent;
-        transition: all 0.2s;
-      }
-
-      .input-wrapper:focus-within {
-        border-color: var(--primary);
-        box-shadow: 0 0 0 2px rgba(0, 206, 209, 0.2);
-      }
-
-      #message-input {
-        flex: 1;
-        background: transparent;
-        border: none;
-        color: white;
-        padding: 10px 16px;
-        font-size: 0.95rem;
-        min-height: 44px;
-      }
-
-      .send-btn {
-        width: 44px;
-        height: 44px;
-        border-radius: 50%;
-        background: var(--primary);
-        border: none;
-        color: var(--bg-dark);
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: transform 0.1s;
-      }
-
-      .send-btn:hover {
-        background: #00e5e8;
-        transform: scale(1.05);
-      }
-      .send-btn:active {
-        transform: scale(0.95);
-      }
-
-      /* Status Bar */
-      #status-bar {
-        grid-column: 1 / 3;
-        grid-row: 2 / 3;
-        background: var(--bg-card);
-        border-top: 1px solid var(--glass-border);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 16px;
-        font-size: 0.75rem;
-        color: var(--text-muted);
-      }
-
-      .status-pill {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 2px 8px;
-        border-radius: 4px;
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid transparent;
-        transition: all 0.3s;
-      }
-
-      /* Modals */
-      .modal-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.6);
-        backdrop-filter: blur(4px);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 100;
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.2s;
-      }
-
-      .modal-overlay.visible {
-        opacity: 1;
-        pointer-events: auto;
-      }
-
-      .modal {
-        background: var(--bg-card);
-        border: 1px solid var(--glass-border);
-        width: 400px;
-        max-width: 90%;
-        border-radius: var(--radius-lg);
-        padding: 24px;
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-        transform: translateY(20px);
-        transition: transform 0.2s var(--ease-out);
-      }
-
-      .modal-overlay.visible .modal {
-        transform: translateY(0);
-      }
-
-      .modal-header {
-        display: flex;
-        justify-content: space-between; /* align-items: center; */
-        margin-bottom: 20px;
-      }
-
-      .close-btn {
-        background: none;
-        border: none;
-        color: var(--text-muted);
-        cursor: pointer;
-        font-size: 1.2rem;
-      }
-
-      .btn {
-        padding: 10px 20px;
-        border-radius: var(--radius-md);
-        border: none;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s;
-      }
-
-      .btn-primary {
-        background: var(--primary);
-        color: var(--bg-dark);
-      }
-      .btn-primary:hover {
-        filter: brightness(1.1);
-      }
-
-      .form-group {
-        margin-bottom: 16px;
-      }
-      .form-label {
-        display: block;
-        margin-bottom: 6px;
-        font-size: 0.85rem;
-        color: var(--text-muted);
-      }
-      .form-input {
-        width: 100%;
-        background: var(--bg-input);
-        border: 1px solid var(--glass-border);
-        padding: 10px;
-        border-radius: var(--radius-sm);
-        color: white;
-      }
-
-      /* Animations */
-      @keyframes pulse-green {
-        0% {
-          box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
-        }
-        70% {
-          box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
-        }
-        100% {
-          box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-        }
-      }
-
-      .pulse {
-        animation: pulse-green 2s infinite;
-      }
-
-      /* Utility */
-      .hidden {
-        display: none !important;
-      }
-      .flex {
-        display: flex;
-      }
-      .gap-2 {
-        gap: 8px;
-      }
-
-      /* Icons */
-      .icon {
-        width: 18px;
-        height: 18px;
-        fill: currentColor;
-      }
-
-      #settings-trigger:hover {
-        color: var(--text-main);
-        transform: rotate(45deg);
-        transition: transform 0.3s;
-      }
-
-      /* Tabs */
-      .tab-content.hidden {
-        display: none;
-      }
-      .tab-btn {
-        background: none;
-        border: none;
-        padding-bottom: 8px;
-        cursor: pointer;
-        color: var(--text-muted);
-        border-bottom: 2px solid transparent;
-        transition: all 0.2s;
-        font-size: 1rem;
-        font-weight: 500;
-      }
-      .tab-btn.active {
-        color: var(--primary);
-        border-bottom-color: var(--primary);
-      }
-
-      /* Scrollbar */
-      ::-webkit-scrollbar {
-        width: 6px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 3px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.2);
-      }
-    </style>
-  </head>
-  <body>
-    <div id="app">
-      <!-- Sidebar -->
-      <aside id="sidebar" class="glass">
-        <div class="sidebar-header">
-          <div class="app-title">
-            <div class="title-wrapper">
-              <div class="app-logo">SC</div>
-              <span style="font-weight: 600">SCMessenger</span>
-            </div>
-            <button
-              id="settings-trigger"
-              style="
-                background: none;
-                border: none;
-                color: var(--text-muted);
-                font-size: 1.2rem;
-                cursor: pointer;
-                margin-left: auto;
-              "
-              onclick="app.ui.openSettings()"
-            >
-              ⚙
-            </button>
-          </div>
-          <div id="add-contact-row" style="margin-top: 16px; display: flex; gap: 8px">
-            <button
-              id="add-contact-btn"
-              class="btn-primary"
-              style="
-                width: 100%;
-                padding: 8px;
-                border-radius: 8px;
-                font-size: 0.9rem;
-              "
-              onclick="app.ui.openAddContact()"
-            >
-              + Add Contact
-            </button>
-          </div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SCMessenger</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+
+<div id="app-shell">
+  <!-- ===== MAIN CONTENT ===== -->
+  <div id="app-content">
+
+    <!-- TAB: Conversations (Chats) -->
+    <div id="page-conversations" class="tab-page active">
+      <div class="top-bar">Conversations</div>
+      <div id="conv-stats" class="card hidden">
+        <div style="display:flex;justify-content:space-evenly;text-align:center">
+          <div><div class="stat-value" id="st-total">0</div><div class="stat-label">Total</div></div>
+          <div><div class="stat-value" id="st-sent">0</div><div class="stat-label">Sent</div></div>
+          <div><div class="stat-value" id="st-recv">0</div><div class="stat-label">Received</div></div>
+          <div><div class="stat-value" id="st-deliv">0</div><div class="stat-label">Delivered</div></div>
         </div>
-
-        <div class="search-container">
-          <input
-            type="text"
-            id="contact-search"
-            class="search-input"
-            placeholder="Search contacts..."
-            onkeyup="app.ui.filterContacts(this.value)"
-          />
-        </div>
-
-        <div id="contact-list">
-          <!-- Contacts rendered here -->
-        </div>
-
-        <!-- My Identity Mini-Card -->
-        <div
-          style="
-            padding: 16px;
-            border-top: 1px solid var(--glass-border);
-            background: rgba(0, 0, 0, 0.2);
-          "
-        >
-          <div class="flex" style="align-items: center; gap: 10px">
-            <div
-              class="avatar"
-              style="
-                width: 32px;
-                height: 32px;
-                font-size: 0.8rem;
-                background: var(--accent);
-              "
-            >
-              ME
-            </div>
-            <div style="overflow: hidden">
-              <div class="text-sm font-bold">My Identity</div>
-              <div
-                class="text-xs text-muted mono"
-                id="my-peer-id"
-                style="
-                  text-overflow: ellipsis;
-                  overflow: hidden;
-                  white-space: nowrap;
-                "
-              >
-                Loading...
-              </div>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      <!-- Main Chat Area -->
-      <main id="main">
-        <!-- Empty State -->
-        <div id="empty-state">
-          <div class="logo-large">SC</div>
-          <h2>Sovereign Communication</h2>
-          <p id="empty-state-copy" style="max-width: 400px; line-height: 1.6">
-            Connect freely. No servers. No masters.<br />
-            Select a contact to start messaging or add a new peer to the mesh.
-          </p>
-          <div id="relay-onboarding-cta" class="hidden" style="margin-top: 16px">
-            <button class="btn btn-primary" onclick="app.actions.initializeIdentity()">
-              Initialize Identity to Enable Chats
-            </button>
-          </div>
-        </div>
-
-        <!-- Active Chat -->
-        <div
-          id="chat-interface"
-          class="hidden"
-          style="display: flex; flex-direction: column; height: 100%"
-        >
-          <header class="chat-header glass">
-            <div class="chat-header-info">
-              <div class="avatar" id="current-chat-avatar">A</div>
-              <div>
-                <h3 id="current-chat-name">Alice</h3>
-                <div class="text-xs text-muted flex gap-2">
-                  <span
-                    id="current-chat-status"
-                    class="flex"
-                    style="align-items: center; gap: 4px"
-                  >
-                    <span
-                      class="status-dot status-online"
-                      style="
-                        position: static;
-                        width: 6px;
-                        height: 6px;
-                        border: none;
-                      "
-                    ></span>
-                    Online
-                  </span>
-                  <span class="mono peer-id-badge" id="current-chat-id"
-                    >ID: 12D3...</span
-                  >
-                </div>
-              </div>
-            </div>
-          </header>
-
-          <div id="messages-container">
-            <!-- Messages go here -->
-          </div>
-
-          <div class="chat-input-area glass">
-            <div class="input-wrapper">
-              <input
-                type="text"
-                id="message-input"
-                placeholder="Type a secure message..."
-                autocomplete="off"
-              />
-              <button class="send-btn" id="send-btn">
-                <svg viewBox="0 0 24 24" class="icon" style="margin-left: 2px">
-                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
-                </svg>
-              </button>
-            </div>
-            <div
-              class="text-xs text-muted"
-              style="margin-top: 8px; text-align: center"
-            >
-              <span style="color: var(--primary)">🔒 End-to-End Encrypted</span>
-              • Relayed via Minimal Hops • <span id="sync-status">Synced</span>
-            </div>
-          </div>
-        </div>
-      </main>
-
-      <!-- Status Bar -->
-      <footer id="status-bar">
-        <div class="flex gap-2">
-          <div class="status-pill" id="network-status-pill">
-            <span
-              class="status-dot status-offline"
-              id="net-dot"
-              style="position: static; width: 8px; height: 8px; border: none"
-            ></span>
-            <span id="net-text">Initializing...</span>
-          </div>
-          <div class="status-pill">
-            <span class="text-muted">Peers:</span>
-            <span id="peer-count">0</span>
-          </div>
-        </div>
-        <div class="flex gap-2">
-          <div
-            id="role-pill"
-            class="status-pill"
-            style="border: 1px solid var(--glass-border)"
-          >
-            ⚡ Relay Active
-          </div>
-        </div>
-      </footer>
-    </div>
-
-    <!-- Modals -->
-    <div id="modal-first-run" class="modal-overlay">
-      <div class="modal glass" style="width: 480px">
-        <div class="modal-header">
-          <h3>Choose Install Mode</h3>
-        </div>
-        <p class="text-muted" style="margin-bottom: 12px">
-          This node can run relay-only, or initialize an identity for chats and contacts.
-        </p>
-        <div class="form-group">
-          <label class="form-label">Nickname (optional now, can change later)</label>
-          <input
-            type="text"
-            id="install-choice-nickname"
-            class="form-input"
-            placeholder="e.g. christy"
-          />
-        </div>
-        <div style="display: flex; gap: 8px; margin-top: 14px">
-          <button
-            class="btn btn-primary"
-            style="flex: 1"
-            onclick="SCM.actions.initializeIdentityFromInstallChoice()"
-          >
-            Generate Identity Now
-          </button>
-          <button
-            class="btn btn-secondary"
-            style="flex: 1"
-            onclick="SCM.actions.skipRelayOnlyInstallChoice()"
-          >
-            Skip for Relay-Only Install
-          </button>
-        </div>
-        <p class="text-xs text-muted" style="margin-top: 10px">
-          You can initialize identity later from Settings > Identity.
-        </p>
+      </div>
+      <div id="conv-list" style="flex:1;overflow-y:auto"></div>
+      <div id="conv-empty" class="empty-state">
+        <div class="empty-icon">💬</div>
+        <div class="empty-title">No conversations yet</div>
+        <div class="empty-subtitle">Your encrypted conversations will appear here</div>
       </div>
     </div>
 
-    <div id="modal-add-contact" class="modal-overlay">
-      <div class="modal glass">
-        <div class="modal-header">
-          <h3>Add Contact</h3>
-          <button class="close-btn" onclick="app.ui.closeModals()">×</button>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Contact Name</label>
-          <input
-            type="text"
-            id="add-name"
-            class="form-input"
-            placeholder="e.g. Bob"
-          />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Peer ID</label>
-          <input
-            type="text"
-            id="add-peer-id"
-            class="form-input mono"
-            placeholder="12D3Koo..."
-          />
-        </div>
-        <button
-          class="btn btn-primary"
-          style="width: 100%"
-          onclick="app.actions.addContact()"
-        >
-          Add to Mesh
-        </button>
+    <!-- TAB: Contacts -->
+    <div id="page-contacts" class="tab-page">
+      <div class="top-bar" id="contacts-title">Contacts (0)</div>
+      <input type="text" class="search-bar" id="contact-search" placeholder="Search contacts..." />
+      <div id="contacts-list" style="flex:1;overflow-y:auto"></div>
+      <div id="contacts-empty" class="empty-state">
+        <div class="empty-icon">👤</div>
+        <div class="empty-title">No contacts yet</div>
+        <div class="empty-subtitle">Add contacts to start messaging</div>
       </div>
+      <button class="fab" id="fab-add-contact" title="Add Contact">+</button>
     </div>
 
-    <!-- Settings Modal -->
-    <div id="modal-settings" class="modal-overlay">
-      <div class="modal glass" style="width: 500px">
-        <div class="modal-header">
-          <h3>Settings</h3>
-          <button class="close-btn" onclick="app.ui.closeModals()">×</button>
+    <!-- TAB: Mesh (Dashboard) -->
+    <div id="page-mesh" class="tab-page">
+      <div class="top-bar">Mesh</div>
+      <div style="flex:1;overflow-y:auto;padding-bottom:16px">
+
+        <div id="mesh-status-card" class="status-card">
+          <div class="status-title" id="mesh-status-title">Initializing...</div>
+          <div class="status-subtitle" id="mesh-status-sub">State: Starting</div>
         </div>
 
-        <div
-          class="tabs"
-          style="
-            display: flex;
-            gap: 16px;
-            border-bottom: 1px solid var(--glass-border);
-            margin-bottom: 20px;
-          "
-        >
-          <button
-            id="tab-btn-network"
-            class="tab-btn active"
-            onclick="app.ui.switchTab('network')"
-          >
-            Network
-          </button>
-          <button
-            id="tab-btn-identity"
-            class="tab-btn"
-            onclick="app.ui.switchTab('identity')"
-          >
-            Identity
-          </button>
+        <div class="stat-row">
+          <div class="stat-card">
+            <div class="stat-value" id="mesh-peer-count">0</div>
+            <div class="stat-label" id="mesh-peer-label">Peers</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="mesh-relay-count">0</div>
+            <div class="stat-label">Relayed</div>
+          </div>
         </div>
 
-        <!-- Network Tab -->
-        <div id="tab-content-network" class="tab-content">
-          <div class="form-group">
-            <label class="form-label">Bootstrap Nodes</label>
-            <textarea
-              id="setting-bootstrap"
-              class="form-input"
-              rows="3"
-              style="font-family: monospace; font-size: 0.8rem"
-            >
-/ip4/bootstrap.example.com/tcp/4001</textarea
-            >
+        <div class="card">
+          <div class="card-title">Transports</div>
+          <div style="display:flex;justify-content:space-around;text-align:center;padding-top:4px">
+            <div><div style="font-size:24px">🌐</div><div class="stat-label">WebSocket</div></div>
+            <div><div style="font-size:24px;opacity:0.3">📶</div><div class="stat-label" style="opacity:0.3">BLE (N/A)</div></div>
+            <div><div style="font-size:24px;opacity:0.3">📡</div><div class="stat-label" style="opacity:0.3">WiFi (N/A)</div></div>
           </div>
-          <div class="form-group">
-            <label class="form-label" for="setting-relay-enabled">
-              Mesh Participation
-            </label>
-            <div class="text-sm text-muted" style="margin-bottom: 8px">
-              When disabled, send/receive messaging and relay participation are blocked.
-            </div>
-            <label style="display: flex; align-items: center; gap: 8px">
-              <input type="checkbox" id="setting-relay-enabled" checked />
-              <span>Enable mesh messaging + relay traffic</span>
-            </label>
-          </div>
-
-          <button
-            class="btn btn-primary"
-            style="width: 100%"
-            onclick="app.actions.saveSettings()"
-          >
-            Save Configuration
-          </button>
-
         </div>
 
-        <!-- Identity Tab -->
-        <div id="tab-content-identity" class="tab-content hidden">
-          <div class="form-group">
-            <label class="form-label">My Peer ID</label>
-            <input
-              type="text"
-              id="setting-peer-id"
-              class="form-input mono"
-              readonly
-              value="Loading..."
-            />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Public Key</label>
-            <textarea
-              id="setting-pub-key"
-              class="form-input mono"
-              readonly
-              rows="3"
-            >
-Loading...</textarea
-            >
-          </div>
-          <div class="form-group">
-            <label class="form-label">Nickname</label>
-            <input
-              type="text"
-              id="setting-nickname"
-              class="form-input"
-              placeholder="Optional display name"
-            />
-          </div>
-          <div
-            style="
-              font-size: 0.75rem;
-              color: var(--text-muted);
-              text-align: center;
-              margin-top: 20px;
-            "
-          >
-            Identity is managed by the core node. Keys are stored securely.
-          </div>
-          <div style="margin-top: 20px; text-align: right">
-            <button
-              class="btn btn-primary"
-              style="margin-right: 8px"
-              onclick="SCM.actions.initializeIdentity()"
-            >
-              Initialize Identity
-            </button>
-            <button
-              class="btn btn-secondary"
-              onclick="SCM.actions.exportIdentity()"
-            >
-              Export Identity (Backup)
-            </button>
-          </div>
+        <div class="card">
+          <div class="card-title">Mesh Performance</div>
+          <div class="detail-row"><span class="detail-label">Connection</span><span class="detail-value" id="mesh-conn-path">—</span></div>
+          <div class="detail-row"><span class="detail-label">Uptime</span><span class="detail-value" id="mesh-uptime">—</span></div>
+          <div class="detail-row"><span class="detail-label">NAT Status</span><span class="detail-value" id="mesh-nat">—</span></div>
+          <div class="detail-row"><span class="detail-label">Inbox / Outbox</span><span class="detail-value" id="mesh-inbox-outbox">0 / 0</span></div>
+        </div>
+
+        <div class="section-header">Discovered Nodes</div>
+        <div id="mesh-peers-list"></div>
+        <div id="mesh-peers-empty" style="padding:0 16px 16px">
+          <span class="list-subtitle">No nodes discovered yet</span>
         </div>
       </div>
     </div>
 
-    <!-- Export Identity Modal -->
-    <div id="modal-export" class="modal-overlay">
-      <div class="modal glass" style="width: 500px">
-        <div class="modal-header">
-          <h3>Identity Backup</h3>
-          <button class="close-btn" onclick="SCM.ui.closeModals()">×</button>
+    <!-- TAB: Settings -->
+    <div id="page-settings" class="tab-page">
+      <div class="top-bar">Settings</div>
+      <div style="flex:1;overflow-y:auto;padding-bottom:16px">
+
+        <!-- Mesh Service -->
+        <div class="card">
+          <div class="card-title">Mesh Service</div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div id="svc-status-text">Status: Running</div>
+              <div class="list-subtitle" id="svc-active-text" style="color:var(--md-primary)">Active</div>
+            </div>
+            <button class="btn btn-filled" id="btn-toggle-service" onclick="SCM.actions.toggleMeshService()">Stop</button>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Storage Path</label>
-          <input id="export-path" class="form-input mono" readonly />
+
+        <!-- Identity -->
+        <div class="card" id="identity-card">
+          <div class="card-title">Identity</div>
+          <div id="identity-initialized" class="hidden">
+            <div class="field"><label>Nickname</label><input type="text" id="id-nickname" /></div>
+            <div class="divider"></div>
+            <div class="detail-row"><span class="detail-label">Identity ID</span><span class="detail-value mono" id="id-identity-id">—</span></div>
+            <div class="detail-row"><span class="detail-label">Public Key</span><span class="detail-value mono" id="id-pub-key">—</span></div>
+            <div class="detail-row"><span class="detail-label">Device ID</span><span class="detail-value mono" id="id-device-id">—</span></div>
+            <div class="detail-row"><span class="detail-label">libp2p Peer ID</span><span class="detail-value mono" id="id-libp2p-peer">—</span></div>
+            <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-outline" onclick="SCM.actions.copyIdentityExport()">📋 Copy Full Export</button>
+              <button class="btn btn-outline" onclick="SCM.actions.exportIdentity()">🔑 Show Backup</button>
+            </div>
+          </div>
+          <div id="identity-uninitialized">
+            <p style="font-size:14px;color:var(--md-on-surface-variant);margin-bottom:12px">This node is relay-only. Create an identity to enable chats and contacts.</p>
+            <button class="btn btn-filled" style="width:100%" onclick="SCM.actions.initializeIdentity()">Create Identity</button>
+            <div class="divider" style="margin:12px 0"></div>
+            <p style="font-size:12px;color:var(--md-on-surface-variant);margin-bottom:8px">Or import from another device:</p>
+            <div class="field"><label>Paste Backup String</label><textarea id="import-backup-input" rows="3" class="mono" style="font-size:11px"></textarea></div>
+            <button class="btn btn-tonal" style="width:100%" onclick="SCM.actions.importIdentity()">Import Identity Backup</button>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Public Key</label>
-          <textarea
-            id="export-pub"
-            class="form-input mono"
-            rows="2"
-            readonly
-          ></textarea>
+
+        <!-- Mesh Network -->
+        <div class="card">
+          <div class="card-title">Mesh Network</div>
+          <div class="warn-card">
+            <div class="warn-title">⚠️ Relay = Messaging (Bidirectional)</div>
+            <div class="warn-body">OFF = no sending OR receiving. ON = full participation.</div>
+          </div>
+          <div class="switch-row">
+            <div class="switch-info"><div class="switch-title">Mesh Participation</div><div class="switch-subtitle">Controls ALL communication</div></div>
+            <div class="switch on" id="sw-relay" onclick="SCM.actions.toggleSetting('relayEnabled')"></div>
+          </div>
+          <div class="switch-row">
+            <div class="switch-info"><div class="switch-title">Internet Relay</div><div class="switch-subtitle">Use internet as fallback</div></div>
+            <div class="switch on" id="sw-internetEnabled" onclick="SCM.actions.toggleSetting('internetEnabled')"></div>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Private Key / Secret</label>
-          <textarea
-            id="export-priv"
-            class="form-input mono"
-            rows="3"
-            readonly
-          ></textarea>
+
+        <!-- Privacy & Security -->
+        <div class="card">
+          <div class="card-title">Privacy & Security</div>
+          <div class="divider"></div>
+          <div class="field" style="margin-top:8px">
+            <label>Discovery Mode</label>
+            <select id="sel-discoveryMode" onchange="SCM.actions.setDiscoveryMode(this.value)" style="width:100%;background:transparent;border:1px solid var(--md-outline);border-radius:4px;padding:10px;color:var(--md-on-surface);font-family:inherit;font-size:14px">
+              <option value="normal" style="background:var(--md-surface)">Normal</option>
+              <option value="cautious" style="background:var(--md-surface)">Cautious</option>
+              <option value="paranoid" style="background:var(--md-surface)">Paranoid</option>
+            </select>
+          </div>
         </div>
-        <p
-          style="font-size: 0.8rem; color: var(--warning); margin-bottom: 1rem"
-        >
-          ⚠️ Keep your private key and storage file secure. Anyone with access
-          can impersonate you.
-        </p>
-        <div class="modal-actions">
-          <button class="btn btn-primary" onclick="SCM.ui.closeModals()">
-            Close
-          </button>
+
+        <!-- Bootstrap Nodes -->
+        <div class="card">
+          <div class="card-title">Bootstrap Nodes</div>
+          <div class="field"><textarea id="setting-bootstrap" rows="3" class="mono" style="font-size:12px"></textarea></div>
+          <button class="btn btn-tonal" style="width:100%" onclick="SCM.actions.saveBootstrap()">Save Bootstrap Config</button>
+        </div>
+
+        <!-- Dial Peer -->
+        <div class="card">
+          <div class="card-title">Manual Dial</div>
+          <div class="field"><label>Multiaddr</label><input type="text" id="dial-multiaddr" class="mono" placeholder="/ip4/x.x.x.x/tcp/9001/..." /></div>
+          <button class="btn btn-tonal" style="width:100%" onclick="SCM.actions.dialPeer()">Dial Peer</button>
+        </div>
+
+        <!-- Blocked Peers -->
+        <div class="card">
+          <div class="card-title">Blocked Peers (<span id="blocked-count">0</span>)</div>
+          <div id="blocked-list"></div>
+          <div id="blocked-empty" style="text-align:center;padding:16px;color:var(--md-on-surface-variant)">No blocked peers</div>
+        </div>
+
+        <!-- Info -->
+        <div class="card">
+          <div class="card-title">Information</div>
+          <div class="detail-row"><span class="detail-label">Contacts</span><span class="detail-value" id="info-contacts">0</span></div>
+          <div class="detail-row"><span class="detail-label">Messages</span><span class="detail-value" id="info-messages">0</span></div>
+          <div class="detail-row"><span class="detail-label">Undelivered</span><span class="detail-value" id="info-undelivered">0</span></div>
+          <div class="detail-row"><span class="detail-label">Inbox / Outbox</span><span class="detail-value" id="info-inbox-outbox">0 / 0</span></div>
+          <div class="detail-row"><span class="detail-label">Version</span><span class="detail-value">0.2.1 (WASM)</span></div>
+        </div>
+
+        <!-- Diagnostics -->
+        <div class="card">
+          <div class="card-title">Diagnostics & Logs</div>
+          <div class="detail-row"><span class="detail-label">Listeners</span><span class="detail-value mono" id="diag-listeners" style="font-size:11px;max-width:60%;word-break:break-all">—</span></div>
+          <div class="detail-row"><span class="detail-label">External Addrs</span><span class="detail-value mono" id="diag-external" style="font-size:11px;max-width:60%;word-break:break-all">—</span></div>
+          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline" onclick="SCM.actions.exportDiagnostics()">📊 Export Diagnostics</button>
+            <button class="btn btn-outline" onclick="SCM.actions.exportLogs()">📋 Export Logs</button>
+            <button class="btn btn-outline" onclick="SCM.actions.runMaintenance()">🔧 Run Maintenance</button>
+          </div>
+        </div>
+
+        <!-- Data Management (danger) -->
+        <div class="card" style="background:rgba(140,29,24,0.2)">
+          <div class="card-title" style="color:var(--md-error)">Data Management</div>
+          <p style="font-size:12px;margin-bottom:12px">DANGER ZONE: This permanently wipes your identity and all local history.</p>
+          <button class="btn btn-error-filled" style="width:100%" onclick="SCM.actions.factoryReset()">Delete All Data & Reset</button>
         </div>
       </div>
     </div>
 
-    <script>
-      const DEFAULT_BOOTSTRAP_NODES = [
-        "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw",
-        "/ip4/104.28.216.43/tcp/9010/p2p/12D3KooWHpmuhytgzLcM4nj1hZvN5b4crB1wka3LCNfKRCd7yHj9",
-      ];
-      const BOOTSTRAP_STORAGE_KEY = "scm.desktop.bootstrap.v1";
-      const IDENTITY_INSTALL_CHOICE_KEY = "scm.desktop.identity.install.choice.v1";
-
-      const errorOverlay = document.createElement("div");
-      errorOverlay.id = "connection-error";
-      errorOverlay.className = "modal-overlay";
-      errorOverlay.innerHTML = `
-        <div class="modal glass" style="text-align: center; max-width: 520px;">
-          <div class="logo-large" style="margin: 0 auto 20px auto; width: 60px; height: 60px; font-size: 30px;">SC</div>
-          <h3 style="margin-bottom: 10px;">Desktop Runtime Unavailable</h3>
-          <p class="text-muted" id="runtime-error-copy" style="margin-bottom: 20px;">
-            Could not initialize the SCMessenger desktop runtime.
-          </p>
-          <button class="btn btn-primary" onclick="window.location.reload()">Retry</button>
+    <!-- CHAT VIEW (overlays tab pages) -->
+    <div id="chat-view">
+      <div class="chat-topbar">
+        <button class="icon-btn" onclick="SCM.ui.closeChat()">←</button>
+        <div style="flex:1">
+          <div class="chat-topbar-title" id="chat-title">Contact</div>
+          <div class="list-meta" id="chat-peer-id-short"></div>
         </div>
-      `;
-      document.body.appendChild(errorOverlay);
-
-      const SCM = {
-        state: {
-          wasmModule: null,
-          core: null,
-          contactManager: null,
-          historyManager: null,
-          identity: null,
-          role: "relay-only",
-          relayEnabled: true,
-          swarmRunning: false,
-          bootstrapAddrs: [],
-          contacts: {},
-          messages: {},
-          activeChat: null,
-          peers: [],
-          dashboardTimer: null,
-          inboxTimer: null,
-        },
-
-        async init() {
-          this.bindEvents();
-          this.state.bootstrapAddrs = this.loadBootstrapNodes();
-          document.getElementById("setting-bootstrap").value =
-            this.state.bootstrapAddrs.join("\n");
-
-          await this.loadWasmRuntime();
-          await this.initializeCore();
-          await this.refreshIdentityRole();
-          this.ui.maybeShowInstallChoice();
-          await this.startSwarm();
-          await this.actions.refreshContacts();
-          this.startPolling();
-          await this.refreshDashboard();
-        },
-
-        bindEvents() {
-          document
-            .getElementById("send-btn")
-            .addEventListener("click", () => this.actions.sendMessage());
-          document
-            .getElementById("message-input")
-            .addEventListener("keypress", (e) => {
-              if (e.key === "Enter") this.actions.sendMessage();
-            });
-        },
-
-        loadBootstrapNodes() {
-          try {
-            const raw = localStorage.getItem(BOOTSTRAP_STORAGE_KEY);
-            if (!raw) return [...DEFAULT_BOOTSTRAP_NODES];
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              return parsed.filter((item) => typeof item === "string");
-            }
-          } catch (error) {
-            console.warn("Failed to load bootstrap nodes from local storage", error);
-          }
-          return [...DEFAULT_BOOTSTRAP_NODES];
-        },
-
-        persistBootstrapNodes(nodes) {
-          localStorage.setItem(BOOTSTRAP_STORAGE_KEY, JSON.stringify(nodes));
-        },
-
-        parseBootstrapTextarea() {
-          const raw = document.getElementById("setting-bootstrap").value;
-          const nodes = raw
-            .split("\n")
-            .map((line) => line.trim())
-            .filter((line) => line.length > 0);
-          return [...new Set(nodes)];
-        },
-
-        async loadWasmRuntime() {
-          const candidates = [
-            "/wasm/pkg/scmessenger_wasm.js",
-            "../wasm/pkg/scmessenger_wasm.js",
-            "./wasm/pkg/scmessenger_wasm.js",
-          ];
-
-          let lastError = null;
-          for (const candidate of candidates) {
-            try {
-              const module = await import(candidate);
-              if (typeof module.default === "function") {
-                await module.default();
-              }
-              if (!module.IronCore) {
-                throw new Error(`IronCore export missing in ${candidate}`);
-              }
-              this.state.wasmModule = module;
-              return;
-            } catch (error) {
-              lastError = error;
-            }
-          }
-
-          throw new Error(
-            `Failed to load scmessenger-wasm runtime. Last error: ${lastError}`,
-          );
-        },
-
-        async initializeCore() {
-          const { IronCore } = this.state.wasmModule;
-          const core =
-            typeof IronCore.withStorage === "function"
-              ? IronCore.withStorage("scm_desktop")
-              : new IronCore();
-
-          core.start();
-          this.state.core = core;
-          this.state.contactManager = core.getContactManager();
-          this.state.historyManager = core.getHistoryManager();
-
-          const settings = core.getSettings();
-          this.state.relayEnabled = settings.relayEnabled !== false;
-          document.getElementById("setting-relay-enabled").checked =
-            this.state.relayEnabled;
-        },
-
-        async startSwarm() {
-          if (this.state.swarmRunning) return;
-          await this.state.core.startSwarm(this.state.bootstrapAddrs);
-          this.state.swarmRunning = true;
-        },
-
-        async stopSwarm() {
-          if (!this.state.swarmRunning) return;
-          await this.state.core.stopSwarm();
-          this.state.swarmRunning = false;
-        },
-
-        async restartSwarm() {
-          await this.stopSwarm();
-          await this.startSwarm();
-        },
-
-        startPolling() {
-          clearInterval(this.state.dashboardTimer);
-          clearInterval(this.state.inboxTimer);
-
-          this.state.dashboardTimer = setInterval(() => {
-            this.refreshDashboard().catch((error) =>
-              console.warn("Dashboard refresh failed", error),
-            );
-          }, 2500);
-
-          this.state.inboxTimer = setInterval(() => {
-            this.pollIncomingMessages().catch((error) =>
-              console.warn("Incoming message poll failed", error),
-            );
-          }, 900);
-        },
-
-        async refreshIdentityRole() {
-          const info = this.state.core.getIdentityInfo();
-          this.state.identity = info;
-          const fullRole = !!info.initialized;
-          this.state.role = fullRole ? "full" : "relay-only";
-
-          const displayPeer = info.libp2pPeerId || info.identityId || "Relay-Only Mode";
-          document.getElementById("my-peer-id").textContent = displayPeer;
-          document.getElementById("setting-peer-id").value = displayPeer;
-          document.getElementById("setting-pub-key").value =
-            info.publicKeyHex || "No identity initialized";
-          document.getElementById("setting-nickname").value = info.nickname || "";
-
-          this.ui.applyRoleGating(fullRole);
-          this.ui.updateRolePill();
-        },
-
-        async refreshDashboard() {
-          if (!this.state.core) return;
-
-          const peers = await this.state.core.getPeers().catch(() => []);
-          this.state.peers = Array.isArray(peers) ? peers : [];
-          document.getElementById("peer-count").textContent = this.state.peers.length;
-
-          const pathState = await this.state.core
-            .getConnectionPathState()
-            .catch(() => "Disconnected");
-          const statusMode = this.utils.networkModeFromPath(pathState);
-          this.ui.updateNetworkStatus(statusMode, pathState);
-
-          const stats = this.state.historyManager
-            ? this.state.historyManager.stats()
-            : null;
-          if (stats) {
-            const sync = document.getElementById("sync-status");
-            sync.textContent = `Inbox ${stats.receivedCount} / Outbox ${this.state.core.outboxCount()}`;
-          }
-
-          const onlinePeers = new Set(this.state.peers);
-          Object.values(this.state.contacts).forEach((contact) => {
-            contact.status = onlinePeers.has(contact.peer_id) ? "online" : "offline";
-          });
-          this.ui.renderContacts();
-          this.ui.updateRolePill();
-        },
-
-        async pollIncomingMessages() {
-          if (!this.state.core) return;
-
-          const drained = Array.from(this.state.core.drainReceivedMessages());
-          if (drained.length === 0) return;
-
-          for (const incoming of drained) {
-            const peerId = incoming.senderPeerId || incoming.senderId;
-            if (!peerId) continue;
-
-            await this.ensureContactForPeer(peerId);
-
-            const timestampMs = Number(incoming.timestamp || 0) * 1000;
-            const content = incoming.text || "";
-            const record = {
-              id: incoming.id || `incoming-${Date.now()}`,
-              direction: "received",
-              content,
-              timestamp: timestampMs || Date.now(),
-              status: "read",
-            };
-
-            this.storeMessage(peerId, record);
-            this.addHistoryRecord({
-              id: record.id,
-              direction: "Received",
-              peer_id: peerId,
-              content,
-              timestamp: Math.floor(record.timestamp / 1000),
-              delivered: true,
-            });
-          }
-        },
-
-        async ensureContactForPeer(peerId) {
-          if (this.state.contacts[peerId]) return;
-
-          let publicKey = "";
-          try {
-            publicKey = this.state.core.extractPublicKeyFromPeerId(peerId);
-          } catch (_error) {
-            publicKey = "00".repeat(32);
-          }
-
-          const now = Math.floor(Date.now() / 1000);
-          const contact = {
-            peer_id: peerId,
-            nickname: null,
-            local_nickname: `Peer ${peerId.slice(0, 8)}`,
-            public_key: publicKey,
-            added_at: now,
-            last_seen: now,
-            notes: null,
-            status: "online",
-          };
-
-          this.state.contactManager.add(contact);
-          this.state.contacts[peerId] = contact;
-          this.ui.renderContacts();
-        },
-
-        addHistoryRecord(record) {
-          if (!this.state.historyManager) return;
-          try {
-            this.state.historyManager.add(record);
-          } catch (error) {
-            console.warn("History write failed", error);
-          }
-        },
-
-        storeMessage(peerId, msg) {
-          if (!this.state.messages[peerId]) this.state.messages[peerId] = [];
-          if (this.state.messages[peerId].find((existing) => existing.id === msg.id)) {
-            return;
-          }
-
-          this.state.messages[peerId].push(msg);
-          this.state.messages[peerId].sort((a, b) => a.timestamp - b.timestamp);
-
-          if (this.state.activeChat === peerId) {
-            this.ui.renderMessages(peerId);
-          }
-          this.ui.updateContactPreview(peerId, msg);
-        },
-
-        handleFatal(error) {
-          console.error(error);
-          document.getElementById("runtime-error-copy").textContent = `${error}`;
-          document.getElementById("connection-error").classList.add("visible");
-          this.ui.updateNetworkStatus("offline", "Runtime error");
-        },
-
-        actions: {
-          async initializeIdentity() {
-            try {
-              SCM.state.core.initializeIdentity();
-              const nickname = document
-                .getElementById("setting-nickname")
-                .value.trim();
-              if (nickname) SCM.state.core.setNickname(nickname);
-              await SCM.refreshIdentityRole();
-              await SCM.restartSwarm();
-              await SCM.actions.refreshContacts();
-              localStorage.setItem(IDENTITY_INSTALL_CHOICE_KEY, "done");
-              SCM.ui.closeModals();
-            } catch (error) {
-              alert(`Identity initialization failed: ${error}`);
-            }
-          },
-
-          async initializeIdentityFromInstallChoice() {
-            const nicknameInput = document
-              .getElementById("install-choice-nickname")
-              .value.trim();
-            if (nicknameInput) {
-              document.getElementById("setting-nickname").value = nicknameInput;
-            }
-            await SCM.actions.initializeIdentity();
-          },
-
-          skipRelayOnlyInstallChoice() {
-            localStorage.setItem(IDENTITY_INSTALL_CHOICE_KEY, "done");
-            document.getElementById("modal-first-run").classList.remove("visible");
-          },
-
-          async refreshContacts() {
-            const list = Array.from(SCM.state.contactManager.list());
-            SCM.state.contacts = {};
-            for (const contact of list) {
-              const normalized = {
-                ...contact,
-                nickname:
-                  contact.local_nickname ||
-                  contact.nickname ||
-                  `Peer ${contact.peer_id.slice(0, 8)}`,
-                status: "offline",
-              };
-              SCM.state.contacts[contact.peer_id] = normalized;
-            }
-            SCM.ui.renderContacts();
-          },
-
-          async addContact() {
-            if (SCM.state.role !== "full") {
-              alert("Relay-only mode: initialize identity to add contacts.");
-              return;
-            }
-
-            const name = document.getElementById("add-name").value.trim();
-            const peerId = document.getElementById("add-peer-id").value.trim();
-            if (!peerId) return;
-
-            try {
-              const publicKey = SCM.state.core.extractPublicKeyFromPeerId(peerId);
-              const now = Math.floor(Date.now() / 1000);
-              const contact = {
-                peer_id: peerId,
-                nickname: null,
-                local_nickname: name || null,
-                public_key: publicKey,
-                added_at: now,
-                last_seen: now,
-                notes: null,
-                status: "offline",
-              };
-
-              SCM.state.contactManager.add(contact);
-              SCM.state.contacts[peerId] = {
-                ...contact,
-                nickname: name || `Peer ${peerId.slice(0, 8)}`,
-              };
-              SCM.state.messages[peerId] = SCM.state.messages[peerId] || [];
-              SCM.ui.renderContacts();
-              SCM.ui.closeModals();
-            } catch (error) {
-              alert(`Failed to add contact: ${error}`);
-            }
-          },
-
-          async removeContact(peerId) {
-            if (!confirm("Are you sure you want to remove this contact?")) return;
-            try {
-              SCM.state.contactManager.remove(peerId);
-              delete SCM.state.contacts[peerId];
-              delete SCM.state.messages[peerId];
-
-              if (SCM.state.activeChat === peerId) {
-                SCM.state.activeChat = null;
-                document.getElementById("chat-interface").classList.add("hidden");
-                document.getElementById("empty-state").classList.remove("hidden");
-              }
-
-              SCM.ui.renderContacts();
-            } catch (error) {
-              alert(`Failed to remove contact: ${error}`);
-            }
-          },
-
-          async selectContact(peerId) {
-            if (SCM.state.role !== "full") return;
-            SCM.state.activeChat = peerId;
-
-            const contact = SCM.state.contacts[peerId];
-            const records = Array.from(
-              SCM.state.historyManager.conversation(peerId, 200),
-            ).sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
-
-            SCM.state.messages[peerId] = records.map((record) => ({
-              id: record.id,
-              direction: SCM.utils.historyDirectionToUi(record.direction),
-              content: record.content,
-              timestamp: Number(record.timestamp) * 1000,
-              status: record.delivered ? "delivered" : "sent",
-            }));
-
-            document.getElementById("empty-state").classList.add("hidden");
-            const chatInterface = document.getElementById("chat-interface");
-            chatInterface.classList.remove("hidden");
-            chatInterface.style.display = "flex";
-
-            document.getElementById("current-chat-name").textContent =
-              contact.nickname || peerId.slice(0, 8);
-            document.getElementById("current-chat-id").textContent =
-              "ID: " + peerId.slice(0, 12) + "...";
-
-            const avatar = document.getElementById("current-chat-avatar");
-            avatar.textContent = (contact.nickname || "P")[0].toUpperCase();
-            avatar.style.background = SCM.utils.stringToColor(peerId);
-
-            SCM.ui.renderMessages(peerId);
-
-            document
-              .querySelectorAll(".contact-item")
-              .forEach((el) => el.classList.remove("active"));
-            const activeEl = document.getElementById(`contact-${peerId}`);
-            if (activeEl) activeEl.classList.add("active");
-
-            document.getElementById("message-input").focus();
-          },
-
-          async sendMessage() {
-            if (SCM.state.role !== "full") {
-              alert("Relay-only mode: initialize identity to send messages.");
-              return;
-            }
-            if (!SCM.state.relayEnabled) {
-              alert("Mesh participation is disabled in settings.");
-              return;
-            }
-
-            const input = document.getElementById("message-input");
-            const text = input.value.trim();
-            const peerId = SCM.state.activeChat;
-            if (!text || !peerId) return;
-
-            const contact = SCM.state.contacts[peerId];
-            if (!contact?.public_key) {
-              alert("Contact is missing public key metadata.");
-              return;
-            }
-
-            try {
-              const prepared = SCM.state.core.prepareMessageWithId(
-                contact.public_key,
-                text,
-              );
-              await SCM.state.core.sendPreparedEnvelope(
-                peerId,
-                prepared.envelopeData,
-              );
-
-              const nowMs = Date.now();
-              const message = {
-                id: prepared.messageId,
-                direction: "sent",
-                content: text,
-                timestamp: nowMs,
-                status: "sent",
-              };
-
-              SCM.storeMessage(peerId, message);
-              SCM.addHistoryRecord({
-                id: prepared.messageId,
-                direction: "Sent",
-                peer_id: peerId,
-                content: text,
-                timestamp: Math.floor(nowMs / 1000),
-                delivered: false,
-              });
-              input.value = "";
-            } catch (error) {
-              alert(`Send failed: ${error}`);
-            }
-          },
-
-          async saveSettings() {
-            try {
-              const bootstrap = SCM.parseBootstrapTextarea();
-              const relayEnabled = document.getElementById(
-                "setting-relay-enabled",
-              ).checked;
-              const nickname = document
-                .getElementById("setting-nickname")
-                .value.trim();
-
-              SCM.state.bootstrapAddrs =
-                bootstrap.length > 0 ? bootstrap : [...DEFAULT_BOOTSTRAP_NODES];
-              SCM.persistBootstrapNodes(SCM.state.bootstrapAddrs);
-
-              const settings = SCM.state.core.getSettings();
-              settings.relayEnabled = relayEnabled;
-              SCM.state.core.updateSettings(settings);
-
-              if (SCM.state.identity?.initialized) {
-                const currentNickname = SCM.state.identity.nickname || "";
-                if (nickname !== currentNickname) {
-                  SCM.state.core.setNickname(nickname);
-                }
-              }
-
-              SCM.state.relayEnabled = relayEnabled;
-              await SCM.restartSwarm();
-              await SCM.refreshIdentityRole();
-
-              SCM.ui.updateRolePill();
-              SCM.ui.closeModals();
-              await SCM.refreshDashboard();
-              alert("Settings saved.");
-            } catch (error) {
-              alert(`Failed to save settings: ${error}`);
-            }
-          },
-
-          exportIdentity() {
-            try {
-              if (!SCM.state.identity?.initialized) {
-                alert("No identity initialized yet.");
-                return;
-              }
-              const backup = SCM.state.core.exportIdentityBackup();
-              document.getElementById("export-path").value =
-                "Desktop storage: scm_desktop";
-              document.getElementById("export-pub").value =
-                SCM.state.identity.publicKeyHex || "N/A";
-              document.getElementById("export-priv").value = backup;
-              document.getElementById("modal-export").classList.add("visible");
-            } catch (error) {
-              alert(`Identity export failed: ${error}`);
-            }
-          },
-        },
-
-        ui: {
-          applyRoleGating(fullRole) {
-            document
-              .getElementById("add-contact-row")
-              .classList.toggle("hidden", !fullRole);
-            document
-              .getElementById("contact-search")
-              .parentElement.classList.toggle("hidden", !fullRole);
-            document
-              .getElementById("contact-list")
-              .classList.toggle("hidden", !fullRole);
-            document
-              .getElementById("relay-onboarding-cta")
-              .classList.toggle("hidden", fullRole);
-
-            const input = document.getElementById("message-input");
-            input.disabled = !fullRole || !SCM.state.relayEnabled;
-            document.getElementById("send-btn").disabled = input.disabled;
-
-            const emptyCopy = document.getElementById("empty-state-copy");
-            if (fullRole) {
-              emptyCopy.innerHTML =
-                "Connect freely. No servers. No masters.<br />Select a contact to start messaging or add a new peer to the mesh.";
-            } else {
-              emptyCopy.innerHTML =
-                "Relay-only mode active.<br />This node participates in the mesh without a local identity.";
-              document.getElementById("chat-interface").classList.add("hidden");
-              document.getElementById("empty-state").classList.remove("hidden");
-              SCM.state.activeChat = null;
-            }
-          },
-
-          renderContacts() {
-            const list = document.getElementById("contact-list");
-            list.innerHTML = "";
-
-            Object.values(SCM.state.contacts).forEach((contact) => {
-              const el = document.createElement("div");
-              el.className = `contact-item ${
-                SCM.state.activeChat === contact.peer_id ? "active" : ""
-              }`;
-              el.id = `contact-${contact.peer_id}`;
-              el.onclick = () => SCM.actions.selectContact(contact.peer_id);
-
-              const lastMsg = SCM.state.messages[contact.peer_id]?.slice(-1)[0];
-              const lastMsgText = lastMsg ? lastMsg.content : "No messages yet";
-              const initial = (contact.nickname || "?")[0].toUpperCase();
-
-              el.innerHTML = `
-                <div class="avatar" style="background: ${SCM.utils.stringToColor(contact.peer_id)}">
-                  ${initial}
-                  <div class="status-dot status-${contact.status || "offline"}"></div>
-                </div>
-                <div class="contact-info">
-                  <div class="contact-name">${SCM.utils.escapeHtml(contact.nickname || "Unknown")}</div>
-                  <div class="last-msg">${SCM.utils.escapeHtml(lastMsgText)}</div>
-                </div>
-                <div class="contact-meta">
-                  <div>${SCM.utils.formatTime(contact.last_seen || contact.added_at)}</div>
-                  <div class="contact-actions">
-                    <button class="btn-icon-sm" onclick="event.stopPropagation(); SCM.actions.removeContact('${contact.peer_id}')" title="Remove Contact">×</button>
-                  </div>
-                </div>
-              `;
-              list.appendChild(el);
-            });
-          },
-
-          renderMessages(peerId) {
-            const container = document.getElementById("messages-container");
-            container.innerHTML = "";
-            const messages = SCM.state.messages[peerId] || [];
-            messages.forEach((msg) => this.appendMessage(msg, false));
-            this.scrollToBottom();
-          },
-
-          appendMessage(msg, scroll = true) {
-            const container = document.getElementById("messages-container");
-            const isMine = msg.direction === "sent";
-
-            const div = document.createElement("div");
-            div.className = `message-group ${isMine ? "mine" : "theirs"}`;
-
-            let statusIcon = "";
-            if (isMine) {
-              if (msg.status === "queued") statusIcon = "◷";
-              else if (msg.status === "sent") statusIcon = "➤";
-              else if (msg.status === "delivered") statusIcon = "✓";
-              else if (msg.status === "read") statusIcon = "✓✓";
-            }
-
-            div.innerHTML = `
-              <div class="message-bubble" title="ID: ${SCM.utils.escapeHtml(msg.id)}">
-                ${SCM.utils.escapeHtml(msg.content)}
-              </div>
-              <div class="message-meta">
-                ${new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                <span>${statusIcon}</span>
-              </div>
-            `;
-
-            container.appendChild(div);
-            if (scroll) this.scrollToBottom();
-          },
-
-          scrollToBottom() {
-            const container = document.getElementById("messages-container");
-            container.scrollTop = container.scrollHeight;
-          },
-
-          updateContactPreview(peerId, lastMsg) {
-            const el = document.getElementById(`contact-${peerId}`);
-            if (el) {
-              const msgEl = el.querySelector(".last-msg");
-              if (msgEl) msgEl.textContent = lastMsg.content;
-            }
-          },
-
-          updateNetworkStatus(mode, pathState = "") {
-            const dot = document.getElementById("net-dot");
-            const text = document.getElementById("net-text");
-            const pill = document.getElementById("network-status-pill");
-            dot.className = "status-dot";
-
-            if (mode === "online") {
-              text.textContent = pathState || "Direct Preferred";
-              dot.classList.add("status-online", "pulse");
-              pill.style.borderColor = "var(--success)";
-            } else if (mode === "mesh") {
-              text.textContent = pathState || "Mesh Connected";
-              dot.classList.add("status-mesh");
-              pill.style.borderColor = "var(--primary)";
-            } else {
-              text.textContent = pathState || "Offline";
-              dot.classList.add("status-offline");
-              pill.style.borderColor = "var(--danger)";
-            }
-          },
-
-          updateRolePill() {
-            const rolePill = document.getElementById("role-pill");
-            if (SCM.state.role === "relay-only") {
-              rolePill.textContent = "🛰 Relay-Only Mode";
-              return;
-            }
-            rolePill.textContent = SCM.state.relayEnabled
-              ? "⚡ Full Node (Relay ON)"
-              : "⛔ Mesh Participation Disabled";
-          },
-
-          openAddContact() {
-            if (SCM.state.role !== "full") {
-              alert("Initialize identity to manage contacts.");
-              return;
-            }
-            document.getElementById("modal-add-contact").classList.add("visible");
-            document.getElementById("add-name").focus();
-          },
-
-          openSettings() {
-            document.getElementById("modal-settings").classList.add("visible");
-          },
-
-          maybeShowInstallChoice() {
-            const completed = localStorage.getItem(IDENTITY_INSTALL_CHOICE_KEY) === "done";
-            if (SCM.state.identity?.initialized) {
-                localStorage.setItem(IDENTITY_INSTALL_CHOICE_KEY, "done");
-                document.getElementById("modal-first-run").classList.remove("visible");
-                return;
-            }
-            if (!completed) {
-              document.getElementById("modal-first-run").classList.add("visible");
-              document.getElementById("install-choice-nickname").focus();
-            }
-          },
-
-          closeModals() {
-            document
-              .querySelectorAll(".modal-overlay")
-              .forEach((el) => el.classList.remove("visible"));
-          },
-
-          switchTab(tabName) {
-            document
-              .querySelectorAll(".tab-btn")
-              .forEach((button) => button.classList.remove("active"));
-            document
-              .getElementById(`tab-btn-${tabName}`)
-              .classList.add("active");
-
-            document
-              .querySelectorAll(".tab-content")
-              .forEach((content) => content.classList.add("hidden"));
-            document
-              .getElementById(`tab-content-${tabName}`)
-              .classList.remove("hidden");
-          },
-
-          filterContacts(query) {
-            const term = query.toLowerCase();
-            document.querySelectorAll(".contact-item").forEach((el) => {
-              const name = el.querySelector(".contact-name").textContent.toLowerCase();
-              el.style.display = name.includes(term) ? "flex" : "none";
-            });
-          },
-        },
-
-        utils: {
-          networkModeFromPath(pathState) {
-            if (pathState === "DirectPreferred") return "online";
-            if (pathState === "RelayFallback" || pathState === "RelayOnly")
-              return "mesh";
-            if (pathState === "Bootstrapping") return "mesh";
-            return "offline";
-          },
-
-          historyDirectionToUi(direction) {
-            if (direction === "Sent") return "sent";
-            if (direction === "Received") return "received";
-            if (typeof direction === "string") {
-              return direction.toLowerCase() === "sent" ? "sent" : "received";
-            }
-            return "received";
-          },
-
-          stringToColor(str) {
-            let hash = 0;
-            for (let i = 0; i < str.length; i += 1) {
-              hash = str.charCodeAt(i) + ((hash << 5) - hash);
-            }
-            const color = (hash & 0x00ffffff).toString(16).toUpperCase();
-            return "#" + "00000".substring(0, 6 - color.length) + color;
-          },
-
-          formatTime(seconds) {
-            if (!seconds) return "";
-            const date = new Date(Number(seconds) * 1000);
-            const now = new Date();
-            if (date.toDateString() === now.toDateString()) {
-              return date.toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              });
-            }
-            return date.toLocaleDateString([], {
-              month: "short",
-              day: "numeric",
-            });
-          },
-
-          escapeHtml(text) {
-            const tmp = document.createElement("div");
-            tmp.textContent = text;
-            return tmp.innerHTML;
-          },
-        },
-      };
-
-      window.app = SCM;
-      window.addEventListener("DOMContentLoaded", () => {
-        SCM.init().catch((error) => SCM.handleFatal(error));
-      });
-    </script>
-  </body>
+        <button class="icon-btn" id="chat-block-btn" onclick="SCM.actions.toggleBlockChatPeer()" title="Block/Unblock">🛡️</button>
+        <button class="icon-btn" onclick="SCM.actions.blockAndDeleteChatPeer()" title="Block & Delete All">⛔</button>
+      </div>
+      <div id="chat-banner" class="hidden" style="margin:8px 16px">
+        <div class="card" style="background:var(--md-secondary-container);margin:0;display:flex;justify-content:space-between;align-items:center">
+          <div><div style="font-size:14px;font-weight:500">Not in contacts</div><div class="list-subtitle">Add to send messages</div></div>
+          <button class="btn btn-filled" onclick="SCM.actions.quickAddFromChat()">Add Contact</button>
+        </div>
+      </div>
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="chat-input-area">
+        <input type="text" id="chat-input" class="chat-input" placeholder="Type a message..." autocomplete="off" />
+        <button class="send-fab" id="chat-send-btn">➤</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== BOTTOM NAV ===== -->
+  <nav id="bottom-nav">
+    <button class="nav-item active" data-tab="conversations" onclick="SCM.ui.switchTab('conversations')">
+      <div class="nav-icon">💬</div>Chats
+    </button>
+    <button class="nav-item" data-tab="contacts" onclick="SCM.ui.switchTab('contacts')">
+      <div class="nav-icon">👥</div>Contacts
+    </button>
+    <button class="nav-item" data-tab="mesh" onclick="SCM.ui.switchTab('mesh')">
+      <div class="nav-icon">🌐</div>Mesh
+    </button>
+    <button class="nav-item" data-tab="settings" onclick="SCM.ui.switchTab('settings')">
+      <div class="nav-icon">⚙️</div>Settings
+    </button>
+  </nav>
+</div>
+
+<!-- ===== MODALS ===== -->
+
+<!-- Add Contact -->
+<div id="modal-add-contact" class="modal-overlay">
+  <div class="modal-dialog">
+    <div class="modal-title">Add Contact</div>
+    <button class="btn btn-outline" style="width:100%;margin-bottom:8px" onclick="SCM.actions.pasteIdentityExport()">📋 Paste Identity Export</button>
+    <div class="divider" style="margin:12px 0"></div>
+    <div class="field"><label>Peer ID (libp2p)</label><input type="text" id="add-peer-id" class="mono" /></div>
+    <div class="field"><label>Nickname (Optional)</label><input type="text" id="add-name" /></div>
+    <div id="add-contact-error" style="color:var(--md-error);font-size:12px;margin-bottom:8px;display:none"></div>
+    <div class="modal-actions">
+      <button class="btn btn-text" onclick="SCM.ui.closeModals()">Cancel</button>
+      <button class="btn btn-text" onclick="SCM.actions.addContact()">Add</button>
+      <button class="btn btn-text" onclick="SCM.actions.addContactAndChat()">Chat</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Nickname -->
+<div id="modal-edit-nickname" class="modal-overlay">
+  <div class="modal-dialog">
+    <div class="modal-title">Edit Nickname</div>
+    <input type="hidden" id="edit-nick-peer-id" />
+    <p id="edit-nick-info" style="font-size:12px;color:var(--md-on-surface-variant);margin-bottom:8px"></p>
+    <div class="field"><label>Nickname</label><input type="text" id="edit-nick-input" /></div>
+    <div class="modal-actions">
+      <button class="btn btn-text" onclick="SCM.ui.closeModals()">Cancel</button>
+      <button class="btn btn-text" onclick="SCM.actions.saveNickname()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Export Identity -->
+<div id="modal-export" class="modal-overlay">
+  <div class="modal-dialog">
+    <div class="modal-title">Identity Backup</div>
+    <div class="field"><label>Storage</label><input type="text" id="export-path" readonly value="Browser: scm_desktop" /></div>
+    <div class="field"><label>Public Key</label><input type="text" id="export-pub" class="mono" readonly /></div>
+    <div class="field"><label style="color:var(--md-error)">Private Key Backup</label><textarea id="export-priv" class="mono" rows="4" readonly style="border-color:var(--md-error);color:var(--md-error)"></textarea></div>
+    <p style="font-size:12px;color:var(--md-on-surface-variant);margin-top:8px">Store this backup securely. Anyone with it can impersonate your identity.</p>
+    <div class="modal-actions"><button class="btn btn-text" onclick="SCM.ui.closeModals()">Close</button></div>
+  </div>
+</div>
+
+<!-- Delete Conversation Confirm -->
+<div id="modal-delete-conv" class="modal-overlay">
+  <div class="modal-dialog">
+    <div class="modal-title">Delete Conversation?</div>
+    <p id="delete-conv-text" style="font-size:14px;color:var(--md-on-surface-variant)">Delete all messages? This cannot be undone.</p>
+    <input type="hidden" id="delete-conv-peer-id" />
+    <div class="modal-actions">
+      <button class="btn btn-text" onclick="SCM.ui.closeModals()">Cancel</button>
+      <button class="btn btn-text" style="color:var(--md-error)" onclick="SCM.actions.confirmDeleteConversation()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Diagnostics Export -->
+<div id="modal-diagnostics" class="modal-overlay">
+  <div class="modal-dialog">
+    <div class="modal-title">Diagnostics</div>
+    <textarea id="diag-output" class="mono" rows="12" readonly style="width:100%;font-size:11px;background:var(--md-surface);border:1px solid var(--md-outline);border-radius:4px;padding:8px;color:var(--md-on-surface)"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-text" onclick="navigator.clipboard.writeText(document.getElementById('diag-output').value);SCM.showSnackbar('Copied!')">Copy</button>
+      <button class="btn btn-text" onclick="SCM.ui.closeModals()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- First Run / Onboarding -->
+<div id="modal-onboarding" class="modal-overlay">
+  <div class="modal-dialog" style="text-align:center">
+    <div style="font-size:48px;margin-bottom:16px">🛡️</div>
+    <div class="modal-title" style="text-align:center">SCMessenger</div>
+    <p style="font-size:14px;color:var(--md-on-surface-variant);margin-bottom:24px;text-align:left">
+      Your browser is running a sovereign mesh node in <b>relay-only mode</b>.
+      Create an identity to unlock messaging and contacts, or import one from another device.
+    </p>
+    <div class="field"><label>Choose a nickname</label><input type="text" id="onboard-nickname" placeholder="e.g. Alice" /></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-tonal" style="flex:1" onclick="SCM.actions.skipOnboarding()">Skip (Relay Only)</button>
+      <button class="btn btn-filled" style="flex:1" onclick="SCM.actions.onboardInit()">Create Identity</button>
+    </div>
+  </div>
+</div>
+
+<!-- Snackbar -->
+<div id="snackbar" class="snackbar"></div>
+
+<script src="./app.js"></script>
+</body>
 </html>

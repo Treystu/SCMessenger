@@ -246,29 +246,7 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun updateOnionRouting(enabled: Boolean) {
-        _settings.value?.let { current ->
-            updateSettings(current.copy(onionRouting = enabled))
-        }
-    }
 
-    fun updateCoverTrafficEnabled(enabled: Boolean) {
-        _settings.value?.let { current ->
-            updateSettings(current.copy(coverTrafficEnabled = enabled))
-        }
-    }
-
-    fun updateMessagePaddingEnabled(enabled: Boolean) {
-        _settings.value?.let { current ->
-            updateSettings(current.copy(messagePaddingEnabled = enabled))
-        }
-    }
-
-    fun updateTimingObfuscationEnabled(enabled: Boolean) {
-        _settings.value?.let { current ->
-            updateSettings(current.copy(timingObfuscationEnabled = enabled))
-        }
-    }
 
     // ========================================================================
     // APP PREFERENCES
