@@ -1,9 +1,46 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-04-09
+Last updated: 2026-04-10
 
-Last verified: **2026-04-09** (TCP/mDNS transport parity achieved across all platforms)
+Last verified: **2026-04-10** (Android SmartTransportRouter parallel race correctness fix)
+
+---
+
+## 2026-04-10: Android SmartTransportRouter — Parallel Race Correctness Fix
+
+**Status:** ✅ IMPLEMENTATION COMPLETE
+
+### Problem
+
+`SmartTransportRouter.attemptDelivery()` launched all transports concurrently via
+`async { }` blocks but awaited them **sequentially** using a `for (deferred in deferreds)
+{ deferred.await() }` loop. This meant:
+
+- If the first transport in the list was slow to fail (e.g. 10 s timeout), the entire
+  delivery attempt stalled for that duration even if a later transport had already
+  succeeded.
+- Delivery latency was bounded by the **slowest-failing** transport, not the
+  **fastest-succeeding** one.
+
+### Fix
+
+Replaced the sequential await loop in `android/app/src/main/java/com/scmessenger/android/transport/SmartTransportRouter.kt`
+with a `CompletableDeferred<Triple<TransportType, Boolean, Long>?>` winner pattern:
+
+- All transports launch via `launch { }` (truly concurrent).
+- The first coroutine to succeed calls `winner.complete(result)` — unblocks immediately.
+- A `waitJob` joins all transport jobs and calls `winner.complete(null)` as the
+  all-failed fallback. `complete()` is idempotent, so it never races with a real winner.
+- Cancel order: transport jobs cancelled first (`cancelAndJoin`), then `waitJob` —
+  since `waitJob` joins transport jobs, cancelling them first prevents it from
+  blocking on uncancelled work.
+- `null` winner replaces the previous `TransportType.CORE` magic sentinel value,
+  making the "no winner" state explicit and type-safe.
+
+### Build Verification
+
+`./gradlew :app:compileDebugKotlin -x buildRustAndroid` — **BUILD SUCCESSFUL**, no new warnings.
 
 ---
 
