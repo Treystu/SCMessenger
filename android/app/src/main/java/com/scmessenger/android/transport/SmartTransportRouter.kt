@@ -368,8 +368,11 @@ class SmartTransportRouter {
         Timber.tag(TAG).i("Racing ${availableTransports.count()} transports for peer ${peerId.take(8)}")
 
         val result = coroutineScope {
-            val deferreds = availableTransports.map { transportAttempt ->
-                async {
+            // null = no winner yet; non-null = first successful transport result
+            val winner = CompletableDeferred<Triple<TransportType, Boolean, Long>?>()
+
+            val jobs = availableTransports.map { transportAttempt ->
+                launch {
                     val transportStart = System.currentTimeMillis()
                     val success = try {
                         transportAttempt.attempt()
@@ -378,24 +381,25 @@ class SmartTransportRouter {
                         false
                     }
                     val latencyMs = System.currentTimeMillis() - transportStart
-                    Triple(transportAttempt.type, success, latencyMs)
+                    if (success) {
+                        winner.complete(Triple(transportAttempt.type, true, latencyMs))
+                    }
                 }
             }
 
-            // Wait for first successful result
-            var firstSuccess: Triple<TransportType, Boolean, Long>? = null
-            for (deferred in deferreds) {
-                val result = deferred.await()
-                if (result.second) {
-                    firstSuccess = result
-                    break
-                }
+            // When all jobs finish without a success, complete winner with null (no winner).
+            // complete() is a no-op if winner was already completed by a successful transport.
+            val waitJob = launch {
+                jobs.forEach { it.join() }
+                winner.complete(null)
             }
 
-            // Cancel remaining coroutines
-            deferreds.forEach { it.cancel() }
-
-            firstSuccess
+            val resolved = winner.await()
+            // Cancel transport jobs first (waitJob joins them), then cancel waitJob.
+            // This prevents waitJob from blocking on a job that hasn't been cancelled yet.
+            jobs.forEach { it.cancelAndJoin() }
+            waitJob.cancelAndJoin()
+            resolved
         }
 
         return if (result != null) {
