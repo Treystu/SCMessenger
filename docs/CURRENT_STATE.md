@@ -3,7 +3,42 @@
 Status: Active
 Last updated: 2026-04-09
 
-Last verified: **2026-04-09** (TCP/mDNS transport parity achieved across all platforms)
+Last verified: **2026-04-09** (TCP/mDNS transport parity + Android SmartTransportRouter parallel race fix)
+
+---
+
+## 2026-04-09: Android SmartTransportRouter — Parallel Race Fix (P1)
+
+**Status:** ✅ IMPLEMENTATION COMPLETE
+
+### Overview
+
+Fixed a P1 transport latency bug in `SmartTransportRouter.attemptDelivery()` on Android. The
+previous implementation launched all transports concurrently but awaited them **sequentially**
+by iterating `deferreds` in list order — meaning a slow-failing transport at index 0 would
+stall the entire delivery loop even if a later transport had already succeeded.
+
+### Fix Applied
+
+Replaced the sequential `for (deferred in deferreds) { deferred.await() }` loop with a
+`CompletableDeferred<Triple<TransportType, Boolean, Long>?>` winner pattern:
+
+- All transports run via `launch` (truly concurrent, no ordering dependency)
+- The first coroutine to succeed calls `winner.complete(result)` — unblocks the caller immediately
+- A `waitJob` joins all transport jobs and calls `winner.complete(null)` as the all-failed fallback;
+  `complete()` is idempotent so it never races with a real winner
+- `null` winner (typed `Triple?`) makes the no-winner state explicit — no magic sentinel value
+- Removed the `isCompleted`/`getCompleted()` check-then-get fast-path, which had a TOCTOU race;
+  replaced with a single `winner.await()`
+- Cancel order: transport jobs cancelled first (`cancelAndJoin`), then `waitJob` — since `waitJob`
+  joins transport jobs, cancelling them first prevents `waitJob` from blocking on uncancelled work
+
+### Impact
+
+Delivery latency is now bounded by the **fastest-succeeding** transport rather than the
+**slowest-failing** one. No behavior contract change — internal coroutine scheduling only.
+
+**File:** `android/app/src/main/java/com/scmessenger/android/transport/SmartTransportRouter.kt`
 
 ---
 
