@@ -1,5 +1,10 @@
 // WASM Transport Layer — WebRTC + WebSocket relay connectivity
 //
+// **Thin-client direction:** when the UI is driven by the local CLI daemon, the primary
+// path is JSON-RPC over `ws://127.0.0.1:<port>/ws` (see `daemon_bridge.rs` and
+// `scmessenger_core::wasm_support::rpc`). Direct WebRTC mesh dialing in the browser is
+// deprecated for that mode; keep WebSocket relay paths for standalone / legacy flows.
+//
 // Provides peer-to-peer communication via WebRTC data channels and relay connectivity
 // through WebSocket to known relay nodes. This module is designed to work with browser
 // APIs via wasm-bindgen, with mock implementations for testing in non-WASM environments.

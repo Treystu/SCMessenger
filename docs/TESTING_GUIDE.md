@@ -1,7 +1,7 @@
 # SCMessenger Testing Guide
 
 Status: Active
-Last updated: 2026-03-16
+Last updated: 2026-04-11
 
 Current release line: `v0.2.0` is the active alpha baseline. Planned workstreams `WS13` and `WS14` remain `v0.2.1` follow-up scope.
 
@@ -41,8 +41,10 @@ cargo test --workspace
 # Level 2: Platform parity (optional, requires devices)
 ./scripts/verify_ws12_matrix.sh
 
-# Documentation sync
+# Documentation sync (Unix / Git Bash)
 ./scripts/docs_sync_check.sh
+# Windows PowerShell:
+# powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docs_sync_check.ps1
 ```
 
 ## Level 2: Platform Validation

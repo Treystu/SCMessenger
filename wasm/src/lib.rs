@@ -1,6 +1,7 @@
 // scmessenger-wasm — WebAssembly bindings for browser environments
 
 pub mod connection_state;
+pub mod daemon_bridge;
 pub mod transport;
 
 use libp2p::{Multiaddr, PeerId};
@@ -272,12 +273,7 @@ impl IronCore {
         self.inner.is_running()
     }
 
-    #[wasm_bindgen(js_name = initializeIdentity)]
-    pub fn initialize_identity(&self) -> Result<(), JsValue> {
-        self.inner
-            .initialize_identity()
-            .map_err(|e| js_value_from_str(&format!("{}", e)))
-    }
+
 
     #[wasm_bindgen(js_name = getIdentityInfo)]
     pub fn get_identity_info(&self) -> JsValue {

@@ -1,7 +1,7 @@
 # SCMessenger Copilot Instructions
 
 Status: Active
-Last updated: 2026-03-14
+Last updated: 2026-04-11
 
 ## ⚠️ CRITICAL - Read First
 
@@ -45,7 +45,7 @@ Do not treat mixed or historical docs as current source of truth unless the cano
 ## Mandatory Execution Rules
 
 1. If a run changes behavior, scope, risk posture, scripts, tests, verification workflow, or operator workflow, update the canonical docs in the same run.
-2. Run `./scripts/docs_sync_check.sh` before concluding any change-bearing run and resolve failures before finalizing.
+2. Run `./scripts/docs_sync_check.sh` (Unix / Git Bash) or `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docs_sync_check.ps1` (Windows) before concluding any change-bearing run and resolve failures before finalizing.
 3. If a run edits code, generated bindings, build wiring, or platform-specific implementation, run the appropriate build verification command(s) for the edited target(s) before concluding the run.
 4. Final summaries must state which docs were updated, or why no doc updates were needed, and must report build verification status for edited targets.
 

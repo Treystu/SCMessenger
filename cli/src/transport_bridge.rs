@@ -115,11 +115,18 @@ impl TransportBridge {
     
     /// Detect CLI transport capabilities
     fn detect_cli_capabilities() -> Vec<TransportType> {
-        vec![
-            TransportType::Internet,  // WebSocket relay
-            TransportType::Local,     // Local TCP/IP and mDNS
-            // Note: BLE, WiFiDirect, WiFiAware not available in Node.js
-        ]
+        let mut caps = vec![
+            TransportType::Internet, // WebSocket relay + daemon UI bridge
+            TransportType::Local,    // TCP/QUIC/mDNS
+        ];
+        // WiFi Direct deferred (unstable cross-platform). BLE is exposed for the native daemon path.
+        #[cfg(any(
+            target_os = "linux",
+            target_os = "windows",
+            target_os = "macos"
+        ))]
+        caps.push(TransportType::BLE);
+        caps
     }
     
     /// Register a peer with its transport capabilities
@@ -180,8 +187,8 @@ impl TransportBridge {
     /// Get available transports from WASM to CLI
     fn get_wasm_transports(&self) -> Vec<TransportType> {
         vec![
-            TransportType::Internet,  // WebSocket
-            TransportType::Local,       // WebRTC or local WebSocket
+            TransportType::Internet, // Daemon WebSocket JSON-RPC to this CLI
+            TransportType::Local,    // Same-machine loopback path
         ]
     }
     

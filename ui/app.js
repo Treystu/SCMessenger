@@ -35,7 +35,6 @@ const SCM = {
     transportMode: "standalone" // "standalone", "cli-bridge", or "headless-node"
   },
 
-  // ===== INIT =====
   async init() {
     this.state.bootstrapAddrs = this.loadBootstrap();
     const bsEl = document.getElementById("setting-bootstrap");
@@ -44,15 +43,14 @@ const SCM = {
     try {
       await this.loadWasm();
       await this.initCore();
-      await this.refreshIdentity();
-      this.syncSettingsUI();
-      this.maybeOnboard();
       
-      // Proactively discover and sync with the local CLI bridge BEFORE starting swarm
-      // This allows adding it to bootstrap list if dial is missing.
+      // Sync with CLI node info
       await this.syncWithCliNode();
       
-      await this.startSwarm();
+      // Connect specifically to Daemon Bridge JSON-RPC
+      await this.connectDaemonBridge();
+      
+      // Fetch identity from CLI JSON-RPC instead of local WebRTC swarm
       await this.refreshContacts();
       this.bindSettingsListeners();
       this.startPolling();
@@ -206,8 +204,76 @@ const SCM = {
 
   async stopSwarm() {
     if (!this.state.swarmRunning) return;
-    await this.state.core.stopSwarm();
+    try { await this.state.core.stopSwarm(); } catch(_) {}
     this.state.swarmRunning = false;
+  },
+
+  async connectDaemonBridge() {
+    return new Promise((resolve, reject) => {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = protocol + '//' + window.location.host + '/ws';
+      this.state.bridgeWs = new WebSocket(wsUrl);
+
+      this.state.bridgeWs.onopen = () => {
+        console.log("Daemon Bridge connected.");
+        
+        // Request identity blocking UI
+        const id = "req_" + Date.now();
+        const handler = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data.id === id) {
+              this.state.bridgeWs.removeEventListener('message', handler);
+              if (data.error) {
+                console.error("Identity error:", data.error);
+                return reject(new Error(data.error.message));
+              }
+              
+              this.state.identity = {
+                initialized: true,
+                identityId: data.result.peer_id,
+                publicKeyHex: data.result.public_key,
+                deviceId: "daemon",
+                libp2pPeerId: data.result.peer_id,
+              };
+              this.state.role = "full";
+              this.ui.updateIdentityUI(this.state.identity);
+              this.ui.applyRoleGating();
+              
+              const obs = document.getElementById("modal-onboarding");
+              if (obs) obs.classList.remove("visible");
+              
+              resolve();
+            }
+          } catch(err) {}
+        };
+        this.state.bridgeWs.addEventListener('message', handler);
+        this.state.bridgeWs.send(JSON.stringify({ jsonrpc: "2.0", id, method: "get_identity", params: {} }));
+      };
+
+      this.state.bridgeWs.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.method === "message_received") {
+             const p = payload.params;
+             const ts = p.timestamp || Date.now();
+             const msgId = p.message_id || "in-" + Date.now() + "-" + Math.random().toString(36).slice(2,8);
+             
+             this.ensureContact(p.from);
+             const msg = { id: msgId, direction: "received", content: p.content, timestamp: ts, status: "read" };
+             this.storeMsg(p.from, msg);
+             this.addHistory({ id: msgId, direction: "Received", peer_id: p.from, content: p.content, timestamp: Math.floor(ts/1000), sender_timestamp: Math.floor(ts/1000), delivered: true, hidden: false });
+             
+             if (this.state.activeChat === p.from) this.ui.renderChatMessages(p.from);
+             this.ui.renderConversations();
+          } else if (payload.method === "peer_discovered") {
+             this.ensureContact(payload.params.peer_id);
+          }
+        } catch(_) {}
+      };
+
+      this.state.bridgeWs.onerror = (e) => reject(new Error("Daemon Bridge WebSocket error"));
+    });
   },
 
   // ===== BOOTSTRAP =====
@@ -839,26 +905,24 @@ const SCM = {
         // Ensure CLI bridge is connected for optimal forwarding
         const bridgeConnected = await SCM.ensureCliBridgeConnected();
         
-        // Select best transport path for this peer
-        const bestPath = await SCM.selectBestTransportPath(peerId);
-        if (bestPath) {
-          console.log(`Using transport path for ${peerId}:`, bestPath);
-          // Note: The core will automatically use the best available path
-          // based on the transport bridge information
-        } else if (bridgeConnected) {
-          console.log("Using CLI bridge for forwarding to", peerId);
+        if (this.state.cliBridgeAvailable && this.state.bridgeWs && this.state.bridgeWs.readyState === WebSocket.OPEN) {
+          const rpcId = "send_" + Date.now();
+          this.state.bridgeWs.send(JSON.stringify({
+            jsonrpc: "2.0",
+            id: rpcId,
+            method: "send_message",
+            params: {
+              recipient: peerId,
+              message: text,
+              id: prep.messageId
+            }
+          }));
+          console.log(`Message forwarded via Daemon bridge to ${peerId}`);
         } else {
+          await SCM.state.core.sendPreparedEnvelope(peerId, prep.envelopeData);
           console.log("Using direct connection to", peerId);
         }
         
-        // Send the message - the core will use the appropriate transport
-        // based on the bridge configuration
-        await SCM.state.core.sendPreparedEnvelope(peerId, prep.envelopeData);
-        
-        // If we're using the CLI bridge, log the forwarding
-        if (bridgeConnected) {
-          console.log(`Message forwarded via CLI bridge to ${peerId}`);
-        }
         // Mark sent in core outbox
         try { SCM.state.core.markMessageSent(prep.messageId); } catch(_) {}
         const nowMs = Date.now();

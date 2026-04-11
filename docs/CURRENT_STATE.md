@@ -30,6 +30,20 @@ Resolved critical connectivity failures between browser-based WASM nodes and the
 - ✅ CLI bridge serves as a stable anchor for sandboxed browser nodes.
 - ✅ Full parity for LAN-based message delivery between Browser and Android/iOS.
 
+### WASM thin client / local daemon JSON-RPC (2026-04-11 addendum)
+
+**Status:** ✅ LANDED (incremental; BLE GATT proxy still open)
+
+- **Loopback-only UI server:** `scmessenger-cli` Warp server binds `127.0.0.1:<port>` (default UI port unchanged). Mitigates cross-site WebSocket hijacking for the daemon bridge.
+- **Strict WebSocket `Origin`:** `/ws` accepts only `http://127.0.0.1:<port>` and `http://localhost:<port>` (same port as the UI server).
+- **CORS:** HTTP routes use allow-lists matching those two origins (no `*`).
+- **WebUI static root:** `/` serves `dist/index.html` when present (else bundled landing); `/dist/` serves the `dist/` tree for WASM/WebUI assets.
+- **Shared RPC schema:** `core/src/wasm_support/rpc.rs` — JSON-RPC 2.0 methods `get_identity`, `scan_peers`, `get_topology`, `send_message`; server push notifications `message_received`, `peer_discovered`, `mesh_topology_update`, `delivery_status`.
+- **CLI wiring:** `cli/src/server.rs` multiplexes legacy `UiEvent` JSON and raw JSON-RPC on the same broadcast channel (`UiOutbound`). `cli/src/main.rs` handles `UiCommand::DaemonRpc` and mirrors key mesh events to JSON-RPC for thin clients.
+- **Install helpers:** `scripts/install.sh` (Linux systemd user unit + macOS LaunchAgent templates) and `scripts/install.ps1` (copy to `%USERPROFILE%\.local\bin`).
+- **BLE activation (incremental):** `btleplug` manager probe at daemon start; `TransportType::BLE` in CLI capabilities on Linux/macOS/Windows. **GATT central:** `cli/src/ble_mesh.rs` scans for the SCM service UUID, subscribes to notify characteristic `0xDF03`, verifies Drift data frames via `IronCore::receive_message`, and emits JSON-RPC `message_received` (plus legacy UI events). **GATT peripheral advertising** via btleplug is still not enabled; see `REMAINING_WORK_TRACKING.md`.
+- **Doc sync (multi-OS):** `scripts/docs_sync_check.ps1` mirrors `docs_sync_check.sh` for Windows agents without Bash.
+
 ---
 
 ## 2026-04-10: WebSocket Bridge & UI Hosting — Full Mesh Integration

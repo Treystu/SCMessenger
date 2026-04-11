@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Status: Active
-Last updated: 2026-03-19
+Last updated: 2026-04-11
 
 Repository-scoped instructions for Codex agents.
 
@@ -46,10 +46,14 @@ This rule applies whenever behavior, interfaces, scripts, generated code, or pla
 
 ## Passive consistency check
 
-Run:
+Run one of:
 
 ```bash
 ./scripts/docs_sync_check.sh
+```
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docs_sync_check.ps1
 ```
 
 before finalizing work. If it fails, resolve documentation drift in the same run.
@@ -58,7 +62,7 @@ before finalizing work. If it fails, resolve documentation drift in the same run
 
 1. Re-read the active canonical doc chain before editing implementation or workflow behavior.
 2. Update the canonical docs in the same run whenever behavior, scope, scripts, risks, verification commands, or operator workflow changes.
-3. Run `./scripts/docs_sync_check.sh` before finalizing; fix failures in the same run.
+3. Run `docs_sync_check.sh` or `docs_sync_check.ps1` (see Passive consistency check) before finalizing; fix failures in the same run.
 4. If any code, build wiring, generated bindings, or scripts affecting a build target changed, run the appropriate build verification command(s) before finalizing.
 5. Do not conclude the session until both documentation sync and required build verification are complete, or the blocker is explicitly called out with the exact failed command and reason.
 

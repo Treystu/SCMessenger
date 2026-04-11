@@ -86,3 +86,5 @@ live_ios_log.log
 ios_diagnostic_snapshot.log
 live_logcat.log
 diagnostic_snapshots/
+.aider*
+WASM_latest.md

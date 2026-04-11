@@ -1,7 +1,7 @@
 # SCMessenger Documentation Hub
 
 Status: Active
-Last updated: 2026-03-19 (Log Audit Critical Findings)
+Last updated: 2026-04-11 (WASM thin client / daemon JSON-RPC)
 
 This is the primary documentation entrypoint.
 
@@ -113,6 +113,7 @@ Custom modes, rules, and skills for optimized agent workflows:
 
 ## Operations and Setup
 
+- **CLI daemon + browser thin client (2026-04-11):** The interactive CLI serves the Web UI on **127.0.0.1** only; `/ws` uses JSON-RPC (`core/src/wasm_support/rpc.rs`) with strict browser `Origin` checks. User-level install helpers: [`scripts/install.sh`](scripts/install.sh) (Linux/macOS systemd/LaunchAgent templates), [`scripts/install.ps1`](scripts/install.ps1) (Windows). Verified detail: [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md).
 - [Install](INSTALL.md)
 - [Quick Connect](docs/historical/plans/QUICKCONNECT.md)
 - [Docker](docker/README.md)
@@ -378,7 +379,7 @@ Historical audit artifacts currently live under `docs/historical/`.
 3. Residual risk updates must go to `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md` (or the active release's equivalent register).
 4. Superseded status/audit reports should be moved to or referenced from `docs/historical/`, not duplicated as new "final" docs.
 5. Use `iOS/` (uppercase-I) for all path references.
-6. Run `./scripts/docs_sync_check.sh` before finalizing task output; fix failures in the same run.
+6. Run `./scripts/docs_sync_check.sh` (Unix / Git Bash) or `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docs_sync_check.ps1` (Windows) before finalizing task output; fix failures in the same run.
 7. If the run edits code, bindings, scripts that affect runtime/build behavior, or platform wiring, run the appropriate build verification command(s) before finalizing and record the result in the active doc chain.
 
 - 2026-03-13: Added operational documentation for the iOS simulator launch ambiguity where a stale `platform IOS` app can remain installed in the simulator and fail only at bootstrap; canonical references updated in `docs/CURRENT_STATE.md`, `REMAINING_WORK_TRACKING.md`, and `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`.

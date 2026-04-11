@@ -1,7 +1,7 @@
 # SCMessenger v0.2.0 Alpha Milestone Plan
 
 Status: Active (execution complete through WS12.41 Logging Audit)
-Last updated: 2026-03-13
+Last updated: 2026-04-11
 Scope: Core + Android + iOS + Desktop GUI + Relay topology
 
 ---
@@ -943,3 +943,9 @@ Key cross-cutting findings captured during the latest live-debug session:
 5. Full 5-node visibility was still not conclusively proven in the recent runs; the honest state remained partially indeterminate.
 6. The iPhone 17 Pro simulator launch failure was traced to a stale device-flavor SCMessenger bundle installed into the simulator and resolved by reinstalling a proper `iphonesimulator` build.
 7. Post-launch simulator runtime still has active follow-on debt, especially `historySync request failed to prepare message`.
+
+---
+
+## 18) Operator tooling addendum (2026-04-11)
+
+1. `scripts/docs_sync_check.ps1` mirrors `docs_sync_check.sh` so documentation consistency checks run on Windows hosts without Bash.

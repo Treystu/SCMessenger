@@ -151,7 +151,7 @@ git push origin feature/your-feature-name
 - Reference any related issues
 - Add tests for new functionality
 - Update documentation as needed
-- Run `./scripts/docs_sync_check.sh` when documentation or GitHub-facing contributor surfaces change
+- Run `./scripts/docs_sync_check.sh` (Unix / Git Bash) or `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docs_sync_check.ps1` (Windows) when documentation or GitHub-facing contributor surfaces change
 
 ## Project Structure
 

@@ -16,6 +16,7 @@ pub mod privacy;
 pub mod routing;
 pub mod store;
 pub mod transport;
+pub mod wasm_support;
 
 // Relay module requires quinn which is not available on WASM
 #[cfg(not(target_arch = "wasm32"))]

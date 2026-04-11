@@ -13,6 +13,7 @@ use warp::Filter; // for .red() logic (already in cargo.toml)
 // UI EVENT / COMMAND TYPES (unchanged)
 // ============================================================================
 
+/// Legacy dashboard / landing WebSocket envelope (`type` + snake_case fields).
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UiEvent {
@@ -73,6 +74,13 @@ pub enum UiEvent {
     },
 }
 
+/// Multiplexed WebSocket outbound: legacy JSON or raw JSON-RPC value (no extra wrapper).
+#[derive(Debug, Clone)]
+pub enum UiOutbound {
+    Legacy(UiEvent),
+    JsonRpc(serde_json::Value),
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum UiCommand {
@@ -113,6 +121,11 @@ pub enum UiCommand {
         limit: Option<usize>,
     },
     Restart,
+    /// Thin-client JSON-RPC intents (see `scmessenger_core::wasm_support::rpc`).
+    DaemonRpc {
+        id: Option<serde_json::Value>,
+        intent: scmessenger_core::wasm_support::rpc::ClientIntent,
+    },
 }
 
 // ============================================================================
@@ -128,6 +141,8 @@ pub struct WebContext {
     pub peers: Arc<tokio::sync::Mutex<HashMap<libp2p::PeerId, Option<String>>>>,
     pub start_time: Instant,
     pub transport_bridge: Arc<tokio::sync::Mutex<crate::transport_bridge::TransportBridge>>,
+    /// TCP port the UI server listens on (127.0.0.1) — for correct URLs in API payloads.
+    pub ui_port: u16,
 }
 
 impl WebContext {
@@ -215,11 +230,26 @@ struct InstallParams {
 /// The landing page HTML, compiled into the binary.
 const LANDING_HTML: &str = include_str!("landing.html");
 
+#[derive(Debug)]
+struct WsOriginRejected;
+
+impl warp::reject::Reject for WsOriginRejected {}
+
+/// WebSocket upgrade: allow only same-origin browser pages served from this UI port on loopback.
+fn websocket_origin_allowed(origin: Option<&str>, port: u16) -> bool {
+    let Some(o) = origin else {
+        return false;
+    };
+    let a = format!("http://127.0.0.1:{}", port);
+    let b = format!("http://localhost:{}", port);
+    o == a.as_str() || o == b.as_str()
+}
+
 pub async fn start(
     port: u16,
     web_ctx: Arc<WebContext>,
-) -> anyhow::Result<(broadcast::Sender<UiEvent>, mpsc::Receiver<UiCommand>)> {
-    let (broadcast_tx, _br_rx) = broadcast::channel::<UiEvent>(100);
+) -> anyhow::Result<(broadcast::Sender<UiOutbound>, mpsc::Receiver<UiCommand>)> {
+    let (broadcast_tx, _br_rx) = broadcast::channel::<UiOutbound>(100);
     let (cmd_tx, cmd_rx) = mpsc::channel::<UiCommand>(100);
 
     // --- Warp filters for shared state ---
@@ -241,26 +271,45 @@ pub async fn start(
 
     // --- Routes ---
 
-    // 1. Landing page at /
+    // 1. Root: prefer dist/index.html (WASM WebUI build), else bundled landing page
     let landing_html = LANDING_HTML.to_string();
-    let landing_route = warp::path::end()
+    let root_route = warp::path::end()
         .and(warp::get())
         .map(move || {
+            let body = std::fs::read_to_string("dist/index.html").unwrap_or_else(|_| landing_html.clone());
             warp::http::Response::builder()
                 .header("content-type", "text/html; charset=utf-8")
-                .body(landing_html.clone())
+                .body(body)
                 .unwrap()
         })
         .boxed();
 
-    // 2. WebSocket at /ws
+    // 1b. Static WASM/WebUI assets (relative URLs often use /dist/...)
+    let dist_route = warp::path("dist")
+        .and(warp::fs::dir("dist"))
+        .boxed();
+
+    // 2. WebSocket at /ws — strict Origin (CSWSH mitigation); see `websocket_origin_allowed`
+    let bind_port = port;
     let ws_route = warp::path("ws")
         .and(warp::ws())
+        .and(warp::header::optional::<String>("origin"))
         .and(broadcast_tx_filter)
         .and(cmd_tx_filter)
-        .map(|ws: warp::ws::Ws, br_tx, c_tx| {
-            ws.on_upgrade(move |socket| handle_connection(socket, br_tx, c_tx))
-        })
+        .and_then(
+            move |ws: warp::ws::Ws,
+                  origin: Option<String>,
+                  br_tx: broadcast::Sender<UiOutbound>,
+                  c_tx: mpsc::Sender<UiCommand>| {
+                let port = bind_port;
+                async move {
+                    if !websocket_origin_allowed(origin.as_deref(), port) {
+                        return Err(warp::reject::custom(WsOriginRejected));
+                    }
+                    Ok(ws.on_upgrade(move |socket| handle_connection(socket, br_tx, c_tx)))
+                }
+            },
+        )
         .boxed();
 
     // 3. Network info API
@@ -395,9 +444,17 @@ pub async fn start(
         )
         .boxed();
 
-    // Combine all routes with CORS
-    let cors = warp::cors().allow_any_origin();
-    let routes = landing_route
+    // Combine all routes with CORS (loopback UI origins only)
+    // HTTP CORS: restrict to loopback UI origins (same port). WebSocket Origin is enforced separately.
+    let origin_127 = format!("http://127.0.0.1:{}", port);
+    let origin_localhost = format!("http://localhost:{}", port);
+    let cors = warp::cors()
+        .allow_origins(vec![origin_127.as_str(), origin_localhost.as_str()])
+        .allow_methods(vec!["GET", "POST", "OPTIONS", "DELETE"])
+        .allow_headers(vec!["content-type", "origin", "accept"]);
+
+    let routes = root_route
+        .or(dist_route)
         .or(ui_route)
         .or(wasm_route)
         .or(ws_route)
@@ -413,15 +470,18 @@ pub async fn start(
         .with(cors)
         .boxed();
 
-    // Attempt to bind explicitly to catch usage errors, but DROP it so warp can bind.
-    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+    // Bind loopback only (daemon UI + local WASM thin client)
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
     {
         tokio::net::TcpListener::bind(addr)
             .await
             .with_context(|| format!("Failed to bind web server to {}", addr))?;
     }
 
-    println!("Starting WebSocket + HTTP server on {}", addr);
+    println!(
+        "Starting WebSocket + HTTP server on http://127.0.0.1:{} (localhost only)",
+        port
+    );
 
     tokio::spawn(async move {
         // Use AssertUnwindSafe to catch panics from warp::run (e.g. "Address already in use")
@@ -455,20 +515,6 @@ async fn handle_network_info(ctx: Arc<WebContext>) -> Result<impl warp::Reply, w
 
     let uptime = ctx.start_time.elapsed().as_secs();
     let topics = ledger_guard.all_known_topics();
-
-    let ledger_entries: Vec<LedgerEntryPayload> = ledger_guard
-        .entries
-        .values()
-        .map(|e| LedgerEntryPayload {
-            address: e.address.clone(),
-            multiaddr: e.multiaddr.clone(),
-            last_peer_id: e.last_peer_id.clone(),
-            last_seen: e.last_seen,
-            is_bootstrap: e.is_bootstrap,
-            known_topics: e.known_topics.clone(),
-            label: e.label.clone(),
-        })
-        .collect();
 
     // Get CLI transport capabilities for WASM
     let transport_bridge = ctx.transport_bridge.lock().await;
@@ -512,7 +558,7 @@ async fn handle_network_info(ctx: Arc<WebContext>) -> Result<impl warp::Reply, w
             is_headless_node: true,
             supports_forwarding: true,
             ws_bridge_port: 9002,  // WebSocket bridge port
-            api_base_url: format!("http://{}:9000", ctx.node_peer_id),
+            api_base_url: format!("http://127.0.0.1:{}", ctx.ui_port),
         }),
     };
 
@@ -733,52 +779,77 @@ echo "👉 Run: ./target/release/scmessenger-cli start"
 
 async fn handle_connection(
     ws: warp::ws::WebSocket,
-    broadcast_tx: broadcast::Sender<UiEvent>,
+    broadcast_tx: broadcast::Sender<UiOutbound>,
     cmd_tx: mpsc::Sender<UiCommand>,
 ) {
+    use scmessenger_core::wasm_support::rpc::{parse_intent, rpc_error, JsonRpcRequest};
+
     let (mut user_ws_tx, mut user_ws_rx) = ws.split();
     let mut broadcast_rx = broadcast_tx.subscribe();
 
-    // Task to forward broadcast events -> WebSocket
-    let forward_task = tokio::spawn(async move {
-        while let Ok(event) = broadcast_rx.recv().await {
-            if let Ok(json) = serde_json::to_string(&event) {
-                if user_ws_tx
-                    .send(warp::ws::Message::text(json))
-                    .await
-                    .is_err()
-                {
+    loop {
+        tokio::select! {
+            recv = broadcast_rx.recv() => {
+                let Ok(out) = recv else {
+                    break;
+                };
+                let json = match &out {
+                    UiOutbound::JsonRpc(v) => v.to_string(),
+                    UiOutbound::Legacy(ev) => serde_json::to_string(ev).unwrap_or_default(),
+                };
+                if user_ws_tx.send(warp::ws::Message::text(json)).await.is_err() {
                     break;
                 }
             }
-        }
-    });
-
-    // Handle WebSocket -> Command Channel
-    while let Some(result) = user_ws_rx.next().await {
-        match result {
-            Ok(msg) => {
-                if let Ok(text) = msg.to_str() {
-                    match serde_json::from_str::<UiCommand>(text) {
-                        Ok(cmd) => {
-                            if cmd_tx.send(cmd).await.is_err() {
-                                break;
+            msg = user_ws_rx.next() => {
+                let Some(result) = msg else { break };
+                match result {
+                    Ok(msg) => {
+                        if let Ok(text) = msg.to_str() {
+                            if let Ok(rpc_req) = serde_json::from_str::<JsonRpcRequest>(text) {
+                                if rpc_req.jsonrpc == "2.0" {
+                                    match parse_intent(&rpc_req) {
+                                        Ok(intent) => {
+                                            if cmd_tx
+                                                .send(UiCommand::DaemonRpc {
+                                                    id: rpc_req.id.clone(),
+                                                    intent,
+                                                })
+                                                .await
+                                                .is_err()
+                                            {
+                                                break;
+                                            }
+                                            continue;
+                                        }
+                                        Err(err_body) => {
+                                            let resp = rpc_error(rpc_req.id.clone(), err_body);
+                                            if let Ok(s) = serde_json::to_string(&resp) {
+                                                if user_ws_tx
+                                                    .send(warp::ws::Message::text(s))
+                                                    .await
+                                                    .is_err()
+                                                {
+                                                    break;
+                                                }
+                                            }
+                                            continue;
+                                        }
+                                    }
+                                }
                             }
-                        }
-                        Err(e) => {
-                            // Don't optimize out
-                            let _ = e;
+                            if let Ok(cmd) = serde_json::from_str::<UiCommand>(text) {
+                                if cmd_tx.send(cmd).await.is_err() {
+                                    break;
+                                }
+                            }
+                        } else if msg.is_close() {
+                            break;
                         }
                     }
-                } else if msg.is_close() {
-                    break;
+                    Err(_) => break,
                 }
-            }
-            Err(_e) => {
-                break;
             }
         }
     }
-
-    forward_task.abort();
 }

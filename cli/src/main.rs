@@ -3,6 +3,8 @@
 // Cross-platform (macOS, Linux, Windows) command-line interface for SCMessenger.
 
 mod api;
+mod ble_daemon;
+mod ble_mesh;
 mod bootstrap;
 mod config;
 mod ledger;
@@ -19,6 +21,11 @@ use scmessenger_core::store::{Contact, ContactManager, MessageDirection, Outbox,
 use scmessenger_core::transport::{self, SwarmEvent};
 use scmessenger_core::transport::abstraction::TransportType;
 use scmessenger_core::IronCore;
+use scmessenger_core::wasm_support::rpc::{
+    notif_delivery_status, notif_message_received, notif_peer_discovered, rpc_error, rpc_result,
+    ClientIntent, DeliveryStatusParams, JsonRpcErrorBody, MessageReceivedParams,
+    MeshTopologyUpdateParams, PeerDiscoveredParams,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -1045,8 +1052,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
             .as_deref()
             .unwrap_or("(not initialized)")
     );
-    println!("Landing Page:  http://0.0.0.0:{}", ws_port);
-    println!("WebSocket:     ws://localhost:{}/ws", ws_port);
+    println!("Landing Page:  http://127.0.0.1:{}", ws_port);
+    println!("WebSocket:     ws://127.0.0.1:{}/ws", ws_port);
     println!("P2P Listener:  /ip4/0.0.0.0/tcp/{}", p2p_port);
     println!("WASM Bridge:   /ip4/0.0.0.0/tcp/{}/ws", p2p_port + 1);
     println!("📒 {}", connection_ledger.summary());
@@ -1091,10 +1098,11 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         peers: peers.clone(),
         start_time: std::time::Instant::now(),
         transport_bridge: transport_bridge.clone(),
+        ui_port: ws_port,
     });
 
     // Start WebSocket + HTTP Server (serves landing page at /)
-    let (ui_broadcast, mut ui_cmd_rx) = server::start(ws_port, web_ctx).await?;
+    let (ui_broadcast, mut ui_cmd_rx) = server::start(ws_port, web_ctx.clone()).await?;
 
     let listen_addr: libp2p::Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", p2p_port).parse()?;
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);
@@ -1110,6 +1118,10 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     }
 
     println!("{} Network started", "✓".green());
+
+    tokio::spawn(async move {
+        ble_daemon::probe_and_log().await;
+    });
 
     // Subscribe to any topics from the ledger
     for topic in known_topics {
@@ -1133,6 +1145,17 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let core = Arc::new(core);
     // Note: peers and ledger Arc<Mutex> created above (before server::start)
     // so the landing page and API endpoints have access to them.
+
+    let core_ble = Arc::clone(&core);
+    let ui_ble = ui_broadcast.clone();
+    tokio::spawn(async move {
+        ble_mesh::run_ble_central_ingress(core_ble, ui_ble).await;
+    });
+
+    let core_ble_adv = Arc::clone(&core);
+    tokio::spawn(async move {
+        ble_mesh::run_ble_peripheral_advertising(core_ble_adv).await;
+    });
 
     // ── Promiscuous Bootstrap Dialing ────────────────────────────────────
     // Dial bootstrap nodes by IP:Port ONLY (stripped of PeerID).
@@ -1192,10 +1215,10 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             let count = peers_clone_status.lock().await.len();
             // Don't crash if no subscribers
-            let _ = ui_broadcast_clone.send(server::UiEvent::NetworkStatus {
+            let _ = ui_broadcast_clone.send(server::UiOutbound::Legacy(server::UiEvent::NetworkStatus {
                 status: "online".to_string(),
                 peer_count: count,
-            });
+            }));
         }
     });
 
@@ -1261,12 +1284,24 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                  .map(|c| (Some(c.public_key), Some(c.peer_id.clone())))
                                  .unwrap_or((None, None));
 
-                             let _ = ui_broadcast.send(server::UiEvent::PeerDiscovered {
+                             let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::PeerDiscovered {
                                  peer_id: peer_id.to_string(),
                                  transport: "tcp".to_string(),
                                  public_key,
                                  identity,
+                             }));
+                             let n = notif_peer_discovered(PeerDiscoveredParams {
+                                 peer_id: peer_id.to_string(),
+                                 transport: "tcp".to_string(),
+                                 public_key: contacts_rx
+                                     .get(peer_id.to_string())
+                                     .ok()
+                                     .flatten()
+                                     .map(|c| c.public_key),
                              });
+                             if let Ok(v) = serde_json::to_value(&n) {
+                                 let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
+                             }
 
                              // Register peer with transport bridge using default capabilities
                              let capabilities = vec![TransportType::Internet, TransportType::Local];
@@ -1431,15 +1466,25 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                     let _ = std::io::Write::flush(&mut std::io::stdout());
 
 
-                                    let _ = ui_broadcast.send(server::UiEvent::MessageReceived {
+                                    let ts = std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_secs();
+                                    let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::MessageReceived {
+                                        from: peer_id.to_string(),
+                                        content: text.clone(),
+                                        timestamp: ts,
+                                        message_id: msg.id.clone(),
+                                    }));
+                                    let mn = notif_message_received(MessageReceivedParams {
                                         from: peer_id.to_string(),
                                         content: text,
-                                        timestamp: std::time::SystemTime::now()
-                                            .duration_since(std::time::UNIX_EPOCH)
-                                            .unwrap_or_default()
-                                            .as_secs(),
+                                        timestamp: ts,
                                         message_id: msg.id.clone(),
                                     });
+                                    if let Ok(v) = serde_json::to_value(&mn) {
+                                        let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
+                                    }
 
                                     // Send delivery receipt back to sender.
                                     if let Some(ref pk_hex) = sender_public_key_hex {
@@ -1488,26 +1533,26 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                 match cmd {
                     server::UiCommand::IdentityShow => {
                         let i = core_rx.get_identity_info();
-                        let _ = ui_broadcast.send(server::UiEvent::IdentityInfo {
+                        let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::IdentityInfo {
                             peer_id: i.identity_id.unwrap_or_default(),
                             public_key: i.public_key_hex.unwrap_or_default(),
-                        });
+                        }));
                     }
                     server::UiCommand::IdentityExport => {
                         let i = core_rx.get_identity_info();
                         let data_dir = config::Config::data_dir().unwrap_or_default();
                         let storage_path = data_dir.join("storage");
 
-                        let _ = ui_broadcast.send(server::UiEvent::IdentityExportData {
+                        let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::IdentityExportData {
                             identity_id: i.identity_id.unwrap_or_default(),
                             public_key: i.public_key_hex.unwrap_or_default(),
                             private_key: "Keys are stored securely in the data directory.".to_string(),
                             storage_path: storage_path.display().to_string(),
-                        });
+                        }));
                     }
                     server::UiCommand::ContactList => {
                         if let Ok(list) = contacts_rx.list() {
-                            let _ = ui_broadcast.send(server::UiEvent::ContactList { contacts: list });
+                            let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ContactList { contacts: list }));
                         }
                     }
                     server::UiCommand::HistoryList { peer_id, limit } => {
@@ -1524,18 +1569,18 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                     timestamp: m.timestamp,
                                 }
                             }).collect();
-                            let _ = ui_broadcast.send(server::UiEvent::HistoryList {
+                            let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::HistoryList {
                                 peer_id,
                                 messages: history_messages
-                            });
+                            }));
                         }
                     }
                     server::UiCommand::Status => {
                         let count = peers_rx.lock().await.len();
-                        let _ = ui_broadcast.send(server::UiEvent::NetworkStatus {
+                        let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::NetworkStatus {
                             status: "online".to_string(),
                             peer_count: count
-                        });
+                        }));
                     }
                     server::UiCommand::Send { recipient, message, id } => {
                         // Resolve recipient to PeerID and PublicKey
@@ -1560,10 +1605,18 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                  // prepare_message_with_id automatically saves outgoing history
                                  if let Ok(prep) = core_rx.prepare_message_with_id(pk, message) {
                                      if swarm_handle.send_message(target, prep.envelope_data, None, None).await.is_ok() {
-                                         let _ = ui_broadcast.send(server::UiEvent::MessageStatus {
-                                             message_id: id.unwrap_or_default(),
+                                         let mid = id.clone().unwrap_or_default();
+                                         let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::MessageStatus {
+                                             message_id: mid.clone(),
                                              status: "sent".to_string()
+                                         }));
+                                         let dn = notif_delivery_status(DeliveryStatusParams {
+                                             message_id: mid,
+                                             status: "sent".to_string(),
                                          });
+                                         if let Ok(v) = serde_json::to_value(&dn) {
+                                             let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
+                                         }
                                      }
                                  }
                              }
@@ -1575,9 +1628,9 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                             // Validate public key before adding
                             if let Err(e) = scmessenger_core::crypto::validate_ed25519_public_key(&pk) {
                                 tracing::warn!("Failed to add contact {}: invalid public key - {}", peer_id, e);
-                                let _ = ui_broadcast.send(server::UiEvent::Error {
+                                let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::Error {
                                     message: format!("Invalid public key: {}", e)
-                                });
+                                }));
                                 continue;
                             }
 
@@ -1585,7 +1638,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                 .with_nickname(name.unwrap_or(peer_id));
                             let _ = contacts_rx.add(contact);
                             if let Ok(list) = contacts_rx.list() {
-                                let _ = ui_broadcast.send(server::UiEvent::ContactList { contacts: list });
+                                let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ContactList { contacts: list }));
                             }
                         }
                     }
@@ -1594,25 +1647,25 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                          // contacts.remove takes peer_id string
                          if contacts_rx.remove(contact).is_ok() {
                              if let Ok(list) = contacts_rx.list() {
-                                 let _ = ui_broadcast.send(server::UiEvent::ContactList { contacts: list });
+                                 let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ContactList { contacts: list }));
                              }
                          }
                     }
                     server::UiCommand::ConfigGet { key } => {
                         if let Ok(cfg) = config::Config::load() {
                             let value = cfg.get(&key);
-                            let _ = ui_broadcast.send(server::UiEvent::ConfigValue {
+                            let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ConfigValue {
                                 key: key.clone(),
                                 value,
-                            });
+                            }));
                         }
                     }
                     server::UiCommand::ConfigList => {
                         if let Ok(cfg) = config::Config::load() {
                             let config_data = cfg.list();
-                            let _ = ui_broadcast.send(server::UiEvent::ConfigData {
+                            let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ConfigData {
                                 config: config_data,
-                            });
+                            }));
                         }
                     }
                     server::UiCommand::ConfigSet { key, value } => {
@@ -1646,6 +1699,130 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                     server::UiCommand::Restart => {
                         println!("Restart requested from UI - shutting down...");
                         std::process::exit(0);
+                    }
+                    server::UiCommand::DaemonRpc { id, intent } => {
+                        let push = |result: serde_json::Value| {
+                            let resp = rpc_result(id.clone(), result);
+                            if let Ok(v) = serde_json::to_value(&resp) {
+                                let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
+                            }
+                        };
+                        let push_err = |code: i32, msg: String| {
+                            let resp = rpc_error(
+                                id.clone(),
+                                JsonRpcErrorBody {
+                                    code,
+                                    message: msg,
+                                    data: None,
+                                },
+                            );
+                            if let Ok(v) = serde_json::to_value(&resp) {
+                                let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
+                            }
+                        };
+                        match intent {
+                            ClientIntent::GetIdentity {} => {
+                                let i = core_rx.get_identity_info();
+                                push(serde_json::json!({
+                                    "peer_id": i.identity_id,
+                                    "public_key_hex": i.public_key_hex,
+                                    "libp2p_peer_id": i.libp2p_peer_id,
+                                    "initialized": i.initialized,
+                                    "nickname": i.nickname,
+                                }));
+                            }
+                            ClientIntent::ScanPeers {} => {
+                                let peers: Vec<String> = peers_rx
+                                    .lock()
+                                    .await
+                                    .keys()
+                                    .map(|p| p.to_string())
+                                    .collect();
+                                push(serde_json::json!({ "peers": peers }));
+                            }
+                            ClientIntent::GetTopology {} => {
+                                let peer_count = peers_rx.lock().await.len();
+                                let (known_peers, bootstrap_nodes) = {
+                                    let l = ledger_rx.lock().await;
+                                    let known = l
+                                        .entries
+                                        .values()
+                                        .filter(|e| !e.known_topics.is_empty())
+                                        .count();
+                                    (known, web_ctx.bootstrap_nodes.clone())
+                                };
+                                let topo = MeshTopologyUpdateParams {
+                                    peer_count,
+                                    known_peers,
+                                    bootstrap_nodes,
+                                };
+                                if let Ok(v) = serde_json::to_value(&topo) {
+                                    push(v);
+                                }
+                            }
+                            ClientIntent::SendMessage {
+                                recipient,
+                                message,
+                                id: msg_id,
+                            } => {
+                                let peer_id_res = recipient.parse::<libp2p::PeerId>();
+                                let contact_res = contacts_rx.get(recipient.clone());
+                                let target_peer = if let Ok(pid) = peer_id_res {
+                                    Some(pid)
+                                } else if let Ok(Some(contact)) = contact_res {
+                                    contact.peer_id.parse().ok()
+                                } else {
+                                    None
+                                };
+                                let Some(target) = target_peer else {
+                                    push_err(-32001, "Recipient not found".into());
+                                    continue;
+                                };
+                                let pk_opt = if let Ok(Some(c)) = contacts_rx.get(target.to_string()) {
+                                    Some(c.public_key)
+                                } else {
+                                    None
+                                };
+                                let Some(pk) = pk_opt else {
+                                    push_err(-32002, "No public key for recipient".into());
+                                    continue;
+                                };
+                                match core_rx.prepare_message_with_id(pk, message) {
+                                    Ok(prep) => {
+                                        if swarm_handle
+                                            .send_message(target, prep.envelope_data, None, None)
+                                            .await
+                                            .is_ok()
+                                        {
+                                            let mid = msg_id.clone().unwrap_or_default();
+                                            push(serde_json::json!({
+                                                "status": "sent",
+                                                "message_id": mid.clone(),
+                                            }));
+                                            let _ = ui_broadcast.send(server::UiOutbound::Legacy(
+                                                server::UiEvent::MessageStatus {
+                                                    message_id: mid.clone(),
+                                                    status: "sent".to_string(),
+                                                },
+                                            ));
+                                            let dn = notif_delivery_status(DeliveryStatusParams {
+                                                message_id: mid,
+                                                status: "sent".to_string(),
+                                            });
+                                            if let Ok(v) = serde_json::to_value(&dn) {
+                                                let _ =
+                                                    ui_broadcast.send(server::UiOutbound::JsonRpc(v));
+                                            }
+                                        } else {
+                                            push_err(-32003, "Swarm send failed".into());
+                                        }
+                                    }
+                                    Err(e) => {
+                                        push_err(-32004, format!("Prepare message: {}", e));
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1786,10 +1963,11 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         peers: peers.clone(),
         start_time: std::time::Instant::now(),
         transport_bridge: transport_bridge.clone(),
+        ui_port: http_port,
     });
 
     // Start HTTP server (landing page + WebSocket)
-    let (ui_broadcast, _ui_cmd_rx) = server::start(http_port, web_ctx).await?;
+    let (ui_broadcast, _ui_cmd_rx) = server::start(http_port, web_ctx.clone()).await?;
     println!("{} HTTP server started on port {}", "✓".green(), http_port);
 
     // Start swarm
@@ -1845,6 +2023,20 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         "✓".green(),
         format!("http://127.0.0.1:{}", api::API_PORT).dimmed()
     );
+
+    tokio::spawn(async move {
+        ble_daemon::probe_and_log().await;
+    });
+    let core_ble = Arc::clone(&core_arc);
+    let ui_ble = ui_broadcast.clone();
+    tokio::spawn(async move {
+        ble_mesh::run_ble_central_ingress(core_ble, ui_ble).await;
+    });
+
+    let core_ble_adv = Arc::clone(&core_arc);
+    tokio::spawn(async move {
+        ble_mesh::run_ble_peripheral_advertising(core_ble_adv).await;
+    });
 
     // ── Initial bootstrap dial ──────────────────────────────────────────
     {
@@ -1903,10 +2095,10 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
             let count = peers_status.lock().await.len();
-            let _ = ui_broadcast_clone.send(server::UiEvent::NetworkStatus {
+            let _ = ui_broadcast_clone.send(server::UiOutbound::Legacy(server::UiEvent::NetworkStatus {
                 status: "online".to_string(),
                 peer_count: count,
-            });
+            }));
         }
     });
 
@@ -1948,12 +2140,24 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
                                 .map(|c| (Some(c.public_key), Some(c.peer_id.clone())))
                                 .unwrap_or((None, None));
 
-                            let _ = ui_broadcast.send(server::UiEvent::PeerDiscovered {
+                            let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::PeerDiscovered {
                                 peer_id: peer_id.to_string(),
                                 transport: "tcp".to_string(),
                                 public_key,
                                 identity,
+                            }));
+                            let n = notif_peer_discovered(PeerDiscoveredParams {
+                                peer_id: peer_id.to_string(),
+                                transport: "tcp".to_string(),
+                                public_key: contacts_rx
+                                    .get(peer_id.to_string())
+                                    .ok()
+                                    .flatten()
+                                    .map(|c| c.public_key),
                             });
+                            if let Ok(v) = serde_json::to_value(&n) {
+                                let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
+                            }
 
                             // Register peer with transport bridge using default capabilities
                             let capabilities = vec![TransportType::Internet, TransportType::Local];

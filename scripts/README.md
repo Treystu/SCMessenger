@@ -1,7 +1,7 @@
 # SCMessenger Scripts Guide
 
 Status: Active
-Last updated: 2026-03-16
+Last updated: 2026-04-11
 
 This guide covers active launch/debug/verification scripts, with a focus on AI-assisted debugging workflows.
 
@@ -24,6 +24,15 @@ This guide covers active launch/debug/verification scripts, with a focus on AI-a
 │    └── Core crypto, transport, receipts, offline/partition matrices        │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+## CLI user install (daemon)
+
+| Goal | Command |
+|------|---------|
+| Copy release CLI to `~/.local/bin` + emit systemd (Linux) or LaunchAgent (macOS) unit | `./scripts/install.sh` (after `cargo build --release -p scmessenger-cli`) |
+| Windows: copy to `%USERPROFILE%\.local\bin` | `powershell -File scripts/install.ps1` |
+
+Optional: `SCMESSENGER_BIN=/path/to/scmessenger-cli` (bash) or `$env:SCMESSENGER_BIN` (PowerShell) to install a non-default artifact.
 
 ## Fast Start By Goal
 
@@ -157,7 +166,7 @@ SCM_SKIP_IOS=1 ./scripts/verify_ws12_matrix.sh      # Skip iOS
 
 ## Repo / Governance Helpers
 
-1. `scripts/docs_sync_check.sh`
+1. `scripts/docs_sync_check.sh` (Unix / Git Bash) or `scripts/docs_sync_check.ps1` (Windows PowerShell)
 2. `scripts/repo_audit.sh`
 3. `scripts/verify_branch_merges.sh`
 4. `scripts/delete_merged_branches.sh`
@@ -208,7 +217,7 @@ Historical debug parsers in `reference/historical/`:
 
 ## Repo / Governance Helpers
 
-1. `scripts/docs_sync_check.sh`
+1. `scripts/docs_sync_check.sh` (Unix / Git Bash) or `scripts/docs_sync_check.ps1` (Windows PowerShell)
 2. `scripts/repo_audit.sh`
 3. `scripts/verify_branch_merges.sh`
 4. `scripts/delete_merged_branches.sh`

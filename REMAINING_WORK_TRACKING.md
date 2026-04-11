@@ -1,14 +1,17 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-03-19
+Last updated: 2026-04-11
 
 ---
 
-# SCMessenger Remaining Work Tracking
+## OPEN — WASM thin client: peripheral BLE & full UI lobotomy
 
-Status: Active
-Last updated: 2026-03-20
+**Status:** TRACKED — partial landing 2026-04-11
+
+1. **BLE GATT peripheral:** btleplug-based **advertising** for the SCM service UUID (mobile discovery of the desktop daemon). **Central scan + Drift notify → `message_received`** is implemented in `cli/src/ble_mesh.rs` (notify char `0xDF03`); see `wasm/wasm_plan.md` Phase 4 verification table.
+2. **Browser IronCore:** Optional runtime mode that refuses local `initialize_identity`, requires `get_identity` over the daemon socket first, and routes `prepare_message` / send exclusively through JSON-RPC (today: `wasm/src/daemon_bridge.rs` wire helpers + `transport.rs` direction comments; full gating not landed).
+3. **Verification:** `wasm-pack test --headless` / browser harness for daemon-driven UI state (deferred where CI lacks headless browser).
 
 ---
 

@@ -1,12 +1,6 @@
-// WASM Client Support — Phase 8
+// WASM / browser daemon bridge shared types (serde JSON-RPC).
 //
-// Portable browser-compatible mesh node implementation for WASM environments.
-// Includes WebRTC/WebSocket transport, in-memory storage, and mesh synchronization.
+// Historical mesh/storage/transport helpers live under `mesh.rs`, `storage.rs`, and
+// `transport.rs` but are not wired into `lib.rs` until they are updated for current libp2p.
 
-pub mod mesh;
-pub mod storage;
-pub mod transport;
-
-pub use mesh::{WasmMeshConfig, WasmMeshNode, WasmMeshState};
-pub use storage::{EvictionStrategy, WasmStore, WasmStoreConfig};
-pub use transport::{WebSocketRelay, WebTransportConfig, WebTransportManager, WebTransportType};
+pub mod rpc;

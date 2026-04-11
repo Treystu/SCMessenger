@@ -9,7 +9,7 @@ use crate::store::backend::{MemoryStorage, StorageBackend};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), unix))]
 use std::ffi::CString;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
