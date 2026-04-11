@@ -1266,22 +1266,6 @@ pub async fn start_swarm_with_config(
     storage_path: Option<String>,
     headless: bool,
 ) -> Result<SwarmHandle> {
-    #[cfg(target_arch = "wasm32")]
-    {
-        let _ = &keypair;
-        let _ = &listen_addr;
-        let _ = &event_tx;
-        let _ = &multiport_config;
-        let _ = &bootstrap_addrs;
-        let _ = &storage_path;
-        let _ = headless;
-
-        // WASM stub: Real swarm networking requires tokio/quic which aren't available in browsers.
-        // Use WasmTransport for browser-based P2P instead.
-        return Err(anyhow::anyhow!(
-            "Swarm networking is not supported in WASM. Use WasmTransport for browser-based P2P."
-        ));
-    }
     #[cfg(not(target_arch = "wasm32"))]
     {
         let local_peer_id = keypair.public().to_peer_id();
@@ -1293,6 +1277,10 @@ pub async fn start_swarm_with_config(
                 libp2p::noise::Config::new,
                 libp2p::yamux::Config::default,
             )?
+            .with_websocket(
+                libp2p::noise::Config::new,
+                libp2p::yamux::Config::default,
+            ).await?
             .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)?
             .with_behaviour(|key, relay_client| {
                 IronCoreBehaviour::new(key, relay_client, headless)
@@ -1343,6 +1331,14 @@ pub async fn start_swarm_with_config(
             match swarm.listen_on(quic_addr.clone()) {
                 Ok(_) => tracing::info!("✓ Bound QUIC listener {}", quic_addr),
                 Err(e) => tracing::warn!("✗ Failed to bind QUIC listener {}: {}", quic_addr, e),
+            }
+        }
+
+        // ADDED: Always expose a WebSocket listener for WASM bridge on 9002
+        if let Ok(ws_addr) = "/ip4/0.0.0.0/tcp/9002/ws".parse::<Multiaddr>() {
+            match swarm.listen_on(ws_addr.clone()) {
+                Ok(_) => tracing::info!("✓ Bound WebSocket listener {}", ws_addr),
+                Err(e) => tracing::warn!("✗ Failed to bind WebSocket listener {}: {}", ws_addr, e),
             }
         }
 

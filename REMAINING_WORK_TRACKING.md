@@ -12,6 +12,28 @@ Last updated: 2026-03-20
 
 ---
 
+## ✅ RESOLVED - 2026-04-11: WASM WebSocket Connectivity Fix
+
+**Status:** ✅ COMPLETE - Bridge connectivity and discovery fixed
+
+Resolved critical connectivity failures between browser WASM nodes and the local CLI bridge.
+
+### Changes Implemented
+1. **Core WebSocket Transport**: Enabled `libp2p::websocket` in `SwarmBuilder` to support WebSocket clients and listeners.
+2. **Dedicated Bridge Port (9002)**: Configured the CLI to listen on a dedicated WebSocket port (9002) to avoid conflicts and ensure reliable browser targeting.
+3. **Rust-Side Listener**: Added a default listener on `/ip4/0.0.0.0/tcp/9002/ws` in `core/src/transport/swarm.rs`.
+4. **WASM Fail-Safe**: Modified `ui/app.js` to perform a feature check for `this.state.core.dial`. If missing (stale WASM), the app now adds the bridge to the bootstrap list instead of crashing.
+5. **Initial discovery re-ordering**: Updated the app initialization to seek the CLI bridge *before* starting the swarm, ensuring first-stab connectivity.
+6. **CLI Visibility**: Enhanced the CLI `relay` output to explicitly display the WebSocket bridge URL for easier manual configuration if needed.
+
+### Verification
+- [X] WASM UI connects to CLI on port 9002.
+- [X] CLI bridge is added to bootstrap list dynamically.
+- [X] Fail-safe prevents crashes when using older WASM builds.
+- [X] Discovery URL (9000) correctly points to Bridge URL (9002).
+
+---
+
 ## ✅ RESOLVED - 2026-04-10: WASM/Android Parity & Bridge Visibility
 
 **Status:** ✅ COMPLETE - UI parity achieved and mesh visibility restored

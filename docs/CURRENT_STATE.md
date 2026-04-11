@@ -1,8 +1,34 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-04-10
-Last verified: **2026-04-10** (WASM WebSocket Bridge & UI Hosting Active)
+Last updated: 2026-04-11
+Last verified: **2026-04-11** (WASM WebSocket Bridge Connectivity Fixed)
+
+---
+
+## 2026-04-11: WASM WebSocket Connectivity & CLI Bridge Stabilized
+
+**Status:** ✅ RESOLVED
+
+### Overview
+
+Resolved critical connectivity failures between browser-based WASM nodes and the local CLI bridge. Browser nodes can now reliably discover and connect to the CLI relay on port 9002, ensuring parity with native discoverability.
+
+### Connectivity Fixes
+- **Core WebSocket Transport**: Enabled `libp2p::websocket` in the `SwarmBuilder` to allow the core library to act as a WebSocket client (for WASM) and server (for CLI).
+- **Dedicated Bridge Port (9002)**: Configured the CLI relay/headless node to always listen on port 9002 for WebSockets, separate from the native P2P port 9001.
+- **Port Discovery Aligned**: Fixed alignment between the CLI's `/api/network-info` and the frontend's transport logic, ensuring the browser targets the correct bridge port.
+- **Initial Sync Flow**: Optimized `app.js` to proactively discover the CLI bridge *before* starting the mesh swarm, allowing the bridge to be used as an immediate bootstrap peer.
+
+### Robustness & Diagnostics
+- **WASM Fail-Safe**: Added logic to `app.js` to handle stale WASM builds gracefully. If the `dial` function is missing from the WASM package, the UI falls back to adding the bridge to the bootstrap list instead of crashing.
+- **CLI Visibility**: Updated the CLI `relay` command output to explicitly show the WebSocket bridge address and discovery API URL.
+- **Auto-Relay Circuit**: Confirmed WASM nodes successfully reserve relay circuits on the CLI bridge (`/p2p-circuit`), making browser nodes reachable via the CLI's LAN/Public addresses.
+
+### Impact
+- ✅ Browser nodes successfully join the mesh on local networks.
+- ✅ CLI bridge serves as a stable anchor for sandboxed browser nodes.
+- ✅ Full parity for LAN-based message delivery between Browser and Android/iOS.
 
 ---
 

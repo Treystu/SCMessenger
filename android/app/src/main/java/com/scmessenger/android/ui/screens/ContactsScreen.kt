@@ -45,7 +45,8 @@ import java.util.*
 @Composable
 fun ContactsScreen(
     viewModel: ContactsViewModel = hiltViewModel(),
-    onNavigateToChat: (String) -> Unit
+    onNavigateToChat: (String) -> Unit,
+    onNavigateToAddContact: () -> Unit = {}
 ) {
     val contacts by viewModel.filteredContacts.collectAsState()
     val nearbyPeers by viewModel.nearbyPeers.collectAsState()
@@ -63,7 +64,7 @@ fun ContactsScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
+            FloatingActionButton(onClick = onNavigateToAddContact) {
                 Icon(Icons.Default.Add, contentDescription = "Add Contact")
             }
         }

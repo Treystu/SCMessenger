@@ -31,6 +31,8 @@ const SCM = {
     swarmRunning: false, bootstrapAddrs: [],
     contacts: {}, messages: {}, peers: [],
     activeChat: null, dashTimer: null, inboxTimer: null, startTime: Date.now(),
+    cliBridgeAvailable: true, // Assume CLI is available until proven otherwise
+    transportMode: "standalone" // "standalone", "cli-bridge", or "headless-node"
   },
 
   // ===== INIT =====
@@ -45,6 +47,11 @@ const SCM = {
       await this.refreshIdentity();
       this.syncSettingsUI();
       this.maybeOnboard();
+      
+      // Proactively discover and sync with the local CLI bridge BEFORE starting swarm
+      // This allows adding it to bootstrap list if dial is missing.
+      await this.syncWithCliNode();
+      
       await this.startSwarm();
       await this.refreshContacts();
       this.bindSettingsListeners();
@@ -117,27 +124,83 @@ const SCM = {
       if (resp.ok) {
         const info = await resp.json();
         const cliPeerId = info.node.peer_id;
-        console.log("Found local CLI bridge:", cliPeerId);
+        console.log("Found local CLI headless node:", cliPeerId);
         
-        const bridgeHost = window.location.hostname || "127.0.0.1";
-        // P2P WebSocket bridge is on p2p_port + 1 = (ws_port + 1) + 1 = 9002
-        const localWsAddr = `/ip4/${bridgeHost}/tcp/9002/ws/p2p/${cliPeerId}`;
-        console.log("Dialing local bridge:", localWsAddr);
-        await this.state.core.dial(localWsAddr);
+        // Check if CLI advertises itself as headless node with forwarding support
+        const isHeadlessNode = info.transport?.is_headless_node || false;
+        const supportsForwarding = info.transport?.supports_forwarding || false;
+        const wsBridgePort = info.transport?.ws_bridge_port || 9002;
+        const cliCapabilities = info.transport?.capabilities || ["Internet", "Local"];
         
-        // Listen on a relay circuit to ensure we are visible
-        // This makes the WASM node reachable via the CLI's public/mDNS addresses
-        try {
-          if (this.state.core.listenOn) {
-            await this.state.core.listenOn("/p2p-circuit");
-            console.log("Reserved relay circuit on bridge");
+        // Set CLI bridge availability based on headless node status
+        this.state.cliBridgeAvailable = isHeadlessNode && supportsForwarding;
+        this.state.transportMode = isHeadlessNode ? "cli-bridge" : "standalone";
+        
+        if (this.state.cliBridgeAvailable) {
+          console.log("CLI is configured as headless node with forwarding support");
+          console.log("Available transport capabilities:", cliCapabilities);
+          
+          // Register CLI's transport capabilities with the bridge
+          await this.registerPeerWithTransportBridge(cliPeerId, cliCapabilities);
+          
+          const bridgeHost = window.location.hostname || "127.0.0.1";
+          // Use the advertised WebSocket bridge port
+          const localWsAddr = `/ip4/${bridgeHost}/tcp/${wsBridgePort}/ws/p2p/${cliPeerId}`;
+          console.log("Connecting to CLI WebSocket bridge:", localWsAddr);
+          
+          try {
+            if (this.state.core.dial) {
+              await this.state.core.dial(localWsAddr);
+              console.log("Successfully connected to CLI bridge via dial()");
+            } else {
+              console.warn("WASM core.dial() is not available! This usually means the WASM package is stale and needs to be rebuilt with 'wasm-pack build'.");
+              console.warn("Attempting to add bridge to bootstrap list instead...");
+              
+              if (!this.state.bootstrapAddrs.includes(localWsAddr)) {
+                this.state.bootstrapAddrs.push(localWsAddr);
+                // If the swarm is already running, we might still be disconnected from bridge
+                // but at least it will be tried on next restart.
+              }
+            }
+            
+            this.state.cliBridgeAvailable = true; // Optimistic if dial didn't throw
+            
+            // Listen on a relay circuit to ensure we are visible
+            // This makes the WASM node reachable via the CLI's public/mDNS addresses
+            try {
+              if (this.state.core.listenOn) {
+                await this.state.core.listenOn("/p2p-circuit");
+                console.log("Reserved relay circuit on CLI bridge - WASM is now reachable via CLI");
+              }
+            } catch(e) {
+              console.warn("Relay circuit reservation skipped:", e);
+            }
+            
+          } catch (dialError) {
+            console.error("Failed to connect to CLI WebSocket bridge:", dialError);
+            this.state.cliBridgeAvailable = false;
+            this.state.transportMode = "standalone";
+            // Don't rethrow, just continue in standalone mode
           }
-        } catch(e) {
-          console.warn("Relay reservation skipped:", e);
+        } else {
+          console.log("CLI detected but not configured as headless node with forwarding support");
+          this.state.cliBridgeAvailable = false;
+          this.state.transportMode = "standalone";
         }
       }
     } catch (e) {
-      console.log("CLI node not detected locally.");
+      console.log("CLI node not detected locally:", e.message);
+      // Set standalone mode flag for UI feedback
+      this.state.cliBridgeAvailable = false;
+      this.state.transportMode = "standalone";
+      
+      // Fallback: Try to connect to public bootstrap nodes if available
+      if (this.state.bootstrapAddrs.length > 0) {
+        console.log("Falling back to public bootstrap nodes - running in standalone mode");
+        // WASM will work in standalone mode with internet relay
+      } else {
+        console.warn("No bootstrap nodes available - WASM will work in isolated mode");
+      }
     }
   },
 
@@ -180,9 +243,14 @@ const SCM = {
     const peers = await this.state.core.getPeers().catch(() => []);
     this.state.peers = Array.isArray(peers) ? peers : [];
 
-    // Mesh tab updates
-    el("mesh-peer-count").textContent = this.state.peers.length;
-    el("mesh-peer-label").textContent = this.state.peers.length === 1 ? "Peer" : "Peers";
+    // Mesh tab updates - filter to only legitimate peers (with topics or contacts)
+    const legitimatePeers = this.state.peers.filter(peerId => {
+      const c = this.state.contacts[peerId];
+      return c || (this.state.knownTopics?.[peerId]?.length > 0);
+    });
+    
+    el("mesh-peer-count").textContent = legitimatePeers.length;
+    el("mesh-peer-label").textContent = legitimatePeers.length === 1 ? "Peer" : "Peers";
 
     const path = await this.state.core.getConnectionPathState().catch(() => "Disconnected");
     el("mesh-conn-path").textContent = path;
@@ -256,6 +324,12 @@ const SCM = {
       this.storeMsg(peerId, msg);
       this.addHistory({ id: msgId, direction: "Received", peer_id: peerId, content: text, timestamp: Math.floor(ts/1000), sender_timestamp: Math.floor(ts/1000), delivered: true, hidden: false });
 
+      // Update UI to show new message
+      if (this.state.activeChat === peerId) {
+        this.ui.renderChatMessages(peerId);
+      }
+      this.ui.renderConversations();
+
       // Send delivery receipt back
       const c = this.state.contacts[peerId];
       if (c?.public_key) {
@@ -276,6 +350,126 @@ const SCM = {
     try { this.state.contactMgr.add(c); } catch(_) {}
     this.state.contacts[peerId] = { ...c, displayName: c.local_nickname };
     this.ui.renderContacts();
+  },
+
+  // ===== TRANSPORT BRIDGE INTEGRATION =====
+  
+  async registerPeerWithTransportBridge(peerId, capabilities) {
+    try {
+      const response = await fetch("/api/transport/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ peer_id: peerId, capabilities })
+      });
+      
+      if (!response.ok) {
+        console.warn("Failed to register peer transport capabilities:", await response.text());
+      } else {
+        console.log("Registered transport capabilities for", peerId);
+      }
+    } catch (e) {
+      console.warn("Transport registration failed:", e.message);
+    }
+  },
+  
+  async fetchTransportCapabilities() {
+    try {
+      const response = await fetch("/api/transport/capabilities");
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Transport capabilities:", data);
+        return data;
+      }
+    } catch (e) {
+      console.warn("Failed to fetch transport capabilities:", e.message);
+    }
+    return { cli_capabilities: [], peer_capabilities: {} };
+  },
+  
+  async fetchTransportPaths(peerId) {
+    try {
+      const response = await fetch(`/api/transport/paths/${peerId}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Available transport paths to", peerId, ":", data);
+        return data.paths || [];
+      }
+    } catch (e) {
+      console.warn("Failed to fetch transport paths:", e.message);
+    }
+    return [];
+  },
+  
+  async selectBestTransportPath(peerId) {
+    try {
+      // Check if we have CLI bridge available
+      if (this.state.cliBridgeAvailable) {
+        const paths = await this.fetchTransportPaths(peerId);
+        if (paths.length === 0) return null;
+        
+        // Return the highest reliability path
+        return paths.reduce((best, current) => 
+          current.reliability > best.reliability ? current : best
+        );
+      } else {
+        // Standalone mode - use direct connection or relay
+        console.log("Using standalone transport mode for", peerId);
+        return null; // Let core handle direct connection
+      }
+    } catch (e) {
+      console.warn("Failed to fetch transport paths:", e);
+      // Fallback to standalone mode
+      this.state.cliBridgeAvailable = false;
+      this.state.transportMode = "standalone";
+      return null;
+    }
+  },
+
+  async checkCliForwardingCapabilities() {
+    try {
+      const resp = await fetch("/api/network-info");
+      if (resp.ok) {
+        const info = await resp.json();
+        const transportInfo = info.transport;
+        
+        if (transportInfo) {
+          const canForward = transportInfo.supports_forwarding || false;
+          const capabilities = transportInfo.capabilities || [];
+          
+          console.log("CLI Forwarding Capabilities:", {
+            canForward,
+            capabilities,
+            isHeadlessNode: transportInfo.is_headless_node
+          });
+          
+          return {
+            canForward,
+            capabilities,
+            wsBridgePort: transportInfo.ws_bridge_port || 9002,
+            isHeadlessNode: transportInfo.is_headless_node || false
+          };
+        }
+      }
+      return null;
+    } catch (e) {
+      console.warn("Failed to check CLI forwarding capabilities:", e);
+      return null;
+    }
+  },
+
+  async ensureCliBridgeConnected() {
+    if (!this.state.cliBridgeAvailable) {
+      console.log("CLI bridge not available - attempting to connect...");
+      await this.syncWithCliNode();
+    }
+    
+    if (this.state.cliBridgeAvailable) {
+      console.log("CLI bridge is connected and ready for forwarding");
+      return true;
+    } else {
+      console.log("No CLI bridge available - running in standalone mode");
+      return false;
+    }
   },
 
   storeMsg(peerId, msg) {
@@ -641,7 +835,30 @@ const SCM = {
       if (!c?.public_key) { SCM.showSnackbar("Contact missing public key."); return; }
       try {
         const prep = SCM.state.core.prepareMessageWithId(c.public_key, text);
+        
+        // Ensure CLI bridge is connected for optimal forwarding
+        const bridgeConnected = await SCM.ensureCliBridgeConnected();
+        
+        // Select best transport path for this peer
+        const bestPath = await SCM.selectBestTransportPath(peerId);
+        if (bestPath) {
+          console.log(`Using transport path for ${peerId}:`, bestPath);
+          // Note: The core will automatically use the best available path
+          // based on the transport bridge information
+        } else if (bridgeConnected) {
+          console.log("Using CLI bridge for forwarding to", peerId);
+        } else {
+          console.log("Using direct connection to", peerId);
+        }
+        
+        // Send the message - the core will use the appropriate transport
+        // based on the bridge configuration
         await SCM.state.core.sendPreparedEnvelope(peerId, prep.envelopeData);
+        
+        // If we're using the CLI bridge, log the forwarding
+        if (bridgeConnected) {
+          console.log(`Message forwarded via CLI bridge to ${peerId}`);
+        }
         // Mark sent in core outbox
         try { SCM.state.core.markMessageSent(prep.messageId); } catch(_) {}
         const nowMs = Date.now();
@@ -685,6 +902,235 @@ const SCM = {
       } catch(e) { SCM.showSnackbar("Diagnostics failed: " + e); }
     },
 
+    // ===== QR CODE GENERATION =====
+    generateQRCode(text, elementId) {
+      try {
+        // Use QRCode.js library if available, otherwise provide fallback
+        if (typeof QRCode !== 'undefined') {
+          const qrElement = document.getElementById(elementId);
+          qrElement.innerHTML = "";
+          new QRCode(qrElement, {
+            text: text,
+            width: 200,
+            height: 200,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.H,
+            // Ensure compatibility with jsQR scanner
+            format: 'UTF-8',
+            margin: 2
+          });
+          return true;
+        } else {
+          // Fallback: Display text if QR library not available
+          const fallbackElement = document.getElementById(elementId);
+          fallbackElement.textContent = "QR Code Library Not Loaded\n" + text;
+          fallbackElement.style.whiteSpace = "pre";
+          return false;
+        }
+      } catch (e) {
+        console.error("QR generation failed:", e);
+        return false;
+      }
+    },
+
+    showPeerQRCode() {
+      try {
+        const info = this.state.core.getIdentityInfo();
+        if (!info?.peerId) {
+          SCM.showSnackbar("Identity not initialized");
+          return;
+        }
+        
+        // Format: SCM:peerId:publicKey
+        const qrData = `SCM:${info.peerId}:${info.publicKeyHex || ''}`;
+        this.generateQRCode(qrData, "peer-qr-code");
+        
+        // Also show peer ID for manual copy
+        document.getElementById("peer-id-text").textContent = info.peerId;
+        document.getElementById("peer-id-text").setAttribute("data-peer-id", info.peerId);
+        
+        // Show modal
+        document.getElementById("modal-peer-qr").classList.add("visible");
+        
+        // Copy to clipboard button
+        document.getElementById("btn-copy-peer-id").onclick = () => {
+          navigator.clipboard.writeText(info.peerId);
+          SCM.showSnackbar("Peer ID copied to clipboard!");
+        };
+      } catch (e) {
+        SCM.showSnackbar("Failed to generate QR: " + e.message);
+      }
+    },
+
+    async scanQRCode() {
+      try {
+        // Check if browser supports camera access
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          SCM.showSnackbar("Camera access not supported in this browser");
+          return;
+        }
+        
+        // Check if we're on HTTPS (required for camera access)
+        if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+          SCM.showSnackbar("Camera access requires HTTPS or localhost for security");
+          return;
+        }
+        
+        // Load QR libraries if not already loaded
+        await this.loadQRLibraries();
+        
+        // Use jsQR or similar library for scanning
+        const video = document.getElementById("qr-video");
+        const canvas = document.getElementById("qr-canvas");
+        const context = canvas.getContext("2d");
+        
+        // Show scanner modal first
+        document.getElementById("modal-qr-scanner").classList.add("visible");
+        
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              facingMode: "environment",
+              width: { ideal: 1920 },
+              height: { ideal: 1080 }
+            } 
+          });
+          
+          video.srcObject = stream;
+          video.setAttribute("playsinline", true);
+          video.play();
+          
+          // Add error handler for video
+          video.onerror = () => {
+            SCM.showSnackbar("Camera video error occurred");
+            this.cancelQRScan();
+          };
+          
+          let scanInterval = null;
+          let scanAttempts = 0;
+          const maxAttempts = 100; // 50 seconds max scanning time
+          
+          scanInterval = setInterval(() => {
+            scanAttempts++;
+            
+            if (scanAttempts >= maxAttempts) {
+              SCM.showSnackbar("QR scanning timed out");
+              this.cancelQRScan();
+              return;
+            }
+            
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+              try {
+                canvas.height = video.videoHeight;
+                canvas.width = video.videoWidth;
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                
+                // Use jsQR to decode
+                if (typeof jsQR !== 'undefined') {
+                  const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                    inversionAttempts: 'attemptBoth'
+                  });
+                  
+                  if (code) {
+                    clearInterval(scanInterval);
+                    stream.getTracks().forEach(track => track.stop());
+                    document.getElementById("modal-qr-scanner").classList.remove("visible");
+                    this.handleScannedQR(code.data);
+                  }
+                } else {
+                  if (scanAttempts % 10 === 0) {
+                    console.warn("jsQR library not loaded");
+                  }
+                }
+              } catch (scanError) {
+                console.error("QR scan error:", scanError);
+                if (scanAttempts % 20 === 0) {
+                  SCM.showSnackbar("QR scanning error - trying again...");
+                }
+              }
+            }
+          }, 500);
+          
+          // Cancel button
+          document.getElementById("btn-cancel-qr").onclick = () => {
+            this.cancelQRScan();
+          };
+          
+        } catch (err) {
+          console.error("Camera access error:", err);
+          SCM.showSnackbar("Camera access denied: " + (err.message || String(err)));
+          this.cancelQRScan();
+        }
+      } catch (e) {
+        console.error("QR scan initialization failed:", e);
+        SCM.showSnackbar("QR scanning failed: " + e.message);
+      }
+    },
+
+    async loadQRLibraries() {
+      return new Promise((resolve, reject) => {
+        // Check if libraries are already loaded
+        if (typeof jsQR !== 'undefined') {
+          resolve();
+          return;
+        }
+        
+        // Load jsQR library dynamically
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/jqrcode@1.0.4/dist/jqrcode.min.js';
+        script.onload = () => {
+          console.log("jsQR library loaded successfully");
+          resolve();
+        };
+        script.onerror = () => {
+          console.error("Failed to load jsQR library");
+          reject(new Error("Failed to load QR scanning library"));
+        };
+        document.head.appendChild(script);
+      });
+    },
+
+    async handleScannedQR(qrData) {
+      try {
+        // Parse SCM QR format: SCM:peerId:publicKey
+        if (qrData.startsWith("SCM:")) {
+          const parts = qrData.split(":");
+          if (parts.length >= 3) {
+            const peerId = parts[1];
+            const publicKey = parts[2];
+            
+            // Check if we already have this contact
+            if (this.state.contacts[peerId]) {
+              SCM.showSnackbar("Contact already exists!");
+              return;
+            }
+            
+            // Add the contact
+            await this.addContact(peerId, publicKey, "Scanned Contact");
+            SCM.showSnackbar("Contact added successfully!");
+            
+            // Switch to chat with new contact
+            this.ui.showChat(peerId);
+          }
+        } else {
+          SCM.showSnackbar("Invalid QR code format");
+        }
+      } catch (e) {
+        SCM.showSnackbar("Failed to process QR: " + e.message);
+      }
+    },
+
+    cancelQRScan() {
+      const video = document.getElementById("qr-video");
+      if (video && video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+      }
+      document.getElementById("modal-qr-scanner").classList.remove("visible");
+    },
+
     exportLogs() {
       try {
         const logs = SCM.state.core.exportLogs();
@@ -708,6 +1154,42 @@ const SCM = {
         SCM.showSnackbar("All data deleted. Reloading...");
         setTimeout(() => location.reload(), 1500);
       } catch (e) { SCM.showSnackbar("Reset failed: " + e); }
+    },
+
+    async checkHeadlessNodeCompatibility() {
+      try {
+        // Check if we can detect any headless node (CLI or other)
+        const response = await fetch("/api/network-info");
+        if (response.ok) {
+          const info = await response.json();
+          this.state.transportMode = "cli-bridge";
+          this.state.cliBridgeAvailable = true;
+          console.log("Headless node detected:", info.node.peer_id);
+          return true;
+        }
+      } catch (e) {
+        // No headless node detected
+        console.log("No headless node detected - running in standalone mode");
+        this.state.transportMode = "standalone";
+        this.state.cliBridgeAvailable = false;
+        return false;
+      }
+      
+      // Try to detect any other headless nodes via transport API
+      try {
+        const capsResponse = await fetch("/api/transport/capabilities");
+        if (capsResponse.ok) {
+          const caps = await capsResponse.json();
+          if (caps.cli_capabilities.length > 0) {
+            console.log("Headless node capabilities:", caps.cli_capabilities);
+            return true;
+          }
+        }
+      } catch (e) {
+        console.log("No additional headless nodes detected");
+      }
+      
+      return false;
     },
   },
 
@@ -870,22 +1352,36 @@ const SCM = {
       const empty = document.getElementById("mesh-peers-empty");
       if (!list) return;
 
-      if (SCM.state.peers.length === 0) {
+      // Filter peers to only show those with known topics (legitimate nodes)
+      const legitimatePeers = SCM.state.peers.filter(peerId => {
+        const c = SCM.state.contacts[peerId];
+        // Show if it's a contact or if we have topic information
+        return c || SCM.state.knownTopics?.[peerId]?.length > 0;
+      });
+
+      if (legitimatePeers.length === 0) {
         list.innerHTML = "";
         empty?.classList.remove("hidden");
         return;
       }
       empty?.classList.add("hidden");
 
-      list.innerHTML = SCM.state.peers.map(peerId => {
+      // Update peer count to show only legitimate peers
+      const peerCountEl = document.getElementById("mesh-peer-count");
+      if (peerCountEl) {
+        peerCountEl.textContent = legitimatePeers.length;
+      }
+
+      list.innerHTML = legitimatePeers.map(peerId => {
         const c = SCM.state.contacts[peerId];
         const name = c?.displayName || "Node";
         const isContact = !!c;
+        const statusIndicator = isContact ? ' • Contact' : ' • Unknown';
         return `<div class="list-item">
           <div class="list-avatar" style="background:var(--md-primary-container)">${(name[0]||"N").toUpperCase()}</div>
           <div class="list-content">
             <div class="list-title">${SCM.utils.esc(name)}</div>
-            <div class="list-meta">ID: ${peerId.slice(0,12)}... • WebSocket${isContact ? '' : ' • Unknown'}</div>
+            <div class="list-meta">ID: ${peerId.slice(0,12)}... • WebSocket${statusIndicator}</div>
           </div>
           <div style="width:8px;height:8px;border-radius:50%;background:#4caf50"></div>
         </div>`;
@@ -914,6 +1410,10 @@ const SCM = {
           </div>`;
         }).join("");
       } catch (_) {}
+    },
+
+    openAddContact() {
+      document.getElementById("modal-add-contact").classList.add("visible");
     },
 
     openChat(peerId) {

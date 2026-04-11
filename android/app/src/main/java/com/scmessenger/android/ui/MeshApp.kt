@@ -1,6 +1,8 @@
 package com.scmessenger.android.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Router
@@ -17,6 +19,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.scmessenger.android.ui.contacts.AddContactScreen
 import com.scmessenger.android.ui.identity.IdentityScreen
 import com.scmessenger.android.ui.screens.*
 import com.scmessenger.android.ui.viewmodels.MainViewModel
@@ -100,7 +103,17 @@ fun MeshNavHost(
                 ContactsScreen(
                     onNavigateToChat = { peerId ->
                         navController.navigate("chat/$peerId")
+                    },
+                    onNavigateToAddContact = {
+                        navController.navigate(Screen.AddContact.route)
                     }
+                )
+            }
+
+            composable(Screen.AddContact.route) {
+                AddContactScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onContactAdded = { navController.popBackStack() }
                 )
             }
         }
@@ -117,6 +130,9 @@ fun MeshNavHost(
                     },
                     onNavigateToDiagnostics = {
                         navController.navigate(Screen.Diagnostics.route)
+                    },
+                    onNavigateToBlockedPeers = {
+                        navController.navigate(Screen.BlockedPeers.route)
                     }
                 )
             }
@@ -133,6 +149,12 @@ fun MeshNavHost(
 
         composable(Screen.Diagnostics.route) {
             DiagnosticsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.BlockedPeers.route) {
+            BlockedPeersScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -189,10 +211,12 @@ fun MeshBottomBar(navController: NavHostController, hasIdentity: Boolean) {
 sealed class Screen(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     object Conversations : Screen("conversations", "Chats", androidx.compose.material.icons.Icons.Default.Chat)
     object Contacts : Screen("contacts", "Contacts", androidx.compose.material.icons.Icons.Default.People)
+    object AddContact : Screen("add_contact", "Add Contact", androidx.compose.material.icons.Icons.Filled.Add)
     object Dashboard: Screen("dashboard", "Mesh", androidx.compose.material.icons.Icons.Filled.Router)
     object Settings : Screen("settings", "Settings", androidx.compose.material.icons.Icons.Default.Settings)
     object Identity : Screen("identity", "Identity", androidx.compose.material.icons.Icons.Default.Settings)
     object Diagnostics : Screen("diagnostics", "Diagnostics", androidx.compose.material.icons.Icons.Default.Settings)
+    object BlockedPeers : Screen("blocked_peers", "Blocked Peers", androidx.compose.material.icons.Icons.Filled.Block)
 
     companion object {
         val fullRoleBottomNavItems = listOf(Conversations, Contacts, Dashboard, Settings)

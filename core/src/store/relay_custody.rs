@@ -10,7 +10,9 @@ use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
-use std::{ffi::CString, path::PathBuf};
+use std::ffi::CString;
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::PathBuf;
 use uuid::Uuid;
 
 const CUSTODY_MSG_PREFIX: &str = "relay_custody_msg_";

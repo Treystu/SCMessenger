@@ -5,8 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SCMessenger</title>
   <link rel="stylesheet" href="./styles.css" />
+  <!-- QR Code Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jqrcode@1.0.4/dist/jqrcode.min.js"></script>
 </head>
-<body>
+<body onload="setTimeout(() => { if (typeof SCM !== 'undefined' && SCM.init) { SCM.init().catch(e => console.error('Init error:', e)); } }, 500)">
 
 <div id="app-shell">
   <!-- ===== MAIN CONTENT ===== -->
@@ -41,7 +44,8 @@
         <div class="empty-title">No contacts yet</div>
         <div class="empty-subtitle">Add contacts to start messaging</div>
       </div>
-      <button class="fab" id="fab-add-contact" title="Add Contact">+</button>
+      <button class="fab" id="fab-add-contact" title="Add Contact" onclick="typeof SCM !== 'undefined' && SCM.ui && SCM.ui.openAddContact()">+</button>
+      <button class="fab" id="fab-scan-qr" title="Scan QR Code" style="right:80px" onclick="SCM.actions.scanQRCode()">📷</button>
     </div>
 
     <!-- TAB: Mesh (Dashboard) -->
@@ -120,6 +124,7 @@
             <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
               <button class="btn btn-outline" onclick="SCM.actions.copyIdentityExport()">📋 Copy Full Export</button>
               <button class="btn btn-outline" onclick="SCM.actions.exportIdentity()">🔑 Show Backup</button>
+              <button class="btn btn-outline" onclick="SCM.actions.showPeerQRCode()">📷 Show QR Code</button>
             </div>
           </div>
           <div id="identity-uninitialized">
@@ -242,16 +247,16 @@
 
   <!-- ===== BOTTOM NAV ===== -->
   <nav id="bottom-nav">
-    <button class="nav-item active" data-tab="conversations" onclick="SCM.ui.switchTab('conversations')">
+    <button class="nav-item active" data-tab="conversations" onclick="typeof SCM !== 'undefined' && SCM.ui && SCM.ui.switchTab('conversations')">
       <div class="nav-icon">💬</div>Chats
     </button>
-    <button class="nav-item" data-tab="contacts" onclick="SCM.ui.switchTab('contacts')">
+    <button class="nav-item" data-tab="contacts" onclick="typeof SCM !== 'undefined' && SCM.ui && SCM.ui.switchTab('contacts')">
       <div class="nav-icon">👥</div>Contacts
     </button>
-    <button class="nav-item" data-tab="mesh" onclick="SCM.ui.switchTab('mesh')">
+    <button class="nav-item" data-tab="mesh" onclick="typeof SCM !== 'undefined' && SCM.ui && SCM.ui.switchTab('mesh')">
       <div class="nav-icon">🌐</div>Mesh
     </button>
-    <button class="nav-item" data-tab="settings" onclick="SCM.ui.switchTab('settings')">
+    <button class="nav-item" data-tab="settings" onclick="typeof SCM !== 'undefined' && SCM.ui && SCM.ui.switchTab('settings')">
       <div class="nav-icon">⚙️</div>Settings
     </button>
   </nav>
@@ -264,6 +269,7 @@
   <div class="modal-dialog">
     <div class="modal-title">Add Contact</div>
     <button class="btn btn-outline" style="width:100%;margin-bottom:8px" onclick="SCM.actions.pasteIdentityExport()">📋 Paste Identity Export</button>
+    <button class="btn btn-outline" style="width:100%;margin-bottom:8px" onclick="SCM.actions.scanQRCode()">📷 Scan QR Code</button>
     <div class="divider" style="margin:12px 0"></div>
     <div class="field"><label>Peer ID (libp2p)</label><input type="text" id="add-peer-id" class="mono" /></div>
     <div class="field"><label>Nickname (Optional)</label><input type="text" id="add-name" /></div>
@@ -340,6 +346,36 @@
     <div style="display:flex;gap:8px;margin-top:8px">
       <button class="btn btn-tonal" style="flex:1" onclick="SCM.actions.skipOnboarding()">Skip (Relay Only)</button>
       <button class="btn btn-filled" style="flex:1" onclick="SCM.actions.onboardInit()">Create Identity</button>
+    </div>
+  </div>
+</div>
+
+<!-- Peer QR Code Display -->
+<div id="modal-peer-qr" class="modal-overlay">
+  <div class="modal-dialog">
+    <div class="modal-title">Peer QR Code</div>
+    <div id="peer-qr-code" style="width:200px;height:200px;margin:0 auto 16px auto"></div>
+    <div class="field"><label>Peer ID</label><input type="text" id="qr-peer-id" class="mono" readonly /></div>
+    <div class="field"><label>Public Key</label><input type="text" id="qr-public-key" class="mono" readonly /></div>
+    <div class="modal-actions">
+      <button class="btn btn-text" onclick="SCM.ui.closeModals()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- QR Scanner -->
+<div id="modal-qr-scanner" class="modal-overlay">
+  <div class="modal-dialog">
+    <div class="modal-title">Scan QR Code</div>
+    <div style="position:relative">
+      <video id="qr-video" style="width:100%;max-height:300px;object-fit:cover" autoplay playsinline></video>
+      <canvas id="qr-canvas" style="display:none"></canvas>
+    </div>
+    <div style="margin:16px 0;text-align:center;color:var(--md-on-surface-variant)">
+      Position QR code in the camera view
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-text" id="btn-cancel-qr" onclick="SCM.actions.cancelQRScan()">Cancel</button>
     </div>
   </div>
 </div>

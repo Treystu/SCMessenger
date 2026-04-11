@@ -19,6 +19,101 @@ export class IronCore {
         wasm.__wbg_ironcore_free(ptr, 0);
     }
     /**
+     * Block a peer AND delete all their stored messages (cascade purge).
+     * Future payloads from this peer are dropped at the ingress layer.
+     * @param {string} peer_id
+     * @param {string | null} [reason]
+     */
+    blockAndDeletePeer(peer_id, reason) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(peer_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            var ptr1 = isLikeNone(reason) ? 0 : passStringToWasm0(reason, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            var len1 = WASM_VECTOR_LEN;
+            wasm.ironcore_blockAndDeletePeer(retptr, this.__wbg_ptr, ptr0, len0, ptr1, len1);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Block a peer by ID, with an optional reason string.
+     * @param {string} peer_id
+     * @param {string | null} [reason]
+     */
+    blockPeer(peer_id, reason) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(peer_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            var ptr1 = isLikeNone(reason) ? 0 : passStringToWasm0(reason, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            var len1 = WASM_VECTOR_LEN;
+            wasm.ironcore_blockPeer(retptr, this.__wbg_ptr, ptr0, len0, ptr1, len1);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Get the count of blocked peers.
+     * @returns {number}
+     */
+    blockedCount() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.ironcore_blockedCount(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return r0 >>> 0;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * @param {any} js_message
+     * @param {any} js_ui_state
+     * @returns {any}
+     */
+    classifyNotification(js_message, js_ui_state) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.ironcore_classifyNotification(retptr, this.__wbg_ptr, addHeapObject(js_message), addHeapObject(js_ui_state));
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return takeObject(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Dial a remote peer by multiaddr.
+     * @param {string} multiaddr
+     * @returns {Promise<void>}
+     */
+    dial(multiaddr) {
+        const ptr0 = passStringToWasm0(multiaddr, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.ironcore_dial(this.__wbg_ptr, ptr0, len0);
+        return takeObject(ret);
+    }
+    /**
      * Drain and return all messages that have arrived since the last call.
      *
      * Returns a `js_sys::Array` of plain JS objects with the same shape as
@@ -50,6 +145,34 @@ export class IronCore {
         try {
             const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
             wasm.ironcore_exportIdentityBackup(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+            var ptr1 = r0;
+            var len1 = r1;
+            if (r3) {
+                ptr1 = 0; len1 = 0;
+                throw takeObject(r2);
+            }
+            deferred2_0 = ptr1;
+            deferred2_1 = len1;
+            return getStringFromWasm0(ptr1, len1);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            wasm.__wbindgen_export4(deferred2_0, deferred2_1, 1);
+        }
+    }
+    /**
+     * Export all recorded log entries as a single string.
+     * @returns {string}
+     */
+    exportLogs() {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.ironcore_exportLogs(retptr, this.__wbg_ptr);
             var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
             var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
             var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
@@ -122,6 +245,26 @@ export class IronCore {
         return takeObject(ret);
     }
     /**
+     * Get the installation-local device ID (UUIDv4).
+     * @returns {string | undefined}
+     */
+    getDeviceId() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.ironcore_getDeviceId(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            let v1;
+            if (r0 !== 0) {
+                v1 = getStringFromWasm0(r0, r1).slice();
+                wasm.__wbindgen_export4(r0, r1 * 1, 1);
+            }
+            return v1;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
      * Get externally observed addresses (if available) for diagnostics parity.
      * @returns {Promise<any>}
      */
@@ -144,12 +287,66 @@ export class IronCore {
         return takeObject(ret);
     }
     /**
+     * Get current swarm listeners.
+     * @returns {Promise<any>}
+     */
+    getListeners() {
+        const ret = wasm.ironcore_getListeners(this.__wbg_ptr);
+        return takeObject(ret);
+    }
+    /**
+     * Get the NAT status. In browser environments this always returns "unknown".
+     * @returns {string}
+     */
+    getNatStatus() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.ironcore_getNatStatus(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            deferred1_0 = r0;
+            deferred1_1 = r1;
+            return getStringFromWasm0(r0, r1);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            wasm.__wbindgen_export4(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
      * Get currently connected peer IDs.
      * @returns {Promise<any>}
      */
     getPeers() {
         const ret = wasm.ironcore_getPeers(this.__wbg_ptr);
         return takeObject(ret);
+    }
+    /**
+     * Get the registration state for a given identity.
+     * @param {string} identity_id
+     * @returns {any}
+     */
+    getRegistrationState(identity_id) {
+        const ptr0 = passStringToWasm0(identity_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.ironcore_getRegistrationState(this.__wbg_ptr, ptr0, len0);
+        return takeObject(ret);
+    }
+    /**
+     * Get the seniority timestamp for this installation.
+     * @returns {bigint | undefined}
+     */
+    getSeniorityTimestamp() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.ironcore_getSeniorityTimestamp(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r2 = getDataViewMemory0().getBigInt64(retptr + 8 * 1, true);
+            return r0 === 0 ? undefined : BigInt.asUintN(64, r2);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
     }
     /**
      * Return the current MeshSettings as a JS object.
@@ -199,11 +396,52 @@ export class IronCore {
         }
     }
     /**
+     * Check whether a peer is currently blocked.
+     * @param {string} peer_id
+     * @returns {boolean}
+     */
+    isPeerBlocked(peer_id) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(peer_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            wasm.ironcore_isPeerBlocked(retptr, this.__wbg_ptr, ptr0, len0);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return r0 !== 0;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
      * @returns {boolean}
      */
     isRunning() {
         const ret = wasm.ironcore_isRunning(this.__wbg_ptr);
         return ret !== 0;
+    }
+    /**
+     * List all blocked peers. Returns a JS array of BlockedIdentity objects.
+     * @returns {Array<any>}
+     */
+    listBlockedPeers() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.ironcore_listBlockedPeers(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return takeObject(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
     }
     /**
      * Remove a message from the Rust outbox after it has been delivered.
@@ -224,11 +462,45 @@ export class IronCore {
         return this;
     }
     /**
+     * Notify the core that a peer disconnected from the network.
+     * @param {string} peer_id
+     */
+    notifyPeerDisconnected(peer_id) {
+        const ptr0 = passStringToWasm0(peer_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.ironcore_notifyPeerDisconnected(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
+     * Notify the core that a peer was discovered on the network.
+     * @param {string} peer_id
+     */
+    notifyPeerDiscovered(peer_id) {
+        const ptr0 = passStringToWasm0(peer_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.ironcore_notifyPeerDiscovered(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
      * @returns {number}
      */
     outboxCount() {
         const ret = wasm.ironcore_outboxCount(this.__wbg_ptr);
         return ret >>> 0;
+    }
+    /**
+     * Perform storage maintenance (quota enforcement, cleanup).
+     */
+    performMaintenance() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.ironcore_performMaintenance(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
     }
     /**
      * Generate a cover traffic payload — random bytes that look like an
@@ -339,6 +611,20 @@ export class IronCore {
         }
     }
     /**
+     * Publish data to a gossipsub topic.
+     * @param {string} topic
+     * @param {Uint8Array} data
+     * @returns {Promise<void>}
+     */
+    publishTopic(topic, data) {
+        const ptr0 = passStringToWasm0(topic, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray8ToWasm0(data, wasm.__wbindgen_export);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.ironcore_publishTopic(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        return takeObject(ret);
+    }
+    /**
      * @param {Uint8Array} envelope_bytes
      * @returns {any}
      */
@@ -360,6 +646,78 @@ export class IronCore {
         }
     }
     /**
+     * Record a log line into the core log manager.
+     * @param {string} line
+     */
+    recordLog(line) {
+        const ptr0 = passStringToWasm0(line, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.ironcore_recordLog(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
+     * Resolve any identifier format (peer ID, identity hash, public key hex)
+     * to the canonical public_key_hex.
+     * @param {string} any_id
+     * @returns {string}
+     */
+    resolveIdentity(any_id) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(any_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            wasm.ironcore_resolveIdentity(retptr, this.__wbg_ptr, ptr0, len0);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+            var ptr2 = r0;
+            var len2 = r1;
+            if (r3) {
+                ptr2 = 0; len2 = 0;
+                throw takeObject(r2);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            wasm.__wbindgen_export4(deferred3_0, deferred3_1, 1);
+        }
+    }
+    /**
+     * Resolve any identifier format to the identity_id (Blake3 hash).
+     * @param {string} any_id
+     * @returns {string}
+     */
+    resolveToIdentityId(any_id) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(any_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            wasm.ironcore_resolveToIdentityId(retptr, this.__wbg_ptr, ptr0, len0);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+            var ptr2 = r0;
+            var len2 = r1;
+            if (r3) {
+                ptr2 = 0; len2 = 0;
+                throw takeObject(r2);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            wasm.__wbindgen_export4(deferred3_0, deferred3_1, 1);
+        }
+    }
+    /**
      * Send a prepared encrypted envelope to a connected libp2p peer.
      * @param {string} peer_id
      * @param {Uint8Array} envelope_bytes
@@ -371,6 +729,17 @@ export class IronCore {
         const ptr1 = passArray8ToWasm0(envelope_bytes, wasm.__wbindgen_export);
         const len1 = WASM_VECTOR_LEN;
         const ret = wasm.ironcore_sendPreparedEnvelope(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        return takeObject(ret);
+    }
+    /**
+     * Send data to all currently connected peers.
+     * @param {Uint8Array} data
+     * @returns {Promise<void>}
+     */
+    sendToAllPeers(data) {
+        const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_export);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.ironcore_sendToAllPeers(this.__wbg_ptr, ptr0, len0);
         return takeObject(ret);
     }
     /**
@@ -467,6 +836,55 @@ export class IronCore {
         return takeObject(ret);
     }
     /**
+     * Subscribe to a gossipsub topic.
+     * @param {string} topic
+     * @returns {Promise<void>}
+     */
+    subscribeTopic(topic) {
+        const ptr0 = passStringToWasm0(topic, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.ironcore_subscribeTopic(this.__wbg_ptr, ptr0, len0);
+        return takeObject(ret);
+    }
+    /**
+     * Unblock a previously blocked peer.
+     * @param {string} peer_id
+     */
+    unblockPeer(peer_id) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(peer_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            wasm.ironcore_unblockPeer(retptr, this.__wbg_ptr, ptr0, len0);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Unsubscribe from a gossipsub topic.
+     * @param {string} topic
+     * @returns {Promise<void>}
+     */
+    unsubscribeTopic(topic) {
+        const ptr0 = passStringToWasm0(topic, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.ironcore_unsubscribeTopic(this.__wbg_ptr, ptr0, len0);
+        return takeObject(ret);
+    }
+    /**
+     * Update disk usage statistics for quota enforcement.
+     * @param {bigint} total_bytes
+     * @param {bigint} free_bytes
+     */
+    updateDiskStats(total_bytes, free_bytes) {
+        wasm.ironcore_updateDiskStats(this.__wbg_ptr, total_bytes, free_bytes);
+    }
+    /**
      * Apply a partial or full settings update from JS.
      * Accepts a JS object matching the WasmMeshSettings shape.
      * @param {any} js_settings
@@ -475,6 +893,23 @@ export class IronCore {
         try {
             const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
             wasm.ironcore_updateSettings(retptr, this.__wbg_ptr, addHeapObject(js_settings));
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Validate the given settings against invariant rules.
+     * @param {any} js_settings
+     */
+    validateSettings(js_settings) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.ironcore_validateSettings(retptr, this.__wbg_ptr, addHeapObject(js_settings));
             var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
             var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
             if (r1) {
@@ -576,6 +1011,12 @@ export class WasmContactManager {
         return ret >>> 0;
     }
     /**
+     * Flush contact data to persistent storage.
+     */
+    flush() {
+        wasm.wasmcontactmanager_flush(this.__wbg_ptr);
+    }
+    /**
      * @param {string} peer_id
      * @returns {any}
      */
@@ -633,6 +1074,28 @@ export class WasmContactManager {
         }
     }
     /**
+     * Search contacts by query string (matches peer_id, nickname, notes).
+     * @param {string} query
+     * @returns {Array<any>}
+     */
+    search(query) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(query, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            wasm.wasmcontactmanager_search(retptr, this.__wbg_ptr, ptr0, len0);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return takeObject(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
      * @param {string} peer_id
      * @param {string | null} [nickname]
      */
@@ -644,6 +1107,69 @@ export class WasmContactManager {
             var ptr1 = isLikeNone(nickname) ? 0 : passStringToWasm0(nickname, wasm.__wbindgen_export, wasm.__wbindgen_export2);
             var len1 = WASM_VECTOR_LEN;
             wasm.wasmcontactmanager_setLocalNickname(retptr, this.__wbg_ptr, ptr0, len0, ptr1, len1);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Set the federated (broadcast) nickname for a contact.
+     * @param {string} peer_id
+     * @param {string | null} [nickname]
+     */
+    setNickname(peer_id, nickname) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(peer_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            var ptr1 = isLikeNone(nickname) ? 0 : passStringToWasm0(nickname, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            var len1 = WASM_VECTOR_LEN;
+            wasm.wasmcontactmanager_setNickname(retptr, this.__wbg_ptr, ptr0, len0, ptr1, len1);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Update the last known device ID for a contact.
+     * @param {string} peer_id
+     * @param {string | null} [device_id]
+     */
+    updateDeviceId(peer_id, device_id) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(peer_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            var ptr1 = isLikeNone(device_id) ? 0 : passStringToWasm0(device_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            var len1 = WASM_VECTOR_LEN;
+            wasm.wasmcontactmanager_updateDeviceId(retptr, this.__wbg_ptr, ptr0, len0, ptr1, len1);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Update the last-seen timestamp for a contact.
+     * @param {string} peer_id
+     */
+    updateLastSeen(peer_id) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(peer_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            wasm.wasmcontactmanager_updateLastSeen(retptr, this.__wbg_ptr, ptr0, len0);
             var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
             var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
             if (r1) {
@@ -704,6 +1230,26 @@ export class WasmHistoryManager {
         }
     }
     /**
+     * Clear all messages in a conversation with a specific peer.
+     * Alias: this is equivalent to `removeConversation` in the core API.
+     * @param {string} peer_id
+     */
+    clearConversation(peer_id) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(peer_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            wasm.wasmhistorymanager_clearConversation(retptr, this.__wbg_ptr, ptr0, len0);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
      * @param {string} peer_id
      * @param {number} limit
      * @returns {Array<any>}
@@ -733,6 +1279,25 @@ export class WasmHistoryManager {
         return ret >>> 0;
     }
     /**
+     * Delete a single message by ID.
+     * @param {string} id
+     */
+    delete(id) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            wasm.wasmhistorymanager_delete(retptr, this.__wbg_ptr, ptr0, len0);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
      * @param {number} max_messages
      * @returns {number}
      */
@@ -747,6 +1312,53 @@ export class WasmHistoryManager {
                 throw takeObject(r1);
             }
             return r0 >>> 0;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Flush history data to persistent storage.
+     */
+    flush() {
+        wasm.wasmcontactmanager_flush(this.__wbg_ptr);
+    }
+    /**
+     * Get a single message record by ID.
+     * @param {string} id
+     * @returns {any}
+     */
+    get(id) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            wasm.wasmhistorymanager_get(retptr, this.__wbg_ptr, ptr0, len0);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return takeObject(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Mark a message as delivered by ID.
+     * @param {string} id
+     */
+    markDelivered(id) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            wasm.wasmhistorymanager_markDelivered(retptr, this.__wbg_ptr, ptr0, len0);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
         } finally {
             wasm.__wbindgen_add_to_stack_pointer(16);
         }
@@ -781,6 +1393,29 @@ export class WasmHistoryManager {
             var ptr0 = isLikeNone(peer_filter) ? 0 : passStringToWasm0(peer_filter, wasm.__wbindgen_export, wasm.__wbindgen_export2);
             var len0 = WASM_VECTOR_LEN;
             wasm.wasmhistorymanager_recent(retptr, this.__wbg_ptr, ptr0, len0, limit);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return takeObject(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Search message history by query string.
+     * @param {string} query
+     * @param {number} limit
+     * @returns {Array<any>}
+     */
+    search(query, limit) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(query, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            wasm.wasmhistorymanager_search(retptr, this.__wbg_ptr, ptr0, len0, limit);
             var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
             var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
             var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
@@ -834,10 +1469,6 @@ function __wbg_get_imports() {
             const len1 = WASM_VECTOR_LEN;
             getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
-        },
-        __wbg_WorkerGlobalScope_cf08aededd98fd54: function(arg0) {
-            const ret = getObject(arg0).WorkerGlobalScope;
-            return addHeapObject(ret);
         },
         __wbg___wbindgen_bigint_get_as_i64_8fcf4ce7f1ca72a2: function(arg0, arg1) {
             const v = getObject(arg1);
@@ -914,10 +1545,6 @@ function __wbg_get_imports() {
         __wbg__wbg_cb_unref_d9b87ff7982e3b21: function(arg0) {
             getObject(arg0)._wbg_cb_unref();
         },
-        __wbg_bufferedAmount_0d42d0dc52062133: function(arg0) {
-            const ret = getObject(arg0).bufferedAmount;
-            return ret;
-        },
         __wbg_call_389efe28435a9388: function() { return handleError(function (arg0, arg1) {
             const ret = getObject(arg0).call(getObject(arg1));
             return addHeapObject(ret);
@@ -926,22 +1553,9 @@ function __wbg_get_imports() {
             const ret = getObject(arg0).call(getObject(arg1), getObject(arg2));
             return addHeapObject(ret);
         }, arguments); },
-        __wbg_clearInterval_905868a11bace7cc: function(arg0, arg1) {
-            getObject(arg0).clearInterval(arg1);
-        },
-        __wbg_clearInterval_c75df0651e74fbb8: function(arg0, arg1) {
-            getObject(arg0).clearInterval(arg1);
-        },
-        __wbg_clearTimeout_96804de0ab838f26: function(arg0) {
-            const ret = clearTimeout(takeObject(arg0));
-            return addHeapObject(ret);
-        },
         __wbg_close_53683f4809368fc7: function(arg0) {
             getObject(arg0).close();
         },
-        __wbg_close_eef7356f70a62f3c: function() { return handleError(function (arg0, arg1, arg2, arg3) {
-            getObject(arg0).close(arg1, getStringFromWasm0(arg2, arg3));
-        }, arguments); },
         __wbg_createIndex_9a2be04a017f6a17: function() { return handleError(function (arg0, arg1, arg2, arg3, arg4) {
             const ret = getObject(arg0).createIndex(getStringFromWasm0(arg1, arg2), getObject(arg3), getObject(arg4));
             return addHeapObject(ret);
@@ -952,10 +1566,6 @@ function __wbg_get_imports() {
         }, arguments); },
         __wbg_crypto_86f2631e91b51511: function(arg0) {
             const ret = getObject(arg0).crypto;
-            return addHeapObject(ret);
-        },
-        __wbg_data_5330da50312d0bc1: function(arg0) {
-            const ret = getObject(arg0).data;
             return addHeapObject(ret);
         },
         __wbg_deleteIndex_0a7a8e99fe536b7c: function() { return handleError(function (arg0, arg1, arg2) {
@@ -1006,9 +1616,6 @@ function __wbg_get_imports() {
         __wbg_getAllKeys_c69c2b19589fffe6: function() { return handleError(function (arg0) {
             const ret = getObject(arg0).getAllKeys();
             return addHeapObject(ret);
-        }, arguments); },
-        __wbg_getRandomValues_1c61fac11405ffdc: function() { return handleError(function (arg0, arg1) {
-            globalThis.crypto.getRandomValues(getArrayU8FromWasm0(arg0, arg1));
         }, arguments); },
         __wbg_getRandomValues_9c5c1b115e142bb8: function() { return handleError(function (arg0, arg1) {
             globalThis.crypto.getRandomValues(getArrayU8FromWasm0(arg0, arg1));
@@ -1117,16 +1724,6 @@ function __wbg_get_imports() {
             const ret = result;
             return ret;
         },
-        __wbg_instanceof_Window_ed49b2db8df90359: function(arg0) {
-            let result;
-            try {
-                result = getObject(arg0) instanceof Window;
-            } catch (_) {
-                result = false;
-            }
-            const ret = result;
-            return ret;
-        },
         __wbg_ironcore_new: function(arg0) {
             const ret = IronCore.__wrap(arg0);
             return addHeapObject(ret);
@@ -1208,10 +1805,6 @@ function __wbg_get_imports() {
             const ret = getObject(arg0).multiEntry;
             return ret;
         },
-        __wbg_new_057993d5b5e07835: function() { return handleError(function (arg0, arg1) {
-            const ret = new WebSocket(getStringFromWasm0(arg0, arg1));
-            return addHeapObject(ret);
-        }, arguments); },
         __wbg_new_361308b2356cecd0: function() {
             const ret = new Object();
             return addHeapObject(ret);
@@ -1231,7 +1824,7 @@ function __wbg_get_imports() {
                     const a = state0.a;
                     state0.a = 0;
                     try {
-                        return __wasm_bindgen_func_elem_2365(a, state0.b, arg0, arg1);
+                        return __wasm_bindgen_func_elem_1284(a, state0.b, arg0, arg1);
                     } finally {
                         state0.a = a;
                     }
@@ -1270,16 +1863,8 @@ function __wbg_get_imports() {
             const ret = getObject(arg0).node;
             return addHeapObject(ret);
         },
-        __wbg_now_2c95c9de01293173: function(arg0) {
-            const ret = getObject(arg0).now();
-            return ret;
-        },
         __wbg_now_a3af9a2f4bbaa4d1: function() {
             const ret = Date.now();
-            return ret;
-        },
-        __wbg_now_ebffdf7e580f210d: function(arg0) {
-            const ret = getObject(arg0).now();
             return ret;
         },
         __wbg_objectStoreNames_d2c5d2377420ad78: function(arg0) {
@@ -1298,10 +1883,6 @@ function __wbg_get_imports() {
             const ret = getObject(arg0).open(getStringFromWasm0(arg1, arg2), arg3 >>> 0);
             return addHeapObject(ret);
         }, arguments); },
-        __wbg_performance_7a3ffd0b17f663ad: function(arg0) {
-            const ret = getObject(arg0).performance;
-            return addHeapObject(ret);
-        },
         __wbg_process_3975fd6c72f520aa: function(arg0) {
             const ret = getObject(arg0).process;
             return addHeapObject(ret);
@@ -1331,10 +1912,6 @@ function __wbg_get_imports() {
         __wbg_randomFillSync_f8c153b79f285817: function() { return handleError(function (arg0, arg1) {
             getObject(arg0).randomFillSync(takeObject(arg1));
         }, arguments); },
-        __wbg_readyState_1bb73ec7b8a54656: function(arg0) {
-            const ret = getObject(arg0).readyState;
-            return ret;
-        },
         __wbg_require_b74f47fc2d022fd6: function() { return handleError(function () {
             const ret = module.require;
             return addHeapObject(ret);
@@ -1347,29 +1924,15 @@ function __wbg_get_imports() {
             const ret = getObject(arg0).result;
             return addHeapObject(ret);
         }, arguments); },
-        __wbg_send_542f95dea2df7994: function() { return handleError(function (arg0, arg1, arg2) {
-            getObject(arg0).send(getArrayU8FromWasm0(arg1, arg2));
-        }, arguments); },
-        __wbg_setInterval_0e3c8fcec0876733: function() { return handleError(function (arg0, arg1, arg2, arg3) {
-            const ret = getObject(arg0).setInterval(getObject(arg1), arg2, ...getObject(arg3));
-            return ret;
-        }, arguments); },
-        __wbg_setInterval_b471c2130618eef6: function() { return handleError(function (arg0, arg1, arg2, arg3) {
-            const ret = getObject(arg0).setInterval(getObject(arg1), arg2, ...getObject(arg3));
-            return ret;
-        }, arguments); },
-        __wbg_setTimeout_eefe7f4c234b0c6b: function() { return handleError(function (arg0, arg1) {
-            const ret = setTimeout(getObject(arg0), arg1);
-            return addHeapObject(ret);
-        }, arguments); },
         __wbg_set_3f1d0b984ed272ed: function(arg0, arg1, arg2) {
             getObject(arg0)[takeObject(arg1)] = takeObject(arg2);
         },
+        __wbg_set_6cb8631f80447a67: function() { return handleError(function (arg0, arg1, arg2) {
+            const ret = Reflect.set(getObject(arg0), getObject(arg1), getObject(arg2));
+            return ret;
+        }, arguments); },
         __wbg_set_auto_increment_5ef604f4f193fa58: function(arg0, arg1) {
             getObject(arg0).autoIncrement = arg1 !== 0;
-        },
-        __wbg_set_binaryType_5bbf62e9f705dc1a: function(arg0, arg1) {
-            getObject(arg0).binaryType = __wbindgen_enum_BinaryType[arg1];
         },
         __wbg_set_f43e577aea94465b: function(arg0, arg1, arg2) {
             getObject(arg0)[arg1 >>> 0] = takeObject(arg2);
@@ -1386,26 +1949,14 @@ function __wbg_get_imports() {
         __wbg_set_onabort_5b85743a64489257: function(arg0, arg1) {
             getObject(arg0).onabort = getObject(arg1);
         },
-        __wbg_set_onclose_d382f3e2c2b850eb: function(arg0, arg1) {
-            getObject(arg0).onclose = getObject(arg1);
-        },
         __wbg_set_oncomplete_76d4a772a6c8cab6: function(arg0, arg1) {
             getObject(arg0).oncomplete = getObject(arg1);
-        },
-        __wbg_set_onerror_377f18bf4569bf85: function(arg0, arg1) {
-            getObject(arg0).onerror = getObject(arg1);
         },
         __wbg_set_onerror_d0db7c6491b9399d: function(arg0, arg1) {
             getObject(arg0).onerror = getObject(arg1);
         },
         __wbg_set_onerror_dc0e606b09e1792f: function(arg0, arg1) {
             getObject(arg0).onerror = getObject(arg1);
-        },
-        __wbg_set_onmessage_2114aa5f4f53051e: function(arg0, arg1) {
-            getObject(arg0).onmessage = getObject(arg1);
-        },
-        __wbg_set_onopen_b7b52d519d6c0f11: function(arg0, arg1) {
-            getObject(arg0).onopen = getObject(arg1);
         },
         __wbg_set_onsuccess_0edec1acb4124784: function(arg0, arg1) {
             getObject(arg0).onsuccess = getObject(arg1);
@@ -1475,51 +2026,36 @@ function __wbg_get_imports() {
             return addHeapObject(ret);
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 125, function: Function { arguments: [Externref], shim_idx: 126, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_2109, __wasm_bindgen_func_elem_2124);
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 43, function: Function { arguments: [Externref], shim_idx: 44, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_1045, __wasm_bindgen_func_elem_1046);
             return addHeapObject(ret);
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 125, function: Function { arguments: [NamedExternref("CloseEvent")], shim_idx: 126, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_2109, __wasm_bindgen_func_elem_2124);
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 43, function: Function { arguments: [NamedExternref("Event")], shim_idx: 44, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_1045, __wasm_bindgen_func_elem_1046);
             return addHeapObject(ret);
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 125, function: Function { arguments: [NamedExternref("Event")], shim_idx: 126, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_2109, __wasm_bindgen_func_elem_2124);
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 43, function: Function { arguments: [NamedExternref("IDBVersionChangeEvent")], shim_idx: 44, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_1045, __wasm_bindgen_func_elem_1046);
             return addHeapObject(ret);
         },
-        __wbindgen_cast_0000000000000004: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 125, function: Function { arguments: [NamedExternref("IDBVersionChangeEvent")], shim_idx: 126, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_2109, __wasm_bindgen_func_elem_2124);
-            return addHeapObject(ret);
-        },
-        __wbindgen_cast_0000000000000005: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 125, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 126, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_2109, __wasm_bindgen_func_elem_2124);
-            return addHeapObject(ret);
-        },
-        __wbindgen_cast_0000000000000006: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 125, function: Function { arguments: [], shim_idx: 203, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_2109, __wasm_bindgen_func_elem_2110);
-            return addHeapObject(ret);
-        },
-        __wbindgen_cast_0000000000000007: function(arg0) {
+        __wbindgen_cast_0000000000000004: function(arg0) {
             // Cast intrinsic for `F64 -> Externref`.
             const ret = arg0;
             return addHeapObject(ret);
         },
-        __wbindgen_cast_0000000000000008: function(arg0, arg1) {
+        __wbindgen_cast_0000000000000005: function(arg0, arg1) {
             // Cast intrinsic for `Ref(Slice(U8)) -> NamedExternref("Uint8Array")`.
             const ret = getArrayU8FromWasm0(arg0, arg1);
             return addHeapObject(ret);
         },
-        __wbindgen_cast_0000000000000009: function(arg0, arg1) {
+        __wbindgen_cast_0000000000000006: function(arg0, arg1) {
             // Cast intrinsic for `Ref(String) -> Externref`.
             const ret = getStringFromWasm0(arg0, arg1);
             return addHeapObject(ret);
         },
-        __wbindgen_cast_000000000000000a: function(arg0) {
+        __wbindgen_cast_0000000000000007: function(arg0) {
             // Cast intrinsic for `U64 -> Externref`.
             const ret = BigInt.asUintN(64, arg0);
             return addHeapObject(ret);
@@ -1538,20 +2074,13 @@ function __wbg_get_imports() {
     };
 }
 
-function __wasm_bindgen_func_elem_2110(arg0, arg1) {
-    wasm.__wasm_bindgen_func_elem_2110(arg0, arg1);
+function __wasm_bindgen_func_elem_1046(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_1046(arg0, arg1, addHeapObject(arg2));
 }
 
-function __wasm_bindgen_func_elem_2124(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_2124(arg0, arg1, addHeapObject(arg2));
+function __wasm_bindgen_func_elem_1284(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_1284(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
-
-function __wasm_bindgen_func_elem_2365(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_2365(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
-}
-
-
-const __wbindgen_enum_BinaryType = ["blob", "arraybuffer"];
 
 
 const __wbindgen_enum_IdbTransactionMode = ["readonly", "readwrite", "versionchange", "readwriteflush", "cleanup"];

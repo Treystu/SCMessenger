@@ -39,6 +39,10 @@ fun ChatScreen(
 ) {
     val messages by viewModel.messages.collectAsState()
     val error by viewModel.error.collectAsState()
+    val blockedPeers by viewModel.blockedPeers.collectAsState()
+    val isBlocked = remember(blockedPeers, conversationId) {
+        blockedPeers.any { it.peerId == conversationId }
+    }
     val chatMessages = remember(messages, conversationId) {
         // MSG-ORDER-001: Sort strictly by sender-assigned timestamp to ensure consistent ordering across platforms
         messages.filter { it.peerId == conversationId }.sortedBy { it.senderTimestamp }
@@ -59,9 +63,10 @@ fun ChatScreen(
         else -> conversationId.take(12) + "..."
     }
 
-    Timber.d("CHAT_SCREEN: conversationId=$conversationId, normalizedPeerId=$normalizedPeerId, displayName=$displayName, localNick=$localNickname, fedNick=$federatedNickname, contactFound=${contact != null}")
+    Timber.d("CHAT_SCREEN: conversationId=$conversationId, normalizedPeerId=$normalizedPeerId, displayName=$displayName, localNick=$localNickname, fedNick=$federatedNickname, contactFound=${contact != null}, isBlocked=$isBlocked")
     val isPeerAvailable = viewModel.isPeerAvailable(normalizedPeerId)
     var showAddContactDialog by remember { mutableStateOf(false) }
+    var showBlockConfirmation by remember { mutableStateOf(false) }
 
     LaunchedEffect(conversationId) {
         viewModel.loadMessages(limit = 200u)
@@ -86,20 +91,17 @@ fun ChatScreen(
                 },
                 actions = {
                     // Block/Unblock button
-                    val isBlocked = viewModel.isBlocked(conversationId)
                     IconButton(
                         onClick = {
                             if (isBlocked) {
                                 viewModel.unblockPeer(conversationId)
-                                Timber.i("Unblocked peer: $conversationId")
                             } else {
-                                viewModel.blockPeer(conversationId, "Blocked from chat")
-                                Timber.i("Blocked peer: $conversationId")
+                                showBlockConfirmation = true
                             }
                         }
                     ) {
                         Icon(
-                            imageVector = if (isBlocked) Icons.Default.CheckCircle else Icons.Default.Block,
+                            imageVector = Icons.Default.Block,
                             contentDescription = if (isBlocked) "Unblock" else "Block",
                             tint = if (isBlocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                         )
@@ -183,57 +185,88 @@ fun ChatScreen(
             }
 
             // Input Area
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .imePadding()  // Add IME (keyboard) padding
+                    .imePadding()
                     .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                contentAlignment = Alignment.Center
             ) {
-                OutlinedTextField(
-                    value = inputText,
-                    onValueChange = { inputText = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Type a message...") },
-                    shape = RoundedCornerShape(24.dp),
-                    maxLines = 4
-                )
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // AND-SEND-BTN-001: Use FloatingActionButton for reliable click handling
-                // IconButton with background modifier can have click detection issues in Material3
-                FloatingActionButton(
-                    onClick = {
-                        Timber.d("SEND_BUTTON_CLICKED: inputText.length=${inputText.length}")
-                        val messageToSend = inputText.trim()
-                        if (messageToSend.isNotEmpty()) {
-                            Timber.d("SEND: Clearing input immediately for instant feedback")
-                            inputText = ""
-                            coroutineScope.launch {
-                                try {
-                                    val success = viewModel.sendMessage(conversationId, messageToSend)
-                                    Timber.d("SEND: Message sent, success=$success")
-                                    if (success) {
-                                        listState.animateScrollToItem(chatMessages.size)
-                                    }
-                                } catch (e: Exception) {
-                                    Timber.e(e, "SEND: Failed to send message")
-                                }
-                            }
-                        } else {
-                            Timber.w("SEND: Attempted to send empty message")
+                if (isBlocked) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Block, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Peer blocked. Unblock to send messages.",
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
                         }
-                    },
-                    modifier = Modifier.size(48.dp),
-                    containerColor = if (inputText.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = if (inputText.isNotBlank()) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Send,
-                        contentDescription = "Send message",
-                        modifier = Modifier.size(24.dp)
-                    )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = inputText,
+                            onValueChange = { inputText = it },
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("Type a message...") },
+                            shape = RoundedCornerShape(24.dp),
+                            maxLines = 4,
+                            enabled = !isBlocked
+                        )
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        // AND-SEND-BTN-001: Use FloatingActionButton for reliable click handling
+                        FloatingActionButton(
+                            onClick = {
+                                if (isBlocked) return@FloatingActionButton
+                                Timber.d("SEND_BUTTON_CLICKED: inputText.length=${inputText.length}")
+                                val messageToSend = inputText.trim()
+                                if (messageToSend.isNotEmpty()) {
+                                    Timber.d("SEND: Clearing input immediately for instant feedback")
+                                    inputText = ""
+                                    coroutineScope.launch {
+                                        try {
+                                            val success = viewModel.sendMessage(conversationId, messageToSend)
+                                            Timber.d("SEND: Message sent, success=$success")
+                                            if (success) {
+                                                listState.animateScrollToItem(chatMessages.size)
+                                            }
+                                        } catch (e: Exception) {
+                                            Timber.e(e, "SEND: Failed to send message")
+                                        }
+                                    }
+                                } else {
+                                    Timber.w("SEND: Attempted to send empty message")
+                                }
+                            },
+                            modifier = Modifier.size(48.dp),
+                            containerColor = if (inputText.isNotBlank() && !isBlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = if (inputText.isNotBlank() && !isBlocked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Send,
+                                contentDescription = "Send message",
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -295,7 +328,33 @@ fun ChatScreen(
             showAddContactDialog = false
         }
     }
+
+    // Block confirmation dialog
+    if (showBlockConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showBlockConfirmation = false },
+            title = { Text("Block Peer?") },
+            text = { Text("You will no longer receive notifications from this peer. Existing messages will be kept.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.blockPeer(conversationId, "Blocked from chat")
+                        showBlockConfirmation = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Block")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBlockConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
+
 
 @Composable
 fun MessageBubble(

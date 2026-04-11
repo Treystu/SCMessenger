@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SCMessenger - Secure Mesh Communication</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            color: #333;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            text-align: center;
+        }
+        header {
+            background-color: #1a73e8;
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin: 0;
+            color: white;
+        }
+        .logo {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 2rem;
+            margin: 2rem 0;
+            text-align: left;
+        }
+        .btn {
+            display: inline-block;
+            background-color: #1a73e8;
+            color: white;
+            padding: 0.8rem 1.5rem;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: background-color 0.3s;
+            margin: 0.5rem;
+        }
+        .btn:hover {
+            background-color: #1765cc;
+        }
+        .btn-secondary {
+            background-color: #f1f3f4;
+            color: #3c4043;
+        }
+        .btn-secondary:hover {
+            background-color: #e8eaed;
+        }
+        .status {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            background-color: #e8f0fe;
+            color: #1a73e8;
+            font-weight: 500;
+            margin: 1rem 0;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+            margin: 1rem 0;
+        }
+        .feature-list li {
+            padding: 0.5rem 0;
+            position: relative;
+            padding-left: 1.5rem;
+        }
+        .feature-list li:before {
+            content: "✓";
+            color: #34a853;
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+        }
+        footer {
+            margin-top: 3rem;
+            padding: 1rem;
+            color: #666;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 1.8rem;
+            }
+            .container {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="logo">🛡️</div>
+            <h1>SCMessenger</h1>
+            <p>Secure, Sovereign Mesh Communication</p>
+        </div>
+    </header>
+    
+    <div class="container">
+        <div class="status">⚡ Node is running</div>
+        
+        <div class="card">
+            <h2>Welcome to SCMessenger</h2>
+            <p>Your sovereign communication node is running and ready to connect.</p>
+            
+            <div style="margin: 2rem 0;">
+                <a href="/ui" class="btn">📱 Open Web Interface</a>
+                <a href="/wasm" class="btn btn-secondary">🔧 WASM Assets</a>
+            </div>
+            
+            <h3>Quick Start</h3>
+            <ul class="feature-list">
+                <li>Open the <strong>Web Interface</strong> to manage your node</li>
+                <li>Create or import your identity to enable messaging</li>
+                <li>Add contacts via QR codes or manual entry</li>
+                <li>Start secure conversations over the mesh network</li>
+            </ul>
+        </div>
+        
+        <div class="card">
+            <h3>Node Information</h3>
+            <p>Your node is running a secure mesh communication stack with:</p>
+            <ul class="feature-list">
+                <li>End-to-end encrypted messaging</li>
+                <li>Multi-transport routing (WebSocket, BLE, WiFi Direct, etc.)</li>
+                <li>Decentralized peer discovery</li>
+                <li>Sovereign identity management</li>
+            </ul>
+        </div>
+        
+        <div class="card">
+            <h3>API Endpoints</h3>
+            <p>Available endpoints for integration:</p>
+            <ul class="feature-list">
+                <li><code>/api/network-info</code> - Node information</li>
+                <li><code>/api/transport/*</code> - Transport bridge</li>
+                <li><code>/ws</code> - WebSocket bridge</li>
+            </ul>
+        </div>
+    </div>
+    
+    <footer>
+        <p>SCMessenger © 2026 | Secure Mesh Communication Platform</p>
+    </footer>
+</body>
+</html>

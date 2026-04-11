@@ -7,6 +7,8 @@ mod bootstrap;
 mod config;
 mod ledger;
 mod server;
+mod transport_api;
+mod transport_bridge;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -15,6 +17,7 @@ use libp2p::Multiaddr;
 use scmessenger_core::message::{decode_envelope, MessageType};
 use scmessenger_core::store::{Contact, ContactManager, MessageDirection, Outbox, QueuedMessage};
 use scmessenger_core::transport::{self, SwarmEvent};
+use scmessenger_core::transport::abstraction::TransportType;
 use scmessenger_core::IronCore;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -1074,6 +1077,11 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         Arc::new(tokio::sync::Mutex::new(HashMap::new()));
     let ledger = Arc::new(tokio::sync::Mutex::new(connection_ledger));
 
+    // Create transport bridge
+    let transport_bridge = Arc::new(tokio::sync::Mutex::new(
+        transport_bridge::TransportBridge::new()
+    ));
+    
     // Build web context for landing page + public APIs
     let web_ctx = Arc::new(server::WebContext {
         node_peer_id: local_peer_id.to_string(),
@@ -1082,6 +1090,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         ledger: ledger.clone(),
         peers: peers.clone(),
         start_time: std::time::Instant::now(),
+        transport_bridge: transport_bridge.clone(),
     });
 
     // Start WebSocket + HTTP Server (serves landing page at /)
@@ -1258,6 +1267,13 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                  public_key,
                                  identity,
                              });
+
+                             // Register peer with transport bridge using default capabilities
+                             let capabilities = vec![TransportType::Internet, TransportType::Local];
+                             let capabilities_clone = capabilities.clone();
+                             let mut bridge = transport_bridge.lock().await;
+                             bridge.register_peer(peer_id, capabilities);
+                             tracing::info!("Registered transport capabilities for {}: {:?}", peer_id, capabilities_clone);
 
                              // AUTO LEDGER EXCHANGE: Share our known peers with the new connection
                              let entries = {
@@ -1728,6 +1744,8 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     );
     println!("  P2P Listen:   {}", listen_addr.green());
     println!("  HTTP Status:  http://0.0.0.0:{}", http_port);
+    println!("  WS Bridge:    ws://0.0.0.0:9002 (libp2p-ws)");
+    println!("  Discovery:    http://localhost:{}/api/network-info", http_port);
     println!();
 
     // Load config for bootstrap nodes
@@ -1754,6 +1772,11 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     let peers: Arc<tokio::sync::Mutex<HashMap<libp2p::PeerId, Option<String>>>> =
         Arc::new(tokio::sync::Mutex::new(HashMap::new()));
 
+    // Create transport bridge
+    let transport_bridge = Arc::new(tokio::sync::Mutex::new(
+        transport_bridge::TransportBridge::new()
+    ));
+    
     // Web context for landing page + API
     let web_ctx = Arc::new(server::WebContext {
         node_peer_id: local_peer_id.to_string(),
@@ -1762,6 +1785,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         ledger: ledger.clone(),
         peers: peers.clone(),
         start_time: std::time::Instant::now(),
+        transport_bridge: transport_bridge.clone(),
     });
 
     // Start HTTP server (landing page + WebSocket)
@@ -1930,6 +1954,13 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
                                 public_key,
                                 identity,
                             });
+
+                            // Register peer with transport bridge using default capabilities
+                            let capabilities = vec![TransportType::Internet, TransportType::Local];
+                            let capabilities_clone = capabilities.clone();
+                            let mut bridge = transport_bridge.lock().await;
+                            bridge.register_peer(peer_id, capabilities);
+                            tracing::info!("Registered transport capabilities for {}: {:?}", peer_id, capabilities_clone);
 
                             // Share ledger with new peer
                             let entries = {

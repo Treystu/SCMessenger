@@ -127,6 +127,14 @@ pub struct WebContext {
     pub ledger: Arc<tokio::sync::Mutex<crate::ledger::ConnectionLedger>>,
     pub peers: Arc<tokio::sync::Mutex<HashMap<libp2p::PeerId, Option<String>>>>,
     pub start_time: Instant,
+    pub transport_bridge: Arc<tokio::sync::Mutex<crate::transport_bridge::TransportBridge>>,
+}
+
+impl WebContext {
+    /// Get transport bridge reference (for future API activation)
+    pub fn transport_bridge(&self) -> &Arc<tokio::sync::Mutex<crate::transport_bridge::TransportBridge>> {
+        &self.transport_bridge
+    }
 }
 
 // ============================================================================
@@ -138,6 +146,7 @@ struct NetworkInfoResponse {
     node: NodeInfoPayload,
     network: NetworkStatsPayload,
     ledger: Vec<LedgerEntryPayload>,
+    transport: Option<TransportInfoPayload>,
 }
 
 #[derive(Serialize)]
@@ -165,6 +174,15 @@ struct LedgerEntryPayload {
     is_bootstrap: bool,
     known_topics: Vec<String>,
     label: Option<String>,
+}
+
+#[derive(Serialize)]
+struct TransportInfoPayload {
+    capabilities: Vec<String>,
+    is_headless_node: bool,
+    supports_forwarding: bool,
+    ws_bridge_port: u16,
+    api_base_url: String,
 }
 
 #[derive(Serialize)]
@@ -305,6 +323,78 @@ pub async fn start(
         .and(warp::fs::dir("wasm"))
         .boxed();
 
+    // 11. Transport Bridge API - Simplified inline implementation
+    // Directly implement transport endpoints to avoid warp filter chaining complexity
+    let ctx_capabilities = web_ctx.clone();
+    let ctx_paths = web_ctx.clone();
+    let ctx_register = web_ctx.clone();
+    
+    // Transport capabilities endpoint
+    let transport_capabilities_route = warp::path!("api" / "transport" / "capabilities")
+        .and(warp::get())
+        .and(warp::any().map(move || ctx_capabilities.clone()))
+        .and_then(
+            |ctx: Arc<crate::server::WebContext>| async move {
+                let bridge = ctx.transport_bridge.lock().await;
+                let cli_caps = bridge.get_cli_capabilities();
+                let peer_caps = bridge.get_available_peer_capabilities();
+                
+                let response = serde_json::json!({
+                    "cli_capabilities": cli_caps,
+                    "peer_capabilities": peer_caps
+                });
+                Ok::<_, warp::Rejection>(warp::reply::json(&response))
+            }
+        )
+        .boxed();
+
+    // Transport paths endpoint
+    let transport_paths_route = warp::path!("api" / "transport" / "paths" / String)
+        .and(warp::get())
+        .and(warp::any().map(move || ctx_paths.clone()))
+        .and_then(
+            |peer_id: String, ctx: Arc<crate::server::WebContext>| async move {
+                if let Ok(peer_id_parsed) = peer_id.parse::<libp2p::PeerId>() {
+                    let bridge = ctx.transport_bridge.lock().await;
+                    let paths = bridge.find_all_paths(&peer_id_parsed);
+                    Ok::<_, warp::Rejection>(warp::reply::json(&paths))
+                } else {
+                    Err(warp::reject::custom(crate::transport_api::TransportError::InvalidPeerId))
+                }
+            }
+        )
+        .boxed();
+
+    // Register peer endpoint
+    let transport_register_route = warp::path!("api" / "transport" / "register")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(warp::any().map(move || ctx_register.clone()))
+        .and_then(
+            |request: crate::transport_api::RegisterPeerRequest, ctx: Arc<crate::server::WebContext>| async move {
+                if let Ok(peer_id) = request.peer_id.parse::<libp2p::PeerId>() {
+                    let capabilities = request.capabilities.iter()
+                        .filter_map(|cap| match cap.as_str() {
+                            "BLE" => Some(scmessenger_core::transport::abstraction::TransportType::BLE),
+                            "WiFiAware" => Some(scmessenger_core::transport::abstraction::TransportType::WiFiAware),
+                            "WiFiDirect" => Some(scmessenger_core::transport::abstraction::TransportType::WiFiDirect),
+                            "Internet" => Some(scmessenger_core::transport::abstraction::TransportType::Internet),
+                            "Local" => Some(scmessenger_core::transport::abstraction::TransportType::Local),
+                            _ => None
+                        })
+                        .collect::<Vec<_>>();
+                    
+                    let mut bridge = ctx.transport_bridge.lock().await;
+                    bridge.register_peer_capabilities(peer_id, capabilities);
+                    
+                    Ok(warp::reply::json(&serde_json::json!({"status": "success"})))
+                } else {
+                    Err(warp::reject::custom(crate::transport_api::TransportError::InvalidPeerId))
+                }
+            }
+        )
+        .boxed();
+
     // Combine all routes with CORS
     let cors = warp::cors().allow_any_origin();
     let routes = landing_route
@@ -317,6 +407,9 @@ pub async fn start(
         .or(install_docker_route)
         .or(install_source_route)
         .or(download_linux_route)
+        .or(transport_capabilities_route)
+        .or(transport_paths_route)
+        .or(transport_register_route)
         .with(cors)
         .boxed();
 
@@ -377,6 +470,29 @@ async fn handle_network_info(ctx: Arc<WebContext>) -> Result<impl warp::Reply, w
         })
         .collect();
 
+    // Get CLI transport capabilities for WASM
+    let transport_bridge = ctx.transport_bridge.lock().await;
+    let cli_capabilities = transport_bridge.get_cli_capabilities();
+    let capabilities_list: Vec<String> = cli_capabilities.iter()
+        .map(|cap| format!("{:?}", cap))
+        .collect();
+
+    // Filter ledger entries to only include nodes with topics (legitimate nodes)
+    let filtered_ledger_entries: Vec<LedgerEntryPayload> = ledger_guard
+        .entries
+        .values()
+        .filter(|e| !e.known_topics.is_empty()) // Only nodes with topics
+        .map(|e| LedgerEntryPayload {
+            address: e.address.clone(),
+            multiaddr: e.multiaddr.clone(),
+            last_peer_id: e.last_peer_id.clone(),
+            last_seen: e.last_seen,
+            is_bootstrap: e.is_bootstrap,
+            known_topics: e.known_topics.clone(),
+            label: e.label.clone(),
+        })
+        .collect();
+
     let response = NetworkInfoResponse {
         node: NodeInfoPayload {
             peer_id: ctx.node_peer_id.clone(),
@@ -386,11 +502,18 @@ async fn handle_network_info(ctx: Arc<WebContext>) -> Result<impl warp::Reply, w
         },
         network: NetworkStatsPayload {
             connected_peers: peers_guard.len(),
-            known_peers: ledger_guard.entries.len(),
+            known_peers: filtered_ledger_entries.len(), // Only count nodes with topics
             bootstrap_nodes: ctx.bootstrap_nodes.clone(),
             topics,
         },
-        ledger: ledger_entries,
+        ledger: filtered_ledger_entries, // Only legitimate nodes with topics
+        transport: Some(TransportInfoPayload {
+            capabilities: capabilities_list,
+            is_headless_node: true,
+            supports_forwarding: true,
+            ws_bridge_port: 9002,  // WebSocket bridge port
+            api_base_url: format!("http://{}:9000", ctx.node_peer_id),
+        }),
     };
 
     Ok(warp::reply::json(&response))

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
@@ -25,7 +26,8 @@ fun SettingsScreen(
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     serviceViewModel: MeshServiceViewModel = hiltViewModel(),
     onNavigateToIdentity: () -> Unit = {},
-    onNavigateToDiagnostics: () -> Unit = {}
+    onNavigateToDiagnostics: () -> Unit = {},
+    onNavigateToBlockedPeers: () -> Unit = {}
 ) {
     val meshSettings by settingsViewModel.settings.collectAsState()
     val identityInfo by settingsViewModel.identityInfo.collectAsState()
@@ -103,6 +105,13 @@ fun SettingsScreen(
             notificationsEnabled = notificationsEnabled,
             onAutoStartChange = { settingsViewModel.setAutoStart(it) },
             onNotificationsChange = { settingsViewModel.setNotificationsEnabled(it) }
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Privacy Section
+        PrivacySection(
+            onNavigateToBlockedPeers = onNavigateToBlockedPeers
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -600,6 +609,34 @@ fun IdentityUnavailableSection(
         }
     }
 }
+@Composable
+fun PrivacySection(
+    onNavigateToBlockedPeers: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "Privacy",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            Button(
+                onClick = onNavigateToBlockedPeers,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.Block, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Manage Blocked Peers")
+            }
+        }
+    }
+}
+
 @Composable
 fun AdvancedSettingsSection(
     onNavigateToDiagnostics: () -> Unit

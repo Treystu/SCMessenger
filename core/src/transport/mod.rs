@@ -1,5 +1,6 @@
 // Transport module — libp2p swarm and networking
 
+pub mod abstraction;
 pub mod behaviour;
 pub mod internet;
 pub mod mesh_routing;

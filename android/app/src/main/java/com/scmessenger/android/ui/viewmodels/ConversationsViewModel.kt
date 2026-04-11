@@ -57,9 +57,14 @@ class ConversationsViewModel @Inject constructor(
     private val _stats = MutableStateFlow<uniffi.api.HistoryStats?>(null)
     val stats: StateFlow<uniffi.api.HistoryStats?> = _stats.asStateFlow()
 
+    // Blocked peers
+    private val _blockedPeers = MutableStateFlow<List<uniffi.api.BlockedIdentity>>(emptyList())
+    val blockedPeers: StateFlow<List<uniffi.api.BlockedIdentity>> = _blockedPeers.asStateFlow()
+
     init {
         loadMessages()
         loadStats()
+        loadBlockedPeers()
 
         // Listen for message updates (sent or received) to refresh the list
         viewModelScope.launch {
@@ -232,6 +237,7 @@ class ConversationsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 meshRepository.blockPeer(peerId, reason)
+                loadBlockedPeers()
                 Timber.i("Blocked peer: $peerId")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to block peer: $peerId")
@@ -246,6 +252,7 @@ class ConversationsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 meshRepository.unblockPeer(peerId)
+                loadBlockedPeers()
                 Timber.i("Unblocked peer: $peerId")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to unblock peer: $peerId")
@@ -260,6 +267,8 @@ class ConversationsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 meshRepository.blockAndDeletePeer(peerId, reason)
+                loadBlockedPeers()
+                loadMessages()
                 Timber.i("Blocked and deleted peer: $peerId")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to block and delete peer: $peerId")
@@ -271,11 +280,30 @@ class ConversationsViewModel @Inject constructor(
      * Check if a peer is blocked
      */
     fun isBlocked(peerId: String): Boolean {
+        // First check our reactive state if possible, fallback to repository
+        val inList = _blockedPeers.value.any { it.peerId == peerId }
+        if (inList) return true
+        
         return try {
             meshRepository.isBlocked(peerId)
         } catch (e: Exception) {
             Timber.e(e, "Failed to check if peer is blocked: $peerId")
             false
+        }
+    }
+
+    /**
+     * Load blocked peers from repository.
+     */
+    fun loadBlockedPeers() {
+        viewModelScope.launch {
+            try {
+                val blocked = meshRepository.listBlockedPeers()
+                _blockedPeers.value = blocked
+                Timber.d("Loaded ${blocked.size} blocked peers")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load blocked peers")
+            }
         }
     }
 

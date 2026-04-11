@@ -292,7 +292,6 @@ class ContactsViewModel @Inject constructor(
                         )
                         current.add(updated)
                         _nearbyPeers.value = current
-                        Timber.d("Nearby identity discovered: ${resolvedPeerId.take(16)}")
                     }
                     is PeerEvent.Discovered -> {
                         // Don't surface bootstrap relay nodes in the nearby list.
@@ -318,7 +317,6 @@ class ContactsViewModel @Inject constructor(
                             _nearbyPeers.value = current
                         } else if (!alreadyContact) {
                             _nearbyPeers.value = current + NearbyPeer(event.peerId, isOnline = true)
-                            Timber.d("Nearby peer (no identity yet): ${event.peerId.take(16)}")
                         }
                     }
                     is PeerEvent.Disconnected -> {
