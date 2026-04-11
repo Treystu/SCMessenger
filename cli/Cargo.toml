@@ -31,7 +31,7 @@ hex = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-colored = "2.1"
+colored = "3.1"
 dirs = "5.0"
 sled = { workspace = true }
 chrono = "0.4"
