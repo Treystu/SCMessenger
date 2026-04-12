@@ -147,6 +147,7 @@ pub struct WebContext {
 
 impl WebContext {
     /// Get transport bridge reference (for future API activation)
+    #[allow(dead_code)]
     pub fn transport_bridge(&self) -> &Arc<tokio::sync::Mutex<crate::transport_bridge::TransportBridge>> {
         &self.transport_bridge
     }

@@ -165,7 +165,7 @@ impl WebSocketRelay {
             let inner_open = Arc::clone(&self.inner);
             let buffer_open = Arc::clone(&self.send_buffer);
             let onopen = Closure::wrap(Box::new(move |_: web_sys::Event| {
-                tracing::info!("WebSocket connection opened");
+                tracing::info!("WebSocket connection opened to {}", self.url);
                 inner_open.write().state = TransportState::Connected;
 
                 // Flush messages that were queued before the socket finished opening.
@@ -240,7 +240,7 @@ impl WebSocketRelay {
             // --- onerror ---
             let inner_err = Arc::clone(&self.inner);
             let onerror = Closure::wrap(Box::new(move |event: ErrorEvent| {
-                tracing::error!("WebSocket error: {}", event.message());
+                tracing::error!("WebSocket error for {}: {}", self.url, event.message());
                 inner_err.write().state = TransportState::Error;
             }) as Box<dyn FnMut(ErrorEvent)>);
             ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
@@ -250,7 +250,8 @@ impl WebSocketRelay {
             let inner_close = Arc::clone(&self.inner);
             let onclose = Closure::wrap(Box::new(move |event: CloseEvent| {
                 tracing::info!(
-                    "WebSocket closed: code={} reason={}",
+                    "WebSocket closed for {}: code={} reason={}",
+                    self.url,
                     event.code(),
                     event.reason()
                 );
@@ -269,7 +270,7 @@ impl WebSocketRelay {
         #[cfg(not(target_arch = "wasm32"))]
         {
             // Non-WASM: simulate an immediate successful connection for tests.
-            tracing::debug!("WebSocket simulation: connected to {}", self.url);
+            tracing::info!("WebSocket simulation: connected to {}", self.url);
             self.inner.write().state = TransportState::Connected;
         }
 
@@ -315,7 +316,7 @@ impl WebSocketRelay {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            tracing::debug!(
+            tracing::info!(
                 "WebSocket simulation: sent {} bytes to {}",
                 data.len(),
                 self.url
@@ -528,14 +529,14 @@ impl WebRtcTransport {
                                                 e
                                             );
                                     } else {
-                                        tracing::debug!(
+                                        tracing::info!(
                                             "WebRTC DataChannel received {} bytes → ingress",
                                             byte_len
                                         );
                                     }
                                 }
                                 None => {
-                                    tracing::debug!(
+                                    tracing::info!(
                                             "WebRTC DataChannel received {} bytes but no subscriber; dropped",
                                             byte_len
                                         );

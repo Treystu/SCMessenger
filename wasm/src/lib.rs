@@ -1753,10 +1753,10 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn test_wasm_identity() {
-        let core = IronCore::new();
+        let core = RustIronCore::new();
         core.initialize_identity().unwrap();
         let info = core.get_identity_info();
-        assert!(!info.is_null());
+        assert!(info.initialized);
     }
 
     #[test]
