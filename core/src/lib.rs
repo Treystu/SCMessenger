@@ -37,7 +37,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use zeroize::Zeroize;
 
-use observability::{AuditEventType, AuditLog as AuditLogType};
+use observability::{AuditEvent, AuditEventType, AuditLog as AuditLogType};
 
 pub use crypto::{decrypt_message, encrypt_message};
 pub use identity::IdentityManager;

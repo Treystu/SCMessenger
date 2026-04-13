@@ -176,6 +176,15 @@ interface IronCore {
     void record_log(string line);
     [Throws=IronCoreError]
     string export_logs();
+
+    // Audit Log (tamper-evident security event trail)
+    sequence<AuditEvent> get_audit_log();
+    sequence<AuditEvent> get_audit_events_by_type(AuditEventType event_type);
+    sequence<AuditEvent> get_audit_events_since(u64 since_unix_secs);
+    [Throws=IronCoreError]
+    string export_audit_log();
+    [Throws=IronCoreError]
+    void validate_audit_chain();
 };
 
 // ============================================================================
@@ -618,6 +627,38 @@ interface SwarmBridge {
 
     [Throws=IronCoreError]
     void send_to_all_peers(bytes data);
+};
+
+// ============================================================================
+// AUDIT LOG
+// ============================================================================
+
+/// Type of audit event for categorization and policy enforcement
+enum AuditEventType {
+    "IdentityCreated",
+    "IdentityDeleted",
+    "MessageSent",
+    "MessageReceived",
+    "RelayEnabled",
+    "RelayDisabled",
+    "ContactAdded",
+    "ContactBlocked",
+    "ContactRemoved",
+    "BackupExported",
+    "BackupImported",
+    "ConsentGranted",
+    "StorageCompacted",
+};
+
+/// Individual auditable event with cryptographic chaining
+dictionary AuditEvent {
+    string event_id;
+    AuditEventType event_type;
+    u64 timestamp_unix_secs;
+    string? identity_id;
+    string? peer_id;
+    string? details;
+    string prev_hash;
 };
 
 // ============================================================================
