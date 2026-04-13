@@ -1609,7 +1609,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
                              if let Some(pk) = pk_opt {
                                  // prepare_message_with_id automatically saves outgoing history
-                                 if let Ok(prep) = core_rx.prepare_message_with_id(pk, message) {
+if let Ok(prep) = core_rx.prepare_message_with_id(pk, message, None) {
                                      if swarm_handle.send_message(target, prep.envelope_data, None, None).await.is_ok() {
                                          let mid = id.clone().unwrap_or_default();
                                          let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::MessageStatus {
@@ -1793,7 +1793,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                     push_err(-32002, "No public key for recipient".into());
                                     continue;
                                 };
-                                match core_rx.prepare_message_with_id(pk, message) {
+match core_rx.prepare_message_with_id(pk, message, None) {
                                     Ok(prep) => {
                                         if swarm_handle
                                             .send_message(target, prep.envelope_data, None, None)
@@ -2310,7 +2310,7 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
     let contact = find_contact(&contacts, &recipient).context("Contact not found")?;
 
     let envelope_bytes = core
-        .prepare_message(contact.public_key.clone(), message.clone())
+.prepare_message(contact.public_key.clone(), message.clone(), None)
         .context("Failed to encrypt message")?;
 
     println!(
@@ -2701,9 +2701,10 @@ async fn cmd_test() -> Result<()> {
 
     println!("{} Identity generation", "✓".green());
 
-    let envelope = alice.prepare_message(
+let envelope = alice.prepare_message(
         bob_info.public_key_hex.clone().unwrap(),
         "Test message".to_string(),
+        None,
     )?;
 
     println!(
@@ -2720,7 +2721,7 @@ async fn cmd_test() -> Result<()> {
     let eve = IronCore::new();
     eve.initialize_identity()?;
 
-    let envelope = alice.prepare_message(bob_info.public_key_hex.unwrap(), "Secret".to_string())?;
+let envelope = alice.prepare_message(bob_info.public_key_hex.unwrap(), "Secret".to_string(), None)?;
 
     assert!(eve.receive_message(envelope).is_err());
     println!("{} Encryption security", "✓".green());

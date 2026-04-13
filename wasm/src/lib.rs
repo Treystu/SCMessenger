@@ -309,7 +309,7 @@ impl IronCore {
     ) -> Result<Vec<u8>, JsValue> {
         ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
         self.inner
-            .prepare_message(recipient_public_key_hex, text)
+.prepare_message(recipient_public_key_hex, text, None)
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
@@ -796,7 +796,7 @@ impl IronCore {
     ) -> Result<JsValue, JsValue> {
         ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
         self.inner
-            .prepare_message_with_id(recipient_public_key_hex, text)
+.prepare_message_with_id(recipient_public_key_hex, text, None)
             .map(|p| {
                 serde_wasm_bindgen::to_value(&WasmPreparedMessage {
                     message_id: p.message_id,

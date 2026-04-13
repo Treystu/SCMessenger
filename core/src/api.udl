@@ -33,6 +33,10 @@ dictionary SignatureResult {
     string public_key_hex;
 };
 
+dictionary TtlConfig {
+    u64 expires_in_seconds;
+};
+
 dictionary PreparedMessage {
     string message_id;
     bytes envelope_data;
@@ -129,9 +133,9 @@ interface IronCore {
 
     // Messaging
     [Throws=IronCoreError]
-    bytes prepare_message(string recipient_public_key_hex, string text);
+    bytes prepare_message(string recipient_public_key_hex, string text, TtlConfig? ttl);
     [Throws=IronCoreError]
-    PreparedMessage prepare_message_with_id(string recipient_public_key_hex, string text);
+    PreparedMessage prepare_message_with_id(string recipient_public_key_hex, string text, TtlConfig? ttl);
     [Throws=IronCoreError]
     bytes prepare_receipt(string recipient_public_key_hex, string message_id);
     /// Generate a cover traffic payload — random bytes that look like an encrypted

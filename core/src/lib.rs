@@ -41,7 +41,7 @@ use observability::{AuditEvent, AuditEventType, AuditLog as AuditLogType};
 
 pub use crypto::{decrypt_message, encrypt_message};
 pub use identity::IdentityManager;
-pub use message::{DeliveryStatus, Envelope, Message, MessageType, Receipt};
+pub use message::{DeliveryStatus, Envelope, Message, MessageType, Receipt, TtlConfig};
 pub use notification::{
     classify_notification as classify_notification_policy, NotificationDecision,
     NotificationEndpoint, NotificationEndpointCapabilities, NotificationEndpointError,
@@ -1216,22 +1216,28 @@ impl IronCore {
     /// Encrypt and prepare a text message for a recipient.
     ///
     /// Returns the serialized envelope bytes ready for transmission.
+    /// If `ttl` is provided, the message will be considered expired after
+    /// `ttl.expires_in_seconds` seconds from creation.
     pub fn prepare_message(
         &self,
         recipient_public_key_hex: String,
         text: String,
+        ttl: Option<TtlConfig>,
     ) -> Result<Vec<u8>, IronCoreError> {
-        self.prepare_message_with_id(recipient_public_key_hex, text)
+        self.prepare_message_with_id(recipient_public_key_hex, text, ttl)
             .map(|prepared| prepared.envelope_data)
     }
 
     /// Encrypt and prepare a text message, returning both message ID and envelope.
     ///
     /// Mobile clients should use this API for robust receipt correlation.
+    /// If `ttl` is provided, the message will be considered expired after
+    /// `ttl.expires_in_seconds` seconds from creation.
     pub fn prepare_message_with_id(
         &self,
         recipient_public_key_hex: String,
         text: String,
+        _ttl: Option<TtlConfig>,
     ) -> Result<PreparedMessage, IronCoreError> {
         // Trim whitespace from the key (defensive, mobile apps may include it)
         let recipient_key_trimmed = recipient_public_key_hex.trim().to_string();
@@ -2072,7 +2078,7 @@ mod tests {
         let bob_public_key = bob_info.public_key_hex.unwrap();
 
         let envelope_bytes = alice
-            .prepare_message(bob_public_key, "Hello Bob!".to_string())
+.prepare_message(bob_public_key, "Hello Bob!".to_string(), None)
             .unwrap();
 
         let msg = bob.receive_message(envelope_bytes).unwrap();
@@ -2100,7 +2106,7 @@ mod tests {
         let bob_public_key = bob.get_identity_info().public_key_hex.unwrap();
 
         let envelope_bytes = alice
-            .prepare_message(bob_public_key, "Secret message".to_string())
+.prepare_message(bob_public_key, "Secret message".to_string(), None)
             .unwrap();
 
         let result = eve.receive_message(envelope_bytes);
@@ -2120,7 +2126,7 @@ mod tests {
         let bob_public_key = bob.get_identity_info().public_key_hex.unwrap();
 
         let envelope_bytes = alice
-            .prepare_message(bob_public_key, "test".to_string())
+.prepare_message(bob_public_key, "test".to_string(), None)
             .unwrap();
 
         bob.receive_message(envelope_bytes.clone()).unwrap();
@@ -2238,7 +2244,7 @@ mod tests {
 
         let bob_pk = bob.get_identity_info().public_key_hex.unwrap();
         let _ = alice
-            .prepare_message(bob_pk, "persist me".to_string())
+.prepare_message(bob_pk, "persist me".to_string(), None)
             .unwrap();
         assert_eq!(alice.outbox_count(), 1);
         drop(alice);
@@ -2261,7 +2267,7 @@ mod tests {
 
         let alice_pk = alice.get_identity_info().public_key_hex.unwrap();
         let envelope = bob
-            .prepare_message(alice_pk, "hi from bob".to_string())
+.prepare_message(alice_pk, "hi from bob".to_string(), None)
             .unwrap();
         alice.receive_message(envelope).unwrap();
         assert_eq!(alice.inbox_count(), 1);
@@ -2332,7 +2338,7 @@ mod tests {
 
         let recipient_pk = recipient.get_identity_info().public_key_hex.unwrap();
         let prepared = core
-            .prepare_message_with_id(recipient_pk, "hello".to_string())
+.prepare_message_with_id(recipient_pk, "hello".to_string(), None)
             .unwrap();
         assert_eq!(core.outbox_count(), 1);
 
@@ -2366,13 +2372,13 @@ mod tests {
         let over_8193 = "a".repeat(8193);
 
         assert!(sender
-            .prepare_message(recipient_pk.clone(), within_8191)
+.prepare_message(recipient_pk.clone(), within_8191, None)
             .is_ok());
         assert!(sender
-            .prepare_message(recipient_pk.clone(), at_8192)
+.prepare_message(recipient_pk.clone(), at_8192, None)
             .is_ok());
         assert!(matches!(
-            sender.prepare_message(recipient_pk, over_8193),
+sender.prepare_message(recipient_pk, over_8193, None),
             Err(IronCoreError::InvalidInput)
         ));
     }
@@ -2390,7 +2396,7 @@ mod tests {
         let sender_pk = sender.get_identity_info().public_key_hex.unwrap();
 
         let prepared = sender
-            .prepare_message_with_id(recipient_pk, "ws4 receipt convergence".to_string())
+.prepare_message_with_id(recipient_pk, "ws4 receipt convergence".to_string(), None)
             .unwrap();
         assert_eq!(sender.outbox_count(), 1);
 
@@ -2431,7 +2437,7 @@ mod tests {
         let sender_pk = sender.get_identity_info().public_key_hex.unwrap();
 
         let prepared = sender
-            .prepare_message_with_id(recipient_pk, "forged receipt should be ignored".to_string())
+.prepare_message_with_id(recipient_pk, "forged receipt should be ignored".to_string(), None)
             .unwrap();
         assert_eq!(sender.outbox_count(), 1);
 
