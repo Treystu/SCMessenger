@@ -457,11 +457,13 @@ mod tests {
 
     #[test]
     fn test_bootstrap_method_enum() {
-        let methods = [BootstrapMethod::QrCode,
+        let methods = [
+            BootstrapMethod::QrCode,
             BootstrapMethod::InviteLink,
             BootstrapMethod::BleDiscovery,
             BootstrapMethod::SeedPeers,
-            BootstrapMethod::ManualAddress];
+            BootstrapMethod::ManualAddress,
+        ];
 
         assert_eq!(methods.len(), 5);
     }

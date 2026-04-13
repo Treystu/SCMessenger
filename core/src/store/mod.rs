@@ -9,6 +9,7 @@ pub mod logs;
 pub mod outbox;
 pub mod relay_custody;
 pub mod storage;
+pub mod sweeper;
 pub mod tracing_init;
 
 pub use backend::StorageBackend;
@@ -22,3 +23,4 @@ pub use relay_custody::{
     RegistrationState, RegistrationStateInfo, RegistrationTransition, RelayCustodyStore,
     RelayRegistry,
 };
+pub use sweeper::*;

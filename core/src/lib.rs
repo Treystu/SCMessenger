@@ -1761,6 +1761,14 @@ impl IronCore {
     }
 
     pub fn perform_maintenance(&self) -> Result<(), IronCoreError> {
+        // Sweep expired messages from inbox and outbox
+        let deleted = crate::store::sweeper::sweep_expired_messages(
+            &mut self.inbox.write(),
+            &mut self.outbox.write(),
+        );
+        if deleted > 0 {
+            tracing::info!("Swept {} expired messages", deleted);
+        }
         self.storage_manager.perform_maintenance()
     }
 

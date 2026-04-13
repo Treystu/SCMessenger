@@ -504,11 +504,13 @@ mod tests {
 
     #[test]
     fn test_all_transport_types_distinct() {
-        let types = [TransportType::BLE,
+        let types = [
+            TransportType::BLE,
             TransportType::WiFiAware,
             TransportType::WiFiDirect,
             TransportType::Internet,
-            TransportType::Local];
+            TransportType::Local,
+        ];
         for i in 0..types.len() {
             for j in (i + 1)..types.len() {
                 assert_ne!(types[i], types[j]);

@@ -1444,10 +1444,12 @@ mod tests {
 
     #[test]
     fn test_transport_state_enum() {
-        let states = [TransportState::Disconnected,
+        let states = [
+            TransportState::Disconnected,
             TransportState::Connecting,
             TransportState::Connected,
-            TransportState::Error];
+            TransportState::Error,
+        ];
         assert_eq!(states.len(), 4);
     }
 
