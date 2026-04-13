@@ -2241,6 +2241,7 @@ mod tests {
         let core = service
             .get_core()
             .expect("core should be available after start");
+        core.grant_consent();
         core.initialize_identity().unwrap();
 
         let (full_keypair, headless_after) = service.resolve_swarm_keypair_and_mode().unwrap();

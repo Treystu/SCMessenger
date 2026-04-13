@@ -55,6 +55,20 @@ docwriter_llm = LLM(
     base_url="http://localhost:11434"
 )
 
+# --- Platform Integration ---
+# gemma4:31b: Fast execution, binding regeneration, platform wiring
+platform_engineer_llm = LLM(
+    model="ollama/gemma4:31b:cloud",
+    base_url="http://localhost:11434"
+)
+
+# --- Fast Execution ---
+# gemma4:31b: Quick commands, lint fixes, build verification, minor edits
+fast_executer_llm = LLM(
+    model="ollama/gemma4:31b:cloud",
+    base_url="http://localhost:11434"
+)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # 2. DEFINE CUSTOM TOOLS
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -191,99 +205,82 @@ technical_writer = Agent(
     allow_delegation=False
 )
 
-# All agents in a single list for easy reference
-ALL_AGENTS = [lead_architect, rust_programmer, code_reviewer, security_auditor, test_engineer, technical_writer]
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# 4. PIPELINE BUILDER — EXPLICIT PER-AGENT TASKS
-# ═══════════════════════════════════════════════════════════════════════════════
-# Using explicit per-agent tasks ensures each specialist receives its task directly,
-# so agents with write_to_file actually write files to disk instead of the Architect
-# generating text that never gets saved.
-
-def build_pipeline_tasks(spec: str) -> list:
-    """Build a full pipeline of tasks from a high-level spec string.
-    
-    Returns a list of Task objects, one per specialist agent, in execution order.
-    The spec describes what to build; each task translates it for its agent.
-    """
-    return [
-        Task(
-            description=(
-                f"Design the architectural specification for the following SCMessenger component: {spec}. "
-                "Produce a clear, detailed spec that the Rust Systems Programmer can implement directly. "
-                "Include: field names, types, derive macros, required trait impls, and file naming conventions."
-            ),
-            expected_output="A detailed architectural specification document for the component.",
-            agent=lead_architect
-        ),
-        Task(
-            description=(
-                f"Implement the following SCMessenger component in Rust: {spec}. "
-                "Follow the architectural specification provided by the Lead Architect. "
-                "Write idiomatic Rust with proper derive macros, serde support, and doc comments. "
-                "YOU MUST use your 'Write to File' tool to save the code to a .rs file on disk. "
-                "Do not just output the code as text — actually write it to a file."
-            ),
-            expected_output="Confirmation that the Rust source file has been written to disk using the Write to File tool.",
-            agent=rust_programmer
-        ),
-        Task(
-            description=(
-                f"Read the Rust source file(s) that were just created for: {spec}. "
-                "Perform a thorough code review covering: correctness, idiomatic Rust patterns, "
-                "ownership/borrowing, error handling, unnecessary allocations, dead code, and style. "
-                "Provide specific line references and suggested fixes for any issues found. "
-                "YOU MUST use your 'Write to File' tool to save your review report to a markdown file (e.g. code_review_report.md). "
-                "Do not just output the report as text — actually write it to a file."
-            ),
-            expected_output="Confirmation that the code review report has been written to disk using the Write to File tool.",
-            agent=code_reviewer
-        ),
-        Task(
-            description=(
-                f"Read the Rust source file(s) that were just created for: {spec}. "
-                "Perform a security audit covering: injection vulnerabilities, integer overflow/underflow, "
-                "cryptographic weaknesses, timing attacks, unsafe blocks, serialization exploits, and P2P attack vectors. "
-                "Rate each finding by severity (Critical/High/Medium/Low). "
-                "YOU MUST use your 'Write to File' tool to save your audit report to a markdown file (e.g. security_audit_report.md). "
-                "Do not just output the report as text — actually write it to a file."
-            ),
-            expected_output="Confirmation that the security audit report has been written to disk using the Write to File tool.",
-            agent=security_auditor
-        ),
-        Task(
-            description=(
-                f"Read the Rust source file(s) that were just created for: {spec}. "
-                "Write comprehensive Rust tests covering: happy paths, edge cases, error conditions, "
-                "serde round-trips, boundary values, and property-based tests where appropriate. "
-                "YOU MUST use your 'Write to File' tool to save the test file to disk alongside the source. "
-                "Do not just output the tests as text — actually write them to a _tests.rs file."
-            ),
-            expected_output="Confirmation that the test file has been written to disk using the Write to File tool.",
-            agent=test_engineer
-        ),
-        Task(
-            description=(
-                f"Read the Rust source file(s) that were just created for: {spec}. "
-                "Write comprehensive rustdoc documentation including: module-level docs (//!), "
-                "item-level docs (///), usage examples, JSON serialization examples, and integration "
-                "guidance for observability pipelines (tracing crate, Grafana/Loki, Elasticsearch). "
-                "YOU MUST use your 'Write to File' tool to save the documentation to a .md file on disk. "
-                "Do not just output the docs as text — actually write them to a file."
-            ),
-            expected_output="Confirmation that the documentation file has been written to disk using the Write to File tool.",
-            agent=technical_writer
-        ),
-    ]
-
-
-# Default pipeline spec for the original built-in task
-DEFAULT_SPEC = (
-    "A structured tracing payload for mandatory relay protocol events in SCMessenger v0.2.1. "
-    "The Rust struct must track 'message_id' (String), 'relay_node_hash' (String), and 'latency_ms' (u64). "
-    "Save source to 'observability.rs'."
+platform_engineer = Agent(
+    role="Platform Integration Engineer",
+    goal="Update UniFFI interface definitions (api.udl) and regenerate platform bindings (Kotlin, Swift) after core API changes.",
+    backstory=(
+        "You are a platform integration specialist for SCMessenger. Your job is to update the UniFFI interface "
+        "definition file (core/src/api.udl) when new Rust methods are added, then run the binding generators "
+        "(cargo run --bin gen_kotlin and cargo run --bin gen_swift) to regenerate the Kotlin and Swift stubs. "
+        "You understand the .udl format, UniFFI type mappings, and how platform bindings map to Rust types. "
+        "You MUST read the existing api.udl before making changes. You MUST run cargo check after updating "
+        "the UDL to verify the scaffolding compiles. You MUST run the gen_kotlin and gen_swift binaries "
+        "to regenerate bindings."
+    ),
+    llm=platform_engineer_llm,
+    tools=[write_to_file, read_file, list_files, execute_command],
+    allow_delegation=False
 )
+
+fast_executer = Agent(
+    role="Fast Executer",
+    goal="Execute quick terminal commands, run build verification, fix lint issues, and perform minor edits under 50 LOC.",
+    backstory=(
+        "You are a fast execution agent. You run cargo check, cargo test, cargo clippy, and other verification "
+        "commands quickly. You can fix trivial syntax errors, typos, and 1-2 line adjustments. You do NOT make "
+        "changes to crypto algorithms or identity model. You are the CI gatekeeper who verifies that code compiles "
+        "and tests pass. You MUST use your Execute Command tool to run verification commands."
+    ),
+    llm=fast_executer_llm,
+    tools=[write_to_file, read_file, list_files, execute_command],
+    allow_delegation=False
+)
+
+# All agents in a single list for easy reference
+ALL_AGENTS = [lead_architect, rust_programmer, code_reviewer, security_auditor, test_engineer, technical_writer, platform_engineer, fast_executer]
+
+AGENT_MAP = {
+    "Lead Systems Architect": lead_architect,
+    "Rust Systems Programmer": rust_programmer,
+    "Senior Code Reviewer": code_reviewer,
+    "Security Auditor": security_auditor,
+    "Test Engineer": test_engineer,
+    "Technical Writer": technical_writer,
+    "Platform Integration Engineer": platform_engineer,
+    "Fast Executer": fast_executer
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 4. DYNAMIC TASK LOADING
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tasks are now dynamically routed to specific agents via the "agent" key in JSON.
+# The AGENT_MAP dictionary maps agent name strings to Agent objects.
+
+def load_dynamic_tasks_from_file(filepath: str) -> list:
+    """Load task specs and assign them to specific agents based on the JSON.
+    
+    Format: [{"agent": "Rust Systems Programmer", "description": "...", "expected_output": "..."}]
+    Each task is routed directly to the named agent via AGENT_MAP.
+    """
+    with open(filepath, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, list):
+        data = [data]
+    tasks = []
+    for item in data:
+        agent_name = item.get("agent")
+        desc = item.get("description", "")
+        expected = item.get("expected_output", "Task completed successfully.")
+        
+        if agent_name in AGENT_MAP and desc:
+            tasks.append(Task(
+                description=desc,
+                expected_output=expected,
+                agent=AGENT_MAP[agent_name]
+            ))
+        else:
+            print(f"⚠️ Warning: Skipping task. Invalid agent '{agent_name}' or missing description.")
+    return tasks
 
 
 def build_task(description: str, expected_output: str = "Task completed successfully.") -> Task:
@@ -331,7 +328,7 @@ def parse_args():
         default=None,
         help=(
             "Path to a JSON file containing tasks. Format: "
-            '[{"description": "...", "expected_output": "..."}]'
+            '[{"agent": "...", "description": "...", "expected_output": "..."}]'
         )
     )
     parser.add_argument(
@@ -345,24 +342,6 @@ def parse_args():
         help="Print model assignments and exit (no execution)."
     )
     return parser.parse_args()
-
-
-def load_pipeline_tasks_from_file(filepath: str) -> list:
-    """Load task specs from a JSON file and expand each into a full pipeline.
-    
-    Format: [{"description": "...", "expected_output": "..."}]
-    Each spec gets expanded into 6 per-agent tasks via build_pipeline_tasks().
-    """
-    with open(filepath, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    if not isinstance(data, list):
-        data = [data]
-    all_tasks = []
-    for item in data:
-        desc = item.get("description", "")
-        if desc:
-            all_tasks.extend(build_pipeline_tasks(desc))
-    return all_tasks
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -396,14 +375,19 @@ if __name__ == "__main__":
 
     # Determine tasks
     if args.task_file:
-        print(f"📂 Loading tasks from: {args.task_file} — building full pipeline per spec")
-        tasks = load_pipeline_tasks_from_file(args.task_file)
+        print(f"📂 Loading dynamic tasks from: {args.task_file}")
+        tasks = load_dynamic_tasks_from_file(args.task_file)
     elif args.task:
-        print(f"🎯 Dynamic task received via --task — building full pipeline")
-        tasks = build_pipeline_tasks(args.task)
+        print(f"🎯 Single task received via --task — routing to Lead Architect")
+        tasks = [build_task(args.task, args.expected_output)]
     else:
-        print("📋 No --task or --task-file provided. Using default built-in pipeline.")
-        tasks = build_pipeline_tasks(DEFAULT_SPEC)
+        print("❌ No --task or --task-file provided. Use --task-file for dynamic routing or --task for a single task.")
+        print("   Example --task-file format:")
+        print('   [')
+        print('     {"agent": "Rust Systems Programmer", "description": "Write the struct in src/file.rs", "expected_output": "File written"},')
+        print('     {"agent": "Test Engineer", "description": "Write tests in src/file.rs", "expected_output": "Tests written"}')
+        print('   ]')
+        sys.exit(1)
 
     if not tasks:
         print("❌ No valid tasks found. Exiting.")

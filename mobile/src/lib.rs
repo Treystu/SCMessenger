@@ -23,6 +23,7 @@ mod tests {
     #[test]
     fn test_mobile_identity() {
         let core = IronCore::new();
+        core.grant_consent();
 
         let info_before = core.get_identity_info();
         assert!(!info_before.initialized);
@@ -40,6 +41,8 @@ mod tests {
     fn test_mobile_messaging() {
         let alice = IronCore::new();
         let bob = IronCore::new();
+        alice.grant_consent();
+        bob.grant_consent();
 
         alice.initialize_identity().unwrap();
         bob.initialize_identity().unwrap();

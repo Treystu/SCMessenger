@@ -94,6 +94,10 @@ interface IronCore {
     void stop();
     boolean is_running();
 
+    // Consent Gate (PHIL-004)
+    void grant_consent();
+    boolean is_consent_granted();
+
     // Identity & Cryptography
     [Throws=IronCoreError]
     void initialize_identity();
@@ -214,6 +218,7 @@ enum IronCoreError {
     "NetworkError",
     "InvalidInput",
     "Blocked",
+    "ConsentRequired",
     "Internal",
 };
 

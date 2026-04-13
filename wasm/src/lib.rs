@@ -1754,6 +1754,7 @@ mod tests {
     #[wasm_bindgen_test]
     fn test_wasm_identity() {
         let core = RustIronCore::new();
+        core.grant_consent();
         core.initialize_identity().unwrap();
         let info = core.get_identity_info();
         assert!(info.initialized);
@@ -1763,6 +1764,7 @@ mod tests {
     fn test_desktop_identity_flow_exposes_metadata_after_init() {
         let core = RustIronCore::with_storage(temp_storage_path("identity-flow"));
         core.start().unwrap();
+        core.grant_consent();
         core.initialize_identity().unwrap();
         core.set_nickname("Desktop Node".to_string()).unwrap();
 
@@ -1824,6 +1826,7 @@ mod tests {
             "desktop should start relay-only when identity is absent"
         );
 
+        core.grant_consent();
         core.initialize_identity().unwrap();
         let (_, full_role) = resolve_swarm_keypair_and_mode(&core).unwrap();
         assert!(
@@ -1846,6 +1849,7 @@ mod tests {
     fn test_desktop_contacts_and_messaging_interaction_flow() {
         let core = RustIronCore::with_storage(temp_storage_path("contacts-flow"));
         core.start().unwrap();
+        core.grant_consent();
         core.initialize_identity().unwrap();
 
         let contact_manager = core.contacts_store_manager();

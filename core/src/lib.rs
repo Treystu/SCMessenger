@@ -156,6 +156,8 @@ pub enum IronCoreError {
     InvalidInput,
     #[error("Peer is blocked")]
     Blocked,
+    #[error("Consent not yet granted")]
+    ConsentRequired,
     #[error("Internal error")]
     Internal,
 }
@@ -291,6 +293,8 @@ pub struct IronCore {
     relay_registry: Arc<store::RelayRegistry>,
     /// Tamper-evident audit log for security-critical operations
     audit_log: Arc<RwLock<AuditLogType>>,
+    /// Whether explicit user consent has been granted for identity generation
+    pub consent_granted: Arc<RwLock<bool>>,
     /// UniFFI-facing contacts manager (non-wasm builds only)
     #[cfg(not(target_arch = "wasm32"))]
     contacts_bridge_manager: Arc<crate::contacts_bridge::ContactManager>,
@@ -731,6 +735,7 @@ impl IronCore {
             blocked_manager,
             relay_registry,
             audit_log: Arc::new(RwLock::new(AuditLogType::new())),
+            consent_granted: Arc::new(RwLock::new(false)),
             #[cfg(not(target_arch = "wasm32"))]
             contacts_bridge_manager,
             #[cfg(not(target_arch = "wasm32"))]
@@ -852,6 +857,7 @@ impl IronCore {
             blocked_manager,
             relay_registry,
             audit_log: Arc::new(RwLock::new(AuditLogType::new())),
+            consent_granted: Arc::new(RwLock::new(false)),
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
         }
@@ -914,8 +920,22 @@ impl IronCore {
     // IDENTITY & CRYPTOGRAPHY
     // ------------------------------------------------------------------------
 
+    /// Grant explicit user consent for cryptographic identity generation
+    pub fn grant_consent(&self) {
+        *self.consent_granted.write() = true;
+        self.emit_audit(AuditEventType::ConsentGranted, None, None);
+    }
+
+    /// Check if explicit consent has been granted
+    pub fn is_consent_granted(&self) -> bool {
+        *self.consent_granted.read()
+    }
+
     /// Initialize identity keys (generate new or load existing)
     pub fn initialize_identity(&self) -> Result<(), IronCoreError> {
+        if !*self.consent_granted.read() {
+            return Err(IronCoreError::ConsentRequired);
+        }
         self.identity
             .write()
             .initialize()
@@ -1959,6 +1979,7 @@ mod tests {
     #[test]
     fn test_identity_initialization() {
         let core = IronCore::new();
+        core.grant_consent();
 
         let info_before = core.get_identity_info();
         assert!(!info_before.initialized);
@@ -1988,6 +2009,7 @@ mod tests {
     #[test]
     fn test_signing_and_verification() {
         let core = IronCore::new();
+        core.grant_consent();
         core.initialize_identity().unwrap();
 
         let data = b"test message".to_vec();
@@ -2019,6 +2041,7 @@ mod tests {
     #[test]
     fn test_invalid_public_key_length() {
         let core = IronCore::new();
+        core.grant_consent();
         core.initialize_identity().unwrap();
 
         let result =
@@ -2030,6 +2053,8 @@ mod tests {
     fn test_end_to_end_messaging() {
         let alice = IronCore::new();
         let bob = IronCore::new();
+        alice.grant_consent();
+        bob.grant_consent();
 
         alice.initialize_identity().unwrap();
         bob.initialize_identity().unwrap();
@@ -2055,6 +2080,9 @@ mod tests {
         let alice = IronCore::new();
         let bob = IronCore::new();
         let eve = IronCore::new();
+        alice.grant_consent();
+        bob.grant_consent();
+        eve.grant_consent();
 
         alice.initialize_identity().unwrap();
         bob.initialize_identity().unwrap();
@@ -2074,6 +2102,8 @@ mod tests {
     fn test_message_deduplication() {
         let alice = IronCore::new();
         let bob = IronCore::new();
+        alice.grant_consent();
+        bob.grant_consent();
 
         alice.initialize_identity().unwrap();
         bob.initialize_identity().unwrap();
@@ -2114,6 +2144,7 @@ mod tests {
         let path = dir.path().to_string_lossy().to_string();
 
         let first = IronCore::with_storage(path.clone());
+        first.grant_consent();
         first.initialize_identity().unwrap();
         first.set_nickname("persisted-hydrate".to_string()).unwrap();
         let original_info = first.get_identity_info();
@@ -2170,6 +2201,7 @@ mod tests {
     #[test]
     fn test_extract_public_key_from_peer_id() {
         let core = IronCore::new();
+        core.grant_consent();
         core.initialize_identity().unwrap();
         let info = core.get_identity_info();
         let libp2p_peer_id = info.libp2p_peer_id.unwrap();
@@ -2190,6 +2222,8 @@ mod tests {
 
         let alice = IronCore::with_storage(path.clone());
         let bob = IronCore::new();
+        alice.grant_consent();
+        bob.grant_consent();
         alice.initialize_identity().unwrap();
         bob.initialize_identity().unwrap();
 
@@ -2211,6 +2245,8 @@ mod tests {
 
         let alice = IronCore::with_storage(path.clone());
         let bob = IronCore::new();
+        alice.grant_consent();
+        bob.grant_consent();
         alice.initialize_identity().unwrap();
         bob.initialize_identity().unwrap();
 
@@ -2229,6 +2265,7 @@ mod tests {
     #[test]
     fn test_identity_backup_roundtrip() {
         let core = IronCore::new();
+        core.grant_consent();
         core.initialize_identity().unwrap();
 
         let backup = core.export_identity_backup().unwrap();
@@ -2276,6 +2313,8 @@ mod tests {
     fn test_mark_message_sent_removes_from_outbox() {
         let core = IronCore::new();
         let recipient = IronCore::new();
+        core.grant_consent();
+        recipient.grant_consent();
         core.initialize_identity().unwrap();
         recipient.initialize_identity().unwrap();
 
@@ -2294,6 +2333,7 @@ mod tests {
     #[test]
     fn test_mark_message_sent_unknown_id_returns_false() {
         let core = IronCore::new();
+        core.grant_consent();
         core.initialize_identity().unwrap();
         let removed = core.mark_message_sent("nonexistent-id".to_string());
         assert!(!removed);
@@ -2303,6 +2343,8 @@ mod tests {
     fn test_prepare_message_payload_boundaries() {
         let sender = IronCore::new();
         let recipient = IronCore::new();
+        sender.grant_consent();
+        recipient.grant_consent();
         sender.initialize_identity().unwrap();
         recipient.initialize_identity().unwrap();
         let recipient_pk = recipient.get_identity_info().public_key_hex.unwrap();
@@ -2327,6 +2369,8 @@ mod tests {
     fn test_delivery_receipt_marks_history_and_outbox_delivered() {
         let sender = IronCore::new();
         let recipient = IronCore::new();
+        sender.grant_consent();
+        recipient.grant_consent();
         sender.initialize_identity().unwrap();
         recipient.initialize_identity().unwrap();
 
@@ -2364,6 +2408,9 @@ mod tests {
         let sender = IronCore::new();
         let recipient = IronCore::new();
         let attacker = IronCore::new();
+        sender.grant_consent();
+        recipient.grant_consent();
+        attacker.grant_consent();
         sender.initialize_identity().unwrap();
         recipient.initialize_identity().unwrap();
         attacker.initialize_identity().unwrap();
@@ -2421,8 +2468,35 @@ mod tests {
     }
 
     #[test]
+    fn test_consent_gate_blocks_identity_initialization() {
+        let core = IronCore::new();
+
+        // Consent not granted by default
+        assert!(!core.is_consent_granted());
+
+        // initialize_identity must fail without consent
+        assert!(matches!(
+            core.initialize_identity(),
+            Err(IronCoreError::ConsentRequired)
+        ));
+
+        // Grant consent
+        core.grant_consent();
+        assert!(core.is_consent_granted());
+
+        // Now initialize_identity should succeed
+        core.initialize_identity().unwrap();
+        assert!(core.get_identity_info().initialized);
+
+        // Consent should be recorded in the audit log
+        let consent_events = core.get_audit_events_by_type(AuditEventType::ConsentGranted);
+        assert_eq!(consent_events.len(), 1);
+    }
+
+    #[test]
     fn test_resolve_identity_checks_contacts_before_key_shape() {
         let core = IronCore::new();
+        core.grant_consent();
         core.initialize_identity().unwrap();
 
         // Add a contact with a known public key
