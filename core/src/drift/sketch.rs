@@ -28,7 +28,7 @@ pub struct IBLTCell {
     pub count: i32,
     /// XOR of all MessageIds hashing to this cell
     pub key_sum: [u8; 16],
-    /// XOR of blake3(key)[0:4] for all keys hashing to this cell
+    /// XOR of blake3(key)\[0:4\] for all keys hashing to this cell
     pub key_check: u32,
 }
 
@@ -541,7 +541,7 @@ mod tests {
     #[test]
     fn test_iblt_from_bytes_invalid_length() {
         let mut buf = vec![0u8, 1]; // Claims 256 cells
-        buf.extend_from_slice(&vec![0u8; 100]); // But not enough data
+        buf.extend_from_slice(&[0u8; 100]); // But not enough data
 
         let result = IBLT::from_bytes(&buf);
         assert!(result.is_err());

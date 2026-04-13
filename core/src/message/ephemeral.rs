@@ -24,7 +24,7 @@ pub fn is_expired(creation_timestamp: u64, ttl: &TtlConfig) -> bool {
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")
         .as_secs();
-    
+
     current_time > creation_timestamp + ttl.expires_in_seconds
 }
 
@@ -38,22 +38,27 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs();
-        
-        let ttl = TtlConfig { expires_in_seconds: 10 };
-        
+
+        let ttl = TtlConfig {
+            expires_in_seconds: 10,
+        };
+
         assert!(!is_expired(creation_time, &ttl));
     }
 
     #[test]
     fn test_expired() {
-        let ttl = TtlConfig { expires_in_seconds: 0 };
-        
+        let ttl = TtlConfig {
+            expires_in_seconds: 0,
+        };
+
         // Creation time is set to 1 second in the past
         let creation_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
-            .as_secs() - 1;
-        
+            .as_secs()
+            - 1;
+
         assert!(is_expired(creation_time, &ttl));
     }
 }

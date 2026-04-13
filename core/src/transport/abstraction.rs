@@ -73,28 +73,28 @@ impl TransportCapabilities {
                 max_payload_size: 512,
                 supports_streaming: false,
                 is_bidirectional: true,
-                estimated_bandwidth_bps: 2_000_000,     // 2 Mbps
+                estimated_bandwidth_bps: 2_000_000, // 2 Mbps
                 estimated_latency_ms: 50,
             },
             TransportType::WiFiAware => Self {
                 max_payload_size: 2048,
                 supports_streaming: true,
                 is_bidirectional: true,
-                estimated_bandwidth_bps: 80_000_000,    // 80 Mbps
+                estimated_bandwidth_bps: 80_000_000, // 80 Mbps
                 estimated_latency_ms: 10,
             },
             TransportType::WiFiDirect => Self {
                 max_payload_size: 4096,
                 supports_streaming: true,
                 is_bidirectional: true,
-                estimated_bandwidth_bps: 250_000_000,   // 250 Mbps
+                estimated_bandwidth_bps: 250_000_000, // 250 Mbps
                 estimated_latency_ms: 5,
             },
             TransportType::Internet => Self {
                 max_payload_size: 8192,
                 supports_streaming: true,
                 is_bidirectional: true,
-                estimated_bandwidth_bps: 100_000_000,   // 100 Mbps average
+                estimated_bandwidth_bps: 100_000_000, // 100 Mbps average
                 estimated_latency_ms: 100,
             },
             TransportType::Local => Self {
@@ -144,27 +144,41 @@ impl fmt::Display for TransportEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TransportEvent::PeerDiscovered {
-                peer_id,
-                transport,
-                ..
-            } => write!(f, "PeerDiscovered {{ peer_id: {:x?}, transport: {} }}", &peer_id[..8], transport),
-            TransportEvent::PeerDisconnected {
-                peer_id,
-                transport,
-            } => write!(f, "PeerDisconnected {{ peer_id: {:x?}, transport: {} }}", &peer_id[..8], transport),
+                peer_id, transport, ..
+            } => write!(
+                f,
+                "PeerDiscovered {{ peer_id: {:x?}, transport: {} }}",
+                &peer_id[..8],
+                transport
+            ),
+            TransportEvent::PeerDisconnected { peer_id, transport } => write!(
+                f,
+                "PeerDisconnected {{ peer_id: {:x?}, transport: {} }}",
+                &peer_id[..8],
+                transport
+            ),
             TransportEvent::DataReceived {
                 peer_id,
                 transport,
                 data,
-            } => write!(f, "DataReceived {{ peer_id: {:x?}, transport: {}, data_len: {} }}", &peer_id[..8], transport, data.len()),
-            TransportEvent::TransportError {
+            } => write!(
+                f,
+                "DataReceived {{ peer_id: {:x?}, transport: {}, data_len: {} }}",
+                &peer_id[..8],
                 transport,
-                error,
-            } => write!(f, "TransportError {{ transport: {}, error: {} }}", transport, error),
-            TransportEvent::ConnectionEstablished {
-                peer_id,
-                transport,
-            } => write!(f, "ConnectionEstablished {{ peer_id: {:x?}, transport: {} }}", &peer_id[..8], transport),
+                data.len()
+            ),
+            TransportEvent::TransportError { transport, error } => write!(
+                f,
+                "TransportError {{ transport: {}, error: {} }}",
+                transport, error
+            ),
+            TransportEvent::ConnectionEstablished { peer_id, transport } => write!(
+                f,
+                "ConnectionEstablished {{ peer_id: {:x?}, transport: {} }}",
+                &peer_id[..8],
+                transport
+            ),
         }
     }
 }
@@ -195,7 +209,13 @@ impl fmt::Display for TransportCommand {
                 peer_id,
                 data,
                 priority,
-            } => write!(f, "SendData {{ peer_id: {:x?}, data_len: {}, priority: {} }}", &peer_id[..8], data.len(), priority),
+            } => write!(
+                f,
+                "SendData {{ peer_id: {:x?}, data_len: {}, priority: {} }}",
+                &peer_id[..8],
+                data.len(),
+                priority
+            ),
             TransportCommand::Connect { peer_id, .. } => {
                 write!(f, "Connect {{ peer_id: {:x?} }}", &peer_id[..8])
             }
@@ -484,13 +504,11 @@ mod tests {
 
     #[test]
     fn test_all_transport_types_distinct() {
-        let types = vec![
-            TransportType::BLE,
+        let types = [TransportType::BLE,
             TransportType::WiFiAware,
             TransportType::WiFiDirect,
             TransportType::Internet,
-            TransportType::Local,
-        ];
+            TransportType::Local];
         for i in 0..types.len() {
             for j in (i + 1)..types.len() {
                 assert_ne!(types[i], types[j]);

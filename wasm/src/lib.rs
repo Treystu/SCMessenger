@@ -273,8 +273,6 @@ impl IronCore {
         self.inner.is_running()
     }
 
-
-
     #[wasm_bindgen(js_name = getIdentityInfo)]
     pub fn get_identity_info(&self) -> JsValue {
         let info = self.inner.get_identity_info();
@@ -309,7 +307,7 @@ impl IronCore {
     ) -> Result<Vec<u8>, JsValue> {
         ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
         self.inner
-.prepare_message(recipient_public_key_hex, text, None)
+            .prepare_message(recipient_public_key_hex, text, None)
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
@@ -770,7 +768,11 @@ impl IronCore {
     /// Import an identity from an encrypted backup string produced by `exportIdentityBackup`.
     /// Requires the same passphrase that was used during export.
     #[wasm_bindgen(js_name = importIdentityBackup)]
-    pub fn import_identity_backup(&self, backup: String, passphrase: String) -> Result<(), JsValue> {
+    pub fn import_identity_backup(
+        &self,
+        backup: String,
+        passphrase: String,
+    ) -> Result<(), JsValue> {
         self.inner
             .import_identity_backup(backup, passphrase)
             .map_err(|e| js_value_from_str(&format!("{}", e)))
@@ -796,7 +798,7 @@ impl IronCore {
     ) -> Result<JsValue, JsValue> {
         ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
         self.inner
-.prepare_message_with_id(recipient_public_key_hex, text, None)
+            .prepare_message_with_id(recipient_public_key_hex, text, None)
             .map(|p| {
                 serde_wasm_bindgen::to_value(&WasmPreparedMessage {
                     message_id: p.message_id,

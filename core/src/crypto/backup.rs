@@ -9,8 +9,7 @@
 use crate::IronCoreError;
 use chacha20poly1305::{
     aead::{Aead, KeyInit},
-    XChaCha20Poly1305,
-    XNonce,
+    XChaCha20Poly1305, XNonce,
 };
 use pbkdf2::pbkdf2_hmac;
 use sha2::Sha256;
@@ -68,8 +67,7 @@ pub fn encrypt_backup(payload: &str, passphrase: &str) -> Result<String, IronCor
     let key = derive_key(passphrase)?;
 
     // Initialize cipher and encrypt
-    let cipher = XChaCha20Poly1305::new_from_slice(&key)
-        .map_err(|_| IronCoreError::CryptoError)?;
+    let cipher = XChaCha20Poly1305::new_from_slice(&key).map_err(|_| IronCoreError::CryptoError)?;
     let nonce = XNonce::from_slice(&nonce_bytes);
 
     let ciphertext = cipher
@@ -112,8 +110,7 @@ pub fn decrypt_backup(encrypted_hex: &str, passphrase: &str) -> Result<String, I
     let key = derive_key(passphrase)?;
 
     // Initialize cipher and decrypt
-    let cipher = XChaCha20Poly1305::new_from_slice(&key)
-        .map_err(|_| IronCoreError::CryptoError)?;
+    let cipher = XChaCha20Poly1305::new_from_slice(&key).map_err(|_| IronCoreError::CryptoError)?;
     let nonce = XNonce::from_slice(nonce_bytes);
 
     let plaintext = cipher

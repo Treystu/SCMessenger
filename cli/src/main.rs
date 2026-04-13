@@ -18,14 +18,14 @@ use colored::*;
 use libp2p::Multiaddr;
 use scmessenger_core::message::{decode_envelope, MessageType};
 use scmessenger_core::store::{Contact, ContactManager, MessageDirection, Outbox, QueuedMessage};
-use scmessenger_core::transport::{self, SwarmEvent};
 use scmessenger_core::transport::abstraction::TransportType;
-use scmessenger_core::IronCore;
+use scmessenger_core::transport::{self, SwarmEvent};
 use scmessenger_core::wasm_support::rpc::{
     notif_delivery_status, notif_message_received, notif_peer_discovered, rpc_error, rpc_result,
-    ClientIntent, DeliveryStatusParams, JsonRpcErrorBody, MessageReceivedParams,
-    MeshTopologyUpdateParams, PeerDiscoveredParams,
+    ClientIntent, DeliveryStatusParams, JsonRpcErrorBody, MeshTopologyUpdateParams,
+    MessageReceivedParams, PeerDiscoveredParams,
 };
+use scmessenger_core::IronCore;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -489,7 +489,11 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
                 println!("{}", backup);
             }
         }
-        Some(IdentityAction::Import { passphrase, backup, input }) => {
+        Some(IdentityAction::Import {
+            passphrase,
+            backup,
+            input,
+        }) => {
             let payload = if let Some(path) = input {
                 std::fs::read_to_string(&path)
                     .with_context(|| format!("Failed to read backup file: {}", path))?
@@ -1092,9 +1096,9 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
     // Create transport bridge
     let transport_bridge = Arc::new(tokio::sync::Mutex::new(
-        transport_bridge::TransportBridge::new()
+        transport_bridge::TransportBridge::new(),
     ));
-    
+
     // Build web context for landing page + public APIs
     let web_ctx = Arc::new(server::WebContext {
         node_peer_id: local_peer_id.to_string(),
@@ -1117,9 +1121,14 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
     // ── WebSocket P2P Bridge for WASM ────────────────────────────────────
     let ws_p2p_port = p2p_port + 1;
-    let ws_listen_addr: libp2p::Multiaddr = format!("/ip4/0.0.0.0/tcp/{}/ws", ws_p2p_port).parse()?;
+    let ws_listen_addr: libp2p::Multiaddr =
+        format!("/ip4/0.0.0.0/tcp/{}/ws", ws_p2p_port).parse()?;
     match swarm_handle.listen(ws_listen_addr.clone()).await {
-        Ok(_) => println!("{} WebSocket P2P Bridge started on {}", "✓".green(), ws_listen_addr),
+        Ok(_) => println!(
+            "{} WebSocket P2P Bridge started on {}",
+            "✓".green(),
+            ws_listen_addr
+        ),
         Err(e) => tracing::warn!("Failed to start WebSocket P2P bridge: {}", e),
     }
 
@@ -1221,10 +1230,12 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             let count = peers_clone_status.lock().await.len();
             // Don't crash if no subscribers
-            let _ = ui_broadcast_clone.send(server::UiOutbound::Legacy(server::UiEvent::NetworkStatus {
-                status: "online".to_string(),
-                peer_count: count,
-            }));
+            let _ = ui_broadcast_clone.send(server::UiOutbound::Legacy(
+                server::UiEvent::NetworkStatus {
+                    status: "online".to_string(),
+                    peer_count: count,
+                },
+            ));
         }
     });
 
@@ -1272,507 +1283,327 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
     loop {
         tokio::select! {
-            // 1. Swarm Events (Network -> App -> UI)
-            Some(event) = event_rx.recv() => {
-                match event {
-                    SwarmEvent::PeerDiscovered(peer_id) => {
-                         let mut p = peers_rx.lock().await;
-                         if let std::collections::hash_map::Entry::Vacant(e) = p.entry(peer_id) {
-                             e.insert(None);
-                             println!("\n{} Peer: {}", "✓".green(), peer_id);
-                             print!("> ");
-                             let _ = std::io::Write::flush(&mut std::io::stdout());
-                             let _ = contacts_rx.update_last_seen(peer_id.to_string());
+                    // 1. Swarm Events (Network -> App -> UI)
+                    Some(event) = event_rx.recv() => {
+                        match event {
+                            SwarmEvent::PeerDiscovered(peer_id) => {
+                                 let mut p = peers_rx.lock().await;
+                                 if let std::collections::hash_map::Entry::Vacant(e) = p.entry(peer_id) {
+                                     e.insert(None);
+                                     println!("\n{} Peer: {}", "✓".green(), peer_id);
+                                     print!("> ");
+                                     let _ = std::io::Write::flush(&mut std::io::stdout());
+                                     let _ = contacts_rx.update_last_seen(peer_id.to_string());
 
-                             // Try to get public key from existing contact, if available
-                             let (public_key, identity) = contacts_rx.get(peer_id.to_string())
-                                 .ok().flatten()
-                                 .map(|c| (Some(c.public_key), Some(c.peer_id.clone())))
-                                 .unwrap_or((None, None));
+                                     // Try to get public key from existing contact, if available
+                                     let (public_key, identity) = contacts_rx.get(peer_id.to_string())
+                                         .ok().flatten()
+                                         .map(|c| (Some(c.public_key), Some(c.peer_id.clone())))
+                                         .unwrap_or((None, None));
 
-                             let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::PeerDiscovered {
-                                 peer_id: peer_id.to_string(),
-                                 transport: "tcp".to_string(),
-                                 public_key,
-                                 identity,
-                             }));
-                             let n = notif_peer_discovered(PeerDiscoveredParams {
-                                 peer_id: peer_id.to_string(),
-                                 transport: "tcp".to_string(),
-                                 public_key: contacts_rx
-                                     .get(peer_id.to_string())
-                                     .ok()
-                                     .flatten()
-                                     .map(|c| c.public_key),
-                             });
-                             if let Ok(v) = serde_json::to_value(&n) {
-                                 let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
-                             }
+                                     let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::PeerDiscovered {
+                                         peer_id: peer_id.to_string(),
+                                         transport: "tcp".to_string(),
+                                         public_key,
+                                         identity,
+                                     }));
+                                     let n = notif_peer_discovered(PeerDiscoveredParams {
+                                         peer_id: peer_id.to_string(),
+                                         transport: "tcp".to_string(),
+                                         public_key: contacts_rx
+                                             .get(peer_id.to_string())
+                                             .ok()
+                                             .flatten()
+                                             .map(|c| c.public_key),
+                                     });
+                                     if let Ok(v) = serde_json::to_value(&n) {
+                                         let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
+                                     }
 
-                             // Register peer with transport bridge using default capabilities
-                             let capabilities = vec![TransportType::Internet, TransportType::Local];
-                             let capabilities_clone = capabilities.clone();
-                             let mut bridge = transport_bridge.lock().await;
-                             bridge.register_peer(peer_id, capabilities);
-                             tracing::info!("Registered transport capabilities for {}: {:?}", peer_id, capabilities_clone);
+                                     // Register peer with transport bridge using default capabilities
+                                     let capabilities = vec![TransportType::Internet, TransportType::Local];
+                                     let capabilities_clone = capabilities.clone();
+                                     let mut bridge = transport_bridge.lock().await;
+                                     bridge.register_peer(peer_id, capabilities);
+                                     tracing::info!("Registered transport capabilities for {}: {:?}", peer_id, capabilities_clone);
 
-                             // AUTO LEDGER EXCHANGE: Share our known peers with the new connection
-                             let entries = {
-                                 let l = ledger_rx.lock().await;
-                                 l.to_shared_entries()
-                             };
-                             if let Err(e) = swarm_handle.share_ledger(peer_id, entries).await {
-                                 tracing::warn!("Failed to share ledger with {}: {}", peer_id, e);
-                             }
+                                     // AUTO LEDGER EXCHANGE: Share our known peers with the new connection
+                                     let entries = {
+                                         let l = ledger_rx.lock().await;
+                                         l.to_shared_entries()
+                                     };
+                                     if let Err(e) = swarm_handle.share_ledger(peer_id, entries).await {
+                                         tracing::warn!("Failed to share ledger with {}: {}", peer_id, e);
+                                     }
 
-                             // OUTBOX FLUSH: Deliver any queued messages for this peer now
-                             // that they are online. We drain (remove-and-return) the queue
-                             // atomically; failed sends are re-enqueued so they retry on the
-                             // next connection.
-                             //
-                             // KEY MATCHING: `peer_id.to_string()` here is the libp2p PeerId
-                             // (a base58-encoded multihash derived from the peer's Ed25519 key,
-                             // e.g. "12D3Koo..."). The outbox stores messages keyed by
-                             // `QueuedMessage::recipient_id`, which is set to `contact.peer_id`
-                             // in `cmd_send_offline`. `Contact::peer_id` is documented and
-                             // populated as the libp2p PeerId string — users supply it via
-                             // `scm contact add <peer-id> <public-key>`. The `scm identity`
-                             // display shows both "ID" (Blake3 identity_id) and "Peer ID
-                             // (Network)" (the libp2p PeerId); contacts must use the *Peer ID
-                             // (Network)* value for this flush to match. The two identifiers
-                             // are distinct strings; using the Blake3 identity_id as the
-                             // contact peer_id would silently break outbox delivery.
-                             let queued = {
-                                 let mut ob = outbox_rx.lock().await;
-                                 ob.drain_for_peer(&peer_id.to_string())
-                             };
+                                     // OUTBOX FLUSH: Deliver any queued messages for this peer now
+                                     // that they are online. We drain (remove-and-return) the queue
+                                     // atomically; failed sends are re-enqueued so they retry on the
+                                     // next connection.
+                                     //
+                                     // KEY MATCHING: `peer_id.to_string()` here is the libp2p PeerId
+                                     // (a base58-encoded multihash derived from the peer's Ed25519 key,
+                                     // e.g. "12D3Koo..."). The outbox stores messages keyed by
+                                     // `QueuedMessage::recipient_id`, which is set to `contact.peer_id`
+                                     // in `cmd_send_offline`. `Contact::peer_id` is documented and
+                                     // populated as the libp2p PeerId string — users supply it via
+                                     // `scm contact add <peer-id> <public-key>`. The `scm identity`
+                                     // display shows both "ID" (Blake3 identity_id) and "Peer ID
+                                     // (Network)" (the libp2p PeerId); contacts must use the *Peer ID
+                                     // (Network)* value for this flush to match. The two identifiers
+                                     // are distinct strings; using the Blake3 identity_id as the
+                                     // contact peer_id would silently break outbox delivery.
+                                     let queued = {
+                                         let mut ob = outbox_rx.lock().await;
+                                         ob.drain_for_peer(&peer_id.to_string())
+                                     };
 
-                             if !queued.is_empty() {
-                                 tracing::info!(
-                                     "Flushing {} queued message(s) to newly-connected peer {}",
-                                     queued.len(),
-                                     peer_id
-                                 );
-                             }
-
-                             for msg in queued {
-                                 let msg_id = msg.message_id.clone();
-                                 match swarm_handle.send_message(peer_id, msg.envelope_data.clone(), None, None).await {
-                                     Ok(()) => {
+                                     if !queued.is_empty() {
                                          tracing::info!(
-                                             "Flushed queued message {} to {}",
-                                             msg_id,
+                                             "Flushing {} queued message(s) to newly-connected peer {}",
+                                             queued.len(),
                                              peer_id
                                          );
                                      }
-                                     Err(e) => {
-                                         // Re-enqueue on failure so it is retried next connect.
-                                         tracing::warn!(
-                                             "Failed to flush queued message {} to {}: {} — re-enqueuing",
-                                             msg_id,
-                                             peer_id,
-                                             e
-                                         );
-                                         let mut ob = outbox_rx.lock().await;
-                                         if let Err(eq_err) = ob.enqueue(msg) {
-                                             tracing::error!(
-                                                 "Failed to re-enqueue message {}: {}",
-                                                 msg_id,
-                                                 eq_err
-                                             );
+
+                                     for msg in queued {
+                                         let msg_id = msg.message_id.clone();
+                                         match swarm_handle.send_message(peer_id, msg.envelope_data.clone(), None, None).await {
+                                             Ok(()) => {
+                                                 tracing::info!(
+                                                     "Flushed queued message {} to {}",
+                                                     msg_id,
+                                                     peer_id
+                                                 );
+                                             }
+                                             Err(e) => {
+                                                 // Re-enqueue on failure so it is retried next connect.
+                                                 tracing::warn!(
+                                                     "Failed to flush queued message {} to {}: {} — re-enqueuing",
+                                                     msg_id,
+                                                     peer_id,
+                                                     e
+                                                 );
+                                                 let mut ob = outbox_rx.lock().await;
+                                                 if let Err(eq_err) = ob.enqueue(msg) {
+                                                     tracing::error!(
+                                                         "Failed to re-enqueue message {}: {}",
+                                                         msg_id,
+                                                         eq_err
+                                                     );
+                                                 }
+                                             }
                                          }
                                      }
                                  }
-                             }
-                         }
-                    }
-                    SwarmEvent::PeerDisconnected(peer_id) => {
-                        peers_rx.lock().await.remove(&peer_id);
-
-                        // Record disconnect in ledger (useful for backoff tracking)
-                        // We find the entry by PeerID and record failure
-                        let mut l = ledger_rx.lock().await;
-                        if let Some(entry) = l.find_by_peer_id(&peer_id.to_string()) {
-                            let multiaddr = entry.multiaddr.clone();
-                            l.record_failure(&multiaddr);
-                        }
-                    }
-
-                    // LEDGER EXCHANGE: Received peer list from a connected peer
-                    SwarmEvent::LedgerReceived { from_peer, entries } => {
-                        let mut l = ledger_rx.lock().await;
-                        let new_count = l.merge_shared_entries(&entries);
-
-                        if new_count > 0 {
-                            println!(
-                                "\n{} 📒 Learned {} new peers from {}",
-                                "✓".green(),
-                                new_count,
-                                from_peer
-                            );
-                            print!("> ");
-                            let _ = std::io::Write::flush(&mut std::io::stdout());
-
-                            // Save immediately after learning new peers
-                            if let Err(e) = l.save(&data_dir) {
-                                tracing::error!("Failed to save ledger: {}", e);
                             }
+                            SwarmEvent::PeerDisconnected(peer_id) => {
+                                peers_rx.lock().await.remove(&peer_id);
 
-                            // Dial newly discovered peers
-                            let new_addrs: Vec<String> = entries.iter()
-                                .map(|e| ledger::strip_peer_id(&e.multiaddr))
-                                .collect();
-                            drop(l); // release lock before dialing
-
-                            for addr_str in new_addrs {
-                                if let Ok(addr) = addr_str.parse::<Multiaddr>() {
-                                    let _ = swarm_handle.dial(addr).await;
+                                // Record disconnect in ledger (useful for backoff tracking)
+                                // We find the entry by PeerID and record failure
+                                let mut l = ledger_rx.lock().await;
+                                if let Some(entry) = l.find_by_peer_id(&peer_id.to_string()) {
+                                    let multiaddr = entry.multiaddr.clone();
+                                    l.record_failure(&multiaddr);
                                 }
                             }
-                        }
-                    }
 
-                    // IDENTIFY: Peer identity confirmed — update ledger
-                    SwarmEvent::PeerIdentified { peer_id, listen_addrs, .. } => {
-                        let mut l = ledger_rx.lock().await;
-                        for addr in &listen_addrs {
-                            l.record_connection(&addr.to_string(), &peer_id.to_string());
-                        }
-                    }
+                            // LEDGER EXCHANGE: Received peer list from a connected peer
+                            SwarmEvent::LedgerReceived { from_peer, entries } => {
+                                let mut l = ledger_rx.lock().await;
+                                let new_count = l.merge_shared_entries(&entries);
 
-                    // GOSSIPSUB: New topic discovered
-                    SwarmEvent::TopicDiscovered { peer_id, topic } => {
-                        tracing::info!("Topic discovered from {}: {}", peer_id, topic);
-                        // Record the topic in the ledger for this peer
-                        let mut l = ledger_rx.lock().await;
-                        if let Some(entry) = l.find_by_peer_id(&peer_id.to_string()) {
-                            let multiaddr = entry.multiaddr.clone();
-                            l.record_topic(&multiaddr, &topic);
-                        }
-                    }
-
-                    SwarmEvent::MessageReceived { peer_id, envelope_data } => {
-                        // Extract sender's Ed25519 public key from the envelope before decryption.
-                        // We need it to encrypt the delivery receipt back to them.
-                        let sender_public_key_hex = decode_envelope(&envelope_data)
-                            .ok()
-                            .map(|env| hex::encode(&env.sender_public_key));
-
-                        if let Ok(msg) = core_rx.receive_message(envelope_data) {
-                            match msg.message_type {
-                                MessageType::Text => {
-                                    let text = msg.text_content().unwrap_or_else(|| "<binary>".into());
-                                    let sender_name = contacts_rx.get(peer_id.to_string())
-                                        .ok().flatten()
-                                        .map(|c| c.display_name().to_string())
-                                        .unwrap_or_else(|| peer_id.to_string());
-
-                                    println!("\n{} {}: {}", "←".bright_blue(), sender_name.bright_cyan(), text);
+                                if new_count > 0 {
+                                    println!(
+                                        "\n{} 📒 Learned {} new peers from {}",
+                                        "✓".green(),
+                                        new_count,
+                                        from_peer
+                                    );
                                     print!("> ");
                                     let _ = std::io::Write::flush(&mut std::io::stdout());
 
-
-                                    let ts = std::time::SystemTime::now()
-                                        .duration_since(std::time::UNIX_EPOCH)
-                                        .unwrap_or_default()
-                                        .as_secs();
-                                    let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::MessageReceived {
-                                        from: peer_id.to_string(),
-                                        content: text.clone(),
-                                        timestamp: ts,
-                                        message_id: msg.id.clone(),
-                                    }));
-                                    let mn = notif_message_received(MessageReceivedParams {
-                                        from: peer_id.to_string(),
-                                        content: text,
-                                        timestamp: ts,
-                                        message_id: msg.id.clone(),
-                                    });
-                                    if let Ok(v) = serde_json::to_value(&mn) {
-                                        let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
+                                    // Save immediately after learning new peers
+                                    if let Err(e) = l.save(&data_dir) {
+                                        tracing::error!("Failed to save ledger: {}", e);
                                     }
 
-                                    // Send delivery receipt back to sender.
-                                    if let Some(ref pk_hex) = sender_public_key_hex {
-                                        match core_rx.prepare_receipt(pk_hex.clone(), msg.id.clone()) {
-                                            Ok(ack_bytes) => {
-                                                tracing::debug!("Sending delivery ACK for {} to {}", msg.id, peer_id);
-                                                if let Err(e) = swarm_handle.send_message(peer_id, ack_bytes, None, None).await {
-                                                    tracing::debug!("Failed to send delivery ACK to {}: {}", peer_id, e);
+                                    // Dial newly discovered peers
+                                    let new_addrs: Vec<String> = entries.iter()
+                                        .map(|e| ledger::strip_peer_id(&e.multiaddr))
+                                        .collect();
+                                    drop(l); // release lock before dialing
+
+                                    for addr_str in new_addrs {
+                                        if let Ok(addr) = addr_str.parse::<Multiaddr>() {
+                                            let _ = swarm_handle.dial(addr).await;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // IDENTIFY: Peer identity confirmed — update ledger
+                            SwarmEvent::PeerIdentified { peer_id, listen_addrs, .. } => {
+                                let mut l = ledger_rx.lock().await;
+                                for addr in &listen_addrs {
+                                    l.record_connection(&addr.to_string(), &peer_id.to_string());
+                                }
+                            }
+
+                            // GOSSIPSUB: New topic discovered
+                            SwarmEvent::TopicDiscovered { peer_id, topic } => {
+                                tracing::info!("Topic discovered from {}: {}", peer_id, topic);
+                                // Record the topic in the ledger for this peer
+                                let mut l = ledger_rx.lock().await;
+                                if let Some(entry) = l.find_by_peer_id(&peer_id.to_string()) {
+                                    let multiaddr = entry.multiaddr.clone();
+                                    l.record_topic(&multiaddr, &topic);
+                                }
+                            }
+
+                            SwarmEvent::MessageReceived { peer_id, envelope_data } => {
+                                // Extract sender's Ed25519 public key from the envelope before decryption.
+                                // We need it to encrypt the delivery receipt back to them.
+                                let sender_public_key_hex = decode_envelope(&envelope_data)
+                                    .ok()
+                                    .map(|env| hex::encode(&env.sender_public_key));
+
+                                if let Ok(msg) = core_rx.receive_message(envelope_data) {
+                                    match msg.message_type {
+                                        MessageType::Text => {
+                                            let text = msg.text_content().unwrap_or_else(|| "<binary>".into());
+                                            let sender_name = contacts_rx.get(peer_id.to_string())
+                                                .ok().flatten()
+                                                .map(|c| c.display_name().to_string())
+                                                .unwrap_or_else(|| peer_id.to_string());
+
+                                            println!("\n{} {}: {}", "←".bright_blue(), sender_name.bright_cyan(), text);
+                                            print!("> ");
+                                            let _ = std::io::Write::flush(&mut std::io::stdout());
+
+
+                                            let ts = std::time::SystemTime::now()
+                                                .duration_since(std::time::UNIX_EPOCH)
+                                                .unwrap_or_default()
+                                                .as_secs();
+                                            let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::MessageReceived {
+                                                from: peer_id.to_string(),
+                                                content: text.clone(),
+                                                timestamp: ts,
+                                                message_id: msg.id.clone(),
+                                            }));
+                                            let mn = notif_message_received(MessageReceivedParams {
+                                                from: peer_id.to_string(),
+                                                content: text,
+                                                timestamp: ts,
+                                                message_id: msg.id.clone(),
+                                            });
+                                            if let Ok(v) = serde_json::to_value(&mn) {
+                                                let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
+                                            }
+
+                                            // Send delivery receipt back to sender.
+                                            if let Some(ref pk_hex) = sender_public_key_hex {
+                                                match core_rx.prepare_receipt(pk_hex.clone(), msg.id.clone()) {
+                                                    Ok(ack_bytes) => {
+                                                        tracing::debug!("Sending delivery ACK for {} to {}", msg.id, peer_id);
+                                                        if let Err(e) = swarm_handle.send_message(peer_id, ack_bytes, None, None).await {
+                                                            tracing::debug!("Failed to send delivery ACK to {}: {}", peer_id, e);
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        tracing::debug!("Failed to prepare delivery ACK: {}", e);
+                                                    }
                                                 }
                                             }
-                                            Err(e) => {
-                                                tracing::debug!("Failed to prepare delivery ACK: {}", e);
+                                        }
+                                        MessageType::Receipt => {
+                                            // Received a delivery receipt — the remote peer confirmed delivery.
+                                            if let Ok(receipt) = bincode::deserialize::<scmessenger_core::Receipt>(&msg.payload) {
+                                                let short_id = receipt.message_id.get(..8).unwrap_or(&receipt.message_id);
+                                                println!("\n{} Delivered: {}", "✓✓".green(), short_id);
+                                                print!("> ");
+                                                let _ = std::io::Write::flush(&mut std::io::stdout());
+                                                tracing::debug!("Delivery ACK received from {}: msg_id={}", peer_id, receipt.message_id);
+
+                                                // Mark the message as delivered in history
+                                                if let Err(e) = history_rx.mark_delivered(receipt.message_id.clone()) {
+                                                    tracing::warn!("Failed to mark message {} as delivered: {}", receipt.message_id, e);
+                                                }
                                             }
                                         }
                                     }
                                 }
-                                MessageType::Receipt => {
-                                    // Received a delivery receipt — the remote peer confirmed delivery.
-                                    if let Ok(receipt) = bincode::deserialize::<scmessenger_core::Receipt>(&msg.payload) {
-                                        let short_id = receipt.message_id.get(..8).unwrap_or(&receipt.message_id);
-                                        println!("\n{} Delivered: {}", "✓✓".green(), short_id);
-                                        print!("> ");
-                                        let _ = std::io::Write::flush(&mut std::io::stdout());
-                                        tracing::debug!("Delivery ACK received from {}: msg_id={}", peer_id, receipt.message_id);
-
-                                        // Mark the message as delivered in history
-                                        if let Err(e) = history_rx.mark_delivered(receipt.message_id.clone()) {
-                                            tracing::warn!("Failed to mark message {} as delivered: {}", receipt.message_id, e);
-                                        }
-                                    }
-                                }
                             }
-                        }
-                    }
-                    SwarmEvent::ListeningOn(addr) => {
-                        println!("{} Listening on {}", "✓".green(), addr);
-                    }
-                    _ => {}
-                }
-            }
-
-
-
-            // 2. UI Commands (UI -> App -> Network)
-            Some(cmd) = ui_cmd_rx.recv() => {
-                match cmd {
-                    server::UiCommand::IdentityShow => {
-                        let i = core_rx.get_identity_info();
-                        let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::IdentityInfo {
-                            peer_id: i.identity_id.unwrap_or_default(),
-                            public_key: i.public_key_hex.unwrap_or_default(),
-                        }));
-                    }
-                    server::UiCommand::IdentityExport => {
-                        let i = core_rx.get_identity_info();
-                        let data_dir = config::Config::data_dir().unwrap_or_default();
-                        let storage_path = data_dir.join("storage");
-
-                        let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::IdentityExportData {
-                            identity_id: i.identity_id.unwrap_or_default(),
-                            public_key: i.public_key_hex.unwrap_or_default(),
-                            private_key: "Keys are stored securely in the data directory.".to_string(),
-                            storage_path: storage_path.display().to_string(),
-                        }));
-                    }
-                    server::UiCommand::ContactList => {
-                        if let Ok(list) = contacts_rx.list() {
-                            let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ContactList { contacts: list }));
-                        }
-                    }
-                    server::UiCommand::HistoryList { peer_id, limit } => {
-                        let l = limit.unwrap_or(50) as u32;
-                        if let Ok(messages) = history_rx.conversation(peer_id.clone(), l) {
-                            let history_messages = messages.into_iter().map(|m| {
-                                crate::api::HistoryMessage {
-                                    peer_id: m.peer_id,
-                                    content: m.content,
-                                    direction: match m.direction {
-                                        MessageDirection::Sent => "sent".to_string(),
-                                        MessageDirection::Received => "received".to_string(),
-                                    },
-                                    timestamp: m.timestamp,
-                                }
-                            }).collect();
-                            let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::HistoryList {
-                                peer_id,
-                                messages: history_messages
-                            }));
-                        }
-                    }
-                    server::UiCommand::Status => {
-                        let count = peers_rx.lock().await.len();
-                        let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::NetworkStatus {
-                            status: "online".to_string(),
-                            peer_count: count
-                        }));
-                    }
-                    server::UiCommand::Send { recipient, message, id } => {
-                        // Resolve recipient to PeerID and PublicKey
-                        let peer_id_res = recipient.parse::<libp2p::PeerId>();
-                        let contact_res = contacts_rx.get(recipient.clone());
-
-                        let target_peer = if let Ok(pid) = peer_id_res {
-                            Some(pid)
-                        } else if let Ok(Some(contact)) = contact_res {
-                            contact.peer_id.parse().ok()
-                        } else {
-                            None
-                        };
-
-                        if let Some(target) = target_peer {
-                             // Try to find public key
-                             let pk_opt = if let Ok(Some(c)) = contacts_rx.get(target.to_string()) {
-                                 Some(c.public_key)
-                             } else { None };
-
-                             if let Some(pk) = pk_opt {
-                                 // prepare_message_with_id automatically saves outgoing history
-if let Ok(prep) = core_rx.prepare_message_with_id(pk, message, None) {
-                                     if swarm_handle.send_message(target, prep.envelope_data, None, None).await.is_ok() {
-                                         let mid = id.clone().unwrap_or_default();
-                                         let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::MessageStatus {
-                                             message_id: mid.clone(),
-                                             status: "sent".to_string()
-                                         }));
-                                         let dn = notif_delivery_status(DeliveryStatusParams {
-                                             message_id: mid,
-                                             status: "sent".to_string(),
-                                         });
-                                         if let Ok(v) = serde_json::to_value(&dn) {
-                                             let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
-                                         }
-                                     }
-                                 }
-                             }
-                        }
-                    }
-                    server::UiCommand::ContactAdd { peer_id, name, public_key } => {
-                        // Assuming public key is provided or we can fetch it? MVP assumes provided.
-                        if let Some(pk) = public_key {
-                            // Validate public key before adding
-                            if let Err(e) = scmessenger_core::crypto::validate_ed25519_public_key(&pk) {
-                                tracing::warn!("Failed to add contact {}: invalid public key - {}", peer_id, e);
-                                let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::Error {
-                                    message: format!("Invalid public key: {}", e)
-                                }));
-                                continue;
+                            SwarmEvent::ListeningOn(addr) => {
+                                println!("{} Listening on {}", "✓".green(), addr);
                             }
+                            _ => {}
+                        }
+                    }
 
-                            let contact = Contact::new(peer_id.clone(), pk)
-                                .with_nickname(name.unwrap_or(peer_id));
-                            let _ = contacts_rx.add(contact);
-                            if let Ok(list) = contacts_rx.list() {
-                                let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ContactList { contacts: list }));
-                            }
-                        }
-                    }
-                    server::UiCommand::ContactRemove { contact } => {
-                         // remove by peer_id (assuming contact arg is peer_id for now, or resolving nickname)
-                         // contacts.remove takes peer_id string
-                         if contacts_rx.remove(contact).is_ok() {
-                             if let Ok(list) = contacts_rx.list() {
-                                 let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ContactList { contacts: list }));
-                             }
-                         }
-                    }
-                    server::UiCommand::ConfigGet { key } => {
-                        if let Ok(cfg) = config::Config::load() {
-                            let value = cfg.get(&key);
-                            let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ConfigValue {
-                                key: key.clone(),
-                                value,
-                            }));
-                        }
-                    }
-                    server::UiCommand::ConfigList => {
-                        if let Ok(cfg) = config::Config::load() {
-                            let config_data = cfg.list();
-                            let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ConfigData {
-                                config: config_data,
-                            }));
-                        }
-                    }
-                    server::UiCommand::ConfigSet { key, value } => {
-                        if let Ok(mut cfg) = config::Config::load() {
-                            if cfg.set(&key, &value).is_ok() {
-                                // Config updated
-                            }
-                        }
-                    }
-                    server::UiCommand::ConfigBootstrapAdd { multiaddr } => {
-                         if let Ok(mut cfg) = config::Config::load() {
-                            let _ = cfg.add_bootstrap_node(multiaddr);
-                        }
-                    }
-                    server::UiCommand::ConfigBootstrapRemove { multiaddr } => {
-                         if let Ok(mut cfg) = config::Config::load() {
-                            let _ = cfg.remove_bootstrap_node(&multiaddr);
-                        }
-                    }
-                    server::UiCommand::FactoryReset => {
-                        println!("{} Factory Reset initiated from UI...", "⚠".yellow());
-                        // Attempt to clean data dir. This is aggressive.
-                        if let Ok(data_dir) = config::Config::data_dir() {
-                             // On unix we can delete even if open? Sometimes.
-                             // Best effort: Log and Exit
-                             println!("Process will exit to clear data.");
-                             let _ = std::fs::remove_dir_all(&data_dir);
-                        }
-                        std::process::exit(0);
-                    }
-                    server::UiCommand::Restart => {
-                        println!("Restart requested from UI - shutting down...");
-                        std::process::exit(0);
-                    }
-                    server::UiCommand::DaemonRpc { id, intent } => {
-                        let push = |result: serde_json::Value| {
-                            let resp = rpc_result(id.clone(), result);
-                            if let Ok(v) = serde_json::to_value(&resp) {
-                                let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
-                            }
-                        };
-                        let push_err = |code: i32, msg: String| {
-                            let resp = rpc_error(
-                                id.clone(),
-                                JsonRpcErrorBody {
-                                    code,
-                                    message: msg,
-                                    data: None,
-                                },
-                            );
-                            if let Ok(v) = serde_json::to_value(&resp) {
-                                let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
-                            }
-                        };
-                        match intent {
-                            ClientIntent::GetIdentity {} => {
+
+
+                    // 2. UI Commands (UI -> App -> Network)
+                    Some(cmd) = ui_cmd_rx.recv() => {
+                        match cmd {
+                            server::UiCommand::IdentityShow => {
                                 let i = core_rx.get_identity_info();
-                                push(serde_json::json!({
-                                    "peer_id": i.identity_id,
-                                    "public_key_hex": i.public_key_hex,
-                                    "libp2p_peer_id": i.libp2p_peer_id,
-                                    "initialized": i.initialized,
-                                    "nickname": i.nickname,
+                                let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::IdentityInfo {
+                                    peer_id: i.identity_id.unwrap_or_default(),
+                                    public_key: i.public_key_hex.unwrap_or_default(),
                                 }));
                             }
-                            ClientIntent::ScanPeers {} => {
-                                let peers: Vec<String> = peers_rx
-                                    .lock()
-                                    .await
-                                    .keys()
-                                    .map(|p| p.to_string())
-                                    .collect();
-                                push(serde_json::json!({ "peers": peers }));
+                            server::UiCommand::IdentityExport => {
+                                let i = core_rx.get_identity_info();
+                                let data_dir = config::Config::data_dir().unwrap_or_default();
+                                let storage_path = data_dir.join("storage");
+
+                                let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::IdentityExportData {
+                                    identity_id: i.identity_id.unwrap_or_default(),
+                                    public_key: i.public_key_hex.unwrap_or_default(),
+                                    private_key: "Keys are stored securely in the data directory.".to_string(),
+                                    storage_path: storage_path.display().to_string(),
+                                }));
                             }
-                            ClientIntent::GetTopology {} => {
-                                let peer_count = peers_rx.lock().await.len();
-                                let (known_peers, bootstrap_nodes) = {
-                                    let l = ledger_rx.lock().await;
-                                    let known = l
-                                        .entries
-                                        .values()
-                                        .filter(|e| !e.known_topics.is_empty())
-                                        .count();
-                                    (known, web_ctx.bootstrap_nodes.clone())
-                                };
-                                let topo = MeshTopologyUpdateParams {
-                                    peer_count,
-                                    known_peers,
-                                    bootstrap_nodes,
-                                };
-                                if let Ok(v) = serde_json::to_value(&topo) {
-                                    push(v);
+                            server::UiCommand::ContactList => {
+                                if let Ok(list) = contacts_rx.list() {
+                                    let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ContactList { contacts: list }));
                                 }
                             }
-                            ClientIntent::SendMessage {
-                                recipient,
-                                message,
-                                id: msg_id,
-                            } => {
+                            server::UiCommand::HistoryList { peer_id, limit } => {
+                                let l = limit.unwrap_or(50) as u32;
+                                if let Ok(messages) = history_rx.conversation(peer_id.clone(), l) {
+                                    let history_messages = messages.into_iter().map(|m| {
+                                        crate::api::HistoryMessage {
+                                            peer_id: m.peer_id,
+                                            content: m.content,
+                                            direction: match m.direction {
+                                                MessageDirection::Sent => "sent".to_string(),
+                                                MessageDirection::Received => "received".to_string(),
+                                            },
+                                            timestamp: m.timestamp,
+                                        }
+                                    }).collect();
+                                    let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::HistoryList {
+                                        peer_id,
+                                        messages: history_messages
+                                    }));
+                                }
+                            }
+                            server::UiCommand::Status => {
+                                let count = peers_rx.lock().await.len();
+                                let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::NetworkStatus {
+                                    status: "online".to_string(),
+                                    peer_count: count
+                                }));
+                            }
+                            server::UiCommand::Send { recipient, message, id } => {
+                                // Resolve recipient to PeerID and PublicKey
                                 let peer_id_res = recipient.parse::<libp2p::PeerId>();
                                 let contact_res = contacts_rx.get(recipient.clone());
+
                                 let target_peer = if let Ok(pid) = peer_id_res {
                                     Some(pid)
                                 } else if let Ok(Some(contact)) = contact_res {
@@ -1780,91 +1611,271 @@ if let Ok(prep) = core_rx.prepare_message_with_id(pk, message, None) {
                                 } else {
                                     None
                                 };
-                                let Some(target) = target_peer else {
-                                    push_err(-32001, "Recipient not found".into());
-                                    continue;
+
+                                if let Some(target) = target_peer {
+                                     // Try to find public key
+                                     let pk_opt = if let Ok(Some(c)) = contacts_rx.get(target.to_string()) {
+                                         Some(c.public_key)
+                                     } else { None };
+
+                                     if let Some(pk) = pk_opt {
+                                         // prepare_message_with_id automatically saves outgoing history
+        if let Ok(prep) = core_rx.prepare_message_with_id(pk, message, None) {
+                                             if swarm_handle.send_message(target, prep.envelope_data, None, None).await.is_ok() {
+                                                 let mid = id.clone().unwrap_or_default();
+                                                 let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::MessageStatus {
+                                                     message_id: mid.clone(),
+                                                     status: "sent".to_string()
+                                                 }));
+                                                 let dn = notif_delivery_status(DeliveryStatusParams {
+                                                     message_id: mid,
+                                                     status: "sent".to_string(),
+                                                 });
+                                                 if let Ok(v) = serde_json::to_value(&dn) {
+                                                     let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
+                                                 }
+                                             }
+                                         }
+                                     }
+                                }
+                            }
+                            server::UiCommand::ContactAdd { peer_id, name, public_key } => {
+                                // Assuming public key is provided or we can fetch it? MVP assumes provided.
+                                if let Some(pk) = public_key {
+                                    // Validate public key before adding
+                                    if let Err(e) = scmessenger_core::crypto::validate_ed25519_public_key(&pk) {
+                                        tracing::warn!("Failed to add contact {}: invalid public key - {}", peer_id, e);
+                                        let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::Error {
+                                            message: format!("Invalid public key: {}", e)
+                                        }));
+                                        continue;
+                                    }
+
+                                    let contact = Contact::new(peer_id.clone(), pk)
+                                        .with_nickname(name.unwrap_or(peer_id));
+                                    let _ = contacts_rx.add(contact);
+                                    if let Ok(list) = contacts_rx.list() {
+                                        let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ContactList { contacts: list }));
+                                    }
+                                }
+                            }
+                            server::UiCommand::ContactRemove { contact } => {
+                                 // remove by peer_id (assuming contact arg is peer_id for now, or resolving nickname)
+                                 // contacts.remove takes peer_id string
+                                 if contacts_rx.remove(contact).is_ok() {
+                                     if let Ok(list) = contacts_rx.list() {
+                                         let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ContactList { contacts: list }));
+                                     }
+                                 }
+                            }
+                            server::UiCommand::ConfigGet { key } => {
+                                if let Ok(cfg) = config::Config::load() {
+                                    let value = cfg.get(&key);
+                                    let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ConfigValue {
+                                        key: key.clone(),
+                                        value,
+                                    }));
+                                }
+                            }
+                            server::UiCommand::ConfigList => {
+                                if let Ok(cfg) = config::Config::load() {
+                                    let config_data = cfg.list();
+                                    let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ConfigData {
+                                        config: config_data,
+                                    }));
+                                }
+                            }
+                            server::UiCommand::ConfigSet { key, value } => {
+                                if let Ok(mut cfg) = config::Config::load() {
+                                    if cfg.set(&key, &value).is_ok() {
+                                        // Config updated
+                                    }
+                                }
+                            }
+                            server::UiCommand::ConfigBootstrapAdd { multiaddr } => {
+                                 if let Ok(mut cfg) = config::Config::load() {
+                                    let _ = cfg.add_bootstrap_node(multiaddr);
+                                }
+                            }
+                            server::UiCommand::ConfigBootstrapRemove { multiaddr } => {
+                                 if let Ok(mut cfg) = config::Config::load() {
+                                    let _ = cfg.remove_bootstrap_node(&multiaddr);
+                                }
+                            }
+                            server::UiCommand::FactoryReset => {
+                                println!("{} Factory Reset initiated from UI...", "⚠".yellow());
+                                // Attempt to clean data dir. This is aggressive.
+                                if let Ok(data_dir) = config::Config::data_dir() {
+                                     // On unix we can delete even if open? Sometimes.
+                                     // Best effort: Log and Exit
+                                     println!("Process will exit to clear data.");
+                                     let _ = std::fs::remove_dir_all(&data_dir);
+                                }
+                                std::process::exit(0);
+                            }
+                            server::UiCommand::Restart => {
+                                println!("Restart requested from UI - shutting down...");
+                                std::process::exit(0);
+                            }
+                            server::UiCommand::DaemonRpc { id, intent } => {
+                                let push = |result: serde_json::Value| {
+                                    let resp = rpc_result(id.clone(), result);
+                                    if let Ok(v) = serde_json::to_value(&resp) {
+                                        let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
+                                    }
                                 };
-                                let pk_opt = if let Ok(Some(c)) = contacts_rx.get(target.to_string()) {
-                                    Some(c.public_key)
-                                } else {
-                                    None
+                                let push_err = |code: i32, msg: String| {
+                                    let resp = rpc_error(
+                                        id.clone(),
+                                        JsonRpcErrorBody {
+                                            code,
+                                            message: msg,
+                                            data: None,
+                                        },
+                                    );
+                                    if let Ok(v) = serde_json::to_value(&resp) {
+                                        let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
+                                    }
                                 };
-                                let Some(pk) = pk_opt else {
-                                    push_err(-32002, "No public key for recipient".into());
-                                    continue;
-                                };
-match core_rx.prepare_message_with_id(pk, message, None) {
-                                    Ok(prep) => {
-                                        if swarm_handle
-                                            .send_message(target, prep.envelope_data, None, None)
+                                match intent {
+                                    ClientIntent::GetIdentity {} => {
+                                        let i = core_rx.get_identity_info();
+                                        push(serde_json::json!({
+                                            "peer_id": i.identity_id,
+                                            "public_key_hex": i.public_key_hex,
+                                            "libp2p_peer_id": i.libp2p_peer_id,
+                                            "initialized": i.initialized,
+                                            "nickname": i.nickname,
+                                        }));
+                                    }
+                                    ClientIntent::ScanPeers {} => {
+                                        let peers: Vec<String> = peers_rx
+                                            .lock()
                                             .await
-                                            .is_ok()
-                                        {
-                                            let mid = msg_id.clone().unwrap_or_default();
-                                            push(serde_json::json!({
-                                                "status": "sent",
-                                                "message_id": mid.clone(),
-                                            }));
-                                            let _ = ui_broadcast.send(server::UiOutbound::Legacy(
-                                                server::UiEvent::MessageStatus {
-                                                    message_id: mid.clone(),
-                                                    status: "sent".to_string(),
-                                                },
-                                            ));
-                                            let dn = notif_delivery_status(DeliveryStatusParams {
-                                                message_id: mid,
-                                                status: "sent".to_string(),
-                                            });
-                                            if let Ok(v) = serde_json::to_value(&dn) {
-                                                let _ =
-                                                    ui_broadcast.send(server::UiOutbound::JsonRpc(v));
-                                            }
-                                        } else {
-                                            push_err(-32003, "Swarm send failed".into());
+                                            .keys()
+                                            .map(|p| p.to_string())
+                                            .collect();
+                                        push(serde_json::json!({ "peers": peers }));
+                                    }
+                                    ClientIntent::GetTopology {} => {
+                                        let peer_count = peers_rx.lock().await.len();
+                                        let (known_peers, bootstrap_nodes) = {
+                                            let l = ledger_rx.lock().await;
+                                            let known = l
+                                                .entries
+                                                .values()
+                                                .filter(|e| !e.known_topics.is_empty())
+                                                .count();
+                                            (known, web_ctx.bootstrap_nodes.clone())
+                                        };
+                                        let topo = MeshTopologyUpdateParams {
+                                            peer_count,
+                                            known_peers,
+                                            bootstrap_nodes,
+                                        };
+                                        if let Ok(v) = serde_json::to_value(&topo) {
+                                            push(v);
                                         }
                                     }
-                                    Err(e) => {
-                                        push_err(-32004, format!("Prepare message: {}", e));
+                                    ClientIntent::SendMessage {
+                                        recipient,
+                                        message,
+                                        id: msg_id,
+                                    } => {
+                                        let peer_id_res = recipient.parse::<libp2p::PeerId>();
+                                        let contact_res = contacts_rx.get(recipient.clone());
+                                        let target_peer = if let Ok(pid) = peer_id_res {
+                                            Some(pid)
+                                        } else if let Ok(Some(contact)) = contact_res {
+                                            contact.peer_id.parse().ok()
+                                        } else {
+                                            None
+                                        };
+                                        let Some(target) = target_peer else {
+                                            push_err(-32001, "Recipient not found".into());
+                                            continue;
+                                        };
+                                        let pk_opt = if let Ok(Some(c)) = contacts_rx.get(target.to_string()) {
+                                            Some(c.public_key)
+                                        } else {
+                                            None
+                                        };
+                                        let Some(pk) = pk_opt else {
+                                            push_err(-32002, "No public key for recipient".into());
+                                            continue;
+                                        };
+        match core_rx.prepare_message_with_id(pk, message, None) {
+                                            Ok(prep) => {
+                                                if swarm_handle
+                                                    .send_message(target, prep.envelope_data, None, None)
+                                                    .await
+                                                    .is_ok()
+                                                {
+                                                    let mid = msg_id.clone().unwrap_or_default();
+                                                    push(serde_json::json!({
+                                                        "status": "sent",
+                                                        "message_id": mid.clone(),
+                                                    }));
+                                                    let _ = ui_broadcast.send(server::UiOutbound::Legacy(
+                                                        server::UiEvent::MessageStatus {
+                                                            message_id: mid.clone(),
+                                                            status: "sent".to_string(),
+                                                        },
+                                                    ));
+                                                    let dn = notif_delivery_status(DeliveryStatusParams {
+                                                        message_id: mid,
+                                                        status: "sent".to_string(),
+                                                    });
+                                                    if let Ok(v) = serde_json::to_value(&dn) {
+                                                        let _ =
+                                                            ui_broadcast.send(server::UiOutbound::JsonRpc(v));
+                                                    }
+                                                } else {
+                                                    push_err(-32003, "Swarm send failed".into());
+                                                }
+                                            }
+                                            Err(e) => {
+                                                push_err(-32004, format!("Prepare message: {}", e));
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
-            }
 
-            // 3. Stdin (User -> App)
-            Ok(Some(line)) = stdin_lines.next_line() => {
-                let line = line.trim();
-                if line.is_empty() {
-                     print!("> ");
-                     let _ = std::io::Write::flush(&mut std::io::stdout());
-                     continue;
-                }
-                if line == "quit" || line == "exit" {
-                    println!("Shutting down...");
-                    let _ = swarm_handle.shutdown().await;
-                    break;
-                }
-                // (Implement simple CLI commands if needed, mirroring old logic)
-                if line == "status" {
-                     let c = peers_rx.lock().await.len();
-                     println!("Peers: {}", c);
-                }
-                if line == "peers" {
-                     let p = peers_rx.lock().await;
-                     for k in p.keys() { println!("  {}", k); }
-                }
-                if line == "contacts" {
-                    if let Ok(l) = contacts_rx.list() {
-                        for c in l { println!("  {}", c.display_name()); }
+                    // 3. Stdin (User -> App)
+                    Ok(Some(line)) = stdin_lines.next_line() => {
+                        let line = line.trim();
+                        if line.is_empty() {
+                             print!("> ");
+                             let _ = std::io::Write::flush(&mut std::io::stdout());
+                             continue;
+                        }
+                        if line == "quit" || line == "exit" {
+                            println!("Shutting down...");
+                            let _ = swarm_handle.shutdown().await;
+                            break;
+                        }
+                        // (Implement simple CLI commands if needed, mirroring old logic)
+                        if line == "status" {
+                             let c = peers_rx.lock().await.len();
+                             println!("Peers: {}", c);
+                        }
+                        if line == "peers" {
+                             let p = peers_rx.lock().await;
+                             for k in p.keys() { println!("  {}", k); }
+                        }
+                        if line == "contacts" {
+                            if let Ok(l) = contacts_rx.list() {
+                                for c in l { println!("  {}", c.display_name()); }
+                            }
+                        }
+
+                        print!("> ");
+                        let _ = std::io::Write::flush(&mut std::io::stdout());
                     }
                 }
-
-                print!("> ");
-                let _ = std::io::Write::flush(&mut std::io::stdout());
-            }
-        }
     }
 
     Ok(())
@@ -1928,7 +1939,10 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     println!("  P2P Listen:   {}", listen_addr.green());
     println!("  HTTP Status:  http://0.0.0.0:{}", http_port);
     println!("  WS Bridge:    ws://0.0.0.0:9002 (libp2p-ws)");
-    println!("  Discovery:    http://localhost:{}/api/network-info", http_port);
+    println!(
+        "  Discovery:    http://localhost:{}/api/network-info",
+        http_port
+    );
     println!();
 
     // Load config for bootstrap nodes
@@ -1957,9 +1971,9 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
 
     // Create transport bridge
     let transport_bridge = Arc::new(tokio::sync::Mutex::new(
-        transport_bridge::TransportBridge::new()
+        transport_bridge::TransportBridge::new(),
     ));
-    
+
     // Web context for landing page + API
     let web_ctx = Arc::new(server::WebContext {
         node_peer_id: local_peer_id.to_string(),
@@ -2101,10 +2115,12 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
             let count = peers_status.lock().await.len();
-            let _ = ui_broadcast_clone.send(server::UiOutbound::Legacy(server::UiEvent::NetworkStatus {
-                status: "online".to_string(),
-                peer_count: count,
-            }));
+            let _ = ui_broadcast_clone.send(server::UiOutbound::Legacy(
+                server::UiEvent::NetworkStatus {
+                    status: "online".to_string(),
+                    peer_count: count,
+                },
+            ));
         }
     });
 
@@ -2310,7 +2326,7 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
     let contact = find_contact(&contacts, &recipient).context("Contact not found")?;
 
     let envelope_bytes = core
-.prepare_message(contact.public_key.clone(), message.clone(), None)
+        .prepare_message(contact.public_key.clone(), message.clone(), None)
         .context("Failed to encrypt message")?;
 
     println!(
@@ -2701,7 +2717,7 @@ async fn cmd_test() -> Result<()> {
 
     println!("{} Identity generation", "✓".green());
 
-let envelope = alice.prepare_message(
+    let envelope = alice.prepare_message(
         bob_info.public_key_hex.clone().unwrap(),
         "Test message".to_string(),
         None,
@@ -2721,7 +2737,8 @@ let envelope = alice.prepare_message(
     let eve = IronCore::new();
     eve.initialize_identity()?;
 
-let envelope = alice.prepare_message(bob_info.public_key_hex.unwrap(), "Secret".to_string(), None)?;
+    let envelope =
+        alice.prepare_message(bob_info.public_key_hex.unwrap(), "Secret".to_string(), None)?;
 
     assert!(eve.receive_message(envelope).is_err());
     println!("{} Encryption security", "✓".green());

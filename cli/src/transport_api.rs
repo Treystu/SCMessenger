@@ -3,12 +3,11 @@
 // Simplified to avoid complex warp filter issues while maintaining functionality
 // NOTE: This module contains unused code that will be activated when warp filter
 // chaining issues are resolved. The structures and functions are kept for future use.
-#[allow(dead_code)]
-
-use warp::Filter;
-use std::sync::Arc;
-use serde::{Deserialize, Serialize};
 use scmessenger_core::transport::abstraction::TransportType;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+#[allow(dead_code)]
+use warp::Filter;
 use warp::Rejection;
 
 /// Request payload for peer registration
@@ -44,7 +43,9 @@ impl std::fmt::Display for TransportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             TransportError::InvalidPeerId => write!(f, "Invalid peer ID format"),
-            TransportError::InvalidCapabilities => write!(f, "No valid transport capabilities provided"),
+            TransportError::InvalidCapabilities => {
+                write!(f, "No valid transport capabilities provided")
+            }
         }
     }
 }
@@ -56,7 +57,7 @@ pub fn transport_routes(
     let ctx1 = web_ctx.clone();
     let ctx2 = web_ctx.clone();
     let ctx3 = web_ctx.clone();
-    
+
     // Transport capabilities endpoint
     let capabilities_route = warp::path!("api" / "transport" / "capabilities")
         .and(warp::get())
@@ -79,34 +80,34 @@ pub fn transport_routes(
         .and_then(handle_register_peer)
         .boxed();
 
-    capabilities_route
-        .or(paths_route)
-        .or(register_route)
+    capabilities_route.or(paths_route).or(register_route)
 }
 
 async fn handle_transport_capabilities(
     ctx: Arc<crate::server::WebContext>,
 ) -> Result<impl warp::Reply, Rejection> {
     let bridge = ctx.transport_bridge.lock().await;
-    
-    let cli_caps = bridge.get_cli_capabilities()
+
+    let cli_caps = bridge
+        .get_cli_capabilities()
         .iter()
         .map(|t| t.to_string())
         .collect::<Vec<String>>();
-    
+
     let mut peer_caps = std::collections::HashMap::new();
     for (peer_id, caps) in bridge.get_available_paths() {
-        let cap_strings = caps.iter()
+        let cap_strings = caps
+            .iter()
             .map(|path| path.destination.to_string())
             .collect::<Vec<String>>();
         peer_caps.insert(peer_id.to_string(), cap_strings);
     }
-    
+
     let response = TransportCapabilitiesResponse {
         cli_capabilities: cli_caps,
         peer_capabilities: peer_caps,
     };
-    
+
     Ok(warp::reply::json(&response))
 }
 
@@ -118,16 +119,14 @@ async fn handle_transport_paths(
         Ok(id) => id,
         Err(_) => return Err(warp::reject::custom(TransportError::InvalidPeerId)),
     };
-    
+
     let bridge = ctx.transport_bridge.lock().await;
     let paths = bridge.find_all_paths(&peer_id);
-    
-    let routes = paths.iter()
-        .map(|path| path.into())
-        .collect::<Vec<_>>();
-    
+
+    let routes = paths.iter().map(|path| path.into()).collect::<Vec<_>>();
+
     let response = TransportPathsResponse { paths: routes };
-    
+
     Ok(warp::reply::json(&response))
 }
 
@@ -139,28 +138,28 @@ async fn handle_register_peer(
         Ok(id) => id,
         Err(_) => return Err(warp::reject::custom(TransportError::InvalidPeerId)),
     };
-    
+
     // Convert string capabilities to TransportType enum
-    let capabilities: Vec<TransportType> = request.capabilities.iter()
-        .filter_map(|s| {
-            match s.as_str() {
-                "BLE" => Some(TransportType::BLE),
-                "WiFiAware" => Some(TransportType::WiFiAware),
-                "WiFiDirect" => Some(TransportType::WiFiDirect),
-                "Internet" => Some(TransportType::Internet),
-                "Local" => Some(TransportType::Local),
-                _ => None,
-            }
+    let capabilities: Vec<TransportType> = request
+        .capabilities
+        .iter()
+        .filter_map(|s| match s.as_str() {
+            "BLE" => Some(TransportType::BLE),
+            "WiFiAware" => Some(TransportType::WiFiAware),
+            "WiFiDirect" => Some(TransportType::WiFiDirect),
+            "Internet" => Some(TransportType::Internet),
+            "Local" => Some(TransportType::Local),
+            _ => None,
         })
         .collect();
-    
+
     if capabilities.is_empty() {
         return Err(warp::reject::custom(TransportError::InvalidCapabilities));
     }
-    
+
     let mut bridge = ctx.transport_bridge.lock().await;
     bridge.register_peer(peer_id, capabilities);
-    
+
     Ok(warp::reply::json(&serde_json::json!({
         "status": "success",
         "message": "Peer registered"

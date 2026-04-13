@@ -25,7 +25,7 @@ pub enum AuditEventType {
     RelayDisabled,
     /// New contact added via QR scan or import
     ContactAdded,
-    /// Contact explicitly blocked via block list 
+    /// Contact explicitly blocked via block list
     ContactBlocked,
     /// Contact removed via explicit action
     ContactRemoved,
@@ -134,7 +134,8 @@ pub struct AuditLog {
 impl AuditLog {
     /// Create a new empty audit log with genesis hash
     pub fn new() -> Self {
-        let genesis_hash = "0000000000000000000000000000000000000000000000000000000000000000".to_string();
+        let genesis_hash =
+            "0000000000000000000000000000000000000000000000000000000000000000".to_string();
         AuditLog {
             events: Vec::new(),
             last_hash: genesis_hash,
@@ -362,7 +363,8 @@ mod tests {
     #[test]
     fn test_multi_event_chaining() {
         let mut log = AuditLog::new();
-        let genesis_hash = "0000000000000000000000000000000000000000000000000000000000000000".to_string();
+        let genesis_hash =
+            "0000000000000000000000000000000000000000000000000000000000000000".to_string();
 
         assert_eq!(log.last_hash, genesis_hash);
 

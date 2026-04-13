@@ -276,7 +276,7 @@ mod tests {
         for _ in 0..100 {
             let delay = compute_jitter(&config);
             let millis = delay.as_millis() as u32;
-            assert!(millis >= 100 && millis <= 200);
+            assert!((100..=200).contains(&millis));
         }
     }
 
@@ -291,7 +291,7 @@ mod tests {
         for _ in 0..100 {
             let delay = compute_jitter(&config);
             let millis = delay.as_millis() as u32;
-            assert!(millis >= 50 && millis <= 500);
+            assert!((50..=500).contains(&millis));
         }
     }
 

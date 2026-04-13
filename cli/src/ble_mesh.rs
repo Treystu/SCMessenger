@@ -6,7 +6,9 @@
 //! connects, and ingests notify payloads.
 
 use btleplug::api::bleuuid::uuid_from_u16;
-use btleplug::api::{Central, CentralEvent, CharPropFlags, Manager as _, Peripheral as PeripheralApi, ScanFilter};
+use btleplug::api::{
+    Central, CentralEvent, CharPropFlags, Manager as _, Peripheral as PeripheralApi, ScanFilter,
+};
 use btleplug::platform::{Manager, Peripheral};
 use futures_util::StreamExt;
 use scmessenger_core::drift::frame::{DriftFrame, FrameType};
@@ -20,7 +22,7 @@ use uuid::Uuid;
 use crate::server::{UiEvent, UiOutbound};
 
 /// SCM GATT primary service UUID (must match `core/src/transport/ble/gatt.rs`).
-const GATT_SERVICE_UUID: u128 = 0xDF01_0000_0000_1000_8000_00805F9B34FB;
+const GATT_SERVICE_UUID: u128 = 0xDF01_0000_0000_1000_8000_0080_5F9B_34FB;
 
 fn scm_service_uuid() -> Uuid {
     Uuid::from_u128(GATT_SERVICE_UUID)
@@ -54,7 +56,10 @@ pub fn decode_ble_payload_for_ui(core: &IronCore, data: &[u8]) -> Option<Message
     })
 }
 
-fn push_message_to_ui(ui_tx: &tokio::sync::broadcast::Sender<UiOutbound>, p: MessageReceivedParams) {
+fn push_message_to_ui(
+    ui_tx: &tokio::sync::broadcast::Sender<UiOutbound>,
+    p: MessageReceivedParams,
+) {
     let legacy = UiEvent::MessageReceived {
         from: p.from.clone(),
         content: p.content.clone(),
@@ -124,22 +129,14 @@ pub async fn run_ble_central_ingress(
     core: Arc<IronCore>,
     ui_tx: tokio::sync::broadcast::Sender<UiOutbound>,
 ) {
-    #[cfg(not(any(
-        target_os = "linux",
-        target_os = "windows",
-        target_os = "macos"
-    )))]
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
     {
         let _ = (core, ui_tx);
         tracing::debug!("BLE central ingress: unsupported OS");
         return;
     }
 
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "windows",
-        target_os = "macos"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
     {
         tracing::info!(
             "BLE: CLI GATT central for service {:x} (peripheral advertising via btleplug not enabled).",
@@ -232,7 +229,7 @@ pub async fn run_ble_peripheral_advertising(_core: Arc<IronCore>) {
             "BLE: GATT advertising stub started for service {:x} (Awaiting full platform advertising support).",
             GATT_SERVICE_UUID
         );
-        
+
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
         }

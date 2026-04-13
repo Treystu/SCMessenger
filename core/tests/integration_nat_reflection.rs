@@ -86,9 +86,10 @@ async fn test_peer_address_discovery_with_live_swarm() {
     let (event_tx1, mut event_rx1) = mpsc::channel(256);
     let (event_tx2, mut _event_rx2) = mpsc::channel(256);
 
-    let _swarm_reflector: SwarmHandle = start_swarm(keypair_reflector.clone(), None, event_tx1, false)
-        .await
-        .expect("Failed to start reflector swarm");
+    let _swarm_reflector: SwarmHandle =
+        start_swarm(keypair_reflector.clone(), None, event_tx1, false)
+            .await
+            .expect("Failed to start reflector swarm");
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
@@ -106,9 +107,10 @@ async fn test_peer_address_discovery_with_live_swarm() {
 
     assert!(reflector_addr.is_some());
 
-    let swarm_requester: SwarmHandle = start_swarm(keypair_requester.clone(), None, event_tx2, false)
-        .await
-        .expect("Failed to start requester swarm");
+    let swarm_requester: SwarmHandle =
+        start_swarm(keypair_requester.clone(), None, event_tx2, false)
+            .await
+            .expect("Failed to start requester swarm");
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 

@@ -5,11 +5,7 @@ use btleplug::api::Manager as _;
 
 /// Log whether the local Bluetooth stack exposes at least one adapter.
 pub async fn probe_and_log() {
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "windows",
-        target_os = "macos"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
     {
         match btleplug::platform::Manager::new().await {
             Ok(manager) => match manager.adapters().await {
@@ -27,11 +23,7 @@ pub async fn probe_and_log() {
             Err(e) => tracing::warn!("btleplug: failed to create manager: {}", e),
         }
     }
-    #[cfg(not(any(
-        target_os = "linux",
-        target_os = "windows",
-        target_os = "macos"
-    )))]
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
     {
         tracing::debug!("btleplug: BLE probe skipped on this target OS");
     }

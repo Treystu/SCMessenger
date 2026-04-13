@@ -34,7 +34,7 @@ pub enum PaddingError {
 
 /// Add padding to reach a target size
 ///
-/// Padding format: [original_data][0x80][0x00...0x00]
+/// Padding format: [original_data]\[0x80\]\[0x00...0x00\]
 /// The 0x80 marker indicates start of padding.
 ///
 /// # Arguments
@@ -312,7 +312,7 @@ mod tests {
 
     #[test]
     fn test_standard_sizes_constant() {
-        assert!(STANDARD_SIZES.len() > 0);
+        assert!(!STANDARD_SIZES.is_empty());
         for i in 1..STANDARD_SIZES.len() {
             assert!(STANDARD_SIZES[i] > STANDARD_SIZES[i - 1]);
         }

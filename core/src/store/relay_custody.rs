@@ -7,12 +7,12 @@
 use crate::store::backend::SledStorage;
 use crate::store::backend::{MemoryStorage, StorageBackend};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 #[cfg(all(not(target_arch = "wasm32"), unix))]
 use std::ffi::CString;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use uuid::Uuid;
 
 const CUSTODY_MSG_PREFIX: &str = "relay_custody_msg_";

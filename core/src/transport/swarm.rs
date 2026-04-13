@@ -1270,26 +1270,25 @@ pub async fn start_swarm_with_config(
     {
         let local_peer_id = keypair.public().to_peer_id();
 
-        let mut swarm: libp2p::Swarm<IronCoreBehaviour> = libp2p::SwarmBuilder::with_existing_identity(keypair)
-            .with_tokio()
-            .with_tcp(
-                libp2p::tcp::Config::default(),
-                libp2p::noise::Config::new,
-                libp2p::yamux::Config::default,
-            )?
-            .with_websocket(
-                libp2p::noise::Config::new,
-                libp2p::yamux::Config::default,
-            ).await?
-            .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)?
-            .with_behaviour(|key, relay_client| {
-                IronCoreBehaviour::new(key, relay_client, headless)
-                    .expect("Failed to create network behaviour")
-            })?
-            .with_swarm_config(|cfg: libp2p::swarm::Config| {
-                cfg.with_idle_connection_timeout(web_time::Duration::from_secs(600))
-            })
-            .build();
+        let mut swarm: libp2p::Swarm<IronCoreBehaviour> =
+            libp2p::SwarmBuilder::with_existing_identity(keypair)
+                .with_tokio()
+                .with_tcp(
+                    libp2p::tcp::Config::default(),
+                    libp2p::noise::Config::new,
+                    libp2p::yamux::Config::default,
+                )?
+                .with_websocket(libp2p::noise::Config::new, libp2p::yamux::Config::default)
+                .await?
+                .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)?
+                .with_behaviour(|key, relay_client| {
+                    IronCoreBehaviour::new(key, relay_client, headless)
+                        .expect("Failed to create network behaviour")
+                })?
+                .with_swarm_config(|cfg: libp2p::swarm::Config| {
+                    cfg.with_idle_connection_timeout(web_time::Duration::from_secs(600))
+                })
+                .build();
 
         // Start listening on ports
         let mut bind_results = Vec::new();
@@ -2816,9 +2815,9 @@ pub async fn start_swarm_with_config(
                                 for ext_addr in swarm.external_addresses().cloned() {
                                     // Construct: /.../p2p/<our-id>/p2p-circuit/p2p/<their-id>
                                     let mut circuit_addr: Multiaddr = ext_addr;
-                                    circuit_addr.push(libp2p::multiaddr::Protocol::P2p(local_peer_id.into()));
+                                    circuit_addr.push(libp2p::multiaddr::Protocol::P2p(local_peer_id));
                                     circuit_addr.push(libp2p::multiaddr::Protocol::P2pCircuit);
-                                    circuit_addr.push(libp2p::multiaddr::Protocol::P2p(peer_id.into()));
+                                    circuit_addr.push(libp2p::multiaddr::Protocol::P2p(peer_id));
                                     addresses.push(circuit_addr.to_string());
                                 }
 

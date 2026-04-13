@@ -44,7 +44,7 @@ fn test_two_node_message_roundtrip() {
 
     // Alice prepares (encrypts) the envelope.
     let envelope_bytes = alice
-        .prepare_message(pubkey(&bob), plaintext.to_string())
+        .prepare_message(pubkey(&bob), plaintext.to_string(), None)
         .expect("prepare_message must succeed");
 
     assert!(
@@ -89,7 +89,7 @@ fn test_wrong_recipient_cannot_decrypt() {
     let eve = make_node();
 
     let envelope_bytes = alice
-        .prepare_message(pubkey(&bob), "Secret for Bob only".to_string())
+        .prepare_message(pubkey(&bob), "Secret for Bob only".to_string(), None)
         .expect("prepare_message must succeed");
 
     let result = eve.receive_message(envelope_bytes);
@@ -112,7 +112,7 @@ fn test_envelope_signature_verification() {
     let bob = make_node();
 
     let mut envelope_bytes = alice
-        .prepare_message(pubkey(&bob), "Tamper me if you dare".to_string())
+        .prepare_message(pubkey(&bob), "Tamper me if you dare".to_string(), None)
         .expect("prepare_message must succeed");
 
     // Flip a byte well into the payload (past any headers / nonce material).
@@ -140,7 +140,7 @@ fn test_duplicate_delivery_rejected() {
     let bob = make_node();
 
     let envelope_bytes = alice
-        .prepare_message(pubkey(&bob), "Once is enough".to_string())
+        .prepare_message(pubkey(&bob), "Once is enough".to_string(), None)
         .expect("prepare_message must succeed");
 
     // First delivery succeeds.
@@ -178,7 +178,7 @@ fn test_multiple_messages_roundtrip() {
 
     for expected_text in &messages {
         let envelope_bytes = alice
-            .prepare_message(bob_pubkey.clone(), expected_text.to_string())
+            .prepare_message(bob_pubkey.clone(), expected_text.to_string(), None)
             .expect("prepare_message must succeed");
 
         let received = bob
@@ -213,7 +213,7 @@ fn test_self_message_roundtrip() {
     let plaintext = "Note to self";
 
     let envelope_bytes = node
-        .prepare_message(pubkey(&node), plaintext.to_string())
+        .prepare_message(pubkey(&node), plaintext.to_string(), None)
         .expect("prepare_message to self must succeed");
 
     let received = node
@@ -241,7 +241,7 @@ fn test_empty_payload_roundtrip() {
     let bob = make_node();
 
     let envelope_bytes = alice
-        .prepare_message(pubkey(&bob), String::new())
+        .prepare_message(pubkey(&bob), String::new(), None)
         .expect("prepare_message with empty body must succeed");
 
     let received = bob

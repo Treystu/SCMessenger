@@ -11,8 +11,8 @@ pub mod drift;
 pub mod identity;
 pub mod message;
 pub mod notification;
-pub mod observability;
 pub mod notification_defaults;
+pub mod observability;
 pub mod privacy;
 pub mod routing;
 pub mod store;
@@ -1036,7 +1036,11 @@ impl IronCore {
     ///
     /// Decrypts the backup with the provided passphrase, then restores the
     /// identity key material. See `export_identity_backup` for format details.
-    pub fn import_identity_backup(&self, backup: String, passphrase: String) -> Result<(), IronCoreError> {
+    pub fn import_identity_backup(
+        &self,
+        backup: String,
+        passphrase: String,
+    ) -> Result<(), IronCoreError> {
         let decrypted_json = crypto::backup::decrypt_backup(&backup, &passphrase)?;
         let payload: IdentityBackupV1 =
             serde_json::from_str(&decrypted_json).map_err(|_| IronCoreError::InvalidInput)?;
@@ -1839,7 +1843,11 @@ impl IronCore {
         // 1. Set blocked+deleted state so future ingress rejects payloads.
         self.blocked_manager
             .block_and_delete(peer_id.clone(), reason)?;
-        self.emit_audit(AuditEventType::ContactBlocked, Some(peer_id.clone()), Some("block_and_delete".to_string()));
+        self.emit_audit(
+            AuditEventType::ContactBlocked,
+            Some(peer_id.clone()),
+            Some("block_and_delete".to_string()),
+        );
         // 2. Purge all existing stored messages for this peer from core history.
         //    Propagate storage errors so callers know when the purge is incomplete.
         self.history.read().remove_conversation(peer_id.clone())?;
@@ -2078,7 +2086,7 @@ mod tests {
         let bob_public_key = bob_info.public_key_hex.unwrap();
 
         let envelope_bytes = alice
-.prepare_message(bob_public_key, "Hello Bob!".to_string(), None)
+            .prepare_message(bob_public_key, "Hello Bob!".to_string(), None)
             .unwrap();
 
         let msg = bob.receive_message(envelope_bytes).unwrap();
@@ -2106,7 +2114,7 @@ mod tests {
         let bob_public_key = bob.get_identity_info().public_key_hex.unwrap();
 
         let envelope_bytes = alice
-.prepare_message(bob_public_key, "Secret message".to_string(), None)
+            .prepare_message(bob_public_key, "Secret message".to_string(), None)
             .unwrap();
 
         let result = eve.receive_message(envelope_bytes);
@@ -2126,7 +2134,7 @@ mod tests {
         let bob_public_key = bob.get_identity_info().public_key_hex.unwrap();
 
         let envelope_bytes = alice
-.prepare_message(bob_public_key, "test".to_string(), None)
+            .prepare_message(bob_public_key, "test".to_string(), None)
             .unwrap();
 
         bob.receive_message(envelope_bytes.clone()).unwrap();
@@ -2244,7 +2252,7 @@ mod tests {
 
         let bob_pk = bob.get_identity_info().public_key_hex.unwrap();
         let _ = alice
-.prepare_message(bob_pk, "persist me".to_string(), None)
+            .prepare_message(bob_pk, "persist me".to_string(), None)
             .unwrap();
         assert_eq!(alice.outbox_count(), 1);
         drop(alice);
@@ -2267,7 +2275,7 @@ mod tests {
 
         let alice_pk = alice.get_identity_info().public_key_hex.unwrap();
         let envelope = bob
-.prepare_message(alice_pk, "hi from bob".to_string(), None)
+            .prepare_message(alice_pk, "hi from bob".to_string(), None)
             .unwrap();
         alice.receive_message(envelope).unwrap();
         assert_eq!(alice.inbox_count(), 1);
@@ -2314,7 +2322,9 @@ mod tests {
         core.grant_consent();
         core.initialize_identity().unwrap();
 
-        let backup = core.export_identity_backup("correct-passphrase".to_string()).unwrap();
+        let backup = core
+            .export_identity_backup("correct-passphrase".to_string())
+            .unwrap();
         let core2 = IronCore::new();
         let result = core2.import_identity_backup(backup, "wrong-passphrase".to_string());
         assert!(result.is_err(), "wrong passphrase must fail decryption");
@@ -2324,7 +2334,9 @@ mod tests {
     fn test_import_identity_backup_invalid_hex() {
         let core = IronCore::new();
         let bad = "not-valid-hex!!".to_string();
-        assert!(core.import_identity_backup(bad, "passphrase".to_string()).is_err());
+        assert!(core
+            .import_identity_backup(bad, "passphrase".to_string())
+            .is_err());
     }
 
     #[test]
@@ -2338,7 +2350,7 @@ mod tests {
 
         let recipient_pk = recipient.get_identity_info().public_key_hex.unwrap();
         let prepared = core
-.prepare_message_with_id(recipient_pk, "hello".to_string(), None)
+            .prepare_message_with_id(recipient_pk, "hello".to_string(), None)
             .unwrap();
         assert_eq!(core.outbox_count(), 1);
 
@@ -2372,13 +2384,13 @@ mod tests {
         let over_8193 = "a".repeat(8193);
 
         assert!(sender
-.prepare_message(recipient_pk.clone(), within_8191, None)
+            .prepare_message(recipient_pk.clone(), within_8191, None)
             .is_ok());
         assert!(sender
-.prepare_message(recipient_pk.clone(), at_8192, None)
+            .prepare_message(recipient_pk.clone(), at_8192, None)
             .is_ok());
         assert!(matches!(
-sender.prepare_message(recipient_pk, over_8193, None),
+            sender.prepare_message(recipient_pk, over_8193, None),
             Err(IronCoreError::InvalidInput)
         ));
     }
@@ -2396,7 +2408,7 @@ sender.prepare_message(recipient_pk, over_8193, None),
         let sender_pk = sender.get_identity_info().public_key_hex.unwrap();
 
         let prepared = sender
-.prepare_message_with_id(recipient_pk, "ws4 receipt convergence".to_string(), None)
+            .prepare_message_with_id(recipient_pk, "ws4 receipt convergence".to_string(), None)
             .unwrap();
         assert_eq!(sender.outbox_count(), 1);
 
@@ -2437,7 +2449,11 @@ sender.prepare_message(recipient_pk, over_8193, None),
         let sender_pk = sender.get_identity_info().public_key_hex.unwrap();
 
         let prepared = sender
-.prepare_message_with_id(recipient_pk, "forged receipt should be ignored".to_string(), None)
+            .prepare_message_with_id(
+                recipient_pk,
+                "forged receipt should be ignored".to_string(),
+                None,
+            )
             .unwrap();
         assert_eq!(sender.outbox_count(), 1);
 

@@ -345,7 +345,7 @@ mod tests {
         assert!(phase2.is_some());
 
         // Eventually should complete
-        let phase3 = engine.advance_discovery_phase();
+        let _phase3 = engine.advance_discovery_phase();
         let phase4 = engine.advance_discovery_phase();
         assert!(phase4.is_none());
         assert!(!engine.is_discovery_in_progress());

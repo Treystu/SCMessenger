@@ -579,8 +579,8 @@ mod tests {
         let (_completion, _) = session_a.complete(&store_a, &response).unwrap();
 
         // Both should identify differences (exact count depends on collisions and wrapping)
-        assert!(session_a.our_missing_ids().len() > 0);
-        assert!(session_b.our_missing_ids().len() > 0);
+        assert!(!session_a.our_missing_ids().is_empty());
+        assert!(!session_b.our_missing_ids().is_empty());
     }
 
     #[test]
@@ -606,7 +606,7 @@ mod tests {
         {
             // B thinks A is missing msg 1 (correct) and 2 (wrong, A doesn't have 2)
             // So missing_envelopes should contain msg 1 and 2
-            assert!(missing_envelopes.len() > 0);
+            assert!(!missing_envelopes.is_empty());
         }
     }
 }

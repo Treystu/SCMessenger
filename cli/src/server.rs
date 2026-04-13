@@ -148,7 +148,9 @@ pub struct WebContext {
 impl WebContext {
     /// Get transport bridge reference (for future API activation)
     #[allow(dead_code)]
-    pub fn transport_bridge(&self) -> &Arc<tokio::sync::Mutex<crate::transport_bridge::TransportBridge>> {
+    pub fn transport_bridge(
+        &self,
+    ) -> &Arc<tokio::sync::Mutex<crate::transport_bridge::TransportBridge>> {
         &self.transport_bridge
     }
 }
@@ -277,7 +279,8 @@ pub async fn start(
     let root_route = warp::path::end()
         .and(warp::get())
         .map(move || {
-            let body = std::fs::read_to_string("dist/index.html").unwrap_or_else(|_| landing_html.clone());
+            let body =
+                std::fs::read_to_string("dist/index.html").unwrap_or_else(|_| landing_html.clone());
             warp::http::Response::builder()
                 .header("content-type", "text/html; charset=utf-8")
                 .body(body)
@@ -286,9 +289,7 @@ pub async fn start(
         .boxed();
 
     // 1b. Static WASM/WebUI assets (relative URLs often use /dist/...)
-    let dist_route = warp::path("dist")
-        .and(warp::fs::dir("dist"))
-        .boxed();
+    let dist_route = warp::path("dist").and(warp::fs::dir("dist")).boxed();
 
     // 2. WebSocket at /ws — strict Origin (CSWSH mitigation); see `websocket_origin_allowed`
     let bind_port = port;
@@ -364,38 +365,32 @@ pub async fn start(
         .boxed();
 
     // 9. UI Static Assets (The Messenger App)
-    let ui_route = warp::path("ui")
-        .and(warp::fs::dir("ui"))
-        .boxed();
+    let ui_route = warp::path("ui").and(warp::fs::dir("ui")).boxed();
 
     // 10. WASM Static Assets
-    let wasm_route = warp::path("wasm")
-        .and(warp::fs::dir("wasm"))
-        .boxed();
+    let wasm_route = warp::path("wasm").and(warp::fs::dir("wasm")).boxed();
 
     // 11. Transport Bridge API - Simplified inline implementation
     // Directly implement transport endpoints to avoid warp filter chaining complexity
     let ctx_capabilities = web_ctx.clone();
     let ctx_paths = web_ctx.clone();
     let ctx_register = web_ctx.clone();
-    
+
     // Transport capabilities endpoint
     let transport_capabilities_route = warp::path!("api" / "transport" / "capabilities")
         .and(warp::get())
         .and(warp::any().map(move || ctx_capabilities.clone()))
-        .and_then(
-            |ctx: Arc<crate::server::WebContext>| async move {
-                let bridge = ctx.transport_bridge.lock().await;
-                let cli_caps = bridge.get_cli_capabilities();
-                let peer_caps = bridge.get_available_peer_capabilities();
-                
-                let response = serde_json::json!({
-                    "cli_capabilities": cli_caps,
-                    "peer_capabilities": peer_caps
-                });
-                Ok::<_, warp::Rejection>(warp::reply::json(&response))
-            }
-        )
+        .and_then(|ctx: Arc<crate::server::WebContext>| async move {
+            let bridge = ctx.transport_bridge.lock().await;
+            let cli_caps = bridge.get_cli_capabilities();
+            let peer_caps = bridge.get_available_peer_capabilities();
+
+            let response = serde_json::json!({
+                "cli_capabilities": cli_caps,
+                "peer_capabilities": peer_caps
+            });
+            Ok::<_, warp::Rejection>(warp::reply::json(&response))
+        })
         .boxed();
 
     // Transport paths endpoint
@@ -409,9 +404,11 @@ pub async fn start(
                     let paths = bridge.find_all_paths(&peer_id_parsed);
                     Ok::<_, warp::Rejection>(warp::reply::json(&paths))
                 } else {
-                    Err(warp::reject::custom(crate::transport_api::TransportError::InvalidPeerId))
+                    Err(warp::reject::custom(
+                        crate::transport_api::TransportError::InvalidPeerId,
+                    ))
                 }
-            }
+            },
         )
         .boxed();
 
@@ -421,27 +418,42 @@ pub async fn start(
         .and(warp::body::json())
         .and(warp::any().map(move || ctx_register.clone()))
         .and_then(
-            |request: crate::transport_api::RegisterPeerRequest, ctx: Arc<crate::server::WebContext>| async move {
+            |request: crate::transport_api::RegisterPeerRequest,
+             ctx: Arc<crate::server::WebContext>| async move {
                 if let Ok(peer_id) = request.peer_id.parse::<libp2p::PeerId>() {
-                    let capabilities = request.capabilities.iter()
+                    let capabilities = request
+                        .capabilities
+                        .iter()
                         .filter_map(|cap| match cap.as_str() {
-                            "BLE" => Some(scmessenger_core::transport::abstraction::TransportType::BLE),
-                            "WiFiAware" => Some(scmessenger_core::transport::abstraction::TransportType::WiFiAware),
-                            "WiFiDirect" => Some(scmessenger_core::transport::abstraction::TransportType::WiFiDirect),
-                            "Internet" => Some(scmessenger_core::transport::abstraction::TransportType::Internet),
-                            "Local" => Some(scmessenger_core::transport::abstraction::TransportType::Local),
-                            _ => None
+                            "BLE" => {
+                                Some(scmessenger_core::transport::abstraction::TransportType::BLE)
+                            }
+                            "WiFiAware" => Some(
+                                scmessenger_core::transport::abstraction::TransportType::WiFiAware,
+                            ),
+                            "WiFiDirect" => Some(
+                                scmessenger_core::transport::abstraction::TransportType::WiFiDirect,
+                            ),
+                            "Internet" => Some(
+                                scmessenger_core::transport::abstraction::TransportType::Internet,
+                            ),
+                            "Local" => {
+                                Some(scmessenger_core::transport::abstraction::TransportType::Local)
+                            }
+                            _ => None,
                         })
                         .collect::<Vec<_>>();
-                    
+
                     let mut bridge = ctx.transport_bridge.lock().await;
                     bridge.register_peer_capabilities(peer_id, capabilities);
-                    
+
                     Ok(warp::reply::json(&serde_json::json!({"status": "success"})))
                 } else {
-                    Err(warp::reject::custom(crate::transport_api::TransportError::InvalidPeerId))
+                    Err(warp::reject::custom(
+                        crate::transport_api::TransportError::InvalidPeerId,
+                    ))
                 }
-            }
+            },
         )
         .boxed();
 
@@ -520,7 +532,8 @@ async fn handle_network_info(ctx: Arc<WebContext>) -> Result<impl warp::Reply, w
     // Get CLI transport capabilities for WASM
     let transport_bridge = ctx.transport_bridge.lock().await;
     let cli_capabilities = transport_bridge.get_cli_capabilities();
-    let capabilities_list: Vec<String> = cli_capabilities.iter()
+    let capabilities_list: Vec<String> = cli_capabilities
+        .iter()
         .map(|cap| format!("{:?}", cap))
         .collect();
 
@@ -558,7 +571,7 @@ async fn handle_network_info(ctx: Arc<WebContext>) -> Result<impl warp::Reply, w
             capabilities: capabilities_list,
             is_headless_node: true,
             supports_forwarding: true,
-            ws_bridge_port: 9002,  // WebSocket bridge port
+            ws_bridge_port: 9002, // WebSocket bridge port
             api_base_url: format!("http://127.0.0.1:{}", ctx.ui_port),
         }),
     };
