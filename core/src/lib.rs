@@ -11,6 +11,7 @@ pub mod drift;
 pub mod identity;
 pub mod message;
 pub mod notification;
+pub mod observability;
 pub mod notification_defaults;
 pub mod privacy;
 pub mod routing;
@@ -35,6 +36,8 @@ use std::path::Path;
 use std::sync::Arc;
 use thiserror::Error;
 use zeroize::Zeroize;
+
+use observability::{AuditEventType, AuditLog as AuditLogType};
 
 pub use crypto::{decrypt_message, encrypt_message};
 pub use identity::IdentityManager;
@@ -286,6 +289,8 @@ pub struct IronCore {
     blocked_manager: Arc<store::blocked::BlockedManager>,
     /// Relay registration registry backed by the canonical root store
     relay_registry: Arc<store::RelayRegistry>,
+    /// Tamper-evident audit log for security-critical operations
+    audit_log: Arc<RwLock<AuditLogType>>,
     /// UniFFI-facing contacts manager (non-wasm builds only)
     #[cfg(not(target_arch = "wasm32"))]
     contacts_bridge_manager: Arc<crate::contacts_bridge::ContactManager>,
@@ -725,6 +730,7 @@ impl IronCore {
             log_manager,
             blocked_manager,
             relay_registry,
+            audit_log: Arc::new(RwLock::new(AuditLogType::new())),
             #[cfg(not(target_arch = "wasm32"))]
             contacts_bridge_manager,
             #[cfg(not(target_arch = "wasm32"))]
@@ -845,9 +851,27 @@ impl IronCore {
             log_manager,
             blocked_manager,
             relay_registry,
+            audit_log: Arc::new(RwLock::new(AuditLogType::new())),
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// Internal helper: emit an audit event to the tamper-evident log.
+    /// Fire-and-forget — never propagates errors to callers.
+    fn emit_audit(
+        &self,
+        event_type: AuditEventType,
+        peer_id: Option<String>,
+        details: Option<String>,
+    ) {
+        let identity_id = self
+            .identity
+            .read()
+            .identity_id()
+            .unwrap_or_else(|| "unknown".to_string());
+        let mut log = self.audit_log.write();
+        let _ = log.append(event_type, Some(identity_id), peer_id, details);
     }
 
     // ------------------------------------------------------------------------
@@ -895,7 +919,9 @@ impl IronCore {
         self.identity
             .write()
             .initialize()
-            .map_err(|_| IronCoreError::CryptoError)
+            .map_err(|_| IronCoreError::CryptoError)?;
+        self.emit_audit(AuditEventType::IdentityCreated, None, None);
+        Ok(())
     }
 
     /// Get identity information
@@ -977,6 +1003,7 @@ impl IronCore {
             nickname: identity.nickname(),
         };
         key_bytes.zeroize();
+        self.emit_audit(AuditEventType::BackupExported, None, None);
         serde_json::to_string(&payload).map_err(|_| IronCoreError::Internal)
     }
 
@@ -1000,6 +1027,8 @@ impl IronCore {
                 .set_nickname(nickname)
                 .map_err(|_| IronCoreError::StorageError)?;
         }
+        drop(identity);
+        self.emit_audit(AuditEventType::BackupImported, None, None);
         Ok(())
     }
 
@@ -1276,6 +1305,13 @@ impl IronCore {
                 attempts: 0,
             })
             .map_err(|_| IronCoreError::StorageError)?;
+
+        // Audit: message prepared for sending
+        self.emit_audit(
+            AuditEventType::MessageSent,
+            Some(recipient_key_trimmed.clone()),
+            None,
+        );
 
         Ok(PreparedMessage {
             message_id,
@@ -1704,16 +1740,19 @@ impl IronCore {
     /// Block a peer by ID
     pub fn block_peer(&self, peer_id: String, reason: Option<String>) -> Result<(), IronCoreError> {
         use crate::store::blocked::BlockedIdentity;
-        let mut blocked = BlockedIdentity::new(peer_id);
+        let mut blocked = BlockedIdentity::new(peer_id.clone());
         if let Some(r) = reason {
             blocked.reason = Some(r);
         }
-        self.blocked_manager.block(blocked)
+        self.blocked_manager.block(blocked)?;
+        self.emit_audit(AuditEventType::ContactBlocked, Some(peer_id), None);
+        Ok(())
     }
 
     /// Unblock a peer and restore any evidentiary-retained messages to visible.
     pub fn unblock_peer(&self, peer_id: String) -> Result<(), IronCoreError> {
         self.blocked_manager.unblock(peer_id.clone(), None)?;
+        self.emit_audit(AuditEventType::ContactRemoved, Some(peer_id.clone()), None);
         // Restore visibility of messages that were hidden during the block period.
         // Log but do not fail the unblock operation if restoration encounters a
         // storage error — the important state transition (unblock) has already
@@ -1765,6 +1804,7 @@ impl IronCore {
         // 1. Set blocked+deleted state so future ingress rejects payloads.
         self.blocked_manager
             .block_and_delete(peer_id.clone(), reason)?;
+        self.emit_audit(AuditEventType::ContactBlocked, Some(peer_id.clone()), Some("block_and_delete".to_string()));
         // 2. Purge all existing stored messages for this peer from core history.
         //    Propagate storage errors so callers know when the purge is incomplete.
         self.history.read().remove_conversation(peer_id.clone())?;

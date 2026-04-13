@@ -5,7 +5,8 @@ pub use scmessenger_core::*;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use scmessenger_core::IronCore;
+    use scmessenger_core::SwarmBridge;
 
     #[test]
     fn test_mobile_bindings_lifecycle() {

@@ -1,7 +1,56 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-04-11
+Last updated: 2026-04-12
+
+---
+
+## 🔴 2026-04-12 COMPREHENSIVE GAP ANALYSIS — v1.0 Production Roadmap
+
+**Status:** 🔴 CRITICAL GAPS IDENTIFIED — See `PRODUCTION_ROADMAP.md` for full details
+
+### 28 Gaps Found (6 P0, 5 P1, 8 P2, 9 P3)
+
+**P0 Non-Negotiable (must fix before any release):**
+1. ~~First-run consent gate (PHIL-004)~~ — **ALREADY IMPLEMENTED on all platforms** (Android `OnboardingScreen.kt`+`ConsentView`, iOS `OnboardingFlow.swift`+`ConsentView`, WASM `ui/app.js` onboarding modal, CLI `scm init`). **Remaining**: Gate `initialize_identity()` at Rust core API level until platform confirms consent (currently UI-only gate).
+2. No bounded retention enforcement (PHIL-005) — sled grows without bound, no compaction
+3. No anti-abuse controls (PHIL-009) — only token-bucket rate limiting, no reputation/spam detection
+4. No forward secrecy — ephemeral ECDH per-message but no ratcheting, compromise = all history
+5. Identity backup stores `secret_key_hex` in plaintext JSON — no passphrase encryption
+6. No audit logging — security events leave no tamper-evident trail
+
+**P1 Core Wiring (dormant modules):**
+7. Drift Protocol: 8 files, all unit-tested, NONE wired to production path
+8. Mycorrhizal Routing: 10 files, all unit-tested, NONE wired to SwarmHandle dispatch
+9. Privacy modules: onion/cover/padding/timing all dormant, never called
+10. Outbox flush on PeerDiscovered incomplete (mobile/WASM paths missing)
+11. Delivery receipt generation not wired into mobile receive path
+
+**P2 Global-Scale Infrastructure:**
+12-20. No STUN/TURN, no mesh health monitoring, no peer reputation system, no bandwidth-adaptive compression, no cross-device dedup, no group messaging, no search indexing, sled not production-hardened, no E2E delivery confirmation
+
+**P3 Platform & Build:**
+21-28. CLI type annotation errors (45), core integration test rlib crash, WASM WebRTC gaps, Android/iOS partial, UniFFI fragility, no CI pipeline, no fuzzing, no graceful shutdown
+
+### Build Status (as of 2026-04-12)
+- `cargo test --workspace --lib`: ✅ 734 tests pass (0 failures)
+- `cargo test -p scmessenger-cli`: ✅ 20/20 tests pass
+- Android `./gradlew assembleDebug`: ✅ PASS (JDK 17)
+- WASM `cargo build --target wasm32-unknown-unknown`: ✅ PASS
+- `cargo test --workspace` (full): ⚠️ Core integration tests reference unimplemented Phase 2+ APIs (ReputationTracker, MultiPathDelivery, etc.); rlib format errors; rustc crash on test_address_observation.rs. CLI binary tests fixed via `test = false`.
+
+### Priority Order
+1. Build fixes (Phase 1.1) — unblock all other work
+2. Security quick wins (Phase 1.5) — encrypt backups, audit logs
+3. Consent gate (Phase 3.1) — PHIL-004
+4. Retention enforcement (Phase 3.2) — PHIL-005
+5. Core wiring (Phase 2) — Drift, Routing, Privacy
+6. Anti-abuse (Phase 3.4) — PHIL-009
+7. Platform parity (Phase 4) — PHIL-006/010
+
+See **`PRODUCTION_ROADMAP.md`** for the complete 6-phase plan with LOC estimates.
+
+---
 
 ---
 

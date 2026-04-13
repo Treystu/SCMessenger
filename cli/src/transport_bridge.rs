@@ -334,8 +334,8 @@ impl TransportBridge {
     pub fn can_reach_destination(&self, peer_id: &PeerId) -> bool {
         if let Some(caps) = self.get_peer_capabilities(peer_id) {
             // Check if we have any compatible transport
-            caps.iter().any(|dest_cap| {
-                self.cli_capabilities.iter().any(|cli_cap| {
+            caps.iter().any(|_dest_cap| {
+                self.cli_capabilities.iter().any(|_cli_cap| {
                     // Both have at least one transport in common
                     true // Simplified - in reality would check compatibility
                 })
@@ -390,20 +390,26 @@ mod tests {
     use libp2p::PeerId;
     
     fn create_test_peer_id(name: &str) -> PeerId {
-        // Create deterministic peer ID for testing
-        let mut bytes = [0u8; 32];
+        // Create a valid Ed25519-based PeerId for testing
+        use libp2p::identity::Keypair;
+        let mut seed = [0u8; 32];
         for (i, b) in name.bytes().enumerate() {
             if i < 32 {
-                bytes[i] = b;
+                seed[i] = b;
             }
         }
-        PeerId::from_bytes(&bytes).unwrap()
+        let keypair = Keypair::ed25519_from_bytes(seed).expect("valid seed");
+        keypair.public().to_peer_id()
     }
     
     #[test]
     fn test_transport_bridge_creation() {
         let bridge = TransportBridge::new();
-        assert_eq!(bridge.cli_capabilities.len(), 2); // Internet + Local
+        // Internet + Local always; +BLE on desktop platforms (linux/windows/macos)
+        #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
+        assert_eq!(bridge.cli_capabilities.len(), 3);
+        #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+        assert_eq!(bridge.cli_capabilities.len(), 2);
         assert!(bridge.cli_capabilities.contains(&TransportType::Internet));
         assert!(bridge.cli_capabilities.contains(&TransportType::Local));
     }

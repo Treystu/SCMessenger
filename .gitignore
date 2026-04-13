@@ -88,3 +88,13 @@ live_logcat.log
 diagnostic_snapshots/
 .aider*
 WASM_latest.md
+
+# SCMessenger Agent Swarm Exhaust
+scmessenger_swarm/.venv/
+scmessenger_swarm/swarm_logs/
+scmessenger_swarm/__pycache__/
+scmessenger_swarm/task_*.json
+AgentSwarmCline/scmessenger_swarm/.venv/
+AgentSwarmCline/scmessenger_swarm/swarm_logs/
+AgentSwarmCline/scmessenger_swarm/__pycache__/
+AgentSwarmCline/scmessenger_swarm/task_*.json

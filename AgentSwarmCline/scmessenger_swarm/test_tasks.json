@@ -1,0 +1,10 @@
+[
+  {
+    "description": "Write a Rust struct for a DHT routing table entry with fields: node_id, ip_address, port, last_seen_unix. Save to routing_table.rs.",
+    "expected_output": "A confirmation that routing_table.rs has been created with the correct Rust struct."
+  },
+  {
+    "description": "Write a Rust enum for message types in the P2P protocol: Handshake, Data, Ack, Disconnect. Save to message_types.rs.",
+    "expected_output": "A confirmation that message_types.rs has been created with the correct Rust enum."
+  }
+]
