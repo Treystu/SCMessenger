@@ -1868,6 +1868,55 @@ impl IronCore {
             delegate.on_peer_disconnected(peer_id);
         }
     }
+
+    // ========================================================================
+    // AUDIT LOG
+    // ========================================================================
+
+    /// Return all audit events in chronological order.
+    pub fn get_audit_log(&self) -> Vec<observability::AuditEvent> {
+        self.audit_log.read().events.clone()
+    }
+
+    /// Return audit events matching the given event type.
+    pub fn get_audit_events_by_type(
+        &self,
+        event_type: observability::AuditEventType,
+    ) -> Vec<observability::AuditEvent> {
+        self.audit_log
+            .read()
+            .events
+            .iter()
+            .filter(|e| e.event_type == event_type)
+            .cloned()
+            .collect()
+    }
+
+    /// Return audit events at or after the given unix timestamp.
+    pub fn get_audit_events_since(&self, since_unix_secs: u64) -> Vec<observability::AuditEvent> {
+        self.audit_log
+            .read()
+            .events
+            .iter()
+            .filter(|e| e.timestamp_unix_secs >= since_unix_secs)
+            .cloned()
+            .collect()
+    }
+
+    /// Export the entire audit log as a JSON string for platform persistence.
+    pub fn export_audit_log(&self) -> Result<String, IronCoreError> {
+        let log = self.audit_log.read();
+        serde_json::to_string(&*log).map_err(|_| IronCoreError::Internal)
+    }
+
+    /// Validate the cryptographic chain integrity of the audit log.
+    /// Returns Ok(()) if the chain is intact, Err with details if tampered.
+    pub fn validate_audit_chain(&self) -> Result<(), IronCoreError> {
+        self.audit_log
+            .read()
+            .validate_chain()
+            .map_err(|_| IronCoreError::Internal)
+    }
 }
 
 impl Default for IronCore {
