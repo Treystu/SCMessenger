@@ -761,17 +761,18 @@ impl IronCore {
 
     /// Export the local identity as a backup string (for import on another device).
     #[wasm_bindgen(js_name = exportIdentityBackup)]
-    pub fn export_identity_backup(&self) -> Result<String, JsValue> {
+    pub fn export_identity_backup(&self, passphrase: String) -> Result<String, JsValue> {
         self.inner
-            .export_identity_backup()
+            .export_identity_backup(passphrase)
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
-    /// Import an identity from a backup string produced by `exportIdentityBackup`.
+    /// Import an identity from an encrypted backup string produced by `exportIdentityBackup`.
+    /// Requires the same passphrase that was used during export.
     #[wasm_bindgen(js_name = importIdentityBackup)]
-    pub fn import_identity_backup(&self, backup: String) -> Result<(), JsValue> {
+    pub fn import_identity_backup(&self, backup: String, passphrase: String) -> Result<(), JsValue> {
         self.inner
-            .import_identity_backup(backup)
+            .import_identity_backup(backup, passphrase)
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 

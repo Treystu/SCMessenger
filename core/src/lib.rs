@@ -1011,8 +1011,12 @@ impl IronCore {
             .map_err(|_| IronCoreError::InvalidInput)
     }
 
-    /// Export identity key material for platform-secure backup.
-    pub fn export_identity_backup(&self) -> Result<String, IronCoreError> {
+    /// Export identity key material as an encrypted backup.
+    ///
+    /// The backup is encrypted with the provided passphrase using
+    /// PBKDF2-HMAC-SHA256 (600k iterations) + XChaCha20-Poly1305.
+    /// Returns hex-encoded nonce+ciphertext.
+    pub fn export_identity_backup(&self, passphrase: String) -> Result<String, IronCoreError> {
         let identity = self.identity.read();
         let mut key_bytes = identity
             .export_key_bytes()
@@ -1023,14 +1027,19 @@ impl IronCore {
             nickname: identity.nickname(),
         };
         key_bytes.zeroize();
+        let json_payload = serde_json::to_string(&payload).map_err(|_| IronCoreError::Internal)?;
         self.emit_audit(AuditEventType::BackupExported, None, None);
-        serde_json::to_string(&payload).map_err(|_| IronCoreError::Internal)
+        crypto::backup::encrypt_backup(&json_payload, &passphrase)
     }
 
-    /// Import identity key material from a platform-secure backup payload.
-    pub fn import_identity_backup(&self, backup: String) -> Result<(), IronCoreError> {
+    /// Import identity key material from an encrypted backup payload.
+    ///
+    /// Decrypts the backup with the provided passphrase, then restores the
+    /// identity key material. See `export_identity_backup` for format details.
+    pub fn import_identity_backup(&self, backup: String, passphrase: String) -> Result<(), IronCoreError> {
+        let decrypted_json = crypto::backup::decrypt_backup(&backup, &passphrase)?;
         let payload: IdentityBackupV1 =
-            serde_json::from_str(&backup).map_err(|_| IronCoreError::InvalidInput)?;
+            serde_json::from_str(&decrypted_json).map_err(|_| IronCoreError::InvalidInput)?;
         if payload.version != 1 {
             return Err(IronCoreError::InvalidInput);
         }
@@ -2268,19 +2277,17 @@ mod tests {
         core.grant_consent();
         core.initialize_identity().unwrap();
 
-        let backup = core.export_identity_backup().unwrap();
+        let passphrase = "correct-horse-battery-staple".to_string();
+        let backup = core.export_identity_backup(passphrase.clone()).unwrap();
         assert!(!backup.is_empty());
 
-        // Backup payload is valid JSON
-        let parsed: serde_json::Value = serde_json::from_str(&backup).unwrap();
-        assert_eq!(parsed["version"], 1);
-        assert!(parsed["secret_key_hex"].is_string());
-        assert!(parsed.get("device_id").is_none());
-        assert!(parsed.get("seniority_timestamp").is_none());
+        // Backup payload is hex-encoded encrypted data (not plaintext JSON)
+        // Verify it's valid hex
+        assert!(hex::decode(&backup).is_ok());
 
         // Import into a fresh core and verify identity is restored
         let core2 = IronCore::new();
-        core2.import_identity_backup(backup).unwrap();
+        core2.import_identity_backup(backup, passphrase).unwrap();
 
         let orig = core.get_identity_info();
         let restored = core2.get_identity_info();
@@ -2296,17 +2303,22 @@ mod tests {
     }
 
     #[test]
-    fn test_import_identity_backup_invalid_version() {
+    fn test_identity_backup_wrong_passphrase_fails() {
         let core = IronCore::new();
-        let bad = r#"{"version":99,"secret_key_hex":"aabb","nickname":null}"#.to_string();
-        assert!(core.import_identity_backup(bad).is_err());
+        core.grant_consent();
+        core.initialize_identity().unwrap();
+
+        let backup = core.export_identity_backup("correct-passphrase".to_string()).unwrap();
+        let core2 = IronCore::new();
+        let result = core2.import_identity_backup(backup, "wrong-passphrase".to_string());
+        assert!(result.is_err(), "wrong passphrase must fail decryption");
     }
 
     #[test]
     fn test_import_identity_backup_invalid_hex() {
         let core = IronCore::new();
-        let bad = r#"{"version":1,"secret_key_hex":"not-hex!!","nickname":null}"#.to_string();
-        assert!(core.import_identity_backup(bad).is_err());
+        let bad = "not-valid-hex!!".to_string();
+        assert!(core.import_identity_backup(bad, "passphrase".to_string()).is_err());
     }
 
     #[test]

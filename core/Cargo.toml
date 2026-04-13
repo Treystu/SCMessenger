@@ -42,6 +42,7 @@ parking_lot = "0.12"
 web-time = "1.1"
 crc32fast = "1.3"
 lz4_flex = { version = "0.11", default-features = false, features = ["std"] }
+pbkdf2 = { version = "0.12.2", features = ["sha2"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 uuid = { workspace = true, features = ["js"] }

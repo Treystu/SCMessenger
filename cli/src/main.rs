@@ -210,11 +210,17 @@ enum BlockAction {
 enum IdentityAction {
     Show,
     Export {
+        /// Passphrase to encrypt the backup
+        #[arg(short, long)]
+        passphrase: String,
         /// Optional output file path for backup payload
         #[arg(short, long)]
         output: Option<String>,
     },
     Import {
+        /// Passphrase to decrypt the backup
+        #[arg(short, long)]
+        passphrase: String,
         /// Backup payload string
         #[arg(long, conflicts_with = "input")]
         backup: Option<String>,
@@ -455,9 +461,9 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
                 name.bright_cyan()
             );
         }
-        Some(IdentityAction::Export { output }) => {
+        Some(IdentityAction::Export { passphrase, output }) => {
             let backup = core
-                .export_identity_backup()
+                .export_identity_backup(passphrase)
                 .context("Failed to export identity backup")?;
             let info = core.get_identity_info();
 
@@ -483,7 +489,7 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
                 println!("{}", backup);
             }
         }
-        Some(IdentityAction::Import { backup, input }) => {
+        Some(IdentityAction::Import { passphrase, backup, input }) => {
             let payload = if let Some(path) = input {
                 std::fs::read_to_string(&path)
                     .with_context(|| format!("Failed to read backup file: {}", path))?
@@ -493,7 +499,7 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
                 anyhow::bail!("Provide --backup <payload> or --input <file>");
             };
 
-            core.import_identity_backup(payload)
+            core.import_identity_backup(payload, passphrase)
                 .context("Failed to import identity backup")?;
             let info = core.get_identity_info();
             println!("{}", "✓ Identity backup imported".green());

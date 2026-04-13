@@ -110,9 +110,9 @@ interface IronCore {
     u64? get_seniority_timestamp();
     RegistrationStateInfo get_registration_state(string identity_id);
     [Throws=IronCoreError]
-    string export_identity_backup();
+    string export_identity_backup(string passphrase);
     [Throws=IronCoreError]
-    void import_identity_backup(string backup);
+    void import_identity_backup(string backup, string passphrase);
     [Throws=IronCoreError]
     SignatureResult sign_data(bytes data);
     [Throws=IronCoreError]
