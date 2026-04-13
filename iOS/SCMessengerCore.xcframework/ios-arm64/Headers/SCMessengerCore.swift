@@ -160,10 +160,10 @@ fileprivate protocol FfiConverter {
     associatedtype FfiType
     associatedtype SwiftType
 
-    static func lift(_ value: FfiType) throws -> SwiftType
-    static func lower(_ value: SwiftType) -> FfiType
-    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType
-    static func write(_ value: SwiftType, into buf: inout [UInt8])
+    nonisolated(unsafe) static func lift(_ value: FfiType) throws -> SwiftType
+    nonisolated(unsafe) static func lower(_ value: SwiftType) -> FfiType
+    nonisolated(unsafe) static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType
+    nonisolated(unsafe) static func write(_ value: SwiftType, into buf: inout [UInt8])
 }
 
 // Types conforming to `Primitive` pass themselves directly over the FFI.
@@ -173,14 +173,14 @@ extension FfiConverterPrimitive {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public static func lift(_ value: FfiType) throws -> SwiftType {
+    public nonisolated(unsafe) static func lift(_ value: FfiType) throws -> SwiftType {
         return value
     }
 
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public static func lower(_ value: SwiftType) -> FfiType {
+    public nonisolated(unsafe) static func lower(_ value: SwiftType) -> FfiType {
         return value
     }
 }
@@ -193,7 +193,7 @@ extension FfiConverterRustBuffer {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public static func lift(_ buf: RustBuffer) throws -> SwiftType {
+    public nonisolated(unsafe) static func lift(_ buf: RustBuffer) throws -> SwiftType {
         var reader = createReader(data: Data(rustBuffer: buf))
         let value = try read(from: &reader)
         if hasRemaining(reader) {
@@ -206,7 +206,7 @@ extension FfiConverterRustBuffer {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public static func lower(_ value: SwiftType) -> RustBuffer {
+    public nonisolated(unsafe) static func lower(_ value: SwiftType) -> RustBuffer {
           var writer = createWriter()
           write(value, into: &writer)
           return RustBuffer(bytes: writer)
@@ -1420,6 +1420,12 @@ public func FfiConverterTypeHistoryManager_lower(_ value: HistoryManager) -> UIn
 
 public protocol IronCoreProtocol: AnyObject, Sendable {
     
+    /**
+     * Block a peer AND delete all their stored messages (cascade purge).
+     * Future payloads from this peer are dropped at the ingress layer.
+     */
+    func blockAndDeletePeer(peerId: String, reason: String?) throws 
+    
     func blockPeer(peerId: String, reason: String?) throws 
     
     func blockedCount() throws  -> UInt32
@@ -1428,11 +1434,19 @@ public protocol IronCoreProtocol: AnyObject, Sendable {
     
     func contactsManager()  -> ContactManager
     
+    func exportAuditLog() throws  -> String
+    
     func exportIdentityBackup() throws  -> String
     
     func exportLogs() throws  -> String
     
     func extractPublicKeyFromPeerId(peerId: String) throws  -> String
+    
+    func getAuditEventsByType(eventType: AuditEventType)  -> [AuditEvent]
+    
+    func getAuditEventsSince(sinceUnixSecs: UInt64)  -> [AuditEvent]
+    
+    func getAuditLog()  -> [AuditEvent]
     
     /**
      * Get device ID for this installation (WS13.1)
@@ -1507,6 +1521,8 @@ public protocol IronCoreProtocol: AnyObject, Sendable {
     func unblockPeer(peerId: String) throws 
     
     func updateDiskStats(totalBytes: UInt64, freeBytes: UInt64) 
+    
+    func validateAuditChain() throws 
     
     func verifySignature(data: Data, signature: Data, publicKeyHex: String) throws  -> Bool
     
@@ -1588,6 +1604,19 @@ public static func withStorageAndLogs(storagePath: String, logDirectory: String)
     
 
     
+    /**
+     * Block a peer AND delete all their stored messages (cascade purge).
+     * Future payloads from this peer are dropped at the ingress layer.
+     */
+open func blockAndDeletePeer(peerId: String, reason: String?)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_block_and_delete_peer(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(peerId),
+        FfiConverterOptionString.lower(reason),$0
+    )
+}
+}
+    
 open func blockPeer(peerId: String, reason: String?)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
     uniffi_scmessenger_core_fn_method_ironcore_block_peer(
             self.uniffiCloneHandle(),
@@ -1624,6 +1653,14 @@ open func contactsManager() -> ContactManager  {
 })
 }
     
+open func exportAuditLog()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_export_audit_log(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
 open func exportIdentityBackup()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
     uniffi_scmessenger_core_fn_method_ironcore_export_identity_backup(
@@ -1645,6 +1682,32 @@ open func extractPublicKeyFromPeerId(peerId: String)throws  -> String  {
     uniffi_scmessenger_core_fn_method_ironcore_extract_public_key_from_peer_id(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(peerId),$0
+    )
+})
+}
+    
+open func getAuditEventsByType(eventType: AuditEventType) -> [AuditEvent]  {
+    return try!  FfiConverterSequenceTypeAuditEvent.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_ironcore_get_audit_events_by_type(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeAuditEventType_lower(eventType),$0
+    )
+})
+}
+    
+open func getAuditEventsSince(sinceUnixSecs: UInt64) -> [AuditEvent]  {
+    return try!  FfiConverterSequenceTypeAuditEvent.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_ironcore_get_audit_events_since(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(sinceUnixSecs),$0
+    )
+})
+}
+    
+open func getAuditLog() -> [AuditEvent]  {
+    return try!  FfiConverterSequenceTypeAuditEvent.lift(try! rustCall() {
+    uniffi_scmessenger_core_fn_method_ironcore_get_audit_log(
+            self.uniffiCloneHandle(),$0
     )
 })
 }
@@ -1897,6 +1960,13 @@ open func updateDiskStats(totalBytes: UInt64, freeBytes: UInt64)  {try! rustCall
             self.uniffiCloneHandle(),
         FfiConverterUInt64.lower(totalBytes),
         FfiConverterUInt64.lower(freeBytes),$0
+    )
+}
+}
+    
+open func validateAuditChain()throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
+    uniffi_scmessenger_core_fn_method_ironcore_validate_audit_chain(
+            self.uniffiCloneHandle(),$0
     )
 }
 }
@@ -2912,6 +2982,83 @@ public func FfiConverterTypeSwarmBridge_lower(_ value: SwarmBridge) -> UInt64 {
 
 
 
+/**
+ * Individual auditable event with cryptographic chaining
+ */
+public struct AuditEvent: Equatable, Hashable {
+    public var eventId: String
+    public var eventType: AuditEventType
+    public var timestampUnixSecs: UInt64
+    public var identityId: String?
+    public var peerId: String?
+    public var details: String?
+    public var prevHash: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(eventId: String, eventType: AuditEventType, timestampUnixSecs: UInt64, identityId: String?, peerId: String?, details: String?, prevHash: String) {
+        self.eventId = eventId
+        self.eventType = eventType
+        self.timestampUnixSecs = timestampUnixSecs
+        self.identityId = identityId
+        self.peerId = peerId
+        self.details = details
+        self.prevHash = prevHash
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AuditEvent: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAuditEvent: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuditEvent {
+        return
+            try AuditEvent(
+                eventId: FfiConverterString.read(from: &buf), 
+                eventType: FfiConverterTypeAuditEventType.read(from: &buf), 
+                timestampUnixSecs: FfiConverterUInt64.read(from: &buf), 
+                identityId: FfiConverterOptionString.read(from: &buf), 
+                peerId: FfiConverterOptionString.read(from: &buf), 
+                details: FfiConverterOptionString.read(from: &buf), 
+                prevHash: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AuditEvent, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterTypeAuditEventType.write(value.eventType, into: &buf)
+        FfiConverterUInt64.write(value.timestampUnixSecs, into: &buf)
+        FfiConverterOptionString.write(value.identityId, into: &buf)
+        FfiConverterOptionString.write(value.peerId, into: &buf)
+        FfiConverterOptionString.write(value.details, into: &buf)
+        FfiConverterString.write(value.prevHash, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuditEvent_lift(_ buf: RustBuffer) throws -> AuditEvent {
+    return try FfiConverterTypeAuditEvent.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuditEvent_lower(_ value: AuditEvent) -> RustBuffer {
+    return FfiConverterTypeAuditEvent.lower(value)
+}
+
+
 public struct BleAdjustment: Equatable, Hashable {
     public var scanIntervalMs: UInt32
     public var advertiseIntervalMs: UInt32
@@ -2976,15 +3123,17 @@ public struct BlockedIdentity: Equatable, Hashable {
     public var blockedAt: UInt64
     public var reason: String?
     public var notes: String?
+    public var isDeleted: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(peerId: String, deviceId: String?, blockedAt: UInt64, reason: String?, notes: String?) {
+    public init(peerId: String, deviceId: String?, blockedAt: UInt64, reason: String?, notes: String?, isDeleted: Bool) {
         self.peerId = peerId
         self.deviceId = deviceId
         self.blockedAt = blockedAt
         self.reason = reason
         self.notes = notes
+        self.isDeleted = isDeleted
     }
 
     
@@ -3007,7 +3156,8 @@ public struct FfiConverterTypeBlockedIdentity: FfiConverterRustBuffer {
                 deviceId: FfiConverterOptionString.read(from: &buf), 
                 blockedAt: FfiConverterUInt64.read(from: &buf), 
                 reason: FfiConverterOptionString.read(from: &buf), 
-                notes: FfiConverterOptionString.read(from: &buf)
+                notes: FfiConverterOptionString.read(from: &buf), 
+                isDeleted: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -3017,6 +3167,7 @@ public struct FfiConverterTypeBlockedIdentity: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.blockedAt, into: &buf)
         FfiConverterOptionString.write(value.reason, into: &buf)
         FfiConverterOptionString.write(value.notes, into: &buf)
+        FfiConverterBool.write(value.isDeleted, into: &buf)
     }
 }
 
@@ -3636,10 +3787,19 @@ public struct MessageRecord: Equatable, Hashable {
     public var timestamp: UInt64
     public var senderTimestamp: UInt64
     public var delivered: Bool
+    /**
+     * When true, the message is from a blocked-only peer (evidentiary retention).
+     * It is stored in the DB but hidden from all UI-facing queries.
+     */
+    public var hidden: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, direction: MessageDirection, peerId: String, content: String, timestamp: UInt64, senderTimestamp: UInt64, delivered: Bool) {
+    public init(id: String, direction: MessageDirection, peerId: String, content: String, timestamp: UInt64, senderTimestamp: UInt64, delivered: Bool, 
+        /**
+         * When true, the message is from a blocked-only peer (evidentiary retention).
+         * It is stored in the DB but hidden from all UI-facing queries.
+         */hidden: Bool) {
         self.id = id
         self.direction = direction
         self.peerId = peerId
@@ -3647,6 +3807,7 @@ public struct MessageRecord: Equatable, Hashable {
         self.timestamp = timestamp
         self.senderTimestamp = senderTimestamp
         self.delivered = delivered
+        self.hidden = hidden
     }
 
     
@@ -3671,7 +3832,8 @@ public struct FfiConverterTypeMessageRecord: FfiConverterRustBuffer {
                 content: FfiConverterString.read(from: &buf), 
                 timestamp: FfiConverterUInt64.read(from: &buf), 
                 senderTimestamp: FfiConverterUInt64.read(from: &buf), 
-                delivered: FfiConverterBool.read(from: &buf)
+                delivered: FfiConverterBool.read(from: &buf), 
+                hidden: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -3683,6 +3845,7 @@ public struct FfiConverterTypeMessageRecord: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.timestamp, into: &buf)
         FfiConverterUInt64.write(value.senderTimestamp, into: &buf)
         FfiConverterBool.write(value.delivered, into: &buf)
+        FfiConverterBool.write(value.hidden, into: &buf)
     }
 }
 
@@ -4282,6 +4445,153 @@ public func FfiConverterTypeAdjustmentProfile_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeAdjustmentProfile_lower(_ value: AdjustmentProfile) -> RustBuffer {
     return FfiConverterTypeAdjustmentProfile.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Type of audit event for categorization and policy enforcement
+ */
+
+public enum AuditEventType: Equatable, Hashable {
+    
+    case identityCreated
+    case identityDeleted
+    case messageSent
+    case messageReceived
+    case relayEnabled
+    case relayDisabled
+    case contactAdded
+    case contactBlocked
+    case contactRemoved
+    case backupExported
+    case backupImported
+    case consentGranted
+    case storageCompacted
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension AuditEventType: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAuditEventType: FfiConverterRustBuffer {
+    typealias SwiftType = AuditEventType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuditEventType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .identityCreated
+        
+        case 2: return .identityDeleted
+        
+        case 3: return .messageSent
+        
+        case 4: return .messageReceived
+        
+        case 5: return .relayEnabled
+        
+        case 6: return .relayDisabled
+        
+        case 7: return .contactAdded
+        
+        case 8: return .contactBlocked
+        
+        case 9: return .contactRemoved
+        
+        case 10: return .backupExported
+        
+        case 11: return .backupImported
+        
+        case 12: return .consentGranted
+        
+        case 13: return .storageCompacted
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AuditEventType, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .identityCreated:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .identityDeleted:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .messageSent:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .messageReceived:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .relayEnabled:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .relayDisabled:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .contactAdded:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .contactBlocked:
+            writeInt(&buf, Int32(8))
+        
+        
+        case .contactRemoved:
+            writeInt(&buf, Int32(9))
+        
+        
+        case .backupExported:
+            writeInt(&buf, Int32(10))
+        
+        
+        case .backupImported:
+            writeInt(&buf, Int32(11))
+        
+        
+        case .consentGranted:
+            writeInt(&buf, Int32(12))
+        
+        
+        case .storageCompacted:
+            writeInt(&buf, Int32(13))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuditEventType_lift(_ buf: RustBuffer) throws -> AuditEventType {
+    return try FfiConverterTypeAuditEventType.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuditEventType_lower(_ value: AuditEventType) -> RustBuffer {
+    return FfiConverterTypeAuditEventType.lower(value)
 }
 
 
@@ -5706,6 +6016,31 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeAuditEvent: FfiConverterRustBuffer {
+    typealias SwiftType = [AuditEvent]
+
+    public static func write(_ value: [AuditEvent], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeAuditEvent.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [AuditEvent] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [AuditEvent]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeAuditEvent.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeBlockedIdentity: FfiConverterRustBuffer {
     typealias SwiftType = [BlockedIdentity]
 
@@ -5963,6 +6298,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_scmessenger_core_checksum_method_historymanager_stats() != 44139) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_block_and_delete_peer() != 43503) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_block_peer() != 2802) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5975,6 +6313,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_scmessenger_core_checksum_method_ironcore_contacts_manager() != 14615) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_export_audit_log() != 9767) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scmessenger_core_checksum_method_ironcore_export_identity_backup() != 47067) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5982,6 +6323,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_extract_public_key_from_peer_id() != 44861) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_get_audit_events_by_type() != 50708) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_get_audit_events_since() != 27372) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_get_audit_log() != 63751) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_get_device_id() != 29781) {
@@ -6066,6 +6416,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_update_disk_stats() != 12198) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scmessenger_core_checksum_method_ironcore_validate_audit_chain() != 1642) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scmessenger_core_checksum_method_ironcore_verify_signature() != 4799) {
