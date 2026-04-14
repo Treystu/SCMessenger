@@ -331,7 +331,7 @@ async fn handle_send_message(req: Request<Body>, ctx: Arc<ApiContext>) -> Result
     // Prepare and send message.
     // Uses prepare_message_with_id to trigger Core's auto-save to history.
     let prepared =
-        core.prepare_message_with_id(contact.public_key.clone(), None, request.message.clone())?;
+        core.prepare_message_with_id(contact.public_key.clone(), request.message.clone(), None)?;
 
     ctx.swarm_handle
         .send_message(peer_id, prepared.envelope_data, None, None)

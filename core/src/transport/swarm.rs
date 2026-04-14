@@ -3882,6 +3882,11 @@ pub async fn start_swarm_with_config(
                                 }).await;
                             }
                             SwarmEvent::ConnectionEstablished { peer_id, endpoint, connection_id, .. } => {
+                                tracing::info!(
+                                    event = "outbox_flush_triggered",
+                                    reason = ?crate::routing::smart_retry::DeliveryTrigger::PeerDiscovered(peer_id.to_string()),
+                                    peer = %peer_id
+                                );
                                 connection_tracker.add_connection(
                                     peer_id,
                                     endpoint.get_remote_address().clone(),

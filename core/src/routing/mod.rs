@@ -18,6 +18,7 @@ pub mod negative_cache;
 pub mod neighborhood;
 pub mod optimized_engine;
 pub mod resume_prefetch;
+pub mod smart_retry;
 pub mod timeout_budget;
 
 pub use adaptive_ttl::{ActivityHistory, AdaptiveTTLManager};
@@ -33,4 +34,5 @@ pub use resume_prefetch::{
     FrequentPeer, PrefetchConfig, PrefetchStats, PrefetchStatus, PrefetchedRoute,
     ResumePrefetchManager,
 };
+pub use smart_retry::{calculate_next_attempt, BackoffStrategy, DeliveryTrigger};
 pub use timeout_budget::{BudgetSummary, DiscoveryPhase, TimeoutBudget};

@@ -131,6 +131,12 @@ pub struct AuditLog {
     pub last_hash: String,
 }
 
+impl Default for AuditLog {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AuditLog {
     /// Create a new empty audit log with genesis hash
     pub fn new() -> Self {
