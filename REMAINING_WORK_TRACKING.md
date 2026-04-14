@@ -86,6 +86,34 @@ Resolved critical connectivity failures between browser WASM nodes and the local
 
 ---
 
+## ✅ RESOLVED - 2026-04-14: LangGraph Immune System for Surgical File Edits
+
+**Status:** ✅ COMPLETE - Actor-Critic architecture implemented
+
+Implemented a self-healing retry loop for surgical file edits using LangGraph's state machine framework.
+
+### Changes Implemented
+1. **GraphState Schema**: TypedDict tracking task_description, target_file, search_block, replace_block, error_message, file_context, retry_count, and philosophy_veto.
+2. **Surgeon Node (LLM)**: Generates exact search_block and replace_block JSON for surgical edits using deepseek-v3.2:cloud model.
+3. **Philosophy Verifier Node (LLM)**: Intercepts Surgeon output and VETOs code violating architectural tenets (Sovereign Mesh, Eventual Delivery, Extreme Efficiency, Mandatory Relay).
+4. **Applier Node (Pure Python)**: Reads target file, applies replacements if search_block matches exactly, captures 50-line context on failure for resolution.
+5. **Error Resolver Node (LLM)**: Analyzes errors and file context to generate corrected search_block and replace_block with proper indentation.
+6. **Actor-Critic Routing**: Conditional edges route failed applications back through the Error Resolver (max 3 retries) before hard fail.
+
+### Verification
+- [X] Self-healing loop executed successfully with dummy_test.txt
+- [X] Initial surgeon rejection detected and routed to resolver
+- [X] Error resolver corrected formatting issues
+- [X] Final file edit applied successfully
+- [X] Graph routed correctly through all nodes
+
+### Documentation
+- File: `AgentSwarmCline/scmessenger_swarm/surgeon_graph.py`
+- Test: `dummy_test.txt` created and edited successfully
+- Commit: 06a2a50 "Swarm: Add LangGraph immune system for surgical file edits"
+
+---
+
 ## ✅ RESOLVED - 2026-04-10: WASM/Android Parity & Bridge Visibility
 
 **Status:** ✅ COMPLETE - UI parity achieved and mesh visibility restored
