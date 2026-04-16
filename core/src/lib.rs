@@ -687,6 +687,10 @@ impl IronCore {
 
         let history_arc = Arc::new(RwLock::new(history));
 
+        // P0_SECURITY_005: Load persisted audit log from storage before struct construction
+        let audit_log_data = history_arc.read().backend();
+        let loaded_audit_log = AuditLogType::load(&audit_log_data);
+
         // Root backend for logs and storage metadata
         let root_backend: Arc<dyn store::backend::StorageBackend> =
             if let Some(path) = &storage_path {
@@ -729,13 +733,13 @@ impl IronCore {
             outbox: Arc::new(RwLock::new(outbox)),
             inbox: Arc::new(RwLock::new(inbox)),
             contacts: Arc::new(RwLock::new(contacts)),
-            history: history_arc,
+            history: history_arc.clone(),
             storage_manager,
             log_manager,
             blocked_manager,
             relay_registry,
-            // P0_SECURITY_005: Load persisted audit log from storage, or start fresh
-            audit_log: Arc::new(RwLock::new(AuditLogType::load(&history_arc.read().backend()))),
+            // P0_SECURITY_005: Use pre-loaded audit log
+            audit_log: Arc::new(RwLock::new(loaded_audit_log)),
             consent_granted: Arc::new(RwLock::new(false)),
             #[cfg(not(target_arch = "wasm32"))]
             contacts_bridge_manager,
@@ -837,6 +841,9 @@ impl IronCore {
         };
 
         let history_arc = Arc::new(RwLock::new(history));
+        // P0_SECURITY_005: Load persisted audit log from storage before struct construction
+        let audit_log_data = history_arc.read().backend();
+        let loaded_audit_log = AuditLogType::load(&audit_log_data);
         let root_backend: Arc<dyn store::backend::StorageBackend> =
             Arc::new(store::backend::MemoryStorage::new());
         let log_manager = Arc::new(store::logs::LogManager::new(root_backend.clone()));
@@ -852,13 +859,13 @@ impl IronCore {
             outbox: Arc::new(RwLock::new(outbox)),
             inbox: Arc::new(RwLock::new(inbox)),
             contacts: Arc::new(RwLock::new(contacts)),
-            history: history_arc,
+            history: history_arc.clone(),
             storage_manager,
             log_manager,
             blocked_manager,
             relay_registry,
-            // P0_SECURITY_005: Load persisted audit log from storage, or start fresh
-            audit_log: Arc::new(RwLock::new(AuditLogType::load(&history_arc.read().backend()))),
+            // P0_SECURITY_005: Use pre-loaded audit log
+            audit_log: Arc::new(RwLock::new(loaded_audit_log)),
             consent_granted: Arc::new(RwLock::new(false)),
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
