@@ -9,6 +9,8 @@
 
 | Time | Commit Hash | Type | Description | Verification | Tracking Updated |
 |------|-------------|------|-------------|-------------|-----------------|
+| 20:44 | 5718d85 | Swarm | Core observability + audit logging | cargo check PASS | Yes |
+| 20:40 | d7ec1c0 | Docs | Update COMMIT_TRACKER | Content review | Yes |
 | 20:35 | 1fb99b5 | Fix | AuditLogType::load borrow lifetime | cargo check PASS | Yes |
 | 20:32 | 4faad66 | Docs | Commit schedule implementation | Content review | Yes |
 | 20:30 | 09c6aca | Security | PHIL-005 Bounded retention enforcement | cargo check PASS | Yes |
