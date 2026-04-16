@@ -734,7 +734,8 @@ impl IronCore {
             log_manager,
             blocked_manager,
             relay_registry,
-            audit_log: Arc::new(RwLock::new(AuditLogType::new())),
+            // P0_SECURITY_005: Load persisted audit log from storage, or start fresh
+            audit_log: Arc::new(RwLock::new(AuditLogType::load(&history_arc.read().backend()))),
             consent_granted: Arc::new(RwLock::new(false)),
             #[cfg(not(target_arch = "wasm32"))]
             contacts_bridge_manager,
@@ -856,7 +857,8 @@ impl IronCore {
             log_manager,
             blocked_manager,
             relay_registry,
-            audit_log: Arc::new(RwLock::new(AuditLogType::new())),
+            // P0_SECURITY_005: Load persisted audit log from storage, or start fresh
+            audit_log: Arc::new(RwLock::new(AuditLogType::load(&history_arc.read().backend()))),
             consent_granted: Arc::new(RwLock::new(false)),
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
@@ -864,7 +866,7 @@ impl IronCore {
     }
 
     /// Internal helper: emit an audit event to the tamper-evident log.
-    /// Fire-and-forget — never propagates errors to callers.
+    /// The log is persisted periodically during maintenance and on shutdown.
     fn emit_audit(
         &self,
         event_type: AuditEventType,
@@ -1802,6 +1804,27 @@ impl IronCore {
                         );
                     }
                 }
+            }
+        }
+
+        // P0_SECURITY_005: Audit log persistence and retention.
+        // Prune events older than 365 days and persist the log to storage.
+        {
+            const AUDIT_RETENTION_DAYS: u64 = 365;
+            let cutoff = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                .saturating_sub(AUDIT_RETENTION_DAYS * 86400);
+            let mut audit_log = self.audit_log.write();
+            let pruned = audit_log.prune_before(cutoff);
+            if pruned > 0 {
+                tracing::info!("Audit log: pruned {} events older than {} days", pruned, AUDIT_RETENTION_DAYS);
+            }
+            // Persist the audit log to storage
+            let backend = self.history.read().backend();
+            if let Err(e) = audit_log.persist(&backend) {
+                tracing::warn!("Failed to persist audit log: {:?}", e);
             }
         }
 

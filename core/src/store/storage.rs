@@ -160,7 +160,7 @@ fn current_timestamp() -> u64 {
 mod tests {
     use super::*;
     use crate::store::backend::MemoryStorage;
-    use crate::store::history::HistoryManager;
+    use crate::store::history::{HistoryManager, MessageDirection, MessageRecord};
     use crate::store::logs::LogManager;
 
     fn make_storage_manager() -> StorageManager {

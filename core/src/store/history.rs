@@ -95,6 +95,11 @@ impl HistoryManager {
         Self { backend }
     }
 
+    /// P0_SECURITY_005: Expose the storage backend for audit log persistence.
+    pub fn backend(&self) -> Arc<dyn StorageBackend> {
+        self.backend.clone()
+    }
+
     pub fn add(&self, record: MessageRecord) -> Result<(), IronCoreError> {
         let key = format!("msg_{}", record.id);
         let value = serde_json::to_vec(&record).map_err(|_| IronCoreError::Internal)?;

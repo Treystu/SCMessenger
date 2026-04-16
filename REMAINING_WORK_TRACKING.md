@@ -13,7 +13,7 @@ Last updated: 2026-04-12
 
 **P0 Non-Negotiable (must fix before any release):**
 1. ~~First-run consent gate (PHIL-004)~~ — **ALREADY IMPLEMENTED on all platforms** (Android `OnboardingScreen.kt`+`ConsentView`, iOS `OnboardingFlow.swift`+`ConsentView`, WASM `ui/app.js` onboarding modal, CLI `scm init`). **Remaining**: Gate `initialize_identity()` at Rust core API level until platform confirms consent (currently UI-only gate).
-2. No bounded retention enforcement (PHIL-005) — sled grows without bound, no compaction
+2. ~~No bounded retention enforcement (PHIL-005)~~ — ✅ IMPLEMENTED 2026-04-15: RetentionConfig with max_messages (50k) + max_age_days (90) + mobile bridge pruning
 3. No anti-abuse controls (PHIL-009) — only token-bucket rate limiting, no reputation/spam detection
 4. No forward secrecy — ephemeral ECDH per-message but no ratcheting, compromise = all history
 5. Identity backup stores `secret_key_hex` in plaintext JSON — no passphrase encryption
