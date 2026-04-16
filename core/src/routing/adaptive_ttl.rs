@@ -143,6 +143,20 @@ impl AdaptiveTTLManager {
     pub fn is_empty(&self) -> bool {
         self.peer_activity.is_empty()
     }
+
+    /// Calculate dynamic TTL based on battery level and peer count.
+    /// If battery level is below 20%, halve the TTL.
+    /// If peer count is less than 3, double the TTL.
+    pub fn calculate_dynamic_ttl(base_ttl: u64, battery_level: u8, peer_count: usize) -> u64 {
+        let mut ttl = base_ttl;
+        if battery_level < 20 {
+            ttl /= 2;
+        }
+        if peer_count < 3 {
+            ttl *= 2;
+        }
+        ttl
+    }
 }
 
 impl Default for AdaptiveTTLManager {

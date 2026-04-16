@@ -52,9 +52,20 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
-    // Normalize conversationId for contact lookup - may arrive as libp2pPeerId, need to resolve to saved contact
+    // AND-SEND-BTN-001: Use remember with derivedStateOf to avoid calling getContactForPeer
+    // and isPeerAvailable on every recomposition. The underlying canonicalContactId() now
+    // uses an in-memory cache (identityIdCache), so the first call resolves via FFI and
+    // subsequent calls hit the cache. Combined with remember keys, this prevents the
+    // UI-thread-blocking FFI calls that froze the send button.
     val normalizedPeerId = com.scmessenger.android.utils.PeerIdValidator.normalize(conversationId)
-    val contact = viewModel.getContactForPeer(normalizedPeerId)
+
+    val contact = remember(normalizedPeerId) {
+        viewModel.getContactForPeer(normalizedPeerId)
+    }
+    val isPeerAvailable = remember(normalizedPeerId) {
+        viewModel.isPeerAvailable(normalizedPeerId)
+    }
+
     val localNickname = contact?.localNickname?.trim().orEmpty()
     val federatedNickname = contact?.nickname?.trim().orEmpty()
     val displayName = when {
@@ -64,7 +75,6 @@ fun ChatScreen(
     }
 
     Timber.d("CHAT_SCREEN: conversationId=$conversationId, normalizedPeerId=$normalizedPeerId, displayName=$displayName, localNick=$localNickname, fedNick=$federatedNickname, contactFound=${contact != null}, isBlocked=$isBlocked")
-    val isPeerAvailable = viewModel.isPeerAvailable(normalizedPeerId)
     var showAddContactDialog by remember { mutableStateOf(false) }
     var showBlockConfirmation by remember { mutableStateOf(false) }
 
@@ -235,25 +245,44 @@ fun ChatScreen(
                         // AND-SEND-BTN-001: Use FloatingActionButton for reliable click handling
                         FloatingActionButton(
                             onClick = {
-                                if (isBlocked) return@FloatingActionButton
-                                Timber.d("SEND_BUTTON_CLICKED: inputText.length=${inputText.length}")
+                                if (isBlocked) {
+                                    Timber.w("SEND_BUTTON_CLICKED: Peer is blocked, ignoring click")
+                                    return@FloatingActionButton
+                                }
+
+                                // Defensive logging to catch UI thread issues
+                                Timber.d("SEND_BUTTON_CLICKED: Button handler invoked")
+                                Timber.d("SEND_BUTTON_CLICKED: inputText.length=${inputText.length}, isNotBlank=${inputText.isNotBlank()}")
+
                                 val messageToSend = inputText.trim()
-                                if (messageToSend.isNotEmpty()) {
-                                    Timber.d("SEND: Clearing input immediately for instant feedback")
-                                    inputText = ""
-                                    coroutineScope.launch {
-                                        try {
-                                            val success = viewModel.sendMessage(conversationId, messageToSend)
-                                            Timber.d("SEND: Message sent, success=$success")
-                                            if (success) {
+                                if (messageToSend.isEmpty()) {
+                                    Timber.w("SEND: Attempted to send empty message")
+                                    return@FloatingActionButton
+                                }
+
+                                Timber.d("SEND: Processing message send, contentLength=${messageToSend.length}")
+
+                                // Clear input immediately for instant feedback
+                                val originalInput = inputText
+                                inputText = ""
+                                Timber.d("SEND: Input cleared immediately for instant feedback")
+
+                                coroutineScope.launch {
+                                    try {
+                                        Timber.d("SEND: Launching sendMessage coroutine")
+                                        val success = viewModel.sendMessage(conversationId, messageToSend)
+                                        Timber.d("SEND: Message sent, success=$success")
+                                        if (success) {
+                                            // Scroll to bottom to show new message
+                                            if (chatMessages.isNotEmpty()) {
                                                 listState.animateScrollToItem(chatMessages.size)
                                             }
-                                        } catch (e: Exception) {
-                                            Timber.e(e, "SEND: Failed to send message")
                                         }
+                                    } catch (e: Exception) {
+                                        Timber.e(e, "SEND: Failed to send message")
+                                        // Restore input if send failed
+                                        inputText = originalInput
                                     }
-                                } else {
-                                    Timber.w("SEND: Attempted to send empty message")
                                 }
                             },
                             modifier = Modifier.size(48.dp),

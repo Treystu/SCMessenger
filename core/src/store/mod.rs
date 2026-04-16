@@ -23,4 +23,5 @@ pub use relay_custody::{
     RegistrationState, RegistrationStateInfo, RegistrationTransition, RelayCustodyStore,
     RelayRegistry,
 };
+pub use storage::{DiskStats, RetentionConfig, StorageManager};
 pub use sweeper::*;

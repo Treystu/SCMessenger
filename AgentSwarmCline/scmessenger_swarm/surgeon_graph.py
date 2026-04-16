@@ -13,6 +13,26 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 import json
 import difflib
+import re
+
+
+def extract_json(text: str) -> str:
+    """
+    Extract JSON from markdown code blocks or plain text.
+    Handles cases where LLM wraps JSON in ```json ... ``` or ``` ... ```.
+    """
+    # Pattern for markdown code blocks with optional language specifier
+    pattern = r'```(?:json)?\s*(\{.*?\})\s*```'
+    match = re.search(pattern, text, re.DOTALL)
+    if match:
+        return match.group(1)
+    # If no markdown, try to find the first JSON object
+    start = text.find('{')
+    end = text.rfind('}')
+    if start != -1 and end != -1 and start < end:
+        return text[start:end+1]
+    # If no JSON object, return the original text
+    return text
 
 
 class GraphState(TypedDict):
@@ -61,7 +81,8 @@ Example format:
         
         response = llm.invoke([HumanMessage(content=prompt_text)])
         try:
-            result = json.loads(response.content)
+            json_str = extract_json(response.content)
+            result = json.loads(json_str)
             state["search_block"] = result["search_block"]
             state["replace_block"] = result["replace_block"]
         except json.JSONDecodeError:
@@ -110,7 +131,8 @@ Example responses:
         
         response = llm.invoke([HumanMessage(content=prompt_text)])
         try:
-            result = json.loads(response.content)
+            json_str = extract_json(response.content)
+            result = json.loads(json_str)
             state["philosophy_veto"] = result["philosophy_veto"]
             if result["philosophy_veto"]:
                 state["error_message"] = result["error_message"]
@@ -224,7 +246,8 @@ Response format:
         
         response = llm.invoke([HumanMessage(content=prompt_text)])
         try:
-            result = json.loads(response.content)
+            json_str = extract_json(response.content)
+            result = json.loads(json_str)
             state["search_block"] = result["search_block"]
             state["replace_block"] = result["replace_block"]
             state["error_message"] = ""

@@ -237,6 +237,12 @@ open class MeshRepository(private val context: Context) {
     private val dialThrottleLogCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val dialThrottleLogIntervalMs = 300_000L
 
+    // AND-SEND-BTN-001: In-memory cache for identity ID resolution.
+    // canonicalContactId() calls ironCore?.resolveToIdentityId() via synchronous FFI on every
+    // recomposition when invoked from Composable code. This cache eliminates repeated FFI calls
+    // for the same peer ID, preventing UI thread freezes.
+    private val identityIdCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     // TCP/mDNS transport parity: Track peers discovered on LAN via libp2p mDNS.
     // Key = libp2p PeerId, Value = set of LAN multiaddresses for direct TCP delivery.
     private val mdnsLanPeers = ConcurrentHashMap<String, List<String>>()
@@ -386,19 +392,57 @@ open class MeshRepository(private val context: Context) {
         val hasIdentityBackup = identityBackupPrefs.contains(IDENTITY_BACKUP_KEY)
         val contactsOnDisk = java.io.File(storagePath, "contacts.db").exists()
         val historyOnDisk = java.io.File(storagePath, "history.db").exists()
+
+        Timber.d("AND-CONTACTS-WIPE-001: Reinstall check - hasIdentityBackup=$hasIdentityBackup, contactsOnDisk=$contactsOnDisk, historyOnDisk=$historyOnDisk")
+
         if (hasIdentityBackup && (!contactsOnDisk || !historyOnDisk)) {
             isReinstallWithMissingData = true
             Timber.i("Reinstall detected: identity backup present but contacts=$contactsOnDisk history=$historyOnDisk")
+            // AND-CONTACTS-WIPE-001: Log additional details for data recovery
+            if (!contactsOnDisk) {
+                Timber.w("AND-CONTACTS-WIPE-001: CONTACT DATA MISSING - Will attempt peer recovery")
+            }
+            if (!historyOnDisk) {
+                Timber.w("AND-CONTACTS-WIPE-001: HISTORY DATA MISSING")
+            }
+        } else if (hasIdentityBackup && contactsOnDisk && historyOnDisk) {
+            Timber.d("AND-CONTACTS-WIPE-001: Normal startup - all data present")
+        } else if (!hasIdentityBackup) {
+            Timber.d("AND-CONTACTS-WIPE-001: Fresh install - no identity backup found")
         }
     }
 
     private fun initializeManagers() {
         try {
+            // REGRESSION FIX (AND-CONTACTS-WIPE-001): Migrate contacts BEFORE ContactManager
+            // opens the new database. Previously the migration ran after construction, which
+            // meant sled had the file locked and the copied data was invisible to the open handle.
+            migrateContactsFromOldLocation()
+
             // Initialize Data Managers
             settingsManager = uniffi.api.MeshSettingsManager(storagePath)
             historyManager = uniffi.api.HistoryManager(storagePath)
-            // WS12.41: Removed fixed 10k limit. Retention is now disk-percent aware.
-            // historyManager?.enforceRetention(10000u)
+            // P0_SECURITY_001: Bounded retention enforcement at startup.
+            // Prune messages older than 90 days and enforce a 50k message cap.
+            // The periodic maintenance loop (startStorageMaintenance) also enforces this
+            // every 15 minutes, but we run it at init for immediate cleanup.
+            try {
+                val prunedByAge = historyManager?.pruneBefore(
+                    (System.currentTimeMillis() / 1000 - 90L * 24 * 3600).toULong()
+                )
+                if (prunedByAge != null && prunedByAge > 0u) {
+                    Timber.i("P0_SECURITY_001: Pruned $prunedByAge messages older than 90 days at startup")
+                }
+                val count = historyManager?.count() ?: 0u
+                if (count > 50_000u) {
+                    val prunedByCap = historyManager?.enforceRetention(50_000u)
+                    if (prunedByCap != null && prunedByCap > 0u) {
+                        Timber.i("P0_SECURITY_001: Pruned $prunedByCap messages exceeding 50k cap at startup")
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "P0_SECURITY_001: Retention enforcement at startup failed")
+            }
             contactManager = uniffi.api.ContactManager(storagePath)
             ledgerManager = uniffi.api.LedgerManager(storagePath)
             autoAdjustEngine = uniffi.api.AutoAdjustEngine()
@@ -409,11 +453,6 @@ open class MeshRepository(private val context: Context) {
             Timber.i("all_managers_init_success")
             Timber.i("All managers initialized successfully")
 
-            // REGRESSION FIX: Migrate contacts from old location to new database
-            // Old: storagePath/contacts/ (sled dir)
-            // New: storagePath/contacts.db/ (sled dir)
-            migrateContactsFromOldLocation()
-
             // One-time migration: clear stale routing hints inherited from
             // pre-fix builds.  The old appendRoutingHint accumulated duplicate
             // BLE MACs and stale libp2p_peer_id entries that now cause endless
@@ -423,75 +462,146 @@ open class MeshRepository(private val context: Context) {
             // One-time migration: repair contacts with truncated/invalid public keys
             // that were stored before validation was added (March 2026).
             migrateTruncatedPublicKeys()
+
+            // AND-CONTACTS-WIPE-001: Verify contact data integrity after initialization
+            verifyContactDataIntegrity()
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize managers")
         }
     }
 
     /**
-     * REGRESSION FIX (2026-03-24): Migrate contacts from old storage location.
-     * 
-     * Issue: UniFFI contract update changed ContactManager to use "contacts.db/" 
+     * AND-CONTACTS-WIPE-001: Verify contact data integrity after initialization.
+     * Helps detect and log any potential data loss issues for diagnostics.
+     */
+    private fun verifyContactDataIntegrity() {
+        try {
+            val contacts = contactManager?.list().orEmpty()
+            Timber.d("AND-CONTACTS-WIPE-001: Contact data verification - Found ${contacts.size} contacts")
+
+            if (contacts.isEmpty()) {
+                Timber.w("AND-CONTACTS-WIPE-001: WARNING - No contacts found. If this is unexpected, data recovery may be needed.")
+
+                // Check if there are any messages - if yes, but no contacts, that's a red flag
+                val messageCount = try {
+                    historyManager?.getMessageCount() ?: 0u
+                } catch (e: Exception) {
+                    0u
+                }
+
+                if (messageCount > 0u) {
+                    Timber.e("AND-CONTACTS-WIPE-001: CRITICAL - Messages exist (${messageCount} total) but no contacts found. Possible data loss scenario.")
+                }
+            } else {
+                Timber.i("AND-CONTACTS-WIPE-001: Contact data verification successful - ${contacts.size} contacts available")
+
+                // Log sample contact info for diagnostics (without exposing sensitive data)
+                val sampleSize = kotlin.math.minOf(5, contacts.size)
+                Timber.d("AND-CONTACTS-WIPE-001: Sample contacts (${sampleSize} of ${contacts.size}):")
+                contacts.take(sampleSize).forEach { contact ->
+                    val peerIdPreview = contact.peerId.take(12) + if (contact.peerId.length > 12) "..." else ""
+                    val hasValidKey = !contact.publicKey.isNullOrEmpty() && contact.publicKey.length >= 64
+                    Timber.d("  - $peerIdPreview (added: ${contact.addedAt}, hasKey: $hasValidKey)")
+                }
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "AND-CONTACTS-WIPE-001: Failed to verify contact data integrity")
+        }
+    }
+
+    /**
+     * REGRESSION FIX (AND-CONTACTS-WIPE-001): Migrate contacts from old storage location.
+     *
+     * Issue: UniFFI contract update changed ContactManager to use "contacts.db/"
      * instead of "contacts/", causing contacts to disappear after app update.
-     * 
+     *
      * Solution: Copy sled database files from old to new location at file system level.
+     * Must run BEFORE ContactManager construction so the new DB isn't locked.
      */
     private fun migrateContactsFromOldLocation() {
         try {
             val prefs = context.getSharedPreferences("mesh_migrations", android.content.Context.MODE_PRIVATE)
             if (prefs.getBoolean("v2_contacts_db_migration", false)) {
+                Timber.d("Contacts migration already completed, skipping")
                 return
             }
 
+            Timber.i("AND-CONTACTS-WIPE-001: Starting contacts migration process")
+
             val oldDir = java.io.File(storagePath, "contacts")
             val newDir = java.io.File(storagePath, "contacts.db")
-            
+
+            Timber.d("AND-CONTACTS-WIPE-001: Checking old directory existence: ${oldDir.exists()}, isDirectory: ${oldDir.isDirectory}")
+
             if (!oldDir.exists() || !oldDir.isDirectory) {
-                Timber.d("Old contacts directory not found, skipping migration")
+                Timber.d("AND-CONTACTS-WIPE-001: Old contacts directory not found, skipping migration")
                 prefs.edit().putBoolean("v2_contacts_db_migration", true).apply()
                 return
             }
 
             val oldDb = java.io.File(oldDir, "db")
+            Timber.d("AND-CONTACTS-WIPE-001: Old DB exists: ${oldDb.exists()}, size: ${oldDb.length()} bytes")
+
             if (!oldDb.exists() || oldDb.length() == 0L) {
-                Timber.d("Old contacts database empty or missing, skipping migration")
+                Timber.d("AND-CONTACTS-WIPE-001: Old contacts database empty or missing, skipping migration")
                 prefs.edit().putBoolean("v2_contacts_db_migration", true).apply()
                 return
             }
 
-            // Check if new database is empty (never been written to, or just initialized)
+            // Create new directory if it doesn't exist
+            if (!newDir.exists()) {
+                Timber.d("AND-CONTACTS-WIPE-001: Creating new contacts directory")
+                newDir.mkdirs()
+            }
+
+            // Check if new database has meaningful data (not just sled's initial empty tree)
             val newDb = java.io.File(newDir, "db")
             val newDbSize = if (newDb.exists()) newDb.length() else 0L
-            
-            // Only migrate if old DB has data and new DB is small/empty
-            if (oldDb.length() > newDbSize + 10000) { // Old DB has significantly more data
-                Timber.i("🔧 MIGRATION: Copying contacts from old location (${oldDb.length()} bytes)")
-                
-                // Copy all sled files
+            Timber.d("AND-CONTACTS-WIPE-001: New DB size: $newDbSize bytes")
+
+            // Migrate if old DB has more data than new DB, or new DB is absent/tiny.
+            // Sled creates a ~4KB empty tree on open, so we use a low threshold.
+            if (oldDb.length() > newDbSize || newDbSize < 4096) {
+                Timber.i("AND-CONTACTS-WIPE-001: MIGRATION NEEDED - Copying contacts from old location (${oldDb.length()} bytes -> new ${newDbSize} bytes)")
+
+                var copySuccess = true
+                var copiedFiles = 0
+                var totalBytes = 0L
+
+                // Copy all sled files from old to new directory
                 oldDir.listFiles()?.forEach { file ->
                     if (file.isFile) {
                         val dest = java.io.File(newDir, file.name)
                         try {
                             file.copyTo(dest, overwrite = true)
-                            Timber.d("Copied ${file.name} (${file.length()} bytes)")
+                            copiedFiles++
+                            totalBytes += file.length()
+                            Timber.d("AND-CONTACTS-WIPE-001: Copied ${file.name} (${file.length()} bytes)")
                         } catch (e: Exception) {
-                            Timber.e(e, "Failed to copy ${file.name}")
+                            Timber.e(e, "AND-CONTACTS-WIPE-001: Failed to copy ${file.name}")
+                            copySuccess = false
                         }
                     }
                 }
-                
-                Timber.i("🔧 MIGRATION: Contacts migrated successfully")
+
+                Timber.i("AND-CONTACTS-WIPE-001: Copy operation completed. Files: $copiedFiles, Total bytes: $totalBytes, Success: $copySuccess")
+
+                if (copySuccess) {
+                    Timber.i("AND-CONTACTS-WIPE-001: MIGRATION COMPLETED SUCCESSFULLY")
+                    prefs.edit().putBoolean("v2_contacts_db_migration", true).apply()
+                } else {
+                    // Don't mark migration as complete — allow retry on next app start
+                    Timber.w("AND-CONTACTS-WIPE-001: Some files failed to copy, will retry on next launch")
+                }
             } else {
-                Timber.d("New database already has data, skipping migration")
+                Timber.d("AND-CONTACTS-WIPE-001: New database already has sufficient data ($newDbSize bytes), skipping migration")
+                prefs.edit().putBoolean("v2_contacts_db_migration", true).apply()
             }
 
-            prefs.edit().putBoolean("v2_contacts_db_migration", true).apply()
-
         } catch (e: Exception) {
-            Timber.e(e, "Contacts migration failed")
-            // Mark as complete even if failed to avoid retry loops
-            context.getSharedPreferences("mesh_migrations", android.content.Context.MODE_PRIVATE)
-                .edit().putBoolean("v2_contacts_db_migration", true).apply()
+            Timber.e(e, "AND-CONTACTS-WIPE-001: Contacts migration failed — NOT marking complete to allow retry")
+            // AND-CONTACTS-WIPE-001: Do NOT mark migration as complete on failure.
+            // Previously this set the flag to true on failure, preventing any retry.
         }
     }
 
@@ -2630,22 +2740,28 @@ open class MeshRepository(private val context: Context) {
     private fun canonicalContactId(id: String): String {
         val trimmed = id.trim()
         if (trimmed.isEmpty()) return trimmed
-        
+
+        // AND-SEND-BTN-001: Check in-memory cache first to avoid synchronous FFI on UI thread.
+        // Identity resolution is deterministic — once resolved, the mapping never changes.
+        identityIdCache[trimmed]?.let { return it }
+
         // ID-STANDARDIZATION-001: Comprehensive ID resolution with sanity checks
         Timber.d("ID_RESOLUTION: Input ID '$trimmed' (length=${trimmed.length})")
-        
+
         // If it's already a 64-char hex identity ID, normalize and return
         if (PeerIdValidator.isIdentityId(trimmed)) {
             val normalized = PeerIdValidator.normalize(trimmed)
+            identityIdCache[trimmed] = normalized
             Timber.d("ID_RESOLUTION: Already identity_id, returning normalized: ${normalized.take(8)}...")
             return normalized
         }
-        
+
         // Try to resolve to canonical identity_id via IronCore
         try {
             val resolvedIdentityId = ironCore?.resolveToIdentityId(trimmed)
             if (resolvedIdentityId != null) {
                 val normalized = PeerIdValidator.normalize(resolvedIdentityId)
+                identityIdCache[trimmed] = normalized
                 Timber.d("ID_RESOLUTION: Resolved '$trimmed' -> identity_id: ${normalized.take(8)}...")
                 return normalized
             } else {
@@ -2654,9 +2770,10 @@ open class MeshRepository(private val context: Context) {
         } catch (e: Exception) {
             Timber.w("ID_RESOLUTION: Failed to resolve ID '$trimmed' to identity_id: ${e.message}")
         }
-        
+
         // Fallback: Normalize the input ID (libp2p peer ID or other format)
         val normalizedFallback = PeerIdValidator.normalize(trimmed)
+        identityIdCache[trimmed] = normalizedFallback
         Timber.d("ID_RESOLUTION: Fallback to normalized input: ${normalizedFallback.take(16)}...")
         return normalizedFallback
     }

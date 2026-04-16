@@ -1766,7 +1766,46 @@ impl IronCore {
         if deleted > 0 {
             tracing::info!("Swept {} expired messages from inbox", deleted);
         }
-        self.storage_manager.perform_maintenance()
+        self.storage_manager.perform_maintenance()?;
+
+        // P0_SECURITY_001: Also prune the mobile bridge HistoryManager (the one exposed to
+        // Android/iOS via UniFFI) to keep it in sync with retention policies.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let retention = &self.storage_manager.retention;
+            if retention.max_age_days > 0 {
+                let cutoff = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+                    .saturating_sub(retention.max_age_days as u64 * 86400);
+                let pruned = self.history_bridge_manager.prune_before(cutoff)?;
+                if pruned > 0 {
+                    tracing::info!(
+                        "Bridge retention: pruned {} messages older than {} days",
+                        pruned,
+                        retention.max_age_days
+                    );
+                }
+            }
+            if retention.max_messages > 0 {
+                let count = self.history_bridge_manager.count();
+                if count > retention.max_messages {
+                    let pruned = self
+                        .history_bridge_manager
+                        .enforce_retention(retention.max_messages)?;
+                    if pruned > 0 {
+                        tracing::info!(
+                            "Bridge retention: pruned {} messages exceeding cap of {}",
+                            pruned,
+                            retention.max_messages
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     pub fn record_log(&self, line: String) {

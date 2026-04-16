@@ -10,10 +10,47 @@ pub struct DiskStats {
     pub free_bytes: u64,
 }
 
+/// P0_SECURITY_001: Configurable retention policies for message history.
+///
+/// Provides bounds on database growth and enforces data minimization.
+/// Default retention periods are chosen to balance privacy and usability:
+/// - 30 days for aggressive privacy (default)
+/// - 90 days for standard usage
+/// - 365 days for archival needs
+/// - 0 means no time-based retention (only count-based cap applies)
+#[derive(Debug, Clone)]
+pub struct RetentionConfig {
+    /// Maximum number of messages to retain. Messages beyond this cap are pruned
+    /// oldest-first. Set to 0 to disable count-based retention.
+    pub max_messages: u32,
+    /// Maximum age of messages in days. Messages older than this are pruned.
+    /// Set to 0 to disable time-based retention.
+    pub max_age_days: u32,
+}
+
+impl Default for RetentionConfig {
+    fn default() -> Self {
+        Self {
+            max_messages: 50_000,
+            max_age_days: 90,
+        }
+    }
+}
+
+impl RetentionConfig {
+    pub fn new(max_messages: u32, max_age_days: u32) -> Self {
+        Self {
+            max_messages,
+            max_age_days,
+        }
+    }
+}
+
 pub struct StorageManager {
     stats: RwLock<DiskStats>,
     history: Arc<HistoryManager>,
     logs: Arc<LogManager>,
+    pub retention: RetentionConfig,
 }
 
 impl StorageManager {
@@ -22,6 +59,20 @@ impl StorageManager {
             stats: RwLock::new(DiskStats::default()),
             history,
             logs,
+            retention: RetentionConfig::default(),
+        }
+    }
+
+    pub fn with_retention(
+        history: Arc<HistoryManager>,
+        logs: Arc<LogManager>,
+        retention: RetentionConfig,
+    ) -> Self {
+        Self {
+            stats: RwLock::new(DiskStats::default()),
+            history,
+            logs,
+            retention,
         }
     }
 
@@ -33,46 +84,76 @@ impl StorageManager {
         tracing::debug!("Disk stats updated: free {} / total {}", free, total);
     }
 
-    /// Perform maintenance to ensure 20% free space and message cap (80% of total).
+    /// Perform maintenance to enforce retention policies and ensure free disk space.
+    ///
+    /// Strategy (in priority order):
+    /// 1. Time-based retention: prune messages older than `max_age_days`
+    /// 2. Count-based retention: enforce `max_messages` cap
+    /// 3. Emergency: if disk space is below 20%, prune 10% of messages + logs
     pub fn perform_maintenance(&self) -> Result<(), IronCoreError> {
         let stats = self.stats.read().clone();
-        if stats.total_bytes == 0 {
-            return Ok(());
-        }
 
-        let buffer_threshold = (stats.total_bytes as f64 * 0.2) as u64;
-
-        // Current free space is below 20% buffer
-        if stats.free_bytes < buffer_threshold {
-            tracing::warn!(
-                "Free disk space ({}) below 20% threshold ({}). Starting emergency prune.",
-                stats.free_bytes,
-                buffer_threshold
-            );
-
-            // Priority 1: Prune logs
-            self.logs.prune_oldest(100)?;
-
-            // In a real app, we'd check free space again here.
-            // For now, we continue to messages if still needed.
-
-            // Priority 2: Prune messages until we reasonably recover or hit a limit.
-            // We use a heuristic: prune 10% of messages if we are low on space.
-            let current_count = self.history.count();
-            if current_count > 100 {
-                let to_keep = (current_count as f64 * 0.9) as u32;
-                self.history.enforce_retention(to_keep)?;
+        // P0_SECURITY_001: Always enforce time-based retention first
+        if self.retention.max_age_days > 0 {
+            let cutoff = current_timestamp()
+                .saturating_sub(self.retention.max_age_days as u64 * 86400);
+            let pruned = self.history.prune_before(cutoff)?;
+            if pruned > 0 {
+                tracing::info!(
+                    "Retention: pruned {} messages older than {} days",
+                    pruned,
+                    self.retention.max_age_days
+                );
             }
         }
 
-        // Rule: Messages can grow up to 80% of device space.
-        // Practically, this means if we detect message store is exceeding this, we prune.
-        // We don't easily know the exact bytes of messages on disk without scanning or backend stats.
-        // For now, let's assume 1 message is ~1KB for estimation or just rely on the free space buffer logic.
-        // User asked: "to accommodate up to 80% disk usage would be the amount each device gets"
+        // Count-based retention: enforce max_messages cap
+        if self.retention.max_messages > 0 {
+            let current_count = self.history.count();
+            if current_count > self.retention.max_messages {
+                let pruned = self.history.enforce_retention(self.retention.max_messages)?;
+                if pruned > 0 {
+                    tracing::info!(
+                        "Retention: pruned {} messages exceeding cap of {}",
+                        pruned,
+                        self.retention.max_messages
+                    );
+                }
+            }
+        }
+
+        // Emergency: if disk space is critically low, prune more aggressively
+        if stats.total_bytes > 0 {
+            let buffer_threshold = (stats.total_bytes as f64 * 0.2) as u64;
+
+            if stats.free_bytes < buffer_threshold {
+                tracing::warn!(
+                    "Free disk space ({}) below 20% threshold ({}). Starting emergency prune.",
+                    stats.free_bytes,
+                    buffer_threshold
+                );
+
+                // Priority 1: Prune logs
+                self.logs.prune_oldest(100)?;
+
+                // Priority 2: Prune 10% of messages if we are low on space
+                let current_count = self.history.count();
+                if current_count > 100 {
+                    let to_keep = (current_count as f64 * 0.9) as u32;
+                    self.history.enforce_retention(to_keep)?;
+                }
+            }
+        }
 
         Ok(())
     }
+}
+
+fn current_timestamp() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
 }
 
 #[cfg(test)]
@@ -125,5 +206,56 @@ mod tests {
         let stats = DiskStats::default();
         assert_eq!(stats.total_bytes, 0);
         assert_eq!(stats.free_bytes, 0);
+    }
+
+    #[test]
+    fn test_retention_config_default() {
+        let config = RetentionConfig::default();
+        assert_eq!(config.max_messages, 50_000);
+        assert_eq!(config.max_age_days, 90);
+    }
+
+    #[test]
+    fn test_maintenance_with_retention_time_based() {
+        let backend = Arc::new(MemoryStorage::new());
+        let history = Arc::new(HistoryManager::new(backend.clone()));
+        let logs = Arc::new(LogManager::new(backend));
+
+        // Add a message with an old timestamp
+        let old_record = MessageRecord {
+            id: "old_msg".to_string(),
+            direction: MessageDirection::Sent,
+            peer_id: "peer1".to_string(),
+            content: "old message".to_string(),
+            timestamp: 1_000_000, // Very old timestamp
+            sender_timestamp: 1_000_000,
+            delivered: true,
+            hidden: false,
+        };
+        history.add(old_record).unwrap();
+
+        // Add a recent message
+        let recent_record = MessageRecord {
+            id: "recent_msg".to_string(),
+            direction: MessageDirection::Received,
+            peer_id: "peer1".to_string(),
+            content: "recent message".to_string(),
+            timestamp: 1_700_000_000, // Recent
+            sender_timestamp: 1_700_000_000,
+            delivered: true,
+            hidden: false,
+        };
+        history.add(recent_record).unwrap();
+
+        assert_eq!(history.count(), 2);
+
+        // Retain only messages from the last 30 days (2592000 seconds)
+        let retention = RetentionConfig::new(0, 30);
+        let mgr = StorageManager::with_retention(history.clone(), logs, retention);
+        mgr.perform_maintenance().unwrap();
+
+        // Old message should be pruned, recent should remain
+        assert_eq!(history.count(), 1);
+        assert!(history.get("recent_msg".to_string()).unwrap().is_some());
     }
 }

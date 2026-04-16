@@ -131,6 +131,7 @@ class ConversationsViewModel @Inject constructor(
      * Send a message to a peer.
      */
     suspend fun sendMessage(peerId: String, content: String): Boolean {
+        Timber.d("VIEWMODEL_SEND: Entered sendMessage method")
         return withContext(Dispatchers.IO) {
             try {
                 Timber.d("VIEWMODEL_SEND: peerId='$peerId', contentLen=${content.length}")
@@ -138,9 +139,12 @@ class ConversationsViewModel @Inject constructor(
                 Timber.d("VIEWMODEL_SEND: normalized='$normalizedPeerId'")
 
                 // Call repository to handle encryption and transmission
+                Timber.d("VIEWMODEL_SEND: Calling meshRepository.sendMessage")
                 meshRepository.sendMessage(normalizedPeerId, content)
+                Timber.d("VIEWMODEL_SEND: meshRepository.sendMessage completed")
 
                 // Reload messages to show the sent message
+                Timber.d("VIEWMODEL_SEND: Reloading messages")
                 loadMessages()
 
                 Timber.i("Message sent to $normalizedPeerId")
@@ -149,6 +153,8 @@ class ConversationsViewModel @Inject constructor(
                 _error.value = "Failed to send message: ${e.message}"
                 Timber.e(e, "Failed to send message")
                 false
+            } finally {
+                Timber.d("VIEWMODEL_SEND: Exiting sendMessage method")
             }
         }
     }
@@ -206,6 +212,7 @@ class ConversationsViewModel @Inject constructor(
 
     /**
      * Check if a peer can be messaged (exists in contacts or discovered peers).
+     * AND-SEND-BTN-001: Benefiting from in-memory ID resolution cache.
      */
     fun isPeerAvailable(peerId: String): Boolean {
         val contact = getContactForPeer(peerId)
@@ -344,20 +351,23 @@ class ConversationsViewModel @Inject constructor(
      * Tries multiple lookup strategies to handle ID format mismatches:
      * 1. Direct lookup by peerId (canonicalized)
      * 2. Lookup by libp2p peer ID from discovered peers
+     *
+     * AND-SEND-BTN-001: The underlying canonicalContactId() now uses an in-memory
+     * cache, so repeated calls for the same peer ID are fast and avoid FFI.
      */
     fun getContactForPeer(peerId: String): uniffi.api.Contact? {
         return try {
             // Strategy 1: Direct lookup (handles canonical ID resolution)
             val directLookup = meshRepository.getContact(peerId)
             if (directLookup != null) return directLookup
-            
+
             // Strategy 2: Try looking up by libp2p peer ID from discovered peers
             val discoveredPeers = meshRepository.discoveredPeers.value
             val discovered = discoveredPeers.entries.firstOrNull { (key, info) ->
                 PeerIdValidator.isSame(key, peerId) ||
                     info.peerId.equals(peerId, ignoreCase = true)
             }?.value
-            
+
             // Try libp2p peer ID if available
             discovered?.libp2pPeerId?.let { libp2pId ->
                 meshRepository.getContact(libp2pId)

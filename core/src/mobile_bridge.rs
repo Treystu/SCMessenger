@@ -1573,7 +1573,8 @@ impl HistoryManager {
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
             let record = record.adjust_legacy_timestamps();
-            if record.peer_id == peer_id {
+            // P0_SECURITY_001: Case-insensitive peer ID matching to match generic HistoryManager behavior
+            if record.peer_id.eq_ignore_ascii_case(&peer_id) {
                 to_delete.push(key.to_vec());
             }
         }
