@@ -2,6 +2,7 @@ use libp2p::PeerId;
 use scmessenger_core::store::backend::SledStorage;
 use scmessenger_core::store::relay_custody::{CustodyState, RelayCustodyStore};
 use scmessenger_core::store::{Outbox, QueuedMessage};
+#[cfg(feature = "phase2_apis")]
 use scmessenger_core::transport::mesh_routing::{
     MultiPathDelivery, ROUTE_REASON_DIRECT_FIRST, ROUTE_REASON_RELAY_RECENCY_SUCCESS,
 };

@@ -73,6 +73,7 @@ quinn = "0.11"
 mockall = { workspace = true }
 tokio-test = "0.4"
 tempfile = "3.8"
+libp2p = { workspace = true }
 
 [build-dependencies]
 uniffi = { workspace = true, features = ["build"] }

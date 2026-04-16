@@ -5,6 +5,8 @@
 use libp2p::PeerId;
 use scmessenger_core::transport::mesh_routing::*;
 use std::time::Duration;
+use std::prelude::rust_2024::*;
+use std::string::String;
 
 #[test]
 fn test_relay_stats_tracking() {

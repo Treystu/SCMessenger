@@ -2,9 +2,16 @@
 //!
 //! Provides immutable, cryptographically-linked audit trails for security-critical
 //! operations. Each event is chained using Blake3 hashes to detect tampering.
+//!
+//! P0_SECURITY_005: Audit events are persisted to the storage backend and subject
+//! to time-based retention (default: 365 days). Pruning preserves chain integrity
+//! by keeping the oldest remaining event's prev_hash pointing to the pruned event's
+//! hash, which is recorded in the `pruned_head_hash` field.
 
+use crate::store::backend::StorageBackend;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::sync::Arc;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -122,13 +129,17 @@ impl AuditEvent {
     }
 }
 
-/// Immutable, sequentially-hashed audit log
+/// Immutable, sequentially-hashed audit log with persistence support.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditLog {
     /// Chronologically ordered events
     pub events: Vec<AuditEvent>,
     /// Hash of most recent event for fast append
     pub last_hash: String,
+    /// P0_SECURITY_005: Hash of the last event before pruning, used to
+    /// maintain chain integrity when old events are pruned.
+    #[serde(default)]
+    pub pruned_head_hash: Option<String>,
 }
 
 impl Default for AuditLog {
@@ -145,7 +156,81 @@ impl AuditLog {
         AuditLog {
             events: Vec::new(),
             last_hash: genesis_hash,
+            pruned_head_hash: None,
         }
+    }
+
+    /// P0_SECURITY_005: Persist the audit log to the storage backend.
+    /// The entire log is serialized as JSON and stored under a single key.
+    pub fn persist(&self, backend: &Arc<dyn StorageBackend>) -> Result<(), AuditLogError> {
+        let json = serde_json::to_string(self).map_err(|_| AuditLogError::PersistenceError)?;
+        backend
+            .put(b"audit_log_v1", json.as_bytes())
+            .map_err(|_| AuditLogError::PersistenceError)
+    }
+
+    /// P0_SECURITY_005: Load the audit log from the storage backend.
+    /// Returns a new empty log if no persisted log exists.
+    pub fn load(backend: &Arc<dyn StorageBackend>) -> Self {
+        match backend.get(b"audit_log_v1") {
+            Ok(Some(data)) => {
+                let json = String::from_utf8_lossy(&data);
+                match serde_json::from_str::<AuditLog>(&json) {
+                    Ok(log) => log,
+                    Err(e) => {
+                        tracing::warn!("Failed to deserialize audit log, starting fresh: {}", e);
+                        AuditLog::new()
+                    }
+                }
+            }
+            _ => AuditLog::new(),
+        }
+    }
+
+    /// P0_SECURITY_005: Prune events older than `before_timestamp` (unix seconds).
+    /// Preserves chain integrity by recording the hash of the last pruned event
+    /// in `pruned_head_hash`, so validation can still detect tampering of remaining events.
+    pub fn prune_before(&mut self, before_timestamp: u64) -> u32 {
+        let split_idx = self
+            .events
+            .iter()
+            .position(|e| e.timestamp_unix_secs >= before_timestamp);
+
+        let prune_count = match split_idx {
+            Some(0) => 0, // Nothing to prune
+            Some(idx) => {
+                // Record the chain hash of the last pruned event for integrity
+                if idx > 0 {
+                    self.pruned_head_hash = Some(self.events[idx - 1].chain_hash());
+                }
+                let count = idx as u32;
+                self.events.drain(0..idx);
+                count
+            }
+            None => {
+                // All events are older than the cutoff
+                if !self.events.is_empty() {
+                    self.pruned_head_hash = Some(self.events.last().unwrap().chain_hash());
+                    let count = self.events.len() as u32;
+                    self.events.clear();
+                    count
+                } else {
+                    0
+                }
+            }
+        };
+
+        // Update last_hash if we pruned everything
+        if self.events.is_empty() {
+            self.last_hash = self
+                .pruned_head_hash
+                .clone()
+                .unwrap_or_else(|| {
+                    "0000000000000000000000000000000000000000000000000000000000000000".to_string()
+                });
+        }
+
+        prune_count
     }
 
     /// Append a new event to the audit trail and return it
@@ -168,17 +253,24 @@ impl AuditLog {
         event
     }
 
-    /// Verify cryptographic integrity of entire log
+    /// Verify cryptographic integrity of entire log.
+    /// If events were pruned, the first remaining event's prev_hash must match
+    /// the pruned_head_hash (the chain hash of the last pruned event).
     pub fn validate_chain(&self) -> Result<(), AuditLogError> {
         if self.events.is_empty() {
             return Err(AuditLogError::EmptyLog);
         }
 
-        let genesis_hash = "0000000000000000000000000000000000000000000000000000000000000000";
-        if self.events[0].prev_hash != genesis_hash {
+        // The first event must link to either the genesis hash or the pruned head hash
+        let expected_head = self
+            .pruned_head_hash
+            .as_deref()
+            .unwrap_or("0000000000000000000000000000000000000000000000000000000000000000");
+
+        if self.events[0].prev_hash != expected_head {
             return Err(AuditLogError::ChainBroken {
                 event_index: 0,
-                expected: genesis_hash.to_string(),
+                expected: expected_head.to_string(),
                 found: self.events[0].prev_hash.clone(),
             });
         }
@@ -202,6 +294,7 @@ impl AuditLog {
 #[derive(Debug, Clone, Error)]
 pub enum AuditLogError {
     /// Cryptographic chain integrity check failed
+    #[error("Audit chain broken at event {event_index}: expected hash {expected}, found {found}")]
     ChainBroken {
         /// Index of first corrupted event
         event_index: usize,
@@ -211,24 +304,11 @@ pub enum AuditLogError {
         found: String,
     },
     /// Validation performed on empty log
+    #[error("Audit log is empty")]
     EmptyLog,
-}
-
-impl fmt::Display for AuditLogError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            AuditLogError::ChainBroken {
-                event_index,
-                expected,
-                found,
-            } => write!(
-                f,
-                "Audit chain broken at event {}: expected hash {}, found {}",
-                event_index, expected, found
-            ),
-            AuditLogError::EmptyLog => write!(f, "Audit log is empty"),
-        }
-    }
+    /// P0_SECURITY_005: Failed to persist or load audit log
+    #[error("Audit log persistence error")]
+    PersistenceError,
 }
 
 #[cfg(test)]
