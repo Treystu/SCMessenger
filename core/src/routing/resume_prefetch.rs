@@ -536,7 +536,9 @@ mod tests {
         assert_eq!(manager.frequent_peers[0].message_count, 1);
 
         // Manually set last_message to past to trigger decay
-        manager.frequent_peers[0].last_message = Instant::now() - Duration::from_secs(7200);
+        manager.frequent_peers[0].last_message = Instant::now()
+            .checked_sub(Duration::from_secs(7200))
+            .unwrap_or_else(|| Instant::now() - Duration::from_secs(3600));
 
         // Record another message, should trigger decay
         manager.record_message(peer_id, hint);

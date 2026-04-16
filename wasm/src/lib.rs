@@ -334,6 +334,13 @@ impl IronCore {
         self.inner.outbox_count()
     }
 
+    /// Flush the outbox for a specific peer, returning the count of messages drained.
+    /// The caller should then send each message via the swarm transport.
+    #[wasm_bindgen(js_name = flushOutboxForPeer)]
+    pub fn flush_outbox_for_peer(&self, peer_id: String) -> usize {
+        self.inner.flush_outbox_for_peer(&peer_id).len()
+    }
+
     #[wasm_bindgen(js_name = inboxCount)]
     pub fn inbox_count(&self) -> u32 {
         self.inner.inbox_count()
@@ -928,7 +935,7 @@ impl IronCore {
                 &JsValue::from_str(&item.peer_id),
             )
             .map_err(|e| js_value_from_str(&format!("Failed to set peerId: {:?}", e)))?;
-            if let Some(ref did) = item.device_id {
+            if let Some(did) = item.device_id.as_deref() {
                 js_sys::Reflect::set(
                     &obj,
                     &JsValue::from_str("deviceId"),
@@ -942,7 +949,7 @@ impl IronCore {
                 &JsValue::from_f64(item.blocked_at as f64),
             )
             .map_err(|e| js_value_from_str(&format!("Failed to set blockedAt: {:?}", e)))?;
-            if let Some(ref reason) = item.reason {
+            if let Some(reason) = item.reason.as_deref() {
                 js_sys::Reflect::set(
                     &obj,
                     &JsValue::from_str("reason"),
@@ -950,7 +957,7 @@ impl IronCore {
                 )
                 .map_err(|e| js_value_from_str(&format!("Failed to set reason: {:?}", e)))?;
             }
-            if let Some(ref notes) = item.notes {
+            if let Some(notes) = item.notes.as_deref() {
                 js_sys::Reflect::set(&obj, &JsValue::from_str("notes"), &JsValue::from_str(notes))
                     .map_err(|e| js_value_from_str(&format!("Failed to set notes: {:?}", e)))?;
             }
@@ -1466,6 +1473,16 @@ async fn start_swarm_runtime(
                 }
                 scmessenger_core::transport::SwarmEvent::PeerDiscovered(peer_id) => {
                     inner.notify_peer_discovered(peer_id.to_string());
+                    // Flush any queued outbox messages for this peer
+                    let pid_str = peer_id.to_string();
+                    let flushed = inner.flush_outbox_for_peer(&pid_str);
+                    if !flushed.is_empty() {
+                        tracing::info!(
+                            event = "wasm_outbox_flushed",
+                            peer = %pid_str,
+                            count = flushed.len()
+                        );
+                    }
                 }
                 scmessenger_core::transport::SwarmEvent::PeerDisconnected(peer_id) => {
                     inner.notify_peer_disconnected(peer_id.to_string());
@@ -1493,7 +1510,7 @@ fn resolve_swarm_keypair_and_mode(
     inner: &RustIronCore,
 ) -> Result<(libp2p::identity::Keypair, bool), JsValue> {
     if let Some(identity_keys) = inner.get_identity_keys() {
-        let libp2p_keys = identity_keys.to_libp2p_keypair().map_err(|e| {
+        let libp2p_keys: libp2p::identity::Keypair = identity_keys.to_libp2p_keypair().map_err(|e| {
             js_value_from_str(&format!(
                 "Failed to derive libp2p keypair from identity: {}",
                 e

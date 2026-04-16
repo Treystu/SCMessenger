@@ -19,6 +19,19 @@
 /// [2]  ciphertext_len (LE u16)
 /// [N]  ciphertext
 use super::{DriftError, DRIFT_VERSION};
+use crate::message::Envelope;
+use uuid::Uuid;
+use web_time::{SystemTime, UNIX_EPOCH};
+use ed25519_dalek::Signer;
+
+/// Compression threshold: payloads larger than this are LZ4-compressed.
+/// 256 bytes is the crossover point where LZ4 compression typically saves
+/// more bandwidth than the overhead of the size-prepended format.
+pub const COMPRESSION_THRESHOLD: usize = 256;
+
+/// Bit mask for the compression flag in the envelope_type byte.
+/// When set, the ciphertext field contains LZ4-compressed data.
+pub const COMPRESSION_FLAG: u8 = 0x80;
 
 /// Drift Protocol Envelope — compact binary format for mesh relay
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,6 +41,8 @@ pub struct DriftEnvelope {
     pub version: u8,
     /// Envelope type (encrypted message, receipt, sync, etc.)
     pub envelope_type: EnvelopeType,
+    /// Whether the ciphertext is LZ4-compressed
+    pub compressed: bool,
     /// Message ID as raw bytes (16 bytes, UUID)
     pub message_id: [u8; 16],
 
@@ -74,6 +89,14 @@ pub enum EnvelopeType {
     PeerAnnouncement = 0x05,
     /// Route advertisement (0x06)
     RouteAdvertisement = 0x06,
+    /// Cover traffic — indistinguishable from real messages (0x07)
+    /// Relays forward these identically to EncryptedMessage.
+    /// Only the final recipient can determine it's cover traffic
+    /// (by failing to decrypt to a valid message).
+    CoverTraffic = 0x07,
+    /// Onion-routed message — multi-hop relay (0x08)
+    /// Contains an onion envelope that each relay peels one layer from.
+    OnionMessage = 0x08,
 }
 
 impl EnvelopeType {
@@ -86,6 +109,8 @@ impl EnvelopeType {
             0x04 => Ok(EnvelopeType::SyncResponse),
             0x05 => Ok(EnvelopeType::PeerAnnouncement),
             0x06 => Ok(EnvelopeType::RouteAdvertisement),
+            0x07 => Ok(EnvelopeType::CoverTraffic),
+            0x08 => Ok(EnvelopeType::OnionMessage),
             other => Err(DriftError::InvalidEnvelopeType(other)),
         }
     }
@@ -103,19 +128,30 @@ impl DriftEnvelope {
     /// Maximum ciphertext size (2^16 - 1 bytes due to u16 length field)
     pub const MAX_CIPHERTEXT: usize = 65535;
 
-    /// Serialize envelope to bytes (little-endian)
+    /// Serialize envelope to bytes (little-endian).
     ///
+    /// If `compressed` is true, the ciphertext is LZ4-compressed before serialization.
     /// Returns `Err(CiphertextTooLarge)` if ciphertext exceeds MAX_CIPHERTEXT.
     pub fn to_bytes(&self) -> Result<Vec<u8>, DriftError> {
-        if self.ciphertext.len() > Self::MAX_CIPHERTEXT {
-            return Err(DriftError::CiphertextTooLarge(self.ciphertext.len()));
+        // Compress if flagged
+        let ciphertext = if self.compressed {
+            super::compress::compress(&self.ciphertext)
+        } else {
+            self.ciphertext.clone()
+        };
+
+        if ciphertext.len() > Self::MAX_CIPHERTEXT {
+            return Err(DriftError::CiphertextTooLarge(ciphertext.len()));
         }
 
-        let mut buf = Vec::with_capacity(Self::FIXED_OVERHEAD + self.ciphertext.len());
+        let mut buf = Vec::with_capacity(Self::FIXED_OVERHEAD + ciphertext.len());
 
         // Header (18 bytes)
         buf.push(self.version);
-        buf.push(self.envelope_type.as_u8());
+        // Encode envelope_type with compression flag
+        let type_byte = self.envelope_type.as_u8()
+            | if self.compressed { COMPRESSION_FLAG } else { 0 };
+        buf.push(type_byte);
         buf.extend_from_slice(&self.message_id);
 
         // Routing header (14 bytes)
@@ -132,8 +168,8 @@ impl DriftEnvelope {
         buf.extend_from_slice(&self.signature);
 
         // Payload (2 + N bytes)
-        buf.extend_from_slice(&(self.ciphertext.len() as u16).to_le_bytes());
-        buf.extend_from_slice(&self.ciphertext);
+        buf.extend_from_slice(&(ciphertext.len() as u16).to_le_bytes());
+        buf.extend_from_slice(&ciphertext);
 
         Ok(buf)
     }
@@ -162,7 +198,10 @@ impl DriftEnvelope {
             return Err(DriftError::InvalidVersion(version));
         }
 
-        let envelope_type = EnvelopeType::from_u8(data[offset])?;
+        // Decode envelope type with optional compression flag
+        let type_byte = data[offset];
+        let compressed = (type_byte & COMPRESSION_FLAG) != 0;
+        let envelope_type = EnvelopeType::from_u8(type_byte & !COMPRESSION_FLAG)?;
         offset += 1;
 
         let mut message_id = [0u8; 16];
@@ -224,11 +263,16 @@ impl DriftEnvelope {
             });
         }
 
-        let ciphertext = data[offset..offset + ciphertext_len].to_vec();
+        let ciphertext = if compressed {
+            super::compress::decompress(&data[offset..offset + ciphertext_len])?
+        } else {
+            data[offset..offset + ciphertext_len].to_vec()
+        };
 
         Ok(DriftEnvelope {
             version,
             envelope_type,
+            compressed,
             message_id,
             recipient_hint,
             created_at,
@@ -273,6 +317,114 @@ impl DriftEnvelope {
 
         now > self.ttl_expiry
     }
+
+    /// Convert to a legacy message::Envelope for use with crypto::decrypt_message.
+    pub fn to_legacy_envelope(&self) -> Envelope {
+        Envelope {
+            sender_public_key: self.sender_public_key.to_vec(),
+            ephemeral_public_key: self.ephemeral_public_key.to_vec(),
+            nonce: self.nonce.to_vec(),
+            ciphertext: self.ciphertext.clone(),
+        }
+    }
+}
+
+impl DriftEnvelope {
+    /// Convert from a legacy message::Envelope to DriftEnvelope
+    ///
+    /// This converts the bincode-based envelope format to the optimized
+    /// Drift Protocol binary format with additional routing metadata.
+    pub fn from_legacy_envelope(
+        legacy: Envelope,
+        message_id: String,
+        recipient_public_key: [u8; 32],
+        signing_key: &ed25519_dalek::SigningKey,
+    ) -> Result<Self, DriftError> {
+        // Parse message ID as UUID bytes
+        let uuid = Uuid::parse_str(&message_id)
+            .map_err(|e| DriftError::IoError(format!("Invalid message ID: {}", e)))?;
+        let message_id_bytes = *uuid.as_bytes();
+
+        // Calculate recipient hint for routing
+        let recipient_hint = Self::hint_from_public_key(&recipient_public_key);
+
+        // Get current timestamp
+        let created_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| DriftError::IoError(format!("Time error: {}", e)))?
+            .as_secs() as u32;
+
+        // TTL: 7 days by default (604800 seconds)
+        let ttl_expiry = created_at + 604800;
+
+        // Convert Vec<u8> fields to fixed-size arrays
+        let sender_public_key: [u8; 32] = legacy.sender_public_key
+            .try_into()
+            .map_err(|_| DriftError::IoError("Invalid sender public key length".into()))?;
+
+        let ephemeral_public_key: [u8; 32] = legacy.ephemeral_public_key
+            .try_into()
+            .map_err(|_| DriftError::IoError("Invalid ephemeral public key length".into()))?;
+
+        let nonce: [u8; 24] = legacy.nonce
+            .try_into()
+            .map_err(|_| DriftError::IoError("Invalid nonce length".into()))?;
+
+        // Create the envelope without signature first
+        let mut drift_env = DriftEnvelope {
+            version: DRIFT_VERSION,
+            envelope_type: EnvelopeType::EncryptedMessage,
+            compressed: legacy.ciphertext.len() > COMPRESSION_THRESHOLD,
+            message_id: message_id_bytes,
+            recipient_hint,
+            created_at,
+            ttl_expiry,
+            hop_count: 0, // Initial hop count
+            priority: 128, // Medium priority
+            sender_public_key,
+            ephemeral_public_key,
+            nonce,
+            signature: [0u8; 64], // Placeholder, will be filled
+            ciphertext: legacy.ciphertext,
+        };
+
+        // Sign the envelope
+        let signature = drift_env.sign(signing_key);
+        drift_env.signature = signature;
+
+        Ok(drift_env)
+    }
+
+    /// Sign the envelope contents with the sender's signing key
+    fn sign(&self, signing_key: &ed25519_dalek::SigningKey) -> [u8; 64] {
+        // Create a hash of all envelope fields except the signature itself
+        let mut hasher = blake3::Hasher::new();
+
+        // Header and routing fields
+        hasher.update(&[self.version]);
+        hasher.update(&[self.envelope_type.as_u8() | if self.compressed { COMPRESSION_FLAG } else { 0 }]);
+        hasher.update(&self.message_id);
+        hasher.update(&self.recipient_hint);
+        hasher.update(&self.created_at.to_le_bytes());
+        hasher.update(&self.ttl_expiry.to_le_bytes());
+        hasher.update(&[self.hop_count]);
+        hasher.update(&[self.priority]);
+
+        // Crypto fields (except signature)
+        hasher.update(&self.sender_public_key);
+        hasher.update(&self.ephemeral_public_key);
+        hasher.update(&self.nonce);
+
+        // Payload
+        hasher.update(&(self.ciphertext.len() as u16).to_le_bytes());
+        hasher.update(&self.ciphertext);
+
+        let hash = hasher.finalize();
+
+        // Sign the hash
+        let signature = signing_key.sign(hash.as_bytes());
+        signature.to_bytes()
+    }
 }
 
 #[cfg(test)]
@@ -283,6 +435,7 @@ mod tests {
         DriftEnvelope {
             version: DRIFT_VERSION,
             envelope_type: EnvelopeType::EncryptedMessage,
+            compressed: false,
             message_id: [1u8; 16],
             recipient_hint: [2u8; 4],
             created_at: 1234567890,
@@ -305,6 +458,8 @@ mod tests {
         assert_eq!(EnvelopeType::SyncResponse.as_u8(), 0x04);
         assert_eq!(EnvelopeType::PeerAnnouncement.as_u8(), 0x05);
         assert_eq!(EnvelopeType::RouteAdvertisement.as_u8(), 0x06);
+        assert_eq!(EnvelopeType::CoverTraffic.as_u8(), 0x07);
+        assert_eq!(EnvelopeType::OnionMessage.as_u8(), 0x08);
 
         assert_eq!(
             EnvelopeType::from_u8(0x01).unwrap(),
@@ -313,6 +468,14 @@ mod tests {
         assert_eq!(
             EnvelopeType::from_u8(0x02).unwrap(),
             EnvelopeType::DeliveryReceipt
+        );
+        assert_eq!(
+            EnvelopeType::from_u8(0x07).unwrap(),
+            EnvelopeType::CoverTraffic
+        );
+        assert_eq!(
+            EnvelopeType::from_u8(0x08).unwrap(),
+            EnvelopeType::OnionMessage
         );
         assert!(EnvelopeType::from_u8(0x99).is_err());
     }
@@ -459,10 +622,10 @@ mod tests {
     fn test_invalid_envelope_type() {
         let mut data = vec![0u8; DriftEnvelope::FIXED_OVERHEAD + 5];
         data[0] = DRIFT_VERSION;
-        data[1] = 0x99; // Invalid type
+        data[1] = 0x19; // Invalid type (not 0x01-0x06, no compression flag)
 
         let result = DriftEnvelope::from_bytes(&data);
-        assert!(matches!(result, Err(DriftError::InvalidEnvelopeType(0x99))));
+        assert!(matches!(result, Err(DriftError::InvalidEnvelopeType(_))));
     }
 
     #[test]
@@ -498,5 +661,43 @@ mod tests {
         let restored = DriftEnvelope::from_bytes(&bytes).unwrap();
         assert_eq!(restored.created_at, 0x12345678);
         assert_eq!(restored.ttl_expiry, 0xABCDEF00);
+    }
+
+    #[test]
+    fn test_compressed_envelope_roundtrip() {
+        let mut env = make_test_envelope();
+        // Use a large, compressible payload
+        env.ciphertext = vec![0xABu8; 5000];
+        env.compressed = true;
+
+        let bytes = env.to_bytes().unwrap();
+
+        // The serialized form should be smaller than uncompressed
+        let uncompressed_size = DriftEnvelope::FIXED_OVERHEAD + 5000;
+        assert!(bytes.len() < uncompressed_size, "Compressed {} < uncompressed {}", bytes.len(), uncompressed_size);
+
+        // The type byte should have the compression flag set
+        assert!(bytes[1] & COMPRESSION_FLAG != 0, "Compression flag should be set");
+
+        let restored = DriftEnvelope::from_bytes(&bytes).unwrap();
+        assert_eq!(restored.compressed, true);
+        assert_eq!(restored.ciphertext.len(), 5000);
+        assert!(restored.ciphertext.iter().all(|&b| b == 0xAB));
+    }
+
+    #[test]
+    fn test_compression_flag_preserved_on_roundtrip() {
+        let mut env = make_test_envelope();
+        env.compressed = false;
+        let bytes = env.to_bytes().unwrap();
+        assert!(bytes[1] & COMPRESSION_FLAG == 0, "No compression flag");
+        let restored = DriftEnvelope::from_bytes(&bytes).unwrap();
+        assert!(!restored.compressed);
+
+        env.compressed = true;
+        let bytes = env.to_bytes().unwrap();
+        assert!(bytes[1] & COMPRESSION_FLAG != 0, "Compression flag set");
+        let restored = DriftEnvelope::from_bytes(&bytes).unwrap();
+        assert!(restored.compressed);
     }
 }

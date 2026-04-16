@@ -16,6 +16,7 @@ use scmessenger_core::IronCore;
 /// Stand up an initialised IronCore instance with a generated identity.
 fn make_node() -> IronCore {
     let node = IronCore::new();
+    node.grant_consent();
     node.initialize_identity()
         .expect("identity initialization must succeed");
     node

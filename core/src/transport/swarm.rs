@@ -31,6 +31,7 @@ use super::multiport::{self, BindResult, MultiPortConfig};
 use super::observation::{AddressObserver, ConnectionTracker};
 use super::reflection::{AddressReflectionRequest, AddressReflectionService};
 use crate::store::relay_custody::{CustodyEnforcement, RelayCustodyStore};
+use crate::drift::{DriftFrame, SyncSession};
 use anyhow::Result;
 use bincode;
 #[cfg(target_arch = "wasm32")]
@@ -276,6 +277,11 @@ impl RelayAbuseGuardrails {
             self.recent_duplicates.remove(&oldest_key);
         }
     }
+}
+
+/// Check if envelope data is a valid DriftFrame and return its type
+fn get_drift_frame_type(envelope_data: &[u8]) -> Option<DriftFrame> {
+    DriftFrame::from_bytes(envelope_data).ok()
 }
 
 impl DeliveryConvergenceMarker {
@@ -1422,6 +1428,9 @@ pub async fn start_swarm_with_config(
         // Track pending message deliveries
         let mut pending_messages: HashMap<String, PendingMessage> = HashMap::new();
 
+        // SyncSession management for Drift Protocol mesh synchronization
+        let mut sync_sessions: HashMap<PeerId, SyncSession> = HashMap::new();
+
         // Track outbound request IDs to message IDs for direct sends
         let mut request_to_message: HashMap<libp2p::request_response::OutboundRequestId, String> =
             HashMap::new();
@@ -1767,6 +1776,15 @@ pub async fn start_swarm_with_config(
                                                     // Other relay messages, fall through to normal handling
                                                 }
                                             }
+                                        }
+
+                                        // Check if this is a DriftFrame for optimized handling
+                                        if let Some(drift_frame) = get_drift_frame_type(&request.envelope_data) {
+                                            tracing::debug!(
+                                                "📦 Received DriftFrame type: {:?} from {}",
+                                                drift_frame.frame_type,
+                                                peer
+                                            );
                                         }
 
                                         // Received a message from a peer
@@ -2488,6 +2506,13 @@ pub async fn start_swarm_with_config(
                                         bootstrap_capability.add_peer(remote_peer_id);
                                         if reported_peer_discoveries.insert(remote_peer_id) {
                                             let _ = event_tx.send(SwarmEvent2::PeerDiscovered(remote_peer_id)).await;
+
+                                            // Activate SyncSession for Drift Protocol mesh synchronization
+                                            sync_sessions.insert(remote_peer_id, SyncSession::new());
+                                            tracing::debug!(
+                                                "🔄 Activated SyncSession for peer: {}",
+                                                remote_peer_id
+                                            );
                                         }
                                     }
                                     dcutr::Event { remote_peer_id, result: Err(e) } => {
@@ -2595,6 +2620,13 @@ pub async fn start_swarm_with_config(
                                     bootstrap_capability.add_peer(peer_id);
                                     if reported_peer_discoveries.insert(peer_id) {
                                         let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
+
+                                        // Activate SyncSession for Drift Protocol mesh synchronization
+                                        sync_sessions.insert(peer_id, SyncSession::new());
+                                        tracing::debug!(
+                                            "🔄 Activated SyncSession for peer: {}",
+                                            peer_id
+                                        );
                                     }
                                 }
                             }
@@ -2849,6 +2881,13 @@ pub async fn start_swarm_with_config(
 
                                 if reported_peer_discoveries.insert(peer_id) {
                                     let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
+
+                                    // Activate SyncSession for Drift Protocol mesh synchronization
+                                    sync_sessions.insert(peer_id, SyncSession::new());
+                                    tracing::debug!(
+                                        "🔄 Activated SyncSession for peer: {}",
+                                        peer_id
+                                    );
                                 }
 
                                 // AUTO LEDGER EXCHANGE: On every new connection, share our
@@ -3301,6 +3340,7 @@ pub async fn start_swarm_with_config(
         let mut seen_delivery_convergence_markers: HashSet<String> = HashSet::new();
         let bootstrap_addrs_clone = bootstrap_addrs;
         let mut reported_peer_discoveries: HashSet<PeerId> = HashSet::new();
+        let mut sync_sessions: HashMap<PeerId, SyncSession> = HashMap::new();
 
         wasm_bindgen_futures::spawn_local(async move {
             loop {
@@ -3883,8 +3923,8 @@ pub async fn start_swarm_with_config(
                             }
                             SwarmEvent::ConnectionEstablished { peer_id, endpoint, connection_id, .. } => {
                                 tracing::info!(
-                                    event = "outbox_flush_triggered",
-                                    reason = ?crate::routing::smart_retry::DeliveryTrigger::PeerDiscovered(peer_id.to_string()),
+                                    event = "peer_connected",
+                                    trigger = ?crate::routing::smart_retry::DeliveryTrigger::PeerDiscovered(peer_id.to_string()),
                                     peer = %peer_id
                                 );
                                 connection_tracker.add_connection(
@@ -3906,6 +3946,13 @@ pub async fn start_swarm_with_config(
                                 );
                                 if reported_peer_discoveries.insert(peer_id) {
                                     let _ = event_tx.send(SwarmEvent2::PeerDiscovered(peer_id)).await;
+
+                                    // Activate SyncSession for Drift Protocol mesh synchronization
+                                    sync_sessions.insert(peer_id, SyncSession::new());
+                                    tracing::debug!(
+                                        "🔄 Activated SyncSession for peer: {}",
+                                        peer_id
+                                    );
                                 }
                             }
                             SwarmEvent::ConnectionClosed { peer_id, .. } => {

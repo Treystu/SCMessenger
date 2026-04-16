@@ -1,0 +1,5 @@
+# Windows: disable incremental compilation to prevent rlib metadata
+# and paging file errors during integration test builds.
+# See P0_BUILD_004 for context.
+[build]
+incremental = false

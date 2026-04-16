@@ -305,6 +305,14 @@ pub struct IronCore {
     running: Arc<RwLock<bool>>,
     /// Platform delegate for callbacks
     delegate: Arc<RwLock<Option<Arc<dyn CoreDelegate>>>>,
+    /// Drift relay engine (mesh store-and-forward)
+    drift_engine: Arc<RwLock<drift::RelayEngine>>,
+    /// Abuse reputation manager (P0_SECURITY_002)
+    abuse_reputation: Arc<transport::reputation::AbuseReputationManager>,
+    /// Mycorrhizal routing engine (P1_CORE_003: intelligent path selection)
+    routing_engine: Arc<RwLock<routing::OptimizedRoutingEngine>>,
+    /// Privacy feature configuration (padding, onion, cover traffic, timing)
+    privacy_config: Arc<RwLock<privacy::PrivacyConfig>>,
 }
 
 const STORAGE_SCHEMA_VERSION: u32 = 3;
@@ -728,6 +736,23 @@ impl IronCore {
         #[cfg(not(target_arch = "wasm32"))]
         let history_bridge_manager = init_uniffi_history_manager(storage_path.as_deref());
 
+        // Drift relay engine: starts dormant until explicitly activated.
+        // Use a zero local key for the default engine; it will be replaced
+        // with the real identity key once identity is initialized.
+        let drift_engine = Arc::new(RwLock::new(drift::RelayEngine::new(
+            &[0u8; 32],
+            drift::RelayConfig::default(),
+        )));
+
+        let abuse_reputation = Arc::new(transport::reputation::AbuseReputationManager::new(1000));
+
+        // P1_CORE_003: Mycorrhizal routing engine — starts with zero-key identity,
+        // replaced once identity is initialized. Provides intelligent path selection
+        // across all three routing layers (Local, Neighborhood, Global).
+        let routing_engine = Arc::new(RwLock::new(
+            routing::OptimizedRoutingEngine::new([0u8; 32], [0u8; 4]),
+        ));
+
         Self {
             identity,
             outbox: Arc::new(RwLock::new(outbox)),
@@ -747,6 +772,10 @@ impl IronCore {
             history_bridge_manager,
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
+            drift_engine,
+            abuse_reputation,
+            routing_engine,
+            privacy_config: Arc::new(RwLock::new(privacy::PrivacyConfig::default())),
         }
     }
 
@@ -869,6 +898,15 @@ impl IronCore {
             consent_granted: Arc::new(RwLock::new(false)),
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
+            drift_engine: Arc::new(RwLock::new(drift::RelayEngine::new(
+                &[0u8; 32],
+                drift::RelayConfig::default(),
+            ))),
+            abuse_reputation: Arc::new(transport::reputation::AbuseReputationManager::new(1000)),
+            routing_engine: Arc::new(RwLock::new(
+                routing::OptimizedRoutingEngine::new([0u8; 32], [0u8; 4]),
+            )),
+            privacy_config: Arc::new(RwLock::new(privacy::PrivacyConfig::default())),
         }
     }
 
@@ -949,6 +987,24 @@ impl IronCore {
             .write()
             .initialize()
             .map_err(|_| IronCoreError::CryptoError)?;
+
+        // P1_CORE_003: Re-initialize routing engine with real identity key
+        if let Some(keys) = self.identity.read().keys() {
+            let pk = keys.signing_key.verifying_key().to_bytes();
+            self.reinit_routing_with_identity(&pk);
+
+            // Also re-initialize the drift relay engine with the real public key
+            // so recipient hints match correctly for local message delivery.
+            let was_active = self.drift_engine.read().network_state() == drift::NetworkState::Active;
+            *self.drift_engine.write() = drift::RelayEngine::new(
+                &pk,
+                drift::RelayConfig::default(),
+            );
+            if was_active {
+                self.drift_engine.write().set_network_state(drift::NetworkState::Active);
+            }
+        }
+
         self.emit_audit(AuditEventType::IdentityCreated, None, None);
         Ok(())
     }
@@ -1329,15 +1385,45 @@ impl IronCore {
         });
 
         // Serialize the message
-        let plaintext = message::encode_message(&msg).map_err(|_| IronCoreError::Internal)?;
+        let mut plaintext = message::encode_message(&msg).map_err(|_| IronCoreError::Internal)?;
+
+        // Privacy: apply message padding if enabled
+        // Pads to the next standard size (256, 512, 1024, 2048, 4096) to
+        // obscure true message length from traffic analysis.
+        {
+            let pc = self.privacy_config.read();
+            if pc.message_padding_enabled {
+                if let Ok(padded) = privacy::padding::pad_to_next_standard_size(&plaintext) {
+                    plaintext = padded;
+                    tracing::debug!(
+                        event = "privacy_padding_applied",
+                        padded_len = plaintext.len()
+                    );
+                }
+                // If message exceeds max standard size, skip padding silently
+                // (large messages are already hard to fingerprint by size)
+            }
+        }
 
         // Encrypt
         let envelope = crypto::encrypt_message(&keys.signing_key, &recipient_bytes, &plaintext)
             .map_err(|_| IronCoreError::CryptoError)?;
 
-        // Serialize envelope for wire
-        let envelope_bytes =
-            message::encode_envelope(&envelope).map_err(|_| IronCoreError::Internal)?;
+        // Convert to Drift Protocol format and serialize
+        let drift_envelope = drift::DriftEnvelope::from_legacy_envelope(
+            envelope,
+            message_id.clone(),
+            recipient_bytes,
+            &keys.signing_key,
+        ).map_err(|e| {
+            eprintln!("[IronCore] Drift envelope conversion failed: {}", e);
+            IronCoreError::Internal
+        })?;
+
+        let envelope_bytes = drift_envelope.to_bytes().map_err(|e| {
+            eprintln!("[IronCore] Drift envelope serialization failed: {}", e);
+            IronCoreError::Internal
+        })?;
 
         // Persist outbound envelope for retry/reconciliation.
         self.outbox
@@ -1362,7 +1448,7 @@ impl IronCore {
         );
 
         Ok(PreparedMessage {
-            message_id,
+            message_id: message_id.clone(),
             envelope_data: envelope_bytes,
         })
     }
@@ -1407,7 +1493,7 @@ impl IronCore {
         let mut recipient_bytes = [0u8; 32];
         recipient_bytes.copy_from_slice(&recipient_public_key);
 
-        let receipt = Receipt::delivered(message_id);
+        let receipt = Receipt::delivered(message_id.clone());
         let msg = Message::receipt(sender_id, recipient_key_trimmed, &receipt);
 
         let plaintext = message::encode_message(&msg).map_err(|_| IronCoreError::Internal)?;
@@ -1415,8 +1501,21 @@ impl IronCore {
         let envelope = crypto::encrypt_message(&keys.signing_key, &recipient_bytes, &plaintext)
             .map_err(|_| IronCoreError::CryptoError)?;
 
-        let envelope_bytes =
-            message::encode_envelope(&envelope).map_err(|_| IronCoreError::Internal)?;
+        // Convert to Drift Protocol format and serialize
+        let drift_envelope = drift::DriftEnvelope::from_legacy_envelope(
+            envelope,
+            message_id.clone(),
+            recipient_bytes,
+            &keys.signing_key,
+        ).map_err(|e| {
+            eprintln!("[IronCore] Drift envelope conversion failed: {}", e);
+            IronCoreError::Internal
+        })?;
+
+        let envelope_bytes = drift_envelope.to_bytes().map_err(|e| {
+            eprintln!("[IronCore] Drift envelope serialization failed: {}", e);
+            IronCoreError::Internal
+        })?;
 
         Ok(envelope_bytes)
     }
@@ -1444,6 +1543,174 @@ impl IronCore {
         Ok(out)
     }
 
+    // ========================================================================
+    // PRIVACY CONFIGURATION API
+    // ========================================================================
+
+    /// Get the current privacy configuration.
+    pub fn privacy_config(&self) -> privacy::PrivacyConfig {
+        self.privacy_config.read().clone()
+    }
+
+    /// Get current privacy configuration as JSON string.
+    pub fn get_privacy_config(&self) -> String {
+        let config = self.privacy_config.read().clone();
+        serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string())
+    }
+
+    /// Update privacy feature configuration at runtime from JSON.
+    /// Changes take effect immediately for subsequent messages.
+    pub fn set_privacy_config(&self, config_json: String) -> Result<(), IronCoreError> {
+        let config: privacy::PrivacyConfig = serde_json::from_str(&config_json)
+            .map_err(|_| IronCoreError::InvalidInput)?;
+
+        let mut current = self.privacy_config.write();
+        tracing::info!(
+            event = "privacy_config_updated",
+            padding = config.message_padding_enabled,
+            onion = config.onion_routing_enabled,
+            cover_traffic = config.cover_traffic_enabled,
+            timing = config.timing_obfuscation_enabled
+        );
+        *current = config;
+        Ok(())
+    }
+
+    /// Prepare an onion-routed message for anonymous delivery.
+    ///
+    /// Takes an already-prepared envelope and wraps it in onion encryption
+    /// layers for each relay hop. Returns the outermost onion envelope
+    /// serialized as bytes, ready to send to the first relay hop.
+    ///
+    /// # Arguments
+    /// * `envelope_data` - The already-encrypted envelope bytes (from `prepare_message`)
+    /// * `relay_public_keys_json` - JSON array of hex-encoded relay public keys
+    ///
+    /// # Returns
+    /// Onion-routed envelope bytes ready for transmission
+    pub fn prepare_onion_message(
+        &self,
+        envelope_data: Vec<u8>,
+        relay_public_keys_json: String,
+    ) -> Result<Vec<u8>, IronCoreError> {
+        let pc = self.privacy_config.read();
+        if !pc.onion_routing_enabled {
+            // Onion routing disabled — pass through the envelope unchanged
+            return Ok(envelope_data);
+        }
+
+        // Parse JSON array of relay public keys
+        let relay_public_keys: Vec<String> = serde_json::from_str(&relay_public_keys_json)
+            .map_err(|_| IronCoreError::InvalidInput)?;
+
+        if relay_public_keys.is_empty() || relay_public_keys.len() > privacy::MAX_ONION_HOPS {
+            return Err(IronCoreError::InvalidInput);
+        }
+
+        // Decode relay public keys from hex to 32-byte arrays
+        let mut path: Vec<[u8; 32]> = Vec::with_capacity(relay_public_keys.len());
+        for pk_hex in &relay_public_keys {
+            let decoded = hex::decode(pk_hex.trim()).map_err(|_| IronCoreError::InvalidInput)?;
+            if decoded.len() != 32 {
+                return Err(IronCoreError::InvalidInput);
+            }
+            let mut key = [0u8; 32];
+            key.copy_from_slice(&decoded);
+            path.push(key);
+        }
+
+        // The last entry in the path is the destination (recipient).
+        // The envelope_data is the payload for the innermost layer.
+        let onion_envelope = privacy::onion::construct_onion(path, &envelope_data)
+            .map_err(|_| IronCoreError::CryptoError)?;
+
+        // Serialize the onion envelope for wire transmission
+        let onion_bytes = bincode::serialize(&onion_envelope)
+            .map_err(|_| IronCoreError::Internal)?;
+
+        tracing::info!(
+            event = "onion_message_prepared",
+            relay_count = relay_public_keys.len()
+        );
+
+        Ok(onion_bytes)
+    }
+
+    /// Peel one layer of an onion-routed envelope.
+    ///
+    /// Called by a relay node when it receives an onion envelope.
+    /// Reveals the next hop address and returns the remaining layers.
+    ///
+    /// # Arguments
+    /// * `onion_data` - Serialized onion envelope bytes
+    /// * `relay_secret_key` - This node's X25519 static secret key (32 bytes)
+    ///
+    /// # Returns
+    /// Tuple of (next_hop_public_key_or_None, remaining_data):
+    /// - If Some(next_hop): forward remaining_data to next_hop
+    /// - If None: this is the final destination, remaining_data is plaintext
+    pub fn peel_onion_layer_internal(
+        &self,
+        onion_data: Vec<u8>,
+        relay_secret_key: [u8; 32],
+    ) -> Result<(Option<[u8; 32]>, Vec<u8>), IronCoreError> {
+        let onion_envelope: privacy::OnionEnvelope = bincode::deserialize(&onion_data)
+            .map_err(|_| IronCoreError::InvalidInput)?;
+
+        privacy::onion::peel_layer(&onion_envelope, &relay_secret_key)
+            .map_err(|_| IronCoreError::CryptoError)
+    }
+
+    /// Peel one layer of an onion-routed envelope (relay-side operation).
+    /// Returns only the remaining data for the next hop or final destination.
+    pub fn peel_onion_layer(
+        &self,
+        onion_data: Vec<u8>,
+        relay_secret_key: Vec<u8>,
+    ) -> Result<Vec<u8>, IronCoreError> {
+        if relay_secret_key.len() != 32 {
+            return Err(IronCoreError::InvalidInput);
+        }
+        let mut key_array = [0u8; 32];
+        key_array.copy_from_slice(&relay_secret_key);
+
+        let (_next_hop, remaining_data) = self.peel_onion_layer_internal(onion_data, key_array)?;
+        Ok(remaining_data)
+    }
+
+    /// Compute timing jitter delay for relay forwarding.
+    ///
+    /// When timing obfuscation is enabled, returns a random delay in milliseconds
+    /// based on the message priority. When disabled, returns zero delay.
+    /// This method is exposed to the UDL interface.
+    pub fn relay_jitter_delay(&self, priority: String) -> u64 {
+        let priority_enum = match priority.as_str() {
+            "HighPriority" => privacy::timing::MessagePriority::HighPriority,
+            "Normal" => privacy::timing::MessagePriority::Normal,
+            "LowPriority" => privacy::timing::MessagePriority::LowPriority,
+            _ => privacy::timing::MessagePriority::Normal, // Default to Normal for invalid input
+        };
+
+        let duration = self.relay_jitter_delay_internal(priority_enum);
+        duration.as_millis() as u64
+    }
+
+    /// Internal helper for computing timing jitter delay.
+    fn relay_jitter_delay_internal(&self, priority: privacy::timing::MessagePriority) -> web_time::Duration {
+        let pc = self.privacy_config.read();
+        if !pc.timing_obfuscation_enabled {
+            return web_time::Duration::ZERO;
+        }
+
+        let config = match priority {
+            privacy::timing::MessagePriority::HighPriority => &pc.relay_timing_policy.high_priority_config,
+            privacy::timing::MessagePriority::Normal => &pc.relay_timing_policy.normal_config,
+            privacy::timing::MessagePriority::LowPriority => &pc.relay_timing_policy.low_priority_config,
+        };
+
+        privacy::timing::compute_jitter(config)
+    }
+
     pub fn classify_notification(
         &self,
         message: NotificationMessageContext,
@@ -1461,33 +1728,59 @@ impl IronCore {
             IronCoreError::NotInitialized
         })?;
 
-        // Deserialize envelope
-        let envelope = message::decode_envelope(&envelope_bytes).map_err(|e| {
-            let err_msg = format!(
-                "[IronCore] receive_message FAILED: envelope decode error (len={}, err={:?})\n",
-                envelope_bytes.len(),
-                e
-            );
-            let _ = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open("/tmp/scm_debug.log")
-                .map(|mut f| {
-                    use std::io::Write;
-                    f.write_all(err_msg.as_bytes())
-                });
-            eprintln!("{}", err_msg);
-            IronCoreError::Internal
-        })?;
+        // Deserialize envelope — try Drift binary format first, fall back to bincode
+        let envelope = if !envelope_bytes.is_empty() && envelope_bytes[0] == drift::DRIFT_VERSION {
+            // Drift binary format
+            let drift_env = drift::DriftEnvelope::from_bytes(&envelope_bytes)
+                .map_err(|e| {
+                    eprintln!("[IronCore] receive_message FAILED: drift envelope decode error (len={}, err={:?})", envelope_bytes.len(), e);
+                    IronCoreError::Internal
+                })?;
+            drift_env.to_legacy_envelope()
+        } else {
+            // Legacy bincode format
+            message::decode_envelope(&envelope_bytes).map_err(|e| {
+                let err_msg = format!(
+                    "[IronCore] receive_message FAILED: envelope decode error (len={}, err={:?})\n",
+                    envelope_bytes.len(),
+                    e
+                );
+                let _ = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/scm_debug.log")
+                    .map(|mut f| {
+                        use std::io::Write;
+                        f.write_all(err_msg.as_bytes())
+                    });
+                eprintln!("{}", err_msg);
+                IronCoreError::Internal
+            })?
+        };
 
         // Decrypt
-        let plaintext = crypto::decrypt_message(&keys.signing_key, &envelope)
+        let mut plaintext = crypto::decrypt_message(&keys.signing_key, &envelope)
             .map_err(|e| {
                 let err_msg = format!("[IronCore] receive_message FAILED: decrypt error — sender_key={}, local_key={}, err={:?}\n", hex::encode(&envelope.sender_public_key), hex::encode(keys.signing_key.verifying_key().to_bytes()), e);
                 let _ = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/scm_debug.log").map(|mut f| { use std::io::Write; f.write_all(err_msg.as_bytes()) });
                 eprintln!("{}", err_msg);
                 IronCoreError::CryptoError
             })?;
+
+        // Privacy: remove message padding if enabled
+        // Try to unpad; if it fails the message wasn't padded (backward compatible).
+        {
+            let pc = self.privacy_config.read();
+            if pc.message_padding_enabled {
+                if let Ok(unpadded) = privacy::padding::unpad_message(&plaintext) {
+                    plaintext = unpadded;
+                    tracing::debug!(
+                        event = "privacy_padding_removed",
+                        original_len = plaintext.len()
+                    );
+                }
+            }
+        }
 
         // Deserialize message
         let msg = message::decode_message(&plaintext).map_err(|e| {
@@ -1682,6 +1975,8 @@ impl IronCore {
                             .history
                             .read()
                             .mark_delivered(receipt.message_id.clone());
+                        // Feed routing engine: successful delivery confirms reliable path
+                        self.routing_update_reliability(expected_sender_identity.clone(), true);
                     }
                 }
             }
@@ -1973,14 +2268,40 @@ impl IronCore {
     }
 
     /// Notify the delegate that a peer was discovered on the network.
+    /// Also feeds the routing engine's Layer 1 (Mycelium) local cell.
     pub fn notify_peer_discovered(&self, peer_id: String) {
+        // P1_CORE_003: Feed routing engine with peer discovery
+        self.routing_peer_seen(peer_id.clone(), "tcp".to_string());
+        // Successful connection means the peer is reachable
+        self.routing_update_reliability(peer_id.clone(), true);
+
         if let Some(delegate) = self.delegate.read().as_ref() {
             delegate.on_peer_discovered(peer_id);
         }
     }
 
+    /// Drain all queued outbox messages for a specific peer.
+    ///
+    /// Call this when a peer is discovered or connected to attempt delivery
+    /// of any messages that were queued while the peer was offline.
+    /// Returns the drained messages so the caller can send them via the
+    /// appropriate transport.
+    pub fn flush_outbox_for_peer(&self, peer_id: &str) -> Vec<store::QueuedMessage> {
+        let mut outbox = self.outbox.write();
+        let messages = outbox.drain_for_peer(peer_id);
+        if !messages.is_empty() {
+            tracing::info!(
+                event = "outbox_flushed",
+                peer = %peer_id,
+                count = messages.len()
+            );
+        }
+        messages
+    }
+
     /// Notify the delegate that a peer disconnected from the network.
     pub fn notify_peer_disconnected(&self, peer_id: String) {
+        self.routing_update_reliability(peer_id.clone(), false);
         if let Some(delegate) = self.delegate.read().as_ref() {
             delegate.on_peer_disconnected(peer_id);
         }
@@ -2034,6 +2355,226 @@ impl IronCore {
             .validate_chain()
             .map_err(|_| IronCoreError::Internal)
     }
+
+    // ========================================================================
+    // DRIFT PROTOCOL (P1_CORE_001: mesh store-and-forward)
+    // ========================================================================
+
+    /// Activate the Drift network — enables message sending and relay.
+    pub fn drift_activate(&self) {
+        self.drift_engine
+            .write()
+            .set_network_state(drift::NetworkState::Active);
+        self.emit_audit(AuditEventType::RelayEnabled, None, None);
+    }
+
+    /// Deactivate the Drift network — suspends message sending and relay.
+    pub fn drift_deactivate(&self) {
+        self.drift_engine
+            .write()
+            .set_network_state(drift::NetworkState::Dormant);
+        self.emit_audit(AuditEventType::RelayDisabled, None, None);
+    }
+
+    /// Get the current Drift network state as a string ("Active" or "Dormant").
+    pub fn drift_network_state(&self) -> String {
+        match self.drift_engine.read().network_state() {
+            drift::NetworkState::Active => "Active".to_string(),
+            drift::NetworkState::Dormant => "Dormant".to_string(),
+        }
+    }
+
+    /// Get the number of messages currently in the Drift mesh store.
+    pub fn drift_store_size(&self) -> u32 {
+        self.drift_engine.read().store().len() as u32
+    }
+
+    // ========================================================================
+    // ABUSE REPUTATION (P0_SECURITY_002)
+    // ========================================================================
+
+    /// Record an abuse signal for a peer and return the resulting reputation score.
+    pub fn record_abuse_signal(&self, peer_id: String, signal: String) -> f64 {
+        let abuse_signal = match signal.as_str() {
+            "RateLimited" => transport::reputation::AbuseSignal::RateLimited,
+            "OversizedMessage" => transport::reputation::AbuseSignal::OversizedMessage,
+            "InvalidFormat" => transport::reputation::AbuseSignal::InvalidFormat,
+            "DuplicateMessage" => transport::reputation::AbuseSignal::DuplicateMessage,
+            "InvalidDestination" => transport::reputation::AbuseSignal::InvalidDestination,
+            "SuccessfulRelay" => transport::reputation::AbuseSignal::SuccessfulRelay,
+            "FailedRelay" => transport::reputation::AbuseSignal::FailedRelay,
+            "SuccessfulDelivery" => transport::reputation::AbuseSignal::SuccessfulDelivery,
+            "ConnectionTimeout" => transport::reputation::AbuseSignal::ConnectionTimeout,
+            _ => transport::reputation::AbuseSignal::InvalidFormat, // sensible default
+        };
+        self.abuse_reputation
+            .record_signal(&peer_id, abuse_signal)
+            .value()
+    }
+
+    /// Get the reputation score for a peer (0.0 = abusive, 100.0 = trusted, 50.0 = neutral).
+    pub fn get_peer_reputation(&self, peer_id: String) -> f64 {
+        self.abuse_reputation.get_score(&peer_id).value()
+    }
+
+    /// Get the rate limit multiplier for a peer based on reputation.
+    /// Trusted peers get 1.5x, abusive peers get 0.1x, default is 1.0x.
+    pub fn peer_rate_limit_multiplier(&self, peer_id: String) -> f64 {
+        self.abuse_reputation.rate_limit_multiplier(&peer_id)
+    }
+
+    // ========================================================================
+    // MYCORRHIZAL ROUTING (P1_CORE_003: intelligent path selection)
+    // ========================================================================
+
+    /// Record a peer sighting in the routing engine's local cell.
+    /// Called whenever a peer is discovered via any transport (BLE, WiFi, TCP, etc.).
+    /// This feeds the routing engine's Layer 1 (Mycelium) topology awareness.
+    pub fn routing_peer_seen(&self, peer_id_hex: String, transport: String) {
+        let peer_id = match hex_decode_peer_id(&peer_id_hex) {
+            Some(id) => id,
+            None => {
+                tracing::warn!("routing_peer_seen: invalid peer_id hex '{}'", peer_id_hex);
+                return;
+            }
+        };
+
+        let transport_type = match transport.to_lowercase().as_str() {
+            "ble" => routing::local::TransportType::BLE,
+            "wifi_aware" => routing::local::TransportType::WiFiAware,
+            "wifi_direct" => routing::local::TransportType::WiFiDirect,
+            "tcp" => routing::local::TransportType::TCP,
+            "quic" => routing::local::TransportType::QUIC,
+            _ => routing::local::TransportType::TCP, // sensible default
+        };
+
+        self.routing_engine
+            .write()
+            .base_engine_mut()
+            .local_cell_mut()
+            .peer_seen(peer_id, transport_type);
+
+        tracing::debug!(
+            "Routing: peer {} seen via {}",
+            &peer_id_hex[..8.min(peer_id_hex.len())],
+            transport
+        );
+    }
+
+    /// Update the reachable recipient hints for a known peer.
+    /// Called when a peer announces which recipients they can reach.
+    /// This enables the routing engine to select this peer as a relay for those recipients.
+    pub fn routing_update_peer_hints(&self, peer_id_hex: String, hints: Vec<Vec<u8>>) {
+        let peer_id = match hex_decode_peer_id(&peer_id_hex) {
+            Some(id) => id,
+            None => {
+                tracing::warn!("routing_update_peer_hints: invalid peer_id hex");
+                return;
+            }
+        };
+
+        let parsed_hints: Vec<[u8; 4]> = hints
+            .into_iter()
+            .filter_map(|h| {
+                if h.len() == 4 {
+                    let mut arr = [0u8; 4];
+                    arr.copy_from_slice(&h);
+                    Some(arr)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        self.routing_engine
+            .write()
+            .base_engine_mut()
+            .local_cell_mut()
+            .update_peer_hints(&peer_id, parsed_hints);
+    }
+
+    /// Mark a peer as a gateway (they have connections beyond local range).
+    /// Gateway peers are used for Layer 2 (Rhizomorphs) neighborhood routing.
+    pub fn routing_mark_gateway(&self, peer_id_hex: String, is_gateway: bool) {
+        let peer_id = match hex_decode_peer_id(&peer_id_hex) {
+            Some(id) => id,
+            None => {
+                tracing::warn!("routing_mark_gateway: invalid peer_id hex");
+                return;
+            }
+        };
+
+        self.routing_engine
+            .write()
+            .base_engine_mut()
+            .local_cell_mut()
+            .mark_as_gateway(&peer_id, is_gateway);
+    }
+
+    /// Record a relay success/failure for a peer, updating their reliability score.
+    /// Higher reliability peers are preferred for routing decisions.
+    pub fn routing_update_reliability(&self, peer_id_hex: String, success: bool) {
+        let peer_id = match hex_decode_peer_id(&peer_id_hex) {
+            Some(id) => id,
+            None => {
+                tracing::warn!("routing_update_reliability: invalid peer_id hex");
+                return;
+            }
+        };
+
+        self.routing_engine
+            .write()
+            .base_engine_mut()
+            .local_cell_mut()
+            .update_reliability(&peer_id, success);
+    }
+
+    /// Run a routing tick for periodic maintenance.
+    /// Should be called every 10-30 seconds. Handles peer status transitions
+    /// (Active -> Stale -> Dormant), gateway cleanup, and route expiry.
+    pub fn routing_tick(&self) -> String {
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let maintenance = self.routing_engine.write().tick(now);
+        maintenance.to_string()
+    }
+
+    /// Get a JSON summary of the routing state for diagnostics.
+    /// Returns local cell, neighborhood, and global route information.
+    pub fn routing_summary(&self) -> String {
+        let summary = self.routing_engine.read().base_engine().routing_summary();
+        serde_json::to_string(&summary).unwrap_or_else(|_| "{}".to_string())
+    }
+
+    /// Re-initialize the routing engine with the real identity after initialization.
+    /// Called internally by `initialize_identity()` to replace the zero-key placeholder.
+    fn reinit_routing_with_identity(&self, public_key: &[u8; 32]) {
+        let local_hint = drift::envelope::DriftEnvelope::hint_from_public_key(public_key);
+        let mut engine = self.routing_engine.write();
+        *engine = routing::OptimizedRoutingEngine::new(*public_key, local_hint);
+        tracing::info!("Routing engine re-initialized with real identity");
+    }
+}
+
+/// Helper: decode a 64-char hex string into a 32-byte PeerId.
+/// Returns None if the string is not valid 64-char hex.
+fn hex_decode_peer_id(hex_str: &str) -> Option<[u8; 32]> {
+    if hex_str.len() != 64 {
+        return None;
+    }
+    let mut bytes = [0u8; 32];
+    hex_str.as_bytes().chunks_exact(2).enumerate().try_for_each(
+        |(i, chunk)| -> Option<()> {
+            let high = char::from(chunk[0]).to_digit(16)?;
+            let low = char::from(chunk[1]).to_digit(16)?;
+            bytes[i] = ((high << 4) | low) as u8;
+            Some(())
+        },
+    )?;
+    Some(bytes)
 }
 
 impl Default for IronCore {

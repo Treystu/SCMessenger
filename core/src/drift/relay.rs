@@ -11,6 +11,7 @@
 use super::envelope::DriftEnvelope;
 use super::store::{MeshStore, MessageId, StoredEnvelope};
 use super::DriftError;
+use crate::privacy::cover::{CoverConfig, CoverTrafficScheduler};
 use thiserror::Error;
 
 /// The unified relay=messaging toggle state
@@ -109,6 +110,8 @@ pub struct RelayEngine {
     /// Rate limiting: messages relayed in current window
     relay_count_this_hour: u32,
     hour_start: u64,
+    /// Cover traffic scheduler (privacy: traffic analysis resistance)
+    cover_scheduler: Option<CoverTrafficScheduler>,
 }
 
 impl RelayEngine {
@@ -127,6 +130,7 @@ impl RelayEngine {
             local_hint,
             relay_count_this_hour: 0,
             hour_start: now,
+            cover_scheduler: None,
         }
     }
 
@@ -139,6 +143,42 @@ impl RelayEngine {
     /// Get current network state
     pub fn network_state(&self) -> NetworkState {
         self.state
+    }
+
+    /// Enable or disable cover traffic generation.
+    ///
+    /// When enabled, the relay engine generates dummy messages at a configured
+    /// rate to mask real traffic patterns from traffic analysis.
+    pub fn set_cover_traffic(&mut self, enabled: bool, rate_per_minute: u32) {
+        if enabled {
+            let config = CoverConfig {
+                enabled: true,
+                message_size: 512,
+                rate_per_minute: rate_per_minute.max(1),
+            };
+            self.cover_scheduler = CoverTrafficScheduler::new(config).ok();
+        } else {
+            self.cover_scheduler = None;
+        }
+    }
+
+    /// Check if cover traffic is due and generate a cover message.
+    ///
+    /// Call this periodically (e.g., during maintenance tick).
+    /// Returns `Some(cover_bytes)` when a cover message should be broadcast,
+    /// or `None` if it's not yet time.
+    pub fn generate_cover_traffic_if_due(&mut self) -> Option<Vec<u8>> {
+        let scheduler = self.cover_scheduler.as_mut()?;
+        if !scheduler.should_generate_cover_traffic() {
+            return None;
+        }
+        let cover_msg = scheduler.generate_and_update().ok()?;
+        // Encode: ephemeral_key(32) | recipient_hint(32) | encrypted_payload
+        let mut out = Vec::with_capacity(32 + 32 + cover_msg.encrypted_payload.len());
+        out.extend_from_slice(&cover_msg.ephemeral_key);
+        out.extend_from_slice(&cover_msg.recipient_hint);
+        out.extend_from_slice(&cover_msg.encrypted_payload);
+        Some(out)
     }
 
     /// Process an incoming DriftEnvelope. Returns what to do with it.
@@ -162,10 +202,30 @@ impl RelayEngine {
             });
         }
 
+        // Privacy: Cover traffic envelopes are relayed identically to regular
+        // messages but don't count against rate limits. This ensures cover
+        // traffic maintains its indistinguishability while allowing the
+        // network to carry it freely.
+        let is_cover_traffic = envelope.envelope_type == super::envelope::EnvelopeType::CoverTraffic;
+
+        // Privacy: Onion-routed messages are delivered locally if the
+        // recipient_hint matches (meaning we're a hop in the onion path).
+        // The application layer is responsible for peeling the onion layer
+        // and forwarding the remaining envelope.
+        let is_onion = envelope.envelope_type == super::envelope::EnvelopeType::OnionMessage;
+
         // Check if message is for us
         if envelope.recipient_hint == self.local_hint {
-            return Ok(RelayDecision::DeliverLocal {
+            // Onion messages for us need to be delivered locally for peeling
+            if is_onion || !is_cover_traffic {
+                return Ok(RelayDecision::DeliverLocal {
+                    message_id: envelope.message_id,
+                });
+            }
+            // Cover traffic addressed to us: silently absorb (no real recipient)
+            return Ok(RelayDecision::Dropped {
                 message_id: envelope.message_id,
+                reason: DropReason::Expired, // reused as "absorbed cover"
             });
         }
 
@@ -193,15 +253,17 @@ impl RelayEngine {
             });
         }
 
-        // Check rate limit
-        self.check_rate_limit();
-        if self.config.max_relay_per_hour > 0
-            && self.relay_count_this_hour >= self.config.max_relay_per_hour
-        {
-            return Ok(RelayDecision::Dropped {
-                message_id: envelope.message_id,
-                reason: DropReason::RateLimited,
-            });
+        // Check rate limit (cover traffic exempt — it IS the rate limiting mechanism)
+        if !is_cover_traffic {
+            self.check_rate_limit();
+            if self.config.max_relay_per_hour > 0
+                && self.relay_count_this_hour >= self.config.max_relay_per_hour
+            {
+                return Ok(RelayDecision::Dropped {
+                    message_id: envelope.message_id,
+                    reason: DropReason::RateLimited,
+                });
+            }
         }
 
         // Store and relay
@@ -227,8 +289,10 @@ impl RelayEngine {
             });
         }
 
-        // Increment rate limit counter
-        self.relay_count_this_hour += 1;
+        // Increment rate limit counter (cover traffic exempt)
+        if !is_cover_traffic {
+            self.relay_count_this_hour += 1;
+        }
 
         Ok(RelayDecision::StoreAndRelay {
             message_id: envelope.message_id,
@@ -317,6 +381,7 @@ mod tests {
         DriftEnvelope {
             version: super::super::DRIFT_VERSION,
             envelope_type: EnvelopeType::EncryptedMessage,
+            compressed: false,
             message_id,
             recipient_hint,
             created_at: now,
