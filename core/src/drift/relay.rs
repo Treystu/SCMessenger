@@ -12,6 +12,7 @@ use super::envelope::DriftEnvelope;
 use super::store::{MeshStore, MessageId, StoredEnvelope};
 use super::DriftError;
 use crate::privacy::cover::{CoverConfig, CoverTrafficScheduler};
+use std::sync::Arc;
 use thiserror::Error;
 
 /// The unified relay=messaging toggle state
@@ -112,6 +113,8 @@ pub struct RelayEngine {
     hour_start: u64,
     /// Cover traffic scheduler (privacy: traffic analysis resistance)
     cover_scheduler: Option<CoverTrafficScheduler>,
+    /// Reputation manager for abuse-based relay decisions
+    reputation_manager: Option<std::sync::Arc<crate::abuse::reputation::EnhancedAbuseReputationManager>>,
 }
 
 impl RelayEngine {
@@ -131,6 +134,7 @@ impl RelayEngine {
             relay_count_this_hour: 0,
             hour_start: now,
             cover_scheduler: None,
+            reputation_manager: None,
         }
     }
 
@@ -162,6 +166,11 @@ impl RelayEngine {
         }
     }
 
+    /// Set the reputation manager for abuse detection
+    pub fn set_reputation_manager(&mut self, manager: Arc<crate::abuse::reputation::EnhancedAbuseReputationManager>) {
+        self.reputation_manager = Some(manager);
+    }
+
     /// Check if cover traffic is due and generate a cover message.
     ///
     /// Call this periodically (e.g., during maintenance tick).
@@ -186,6 +195,19 @@ impl RelayEngine {
     pub fn process_incoming(&mut self, envelope_data: &[u8]) -> Result<RelayDecision, DriftError> {
         // Parse envelope
         let envelope = DriftEnvelope::from_bytes(envelope_data)?;
+
+        // Check for spam patterns if reputation manager is available
+        if let Some(ref reputation_manager) = self.reputation_manager {
+            let sender_peer_id = "unknown"; // In a real implementation, this would be extracted from the envelope
+            let enhanced_score = reputation_manager.get_enhanced_score(sender_peer_id);
+
+            if enhanced_score.is_abusive() && enhanced_score.spam_confidence > 0.8 {
+                return Ok(RelayDecision::Dropped {
+                    message_id: envelope.message_id,
+                    reason: DropReason::RateLimited,
+                });
+            }
+        }
 
         // Check if already expired
         if envelope.is_expired() {
@@ -335,6 +357,16 @@ impl RelayEngine {
         }
     }
 
+    /// Apply a policy-derived config to the relay engine.
+    ///
+    /// Updates relay parameters (budget, hop count, battery floor) while
+    /// preserving the current network state and cover traffic settings.
+    /// This is the bridge between the PolicyEngine (which computes profiles
+    /// from device state) and the RelayEngine (which enforces relay policy).
+    pub fn apply_policy_config(&mut self, config: RelayConfig) {
+        self.config = config;
+    }
+
     /// Access the underlying store (for sync protocol)
     pub fn store(&self) -> &MeshStore {
         &self.store
@@ -393,6 +425,8 @@ mod tests {
             nonce: [3u8; 24],
             signature: [4u8; 64],
             ciphertext: b"test".to_vec(),
+            ratchet_dh_public: None,
+            ratchet_message_number: None,
         }
     }
 

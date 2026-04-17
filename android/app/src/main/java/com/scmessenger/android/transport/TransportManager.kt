@@ -48,7 +48,7 @@ class TransportManager(
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    private var isRunning = false
+    @Volatile private var isRunning = false
 
     /**
      * Initialize all transports based on settings.

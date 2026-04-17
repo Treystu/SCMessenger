@@ -10,15 +10,13 @@
 // Headless nodes (without identity) often rank highly due to dedicated
 // resources, but any stable node can become a priority relay.
 
-use anyhow::Result;
 use libp2p::{Multiaddr, PeerId};
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use web_time::{Duration, SystemTime, UNIX_EPOCH};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Relay node stability metrics for priority calculation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RelayMetrics {
     /// Peer ID of the relay
     pub peer_id: PeerId,
@@ -159,7 +157,7 @@ impl RelayDiscovery {
     /// Add fallback relay address
     pub fn add_fallback_relay(&mut self, addr: Multiaddr) {
         if !self.fallback_relays.contains(&addr) {
-            self.fallback_relays.push(addr);
+            self.fallback_relays.push(addr.clone());
             info!("Added fallback relay: {}", addr);
         }
     }

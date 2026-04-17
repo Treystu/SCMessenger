@@ -2,8 +2,9 @@
 
 **Priority:** P0 (Critical)
 **Platform:** Android
-**Status:** Open
+**Status:** DONE
 **Source:** MASTER_BUG_TRACKER.md
+**Completed:** 2026-03-18
 
 ## Problem Description
 After deploying QUIC/UDP cellular NAT traversal update, Android contacts were wiped while identity and messages remained intact. This is a data loss regression.

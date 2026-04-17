@@ -139,6 +139,8 @@ mod tests {
             ephemeral_public_key: vec![2u8; 32],
             nonce: vec![3u8; 24],
             ciphertext: vec![4u8; 100],
+            ratchet_dh_public: None,
+            ratchet_message_number: None,
         };
 
         let bytes = encode_envelope(&envelope).unwrap();

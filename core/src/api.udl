@@ -193,6 +193,46 @@ interface IronCore {
     string export_audit_log();
     [Throws=IronCoreError]
     void validate_audit_chain();
+
+    // Drift Protocol (P1_CORE_001: mesh store-and-forward)
+    void drift_activate();
+    void drift_deactivate();
+    string drift_network_state();
+    u32 drift_store_size();
+
+    // Abuse Reputation (P0_SECURITY_002)
+    double record_abuse_signal(string peer_id, string signal);
+    double get_peer_reputation(string peer_id);
+    double peer_rate_limit_multiplier(string peer_id);
+
+    // Ratchet Session Management (P0_SECURITY_002)
+    u32 ratchet_session_count();
+    boolean ratchet_has_session(string peer_id);
+    void ratchet_reset_session(string peer_id);
+
+    // Mycorrhizal Routing (P1_CORE_003: intelligent path selection)
+    void routing_peer_seen(string peer_id_hex, string transport);
+    void routing_update_peer_hints(string peer_id_hex, sequence<bytes> hints);
+    void routing_mark_gateway(string peer_id_hex, boolean is_gateway);
+    void routing_update_reliability(string peer_id_hex, boolean success);
+    string routing_tick();
+    string routing_summary();
+
+    // Privacy Features (P1_CORE_003: privacy modules activation)
+    /// Get current privacy configuration as JSON
+    string get_privacy_config();
+    /// Update privacy configuration from JSON
+    [Throws=IronCoreError]
+    void set_privacy_config(string config_json);
+    /// Wrap an envelope in onion routing layers for anonymous delivery.
+    /// `relay_public_keys` is a JSON array of hex-encoded relay public keys.
+    [Throws=IronCoreError]
+    bytes prepare_onion_message(bytes envelope_data, string relay_public_keys_json);
+    /// Peel one layer of an onion-routed envelope (relay-side operation).
+    [Throws=IronCoreError]
+    bytes peel_onion_layer(bytes onion_data, bytes relay_secret_key);
+    /// Compute timing jitter delay for relay forwarding (milliseconds).
+    u64 relay_jitter_delay(string priority);
 };
 
 // ============================================================================

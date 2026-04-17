@@ -3,6 +3,7 @@
 // Tracks seen message IDs to prevent replay attacks and duplicate delivery.
 
 use crate::store::backend::StorageBackend;
+use crate::store::storage::StorageManager;
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -38,9 +39,10 @@ enum InboxBackend {
     Persistent(Arc<dyn StorageBackend>),
 }
 
-/// Inbound message deduplication and storage
+/// Inbound message deduplication and storage with automatic retention enforcement
 pub struct Inbox {
     backend: InboxBackend,
+    storage_manager: Option<Arc<StorageManager>>,
 }
 
 impl Inbox {
@@ -53,6 +55,18 @@ impl Inbox {
                 messages: HashMap::new(),
                 total: 0,
             },
+            storage_manager: None,
+        }
+    }
+
+    /// Create a persistent inbox with an arbitrary backend and storage manager
+    pub fn persistent_with_storage(
+        backend: Arc<dyn StorageBackend>,
+        storage_manager: Arc<StorageManager>,
+    ) -> Self {
+        Self {
+            backend: InboxBackend::Persistent(backend),
+            storage_manager: Some(storage_manager),
         }
     }
 
@@ -60,6 +74,16 @@ impl Inbox {
     pub fn persistent(backend: Arc<dyn StorageBackend>) -> Self {
         Self {
             backend: InboxBackend::Persistent(backend),
+            storage_manager: None,
+        }
+    }
+
+    /// Trigger maintenance to enforce retention policies after inbox operations.
+    /// This automatically prunes expired messages and enforces configured limits.
+    fn trigger_maintenance(&self) {
+        if let Some(storage_mgr) = &self.storage_manager {
+            // Trigger maintenance - this will enforce retention policies
+            let _ = storage_mgr.perform_maintenance();
         }
     }
 
@@ -165,6 +189,9 @@ impl Inbox {
                 received_at = msg.received_at
             );
         }
+
+        // Trigger maintenance after successful receive
+        self.trigger_maintenance();
 
         is_new
     }

@@ -1,0 +1,566 @@
+//! P0_SECURITY_003: Double Ratchet Protocol for Forward Secrecy.
+//!
+//! Implements the Double Ratchet algorithm (Signal Protocol) adapted for
+//! SCMessenger's mesh architecture. Key properties:
+//!
+//! - **DH Ratchet**: New X25519 keypair per ratchet step; compromising a DH
+//!   private key only decrypts messages until the next DH step.
+//! - **Symmetric Key Ratchet**: Chain keys derive message keys via Blake3 KDF;
+//!   compromising a chain key only reveals future messages until the next DH step.
+//! - **Backward compatibility**: Existing per-message ECDH+XChaCha20 envelopes
+//!   continue to work for peers that haven't established a ratcheted session.
+//!
+
+use anyhow::{bail, Result};
+use chacha20poly1305::{
+    aead::{Aead, KeyInit, Payload},
+    XChaCha20Poly1305, XNonce,
+};
+use rand::RngCore;
+use std::collections::HashMap;
+use zeroize::Zeroize;
+use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/// KDF context strings for ratchet chain derivation.
+const RATCHET_KDF_CONTEXT: &str = "iron-core ratchet v1 2026-04-15";
+const ROOT_KDF_CONTEXT: &str = "iron-core root-chain v1 2026-04-15";
+
+/// Maximum number of skipped message keys we'll store per session.
+const MAX_SKIP_KEYS: usize = 64;
+
+/// Maximum number of DH ratchet steps before requiring re-initialization.
+const MAX_RATCHET_STEPS: u32 = 10_000;
+
+// ---------------------------------------------------------------------------
+// Key types (zeroizing wrappers)
+// ---------------------------------------------------------------------------
+
+/// A 32-byte key that zeroizes on drop.
+#[derive(Clone, Zeroize)]
+#[zeroize(drop)]
+pub struct RatchetKey([u8; 32]);
+
+impl RatchetKey {
+    pub fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for RatchetKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "RatchetKey([REDACTED])")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Ratchet session state
+// ---------------------------------------------------------------------------
+
+/// A symmetric key chain that ratchets forward via KDF.
+#[derive(Clone)]
+pub(crate) struct Chain {
+    /// Current chain key — each step derives a new chain key + message key.
+    chain_key: RatchetKey,
+    /// Number of message keys derived from this chain so far.
+    index: u32,
+}
+
+impl Chain {
+    pub(crate) fn new(chain_key: RatchetKey) -> Self {
+        Self {
+            chain_key,
+            index: 0,
+        }
+    }
+
+    pub(crate) fn new_with_index(chain_key: RatchetKey, index: u32) -> Self {
+        Self { chain_key, index }
+    }
+
+    pub(crate) fn chain_key_bytes(&self) -> [u8; 32] {
+        *self.chain_key.as_bytes()
+    }
+
+    pub(crate) fn index(&self) -> u32 {
+        self.index
+    }
+
+    /// Advance the chain: derive a message key and update the chain key.
+    /// Returns the message key for this step.
+    fn next_message_key(&mut self) -> RatchetKey {
+        let msg_key = derive_key_with_info(&self.chain_key, b"message-key");
+        self.chain_key = derive_key_with_info(&self.chain_key, b"chain-key");
+        self.index += 1;
+        msg_key
+    }
+}
+
+/// State for a single peer-to-peer ratcheted session.
+pub struct RatchetSession {
+    /// Our current DH ratchet keypair (sending side).
+    our_dh_secret: X25519StaticSecret,
+    /// Our current DH ratchet public key.
+    our_dh_public: X25519PublicKey,
+    /// Their current DH ratchet public key (receiving side).
+    their_dh_public: Option<X25519PublicKey>,
+    /// Root key — updated on every DH ratchet step.
+    root_key: RatchetKey,
+    /// Our sending chain (None until DH ratchet is initialized).
+    sending_chain: Option<Chain>,
+    /// Our receiving chain (None until we receive their DH ratchet key).
+    receiving_chain: Option<Chain>,
+    /// Number of DH ratchet steps performed.
+    dh_step_count: u32,
+    /// Skipped message keys: (their_dh_public_bytes, message_number) → message_key.
+    skipped_keys: HashMap<([u8; 32], u32), RatchetKey>,
+    /// Whether this session has been initialized (we've received their DH key).
+    initialized: bool,
+    /// Our X25519 identity secret (for first DH ratchet step on receiver side).
+    /// Kept only until the first DH ratchet is performed, then zeroized.
+    our_identity_secret: Option<X25519StaticSecret>,
+}
+
+impl RatchetSession {
+    /// Reconstruct a session from serialized state (internal use).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn reconstruct(
+        our_dh_secret: X25519StaticSecret,
+        our_dh_public: X25519PublicKey,
+        their_dh_public: Option<X25519PublicKey>,
+        root_key: RatchetKey,
+        sending_chain: Option<Chain>,
+        receiving_chain: Option<Chain>,
+        dh_step_count: u32,
+        initialized: bool,
+        our_identity_secret: Option<X25519StaticSecret>,
+    ) -> Self {
+        Self {
+            our_dh_secret,
+            our_dh_public,
+            their_dh_public,
+            root_key,
+            sending_chain,
+            receiving_chain,
+            dh_step_count,
+            skipped_keys: HashMap::new(),
+            initialized,
+            our_identity_secret,
+        }
+    }
+
+    pub(crate) fn our_dh_secret_bytes(&self) -> [u8; 32] {
+        self.our_dh_secret.to_bytes()
+    }
+
+    pub(crate) fn their_public_key(&self) -> Option<[u8; 32]> {
+        self.their_dh_public.as_ref().map(|k| k.to_bytes())
+    }
+
+    pub(crate) fn root_key_bytes(&self) -> [u8; 32] {
+        *self.root_key.as_bytes()
+    }
+
+    pub(crate) fn sending_chain_state(&self) -> Option<([u8; 32], u32)> {
+        self.sending_chain.as_ref().map(|c| (*c.chain_key.as_bytes(), c.index))
+    }
+
+    pub(crate) fn receiving_chain_state(&self) -> Option<([u8; 32], u32)> {
+        self.receiving_chain.as_ref().map(|c| (*c.chain_key.as_bytes(), c.index))
+    }
+
+    pub(crate) fn has_identity_secret(&self) -> bool {
+        self.our_identity_secret.is_some()
+    }
+
+    pub(crate) fn identity_secret_bytes(&self) -> Option<[u8; 32]> {
+        self.our_identity_secret.as_ref().map(|s| s.to_bytes())
+    }
+
+    /// Initialize a new ratchet session as the initiator (Alice).
+    pub fn init_as_sender(
+        our_signing_key: &ed25519_dalek::SigningKey,
+        their_identity_public_x25519: &X25519PublicKey,
+    ) -> Result<Self> {
+        // Generate our initial DH ratchet keypair
+        let mut our_dh_secret_bytes = [0u8; 32];
+        rand::rngs::OsRng.fill_bytes(&mut our_dh_secret_bytes);
+        let our_dh_secret = X25519StaticSecret::from(our_dh_secret_bytes);
+        our_dh_secret_bytes.zeroize();
+        let our_dh_public = X25519PublicKey::from(&our_dh_secret);
+
+        // Convert our signing key to X25519 for the initial DH
+        let our_x25519 = super::encrypt::ed25519_to_x25519_secret(our_signing_key);
+
+        // X3DH step 1: our_identity_secret × their_identity_public → shared_secret
+        let shared_secret = our_x25519.diffie_hellman(their_identity_public_x25519);
+
+        // Derive initial root key from the identity DH
+        let root_key = derive_root_key(&RatchetKey::from_bytes([0u8; 32]), shared_secret.as_bytes());
+
+        // X3DH step 2: our_dh_secret × their_identity_public → sending chain
+        let dh_output = our_dh_secret.diffie_hellman(their_identity_public_x25519);
+        let (new_root_key, sending_chain_key) = root_key_ratchet(&root_key, dh_output.as_bytes());
+
+        let sending_chain = Chain::new(sending_chain_key);
+
+        Ok(Self {
+            our_dh_secret,
+            our_dh_public,
+            their_dh_public: Some(*their_identity_public_x25519),
+            root_key: new_root_key,
+            sending_chain: Some(sending_chain),
+            receiving_chain: None,
+            dh_step_count: 1,
+            skipped_keys: HashMap::new(),
+            initialized: true,
+            our_identity_secret: None,
+        })
+    }
+
+    /// Initialize a new ratchet session as the receiver (Bob).
+    pub fn init_as_receiver(
+        our_signing_key: &ed25519_dalek::SigningKey,
+        sender_identity_public_x25519: &X25519PublicKey,
+    ) -> Result<Self> {
+        // Generate our initial DH ratchet keypair
+        let mut our_dh_secret_bytes = [0u8; 32];
+        rand::rngs::OsRng.fill_bytes(&mut our_dh_secret_bytes);
+        let our_dh_secret = X25519StaticSecret::from(our_dh_secret_bytes);
+        our_dh_secret_bytes.zeroize();
+        let our_dh_public = X25519PublicKey::from(&our_dh_secret);
+
+        // Convert our signing key to X25519 for the initial DH
+        let our_x25519 = super::encrypt::ed25519_to_x25519_secret(our_signing_key);
+
+        // X3DH step 1: our_identity_secret × sender_identity_public → shared_secret
+        let shared_secret = our_x25519.diffie_hellman(sender_identity_public_x25519);
+
+        // Derive initial root key
+        let root_key = derive_root_key(&RatchetKey::from_bytes([0u8; 32]), shared_secret.as_bytes());
+
+        // Store our identity secret for the first DH ratchet step
+        let our_identity_secret = our_x25519;
+
+        Ok(Self {
+            our_dh_secret,
+            our_dh_public,
+            their_dh_public: None,
+            root_key,
+            sending_chain: None,
+            receiving_chain: None,
+            dh_step_count: 0,
+            skipped_keys: HashMap::new(),
+            initialized: false,
+            our_identity_secret: Some(our_identity_secret),
+        })
+    }
+
+    /// Get our current DH ratchet public key.
+    pub fn our_public_key(&self) -> [u8; 32] {
+        self.our_dh_public.to_bytes()
+    }
+
+    pub fn dh_step_count(&self) -> u32 {
+        self.dh_step_count
+    }
+
+    pub fn is_initialized(&self) -> bool {
+        self.initialized
+    }
+
+    /// Encrypt a message using the current sending chain.
+    pub fn encrypt(&mut self, plaintext: &[u8], aad: &[u8]) -> Result<RatchetEncryptResult> {
+        let chain = self.sending_chain.as_mut()
+            .ok_or_else(|| anyhow::anyhow!("Sending chain not initialized"))?;
+
+        if self.dh_step_count >= MAX_RATCHET_STEPS {
+            bail!("Ratchet session has exceeded maximum steps");
+        }
+
+        let message_key = chain.next_message_key();
+        let message_number = chain.index - 1;
+
+        let mut nonce_bytes = [0u8; 24];
+        rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
+        let nonce = XNonce::from_slice(&nonce_bytes);
+
+        let cipher = XChaCha20Poly1305::new_from_slice(message_key.as_bytes())
+            .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
+
+        let ciphertext = cipher
+            .encrypt(nonce, Payload { msg: plaintext, aad })
+            .map_err(|e| anyhow::anyhow!("Encryption failed: {}", e))?;
+
+        Ok(RatchetEncryptResult {
+            ciphertext,
+            nonce: nonce_bytes.to_vec(),
+            message_number,
+            our_dh_public: self.our_dh_public.to_bytes(),
+        })
+    }
+
+    /// Decrypt a message using the receiving chain.
+    pub fn decrypt(
+        &mut self,
+        their_dh_public: &[u8],
+        message_number: u32,
+        nonce: &[u8],
+        ciphertext: &[u8],
+        aad: &[u8],
+    ) -> Result<Vec<u8>> {
+        if their_dh_public.len() != 32 {
+            bail!("Invalid DH public key length");
+        }
+        let mut their_dh_bytes = [0u8; 32];
+        their_dh_bytes.copy_from_slice(their_dh_public);
+        let their_dh = X25519PublicKey::from(their_dh_bytes);
+
+        let dh_changed = match &self.their_dh_public {
+            None => true,
+            Some(their_current) => their_current.as_bytes() != their_dh.as_bytes(),
+        };
+
+        if dh_changed {
+            self.handle_dh_ratchet(&their_dh)?;
+        }
+
+        let message_key = self.get_message_key(&their_dh, message_number)?;
+
+        let nonce_obj = XNonce::from_slice(nonce);
+        let cipher = XChaCha20Poly1305::new_from_slice(message_key.as_bytes())
+            .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
+
+        cipher
+            .decrypt(nonce_obj, Payload { msg: ciphertext, aad })
+            .map_err(|_| anyhow::anyhow!("Decryption failed"))
+    }
+
+    fn handle_dh_ratchet(&mut self, their_new_dh: &X25519PublicKey) -> Result<()> {
+        let first_dh_secret = if let Some(identity_secret) = self.our_identity_secret.take() {
+            identity_secret
+        } else {
+            X25519StaticSecret::from(self.our_dh_secret.to_bytes())
+        };
+
+        let dh_output = first_dh_secret.diffie_hellman(their_new_dh);
+        let (new_root_key, receiving_chain_key) = root_key_ratchet(&self.root_key, dh_output.as_bytes());
+
+        self.their_dh_public = Some(*their_new_dh);
+
+        let mut new_secret_bytes = [0u8; 32];
+        rand::rngs::OsRng.fill_bytes(&mut new_secret_bytes);
+        let new_dh_secret = X25519StaticSecret::from(new_secret_bytes);
+        new_secret_bytes.zeroize();
+        let new_dh_public = X25519PublicKey::from(&new_dh_secret);
+
+        let dh_output_2 = new_dh_secret.diffie_hellman(their_new_dh);
+        let (new_root_key_2, sending_chain_key) = root_key_ratchet(&new_root_key, dh_output_2.as_bytes());
+
+        self.our_dh_secret = new_dh_secret;
+        self.our_dh_public = new_dh_public;
+        self.root_key = new_root_key_2;
+        self.receiving_chain = Some(Chain::new(receiving_chain_key));
+        self.sending_chain = Some(Chain::new(sending_chain_key));
+        self.dh_step_count += 1;
+        self.initialized = true;
+
+        Ok(())
+    }
+
+    fn get_message_key(
+        &mut self,
+        their_dh: &X25519PublicKey,
+        target_number: u32,
+    ) -> Result<RatchetKey> {
+        let cache_key = (their_dh.to_bytes(), target_number);
+        if let Some(key) = self.skipped_keys.remove(&cache_key) {
+            return Ok(key);
+        }
+
+        let chain = self.receiving_chain.as_mut()
+            .ok_or_else(|| anyhow::anyhow!("Receiving chain not initialized"))?;
+
+        if target_number < chain.index {
+            bail!("Message number is behind current chain position");
+        }
+
+        let skip_count = target_number - chain.index;
+        if skip_count as usize > MAX_SKIP_KEYS {
+            bail!("Too many skipped messages");
+        }
+
+        while chain.index < target_number {
+            let skipped_key = chain.next_message_key();
+            let skipped_number = chain.index - 1;
+            self.skipped_keys.insert(
+                (their_dh.to_bytes(), skipped_number),
+                skipped_key,
+            );
+
+            if self.skipped_keys.len() > MAX_SKIP_KEYS {
+                if let Some(oldest) = self.skipped_keys.keys().min().cloned() {
+                    self.skipped_keys.remove(&oldest);
+                }
+            }
+        }
+
+        Ok(chain.next_message_key())
+    }
+
+    pub fn force_ratchet(&mut self) -> Result<[u8; 32]> {
+        let mut new_secret_bytes = [0u8; 32];
+        rand::rngs::OsRng.fill_bytes(&mut new_secret_bytes);
+        let new_dh_secret = X25519StaticSecret::from(new_secret_bytes);
+        new_secret_bytes.zeroize();
+        let new_dh_public = X25519PublicKey::from(&new_dh_secret);
+
+        self.our_dh_secret = new_dh_secret;
+        self.our_dh_public = new_dh_public;
+        self.dh_step_count += 1;
+
+        if let Some(their_dh) = self.their_dh_public {
+            let dh_output = self.our_dh_secret.diffie_hellman(&their_dh);
+            let (new_root_key, sending_chain_key) = root_key_ratchet(&self.root_key, dh_output.as_bytes());
+            self.root_key = new_root_key;
+            self.sending_chain = Some(Chain::new(sending_chain_key));
+        }
+
+        Ok(self.our_dh_public.to_bytes())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Result types
+// ---------------------------------------------------------------------------
+
+#[derive(Debug)]
+pub struct RatchetEncryptResult {
+    pub ciphertext: Vec<u8>,
+    pub nonce: Vec<u8>,
+    pub message_number: u32,
+    pub our_dh_public: [u8; 32],
+}
+
+// ---------------------------------------------------------------------------
+// KDF helpers
+// ---------------------------------------------------------------------------
+
+fn derive_key_with_info(key: &RatchetKey, info: &[u8]) -> RatchetKey {
+    let context = format!("{}:{}", RATCHET_KDF_CONTEXT, blake3::hash(info).to_hex());
+    let derived = blake3::derive_key(&context, key.as_bytes());
+    RatchetKey::from_bytes(derived)
+}
+
+fn root_key_ratchet(root_key: &RatchetKey, dh_output: &[u8]) -> (RatchetKey, RatchetKey) {
+    let combined = blake3::derive_key(ROOT_KDF_CONTEXT, &[
+        root_key.as_bytes(),
+        dh_output,
+    ].concat());
+    let new_root = blake3::derive_key(
+        &format!("{}:root", ROOT_KDF_CONTEXT),
+        &combined,
+    );
+    let chain_key = blake3::derive_key(
+        &format!("{}:chain", ROOT_KDF_CONTEXT),
+        &combined,
+    );
+    (RatchetKey::from_bytes(new_root), RatchetKey::from_bytes(chain_key))
+}
+
+fn derive_root_key(prior_root: &RatchetKey, shared_secret: &[u8]) -> RatchetKey {
+    let derived = blake3::derive_key(ROOT_KDF_CONTEXT, &[
+        prior_root.as_bytes(),
+        shared_secret,
+    ].concat());
+    RatchetKey::from_bytes(derived)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ed25519_dalek::SigningKey;
+
+    fn generate_keypair() -> SigningKey {
+        let mut secret = [0u8; 32];
+        rand::rngs::OsRng.fill_bytes(&mut secret);
+        let key = SigningKey::from_bytes(&secret);
+        secret.zeroize();
+        key
+    }
+
+    fn signing_key_to_x25519_public(signing_key: &SigningKey) -> X25519PublicKey {
+        let secret = super::super::encrypt::ed25519_to_x25519_secret(signing_key);
+        X25519PublicKey::from(&secret)
+    }
+
+    #[test]
+    fn test_ratchet_key_zeroizes() {
+        let key = RatchetKey::from_bytes([0xAB; 32]);
+        let bytes = key.as_bytes().clone();
+        drop(key);
+        assert_eq!(bytes.len(), 32);
+    }
+
+    #[test]
+    fn test_chain_ratchet_advances() {
+        let chain_key = RatchetKey::from_bytes([0x42; 32]);
+        let mut chain = Chain::new(chain_key);
+
+        let key0 = chain.next_message_key();
+        let key1 = chain.next_message_key();
+        let key2 = chain.next_message_key();
+
+        assert_ne!(key0.as_bytes(), key1.as_bytes());
+        assert_ne!(key1.as_bytes(), key2.as_bytes());
+        assert_ne!(key0.as_bytes(), key2.as_bytes());
+        assert_eq!(chain.index, 3);
+    }
+
+    #[test]
+    fn test_init_as_sender_and_encrypt() {
+        let alice_key = generate_keypair();
+        let bob_key = generate_keypair();
+        let bob_x25519 = signing_key_to_x25519_public(&bob_key);
+
+        let mut alice_session = RatchetSession::init_as_sender(&alice_key, &bob_x25519).unwrap();
+        assert!(alice_session.is_initialized());
+        assert_eq!(alice_session.dh_step_count(), 1);
+
+        let result = alice_session.encrypt(b"hello bob", b"aad").unwrap();
+        assert!(!result.ciphertext.is_empty());
+        assert_eq!(result.nonce.len(), 24);
+        assert_eq!(result.message_number, 0);
+    }
+
+    #[test]
+    fn test_init_as_receiver_then_decrypt() {
+        let alice_key = generate_keypair();
+        let bob_key = generate_keypair();
+        let alice_x25519 = signing_key_to_x25519_public(&alice_key);
+        let bob_x25519 = signing_key_to_x25519_public(&bob_key);
+
+        let mut alice_session = RatchetSession::init_as_sender(&alice_key, &bob_x25519).unwrap();
+        let mut bob_session = RatchetSession::init_as_receiver(&bob_key, &alice_x25519).unwrap();
+        assert!(!bob_session.is_initialized());
+
+        let encrypted = alice_session.encrypt(b"hello bob", b"aad").unwrap();
+        let plaintext = bob_session.decrypt(
+            &encrypted.our_dh_public,
+            encrypted.message_number,
+            &encrypted.nonce,
+            &encrypted.ciphertext,
+            b"aad",
+        ).unwrap();
+
+        assert_eq!(plaintext, b"hello bob");
+        assert!(bob_session.is_initialized());
+    }
+}

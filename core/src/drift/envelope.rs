@@ -71,6 +71,12 @@ pub struct DriftEnvelope {
     // Payload (variable length)
     /// Encrypted + authenticated ciphertext
     pub ciphertext: Vec<u8>,
+
+    // Ratchet metadata (optional, for Double Ratchet forward secrecy)
+    /// Sender's DH ratchet public key (32 bytes) — None for legacy ECDH
+    pub ratchet_dh_public: Option<[u8; 32]>,
+    /// Message number in the current sending chain — None for legacy ECDH
+    pub ratchet_message_number: Option<u32>,
 }
 
 /// Message type enumeration for Drift Envelopes
@@ -171,6 +177,17 @@ impl DriftEnvelope {
         buf.extend_from_slice(&(ciphertext.len() as u16).to_le_bytes());
         buf.extend_from_slice(&ciphertext);
 
+        // Ratchet extension (optional, backward compatible)
+        // Flag byte: 0x00 = no ratchet, 0x01 = ratchet present
+        if let Some(ref dh_public) = self.ratchet_dh_public {
+            buf.push(0x01); // ratchet flag
+            buf.extend_from_slice(dh_public);
+            let msg_num = self.ratchet_message_number.unwrap_or(0);
+            buf.extend_from_slice(&msg_num.to_le_bytes());
+        } else {
+            buf.push(0x00); // no ratchet
+        }
+
         Ok(buf)
     }
 
@@ -268,6 +285,26 @@ impl DriftEnvelope {
         } else {
             data[offset..offset + ciphertext_len].to_vec()
         };
+        offset += ciphertext_len;
+
+        // Ratchet extension (backward compatible — older envelopes don't have this)
+        let (ratchet_dh_public, ratchet_message_number) = if offset < data.len() {
+            let ratchet_flag = data[offset];
+            offset += 1;
+            if ratchet_flag == 0x01 && offset + 32 + 4 <= data.len() {
+                let mut dh_key = [0u8; 32];
+                dh_key.copy_from_slice(&data[offset..offset + 32]);
+                offset += 32;
+                let msg_num = u32::from_le_bytes([
+                    data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
+                ]);
+                (Some(dh_key), Some(msg_num))
+            } else {
+                (None, None)
+            }
+        } else {
+            (None, None)
+        };
 
         Ok(DriftEnvelope {
             version,
@@ -284,6 +321,8 @@ impl DriftEnvelope {
             nonce,
             signature,
             ciphertext,
+            ratchet_dh_public,
+            ratchet_message_number,
         })
     }
 
@@ -325,6 +364,8 @@ impl DriftEnvelope {
             ephemeral_public_key: self.ephemeral_public_key.to_vec(),
             nonce: self.nonce.to_vec(),
             ciphertext: self.ciphertext.clone(),
+            ratchet_dh_public: self.ratchet_dh_public.map(|k| k.to_vec()),
+            ratchet_message_number: self.ratchet_message_number,
         }
     }
 }
@@ -371,6 +412,12 @@ impl DriftEnvelope {
             .map_err(|_| DriftError::IoError("Invalid nonce length".into()))?;
 
         // Create the envelope without signature first
+        let ratchet_dh_public = legacy.ratchet_dh_public
+            .map(|v| -> Result<[u8; 32], DriftError> {
+                v.try_into().map_err(|_| DriftError::IoError("Invalid ratchet_dh_public length".into()))
+            })
+            .transpose()?;
+
         let mut drift_env = DriftEnvelope {
             version: DRIFT_VERSION,
             envelope_type: EnvelopeType::EncryptedMessage,
@@ -386,6 +433,8 @@ impl DriftEnvelope {
             nonce,
             signature: [0u8; 64], // Placeholder, will be filled
             ciphertext: legacy.ciphertext,
+            ratchet_dh_public,
+            ratchet_message_number: legacy.ratchet_message_number,
         };
 
         // Sign the envelope
@@ -419,6 +468,15 @@ impl DriftEnvelope {
         hasher.update(&(self.ciphertext.len() as u16).to_le_bytes());
         hasher.update(&self.ciphertext);
 
+        // Ratchet extension (if present)
+        if let Some(ref dh_public) = self.ratchet_dh_public {
+            hasher.update(&[0x01]); // ratchet flag
+            hasher.update(dh_public);
+            hasher.update(&self.ratchet_message_number.unwrap_or(0).to_le_bytes());
+        } else {
+            hasher.update(&[0x00]); // no ratchet
+        }
+
         let hash = hasher.finalize();
 
         // Sign the hash
@@ -447,6 +505,8 @@ mod tests {
             nonce: [5u8; 24],
             signature: [6u8; 64],
             ciphertext: b"test payload".to_vec(),
+            ratchet_dh_public: None,
+            ratchet_message_number: None,
         }
     }
 
@@ -680,7 +740,7 @@ mod tests {
         assert!(bytes[1] & COMPRESSION_FLAG != 0, "Compression flag should be set");
 
         let restored = DriftEnvelope::from_bytes(&bytes).unwrap();
-        assert_eq!(restored.compressed, true);
+        assert!(restored.compressed);
         assert_eq!(restored.ciphertext.len(), 5000);
         assert!(restored.ciphertext.iter().all(|&b| b == 0xAB));
     }

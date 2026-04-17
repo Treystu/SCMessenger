@@ -1,0 +1,80 @@
+{
+  "version": "2.0",
+  "max_concurrent": 2,
+  "default_agent": "architect",
+  "launch_mode": "cli_only",
+  "agents": [
+    {
+      "name": "architect",
+      "launch_type": "cli",
+      "model": "qwen3-coder:480b:cloud",
+      "fallback_model": "glm-5.1:cloud",
+      "purpose": "System design, planning, architecture decisions, multi-file reasoning",
+      "task_patterns": ["ARCHITECTURE", "PLAN", "DESIGN", "REFACTOR"],
+      "max_per_type": 1
+    },
+    {
+      "name": "implementer",
+      "launch_type": "cli",
+      "model": "qwen3-coder-next:cloud",
+      "fallback_model": "glm-5.1:cloud",
+      "purpose": "Rapid feature landing, general coding, bug fixes, feature implementation",
+      "task_patterns": ["IMPLEMENTATION", "BUG", "FIX", "FEATURE", "WASM", "IOS", "ANDROID"],
+      "max_per_type": 2
+    },
+    {
+      "name": "precision-validator",
+      "launch_type": "cli",
+      "model": "deepseek-v3.2:cloud",
+      "fallback_model": "glm-5.1:cloud",
+      "purpose": "Cryptography, math, protocol validation, security audit, unsafe block verification",
+      "task_patterns": ["SECURITY", "CRYPTO", "AUDIT", "VERIFY", "REVIEW", "GATE"],
+      "max_per_type": 1
+    },
+    {
+      "name": "worker",
+      "launch_type": "cli",
+      "model": "gemma4:31b:cloud",
+      "fallback_model": "glm-5.1:cloud",
+      "purpose": "Unit tests, UniFFI bindings, documentation, platform engineering",
+      "task_patterns": ["PLATFORM", "BINDINGS", "TEST", "DOCS"],
+      "max_per_type": 1
+    },
+    {
+      "name": "triage-router",
+      "launch_type": "cli",
+      "model": "gemini-3-flash-preview:cloud",
+      "fallback_model": "glm-5.1:cloud",
+      "purpose": "Quick triage, lint fixes, minor edits under 50 LOC, CI gatekeeping, parsing",
+      "task_patterns": ["LINT", "TRIAGE", "QUICK", "CI"],
+      "max_per_type": 1
+    },
+    {
+      "name": "gatekeeper-reviewer",
+      "launch_type": "cli",
+      "model": "kimi-k2-thinking:cloud",
+      "fallback_model": "glm-5.1:cloud",
+      "purpose": "Pre-merge verification, final code review gate",
+      "task_patterns": ["MERGE", "RELEASE", "FINAL_REVIEW"],
+      "max_per_type": 1
+    },
+    {
+      "name": "swarm-orchestrator",
+      "launch_type": "cli",
+      "model": "mistral-large-3:675b:cloud",
+      "fallback_model": "glm-5.1:cloud",
+      "purpose": "Pipeline management, multi-agent coordination",
+      "task_patterns": ["ORCHESTRATE", "PIPELINE", "SWARM"],
+      "max_per_type": 1
+    },
+    {
+      "name": "rust-coder",
+      "launch_type": "cli",
+      "model": "glm-5.1:cloud",
+      "fallback_model": "glm-5.1:cloud",
+      "purpose": "Rust core implementation with proven model compatibility",
+      "task_patterns": ["RUST", "CORE", "PROTOCOL", "CRYPTO_IMPL"],
+      "max_per_type": 1
+    }
+  ]
+}

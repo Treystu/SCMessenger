@@ -5,13 +5,13 @@
 
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use web_time::{Duration, SystemTime, UNIX_EPOCH};
+use web_time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, error, info, warn};
 
 /// Connection state for a peer
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum ConnectionState {
     /// Connection is being established
     Connecting,
@@ -26,7 +26,7 @@ pub enum ConnectionState {
 }
 
 /// Connection statistics for a peer
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ConnectionStats {
     /// Peer ID
     pub peer_id: PeerId,
@@ -222,14 +222,29 @@ impl ConnectionStats {
 }
 
 /// Transport health monitor
-#[derive(Debug, Clone)]
 pub struct TransportHealthMonitor {
     /// Connection statistics by peer ID
-    connection_stats: Arc<Mutex<HashMap<PeerId, ConnectionStats>>>, 
+    connection_stats: Arc<Mutex<HashMap<PeerId, ConnectionStats>>>,
     /// Global transport metrics
     global_metrics: Arc<Mutex<GlobalTransportMetrics>>,
     /// Connection state change callbacks
     state_change_callbacks: Arc<Mutex<Vec<Box<dyn Fn(PeerId, ConnectionState) + Send + Sync>>>>,
+}
+
+impl std::fmt::Debug for TransportHealthMonitor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TransportHealthMonitor")
+            .field("connection_stats", &self.connection_stats)
+            .field("global_metrics", &self.global_metrics)
+            .field("state_change_callbacks", &format!("{} callbacks", self.state_change_callbacks.lock().unwrap().len()))
+            .finish()
+    }
+}
+
+impl Default for TransportHealthMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TransportHealthMonitor {
@@ -439,6 +454,12 @@ pub struct GlobalTransportMetrics {
     pub start_timestamp: u64,
 }
 
+impl Default for GlobalTransportMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GlobalTransportMetrics {
     /// Create new global transport metrics
     pub fn new() -> Self {
@@ -446,7 +467,7 @@ impl GlobalTransportMetrics {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
-        
+
         Self {
             total_connection_attempts: 0,
             total_successful_connections: 0,
@@ -482,7 +503,7 @@ impl GlobalTransportMetrics {
     }
 
     /// Record message success
-    pub fn record_message_success(&mut self, bytes: u64, latency_ms: u64) {
+    pub fn record_message_success(&mut self, bytes: u64, _latency_ms: u64) {
         self.total_messages_sent += 1;
         self.total_bytes_sent += bytes;
     }

@@ -1,7 +1,9 @@
 use libp2p::PeerId;
 use scmessenger_core::store::relay_custody::{CustodyState, RelayCustodyStore};
+#[cfg(feature = "phase2_apis")]
 use scmessenger_core::transport::mesh_routing::MultiPathDelivery;
 
+#[cfg(feature = "phase2_apis")]
 #[test]
 fn multi_forwarder_convergence_stops_duplicate_retry_and_purges_pending() {
     let destination = PeerId::random();

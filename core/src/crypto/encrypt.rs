@@ -26,7 +26,7 @@ use zeroize::Zeroize;
 
 /// KDF context string for deriving encryption keys from ECDH shared secrets.
 /// Changing this breaks compatibility with all existing messages.
-const KDF_CONTEXT: &str = "iron-core v2 message encryption 2026-02-05";
+pub const KDF_CONTEXT: &str = "iron-core v2 message encryption 2026-02-05";
 
 /// Convert an Ed25519 signing key to an X25519 static secret for ECDH.
 ///
@@ -34,7 +34,7 @@ const KDF_CONTEXT: &str = "iron-core v2 message encryption 2026-02-05";
 /// so we can derive X25519 keys from Ed25519 keys deterministically.
 /// The conversion uses the clamped SHA-512 hash of the Ed25519 secret key,
 /// which is how Ed25519 internally derives its scalar.
-fn ed25519_to_x25519_secret(signing_key: &SigningKey) -> StaticSecret {
+pub fn ed25519_to_x25519_secret(signing_key: &SigningKey) -> StaticSecret {
     // Ed25519 secret scalar is SHA-512(secret_key_bytes)[0..32], clamped.
     // x25519-dalek StaticSecret expects the raw 32-byte secret and does its own clamping.
     let mut hash = <sha2::Sha512 as sha2::Digest>::digest(signing_key.to_bytes());
@@ -92,7 +92,7 @@ pub fn validate_ed25519_public_key(public_key_hex: &str) -> Result<()> {
 ///
 /// Uses the birational map from Ed25519 (twisted Edwards) to X25519 (Montgomery).
 /// This is the standard conversion: u = (1 + y) / (1 - y) mod p.
-fn ed25519_public_to_x25519(public_key_bytes: &[u8; 32]) -> Result<X25519PublicKey> {
+pub fn ed25519_public_to_x25519(public_key_bytes: &[u8; 32]) -> Result<X25519PublicKey> {
     use curve25519_dalek::edwards::CompressedEdwardsY;
 
     let compressed = CompressedEdwardsY::from_slice(public_key_bytes)
@@ -167,6 +167,8 @@ pub fn encrypt_message(
         ephemeral_public_key: ephemeral_public.to_bytes().to_vec(),
         nonce: nonce_bytes.to_vec(),
         ciphertext,
+        ratchet_dh_public: None,
+        ratchet_message_number: None,
     })
 }
 
@@ -233,6 +235,132 @@ pub fn decrypt_message(
     symmetric_key.zeroize();
 
     Ok(plaintext)
+}
+
+/// Decrypt a ratcheted envelope using a RatchetSession.
+///
+/// The envelope must have `ratchet_dh_public` and `ratchet_message_number` set.
+/// The caller provides a mutable reference to the active `RatchetSession` for
+/// this peer, which will advance the ratchet state as a side effect.
+pub fn decrypt_message_ratcheted(
+    session: &mut crate::crypto::RatchetSession,
+    envelope: &crate::message::Envelope,
+) -> Result<Vec<u8>> {
+    let dh_public = envelope.ratchet_dh_public.as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Ratcheted envelope missing ratchet_dh_public field"))?;
+    let message_number = envelope.ratchet_message_number
+        .ok_or_else(|| anyhow::anyhow!("Ratcheted envelope missing ratchet_message_number field"))?;
+
+    if envelope.nonce.len() != 24 {
+        bail!("Invalid nonce length in ratcheted envelope");
+    }
+
+    // Use sender public key as AAD (same binding as legacy path)
+    let aad = envelope.sender_public_key.as_slice();
+
+    session.decrypt(dh_public, message_number, &envelope.nonce, &envelope.ciphertext, aad)
+}
+
+/// Encrypt a plaintext message using an existing Double Ratchet session.
+///
+/// Unlike `encrypt_message` (which uses per-message ephemeral ECDH), this
+/// uses the ratchet's sending chain to derive the message key, providing
+/// forward secrecy: compromising a key only reveals messages from that
+/// chain step forward, not past messages.
+///
+/// # Arguments
+/// * `sender_signing_key` - Sender's Ed25519 signing key (for sender identification)
+/// * `session` - Mutable reference to an active `RatchetSession` for the recipient
+/// * `plaintext` - The message bytes to encrypt
+///
+/// # Returns
+/// An `Envelope` with `ratchet_dh_public` and `ratchet_message_number` set,
+/// indicating this envelope uses the Double Ratchet protocol.
+pub fn encrypt_message_ratcheted(
+    sender_signing_key: &SigningKey,
+    session: &mut crate::crypto::RatchetSession,
+    plaintext: &[u8],
+) -> Result<crate::message::Envelope> {
+    let sender_public_bytes = sender_signing_key.verifying_key().to_bytes();
+    let result = session.encrypt(plaintext, &sender_public_bytes)?;
+
+    Ok(crate::message::Envelope {
+        sender_public_key: sender_public_bytes.to_vec(),
+        ephemeral_public_key: result.our_dh_public.to_vec(),
+        nonce: result.nonce,
+        ciphertext: result.ciphertext,
+        ratchet_dh_public: Some(result.our_dh_public.to_vec()),
+        ratchet_message_number: Some(result.message_number),
+    })
+}
+
+/// Encrypt a message with automatic ratchet session selection.
+///
+/// If a ratchet session already exists for the peer, uses it (forward secrecy).
+/// Otherwise, falls back to per-message ECDH encryption (backward compatible).
+///
+/// # Arguments
+/// * `sender_signing_key` - Sender's Ed25519 signing key
+/// * `recipient_public_key` - Recipient's Ed25519 public key bytes (32 bytes)
+/// * `plaintext` - The message bytes to encrypt
+/// * `session_manager` - Optional ratchet session manager
+/// * `peer_id` - Peer identifier for ratchet session lookup
+///
+/// # Returns
+/// An `Envelope` encrypted with the best available method.
+pub fn encrypt_with_ratchet_fallback(
+    sender_signing_key: &SigningKey,
+    recipient_public_key: &[u8; 32],
+    plaintext: &[u8],
+    session_manager: Option<&mut crate::crypto::RatchetSessionManager>,
+    peer_id: &str,
+) -> Result<crate::message::Envelope> {
+    if let Some(manager) = session_manager {
+        if let Some(session) = manager.get_session_mut(peer_id) {
+            if session.is_initialized() {
+                return encrypt_message_ratcheted(sender_signing_key, session, plaintext);
+            }
+        }
+    }
+
+    encrypt_message(sender_signing_key, recipient_public_key, plaintext)
+}
+
+/// Decrypt an envelope using the best available method.
+///
+/// If the envelope has ratchet fields (`ratchet_dh_public` and
+/// `ratchet_message_number`), decrypts using the Double Ratchet protocol.
+/// Otherwise, falls back to per-message ECDH decryption.
+///
+/// # Arguments
+/// * `recipient_signing_key` - Recipient's Ed25519 signing key (for legacy path)
+/// * `envelope` - The encrypted envelope
+/// * `session_manager` - Optional ratchet session manager (for ratcheted path)
+///
+/// # Returns
+/// The decrypted plaintext bytes.
+pub fn decrypt_with_ratchet_fallback(
+    recipient_signing_key: &SigningKey,
+    envelope: &crate::message::Envelope,
+    session_manager: Option<&mut crate::crypto::RatchetSessionManager>,
+) -> Result<Vec<u8>> {
+    if is_ratcheted_envelope(envelope) {
+        if let Some(manager) = session_manager {
+            // Derive peer_id from sender_public_key for session lookup
+            let peer_id = hex::encode(&envelope.sender_public_key);
+            if let Some(session) = manager.get_session_mut(&peer_id) {
+                return decrypt_message_ratcheted(session, envelope);
+            }
+        }
+        bail!("Ratcheted envelope received but no active ratchet session for sender");
+    }
+
+    decrypt_message(recipient_signing_key, envelope)
+}
+
+/// Determine if an envelope was encrypted using the Double Ratchet protocol.
+pub fn is_ratcheted_envelope(envelope: &crate::message::Envelope) -> bool {
+    envelope.ratchet_dh_public.is_some() && envelope.ratchet_message_number.is_some()
 }
 
 /// Sign an envelope with the sender's signing key.
@@ -464,6 +592,8 @@ mod tests {
             ephemeral_public_key: vec![0u8; 32],
             nonce: vec![0u8; 12], // Wrong size (should be 24)
             ciphertext: vec![0u8; 32],
+            ratchet_dh_public: None,
+            ratchet_message_number: None,
         };
 
         let result = decrypt_message(&recipient_key, &envelope);

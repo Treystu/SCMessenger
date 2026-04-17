@@ -221,27 +221,32 @@ mod tests {
         let history = Arc::new(HistoryManager::new(backend.clone()));
         let logs = Arc::new(LogManager::new(backend));
 
-        // Add a message with an old timestamp
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Add a message with an old timestamp (60 days ago)
         let old_record = MessageRecord {
             id: "old_msg".to_string(),
             direction: MessageDirection::Sent,
             peer_id: "peer1".to_string(),
             content: "old message".to_string(),
-            timestamp: 1_000_000, // Very old timestamp
-            sender_timestamp: 1_000_000,
+            timestamp: now - 60 * 86400,
+            sender_timestamp: now - 60 * 86400,
             delivered: true,
             hidden: false,
         };
         history.add(old_record).unwrap();
 
-        // Add a recent message
+        // Add a recent message (1 day ago)
         let recent_record = MessageRecord {
             id: "recent_msg".to_string(),
             direction: MessageDirection::Received,
             peer_id: "peer1".to_string(),
             content: "recent message".to_string(),
-            timestamp: 1_700_000_000, // Recent
-            sender_timestamp: 1_700_000_000,
+            timestamp: now - 86400,
+            sender_timestamp: now - 86400,
             delivered: true,
             hidden: false,
         };

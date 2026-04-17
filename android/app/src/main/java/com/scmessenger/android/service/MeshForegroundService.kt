@@ -24,7 +24,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
+import java.util.Collections
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 
 /**
@@ -49,12 +52,16 @@ class MeshForegroundService : Service() {
     @Inject
     lateinit var platformBridge: AndroidPlatformBridge
 
-    private var isRunning = false
-    private val connectedPeers = mutableSetOf<String>()  // Track unique connected peers
-    private var messagesRelayed = 0
+    @Volatile private var isRunning = false
+    private val connectedPeers: MutableSet<String> = Collections.synchronizedSet(mutableSetOf())
+    private val messagesRelayed = AtomicInteger(0)
 
     // WakeLock for BLE scan windows
     private var wakeLock: PowerManager.WakeLock? = null
+    private lateinit var anrWatchdog: AnrWatchdog
+
+    // Performance monitor for ANR tracking and health diagnostics
+    private lateinit var performanceMonitor: PerformanceMonitor
 
     override fun onCreate() {
         super.onCreate()
@@ -66,6 +73,12 @@ class MeshForegroundService : Service() {
             PowerManager.PARTIAL_WAKE_LOCK,
             "SCMessenger::MeshService"
         )
+
+        // Initialize ANR watchdog
+        anrWatchdog = AnrWatchdog(this)
+
+        // Initialize performance monitor
+        performanceMonitor = PerformanceMonitor(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -160,7 +173,7 @@ class MeshForegroundService : Service() {
                 MeshEventBus.statusEvents.collect { event ->
                     when (event) {
                         is StatusEvent.StatsUpdated -> {
-                            messagesRelayed = event.stats.messagesRelayed.toInt()
+                            messagesRelayed.set(event.stats.messagesRelayed.toInt())
                             updateNotification()
                         }
                         else -> {}
@@ -175,6 +188,14 @@ class MeshForegroundService : Service() {
             startPeriodicWakeLockRenewal()
 
             Timber.i("Mesh service started successfully")
+
+            // Start ANR watchdog after service is running
+            anrWatchdog.start()
+
+            // Record service start for uptime tracking
+            performanceMonitor.recordServiceStart()
+
+            Timber.i("Mesh service started successfully - ANR watchdog active")
         } catch (e: Exception) {
             Timber.e(e, "Failed to start mesh service")
             isRunning = false
@@ -264,7 +285,11 @@ class MeshForegroundService : Service() {
 
         isRunning = false
         connectedPeers.clear()
-        messagesRelayed = 0
+        messagesRelayed.set(0)
+        anrWatchdog.stop()
+
+        // Record service stop for health metrics
+        performanceMonitor.recordServiceStop()
 
         // Clean up
         kotlin.runCatching { platformBridge.cleanup() }
@@ -318,7 +343,7 @@ class MeshForegroundService : Service() {
         )
 
         val contentText = if (connectedPeers.isNotEmpty()) {
-            "Connected to ${connectedPeers.size} peers • $messagesRelayed relayed"
+            "Connected to ${connectedPeers.size} peers • ${messagesRelayed.get()} relayed"
         } else {
             getString(R.string.mesh_service_notification_text)
         }
@@ -374,60 +399,92 @@ class MeshForegroundService : Service() {
     /**
      * WS14: Show notification with DM vs DM Request classification.
      * Uses NotificationHelper for proper channel routing and settings.
+     *
+     * This method runs on the repoScope (IO dispatcher) to avoid blocking the main thread.
+     * All FFI calls are dispatched to the IO thread, and the notification is posted
+     * on the main thread using the main handler.
      */
     private fun showMessageNotificationWithClassification(message: uniffi.api.MessageRecord) {
-        // Get contact state for classification
-        val contact = try {
-            meshRepository.getContact(message.peerId)
-        } catch (e: Exception) {
-            null
+        serviceScope.launch {
+            try {
+                // Run FFI calls on IO dispatcher to avoid main thread blocking
+                val contactData = withContext(Dispatchers.Default) {
+                    try {
+                        meshRepository.getContact(message.peerId)
+                    } catch (e: Exception) {
+                        Timber.w(e, "Failed to get contact for ${message.peerId}")
+                        null
+                    }
+                }
+                val isKnownContact = contactData != null
+
+                // Check if conversation exists
+                val hasExistingConversation = withContext(Dispatchers.Default) {
+                    try {
+                        meshRepository.hasConversationWith(message.peerId)
+                    } catch (e: Exception) {
+                        Timber.w(e, "Failed to check conversation for ${message.peerId}")
+                        false
+                    }
+                }
+
+                // Get UI state for foreground suppression (cheap check)
+                val appInForeground = isAppInForeground()
+                val activeConversationId = getActiveConversationId()
+
+                // Get nickname from contact if available
+                val nickname = contactData?.nickname ?: contactData?.localNickname
+
+                // Post notification to main thread
+                withContext(Dispatchers.Main) {
+                    // Use NotificationHelper with WS14 classification
+                    // Note: explicitDmRequest is not available in MessageRecord; classification will infer from contact state
+                    NotificationHelper.showMessageNotification(
+                        context = this@MeshForegroundService,
+                        peerId = message.peerId,
+                        messageId = message.id,
+                        content = message.content,
+                        nickname = nickname,
+                        timestamp = message.timestamp.toLong(),
+                        isKnownContact = isKnownContact,
+                        hasExistingConversation = hasExistingConversation,
+                        appInForeground = appInForeground,
+                        activeConversationId = activeConversationId,
+                        explicitDmRequest = null
+                    )
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to process message notification for ${message.peerId}")
+            }
         }
-        val isKnownContact = contact != null
-        
-        // Check if conversation exists
-        val hasExistingConversation = try {
-            meshRepository.hasConversationWith(message.peerId)
-        } catch (e: Exception) {
-            false
-        }
-
-        // Get UI state for foreground suppression
-        val appInForeground = isAppInForeground()
-        val activeConversationId = getActiveConversationId()
-
-        // Get nickname from contact if available
-        val nickname = contact?.nickname ?: contact?.localNickname
-
-        // Use NotificationHelper with WS14 classification
-        // Note: explicitDmRequest is not available in MessageRecord; classification will infer from contact state
-        NotificationHelper.showMessageNotification(
-            context = this,
-            peerId = message.peerId,
-            messageId = message.id,
-            content = message.content,
-            nickname = nickname,
-            timestamp = message.timestamp.toLong(),
-            isKnownContact = isKnownContact,
-            hasExistingConversation = hasExistingConversation,
-            appInForeground = appInForeground,
-            activeConversationId = activeConversationId,
-            explicitDmRequest = null
-        )
     }
 
     /**
      * Check if app is in foreground.
+     *
+     * Optimized for ANR prevention:
+     * - Caches the activity manager reference
+     * - Uses a simpler process check that's less likely to block
      */
+    @Volatile private var activityManager: android.app.ActivityManager? = null
+
     private fun isAppInForeground(): Boolean {
-        // Simplified check - in production would use ProcessLifecycleOwner
+        // Fast path: use cached activity manager
+        val am = activityManager
+            ?: getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager.also {
+                activityManager = it
+            }
+
         return try {
-            val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-            val runningAppProcesses = activityManager.runningAppProcesses
+            // Use runningAppProcesses - it's cached by the system
+            // Only check if we're the topmost foreground process
+            val runningAppProcesses = am.runningAppProcesses
             runningAppProcesses?.any {
                 it.processName == packageName &&
                 it.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
             } ?: false
         } catch (e: Exception) {
+            Timber.w(e, "isAppInForeground check failed")
             false
         }
     }

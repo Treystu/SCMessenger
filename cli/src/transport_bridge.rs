@@ -1,19 +1,10 @@
-// CLI Transport Bridge - Universal transport capability extender for WASM
+// CLI Transport Bridge - Transport capability extender
 //
-// This module transforms the CLI from a simple relay into a sophisticated
-// transport bridge that can leverage multiple transport types and provide
-// transport awareness to browser-based WASM clients.
-//
-// NOTE: Some code is currently unused as the transport API endpoints are temporarily
-// disabled due to warp filter chaining complexity. This will be activated in future.
-#[allow(dead_code)]
-use crate::api::ApiContext;
+// This module provides transport path management for the CLI.
+
 use libp2p::PeerId;
 use scmessenger_core::transport::abstraction::TransportType;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 /// Represents a transport path from WASM through CLI to destination
 #[derive(Debug, Clone, PartialEq)]
@@ -47,69 +38,19 @@ impl serde::Serialize for TransportPath {
 
 /// Transport bridge that manages all available paths
 pub struct TransportBridge {
-    /// WASM peer ID (browser client)
-    wasm_peer_id: Option<PeerId>,
     /// Known peers and their transport capabilities
     peer_capabilities: HashMap<PeerId, Vec<TransportType>>,
     /// CLI's own transport capabilities
     cli_capabilities: Vec<TransportType>,
-    /// Current active paths
-    active_paths: HashMap<PeerId, TransportPath>,
-    /// Path performance statistics
-    path_stats: HashMap<String, PathStatistics>,
-    /// API context for communication
-    api_context: Option<Arc<Mutex<ApiContext>>>,
-}
-
-/// Performance statistics for a transport path
-#[derive(Debug, Clone, Default)]
-struct PathStatistics {
-    success_count: u32,
-    failure_count: u32,
-    total_latency: u64,
-    message_count: u32,
-}
-
-impl PathStatistics {
-    fn reliability_score(&self) -> f32 {
-        if self.message_count == 0 {
-            0.5 // Neutral score for untried paths
-        } else {
-            self.success_count as f32 / self.message_count as f32
-        }
-    }
-
-    fn average_latency(&self) -> u32 {
-        if self.success_count == 0 {
-            0
-        } else {
-            (self.total_latency / self.success_count as u64) as u32
-        }
-    }
 }
 
 impl TransportBridge {
     /// Create a new transport bridge
     pub fn new() -> Self {
         Self {
-            wasm_peer_id: None,
             peer_capabilities: HashMap::new(),
             cli_capabilities: Self::detect_cli_capabilities(),
-            active_paths: HashMap::new(),
-            path_stats: HashMap::new(),
-            api_context: None,
         }
-    }
-
-    /// Set API context for communication
-    pub fn with_api_context(mut self, ctx: Arc<Mutex<ApiContext>>) -> Self {
-        self.api_context = Some(ctx);
-        self
-    }
-
-    /// Set WASM peer ID
-    pub fn set_wasm_peer(&mut self, peer_id: PeerId) {
-        self.wasm_peer_id = Some(peer_id);
     }
 
     /// Detect CLI transport capabilities
@@ -210,12 +151,6 @@ impl TransportBridge {
 
     /// Get reliability score for a path combination
     fn get_path_reliability(&self, wasm_to_cli: TransportType, cli_to_peer: TransportType) -> f32 {
-        let path_key = format!("{:?}-{:?}", wasm_to_cli, cli_to_peer);
-
-        if let Some(stats) = self.path_stats.get(&path_key) {
-            return stats.reliability_score();
-        }
-
         // Default scores based on transport types
         match (wasm_to_cli, cli_to_peer) {
             (TransportType::Local, TransportType::WiFiDirect) => 0.95, // Best: local + high bandwidth
@@ -234,12 +169,6 @@ impl TransportBridge {
 
     /// Estimate latency for a path combination
     fn estimate_path_latency(&self, wasm_to_cli: TransportType, cli_to_peer: TransportType) -> u32 {
-        let path_key = format!("{:?}-{:?}", wasm_to_cli, cli_to_peer);
-
-        if let Some(stats) = self.path_stats.get(&path_key) {
-            return stats.average_latency();
-        }
-
         // Default latency estimates in ms
         match (wasm_to_cli, cli_to_peer) {
             (TransportType::Local, TransportType::WiFiDirect) => 5, // Very fast
@@ -254,30 +183,6 @@ impl TransportBridge {
             (TransportType::Internet, TransportType::Internet) => 100,
             _ => 150, // Conservative default
         }
-    }
-
-    /// Update path statistics based on message delivery outcome
-    pub fn update_path_stats(&mut self, path: &TransportPath, success: bool, latency: u32) {
-        let path_key = format!("{:?}-{:?}", path.source, path.destination);
-
-        let stats = self.path_stats.entry(path_key).or_default();
-
-        if success {
-            stats.success_count += 1;
-            stats.total_latency += latency as u64;
-        } else {
-            stats.failure_count += 1;
-        }
-
-        stats.message_count += 1;
-
-        tracing::debug!(
-            "Updated stats for path {:?}-{:?}: reliability={:.2}, avg_latency={}ms",
-            path.source,
-            path.destination,
-            stats.reliability_score(),
-            stats.average_latency()
-        );
     }
 
     /// Get all available transport paths (for UI display)
@@ -373,34 +278,6 @@ impl TransportBridge {
     }
 }
 
-/// Transport path with additional routing information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransportRoute {
-    pub peer_id: String,
-    pub path_type: String,
-    pub source_transport: String,
-    pub bridge_transport: String,
-    pub destination_transport: String,
-    pub reliability: f32,
-    pub estimated_latency: u32,
-    pub is_active: bool,
-}
-
-impl From<&TransportPath> for TransportRoute {
-    fn from(path: &TransportPath) -> Self {
-        Self {
-            peer_id: path.peer_id.to_string(),
-            path_type: format!("{:?}-{:?}", path.source, path.destination),
-            source_transport: path.source.to_string(),
-            bridge_transport: path.bridge.to_string(),
-            destination_transport: path.destination.to_string(),
-            reliability: path.reliability_score,
-            estimated_latency: path.latency_estimate,
-            is_active: false,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -490,24 +367,5 @@ mod tests {
             bridge.estimate_path_latency(TransportType::Internet, TransportType::Internet);
 
         assert!(latency1 < latency2); // Local+WiFiDirect should be faster
-    }
-
-    #[test]
-    fn test_stats_update() {
-        let mut bridge = TransportBridge::new();
-        let peer_id = create_test_peer_id("stats-test");
-
-        bridge.register_peer(peer_id, vec![TransportType::Internet]);
-        let path = bridge.find_best_path(&peer_id).unwrap();
-
-        // Initial stats should be default
-        assert!(path.reliability_score > 0.6);
-
-        // Update with success
-        bridge.update_path_stats(&path, true, 45);
-
-        // Get updated path
-        let updated_path = bridge.find_best_path(&peer_id).unwrap();
-        assert_eq!(updated_path.reliability_score, 1.0); // Should be 100% after first success
     }
 }

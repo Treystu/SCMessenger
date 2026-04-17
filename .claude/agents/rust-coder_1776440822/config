@@ -1,0 +1,5 @@
+AGENT_ID=rust-coder_1776440822
+AGENT_MODEL=glm-5.1:cloud
+OLLAMA_HOST=localhost:11434
+WORKING_DIR=/c/Users/kanal/Documents/SCMessenger/SCMessenger
+START_TIME=1776440823

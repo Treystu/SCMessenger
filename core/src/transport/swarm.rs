@@ -24,6 +24,11 @@ use super::behaviour::{
 use super::mesh_routing::{
     advance_route_cursor, BootstrapCapability, MultiPathDelivery, RankedRoute,
 };
+// Import mycorrhizal routing modules
+use super::routing::{
+    engine::RoutingEngine,
+    local::{PeerId as RoutingPeerId, TransportType as RoutingTransportType},
+};
 #[cfg(target_arch = "wasm32")]
 use super::multiport::MultiPortConfig;
 #[cfg(not(target_arch = "wasm32"))]
@@ -482,6 +487,21 @@ fn extract_ed25519_public_key_from_peer_id(peer_id: &PeerId) -> Result<[u8; 32],
     }
 }
 
+/// Extract the 32-byte public key from libp2p PeerId bytes for routing module compatibility
+/// Handles both libp2p PeerId formats (Ed25519 and secp256k1)
+fn extract_peer_id_bytes(bytes: &[u8]) -> [u8; 32] {
+    // For Ed25519 PeerIds (most common): bytes are [0x00, 0x24, 0x08, 0x01, 0x12, 0x20, <32-byte-key>]
+    // We extract the last 32 bytes (the actual public key)
+    let mut result = [0u8; 32];
+    if bytes.len() >= 32 {
+        result.copy_from_slice(&bytes[bytes.len() - 32..]);
+    } else {
+        // Fallback: copy whatever we have
+        result.copy_from_slice(bytes);
+    }
+    result
+}
+
 fn verify_registration_message(
     peer: &PeerId,
     message: &RegistrationMessage,
@@ -634,6 +654,108 @@ fn dispatch_ranked_route(
             .send_request(&relay_peer, relay_request);
         pending_relay_requests.insert(request_id, message_id.to_string());
     }
+}
+
+/// Convert libp2p Kademlia protocol mode to routing transport type
+fn transport_type_to_routing_transport(_mode: kad::Mode) -> RoutingTransportType {
+    // For now, default to TCP as that's what most peers use
+    // In a full implementation, we'd inspect the actual connection transports
+    RoutingTransportType::TCP
+}
+
+/// Convert routing engine decision to ranked routes for dispatch
+fn routing_decision_to_ranked_routes(
+    decision: &RoutingDecision,
+    target_peer: &PeerId,
+    multi_path_delivery: &mut MultiPathDelivery,
+) -> Vec<RankedRoute> {
+    let mut routes = Vec::new();
+
+    match &decision.primary {
+        routing::engine::NextHop::Direct { peer_id, transport: _ } => {
+            // Direct route - use target peer directly
+            routes.push(RankedRoute {
+                path: vec![*target_peer],
+                reason_code: "DIRECT_FROM_ROUTING_ENGINE",
+                recipient_recency: 0,
+                relay_success_score: 1.0,
+                latest_success_order: 0,
+            });
+        }
+        routing::engine::NextHop::Gateway { gateway_id, .. } => {
+            // Route via gateway
+            let gateway_peer = PeerId::from_bytes(gateway_id).ok();
+            if let Some(gw) = gateway_peer {
+                routes.push(RankedRoute {
+                    path: vec![gw, *target_peer],
+                    reason_code: "GATEWAY_FROM_ROUTING_ENGINE",
+                    recipient_recency: 0,
+                    relay_success_score: 0.8,
+                    latest_success_order: 0,
+                });
+            }
+        }
+        routing::engine::NextHop::GlobalRoute { next_hop_id, .. } => {
+            // Route via global route
+            let next_hop = PeerId::from_bytes(next_hop_id).ok();
+            if let Some(hop) = next_hop {
+                routes.push(RankedRoute {
+                    path: vec![hop, *target_peer],
+                    reason_code: "GLOBAL_ROUTE_FROM_ROUTING_ENGINE",
+                    recipient_recency: 0,
+                    relay_success_score: 0.7,
+                    latest_success_order: 0,
+                });
+            }
+        }
+        routing::engine::NextHop::StoreAndCarry => {
+            // Fallback: direct to target
+            routes.push(RankedRoute {
+                path: vec![*target_peer],
+                reason_code: "STORE_AND_CARRY",
+                recipient_recency: 0,
+                relay_success_score: 0.5,
+                latest_success_order: 0,
+            });
+        }
+        routing::engine::NextHop::RouteDiscovery { .. } => {
+            // Route discovery requested - fall back to multi_path_delivery
+            return multi_path_delivery.ranked_routes(target_peer, 3);
+        }
+    }
+
+    // Add alternative routes if available
+    for alt in &decision.alternatives {
+        match alt {
+            routing::engine::NextHop::Direct { peer_id, .. } => {
+                let alt_peer = PeerId::from_bytes(peer_id).ok();
+                if let Some(p) = alt_peer {
+                    routes.push(RankedRoute {
+                        path: vec![p],
+                        reason_code: "ALT_DIRECT_FROM_ROUTING_ENGINE",
+                        recipient_recency: 0,
+                        relay_success_score: 0.9,
+                        latest_success_order: 0,
+                    });
+                }
+            }
+            routing::engine::NextHop::Gateway { gateway_id, .. } => {
+                let gw = PeerId::from_bytes(gateway_id).ok();
+                if let Some(g) = gw {
+                    routes.push(RankedRoute {
+                        path: vec![g, *target_peer],
+                        reason_code: "ALT_GATEWAY_FROM_ROUTING_ENGINE",
+                        recipient_recency: 0,
+                        relay_success_score: 0.7,
+                        latest_success_order: 0,
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    routes
 }
 
 #[derive(Debug, Clone)]
@@ -980,6 +1102,12 @@ pub enum SwarmEvent2 {
     NatStatusChanged(String),
     /// Port mapping event (UPnP).
     PortMapping(String),
+    /// Abuse signal detected by relay guardrails (P0_SECURITY_003).
+    /// Carries the offending peer ID and the signal type name.
+    AbuseSignalDetected {
+        peer_id: PeerId,
+        signal: String,
+    },
 }
 
 /// Handle to communicate with the running swarm task
@@ -1424,6 +1552,17 @@ pub async fn start_swarm_with_config(
         // Mesh routing components (Phase 3-6)
         let mut multi_path_delivery = MultiPathDelivery::new();
         let mut bootstrap_capability = BootstrapCapability::new();
+
+        // Mycorrhizal Routing Engine (Layer 1-3)
+        // Convert libp2p PeerId to routing module's [u8; 32] format
+        // libp2p PeerId for Ed25519 keys: 38 bytes (0x00, 0x24, 0x08, 0x01, 0x12, 0x20, then 32-byte key)
+        // We extract just the 32-byte public key portion
+        let local_peer_id_bytes_raw = local_peer_id.to_bytes();
+        let local_peer_id_bytes: [u8; 32] = extract_peer_id_bytes(&local_peer_id_bytes_raw);
+        let local_hint = blake3::hash(&local_peer_id_bytes).as_bytes()[0..4]
+            .try_into()
+            .expect("blake3 hash should be at least 4 bytes");
+        let mut routing_engine = RoutingEngine::new(local_peer_id_bytes, local_hint);
 
         // Track pending message deliveries
         let mut pending_messages: HashMap<String, PendingMessage> = HashMap::new();
@@ -2067,6 +2206,17 @@ pub async fn start_swarm_with_config(
                                                 request.message_id,
                                                 reason
                                             );
+                                            let abuse_signal = if reason.contains("oversized") {
+                                                "OversizedMessage"
+                                            } else if reason.contains("duplicate") {
+                                                "DuplicateMessage"
+                                            } else {
+                                                "InvalidFormat"
+                                            };
+                                            let _ = event_tx.send(SwarmEvent2::AbuseSignalDetected {
+                                                peer_id: peer,
+                                                signal: abuse_signal.to_string(),
+                                            }).await;
                                             RelayResponse {
                                                 accepted: false,
                                                 error: Some(reason.to_string()),
@@ -2105,6 +2255,10 @@ pub async fn start_swarm_with_config(
                                                 peer,
                                                 request.message_id
                                             );
+                                            let _ = event_tx.send(SwarmEvent2::AbuseSignalDetected {
+                                                peer_id: peer,
+                                                signal: "RateLimited".to_string(),
+                                            }).await;
                                             RelayResponse {
                                                 accepted: false,
                                                 error: Some("relay_peer_rate_limited".to_string()),
@@ -2656,6 +2810,20 @@ pub async fn start_swarm_with_config(
                                 // Identity protocol confirms this peer is presently reachable.
                                 multi_path_delivery.record_recipient_seen_now(peer_id, peer_id);
 
+                                // MYCORRHIZAL ROUTING: Update routing engine with peer discovery
+                                let peer_id_bytes = extract_peer_id_bytes(&peer_id.to_bytes());
+                                let peer_hint = blake3::hash(&peer_id_bytes).as_bytes()[0..4]
+                                    .try_into()
+                                    .expect("blake3 hash should be at least 4 bytes");
+                                routing_engine.local_cell_mut().peer_seen(
+                                    peer_id_bytes,
+                                    transport_type_to_routing_transport(
+                                        swarm.behaviour_mut().kademlia.protocol_mode(),
+                                    ),
+                                );
+                                // Update routing engine with peer hints from identify info
+                                // (peers announce what hints they can reach)
+
                                 // Relay-confirmed observation of our externally visible endpoint
                                 // as seen by this peer. This gives mobile layers a stable
                                 // "what the network sees" signal for publishing connection hints.
@@ -2990,13 +3158,38 @@ pub async fn start_swarm_with_config(
                     Some(command) = command_rx.recv() => {
                         match command {
                             SwarmCommand::SendMessage { peer_id, envelope_data, recipient_identity_id, intended_device_id, reply } => {
-                                // PHASE 6: Multi-path delivery with retry logic
+                                // PHASE 6: Multi-path delivery with routing engine integration
                                 let message_id = format!("{}-{}", peer_id, SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis());
 
                                 // Start delivery tracking
                                 multi_path_delivery.start_delivery(message_id.clone(), peer_id);
 
-                                let routes = multi_path_delivery.ranked_routes(&peer_id, 3);
+                                // MYCORRHIZAL ROUTING: Use routing engine to determine path
+                                // Convert libp2p PeerId to routing module format
+                                let peer_id_bytes = extract_peer_id_bytes(&peer_id.to_bytes());
+                                // Get recipient hint from peer_id (first 4 bytes of blake3 hash)
+                                let hint = blake3::hash(&peer_id_bytes).as_bytes()[0..4]
+                                    .try_into()
+                                    .expect("blake3 hash should be at least 4 bytes");
+
+                                // Route message using mycorrhizal routing engine
+                                let routing_decision = routing_engine.route_message(
+                                    &hint,
+                                    &message_id.as_bytes()[0..16].try_into().unwrap_or([0u8; 16]),
+                                    50, // default priority
+                                    SystemTime::now()
+                                        .duration_since(UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_secs(),
+                                );
+
+                                // Convert routing decision to ranked routes for dispatch
+                                let routes = routing_decision_to_ranked_routes(
+                                    &routing_decision,
+                                    &peer_id,
+                                    &mut multi_path_delivery,
+                                );
+
                                 if routes.is_empty() {
                                     let _ = reply.send(Err("No paths available".to_string())).await;
                                     continue;
@@ -3667,6 +3860,17 @@ pub async fn start_swarm_with_config(
                                                     request.message_id,
                                                     reason
                                                 );
+                                                let abuse_signal = if reason.contains("oversized") {
+                                                    "OversizedMessage"
+                                                } else if reason.contains("duplicate") {
+                                                    "DuplicateMessage"
+                                                } else {
+                                                    "InvalidFormat"
+                                                };
+                                                let _ = event_tx.send(SwarmEvent2::AbuseSignalDetected {
+                                                    peer_id: peer,
+                                                    signal: abuse_signal.to_string(),
+                                                }).await;
                                                 RelayResponse {
                                                     accepted: false,
                                                     error: Some(reason.to_string()),
@@ -3700,6 +3904,10 @@ pub async fn start_swarm_with_config(
                                                     peer,
                                                     request.message_id
                                                 );
+                                                let _ = event_tx.send(SwarmEvent2::AbuseSignalDetected {
+                                                    peer_id: peer,
+                                                    signal: "RateLimited".to_string(),
+                                                }).await;
                                                 RelayResponse {
                                                     accepted: false,
                                                     error: Some("relay_peer_rate_limited".to_string()),

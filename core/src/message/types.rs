@@ -63,16 +63,30 @@ pub struct Receipt {
 ///
 /// Contains everything a recipient needs to decrypt the message,
 /// assuming they have their own private key.
+///
+/// When `ratchet_dh_public` is present, the envelope was encrypted using
+/// the Double Ratchet protocol (forward secrecy). The `ephemeral_public_key`
+/// field carries the ratchet DH public key instead of a per-message ECDH key,
+/// and `ratchet_message_number` identifies the chain position.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Envelope {
     /// Sender's Ed25519 public key (32 bytes) — so recipient knows who sent it
     pub sender_public_key: Vec<u8>,
-    /// Ephemeral X25519 public key (32 bytes) — for ECDH key agreement
+    /// Ephemeral X25519 public key (32 bytes) — for ECDH key agreement.
+    /// In ratcheted mode, this carries the DH ratchet public key.
     pub ephemeral_public_key: Vec<u8>,
     /// XChaCha20-Poly1305 nonce (24 bytes)
     pub nonce: Vec<u8>,
     /// Encrypted + authenticated ciphertext
     pub ciphertext: Vec<u8>,
+    /// Double Ratchet: sender's current DH ratchet public key (32 bytes).
+    /// `None` for legacy per-message ECDH envelopes (backward compatible).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ratchet_dh_public: Option<Vec<u8>>,
+    /// Double Ratchet: message number in the current sending chain.
+    /// `None` for legacy per-message ECDH envelopes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ratchet_message_number: Option<u32>,
 }
 
 /// A signed envelope — adds Ed25519 signature for relay verification.

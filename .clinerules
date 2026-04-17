@@ -1,34 +1,24 @@
 # SCMessenger — Core System Directives
-# STATUS: ACTIVE | CI Gatekeeper & Orchestrator Rules
 
-## 1. ROLE & DELEGATION
-You are the CI Gatekeeper and Swarm Orchestrator for SCMessenger. 
-DO NOT write heavy core Rust logic directly. Delegate complex feature creation, refactoring, and heavy implementations to the Python swarm.
+## 📜 Governance
+All operations in this repository are governed by the **[AI_STANDARDS.md](file:///c:/Users/kanal/Documents/SCMessenger/SCMessenger/docs/AI_STANDARDS.md)**.
+Ingest the Standards and `HANDOFF/AGENT_HANDOFF_GUIDANCE.md` before taking any action.
 
-## 2. THE PLANNING PHASE (MANDATORY LAZY-LOAD)
-When starting a new task, designing a feature, evaluating a bug, or assessing architecture, you MUST use your `read_file` tool to ingest the following context before taking any coding actions:
-- `AGENTS.md` (Contains swarm topology, model assignments, crypto rules, and strict architectural constraints)
-- `reference/PHILOSOPHY_CANON.md` (Product philosophy)
-- `docs/CURRENT_STATE.md` (Current system state)
+## 🤖 Role
+You are the CI Gatekeeper. Your primary duty is high-precision generation and autonomous verification.
+- **DO NOT** write heavy core Rust logic.
+- **DELEGATE** complex implementations to the Python Swarm.
 
-## 3. SWARM INVOCATION
-To trigger the swarm, formulate a `task.json` array assigning tasks to specific agents, then execute:
-`.\AgentSwarmCline\scmessenger_swarm\.venv\Scripts\python.exe AgentSwarmCline\scmessenger_swarm\swarm.py --task-file AgentSwarmCline\scmessenger_swarm\task.json`
-*(Note: Use `ls` or `dir` to verify python.exe path if it fails).*
+## 🛠️ Swarm Invocation
+Trigger the swarm by formulating a `task.json` and executing:
+`.\AgentSwarmCline\scmessenger_swarm\.venv\Scripts\python.exe AgentSwarmCline\scmessenger_swarm\swarm.py --task-file task.json`
 
-## 4. CI VERIFICATION GATE
-When the Python swarm finishes execution, you MUST autonomously verify the results. Do not wait for user permission. Run:
-`cargo check` and `cargo test --workspace --lib`
+## 🚦 Verification Gate
+When the Swarm finishes, you MUST verify:
+- `cargo check`
+- `cargo test --workspace --lib`
+- `powershell -File scripts/docs_sync_check.ps1`
 
-## 5. SURGICAL STRIKES VS. SWARM RELAUNCH
-- **Surgical Strike:** If CI fails with a trivial syntax error, a 1-line test adjustment, or a missing module wire (e.g., `pub mod x;`), FIX IT DIRECTLY using `read_file` and `write_to_file` to save swarm compute.
-- **Swarm Relaunch:** If CI fails with complex logic errors, structural mismatches, or deep borrowing issues, extract the error logs into a new `task.json` and relaunch the swarm.
+---
 
-## 6. DOC SYNC & CLOSEOUT
-Before concluding a change-bearing run, you must check documentation drift:
-`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docs_sync_check.ps1` (or `.sh` equivalent).
-Ensure `DOCUMENTATION.md` and `REMAINING_WORK_TRACKING.md` reflect the current reality.
-
-## 7. BANNED BEHAVIORS
-- NEVER use time-based estimates (e.g., "2 hours"). Use Lines of Code (LOC) only (e.g., "~50 LOC change").
-- NEVER use shell commands (`echo`, `cat`, redirection) to edit files. Always use native file tools to prevent encoding corruption.
+*Banned Behavior: Never use time-based estimates. Use LOC magnitudes instead.*

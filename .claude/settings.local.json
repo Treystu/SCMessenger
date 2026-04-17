@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./scripts/verify_task_completion.sh drift *)",
+      "Bash(cargo check *)",
+      "Bash(kill 1634)",
+      "Bash(rm -rf .claude/agents/security-auditor_1776429958)"
+    ]
+  }
+}

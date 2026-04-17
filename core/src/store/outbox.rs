@@ -4,6 +4,7 @@
 // This is the foundation for store-and-forward delivery.
 
 use crate::store::backend::StorageBackend;
+use crate::store::storage::StorageManager;
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
@@ -41,9 +42,10 @@ enum OutboxBackend {
     Persistent(Arc<dyn StorageBackend>),
 }
 
-/// Outbound message queue
+/// Outbound message queue with automatic retention enforcement
 pub struct Outbox {
     backend: OutboxBackend,
+    storage_manager: Option<Arc<StorageManager>>,
 }
 
 impl Outbox {
@@ -54,6 +56,18 @@ impl Outbox {
                 queues: HashMap::new(),
                 total: 0,
             },
+            storage_manager: None,
+        }
+    }
+
+    /// Create a persistent outbox with an arbitrary backend and storage manager
+    pub fn persistent_with_storage(
+        backend: Arc<dyn StorageBackend>,
+        storage_manager: Arc<StorageManager>,
+    ) -> Self {
+        Self {
+            backend: OutboxBackend::Persistent(backend),
+            storage_manager: Some(storage_manager),
         }
     }
 
@@ -61,6 +75,17 @@ impl Outbox {
     pub fn persistent(backend: Arc<dyn StorageBackend>) -> Self {
         Self {
             backend: OutboxBackend::Persistent(backend),
+            storage_manager: None,
+        }
+    }
+
+    /// Trigger maintenance to enforce retention policies after outbox operations.
+    /// This automatically prunes expired messages and enforces configured limits.
+    /// If storage_manager is not available (None), this is a no-op.
+    fn trigger_maintenance(&self) {
+        if let Some(storage_mgr) = &self.storage_manager {
+            // Trigger maintenance - this will enforce retention policies
+            let _ = storage_mgr.perform_maintenance();
         }
     }
 
@@ -100,6 +125,9 @@ impl Outbox {
 
                 queue.push_back(msg);
                 *total += 1;
+                // Trigger maintenance on memory outbox
+                // Note: This is a best-effort call and any errors are silently ignored
+                self.trigger_maintenance();
                 Ok(())
             }
             OutboxBackend::Persistent(db) => {
@@ -134,6 +162,8 @@ impl Outbox {
                     db.put(key_str.as_bytes(), &bytes)?;
                     db.flush()?;
                 }
+                // Trigger maintenance on persistent outbox
+                self.trigger_maintenance();
                 Ok(())
             }
         }
@@ -570,4 +600,5 @@ mod tests {
         assert_eq!(msgs[0].attempts, u32::MAX);
         assert_eq!(outbox.total_count(), 1);
     }
+
 }

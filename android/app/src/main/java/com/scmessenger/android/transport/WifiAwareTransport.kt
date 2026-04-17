@@ -48,7 +48,7 @@ class WifiAwareTransport(
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    private var isRunning = false
+    @Volatile private var isRunning = false
 
     private val callbackLock = Any()
     private val registeredCallbacks = ConcurrentHashMap<String, ConnectivityManager.NetworkCallback>()

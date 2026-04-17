@@ -685,6 +685,23 @@ impl MeshService {
                                             crate::transport::SwarmEvent::PortMapping(status) => {
                                                 tracing::info!("🌐 Port mapping updated: {}", status);
                                             }
+                                            crate::transport::SwarmEvent::AbuseSignalDetected {
+                                                peer_id,
+                                                signal,
+                                            } => {
+                                                tracing::info!(
+                                                    "Abuse signal detected from {}: {}",
+                                                    peer_id,
+                                                    signal
+                                                );
+                                                let core_guard = core.lock();
+                                                if let Some(core_ref) = core_guard.as_ref() {
+                                                    core_ref.record_abuse_signal(
+                                                        peer_id.to_string(),
+                                                        signal,
+                                                    );
+                                                }
+                                            }
                                             other => {
                                                 tracing::debug!("Swarm event: {:?}", other);
                                             }

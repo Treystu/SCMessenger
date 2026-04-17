@@ -370,8 +370,7 @@ pub async fn start(
     // 10. WASM Static Assets
     let wasm_route = warp::path("wasm").and(warp::fs::dir("wasm")).boxed();
 
-    // 11. Transport Bridge API - Simplified inline implementation
-    // Directly implement transport endpoints to avoid warp filter chaining complexity
+    // 11. Transport Bridge API - using transport_api module
     let ctx_capabilities = web_ctx.clone();
     let ctx_paths = web_ctx.clone();
     let ctx_register = web_ctx.clone();

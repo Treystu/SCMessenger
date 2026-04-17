@@ -6,6 +6,7 @@
 //
 // If the answer is no, it doesn't belong in Phase 0.
 
+pub mod abuse;
 pub mod crypto;
 pub mod drift;
 pub mod identity;
@@ -307,12 +308,14 @@ pub struct IronCore {
     delegate: Arc<RwLock<Option<Arc<dyn CoreDelegate>>>>,
     /// Drift relay engine (mesh store-and-forward)
     drift_engine: Arc<RwLock<drift::RelayEngine>>,
-    /// Abuse reputation manager (P0_SECURITY_002)
-    abuse_reputation: Arc<transport::reputation::AbuseReputationManager>,
+    /// Enhanced abuse reputation manager with spam detection (P0_SECURITY_003)
+    abuse_reputation: Arc<abuse::EnhancedAbuseReputationManager>,
     /// Mycorrhizal routing engine (P1_CORE_003: intelligent path selection)
     routing_engine: Arc<RwLock<routing::OptimizedRoutingEngine>>,
     /// Privacy feature configuration (padding, onion, cover traffic, timing)
     privacy_config: Arc<RwLock<privacy::PrivacyConfig>>,
+    /// Double Ratchet session manager (P0_SECURITY_002: forward secrecy)
+    ratchet_session_manager: Arc<RwLock<crypto::RatchetSessionManager>>,
 }
 
 const STORAGE_SCHEMA_VERSION: u32 = 3;
@@ -611,68 +614,31 @@ impl IronCore {
             Arc::new(RwLock::new(IdentityManager::new()))
         };
 
-        #[allow(unused_variables)]
-        let outbox = if let Some(path) = &storage_path {
-            if !storage_ready {
-                store::Outbox::new()
-            } else {
+        // Root backend for logs and storage metadata
+        let root_backend: Arc<dyn store::backend::StorageBackend> =
+            if let Some(path) = &storage_path {
                 #[cfg(not(target_arch = "wasm32"))]
-                let backend = Arc::new(
-                    crate::store::backend::SledStorage::new(
-                        Path::new(path).join("outbox").to_string_lossy().as_ref(),
-                    )
-                    .unwrap(),
-                );
+                {
+                    match crate::store::backend::SledStorage::new(
+                        Path::new(path).join("root").to_string_lossy().as_ref(),
+                    ) {
+                        Ok(sled) => Arc::new(sled),
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to open root sled backend, falling back to memory: {}",
+                                e
+                            );
+                            Arc::new(store::backend::MemoryStorage::new())
+                        }
+                    }
+                }
                 #[cfg(target_arch = "wasm32")]
-                let backend = Arc::new(crate::store::backend::MemoryStorage::new());
-
-                store::Outbox::persistent(backend)
-            }
-        } else {
-            store::Outbox::new()
-        };
-
-        #[allow(unused_variables)]
-        let inbox = if let Some(path) = &storage_path {
-            if !storage_ready {
-                store::Inbox::new()
+                Arc::new(store::backend::MemoryStorage::new())
             } else {
-                #[cfg(not(target_arch = "wasm32"))]
-                let backend = Arc::new(
-                    crate::store::backend::SledStorage::new(
-                        Path::new(path).join("inbox").to_string_lossy().as_ref(),
-                    )
-                    .unwrap(),
-                );
-                #[cfg(target_arch = "wasm32")]
-                let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+                Arc::new(store::backend::MemoryStorage::new())
+            };
 
-                store::Inbox::persistent(backend)
-            }
-        } else {
-            store::Inbox::new()
-        };
-
-        let contacts = if let Some(path) = &storage_path {
-            if !storage_ready {
-                store::ContactManager::new(Arc::new(store::backend::MemoryStorage::new()))
-            } else {
-                #[cfg(not(target_arch = "wasm32"))]
-                let backend = Arc::new(
-                    crate::store::backend::SledStorage::new(
-                        Path::new(path).join("contacts").to_string_lossy().as_ref(),
-                    )
-                    .unwrap(),
-                );
-                #[cfg(target_arch = "wasm32")]
-                let backend = Arc::new(crate::store::backend::MemoryStorage::new());
-
-                store::ContactManager::new(backend)
-            }
-        } else {
-            store::ContactManager::new(Arc::new(store::backend::MemoryStorage::new()))
-        };
-
+        // Create history manager first - it's needed for storage manager
         let history = if let Some(path) = &storage_path {
             if !storage_ready {
                 store::HistoryManager::new(Arc::new(store::backend::MemoryStorage::new()))
@@ -699,30 +665,7 @@ impl IronCore {
         let audit_log_data = history_arc.read().backend();
         let loaded_audit_log = AuditLogType::load(&audit_log_data);
 
-        // Root backend for logs and storage metadata
-        let root_backend: Arc<dyn store::backend::StorageBackend> =
-            if let Some(path) = &storage_path {
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    match crate::store::backend::SledStorage::new(
-                        Path::new(path).join("root").to_string_lossy().as_ref(),
-                    ) {
-                        Ok(sled) => Arc::new(sled),
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to open root sled backend, falling back to memory: {}",
-                                e
-                            );
-                            Arc::new(store::backend::MemoryStorage::new())
-                        }
-                    }
-                }
-                #[cfg(target_arch = "wasm32")]
-                Arc::new(store::backend::MemoryStorage::new())
-            } else {
-                Arc::new(store::backend::MemoryStorage::new())
-            };
-
+        // Log manager and storage manager - created before outbox/inbox
         let log_manager = Arc::new(store::logs::LogManager::new(root_backend.clone()));
         let storage_manager = Arc::new(store::storage::StorageManager::new(
             history_arc.read().clone().into(),
@@ -744,7 +687,12 @@ impl IronCore {
             drift::RelayConfig::default(),
         )));
 
-        let abuse_reputation = Arc::new(transport::reputation::AbuseReputationManager::new(1000));
+        let abuse_reputation = Arc::new(abuse::EnhancedAbuseReputationManager::new(
+            1000,
+            abuse::spam_detection::SpamDetectionEngine::new_heuristics_only(
+                abuse::spam_detection::SpamDetectionConfig::default(),
+            ),
+        ));
 
         // P1_CORE_003: Mycorrhizal routing engine — starts with zero-key identity,
         // replaced once identity is initialized. Provides intelligent path selection
@@ -752,6 +700,77 @@ impl IronCore {
         let routing_engine = Arc::new(RwLock::new(
             routing::OptimizedRoutingEngine::new([0u8; 32], [0u8; 4]),
         ));
+
+        // Create outbox and inbox after storage_manager exists
+        #[allow(unused_variables)]
+        let outbox = if let Some(path) = &storage_path {
+            if !storage_ready {
+                store::Outbox::new()
+            } else {
+                #[cfg(not(target_arch = "wasm32"))]
+                let backend = Arc::new(
+                    crate::store::backend::SledStorage::new(
+                        Path::new(path).join("outbox").to_string_lossy().as_ref(),
+                    )
+                    .unwrap(),
+                );
+                #[cfg(target_arch = "wasm32")]
+                let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+
+                store::Outbox::persistent_with_storage(backend, storage_manager.clone())
+            }
+        } else {
+            store::Outbox::new()
+        };
+
+        #[allow(unused_variables)]
+        let inbox = if let Some(path) = &storage_path {
+            if !storage_ready {
+                store::Inbox::new()
+            } else {
+                #[cfg(not(target_arch = "wasm32"))]
+                let backend = Arc::new(
+                    crate::store::backend::SledStorage::new(
+                        Path::new(path).join("inbox").to_string_lossy().as_ref(),
+                    )
+                    .unwrap(),
+                );
+                #[cfg(target_arch = "wasm32")]
+                let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+
+                store::Inbox::persistent_with_storage(backend, storage_manager.clone())
+            }
+        } else {
+            store::Inbox::new()
+        };
+
+        let contacts = if let Some(path) = &storage_path {
+            if !storage_ready {
+                store::ContactManager::new(Arc::new(store::backend::MemoryStorage::new()))
+            } else {
+                #[cfg(not(target_arch = "wasm32"))]
+                let backend = Arc::new(
+                    crate::store::backend::SledStorage::new(
+                        Path::new(path).join("contacts").to_string_lossy().as_ref(),
+                    )
+                    .unwrap(),
+                );
+                #[cfg(target_arch = "wasm32")]
+                let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+
+                store::ContactManager::new(backend)
+            }
+        } else {
+            store::ContactManager::new(Arc::new(store::backend::MemoryStorage::new()))
+        };
+
+        // Initialize ratchet session manager with the root backend
+        // Initialize ratchet session manager with the root backend
+        let ratchet_session_manager = {
+            let mut manager = crypto::RatchetSessionManager::with_backend(root_backend.clone());
+            let _ = manager.load(); // Best-effort load
+            Arc::new(RwLock::new(manager))
+        };
 
         Self {
             identity,
@@ -776,6 +795,7 @@ impl IronCore {
             abuse_reputation,
             routing_engine,
             privacy_config: Arc::new(RwLock::new(privacy::PrivacyConfig::default())),
+            ratchet_session_manager,
         }
     }
 
@@ -796,6 +816,40 @@ impl IronCore {
                     .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
             )
             .try_init();
+
+        // Root backend for logs and storage metadata (memory for WASM)
+        let root_backend: Arc<dyn store::backend::StorageBackend> =
+            Arc::new(store::backend::MemoryStorage::new());
+
+        // Create history manager first - needed for storage manager
+        let history = if let Some(path) = &storage_path {
+            let history_path = Path::new(path).join("history");
+            let backend = Arc::new(
+                crate::store::backend::IndexedDbStorage::new(
+                    history_path.to_string_lossy().as_ref(),
+                )
+                .await
+                .expect("Failed to open IndexedDB for history"),
+            );
+            store::HistoryManager::new(backend)
+        } else {
+            store::HistoryManager::new(Arc::new(store::backend::MemoryStorage::new()))
+        };
+
+        let history_arc = Arc::new(RwLock::new(history));
+
+        // P0_SECURITY_005: Load persisted audit log from storage before struct construction
+        let audit_log_data = history_arc.read().backend();
+        let loaded_audit_log = AuditLogType::load(&audit_log_data);
+
+        // Log manager and storage manager - created before outbox/inbox
+        let log_manager = Arc::new(store::logs::LogManager::new(root_backend.clone()));
+        let storage_manager = Arc::new(store::storage::StorageManager::new(
+            history_arc.read().clone().into(),
+            log_manager.clone(),
+        ));
+        let blocked_manager = Arc::new(store::blocked::BlockedManager::new(root_backend.clone()));
+        let relay_registry = Arc::new(store::RelayRegistry::new(root_backend));
 
         let identity = if let Some(path) = &storage_path {
             let identity_path = Path::new(path).join("identity");
@@ -824,7 +878,7 @@ impl IronCore {
                 .await
                 .expect("Failed to open IndexedDB for outbox"),
             );
-            store::Outbox::persistent(backend)
+            store::Outbox::persistent_with_storage(backend, storage_manager.clone())
         } else {
             store::Outbox::new()
         };
@@ -836,7 +890,7 @@ impl IronCore {
                     .await
                     .expect("Failed to open IndexedDB for inbox"),
             );
-            store::Inbox::persistent(backend)
+            store::Inbox::persistent_with_storage(backend, storage_manager.clone())
         } else {
             store::Inbox::new()
         };
@@ -855,33 +909,12 @@ impl IronCore {
             store::ContactManager::new(Arc::new(store::backend::MemoryStorage::new()))
         };
 
-        let history = if let Some(path) = &storage_path {
-            let history_path = Path::new(path).join("history");
-            let backend = Arc::new(
-                crate::store::backend::IndexedDbStorage::new(
-                    history_path.to_string_lossy().as_ref(),
-                )
-                .await
-                .expect("Failed to open IndexedDB for history"),
-            );
-            store::HistoryManager::new(backend)
-        } else {
-            store::HistoryManager::new(Arc::new(store::backend::MemoryStorage::new()))
+        // Initialize ratchet session manager with the root backend (memory for WASM)
+        let ratchet_session_manager = {
+            let mut manager = crypto::RatchetSessionManager::with_backend(root_backend.clone());
+            let _ = manager.load(); // Best-effort load
+            Arc::new(RwLock::new(manager))
         };
-
-        let history_arc = Arc::new(RwLock::new(history));
-        // P0_SECURITY_005: Load persisted audit log from storage before struct construction
-        let audit_log_data = history_arc.read().backend();
-        let loaded_audit_log = AuditLogType::load(&audit_log_data);
-        let root_backend: Arc<dyn store::backend::StorageBackend> =
-            Arc::new(store::backend::MemoryStorage::new());
-        let log_manager = Arc::new(store::logs::LogManager::new(root_backend.clone()));
-        let storage_manager = Arc::new(store::storage::StorageManager::new(
-            history_arc.read().clone().into(),
-            log_manager.clone(),
-        ));
-        let blocked_manager = Arc::new(store::blocked::BlockedManager::new(root_backend.clone()));
-        let relay_registry = Arc::new(store::RelayRegistry::new(root_backend));
 
         Self {
             identity,
@@ -902,11 +935,17 @@ impl IronCore {
                 &[0u8; 32],
                 drift::RelayConfig::default(),
             ))),
-            abuse_reputation: Arc::new(transport::reputation::AbuseReputationManager::new(1000)),
+            abuse_reputation: Arc::new(abuse::EnhancedAbuseReputationManager::new(
+                1000,
+                abuse::spam_detection::SpamDetectionEngine::new_heuristics_only(
+                    abuse::spam_detection::SpamDetectionConfig::default(),
+                ),
+            )),
             routing_engine: Arc::new(RwLock::new(
                 routing::OptimizedRoutingEngine::new([0u8; 32], [0u8; 4]),
             )),
             privacy_config: Arc::new(RwLock::new(privacy::PrivacyConfig::default())),
+            ratchet_session_manager,
         }
     }
 
@@ -2024,6 +2063,28 @@ impl IronCore {
     }
 
     // ------------------------------------------------------------------------
+    // RATCHET SESSION MANAGEMENT
+    // ------------------------------------------------------------------------
+
+    /// Get the count of active ratchet sessions.
+    pub fn ratchet_session_count(&self) -> u32 {
+        self.ratchet_session_manager.read().session_count() as u32
+    }
+
+    /// Check if a ratchet session exists for a peer.
+    pub fn ratchet_has_session(&self, peer_id: String) -> bool {
+        self.ratchet_session_manager
+            .read()
+            .has_session(&peer_id)
+    }
+
+    /// Reset the ratchet session for a peer (for forward secrecy).
+    pub fn ratchet_reset_session(&self, peer_id: String) {
+        let mut manager = self.ratchet_session_manager.write();
+        manager.remove_session(&peer_id);
+    }
+
+    // ------------------------------------------------------------------------
     // DELEGATE
     // ------------------------------------------------------------------------
 
@@ -2390,7 +2451,7 @@ impl IronCore {
     }
 
     // ========================================================================
-    // ABUSE REPUTATION (P0_SECURITY_002)
+    // ABUSE REPUTATION & ANTI-ABUSE (P0_SECURITY_002 / P0_SECURITY_003)
     // ========================================================================
 
     /// Record an abuse signal for a peer and return the resulting reputation score.
@@ -2405,11 +2466,26 @@ impl IronCore {
             "FailedRelay" => transport::reputation::AbuseSignal::FailedRelay,
             "SuccessfulDelivery" => transport::reputation::AbuseSignal::SuccessfulDelivery,
             "ConnectionTimeout" => transport::reputation::AbuseSignal::ConnectionTimeout,
-            _ => transport::reputation::AbuseSignal::InvalidFormat, // sensible default
+            _ => transport::reputation::AbuseSignal::InvalidFormat,
         };
         self.abuse_reputation
             .record_signal(&peer_id, abuse_signal)
             .value()
+    }
+
+    /// Record a spam signal for a peer (P0_SECURITY_003).
+    /// Spam signals include CommunityBlocked, ContentPattern, Flooding,
+    /// MassDistribution, and ColdContactSpam.
+    pub fn record_spam_signal(&self, peer_id: String, signal: String) {
+        let spam_signal = match signal.as_str() {
+            "CommunityBlocked" => abuse::spam_detection::SpamSignal::CommunityBlocked,
+            "ContentPattern" => abuse::spam_detection::SpamSignal::ContentPattern,
+            "Flooding" => abuse::spam_detection::SpamSignal::Flooding,
+            "MassDistribution" => abuse::spam_detection::SpamSignal::MassDistribution,
+            "ColdContactSpam" => abuse::spam_detection::SpamSignal::ColdContactSpam,
+            _ => abuse::spam_detection::SpamSignal::ContentPattern,
+        };
+        self.abuse_reputation.record_spam_signal(&peer_id, spam_signal);
     }
 
     /// Get the reputation score for a peer (0.0 = abusive, 100.0 = trusted, 50.0 = neutral).
@@ -2417,10 +2493,22 @@ impl IronCore {
         self.abuse_reputation.get_score(&peer_id).value()
     }
 
+    /// Get the enhanced reputation score for a peer, including spam confidence (P0_SECURITY_003).
+    /// Returns (base_score, spam_confidence, is_community_flagged).
+    pub fn get_enhanced_peer_reputation(&self, peer_id: String) -> (f64, f64, bool) {
+        let enhanced = self.abuse_reputation.get_enhanced_score(&peer_id);
+        (enhanced.base_score.value(), enhanced.spam_confidence, enhanced.is_community_flagged)
+    }
+
     /// Get the rate limit multiplier for a peer based on reputation.
     /// Trusted peers get 1.5x, abusive peers get 0.1x, default is 1.0x.
     pub fn peer_rate_limit_multiplier(&self, peer_id: String) -> f64 {
         self.abuse_reputation.rate_limit_multiplier(&peer_id)
+    }
+
+    /// Get the spam score for a peer (0.0 to 1.0, where 1.0 is definitely spam) (P0_SECURITY_003).
+    pub fn peer_spam_score(&self, peer_id: String) -> f64 {
+        self.abuse_reputation.spam_detector().spam_score(&peer_id)
     }
 
     // ========================================================================

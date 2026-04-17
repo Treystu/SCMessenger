@@ -154,25 +154,25 @@ open class MeshRepository(private val context: Context) {
     }
 
     // Mesh service instance (lazy init)
-    private var meshService: uniffi.api.MeshService? = null
+    @Volatile private var meshService: uniffi.api.MeshService? = null
 
     // Managers (lazy init)
-    private var contactManager: uniffi.api.ContactManager? = null
-    private var historyManager: uniffi.api.HistoryManager? = null
-    private var ledgerManager: uniffi.api.LedgerManager? = null
-    private var settingsManager: uniffi.api.MeshSettingsManager? = null
-    private var autoAdjustEngine: uniffi.api.AutoAdjustEngine? = null
+    @Volatile private var contactManager: uniffi.api.ContactManager? = null
+    @Volatile private var historyManager: uniffi.api.HistoryManager? = null
+    @Volatile private var ledgerManager: uniffi.api.LedgerManager? = null
+    @Volatile private var settingsManager: uniffi.api.MeshSettingsManager? = null
+    @Volatile private var autoAdjustEngine: uniffi.api.AutoAdjustEngine? = null
 
     // Core & Network (lazy init)
-    private var ironCore: uniffi.api.IronCore? = null
+    @Volatile private var ironCore: uniffi.api.IronCore? = null
     // Swarm Bridge (Internet/Libp2p)
-    private var swarmBridge: uniffi.api.SwarmBridge? = null
+    @Volatile private var swarmBridge: uniffi.api.SwarmBridge? = null
 
     // Wifi Transport
-    private var wifiTransportManager: com.scmessenger.android.transport.WifiTransportManager? = null
-    
+    @Volatile private var wifiTransportManager: com.scmessenger.android.transport.WifiTransportManager? = null
+
     // Smart Transport Router (500ms timeout fallback + health tracking)
-    private var smartTransportRouter: com.scmessenger.android.transport.SmartTransportRouter? = null
+    @Volatile private var smartTransportRouter: com.scmessenger.android.transport.SmartTransportRouter? = null
 
     // Service state
     private val _serviceState = MutableStateFlow(uniffi.api.ServiceState.STOPPED)
@@ -248,16 +248,16 @@ open class MeshRepository(private val context: Context) {
     private val mdnsLanPeers = ConcurrentHashMap<String, List<String>>()
 
     // Core Delegate reference to prevent GC
-    private var coreDelegate: uniffi.api.CoreDelegate? = null
+    @Volatile private var coreDelegate: uniffi.api.CoreDelegate? = null
 
     // BLE Components
-    private var bleScanner: com.scmessenger.android.transport.ble.BleScanner? = null
-    private var bleAdvertiser: com.scmessenger.android.transport.ble.BleAdvertiser? = null
-    private var bleGattServer: com.scmessenger.android.transport.ble.BleGattServer? = null
-    private var bleGattClient: com.scmessenger.android.transport.ble.BleGattClient? = null
-    private var lastBleBeaconUpdateMillis: Long = 0
+    @Volatile private var bleScanner: com.scmessenger.android.transport.ble.BleScanner? = null
+    @Volatile private var bleAdvertiser: com.scmessenger.android.transport.ble.BleAdvertiser? = null
+    @Volatile private var bleGattServer: com.scmessenger.android.transport.ble.BleGattServer? = null
+    @Volatile private var bleGattClient: com.scmessenger.android.transport.ble.BleGattClient? = null
+    @Volatile private var lastBleBeaconUpdateMillis: Long = 0
     private var lastBleBeaconPayload: ByteArray = byteArrayOf()
-    private var lastBleBeaconPayloadPublishedAtMillis: Long = 0
+    @Volatile private var lastBleBeaconPayloadPublishedAtMillis: Long = 0
 
     private data class RoutingHints(
         val wifiPeerId: String?,

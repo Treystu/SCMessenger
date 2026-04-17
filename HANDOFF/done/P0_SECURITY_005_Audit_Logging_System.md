@@ -2,33 +2,31 @@
 
 **Priority:** P0 (Critical Security)
 **Platform:** Core/Rust
-**Status:** DONE
-**Completed:** 2026-04-15
+**Status:** Open
+**Source:** REMAINING_WORK_TRACKING.md
 
-## Findings
+## Problem Description
+No audit logging - security events leave no tamper-evident trail. Cannot track security incidents or investigate breaches.
 
-The tamper-evident audit log (`AuditLog` with `AuditEvent` chain hashing) already existed in `core/src/observability.rs`. However, it was **in-memory only** — events were never persisted and would be lost on restart. There was no retention/pruning mechanism.
+## Security Impact
+- No record of security-related events
+- Unable to investigate incidents
+- No tamper-evident logging
+- Compliance and forensic capabilities missing
 
-## Changes Made
+## Implementation Required
+1. Create audit logging framework in `core/src/audit/`
+2. Implement tamper-evident log structure
+3. Add critical event logging (auth, access, changes)
+4. Create log rotation and retention policies
 
-1. **`core/src/observability.rs`** — Added persistence and retention to `AuditLog`:
-   - `persist(&self, backend)`: Serializes the full log to JSON and stores it under key `audit_log_v1` in the storage backend
-   - `load(backend)`: Deserializes the persisted log, or starts fresh if none exists
-   - `prune_before(&mut self, before_timestamp)`: Time-based pruning that preserves chain integrity by recording the last pruned event's hash in `pruned_head_hash`
-   - Added `pruned_head_hash: Option<String>` field to `AuditLog` struct (with `#[serde(default)]` for backward compatibility)
-   - Updated `validate_chain()` to accept `pruned_head_hash` as the valid head when events have been pruned
-   - Added `PersistenceError` variant to `AuditLogError`
+## Key Files
+- `core/src/audit/mod.rs` (new)
+- `core/src/audit/logger.rs` (new)
+- Integration with existing security events
 
-2. **`core/src/store/history.rs`** — Added `backend()` method to `HistoryManager` to expose the storage backend for audit log persistence
-
-3. **`core/src/lib.rs`** — IronCore initialization:
-   - Loads the audit log from storage on startup via `AuditLogType::load()`
-   - Persists the audit log during `perform_maintenance()` (every 15 minutes)
-   - Prunes audit events older than 365 days during maintenance
-
-4. **`core/src/store/mod.rs`** — Exported `RetentionConfig` and `StorageManager`
-
-5. **`core/src/store/storage.rs`** — Added `RetentionConfig` with configurable `max_messages` and `max_age_days`, and updated `perform_maintenance()` to enforce retention proactively (not just reactively when disk space is low)
-
-## Build Verification
-- Rust `cargo check`: PASSED
+## Expected Outcome
+- Comprehensive audit logging system
+- Tamper-evident log records
+- Security event tracking
+- Forensic investigation capabilities

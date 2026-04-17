@@ -157,8 +157,8 @@ mod tests {
         assert_eq!(padded.len(), 10);
         assert_eq!(padded[0..5], b"hello"[..]);
         assert_eq!(padded[5], 0x80);
-        for i in 6..10 {
-            assert_eq!(padded[i], 0x00);
+        for byte in padded.iter().take(10).skip(6) {
+            assert_eq!(*byte, 0x00);
         }
     }
 

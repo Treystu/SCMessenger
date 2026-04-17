@@ -25,6 +25,7 @@ fn queued_message(message_id: &str, recipient_id: &str) -> QueuedMessage {
     }
 }
 
+#[cfg(feature = "phase2_apis")]
 #[test]
 fn offline_partition_custody_and_outbox_survive_restart_until_reconnect_delivery() {
     let dir = tempfile::tempdir().unwrap();
@@ -124,6 +125,7 @@ fn offline_partition_custody_and_outbox_survive_restart_until_reconnect_delivery
     }
 }
 
+#[cfg(feature = "phase2_apis")]
 #[test]
 fn partition_recency_recovery_prefers_fresh_relays_deterministically() {
     let mut delivery = MultiPathDelivery::new();

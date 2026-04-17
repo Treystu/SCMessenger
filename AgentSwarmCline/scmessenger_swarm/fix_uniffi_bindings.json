@@ -1,0 +1,12 @@
+[
+  {
+    "agent": "Rust Systems Programmer",
+    "description": "Fix UniFFI binding issues in core/src/lib.rs to match the api.udl interface. Specifically: 1) Add missing get_privacy_config() method that serializes PrivacyConfig to JSON string. 2) Add missing relay_jitter_delay_ms() method that returns u64 milliseconds. 3) Fix type mismatches: prepare_onion_message should accept relay_public_keys as JSON string and deserialize it. 4) peel_onion_layer should accept relay_secret_key as Vec<u8> and convert to [u8; 32]. 5) set_privacy_config should accept config_json as string and deserialize it to PrivacyConfig struct.",
+    "expected_output": "Fixed UniFFI binding issues in lib.rs with proper method signatures matching the UDL interface"
+  },
+  {
+    "agent": "Fast Executer",
+    "description": "Run cargo check to verify the fixes compile correctly",
+    "expected_output": "Successful compilation with no UniFFI binding errors"
+  }
+]

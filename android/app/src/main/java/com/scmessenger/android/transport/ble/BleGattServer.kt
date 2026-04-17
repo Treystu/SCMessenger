@@ -47,11 +47,11 @@ class BleGattServer(
     // Pending writes (used for reliable write if applicable)
     private val pendingWrites = ConcurrentHashMap<String, ByteArray>()
 
-    private var isRunning = false
+    @Volatile private var isRunning = false
 
     // Identity beacon data served to BLE scanners via IDENTITY_CHAR_UUID reads.
     // Default is a static placeholder; call setIdentityData() once IronCore is ready.
-    private var identityData: ByteArray = "SCM_IDENTITY_BEACON".toByteArray()
+    @Volatile private var identityData: ByteArray = "SCM_IDENTITY_BEACON".toByteArray()
 
     /**
      * Update the identity beacon payload broadcast to nearby peers.

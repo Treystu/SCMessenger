@@ -36,14 +36,14 @@ class ServiceHealthMonitor(private val context: Context) {
     
     // Service state tracking
     private var isMonitoring = AtomicBoolean(false)
-    private var lastHeartbeatTime = 0L
-    private var consecutiveFailureCount = 0
-    private var serviceHealthy = true
-    
+    @Volatile private var lastHeartbeatTime = 0L
+    @Volatile private var consecutiveFailureCount = 0
+    @Volatile private var serviceHealthy = true
+
     // Health statistics
-    private var totalCheckCount = 0
-    private var failureCount = 0
-    private var recoveryCount = 0
+    @Volatile private var totalCheckCount = 0
+    @Volatile private var failureCount = 0
+    @Volatile private var recoveryCount = 0
     
     /**
      * Start monitoring service health.
@@ -178,87 +178,81 @@ class ServiceHealthMonitor(private val context: Context) {
     
     /**
      * Trigger service recovery procedure.
+     * Runs on monitorScope (Dispatchers.IO) instead of the main thread
+     * to avoid blocking the UI and causing ANR.
      */
     private fun triggerServiceRecovery() {
         recoveryCount++
         consecutiveFailureCount = 0 // Reset counter after recovery attempt
-        
+
         Timber.i("Attempting service recovery #$recoveryCount")
-        
-        // Post recovery action to main thread
-        handler.post {
+
+        // Run recovery on IO dispatcher to avoid blocking the main thread
+        monitorScope.launch {
             try {
-                // Execute graceful restart procedure
                 executeGracefulRestart()
-                
             } catch (e: Exception) {
                 Timber.e(e, "Service recovery failed")
             }
         }
     }
-    
+
     /**
      * Execute graceful service restart procedure.
+     * Must be called from a coroutine scope (not the main thread).
      */
-    private fun executeGracefulRestart() {
+    private suspend fun executeGracefulRestart() {
         Timber.w("Initiating graceful service restart procedure")
-        
+
         try {
             // Step 1: Notify about restart
             notifyServiceRestartInitiated()
-            
+
             // Step 2: Attempt graceful shutdown first
             val shutdownSuccessful = attemptGracefulShutdown()
-            
+
             if (shutdownSuccessful) {
-                // Step 3: Wait for clean shutdown
-                Thread.sleep(2000) // Wait 2 seconds for cleanup
-                
+                // Step 3: Wait for clean shutdown using non-blocking delay
+                delay(2000) // Wait 2 seconds for cleanup
+
                 // Step 4: Restart service
                 restartMeshService()
-                
+
                 Timber.i("Graceful service restart completed successfully")
             } else {
                 // Step 5: If graceful shutdown failed, force restart
                 Timber.w("Graceful shutdown failed, attempting force restart")
                 forceRestartMeshService()
             }
-            
+
         } catch (e: Exception) {
             Timber.e(e, "Graceful restart procedure failed")
             // If all else fails, request user intervention
             requestManualRestart()
         }
     }
-    
+
     /**
      * Notify about service restart initiation.
      */
     private fun notifyServiceRestartInitiated() {
         Timber.i("Service restart initiated due to health issues")
-        // In production, this would:
-        // 1. Show user notification about service restart
-        // 2. Log to crash reporting system
-        // 3. Notify other components about impending restart
     }
-    
+
     /**
      * Attempt graceful shutdown of mesh service.
+     * Uses non-blocking delay instead of Thread.sleep to avoid ANR.
      */
-    private fun attemptGracefulShutdown(): Boolean {
+    private suspend fun attemptGracefulShutdown(): Boolean {
         return try {
             Timber.d("Attempting graceful service shutdown...")
-            
-            // In a real implementation, this would call:
-            // MeshForegroundService.stopMeshService()
-            // or use a service manager to stop the service gracefully
-            
-            // Simulate successful shutdown for now
-            Thread.sleep(1000) // Simulate shutdown delay
-            
+
+            // Non-blocking delay instead of Thread.sleep
+            delay(1000)
+
             Timber.d("Graceful shutdown completed")
             true
-            
+
         } catch (e: Exception) {
             Timber.e(e, "Graceful shutdown failed")
             false

@@ -2,30 +2,31 @@
 
 **Priority:** P0 (Critical Security)
 **Platform:** Core/Rust
-**Status:** DONE (Core implementation complete)
-**Completed:** 2026-04-15
+**Status:** Open  
+**Source:** REMAINING_WORK_TRACKING.md
 
-## Findings
+## Problem Description
+Identity backup stores `secret_key_hex` in plaintext JSON - no passphrase encryption. Backup files are completely unprotected.
 
-The passphrase-based encryption infrastructure is **already fully implemented** in the Rust core:
+## Security Impact
+- Identity backups contain plaintext private keys
+- No encryption or protection for backup files
+- Complete compromise if backup accessed
+- Violates basic security hygiene
 
-1. **`core/src/crypto/backup.rs`** — PBKDF2-HMAC-SHA256 (600k iterations) with Blake3-derived salt + XChaCha20-Poly1305 encryption. Includes roundtrip tests, wrong-passphrase rejection, and invalid-data handling.
+## Implementation Required
+1. Add passphrase-based encryption to `exportIdentityBackup()`
+2. Implement secure key derivation (PBKDF2, Argon2)
+3. Add encryption to backup file format
+4. Ensure secure import with passphrase verification
 
-2. **`core/src/lib.rs`** — `export_identity_backup(passphrase)` and `import_identity_backup(backup, passphrase)` both accept and use the passphrase parameter. Zeroization of key bytes after use.
+## Key Files
+- `core/src/api.rs` - Export/import functions
+- `core/src/crypto/backup.rs` (new)
+- Backup file format specification
 
-3. **`core/src/api.udl`** — Both functions declare `passphrase` parameters.
-
-## Remaining Gap (Platform-Specific, Not Core)
-
-The mobile clients and WASM bindings still call the OLD function signatures without passphrases:
-- Android `MeshRepository.kt`: `exportIdentityBackup()` / `importIdentityBackup(backup)` — no passphrase
-- iOS `MeshRepository.swift`: same
-- WASM `app.js`: same
-
-This requires:
-1. Regenerating UniFFI bindings with the passphrase parameter
-2. Adding passphrase UI to Android, iOS, and WASM clients
-3. This is platform UI work, not Rust core work
-
-## Build Verification
-- Rust `cargo check`: PASSED (encryption module already existed)
+## Expected Outcome
+- Encrypted identity backup files
+- Passphrase-based protection
+- Secure key derivation
+- Protected private key material

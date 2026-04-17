@@ -55,16 +55,16 @@ class AndroidPlatformBridge @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // BLE components for data forwarding
-    private var bleAdvertiser: BleAdvertiser? = null
-    private var bleGattClient: BleGattClient? = null
-    private var bleGattServer: BleGattServer? = null
+    @Volatile private var bleAdvertiser: BleAdvertiser? = null
+    @Volatile private var bleGattClient: BleGattClient? = null
+    @Volatile private var bleGattServer: BleGattServer? = null
 
     // Current state
-    private var currentBatteryPct: UByte = 100u
-    private var isCharging: Boolean = false
-    private var hasWifi: Boolean = false
-    private var hasCellular: Boolean = false
-    private var currentMotionState: uniffi.api.MotionState = uniffi.api.MotionState.UNKNOWN
+    @Volatile private var currentBatteryPct: UByte = 100u
+    @Volatile private var isCharging: Boolean = false
+    @Volatile private var hasWifi: Boolean = false
+    @Volatile private var hasCellular: Boolean = false
+    @Volatile private var currentMotionState: uniffi.api.MotionState = uniffi.api.MotionState.UNKNOWN
 
     /**
      * Initialize system monitoring.

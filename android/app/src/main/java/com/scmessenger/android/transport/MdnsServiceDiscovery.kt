@@ -24,9 +24,9 @@ class MdnsServiceDiscovery(
     private var discoveryListener: NsdManager.DiscoveryListener? = null
     private var resolveListener: NsdManager.ResolveListener? = null
 
-    private var isRunning = false
-    private var isRegistered = false
-    private var isDiscovering = false
+    @Volatile private var isRunning = false
+    @Volatile private var isRegistered = false
+    @Volatile private var isDiscovering = false
 
     // Service type (must match iOS's mDNSServiceDiscovery.SERVICE_TYPE)
     private val serviceType = "_scmessenger._tcp"

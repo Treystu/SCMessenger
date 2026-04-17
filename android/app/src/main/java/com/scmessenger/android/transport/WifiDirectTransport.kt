@@ -36,8 +36,8 @@ class WifiDirectTransport(
     private val wifiP2pManager: WifiP2pManager? = context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
     private var channel: WifiP2pManager.Channel? = null
 
-    private var isRunning = false
-    private var isGroupOwner = false
+    @Volatile private var isRunning = false
+    @Volatile private var isGroupOwner = false
 
     private val discoveredPeers = ConcurrentHashMap<String, WifiP2pDevice>()
     private val activeConnections = ConcurrentHashMap<String, P2pConnection>()

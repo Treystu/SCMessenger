@@ -14,9 +14,9 @@ from crewai.tools import tool
 # All models route through localhost:11434 with :cloud suffix
 
 # --- Strategic / Managerial ---
-# glm-5.1 (1.5T): Best reasoning model — crew manager + lead architect
+# mistral-large-3:675b: Lead Swarm Orchestrator
 architect_llm = LLM(
-    model="ollama/glm-5.1:cloud",
+    model="ollama/mistral-large-3:675b:cloud",
     base_url="http://localhost:11434"
 )
 
@@ -28,23 +28,23 @@ coder_llm = LLM(
 )
 
 # --- Code Review & QA ---
-# deepseek-v3.2 (671B): Strong analytical reasoning — code review, correctness
+# deepseek-v3.2: Cryptography and Protocol Validator (98 Precision)
 reviewer_llm = LLM(
     model="ollama/deepseek-v3.2:cloud",
     base_url="http://localhost:11434"
 )
 
 # --- Security Auditing ---
-# mistral-large-3:675b: Nuanced analysis, security pattern recognition
+# deepseek-v3.2 (96 Agentic, 98 Precision)
 security_llm = LLM(
-    model="ollama/mistral-large-3:675b:cloud",
+    model="ollama/deepseek-v3.2:cloud",
     base_url="http://localhost:11434"
 )
 
 # --- Test Engineering ---
-# devstral-2:123b: Mistral coding model — fast, test-oriented code generation
+# gemma4:31b: Best performance-to-size efficiency for testing
 tester_llm = LLM(
-    model="ollama/devstral-2:123b:cloud",
+    model="ollama/gemma4:31b:cloud",
     base_url="http://localhost:11434"
 )
 
@@ -63,9 +63,9 @@ platform_engineer_llm = LLM(
 )
 
 # --- Fast Execution ---
-# gemma4:31b: Quick commands, lint fixes, build verification, minor edits
+# gemini-3-flash-preview: Max speed for triage and parsing
 fast_executer_llm = LLM(
-    model="ollama/gemma4:31b:cloud",
+    model="ollama/gemini-3-flash-preview:cloud",
     base_url="http://localhost:11434"
 )
 
@@ -354,12 +354,12 @@ if __name__ == "__main__":
     # --list-models: show LLM assignments
     if args.list_models:
         print("=== SCMessenger Swarm — Model Assignments ===")
-        print(f"  Architect/Manager : ollama/glm-5.1:cloud          (1.5T — strategic reasoning)")
-        print(f"  Rust Programmer  : ollama/qwen3-coder:480b:cloud (480B — code generation)")
-        print(f"  Code Reviewer    : ollama/deepseek-v3.2:cloud    (671B — analytical review)")
-        print(f"  Security Auditor : ollama/mistral-large-3:675b:cloud (675B — security analysis)")
-        print(f"  Test Engineer    : ollama/devstral-2:123b:cloud  (123B — test generation)")
-        print(f"  Tech Writer      : ollama/gemma4:31b:cloud       (31B — documentation)")
+        print(f"  Architect/Manager : ollama/mistral-large-3:675b:cloud (675B — lead orchestrator)")
+        print(f"  Rust Programmer  : ollama/qwen3-coder:480b:cloud      (480B — core generation)")
+        print(f"  Code Reviewer    : ollama/deepseek-v3.2:cloud         (98 Precision — validator)")
+        print(f"  Security Auditor : ollama/deepseek-v3.2:cloud         (98 Precision — auditor)")
+        print(f"  Test Engineer    : ollama/gemma4:31b:cloud            (31B — test generation)")
+        print(f"  Tech Writer      : ollama/gemma4:31b:cloud            (31B — documentation)")
         sys.exit(0)
 
     # --list-agents: introspection mode

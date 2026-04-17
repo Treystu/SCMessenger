@@ -185,6 +185,26 @@ impl IndexedDbStorage {
         })
     }
 
+    pub fn new_sync(db_name: &str) -> std::result::Result<Self, String> {
+        use futures::channel::oneshot;
+        use futures::executor::block_on;
+        use wasm_bindgen_futures::spawn_local;
+
+        let (sender, receiver) = oneshot::channel();
+        let db_name = db_name.to_string();
+        spawn_local(async move {
+            match Self::new(&db_name).await {
+                Ok(storage) => {
+                    let _ = sender.send(Ok(storage));
+                }
+                Err(e) => {
+                    let _ = sender.send(Err(e));
+                }
+            }
+        });
+        block_on(receiver).unwrap()
+    }
+
     fn persist_put(&self, key: Vec<u8>, value: Vec<u8>) {
         let db_name = self.db_name.clone();
         let store_name = self.store_name.clone();

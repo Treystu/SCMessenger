@@ -74,6 +74,7 @@ mockall = { workspace = true }
 tokio-test = "0.4"
 tempfile = "3.8"
 libp2p = { workspace = true }
+proptest = "1.5"
 
 [build-dependencies]
 uniffi = { workspace = true, features = ["build"] }
@@ -82,6 +83,8 @@ uniffi = { workspace = true, features = ["build"] }
 default = []
 gen-bindings = ["dep:uniffi_bindgen", "dep:camino"]
 wasm = ["uniffi/wasm-unstable-single-threaded"]
+phase2_apis = []
+kani-proofs = []
 
 [[bin]]
 name = "gen_kotlin"

@@ -80,7 +80,7 @@ pub struct RoutingMaintenance {
 }
 
 /// Routing status summary
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct RoutingSummary {
     /// Total peers in local cell
     pub local_peers: usize,

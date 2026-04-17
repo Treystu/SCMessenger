@@ -21,8 +21,8 @@ import java.nio.ByteBuffer
  */
 class MeshVpnService : VpnService() {
 
-    private var vpnInterface: ParcelFileDescriptor? = null
-    private var isRunning = false
+    @Volatile private var vpnInterface: ParcelFileDescriptor? = null
+    @Volatile private var isRunning = false
 
     override fun onCreate() {
         super.onCreate()

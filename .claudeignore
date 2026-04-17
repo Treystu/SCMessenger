@@ -1,0 +1,53 @@
+# Claude Code Optimization - Ignore list
+# Reduces indexing time and prevents context bloat
+
+# Build Artifacts (Redundant as they are in .gitignore, but good to be explicit)
+target/
+core/target/
+cli/target/
+wasm/target/
+wasm/pkg/
+android/.gradle/
+android/app/build/
+android/build/
+iOS/SCMessenger/Build/
+iOS/SCMessenger/DerivedData/
+dist/
+build/
+**/node_modules/
+AgentSwarmCline/.venv/
+**/__pycache__/
+
+# IDE and System Files
+.idea/
+.vscode/
+.DS_Store
+*.pdb
+*.sdkstatcache
+
+# High Volume Logs & Histories (Exclude from AI context to save tokens)
+*.log
+*.logarchive
+*.logcat
+.aider.chat.history.md
+.aider.input.history
+.aider.tags.cache.v4/
+swarm_logs/
+scmessenger_swarm/swarm_logs/
+AgentSwarmCline/scmessenger_swarm/swarm_logs/
+tmp/
+API_LIMIT_BACKUP_*/
+
+# Large/Redundant Documentation
+# (Keep current ones, ignore historical archives)
+docs/_ios_*
+ios_logs_archive/
+android_logs_archive/
+
+# Tool specific hidden dirs
+.trunk/
+.gradle/
+android/.gradle/
+.roo/
+.cline/
+.legacy_ai_config/
