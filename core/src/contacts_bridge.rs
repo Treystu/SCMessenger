@@ -3,6 +3,7 @@
 // Wraps CLI contact storage logic (sled-based) for UniFFI exposure to Android/iOS.
 // Ensures cross-platform database compatibility via JSON serialization.
 
+use crate::mobile_bridge::HistoryManager;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use sled::Db;

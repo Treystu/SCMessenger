@@ -3,6 +3,7 @@
 // Refactored to use generic StorageBackend for cross-platform parity (Sled/IndexedDB/Memory).
 
 use crate::store::backend::StorageBackend;
+use crate::store::history::HistoryManager;
 use crate::IronCoreError;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
