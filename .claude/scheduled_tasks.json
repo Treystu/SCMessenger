@@ -1,12 +1,3 @@
 {
-  "tasks": [
-    {
-      "id": "2860d112",
-      "cron": "*/5 * * * *",
-      "prompt": "POOL MANAGER CYCLE — Execute the full agent pool management loop:\n\n1. **Check slot availability**: Run `bash .claude/orchestrator_manager.sh pool status` to see how many of the 2 concurrent slots are in use.\n\n2. **Validate completed tasks**: Check `HANDOFF/done/` for any newly completed tasks. For each, run `./scripts/verify_task_completion.sh` to confirm the implementation is real (not dormant). If verified, note it for archival. If not verified, move it back to `HANDOFF/todo/` with a note about what failed verification.\n\n3. **Clean stale agents**: For any agent directories in `.claude/agents/` with PID files where the process is dead, remove them. For any native marker files older than 30 minutes, consider the agent stale and remove them. Run `bash .claude/orchestrator_manager.sh pool status` after cleanup.\n\n4. **Route pending tasks**: If slots are available (< 2 active), check `HANDOFF/todo/` for unclaimed tasks (files NOT starting with `IN_PROGRESS_`). Prioritize by P0 > P1 > P2. Match each task to the best agent type using the task_patterns in `.claude/agent_pool.json`:\n   - EXPLORE/RESEARCH → scout (Agent, subagent_type: Explore)\n   - ARCHITECTURE/PLAN/DESIGN → architect (Agent, subagent_type: Plan)  \n   - IMPLEMENTATION/BUG/FIX/FEATURE → implementer (Agent, subagent_type: general-purpose, isolation: worktree)\n   - REVIEW/AUDIT/VERIFY → reviewer (Agent, subagent_type: general-purpose, model: opus)\n   - RUST/CORE/PROTOCOL → rust-coder (CLI: qwen3-coder:480b:cloud)\n   - SECURITY/CRYPTO → security-auditor (CLI: deepseek-v3.2:cloud)\n   - PLATFORM/BINDINGS/TEST/DOCS → platform-engineer (CLI: gemma4:31b:cloud)\n   - LINT/TRIAGE/QUICK/CI → fast-exec (CLI: gemini-3-flash-preview:cloud)\n   Default to \"implementer\" if no pattern matches.\n\n5. **Launch agents**: For each routed task, if slots are available:\n   - NATIVE agents: Use the Agent tool with the matching subagent_type and model. Pass the task file content as the prompt. Use `run_in_background: true` for parallel execution. Launch up to 2 agents in parallel if tasks are independent.\n   - CLI agents: Run `bash .claude/orchestrator_manager.sh pool launch <agent_name> <task_file>`\n   Then mark the task as IN_PROGRESS by renaming it with the `IN_PROGRESS_` prefix.\n\n6. **Log the cycle**: Report what was done — tasks validated, agents launched, slots freed, stale agents cleaned.",
-      "createdAt": 1776427863653,
-      "lastFiredAt": 1776455669759,
-      "recurring": true
-    }
-  ]
+  "tasks": []
 }

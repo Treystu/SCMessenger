@@ -2206,10 +2206,13 @@ impl IronCore {
     // BLOCKING
     // ========================================================================
 
-    /// Block a peer by ID
-    pub fn block_peer(&self, peer_id: String, reason: Option<String>) -> Result<(), IronCoreError> {
+    /// Block a peer by ID, optionally specifying a device ID for granular blocking
+    pub fn block_peer(&self, peer_id: String, device_id: Option<String>, reason: Option<String>) -> Result<(), IronCoreError> {
         use crate::store::blocked::BlockedIdentity;
         let mut blocked = BlockedIdentity::new(peer_id.clone());
+        if let Some(device_id) = device_id {
+            blocked = blocked.with_device_id(device_id);
+        }
         if let Some(r) = reason {
             blocked.reason = Some(r);
         }
@@ -2219,8 +2222,9 @@ impl IronCore {
     }
 
     /// Unblock a peer and restore any evidentiary-retained messages to visible.
-    pub fn unblock_peer(&self, peer_id: String) -> Result<(), IronCoreError> {
-        self.blocked_manager.unblock(peer_id.clone(), None)?;
+    /// Optionally specify a device ID for granular unblocking.
+    pub fn unblock_peer(&self, peer_id: String, device_id: Option<String>) -> Result<(), IronCoreError> {
+        self.blocked_manager.unblock(peer_id.clone(), device_id)?;
         self.emit_audit(AuditEventType::ContactRemoved, Some(peer_id.clone()), None);
         // Restore visibility of messages that were hidden during the block period.
         // Log but do not fail the unblock operation if restoration encounters a
@@ -2265,9 +2269,11 @@ impl IronCore {
     ///    stores.
     ///
     /// This is irreversible — purged messages cannot be recovered.
+    /// Note: Device ID is not used for block_and_delete operations as they are peer-wide.
     pub fn block_and_delete_peer(
         &self,
         peer_id: String,
+        _device_id: Option<String>,
         reason: Option<String>,
     ) -> Result<(), IronCoreError> {
         // 1. Set blocked+deleted state so future ingress rejects payloads.
@@ -2297,9 +2303,9 @@ impl IronCore {
         Ok(())
     }
 
-    /// Check if a peer is blocked
-    pub fn is_peer_blocked(&self, peer_id: String) -> Result<bool, IronCoreError> {
-        self.blocked_manager.is_blocked(&peer_id, None)
+    /// Check if a peer is blocked, optionally checking for device-specific blocking
+    pub fn is_peer_blocked(&self, peer_id: String, device_id: Option<String>) -> Result<bool, IronCoreError> {
+        self.blocked_manager.is_blocked(&peer_id, device_id.as_deref())
     }
 
     /// List all blocked peers (mobile bridge only - not available on WASM)
@@ -3186,20 +3192,20 @@ mod tests {
         assert!(core.list_blocked_peers().unwrap().is_empty());
 
         // Block a peer
-        core.block_peer("peer123".into(), Some("test reason".into()))
+        core.block_peer("peer123".into(), None, Some("test reason".into()))
             .unwrap();
 
         // Verify persistence across separate calls
         assert_eq!(core.blocked_count().unwrap(), 1);
-        assert!(core.is_peer_blocked("peer123".into()).unwrap());
-        assert!(!core.is_peer_blocked("peer456".into()).unwrap());
+        assert!(core.is_peer_blocked("peer123".into(), None).unwrap());
+        assert!(!core.is_peer_blocked("peer456".into(), None).unwrap());
 
         let list = core.list_blocked_peers().unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].peer_id, "peer123");
 
         // Unblock
-        core.unblock_peer("peer123".into()).unwrap();
+        core.unblock_peer("peer123".into(), None).unwrap();
         assert_eq!(core.blocked_count().unwrap(), 0);
         assert!(!core.is_peer_blocked("peer123".into()).unwrap());
     }

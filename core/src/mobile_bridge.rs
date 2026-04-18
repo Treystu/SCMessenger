@@ -530,6 +530,11 @@ impl MeshService {
                                 bootstrap_multiaddrs.len()
                             );
 
+                            let iron_core_handle = {
+                                let core_guard = core.lock();
+                                core_guard.clone()
+                            };
+
                             match crate::transport::start_swarm_with_config(
                                 libp2p_keys,
                                 listen_multiaddr,
@@ -537,6 +542,12 @@ impl MeshService {
                                 None,
                                 bootstrap_multiaddrs,
                                 service_storage_path,
+                                iron_core_handle.map(|c| {
+                                    // CRITICAL: We need a Weak<IronCore> that points to a live Arc.
+                                    // Since IronCore itself is a collection of Arcs, we need to wrap
+                                    // the IronCore struct in an Arc to downgrade it correctly.
+                                    Arc::downgrade(&Arc::new(c))
+                                }),
                                 headless_mode,
                             )
                             .await

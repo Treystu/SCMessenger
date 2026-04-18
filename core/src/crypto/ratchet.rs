@@ -85,10 +85,12 @@ impl Chain {
         Self { chain_key, index }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn chain_key_bytes(&self) -> [u8; 32] {
         *self.chain_key.as_bytes()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn index(&self) -> u32 {
         self.index
     }

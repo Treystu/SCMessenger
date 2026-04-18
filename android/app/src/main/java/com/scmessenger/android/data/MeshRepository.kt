@@ -484,7 +484,7 @@ open class MeshRepository(private val context: Context) {
 
                 // Check if there are any messages - if yes, but no contacts, that's a red flag
                 val messageCount = try {
-                    historyManager?.getMessageCount() ?: 0u
+                    getMessageCount()
                 } catch (e: Exception) {
                     0u
                 }
@@ -496,7 +496,7 @@ open class MeshRepository(private val context: Context) {
                 Timber.i("AND-CONTACTS-WIPE-001: Contact data verification successful - ${contacts.size} contacts available")
 
                 // Log sample contact info for diagnostics (without exposing sensitive data)
-                val sampleSize = kotlin.math.minOf(5, contacts.size)
+                val sampleSize = minOf(5, contacts.size)
                 Timber.d("AND-CONTACTS-WIPE-001: Sample contacts (${sampleSize} of ${contacts.size}):")
                 contacts.take(sampleSize).forEach { contact ->
                     val peerIdPreview = contact.peerId.take(12) + if (contact.peerId.length > 12) "..." else ""
@@ -1798,7 +1798,7 @@ open class MeshRepository(private val context: Context) {
                 }
 
                 val payload = encodeIdentitySyncPayload()
-                val prepared = ironCore?.prepareMessageWithId(recipientPublicKey, payload)
+                val prepared = ironCore?.prepareMessageWithId(recipientPublicKey, payload, null)
                 if (prepared == null) {
                     identitySyncSentPeers.remove(normalizedRoute)
                     return@launch
@@ -1875,7 +1875,7 @@ open class MeshRepository(private val context: Context) {
                 }
 
                 val payload = encodeMeshMessagePayload(content = "", kind = "history_sync")
-                val prepared = try { ironCore?.prepareMessageWithId(recipientPublicKey, payload) } catch (e: Exception) { Timber.e(e, "prepareMessageWithId failed in history_sync"); null }
+                val prepared = try { ironCore?.prepareMessageWithId(recipientPublicKey, payload, null) } catch (e: Exception) { Timber.e(e, "prepareMessageWithId failed in history_sync"); null }
                 if (prepared == null) {
                     Timber.e("sendHistorySyncIfNeeded: prepared is null for $normalizedRoute")
                     historySyncSentPeers.remove(normalizedRoute)
@@ -1934,7 +1934,7 @@ open class MeshRepository(private val context: Context) {
                         arr.put(obj)
                     }
                     val payload = encodeMeshMessagePayload(content = arr.toString(), kind = "history_sync_data")
-                    val prepared = try { ironCore?.prepareMessageWithId(recipientPublicKey, payload) } catch (e: Exception) {
+                    val prepared = try { ironCore?.prepareMessageWithId(recipientPublicKey, payload, null) } catch (e: Exception) {
                         Timber.e(e, "prepareMessage failed in sync_data batch $batchIndex (${batch.size} msgs)")
                         null
                     }
@@ -2505,7 +2505,7 @@ open class MeshRepository(private val context: Context) {
             return false
         }
         return try {
-            core.importIdentityBackup(backup)
+            core.importIdentityBackup(backup, "")
             Timber.i("Restored identity from Android backup payload")
             true
         } catch (e: Exception) {
@@ -2517,7 +2517,7 @@ open class MeshRepository(private val context: Context) {
     private fun persistIdentityBackup(core: uniffi.api.IronCore?) {
         val activeCore = core ?: return
         try {
-            val backup = activeCore.exportIdentityBackup()
+            val backup = activeCore.exportIdentityBackup("")
             identityBackupPrefs.edit().putString(IDENTITY_BACKUP_KEY, backup).apply()
         } catch (e: Exception) {
             Timber.w("Failed to persist identity backup payload: ${e.message}")
@@ -2899,21 +2899,21 @@ open class MeshRepository(private val context: Context) {
     // BLOCKING
     // ========================================================================
 
-    fun blockPeer(peerId: String, reason: String? = null) {
+    fun blockPeer(peerId: String, deviceId: String? = null, reason: String? = null) {
         ensureServiceInitialized()
         try {
-            ironCore?.blockPeer(peerId, reason)
-            Timber.i("Blocked peer: $peerId (reason: $reason)")
+            ironCore?.blockPeer(peerId, deviceId, reason)
+            Timber.i("Blocked peer: $peerId (device: $deviceId, reason: $reason)")
         } catch (e: Exception) {
             Timber.e(e, "Failed to block peer: $peerId")
         }
     }
 
-    fun unblockPeer(peerId: String) {
+    fun unblockPeer(peerId: String, deviceId: String? = null) {
         ensureServiceInitialized()
         try {
-            ironCore?.unblockPeer(peerId)
-            Timber.i("Unblocked peer: $peerId")
+            ironCore?.unblockPeer(peerId, deviceId)
+            Timber.i("Unblocked peer: $peerId (device: $deviceId)")
         } catch (e: Exception) {
             Timber.e(e, "Failed to unblock peer: $peerId")
         }
@@ -2923,20 +2923,20 @@ open class MeshRepository(private val context: Context) {
      * Block a peer AND delete all their stored messages (cascade purge).
      * Future payloads from this peer are dropped at the ingress layer.
      */
-    fun blockAndDeletePeer(peerId: String, reason: String? = null) {
+    fun blockAndDeletePeer(peerId: String, deviceId: String? = null, reason: String? = null) {
         ensureServiceInitialized()
         try {
-            ironCore?.blockAndDeletePeer(peerId, reason)
-            Timber.i("Blocked and deleted peer: $peerId (reason: $reason)")
+            ironCore?.blockAndDeletePeer(peerId, deviceId, reason)
+            Timber.i("Blocked and deleted peer: $peerId (device: $deviceId, reason: $reason)")
         } catch (e: Exception) {
             Timber.e(e, "Failed to block and delete peer: $peerId")
         }
     }
 
-    fun isBlocked(peerId: String): Boolean {
+    fun isBlocked(peerId: String, deviceId: String? = null): Boolean {
         ensureServiceInitialized()
         return try {
-            ironCore?.isPeerBlocked(peerId) ?: false
+            ironCore?.isPeerBlocked(peerId, deviceId) ?: false
         } catch (e: Exception) {
             Timber.w(e, "Failed to check if peer blocked: $peerId")
             false
@@ -3249,7 +3249,7 @@ open class MeshRepository(private val context: Context) {
 
                 // 4. Encrypt/Prepare message
                 val outboundContent = encodeMessageWithIdentityHints(content)
-                val prepared = ironCore?.prepareMessageWithId(finalPublicKey, outboundContent)
+                val prepared = ironCore?.prepareMessageWithId(finalPublicKey, outboundContent, null)
                     ?: throw IllegalStateException("Failed to prepare message: IronCore not initialized")
 
                 val realMessageId = prepared.messageId.trim()
@@ -5657,10 +5657,17 @@ open class MeshRepository(private val context: Context) {
         val canonicalContact = routeLinked ?: keyMatches.firstOrNull()
         
         // Only create a transport identity if we have an existing contact
-        // or if the peer is not a headless/relay agent
+        // or if the peer is not a headless/relay agent.
+        // FIX: If no contact exists, we now allow the resolution to proceed so that
+        // onPeerIdentified() can trigger auto-contact creation for legitimate peers.
         if (canonicalContact == null) {
-            Timber.d("No existing contact for transport key ${normalizedKey.take(8)}..., treating as transient relay")
-            return null
+            Timber.d("No existing contact for transport key ${normalizedKey.take(8)}..., allowing auto-creation for non-relay peer")
+            return TransportIdentityResolution(
+                canonicalPeerId = libp2pPeerId,
+                publicKey = normalizedKey,
+                nickname = null,
+                localNickname = null
+            )
         }
 
         // Always use the libp2p peer ID as the canonical peer ID to ensure

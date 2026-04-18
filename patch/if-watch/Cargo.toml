@@ -1,0 +1,16 @@
+[package]
+name = "if-watch"
+version = "3.2.1"
+edition = "2021"
+description = "Stub for Android - original requires native compilation"
+license = "MIT"
+
+[dependencies]
+tokio = { version = "1", features = ["full"], optional = true }
+futures = "0.3"
+event-listener = { version = "5", optional = true }
+
+[features]
+default = []
+tokio = ["dep:tokio", "dep:event-listener"]
+smol = []

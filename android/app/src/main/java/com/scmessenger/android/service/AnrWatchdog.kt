@@ -143,11 +143,12 @@ class AnrWatchdog(
         Timber.i("ANR diagnostics written to: %s", anrFile.absolutePath)
 
         // Keep only last 10 ANR files
-        val anrFiles = anrDir.listFiles()?.sortedBy { it.lastModified() } ?: emptyArray()
+        val allAnrFiles = anrDir.listFiles()
+        val anrFiles: Array<File> = if (allAnrFiles != null) allAnrFiles.sortedBy { it.lastModified() }.toTypedArray() else emptyArray()
         if (anrFiles.size > 10) {
-            anrFiles.take(anrFiles.size - 10).forEach { file ->
-                file.delete()
-                Timber.d("Removed old ANR diagnostic: %s", file.name)
+            for (i in 0 until anrFiles.size - 10) {
+                anrFiles[i].delete()
+                Timber.d("Removed old ANR diagnostic: %s", anrFiles[i].name)
             }
         }
     }

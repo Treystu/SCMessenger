@@ -188,20 +188,32 @@ enum BlockAction {
     Add {
         peer_id: String,
         #[arg(short, long)]
+        device_id: Option<String>,
+        #[arg(short, long)]
         reason: Option<String>,
     },
     /// Unblock a peer
-    Remove { peer_id: String },
+    Remove {
+        peer_id: String,
+        #[arg(short, long)]
+        device_id: Option<String>,
+    },
     /// Block a peer AND delete all their stored messages (cascade purge)
     Delete {
         peer_id: String,
+        #[arg(short, long)]
+        device_id: Option<String>,
         #[arg(short, long)]
         reason: Option<String>,
     },
     /// List all blocked peers
     List,
     /// Check if a peer is blocked
-    Check { peer_id: String },
+    Check {
+        peer_id: String,
+        #[arg(short, long)]
+        device_id: Option<String>,
+    },
     /// Show total blocked count
     Count,
 }
@@ -1117,7 +1129,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let listen_addr: libp2p::Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", p2p_port).parse()?;
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);
     let swarm_handle =
-        transport::start_swarm(network_keypair, Some(listen_addr), event_tx, false).await?;
+        transport::start_swarm(network_keypair, Some(listen_addr), event_tx, None, false).await?;
 
     // ── WebSocket P2P Bridge for WASM ────────────────────────────────────
     let ws_p2p_port = p2p_port + 1;
@@ -2518,27 +2530,36 @@ async fn cmd_block(action: BlockAction) -> Result<()> {
         .context("Failed to load identity")?;
 
     match action {
-        BlockAction::Add { peer_id, reason } => {
-            core.block_peer(peer_id.clone(), reason.clone())
+        BlockAction::Add { peer_id, device_id, reason } => {
+            core.block_peer(peer_id.clone(), device_id.clone(), reason.clone())
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
             println!("{} Blocked peer: {}", "✓".green(), peer_id.bright_cyan());
+            if let Some(device_id) = device_id {
+                println!("  Device ID: {}", device_id.dimmed());
+            }
             if let Some(r) = reason {
                 println!("  Reason: {}", r.dimmed());
             }
         }
-        BlockAction::Remove { peer_id } => {
-            core.unblock_peer(peer_id.clone())
+        BlockAction::Remove { peer_id, device_id } => {
+            core.unblock_peer(peer_id.clone(), device_id.clone())
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
             println!("{} Unblocked peer: {}", "✓".green(), peer_id.bright_cyan());
+            if let Some(device_id) = device_id {
+                println!("  Device ID: {}", device_id.dimmed());
+            }
         }
-        BlockAction::Delete { peer_id, reason } => {
-            core.block_and_delete_peer(peer_id.clone(), reason.clone())
+        BlockAction::Delete { peer_id, device_id, reason } => {
+            core.block_and_delete_peer(peer_id.clone(), device_id.clone(), reason.clone())
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
             println!(
                 "{} Blocked and deleted peer: {} (messages purged)",
                 "✓".green(),
                 peer_id.bright_cyan()
             );
+            if let Some(device_id) = device_id {
+                println!("  Device ID: {}", device_id.dimmed());
+            }
             if let Some(r) = reason {
                 println!("  Reason: {}", r.dimmed());
             }
@@ -2574,14 +2595,20 @@ async fn cmd_block(action: BlockAction) -> Result<()> {
                 }
             }
         }
-        BlockAction::Check { peer_id } => {
+        BlockAction::Check { peer_id, device_id } => {
             let blocked = core
-                .is_peer_blocked(peer_id.clone())
+                .is_peer_blocked(peer_id.clone(), device_id.clone())
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
             if blocked {
                 println!("{} {} is blocked", "✗".red(), peer_id.bright_cyan());
+                if let Some(device_id) = device_id {
+                    println!("  Device ID: {}", device_id.dimmed());
+                }
             } else {
                 println!("{} {} is NOT blocked", "✓".green(), peer_id.bright_cyan());
+                if let Some(device_id) = device_id {
+                    println!("  Device ID: {}", device_id.dimmed());
+                }
             }
         }
         BlockAction::Count => {

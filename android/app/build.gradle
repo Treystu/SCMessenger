@@ -16,7 +16,7 @@ android {
     namespace 'com.scmessenger.android'
     compileSdk rootProject.ext.compileSdk
     
-    ndkVersion '26.1.10909125'
+    ndkVersion '30.0.14904198'
 
     signingConfigs {
         release {
@@ -45,7 +45,7 @@ android {
         
         // Specify ABIs we're building for (devices and simulators)
         ndk {
-            abiFilters 'arm64-v8a', 'x86_64'
+            abiFilters 'arm64-v8a'
         }
     }
     
@@ -193,7 +193,7 @@ task buildRustAndroid {
         println "Starting buildRustAndroid task (Profile: ${rustDir})..."
 
         // Targets to build
-        def targets = ['aarch64-linux-android', 'x86_64-linux-android']
+        def targets = ['aarch64-linux-android']
         def abiMap = [
             'aarch64-linux-android': 'arm64-v8a',
             'x86_64-linux-android': 'x86_64'
@@ -252,11 +252,13 @@ task generateUniFFIBindings {
             workingDir '../../core'
             // Unset RUSTFLAGS to avoid Android-specific linker flags affecting the generator build
             environment "RUSTFLAGS", ""
-            
+            // Explicitly build for host target (not Android)
+            environment "CARGO_BUILD_TARGET", ""
+
             if (isWindows) {
-                commandLine 'cmd', '/c', 'cargo run --bin gen_kotlin --features gen-bindings'
+                commandLine 'cmd', '/c', 'cargo run --target x86_64-pc-windows-msvc --bin gen_kotlin --features gen-bindings'
             } else {
-                commandLine 'cargo', 'run', '--bin', 'gen_kotlin', '--features', 'gen-bindings'
+                commandLine 'cargo', 'run', '--target', 'x86_64-pc-windows-msvc', '--bin', 'gen_kotlin', '--features', 'gen-bindings'
             }
         }
     }

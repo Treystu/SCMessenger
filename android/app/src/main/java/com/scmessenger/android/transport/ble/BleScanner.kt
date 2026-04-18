@@ -63,6 +63,11 @@ class BleScanner(
     private var fallbackScanEnabled = false
     private var fallbackPromotionRunnable: Runnable? = null
 
+    // Android 12+ Scan Quota Management
+    private val scanStartTimestamps = java.util.LinkedList<Long>()
+    private val MAX_SCANS_PER_WINDOW = 5
+    private val SCAN_WINDOW_MS = 30_000L
+
     // SCMessenger Service UUID: 0xDF01
     // Full UUID: 0000DF01-0000-1000-8000-00805F9B34FB
     companion object {
@@ -233,11 +238,30 @@ class BleScanner(
             Timber.d("BLE scan already in progress, skipping duplicate start")
             return
         }
-        
+
         // Check if Bluetooth is enabled
         if (bluetoothAdapter?.isEnabled != true) {
             Timber.w("Bluetooth is not enabled, cannot start scanning")
             return
+        }
+
+        // Android 12+ Quota Management
+        val now = System.currentTimeMillis()
+        synchronized(scanStartTimestamps) {
+            // Remove timestamps older than the window
+            while (scanStartTimestamps.isNotEmpty() &&
+                   (now - scanStartTimestamps.first) > SCAN_WINDOW_MS) {
+                scanStartTimestamps.removeFirst()
+            }
+
+            if (scanStartTimestamps.size >= MAX_SCANS_PER_WINDOW) {
+                Timber.w("BLE scan quota exhausted (5 starts / 30s). Delaying restart.")
+                isScanning = false
+                // Retry after a short delay to allow the window to slide
+                handler.postDelayed({ startScanning() }, 5000)
+                return
+            }
+            scanStartTimestamps.addLast(now)
         }
 
         advertisementsSeen.set(0)
@@ -252,7 +276,7 @@ class BleScanner(
             } catch (_: Exception) {
                 // Ignore errors from stopping non-existent scan
             }
-            
+
             scanner.startScan(currentFilters(), buildScanSettings(), scanCallback)
             isScanning = true
             Timber.i("BLE Scanning started (background=$isBackgroundMode, fallback=$fallbackScanEnabled)")

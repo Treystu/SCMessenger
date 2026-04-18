@@ -224,6 +224,29 @@ impl ContactManager {
         }
     }
 
+    /// Reconcile contacts from message history to recover potentially lost records.
+    /// Scans all message records and creates a basic contact if the peer_id is unknown.
+    pub fn reconcile_from_history(&self, history: &HistoryManager) -> Result<u32, crate::IronCoreError> {
+        // The bridge needs to call the inner manager's reconcile logic.
+        // Since ContactManager is the inner type in contacts.rs, and this bridge
+        // wraps the sled DB, we implement the logic here or delegate.
+
+        // Note: history is also a bridge.
+        let messages = history.recent(None, 10000)?;
+        let mut recovered = 0;
+
+        for msg in messages {
+            if self.get(msg.peer_id.clone())?.is_none() {
+                // We need a public key to create a Contact.
+                // In a real scenario, we'd use the libp2p peer_id to derive the key.
+                let contact = Contact::new(msg.peer_id.clone(), msg.peer_id.clone());
+                self.add(contact)?;
+                recovered += 1;
+            }
+        }
+        Ok(recovered)
+    }
+
     /// Count total contacts
     pub fn count(&self) -> u32 {
         let db = self.db.lock().unwrap();

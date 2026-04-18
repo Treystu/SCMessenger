@@ -141,7 +141,7 @@ class PerformanceMonitor(context: Context) {
     fun getHealthStatus(): String {
         val uptime = getServiceUptimeString()
         val anrCount = totalAnrEvents
-        val slowEvents = uiTimingEvents.size().count { uiTimingEvents[it]?.isSlow == true }
+        val slowEvents = (0 until uiTimingEvents.size()).count { uiTimingEvents.get(it)?.isSlow == true }
 
         return """{"uptime":"$uptime","anr_events":$anrCount,"slow_ui_operations":$slowEvents}"""
     }
@@ -163,13 +163,13 @@ class PerformanceMonitor(context: Context) {
             Timber.i("ANR event written to: %s", file.absolutePath)
 
             // Keep only last 100 ANR files
-            val anrFiles = anrDir.listFiles { _, name -> name.startsWith("anr_") && name.endsWith(".json") }
-                ?.sortedBy { it.lastModified() } ?: emptyArray()
+            val allAnrFiles = anrDir.listFiles { dir: File, name: String -> name.startsWith("anr_") && name.endsWith(".json") }
+            val anrFiles: Array<File> = if (allAnrFiles != null) allAnrFiles.sortedBy { it.lastModified() }.toTypedArray() else emptyArray()
 
             if (anrFiles.size > 100) {
-                anrFiles.take(anrFiles.size - 100).forEach { f ->
-                    f.delete()
-                    Timber.d("Removed old ANR file: %s", f.name)
+                for (i in 0 until anrFiles.size - 100) {
+                    anrFiles[i].delete()
+                    Timber.d("Removed old ANR file: %s", anrFiles[i].name)
                 }
             }
         } catch (e: Exception) {

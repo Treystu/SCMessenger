@@ -1,0 +1,7 @@
+[target.x86_64-linux-android]
+codegen-units = 1
+# Use .cmd versions for Windows
+linker = "/c/Users/kanal/AppData/Local/Android/Sdk/ndk/30.0.14904198/toolchains/llvm/prebuilt/windows-x86_64/bin/x86_64-linux-android21-clang.cmd"
+
+[build]
+rustflags = ["-C", "opt-level=s"]

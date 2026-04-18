@@ -26,8 +26,10 @@ use super::mesh_routing::{
 };
 // Import mycorrhizal routing modules
 use super::routing::{
-    engine::RoutingEngine,
-    local::{PeerId as RoutingPeerId, TransportType as RoutingTransportType},
+    engine::{RoutingDecision, NextHop},
+    optimized_engine::OptimizedRoutingEngine,
+    local::TransportType as RoutingTransportType,
+    smart_retry::{BackoffStrategy, calculate_next_attempt},
 };
 #[cfg(target_arch = "wasm32")]
 use super::multiport::MultiPortConfig;
@@ -46,6 +48,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::net::SocketAddr;
+use std::sync::Weak;
 use tokio::sync::mpsc;
 use web_time::SystemTime;
 #[cfg(not(target_arch = "wasm32"))]
@@ -657,6 +660,7 @@ fn dispatch_ranked_route(
 }
 
 /// Convert libp2p Kademlia protocol mode to routing transport type
+#[allow(dead_code)]
 fn transport_type_to_routing_transport(_mode: kad::Mode) -> RoutingTransportType {
     // For now, default to TCP as that's what most peers use
     // In a full implementation, we'd inspect the actual connection transports
@@ -672,7 +676,7 @@ fn routing_decision_to_ranked_routes(
     let mut routes = Vec::new();
 
     match &decision.primary {
-        routing::engine::NextHop::Direct { peer_id, transport: _ } => {
+        NextHop::Direct { peer_id: _, transport: _ } => {
             // Direct route - use target peer directly
             routes.push(RankedRoute {
                 path: vec![*target_peer],
@@ -682,7 +686,7 @@ fn routing_decision_to_ranked_routes(
                 latest_success_order: 0,
             });
         }
-        routing::engine::NextHop::Gateway { gateway_id, .. } => {
+        NextHop::Gateway { gateway_id, .. } => {
             // Route via gateway
             let gateway_peer = PeerId::from_bytes(gateway_id).ok();
             if let Some(gw) = gateway_peer {
@@ -695,7 +699,7 @@ fn routing_decision_to_ranked_routes(
                 });
             }
         }
-        routing::engine::NextHop::GlobalRoute { next_hop_id, .. } => {
+        NextHop::GlobalRoute { next_hop_id, .. } => {
             // Route via global route
             let next_hop = PeerId::from_bytes(next_hop_id).ok();
             if let Some(hop) = next_hop {
@@ -708,7 +712,7 @@ fn routing_decision_to_ranked_routes(
                 });
             }
         }
-        routing::engine::NextHop::StoreAndCarry => {
+        NextHop::StoreAndCarry => {
             // Fallback: direct to target
             routes.push(RankedRoute {
                 path: vec![*target_peer],
@@ -718,7 +722,7 @@ fn routing_decision_to_ranked_routes(
                 latest_success_order: 0,
             });
         }
-        routing::engine::NextHop::RouteDiscovery { .. } => {
+        NextHop::RouteDiscovery { .. } => {
             // Route discovery requested - fall back to multi_path_delivery
             return multi_path_delivery.ranked_routes(target_peer, 3);
         }
@@ -727,7 +731,7 @@ fn routing_decision_to_ranked_routes(
     // Add alternative routes if available
     for alt in &decision.alternatives {
         match alt {
-            routing::engine::NextHop::Direct { peer_id, .. } => {
+            NextHop::Direct { peer_id, .. } => {
                 let alt_peer = PeerId::from_bytes(peer_id).ok();
                 if let Some(p) = alt_peer {
                     routes.push(RankedRoute {
@@ -739,7 +743,7 @@ fn routing_decision_to_ranked_routes(
                     });
                 }
             }
-            routing::engine::NextHop::Gateway { gateway_id, .. } => {
+            NextHop::Gateway { gateway_id, .. } => {
                 let gw = PeerId::from_bytes(gateway_id).ok();
                 if let Some(g) = gw {
                     routes.push(RankedRoute {
@@ -1112,8 +1116,10 @@ pub enum SwarmEvent2 {
 
 /// Handle to communicate with the running swarm task
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct SwarmHandle {
     command_tx: mpsc::Sender<SwarmCommand>,
+    core_handle: Option<Weak<crate::IronCore>>,
 }
 
 impl SwarmHandle {
@@ -1372,6 +1378,7 @@ pub async fn start_swarm(
     keypair: Keypair,
     listen_addr: Option<Multiaddr>,
     event_tx: mpsc::Sender<SwarmEvent2>,
+    core_handle: Option<Weak<crate::IronCore>>,
     headless: bool,
 ) -> Result<SwarmHandle> {
     start_swarm_with_config(
@@ -1381,6 +1388,7 @@ pub async fn start_swarm(
         None,
         Vec::new(),
         None,
+        core_handle,
         headless,
     )
     .await
@@ -1398,6 +1406,7 @@ pub async fn start_swarm_with_config(
     multiport_config: Option<MultiPortConfig>,
     bootstrap_addrs: Vec<Multiaddr>,
     storage_path: Option<String>,
+    core_handle: Option<Weak<crate::IronCore>>,
     headless: bool,
 ) -> Result<SwarmHandle> {
     #[cfg(not(target_arch = "wasm32"))]
@@ -1517,6 +1526,7 @@ pub async fn start_swarm_with_config(
         let (command_tx, mut command_rx) = mpsc::channel::<SwarmCommand>(256);
         let handle = SwarmHandle {
             command_tx: command_tx.clone(),
+            core_handle: core_handle.clone(),
         };
 
         // Address reflection service
@@ -1562,7 +1572,7 @@ pub async fn start_swarm_with_config(
         let local_hint = blake3::hash(&local_peer_id_bytes).as_bytes()[0..4]
             .try_into()
             .expect("blake3 hash should be at least 4 bytes");
-        let mut routing_engine = RoutingEngine::new(local_peer_id_bytes, local_hint);
+        let mut routing_engine = OptimizedRoutingEngine::new(local_peer_id_bytes, local_hint);
 
         // Track pending message deliveries
         let mut pending_messages: HashMap<String, PendingMessage> = HashMap::new();
@@ -1607,6 +1617,13 @@ pub async fn start_swarm_with_config(
         let mut relay_peer_addrs: HashMap<PeerId, Vec<Multiaddr>> = HashMap::new();
 
         // Track relay reconnect backoff state: (peer_id, attempt_count, next_dial_at)
+        let _relay_backoff: HashMap<PeerId, (u32, web_time::Instant)> = HashMap::new();
+        // Mycorrhizal routing: smart retry backoff strategy for pending messages
+        let _retry_backoff = BackoffStrategy {
+            base_ms: 1000,
+            max_ms: 30000,
+            multiplier: 2.0,
+        };
         let mut relay_reconnect_pending: Vec<(PeerId, u32, web_time::Instant)> = Vec::new();
         let mut seen_delivery_convergence_markers: HashSet<String> = HashSet::new();
 
@@ -1671,8 +1688,20 @@ pub async fn start_swarm_with_config(
                                 if attempt.should_retry() {
                                     let elapsed = pending.attempt_start.elapsed().unwrap_or_default();
                                     let retry_delay = attempt.next_retry_delay();
+                                    // Mycorrhizal routing: use smart retry backoff
+                                    let smart_delay = calculate_next_attempt(
+                                        pending.pass_count,
+                                        &_retry_backoff,
+                                    );
+                                    let now_ms = web_time::SystemTime::now()
+                                        .duration_since(web_time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_millis() as u64;
+                                    let smart_delay_dur = web_time::Duration::from_millis(
+                                        smart_delay.saturating_sub(now_ms)
+                                    );
 
-                                    if elapsed >= retry_delay {
+                                    if elapsed >= retry_delay.max(smart_delay_dur) {
                                         to_retry.push(msg_id.clone());
                                     }
                                 }
@@ -1926,6 +1955,24 @@ pub async fn start_swarm_with_config(
                                             );
                                         }
 
+                                        // Check if sender is blocked before processing message
+                                        let sender_blocked = if let Some(core_handle) = core_handle.as_ref().and_then(|w| w.upgrade()) {
+                                            // MessageRequest doesn't have device_id, only RelayRequest does.
+                                            // For direct messaging, we check the peer-level block.
+                                            core_handle.is_peer_blocked(peer.to_string(), None).unwrap_or(false)
+                                        } else {
+                                            false
+                                        };
+
+                                        if sender_blocked {
+                                            tracing::warn!("Blocked peer {} attempted to send message", peer);
+                                            let _ = swarm.behaviour_mut().messaging.send_response(
+                                                channel,
+                                                MessageResponse { accepted: false, error: Some("blocked".to_string()) },
+                                            );
+                                            continue;
+                                        }
+
                                         // Received a message from a peer
                                         let _ = event_tx.send(SwarmEvent2::MessageReceived {
                                             peer_id: peer,
@@ -2021,6 +2068,8 @@ pub async fn start_swarm_with_config(
                                                     // PHASE 5: Track successful delivery
                                                     let latency_ms = pending.attempt_start.elapsed().unwrap_or_default().as_millis() as u64;
                                                     multi_path_delivery.record_success(&message_id, vec![pending.target_peer], latency_ms);
+                                                    // Mycorrhizal routing: record activity for adaptive TTL
+                                                    routing_engine.record_message_activity(&pending.target_peer.to_string());
                                                     tracing::info!("✓ Message delivered successfully to {} ({}ms)", pending.target_peer, latency_ms);
                                                     let _ = pending.reply_tx.send(Ok(())).await;
                                                 } else {
@@ -2060,6 +2109,8 @@ pub async fn start_swarm_with_config(
                                         );
                                         multi_path_delivery
                                             .record_failure(&message_id, vec![pending.target_peer]);
+                                        // Mycorrhizal routing: record unreachable in negative cache
+                                        routing_engine.record_unreachable_peer(&pending.target_peer.to_string());
                                         pending_messages.insert(message_id, pending);
                                     }
                                 }
@@ -2762,6 +2813,7 @@ pub async fn start_swarm_with_config(
                                 tracing::trace!("Ping event: {:?}", event);
                             }
 
+                            #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Mdns(
                                 mdns::Event::Discovered(peers)
                             )) => {
@@ -2785,6 +2837,7 @@ pub async fn start_swarm_with_config(
                                 }
                             }
 
+                            #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Mdns(
                                 mdns::Event::Expired(peers)
                             )) => {
@@ -2812,14 +2865,12 @@ pub async fn start_swarm_with_config(
 
                                 // MYCORRHIZAL ROUTING: Update routing engine with peer discovery
                                 let peer_id_bytes = extract_peer_id_bytes(&peer_id.to_bytes());
-                                let peer_hint = blake3::hash(&peer_id_bytes).as_bytes()[0..4]
+                                let _peer_hint: [u8; 4] = blake3::hash(&peer_id_bytes).as_bytes()[0..4]
                                     .try_into()
                                     .expect("blake3 hash should be at least 4 bytes");
-                                routing_engine.local_cell_mut().peer_seen(
+                                routing_engine.base_engine_mut().local_cell_mut().peer_seen(
                                     peer_id_bytes,
-                                    transport_type_to_routing_transport(
-                                        swarm.behaviour_mut().kademlia.protocol_mode(),
-                                    ),
+                                    RoutingTransportType::TCP,
                                 );
                                 // Update routing engine with peer hints from identify info
                                 // (peers announce what hints they can reach)
@@ -2870,6 +2921,9 @@ pub async fn start_swarm_with_config(
                                     tracing::info!("🔄 Peer {} is identified as a RELAY node (agent: {})", peer_id, info.agent_version);
                                     bootstrap_capability.add_peer(peer_id);
                                     multi_path_delivery.add_relay(peer_id);
+                                    // Mycorrhizal routing: mark relay-capable peer as gateway
+                                    let gw_bytes = extract_peer_id_bytes(&peer_id.to_bytes());
+                                    routing_engine.base_engine_mut().local_cell_mut().mark_as_gateway(&gw_bytes, true);
 
                                     // P0.5B: Register a circuit relay reservation with this relay.
                                     // Guard: only register ONCE per relay peer — identify fires every 60s
@@ -2945,6 +2999,7 @@ pub async fn start_swarm_with_config(
                                 }
                             }
 
+                            #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Upnp(event)) => {
                                 use libp2p::upnp;
                                 match event {
@@ -3173,7 +3228,7 @@ pub async fn start_swarm_with_config(
                                     .expect("blake3 hash should be at least 4 bytes");
 
                                 // Route message using mycorrhizal routing engine
-                                let routing_decision = routing_engine.route_message(
+                                let routing_decision = routing_engine.route_message_optimized(
                                     &hint,
                                     &message_id.as_bytes()[0..16].try_into().unwrap_or([0u8; 16]),
                                     50, // default priority
@@ -3479,6 +3534,7 @@ pub async fn start_swarm_with_config(
         let (command_tx, mut command_rx) = mpsc::channel::<SwarmCommand>(256);
         let handle = SwarmHandle {
             command_tx: command_tx.clone(),
+            core_handle: core_handle.clone(),
         };
 
         let mut pending_direct_replies: HashMap<
@@ -3670,6 +3726,23 @@ pub async fn start_swarm_with_config(
                                 match ev {
                                     request_response::Event::Message { peer, message, .. } => match message {
                                         request_response::Message::Request { request, channel, .. } => {
+                                            // Check if sender is blocked before processing message
+                                            let sender_blocked = if let Some(ref core_handle) = core_handle {
+                                                // WASM version doesn't have device ID in request, so pass None
+                                                core_handle.is_peer_blocked(peer.to_string(), None).unwrap_or(false)
+                                            } else {
+                                                false
+                                            };
+
+                                            if sender_blocked {
+                                                tracing::warn!("Blocked peer {} attempted to send message", peer);
+                                                let _ = swarm.behaviour_mut().messaging.send_response(
+                                                    channel,
+                                                    MessageResponse { accepted: false, error: Some("blocked".to_string()) },
+                                                );
+                                                continue;
+                                            }
+
                                             let _ = event_tx.send(SwarmEvent2::MessageReceived {
                                                 peer_id: peer,
                                                 envelope_data: request.envelope_data,
@@ -4262,7 +4335,7 @@ pub async fn start_swarm_with_config(
 #[cfg(not(target_arch = "wasm32"))]
 use futures::StreamExt;
 use libp2p::identify;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
 use libp2p::mdns;
 use libp2p::{gossipsub, request_response};
 

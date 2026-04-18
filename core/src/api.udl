@@ -154,19 +154,20 @@ interface IronCore {
 
     // Blocking
     [Throws=IronCoreError]
-    void block_peer(string peer_id, string? reason);
+    void block_peer(string peer_id, string? device_id, string? reason);
     [Throws=IronCoreError]
-    void unblock_peer(string peer_id);
+    void unblock_peer(string peer_id, string? device_id);
     [Throws=IronCoreError]
-    boolean is_peer_blocked(string peer_id);
+    boolean is_peer_blocked(string peer_id, string? device_id);
     [Throws=IronCoreError]
     sequence<BlockedIdentity> list_blocked_peers();
     [Throws=IronCoreError]
     u32 blocked_count();
     /// Block a peer AND delete all their stored messages (cascade purge).
     /// Future payloads from this peer are dropped at the ingress layer.
+    /// Note: Device ID is not used for block_and_delete operations as they are peer-wide.
     [Throws=IronCoreError]
-    void block_and_delete_peer(string peer_id, string? reason);
+    void block_and_delete_peer(string peer_id, string? device_id, string? reason);
 
     // Delegate
     void set_delegate(CoreDelegate? delegate);

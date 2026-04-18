@@ -886,7 +886,7 @@ impl IronCore {
     #[wasm_bindgen(js_name = blockPeer)]
     pub fn block_peer(&self, peer_id: String, reason: Option<String>) -> Result<(), JsValue> {
         self.inner
-            .block_peer(peer_id, reason)
+            .block_peer(peer_id, None, reason)
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
@@ -894,7 +894,7 @@ impl IronCore {
     #[wasm_bindgen(js_name = unblockPeer)]
     pub fn unblock_peer(&self, peer_id: String) -> Result<(), JsValue> {
         self.inner
-            .unblock_peer(peer_id)
+            .unblock_peer(peer_id, None)
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
@@ -907,7 +907,7 @@ impl IronCore {
         reason: Option<String>,
     ) -> Result<(), JsValue> {
         self.inner
-            .block_and_delete_peer(peer_id, reason)
+            .block_and_delete_peer(peer_id, None, reason)
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
@@ -915,7 +915,7 @@ impl IronCore {
     #[wasm_bindgen(js_name = isPeerBlocked)]
     pub fn is_peer_blocked(&self, peer_id: String) -> Result<bool, JsValue> {
         self.inner
-            .is_peer_blocked(peer_id)
+            .is_peer_blocked(peer_id, None)
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
@@ -1432,6 +1432,7 @@ async fn start_swarm_runtime(
         None,
         bootstrap_multiaddrs,
         None,
+        Some(Arc::downgrade(&inner)),
         headless_mode,
     )
     .await
