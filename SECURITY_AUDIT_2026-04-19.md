@@ -188,7 +188,7 @@ PoC command:
 
 ```bash
 node - <<'NODE'
-function esc(s){ const d={textContent:String(s)}; return d.textContent.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('\"','&quot;').replaceAll(\"'\",'&#39;'); }
+function esc(s){ const d={textContent:String(s)}; return d.textContent.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'); }
 function renderRow(e){
   return "<tr>" +
   '<td class="mono">' + esc(e.address || e.multiaddr) + '</td>' +
