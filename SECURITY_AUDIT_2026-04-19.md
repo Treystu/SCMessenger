@@ -53,7 +53,8 @@ LOC estimates are rough implementation deltas (code + tests + docs):
 An attacker controlling or influencing the URL (clipboard poison, malicious page, social engineering, link-shortener tampering) can inject shell metacharacters or malformed host strings and get arbitrary command execution on the installer client.
 
 ### Recommended fix
-- Strictly validate `host` against allowlist regex (`^[a-zA-Z0-9.-]+(:\d{1,5})?$`).
+- Strictly validate `host` using an allowlist for the hostname portion (for example, `^[a-zA-Z0-9.-]+(?::\d{1,5})?$` for hostname + optional port structure only), then parse and range-check the port separately to ensure it is within `1–65535`.
+- If IPv6 literals are meant to be allowed, validate them with dedicated logic for bracketed IPv6 host syntax; otherwise explicitly reject them instead of relying on the hostname regex above.
 - Prefer server-side canonical host generation; remove user-supplied `host` where possible.
 - Avoid `curl | bash` UX patterns; provide downloaded, signed script + checksum verification.
 
