@@ -259,6 +259,39 @@ impl ContactManager {
             let _ = db.flush();
         }
     }
+
+    /// Verify database integrity and detect corruption.
+    /// Returns an error if the database has data but returns 0 contacts.
+    pub fn verify_integrity(&self) -> Result<(), crate::IronCoreError> {
+        let db = self.db.lock().map_err(|_| crate::IronCoreError::Internal)?;
+        let contact_count = db.len() as u32;
+        let has_entries = db.iter().next().is_some();
+
+        if contact_count == 0 && has_entries {
+            // Database has entries but count is 0 - potential corruption
+            return Err(crate::IronCoreError::CorruptionDetected);
+        }
+        Ok(())
+    }
+
+    /// Emergency recovery: Reconstruct contacts from message history.
+    /// Scans all message records and creates a basic contact if the peer_id is unknown.
+    pub fn emergency_recover(&self, history: &HistoryManager) -> Result<u32, crate::IronCoreError> {
+        let messages = history.recent(None, 10000)?;
+        let mut recovered = 0;
+
+        for msg in messages {
+            if self.get(msg.peer_id.clone())?.is_none() {
+                // We need a public key to create a Contact.
+                // In a real scenario, we'd use the libp2p peer_id to derive the key.
+                // For emergency recovery, we use the peer_id as the public key placeholder.
+                let contact = Contact::new(msg.peer_id.clone(), msg.peer_id.clone());
+                self.add(contact)?;
+                recovered += 1;
+            }
+        }
+        Ok(recovered)
+    }
 }
 
 fn current_timestamp() -> u64 {

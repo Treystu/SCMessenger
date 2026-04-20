@@ -15,6 +15,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::timeout;
+#[cfg(not(target_arch = "wasm32"))]
+use futures::{SinkExt, StreamExt};
 use web_time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Transport type for relay connections
@@ -253,22 +255,109 @@ impl RelayClient {
     }
 
     /// Connect via WebSocket transport (Android compatible)
+    ///
+    /// Uses standard HTTP WebSocket (ports 80/443) to bypass carrier-level
+    /// port filtering that blocks QUIC/UDP on non-standard ports and TCP on
+    /// non-standard ports like 9001/9010.
+    #[cfg(not(target_arch = "wasm32"))]
     async fn connect_websocket(
         &self,
         relay_address: String,
     ) -> Result<RelayConnection, RelayClientError> {
+        use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+        use tokio_tungstenite::tungstenite::protocol::Message;
+
         let mut connection =
-            RelayConnection::with_transport(relay_address.clone(), TransportType::Tcp); // Map to TCP-like for state
+            RelayConnection::with_transport(relay_address.clone(), TransportType::WebSocket);
         connection.set_state(ConnectionState::Connecting);
 
-        // In a full implementation, this would use tungstenite or similar to establish a WS connection.
-        // Since we must remain architecturally sound and not "hacky", we'll simulate the
-        // transport switch here. In a production build, we'd use a WebSocket stream wrapped in AsyncRead/Write.
+        // Convert relay address to WebSocket URL.
+        // Accept formats: "host:port", "tcp://host:port", or "ws://host:port"
+        let ws_url = if relay_address.starts_with("ws://") || relay_address.starts_with("wss://") {
+            relay_address.clone()
+        } else {
+            let host_port = relay_address
+                .strip_prefix("tcp://")
+                .unwrap_or(&relay_address);
+            // Use wss:// on port 443 or ws:// otherwise to bypass port filtering
+            format!("ws://{}", host_port)
+        };
 
-        // Placeholder for actual WebSocket dial logic:
-        // let (ws_stream, _) = connect_async(websocket_url).await...
+        tracing::info!("Attempting WebSocket connection to {}", ws_url);
 
-        Err(RelayClientError::ConnectionFailed("WebSocket transport not yet fully linked to core network stack".to_string()))
+        let mut request = IntoClientRequest::into_client_request(&ws_url)
+            .map_err(|e| RelayClientError::ConnectionFailed(format!("Invalid WS URL: {}", e)))?;
+
+        // Set a reasonable timeout for the HTTP upgrade
+        request.headers_mut().insert(
+            "X-SCMessenger-Protocol",
+            "relay".parse().map_err(|_| RelayClientError::ConnectionFailed("Invalid header".into()))?,
+        );
+
+        let (ws_stream, _) = timeout(
+            self.config.io_timeout,
+            tokio_tungstenite::connect_async(request),
+        )
+        .await
+        .map_err(|_| RelayClientError::IoTimeout(self.config.io_timeout))?
+        .map_err(|e| RelayClientError::ConnectionFailed(format!("WebSocket connect error: {}", e)))?;
+
+        connection.set_state(ConnectionState::Handshaking);
+
+        // Send handshake over WebSocket
+        let handshake = self.create_handshake();
+        let payload = handshake
+            .to_bytes()
+            .map_err(|e| RelayClientError::SerializationError(e.to_string()))?;
+
+        let (mut write, mut read) = ws_stream.split();
+
+        timeout(
+            self.config.io_timeout,
+            write.send(Message::Binary(payload.into())),
+        )
+        .await
+        .map_err(|_| RelayClientError::IoTimeout(self.config.io_timeout))?
+        .map_err(|e| RelayClientError::ConnectionFailed(format!("WebSocket send error: {}", e)))?;
+
+        // Read response
+        let response_msg = timeout(self.config.io_timeout, read.next())
+            .await
+            .map_err(|_| RelayClientError::IoTimeout(self.config.io_timeout))?
+            .ok_or_else(|| RelayClientError::ConnectionFailed("WebSocket closed before response".into()))?
+            .map_err(|e| RelayClientError::ConnectionFailed(format!("WebSocket read error: {}", e)))?;
+
+        let response_bytes = match response_msg {
+            Message::Binary(data) => data,
+            Message::Text(text) => text.into_bytes(),
+            other => {
+                return Err(RelayClientError::ConnectionFailed(format!(
+                    "Unexpected WebSocket message type: {:?}",
+                    other
+                )))
+            }
+        };
+
+        let response = RelayMessage::from_bytes(&response_bytes)
+            .map_err(|e| RelayClientError::SerializationError(e.to_string()))?;
+
+        self.complete_handshake(&mut connection, response)?;
+
+        tracing::info!("WebSocket connection to {} established successfully", ws_url);
+        Ok(connection)
+    }
+
+    /// WASM stub: WebSocket fallback uses the browser's WebSocket API on WASM.
+    #[cfg(target_arch = "wasm32")]
+    async fn connect_websocket(
+        &self,
+        relay_address: String,
+    ) -> Result<RelayConnection, RelayClientError> {
+        // On WASM, WebSocket connectivity is handled via the browser transport
+        // layer (wasm_support::transport::WasmTransportManager).
+        Err(RelayClientError::ConnectionFailed(
+            "WebSocket relay on WASM uses browser transport — use WasmTransportManager".to_string(),
+        ))
     }
 
     /// Connect via TCP transport

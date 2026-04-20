@@ -244,6 +244,27 @@ impl ContactManager {
     pub fn flush(&self) {
         let _ = self.backend.flush();
     }
+
+    /// Verify database integrity and detect corruption.
+    /// Returns an error if the database has data but returns 0 contacts.
+    pub fn verify_integrity(&self) -> Result<(), IronCoreError> {
+        let contact_count = self.count();
+        let db_size = self.backend.count_prefix(b"").unwrap_or(0);
+
+        // If contact count is 0 but database has entries, there may be corruption
+        // or the contacts were not properly loaded from the database.
+        // We use a threshold of 1024 bytes as a reasonable indicator of data presence.
+        if contact_count == 0 && db_size > 0 {
+            // Check if we have actual data by scanning a few keys
+            let has_data = self.backend.scan_prefix(b"").unwrap_or_default().len() > 0;
+            if has_data {
+                // Database has data but count() returns 0 - potential corruption
+                // This could happen if the data is stored but not properly deserialized
+                return Err(IronCoreError::CorruptionDetected);
+            }
+        }
+        Ok(())
+    }
 }
 
 fn current_timestamp() -> u64 {

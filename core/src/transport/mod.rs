@@ -3,6 +3,7 @@
 pub mod abstraction;
 pub mod behaviour;
 pub mod bootstrap;
+pub mod circuit_breaker;
 pub mod health;
 pub mod internet;
 pub mod mesh_routing;
@@ -15,6 +16,7 @@ pub mod relay_health;
 pub mod reputation;
 pub mod routing;
 pub mod swarm;
+pub mod websocket;
 
 pub use behaviour::{
     DeregistrationPayload, DeregistrationRequest, IronCoreBehaviour, LedgerExchangeRequest,
@@ -52,6 +54,7 @@ pub use health::{
 };
 pub use relay_health::{RelayDiscovery, RelayFallback, RelayMetrics};
 pub use bootstrap::{BootstrapConfig, BootstrapManager, BootstrapState};
+pub use circuit_breaker::{CircuitBreakerConfig, CircuitBreakerManager, CircuitBreakerStats, CircuitState};
 pub use swarm::{
     start_swarm, start_swarm_with_config, SwarmCommand, SwarmEvent2 as SwarmEvent, SwarmHandle,
 };

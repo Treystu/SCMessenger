@@ -161,6 +161,8 @@ pub enum IronCoreError {
     ConsentRequired,
     #[error("Internal error")]
     Internal,
+    #[error("Data corruption detected")]
+    CorruptionDetected,
 }
 
 impl From<anyhow::Error> for IronCoreError {
@@ -3207,7 +3209,7 @@ mod tests {
         // Unblock
         core.unblock_peer("peer123".into(), None).unwrap();
         assert_eq!(core.blocked_count().unwrap(), 0);
-        assert!(!core.is_peer_blocked("peer123".into()).unwrap());
+        assert!(!core.is_peer_blocked("peer123".into(), None).unwrap());
     }
 
     #[test]

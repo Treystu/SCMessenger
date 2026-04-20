@@ -1,6 +1,8 @@
 package com.scmessenger.android.ui
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
+import com.scmessenger.android.service.AnrWatchdog
 import com.scmessenger.android.ui.theme.SCMessengerTheme
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
@@ -19,13 +22,11 @@ import androidx.core.content.ContextCompat
 import com.scmessenger.android.data.MeshRepository
 import javax.inject.Inject
 import java.util.concurrent.atomic.AtomicBoolean
-import android.os.Handler
-import android.os.Looper
 
 /**
  * Main activity for SCMessenger.
  *
- * This is the entry point for the UI, hosting the Compose navigation graph.
+ * This is the UI entry point, hosting the Compose navigation graph.
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -35,6 +36,9 @@ class MainActivity : ComponentActivity() {
     private val permissionRequestInProgress = AtomicBoolean(false)
     private val permissionRequestDebounceMs = 500L
     private val handler = Handler(Looper.getMainLooper())
+
+    // ANR watchdog for UI thread monitoring
+    private lateinit var anrWatchdog: AnrWatchdog
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -46,10 +50,10 @@ class MainActivity : ComponentActivity() {
         if (denied.isNotEmpty()) {
             Timber.w("Permissions denied: $denied")
         }
-        
+
         // Reset flag after handling
         schedulePermissionReset()
-        
+
         if (meshRepository.hasRequiredRuntimePermissions()) {
             meshRepository.onRuntimePermissionsGranted()
         }
@@ -69,6 +73,10 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         Timber.d("MainActivity created")
+
+        // Start ANR watchdog monitoring for UI thread responsiveness
+        startAnrMonitoring()
+
         checkPermissions()
 
         setContent {
@@ -81,6 +89,34 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+
+        // Defer heavy UI work to background to avoid blocking
+        handler.postDelayed({
+            Timber.d("Deferring heavy UI initialization")
+            initializeUiComponents()
+        }, 100L)
+    }
+
+    /**
+     * Start ANR watchdog monitoring for UI thread responsiveness.
+     */
+    private fun startAnrMonitoring() {
+        try {
+            anrWatchdog = AnrWatchdog(this)
+            anrWatchdog.start()
+            Timber.i("ANR watchdog started for UI thread monitoring")
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to start ANR watchdog")
+        }
+    }
+
+    /**
+     * Initialize UI components after a short delay to avoid blocking onCreate.
+     */
+    private fun initializeUiComponents() {
+        // This method is intentionally left empty for now.
+        // Heavy UI initialization can be added here if needed.
+        Timber.d("UI components initialization completed")
     }
 
     private fun checkPermissions() {
@@ -132,5 +168,16 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         Timber.d("MainActivity paused")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Stop ANR watchdog when activity is destroyed
+        try {
+            anrWatchdog.stop()
+            Timber.d("ANR watchdog stopped")
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to stop ANR watchdog")
+        }
     }
 }

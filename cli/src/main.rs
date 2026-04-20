@@ -2007,7 +2007,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         listen_addr.parse().context("Invalid listen multiaddr")?;
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);
     let swarm_handle =
-        transport::start_swarm(network_keypair, Some(listen_multiaddr), event_tx, true).await?;
+        transport::start_swarm(network_keypair, Some(listen_multiaddr), event_tx, None, true).await?;
     println!("{} P2P swarm started on {}", "✓".green(), listen_addr);
 
     // Subscribe to topics

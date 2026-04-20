@@ -58,6 +58,9 @@ hex = "0.4"
 rand = "0.8"
 zeroize = { version = "1.6", features = ["derive"] }
 
+# WebSocket client (relay fallback transport)
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+
 # Storage
 sled = "0.34"
 

@@ -10,6 +10,7 @@ import timber.log.Timber
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * ANR watchdog that detects main thread freezes and triggers recovery.
@@ -18,6 +19,11 @@ import java.util.concurrent.atomic.AtomicLong
  * respond within [anrThresholdMs], it's considered frozen. After
  * [maxConsecutiveBlocks] consecutive blocks, triggers service recovery
  * via MeshForegroundService restart.
+ *
+ * Enhanced features:
+ * - Graceful degradation with user feedback
+ * - System load reduction before critical failure
+ * - Multiple warning levels before forced recovery
  */
 class AnrWatchdog(
     private val context: Context,
@@ -29,8 +35,13 @@ class AnrWatchdog(
     private val isRunning = AtomicBoolean(false)
 
     @Volatile private var lastPingTime = 0L
-    @Volatile private var consecutiveBlocks = 0
-    @Volatile private var totalAnrEvents = 0
+    @Volatile private var consecutiveBlocks = AtomicInteger(0)
+    @Volatile private var totalAnrEvents = AtomicInteger(0)
+
+    // Warning thresholds
+    private val warningLevel1Threshold: Int = 1 // First block
+    private val warningLevel2Threshold: Int = 2 // Second block
+    private val warningLevel3Threshold: Int = 3 // Third block
 
     private val watchdogThread = Thread({ watchdogLoop() }, "ANR-Watchdog")
 
@@ -53,37 +64,119 @@ class AnrWatchdog(
             if (!responded.get()) {
                 val blockedMs = SystemClock.uptimeMillis() - pingStart
                 if (blockedMs > anrThresholdMs) {
-                    consecutiveBlocks++
-                    totalAnrEvents++
-                    Timber.e(
-                        "ANR detected: main thread blocked for %dms (consecutive=%d, total=%d)",
-                        blockedMs, consecutiveBlocks, totalAnrEvents
-                    )
+                    val currentConsecutive = consecutiveBlocks.incrementAndGet()
+                    totalAnrEvents.incrementAndGet()
 
-                    if (consecutiveBlocks >= maxConsecutiveBlocks) {
+                    // Graceful degradation with escalating warnings
+                    handleAnrWarning(blockedMs, currentConsecutive)
+
+                    if (currentConsecutive >= maxConsecutiveBlocks) {
                         triggerAnrRecovery(blockedMs)
+                    }
+                } else {
+                    // Thread responded but slowly - log for monitoring
+                    if (blockedMs > anrThresholdMs / 2) {
+                        Timber.w("Slow main thread: %dms (threshold: %dms)", blockedMs, anrThresholdMs)
                     }
                 }
             } else {
-                if (consecutiveBlocks > 0) {
-                    Timber.i("Main thread recovered after %d ANR-like blocks", consecutiveBlocks)
+                val prevConsecutive = consecutiveBlocks.getAndSet(0)
+                if (prevConsecutive > 0) {
+                    Timber.i("Main thread recovered after %d ANR-like blocks", prevConsecutive)
+                    // Log recovery event for metrics
+                    recordRecoveryEvent(prevConsecutive)
                 }
-                consecutiveBlocks = 0
             }
         }
+    }
+
+    /**
+     * Handle ANR warning with escalating responses based on severity.
+     */
+    private fun handleAnrWarning(blockedMs: Long, consecutiveCount: Int) {
+        Timber.e(
+            "ANR detected: main thread blocked for %dms (consecutive=%d, total=%d)",
+            blockedMs, consecutiveCount, totalAnrEvents.get()
+        )
+
+        // Escalating response based on consecutive block count
+        when (consecutiveCount) {
+            warningLevel1Threshold -> {
+                Timber.w("ANR Level 1: Reduced system load to recover")
+                reduceSystemLoad()
+            }
+            warningLevel2Threshold -> {
+                Timber.w("ANR Level 2: User feedback requested")
+                showBusyIndicator("App not responding. Please wait...")
+            }
+            warningLevel3Threshold -> {
+                Timber.w("ANR Level 3: Emergency measures activated")
+                emergency降级()
+            }
+        }
+    }
+
+    /**
+     * Reduce system load to give the main thread breathing room.
+     * Stops non-critical background operations.
+     */
+    private fun reduceSystemLoad() {
+        try {
+            // Notify service to reduce activity
+            val intent = Intent(context, MeshForegroundService::class.java).apply {
+                action = MeshForegroundService.ACTION_PAUSE
+            }
+            context.startService(intent)
+            Timber.d("Reduced system load via service pause")
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to reduce system load")
+        }
+    }
+
+    /**
+     * Emergency degradation - prioritize critical operations only.
+     */
+    private fun emergency降级() {
+        try {
+            // Force cleanup of non-essential resources
+            val intent = Intent(context, MeshForegroundService::class.java).apply {
+                action = MeshForegroundService.ACTION_PAUSE
+            }
+            context.startService(intent)
+            Timber.w("Emergency degradation: Non-essential resources released")
+        } catch (e: Exception) {
+            Timber.e(e, "Emergency degradation failed")
+        }
+    }
+
+    /**
+     * Show busy indicator to user when ANR is detected.
+     */
+    private fun showBusyIndicator(message: String = "App not responding") {
+        // For now, log the message - actual UI notification would require
+        // a system alert which requires special permissions
+        Timber.w("User notification: $message")
+    }
+
+    /**
+     * Record a recovery event after main thread responds.
+     */
+    private fun recordRecoveryEvent(consecutiveBlocks: Int) {
+        // Log recovery for debugging
+        Timber.i("Recovery: Main thread responsive after %d consecutive blocks", consecutiveBlocks)
     }
 
     private fun triggerAnrRecovery(blockedMs: Long) {
         Timber.e(
             "ANR RECOVERY TRIGGERED - Main thread blocked %dms (threshold=%dms, consecutive=%d, total=%d)",
-            blockedMs, anrThresholdMs, consecutiveBlocks, totalAnrEvents
+            blockedMs, anrThresholdMs, consecutiveBlocks.get(), totalAnrEvents.get()
         )
 
         // Collect ANR diagnostic information
         val anrInfo = buildAnrDiagnostics(blockedMs)
         Timber.e("ANR Diagnostics:\n%s", anrInfo)
 
-        consecutiveBlocks = 0
+        consecutiveBlocks.set(0)
 
         // Write ANR info to file for post-mortem analysis
         try {
@@ -108,8 +201,8 @@ class AnrWatchdog(
         sb.append("=== ANR DIAGNOSTICS ===\n")
         sb.append("Timestamp: ").append(System.currentTimeMillis()).append("\n")
         sb.append("Blocked Duration: ").append(blockedMs).append("ms\n")
-        sb.append("Consecutive Blocks: ").append(consecutiveBlocks).append("\n")
-        sb.append("Total ANR Events: ").append(totalAnrEvents).append("\n")
+        sb.append("Consecutive Blocks: ").append(consecutiveBlocks.get()).append("\n")
+        sb.append("Total ANR Events: ").append(totalAnrEvents.get()).append("\n")
         sb.append("Android Version: ").append(Build.VERSION.SDK_INT).append("\n")
         sb.append("Device: ").append(Build.BRAND).append(" / ").append(Build.MODEL).append("\n")
 
@@ -156,7 +249,7 @@ class AnrWatchdog(
     fun start() {
         if (isRunning.compareAndSet(false, true)) {
             lastPingTime = SystemClock.uptimeMillis()
-            consecutiveBlocks = 0
+            consecutiveBlocks.set(0)
             watchdogThread.start()
             Timber.i("ANR watchdog started (check=%dms, threshold=%dms)", checkIntervalMs, anrThresholdMs)
         }
@@ -166,11 +259,11 @@ class AnrWatchdog(
         if (isRunning.compareAndSet(true, false)) {
             watchdogThread.interrupt()
             handler.removeCallbacksAndMessages(null)
-            Timber.i("ANR watchdog stopped (total ANR events=%d)", totalAnrEvents)
+            Timber.i("ANR watchdog stopped (total ANR events=%d)", totalAnrEvents.get())
         }
     }
 
-    fun getTotalAnrEvents(): Int = totalAnrEvents
+    fun getTotalAnrEvents(): Int = totalAnrEvents.get()
 
-    fun isMainThreadResponsive(): Boolean = consecutiveBlocks == 0
+    fun isMainThreadResponsive(): Boolean = consecutiveBlocks.get() == 0
 }

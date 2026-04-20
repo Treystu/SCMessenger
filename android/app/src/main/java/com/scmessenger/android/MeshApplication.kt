@@ -2,6 +2,11 @@ package com.scmessenger.android
 
 import android.app.Application
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import timber.log.Timber
 
 /**
  * SCMessenger Application class with Hilt dependency injection.
@@ -12,21 +17,34 @@ import dagger.hilt.android.HiltAndroidApp
 @HiltAndroidApp
 class MeshApplication : Application() {
 
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
 
-        // Storage health and maintenance (Clean non-critical, rotate logs)
-        com.scmessenger.android.utils.StorageManager.performStartupMaintenance(this)
+        // Initialize Timber logging first for proper logging
+        Timber.plant(Timber.DebugTree())
+        Timber.plant(com.scmessenger.android.utils.FileLoggingTree(this))
 
-        // Initialize Timber logging
-        timber.log.Timber.plant(timber.log.Timber.DebugTree())
+        // Storage health and maintenance - run on background thread to avoid blocking
+        // startup. These operations can be slow on large storage or busy devices.
+        applicationScope.launch {
+            try {
+                com.scmessenger.android.utils.StorageManager.performStartupMaintenance(this@MeshApplication)
+                Timber.i("Startup storage maintenance completed")
+            } catch (e: Exception) {
+                Timber.w(e, "Startup maintenance failed")
+            }
+        }
 
-        // Always plant FileLoggingTree for debugging "out and about"
-        timber.log.Timber.plant(com.scmessenger.android.utils.FileLoggingTree(this))
-
-        timber.log.Timber.i("SCMessenger application started")
+        Timber.i("SCMessenger application started")
 
         // Application-level initialization
         // The actual mesh service will be started/stopped by user action
+    }
+
+    override fun onTerminate() {
+        super.onTerminate()
+        applicationScope.cancel()
     }
 }

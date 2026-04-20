@@ -80,8 +80,34 @@ case "$1" in
         echo "=== Verifying Forward Secrecy Implementation ==="
         echo "Implementation pending - forward secrecy verification script"
         ;;
+    "android")
+        echo "=== Android Task Verification ==="
+        # Delegate to systematic script
+        ./scripts/verify_task_systematic.sh "android" "$2"
+        ;;
+    "core")
+        echo "=== Core Task Verification ==="
+        ./scripts/verify_task_systematic.sh "core" "$2"
+        ;;
+    "security")
+        echo "=== Security Task Verification ==="
+        ./scripts/verify_task_systematic.sh "security" "$2"
+        ;;
+    "network")
+        echo "=== Network Task Verification ==="
+        ./scripts/verify_task_systematic.sh "network" "$2"
+        ;;
+    "generic")
+        echo "=== Generic Task Verification ==="
+        ./scripts/verify_task_systematic.sh "generic" "$2"
+        ;;
     *)
-        echo "Usage: $0 [drift|anti-abuse|forward-secrecy]"
+        echo "Usage: $0 [drift|anti-abuse|forward-secrecy|android|core|security|network|generic] [mode]"
+        echo ""
+        echo "Modes:"
+        echo "  strict    - Exit on first failure (default)"
+        echo "  report    - Continue on failure, generate report"
+        echo "  validate  - Validation only, no fixes"
         exit 1
         ;;
 esac

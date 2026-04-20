@@ -66,6 +66,7 @@ libp2p = { workspace = true, features = [
 ] }
 quinn = "0.11"
 ureq = "2"
+tokio-tungstenite = { workspace = true }
 
 [target.'cfg(all(not(target_arch = "wasm32"), target_os = "android"))'.dependencies]
 tokio = { workspace = true, features = ["full"] }
@@ -90,6 +91,7 @@ libp2p = { workspace = true, features = [
 ] }
 ureq = "2"
 libc = "0.2"
+tokio-tungstenite = { workspace = true }
 
 [dev-dependencies]
 mockall = { workspace = true }
