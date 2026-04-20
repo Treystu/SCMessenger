@@ -1,0 +1,66 @@
+{
+  "model_capabilities": {
+    "qwen3-coder:480b:cloud": {
+      "capabilities": ["architecture", "planning", "multi_file_reasoning", "system_design"],
+      "role": "architect",
+      "size": "480b",
+      "recommended_for": ["P0_architecture", "P1_design", "complex_refactoring"]
+    },
+    "qwen3-coder-next:cloud": {
+      "capabilities": ["implementation", "bug_fixes", "feature_development", "rapid_coding"],
+      "role": "implementer",
+      "size": "80b",
+      "recommended_for": ["P0_implementation", "P1_features", "code_changes"]
+    },
+    "deepseek-v3.2:cloud": {
+      "capabilities": ["cryptography", "math", "protocol_validation", "security_audit", "unsafe_blocks"],
+      "role": "precision_validator",
+      "size": "671b",
+      "recommended_for": ["P0_security", "P0_crypto", "protocol_implementation"]
+    },
+    "deepseek-v3.1:671b:cloud": {
+      "capabilities": ["orchestration", "monitoring", "coordination", "system_oversight"],
+      "role": "orchestrator",
+      "size": "671b",
+      "recommended_for": ["orchestration", "monitoring", "coordination"]
+    },
+    "gemma4:31b:cloud": {
+      "capabilities": ["documentation", "testing", "bindings", "platform_engineering", "simple_tasks"],
+      "role": "worker",
+      "size": "31b",
+      "recommended_for": ["documentation", "unit_tests", "bindings", "P2_tasks"]
+    },
+    "gemini-3-flash-preview:cloud": {
+      "capabilities": ["quick_triage", "lint_fixes", "minor_edits", "ci_gatekeeping", "parsing"],
+      "role": "triage_router",
+      "size": "small",
+      "recommended_for": ["quick_fixes", "under_50_loc", "triage"]
+    },
+    "kimi-k2-thinking:cloud": {
+      "capabilities": ["code_review", "final_verification", "pre_merge_checks", "quality_gate"],
+      "role": "gatekeeper_reviewer",
+      "size": "1t",
+      "recommended_for": ["final_review", "pre_merge", "quality_gate"]
+    },
+    "mistral-large-3:675b:cloud": {
+      "capabilities": ["pipeline_management", "multi_agent_coordination", "swarm_orchestration"],
+      "role": "swarm_orchestrator",
+      "size": "675b",
+      "recommended_for": ["pipeline_management", "multi_agent_coordination"]
+    },
+    "glm-5.1:cloud": {
+      "capabilities": ["rust_core", "protocol_implementation", "proven_compatibility"],
+      "role": "rust_coder",
+      "size": "1.5t",
+      "recommended_for": ["rust_core", "protocol_work", "compatibility"]
+    }
+  },
+  "source_of_truth": "https://ollama.com/api/tags",
+  "last_updated": "2026-04-20T12:54:07Z",
+  "cloud_suffix": ":cloud",
+  "validation_rules": {
+    "any_model_with_cloud_suffix": "available_via_ollama_cloud",
+    "model_check_frequency": "before_agent_launch",
+    "fallback_strategy": "next_best_capability_match"
+  }
+}

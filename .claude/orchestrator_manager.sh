@@ -7,9 +7,43 @@ STATE_FILE=".claude/orchestrator_state.json"
 AGENT_ROOT=".claude/agents"
 POOL_CONFIG=".claude/agent_pool.json"
 MAX_SUBAGENTS=2
+ORCHESTRATOR_PID_FILE=".claude/orchestrator.pid"
+
+# Get orchestrator PID (claude.exe process that invoked this script)
+get_orchestrator_pid() {
+    if [ -f "$ORCHESTRATOR_PID_FILE" ]; then
+        cat "$ORCHESTRATOR_PID_FILE"
+        return
+    fi
+    # Try to find the parent claude.exe PID
+    local ppid=$$
+    if command -v wmic > /dev/null 2>&1; then
+        # Windows: find claude.exe process that is parent of this script
+        local claude_pid=$(wmic process where "processid='$ppid'" get parentprocessid /value 2>/dev/null | grep -o '[0-9]\+')
+        echo "$claude_pid"
+    else
+        # Unix: assume orchestrator is the parent of this script (should be claude process)
+        echo "$PPID"
+    fi
+}
+
+store_orchestrator_pid() {
+    local pid=$(get_orchestrator_pid)
+    if [ -n "$pid" ]; then
+        echo "$pid" > "$ORCHESTRATOR_PID_FILE"
+        echo "Orchestrator PID stored: $pid"
+    else
+        echo "Warning: Could not determine orchestrator PID" >&2
+    fi
+}
+
+remove_orchestrator_pid() {
+    rm -f "$ORCHESTRATOR_PID_FILE"
+}
 
 count_active_agents() {
     local count=0
+
     # Count CLI agents (PID-based)
     if [ -d "$AGENT_ROOT" ]; then
         for pidfile in "$AGENT_ROOT"/*/pid; do
@@ -21,14 +55,22 @@ count_active_agents() {
             fi
         done
     fi
-    # Count native agents (marker-based)
-    if [ -d "$AGENT_ROOT" ]; then
-        for marker in "$AGENT_ROOT"/*/native_marker; do
-            if [ -f "$marker" ]; then
-                ((count++))
-            fi
-        done
+
+    # Count actual running native Claude processes (Windows)
+    if command -v wmic > /dev/null 2>&1; then
+        # Windows system - use wmic to count claude.exe processes
+        claude_count=$(wmic process where "name like '%claude%'" get processid 2>/dev/null | grep -c "[0-9]")
+        if [ "$claude_count" -gt 0 ]; then
+            count=$((count + claude_count - 1))  # Subtract 1 to exclude the current orchestrator process
+        fi
+    else
+        # Unix system - use ps to count claude processes
+        claude_count=$(ps aux | grep -E "[c]laude" | grep -v grep | wc -l)
+        if [ "$claude_count" -gt 0 ]; then
+            count=$((count + claude_count - 1))  # Subtract 1 to exclude the current orchestrator process
+        fi
     fi
+
     echo $count
 }
 
@@ -49,6 +91,8 @@ count_cli_agents() {
 
 count_native_agents() {
     local count=0
+
+    # Count native agents via marker files (existing method)
     if [ -d "$AGENT_ROOT" ]; then
         for marker in "$AGENT_ROOT"/*/native_marker; do
             if [ -f "$marker" ]; then
@@ -56,6 +100,22 @@ count_native_agents() {
             fi
         done
     fi
+
+    # Count actual running native Claude processes (Windows)
+    if command -v wmic > /dev/null 2>&1; then
+        # Windows system - use wmic to count claude.exe processes
+        claude_count=$(wmic process where "name like '%claude%'" get processid 2>/dev/null | grep -c "[0-9]")
+        if [ "$claude_count" -gt 0 ]; then
+            count=$((count + claude_count - 1))  # Subtract 1 to exclude the current orchestrator process
+        fi
+    else
+        # Unix system - use ps to count claude processes
+        claude_count=$(ps aux | grep -E "[c]laude" | grep -v grep | wc -l)
+        if [ "$claude_count" -gt 0 ]; then
+            count=$((count + claude_count - 1))  # Subtract 1 to exclude the current orchestrator process
+        fi
+    fi
+
     echo $count
 }
 
@@ -196,6 +256,19 @@ for a in cfg.get('agents', []):
     local agent_id="${agent_name}_$(date +%s)"
 
     if [ "$launch_type" = "native" ]; then
+        # Native agent: validate model before creating marker
+        echo "Validating model $model before launch..."
+
+        # Source the model validation template
+        if [ -f "$PWD/.claude/model_validation_template.sh" ]; then
+            source "$PWD/.claude/model_validation_template.sh"
+            validated_model=$(validate_model_before_launch "$model" "$subagent_type")
+            echo "Using validated model: $validated_model"
+            model="$validated_model"
+        else
+            echo "⚠️  Model validation template not found, proceeding with $model"
+        fi
+
         # Native agent: create marker file for tracking
         mkdir -p "$AGENT_ROOT/$agent_id"
         cat > "$AGENT_ROOT/$agent_id/native_marker" <<EOF
@@ -213,7 +286,19 @@ EOF
         echo "NOTE: Native agents are launched via Claude Code's Agent tool."
         echo "The Lead Orchestrator should invoke Agent({subagent_type: \"$subagent_type\", model: \"$model\"$([ -n "$isolation" ] && echo ", isolation: \"$isolation\"" )}) with the task prompt."
     else
-        # CLI agent: try primary model, fallback if unavailable
+        # CLI agent: validate model before launch
+        echo "Validating model $model before launch..."
+
+        # Source the model validation template
+        if [ -f "$PWD/.claude/model_validation_template.sh" ]; then
+            source "$PWD/.claude/model_validation_template.sh"
+            validated_model=$(validate_model_before_launch "$model" "$subagent_type")
+            echo "Using validated model: $validated_model"
+            model="$validated_model"
+        else
+            echo "⚠️  Model validation template not found, proceeding with $model"
+        fi
+
         echo "Launching CLI agent: $agent_id with model $model"
         if ! ./scripts/launch_agent.sh "$model" "$agent_id" start 2>/dev/null; then
             if [ -n "$fallback_model" ]; then
