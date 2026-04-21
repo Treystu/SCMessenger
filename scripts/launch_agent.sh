@@ -114,30 +114,45 @@ EOF
 start_agent() {
     log "INFO" "Starting agent $AGENT_ID with model $AGENT_MODEL"
 
+    # Create a persistent stdin pipe so the backgrounded Claude process
+    # doesn't immediately exit when the parent script's stdin closes.
+    # The pipe delivers the initial prompt, then stays open via tail -f /dev/null.
+    local stdin_pipe="$AGENT_WORK_DIR/stdin_pipe"
+    rm -f "$stdin_pipe"
+    mkfifo "$stdin_pipe" 2>/dev/null || true
+
+    # Write the initial prompt to the pipe, then keep it open indefinitely
+    # so the Claude process never sees EOF on stdin.
+    (echo "$AGENT_PROMPT"; exec tail -f /dev/null) > "$stdin_pipe" &
+    local writer_pid=$!
+    echo "$writer_pid" > "$AGENT_WORK_DIR/writer_pid"
+
     # Launch via ollama launch wrapper for Ollama Cloud model routing
     # --dangerously-skip-permissions for autonomous operation
+    # stdin comes from the persistent pipe so the process stays alive
     ollama launch claude --model "$AGENT_MODEL" \
         -- --dangerously-skip-permissions \
-        -- "$AGENT_PROMPT" \
+        < "$stdin_pipe" \
         >> "$AGENT_LOG" 2>&1 &
 
     local agent_pid=$!
     echo "$agent_pid" > "$AGENT_PID"
     disown $agent_pid 2>/dev/null
+    disown $writer_pid 2>/dev/null
 
-    log "INFO" "Agent started with PID: $agent_pid"
+    log "INFO" "Agent started with PID: $agent_pid (stdin writer PID: $writer_pid)"
 
     # Verify agent is running
     sleep 3
     if kill -0 "$agent_pid" 2>/dev/null; then
         log "INFO" "Agent process verified as running"
-
-        # Prompt sent via stdin for continuous interactive operation
-        log "INFO" "Agent process started successfully - prompt sent via stdin for continuous operation"
-
+        log "INFO" "Agent process started successfully - prompt delivered via persistent stdin pipe"
         return 0
     else
         log "ERROR" "Agent process failed to start"
+        # Clean up writer if agent died
+        kill "$writer_pid" 2>/dev/null || true
+        rm -f "$stdin_pipe"
         return 1
     fi
 }
@@ -198,6 +213,19 @@ restart_agent() {
 
 stop_agent() {
     log "INFO" "Stopping agent $AGENT_ID"
+
+    # Kill the stdin writer process if it exists
+    if [ -f "$AGENT_WORK_DIR/writer_pid" ]; then
+        local writer_pid=$(cat "$AGENT_WORK_DIR/writer_pid")
+        if kill -0 "$writer_pid" 2>/dev/null; then
+            kill "$writer_pid" 2>/dev/null || true
+            log "INFO" "Stdin writer stopped (PID: $writer_pid)"
+        fi
+        rm -f "$AGENT_WORK_DIR/writer_pid"
+    fi
+
+    # Clean up the named pipe
+    rm -f "$AGENT_WORK_DIR/stdin_pipe"
 
     if [ -f "$AGENT_PID" ]; then
         local agent_pid=$(cat "$AGENT_PID")

@@ -1,5 +1,6 @@
 #!/bin/bash
 # Model Validation Template for Agent Launch
+# Returns ONLY the model name on stdout; all status messages go to stderr.
 
 MODEL_API="https://ollama.com/api/tags"
 
@@ -15,8 +16,7 @@ validate_model_before_launch() {
     # Check model availability
     base_model="${model%:cloud}"
     if ! curl -s "$MODEL_API" | grep -q "\"$base_model\""; then
-        echo "❌ CRITICAL: Model $model not available via Ollama Cloud"
-        echo "   Attempting fallback to next best model for $agent_type"
+        echo "Model $model not available via Ollama Cloud, using fallback" >&2
 
         # Fallback logic based on agent type
         case "$agent_type" in
@@ -31,11 +31,12 @@ validate_model_before_launch() {
             *) fallback="qwen3-coder-next:cloud" ;;
         esac
 
-        echo "   Falling back to: $fallback"
+        echo "Falling back to: $fallback" >&2
         model="$fallback"
     else
-        echo "✅ Model $model verified available"
+        echo "Model $model verified available" >&2
     fi
 
+    # Only the model name goes to stdout — caller captures this line only
     echo "$model"
 }
