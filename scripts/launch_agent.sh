@@ -114,18 +114,12 @@ EOF
 start_agent() {
     log "INFO" "Starting agent $AGENT_ID with model $AGENT_MODEL"
 
-    # Write the agent prompt to a temp file so we can pass it as a positional arg
-    local prompt_file="$AGENT_WORK_DIR/prompt.txt"
-    echo "$AGENT_PROMPT" > "$prompt_file"
-
     # Launch via ollama launch wrapper for Ollama Cloud model routing.
-    # Use --print (-p) mode with the prompt as a positional argument for
-    # non-interactive operation. --dangerously-skip-permissions for autonomous mode.
-    # Pipe /dev/null to stdin so the process doesn't wait for terminal input.
+    # Syntax: ollama launch claude --model <model> -- --dangerously-skip-permissions -- "<prompt>"
+    # The prompt is passed as a positional argument to Claude Code.
     ollama launch claude --model "$AGENT_MODEL" \
-        -- -p --dangerously-skip-permissions \
+        -- --dangerously-skip-permissions \
         -- "$AGENT_PROMPT" \
-        < /dev/null \
         >> "$AGENT_LOG" 2>&1 &
 
     local agent_pid=$!
@@ -138,7 +132,7 @@ start_agent() {
     sleep 3
     if kill -0 "$agent_pid" 2>/dev/null; then
         log "INFO" "Agent process verified as running"
-        log "INFO" "Agent process started successfully - running in --print mode"
+        log "INFO" "Agent process started successfully - prompt delivered as positional argument"
         return 0
     else
         log "ERROR" "Agent process failed to start"
