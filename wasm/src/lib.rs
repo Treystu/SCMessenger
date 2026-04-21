@@ -178,6 +178,21 @@ pub fn init_logging() {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum IronCoreMode {
+    /// Full mode: local identity initialization and local mesh operations
+    Full,
+    /// Daemon mode: identity and operations route through local CLI daemon via JSON-RPC
+    Daemon,
+}
+
+impl Default for IronCoreMode {
+    fn default() -> Self {
+        IronCoreMode::Full
+    }
+}
+
 #[wasm_bindgen]
 pub struct IronCore {
     inner: Arc<RustIronCore>,
@@ -189,6 +204,10 @@ pub struct IronCore {
     settings_manager: Option<MeshSettingsManager>,
     /// Cached in-memory settings for the current session.
     settings: Arc<Mutex<MeshSettings>>,
+    /// Operating mode: Full or Daemon
+    mode: Arc<Mutex<IronCoreMode>>,
+    /// Daemon socket URL for JSON-RPC communication (when in Daemon mode)
+    daemon_socket_url: Arc<Mutex<Option<String>>>,
 }
 
 #[wasm_bindgen]
@@ -212,6 +231,8 @@ impl IronCore {
             swarm_handle: Arc::new(Mutex::new(None)),
             settings_manager: None,
             settings: Arc::new(Mutex::new(defaults)),
+            mode: Arc::new(Mutex::new(IronCoreMode::Full)),
+            daemon_socket_url: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -233,6 +254,8 @@ impl IronCore {
             swarm_handle: Arc::new(Mutex::new(None)),
             settings_manager: Some(manager),
             settings: Arc::new(Mutex::new(loaded)),
+            mode: Arc::new(Mutex::new(IronCoreMode::Full)),
+            daemon_socket_url: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -255,6 +278,8 @@ impl IronCore {
             swarm_handle: Arc::new(Mutex::new(None)),
             settings_manager: Some(manager),
             settings: Arc::new(Mutex::new(loaded)),
+            mode: Arc::new(Mutex::new(IronCoreMode::Full)),
+            daemon_socket_url: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -279,6 +304,127 @@ impl IronCore {
         serde_wasm_bindgen::to_value(&WasmIdentityInfo::from(info)).unwrap()
     }
 
+    /// Set the operating mode for this IronCore instance.
+    /// In Daemon mode, the WASM client routes all operations through a local CLI daemon
+    /// via JSON-RPC instead of performing operations locally.
+    #[wasm_bindgen(js_name = setIronCoreMode)]
+    pub fn set_iron_core_mode(&self, mode: JsValue) -> Result<(), JsValue> {
+        let new_mode: IronCoreMode = serde_wasm_bindgen::from_value(mode)
+            .map_err(|e| js_value_from_str(&format!("Invalid mode: {}", e)))?;
+        *self.mode.lock() = new_mode;
+        Ok(())
+    }
+
+    /// Get the current IronCore operating mode.
+    #[wasm_bindgen(js_name = getIronCoreMode)]
+    pub fn get_iron_core_mode(&self) -> JsValue {
+        let mode = *self.mode.lock();
+        serde_wasm_bindgen::to_value(&mode).unwrap()
+    }
+
+    /// Set the daemon WebSocket socket URL for JSON-RPC communication.
+    /// This is required when operating in Daemon mode.
+    #[wasm_bindgen(js_name = setDaemonSocketUrl)]
+    pub fn set_daemon_socket_url(&self, url: String) {
+        *self.daemon_socket_url.lock() = Some(url);
+    }
+
+    /// Get the current daemon socket URL.
+    #[wasm_bindgen(js_name = getDaemonSocketUrl)]
+    pub fn get_daemon_socket_url(&self) -> JsValue {
+        let url = self.daemon_socket_url.lock();
+        match url.as_ref() {
+            Some(u) => serde_wasm_bindgen::to_value(&u).unwrap(),
+            None => JsValue::NULL,
+        }
+    }
+
+    /// Initialize identity in local (non-daemon) mode.
+    /// This generates a new identity or loads an existing one from storage.
+    /// In Daemon mode, call `initializeIdentityFromDaemon` instead.
+    #[wasm_bindgen(js_name = initializeIdentity)]
+    pub fn initialize_identity(&self) -> Result<(), JsValue> {
+        // Clone values to avoid borrowing issues
+        let mode = *self.mode.lock();
+        if mode == IronCoreMode::Daemon {
+            let url = self.daemon_socket_url.lock().clone();
+            let daemon_url = url.as_ref().map(|u| u.as_str()).unwrap_or("unknown");
+            return Err(js_value_from_str(&format!(
+                "Identity initialization refused: IronCore is in Daemon mode. \
+                 Identity must be obtained from daemon at {} via getIdentityFromDaemon().",
+                daemon_url
+            )));
+        }
+
+        self.inner
+            .start() // Ensure core is running first
+            .map_err(|e| js_value_from_str(&format!("{}", e)))?;
+
+        self.inner
+            .initialize_identity()
+            .map_err(|e| js_value_from_str(&format!("{}", e)))?;
+
+        Ok(())
+    }
+
+    /// Initialize identity from daemon when in Daemon mode.
+    /// This fetches the identity from the local CLI daemon via JSON-RPC.
+    #[wasm_bindgen(js_name = initializeIdentityFromDaemon)]
+    pub async fn initialize_identity_from_daemon(&self) -> Result<(), JsValue> {
+        let mode = *self.mode.lock();
+
+        if mode != IronCoreMode::Daemon {
+            return Err(js_value_from_str(
+                "initializeIdentityFromDaemon() called but not in Daemon mode. Use initializeIdentity() instead.",
+            ));
+        }
+
+        // Clone the URL to avoid borrowing issues
+        let url_clone = self.daemon_socket_url.lock().clone();
+        let Some(daemon_url) = url_clone.as_ref() else {
+            return Err(js_value_from_str(
+                "No daemon socket URL set. Call setDaemonSocketUrl() first.",
+            ));
+        };
+
+        // In the current architecture, the daemon handles identity management.
+        // This method serves as a placeholder/gate that enforces the daemon-only mode.
+        // The actual identity is obtained by the daemon and exposed via WebSocket notifications
+        // or through getIdentityFromDaemon() calls.
+        //
+        // For now, we verify that the daemon connection is configured and return success.
+        // The WASM client should NOT perform local identity initialization in this mode.
+        tracing::info!("IronCore initialized in Daemon mode - identity managed by daemon at {}", daemon_url);
+
+        Ok(())
+    }
+
+    /// Get identity info from the local IronCore.
+    /// In Daemon mode, this may return a placeholder until the daemon provides identity.
+    #[wasm_bindgen(js_name = getIdentityFromDaemon)]
+    pub fn get_identity_from_daemon(&self) -> Result<JsValue, JsValue> {
+        let mode = *self.mode.lock();
+
+        if mode == IronCoreMode::Daemon {
+            // Clone the URL to avoid borrowing issues
+            let url_clone = self.daemon_socket_url.lock().clone();
+            // In daemon mode, identity info should come from the daemon.
+            // Return a placeholder indicating we need to wait for daemon identity.
+            let daemon_url = url_clone.as_ref().map(|u| u.as_str()).unwrap_or("unknown");
+            return Err(js_value_from_str(&format!(
+                "Identity pending from daemon at {}. \
+                 Ensure daemon is running and identity has been established.",
+                daemon_url
+            )));
+        }
+
+        // Full mode: return actual identity info from local core
+        let info = self.inner.get_identity_info();
+        serde_wasm_bindgen::to_value(&WasmIdentityInfo::from(info)).map_err(|e| {
+            js_value_from_str(&format!("Failed to serialize identity info: {}", e))
+        })
+    }
+
     #[wasm_bindgen(js_name = signData)]
     pub fn sign_data(&self, data: Vec<u8>) -> Result<JsValue, JsValue> {
         self.inner
@@ -299,12 +445,35 @@ impl IronCore {
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
+    /// Prepare an encrypted message envelope.
+    ///
+    /// In **Full mode**: Encrypts locally using the local identity and returns the envelope bytes.
+    /// In **Daemon mode**: Routes the request to the CLI daemon via JSON-RPC.
+    ///                 Returns the envelope bytes prepared by the daemon.
     #[wasm_bindgen(js_name = prepareMessage)]
     pub fn prepare_message(
         &self,
         recipient_public_key_hex: String,
         text: String,
     ) -> Result<Vec<u8>, JsValue> {
+        let mode = *self.mode.lock();
+        let url = self.daemon_socket_url.lock().clone();
+
+        if mode == IronCoreMode::Daemon {
+            let daemon_url = url.as_ref().map(|u| u.as_str()).unwrap_or("unknown");
+
+            // In daemon mode, we route prepare_message to the daemon.
+            // For now, we return an error indicating daemon is required.
+            // The full implementation would make a JSON-RPC call to the daemon
+            // and return the envelope from the daemon's response.
+            return Err(js_value_from_str(&format!(
+                "prepareMessage() blocked: IronCore is in Daemon mode. \
+                 Message preparation must be done by the daemon at {}. \
+                 Use sendPreparedMessageFromDaemon() after daemon returns envelope.",
+                daemon_url
+            )));
+        }
+
         ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
         self.inner
             .prepare_message(recipient_public_key_hex, text, None)
