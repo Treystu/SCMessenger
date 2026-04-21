@@ -6,9 +6,13 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Build
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
 import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -230,6 +234,35 @@ class NetworkDetector @Inject constructor(
             downstreamBandwidth = capabilities?.linkDownstreamBandwidthKbps ?: 0,
             recommendedTransports = getTransportPriority()
         )
+    }
+
+    /**
+     * P0_NETWORK_001: Probe a set of host:port pairs for reachability.
+     * Uses parallel TCP socket probes with a short timeout.
+     * Returns a map of "host:port" to reachability (true = reachable).
+     * Advisory only — used to deprioritize blocked addresses, not exclude them.
+     */
+    suspend fun probePorts(
+        targets: List<Pair<String, Int>>,
+        timeoutMs: Long = 1500L
+    ): Map<String, Boolean> = kotlinx.coroutines.coroutineScope {
+        val results = ConcurrentHashMap<String, Boolean>()
+        targets.map { (host, port) ->
+            kotlinx.coroutines.async(kotlinx.coroutines.Dispatchers.IO) {
+                val key = "$host:$port"
+                val reachable = try {
+                    val socket = java.net.Socket()
+                    socket.connect(java.net.InetSocketAddress(host, port), timeoutMs.toInt())
+                    socket.close()
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+                results[key] = reachable
+                Timber.d("Port probe: %s = %s", key, if (reachable) "open" else "blocked")
+            }
+        }.awaitAll()
+        results.toMap()
     }
 
     companion object {
