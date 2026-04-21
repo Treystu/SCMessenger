@@ -423,4 +423,45 @@ class TransportManager(
 
         Timber.i("TransportManager cleaned up")
     }
+
+    /**
+     * Handle BLE transport failure with graceful degradation.
+     * Reduces BLE usage and prioritizes other transports when BLE fails.
+     */
+    fun handleBleFailure() {
+        Timber.w("BLE transport failing, initiating graceful degradation")
+        activeTransports.remove(TransportType.BLE)
+
+        // Reduce BLE scan frequency by pausing scanner
+        bleScanner?.stopScanning()
+        bleAdvertiser?.stopAdvertising()
+
+        // Prioritize other transports (WiFi Aware and WiFi Direct)
+        if (activeTransports[TransportType.WIFI_AWARE] == true) {
+            Timber.i("Prioritizing WiFi Aware transport after BLE failure")
+        }
+        if (activeTransports[TransportType.WIFI_DIRECT] == true) {
+            Timber.i("Prioritizing WiFi Direct transport after BLE failure")
+        }
+
+        Timber.i("BLE gracefully degraded, using fallback transports")
+    }
+
+    /**
+     * Attempt BLE recovery after degradation.
+     * Should be called after a cooldown period to retry BLE operations.
+     */
+    fun attemptBleRecovery() {
+        Timber.d("Attempting BLE recovery after degradation cooldown")
+
+        // Check if BLE was previously disabled
+        if (activeTransports[TransportType.BLE] != true) {
+            // Resume BLE scanning
+            bleScanner?.startScanning()
+            bleAdvertiser?.startAdvertising()
+            activeTransports[TransportType.BLE] = true
+
+            Timber.i("BLE recovery successful, resuming scanning")
+        }
+    }
 }

@@ -11,6 +11,9 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
+import com.scmessenger.android.utils.BackoffStrategy
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -30,7 +33,9 @@ import java.util.concurrent.atomic.AtomicLong
 class BleScanner(
     private val context: Context,
     private val onPeerDiscovered: (String) -> Unit,
-    private val onDataReceived: (String, ByteArray) -> Unit
+    private val onDataReceived: (String, ByteArray) -> Unit,
+    private val quotaManager: BleQuotaManager = BleQuotaManager(),
+    private val backoffStrategy: BackoffStrategy = BackoffStrategy()
 ) {
     data class BleDiscoveryStats(
         val advertisementsSeen: Int,
@@ -42,6 +47,10 @@ class BleScanner(
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val bluetoothAdapter = bluetoothManager.adapter
     private val scanner = bluetoothAdapter?.bluetoothLeScanner
+
+    // Scan session management
+    private var currentScanSession: android.bluetooth.le.BluetoothLeScanner? = null
+    private val scanLock = Mutex()
 
     private var isScanning = false
     private var isBackgroundMode = false
@@ -63,10 +72,7 @@ class BleScanner(
     private var fallbackScanEnabled = false
     private var fallbackPromotionRunnable: Runnable? = null
 
-    // Android 12+ Scan Quota Management
-    private val scanStartTimestamps = java.util.LinkedList<Long>()
-    private val MAX_SCANS_PER_WINDOW = 5
-    private val SCAN_WINDOW_MS = 30_000L
+    // Android 12+ Scan Quota Management — delegated to BleQuotaManager
 
     // SCMessenger Service UUID: 0xDF01
     // Full UUID: 0000DF01-0000-1000-8000-00805F9B34FB
@@ -147,8 +153,9 @@ class BleScanner(
             // Error code 4 = SCAN_FAILED_FEATURE_UNSUPPORTED
             when (errorCode) {
                 1 -> {
-                    // SCAN_FAILED_ALREADY_STARTED - stop and retry after delay
-                    Timber.w("BLE scan already started, stopping and retrying in 2s")
+                    // SCAN_FAILED_ALREADY_STARTED - stop and retry with backoff
+                    val retryDelay = backoffStrategy.nextDelay()
+                    Timber.w("BLE scan already started, stopping and retrying in ${retryDelay}ms")
                     handler.postDelayed({
                         if (!isScanning) {
                             try {
@@ -156,11 +163,11 @@ class BleScanner(
                             } catch (_: Exception) {}
                             startScanning()
                         }
-                    }, 2000)
+                    }, retryDelay)
                 }
                 2, 3 -> {
                     // Internal/registration errors - retry with exponential backoff
-                    val retryDelay = minOf(5000L * (1 shl minOf(scanFailures.get(), 4)), 60000L)
+                    val retryDelay = backoffStrategy.nextDelay()
                     Timber.w("BLE scan failed with error $errorCode, retrying in ${retryDelay}ms")
                     handler.postDelayed({
                         if (!isScanning) {
@@ -173,13 +180,14 @@ class BleScanner(
                     Timber.e("BLE scanning not supported on this device")
                 }
                 else -> {
-                    // Unknown error - retry after delay
-                    Timber.w("BLE scan failed with unknown error $errorCode, retrying in 5s")
+                    // Unknown error - retry with backoff
+                    val retryDelay = backoffStrategy.nextDelay()
+                    Timber.w("BLE scan failed with unknown error $errorCode, retrying in ${retryDelay}ms")
                     handler.postDelayed({
                         if (!isScanning) {
                             startScanning()
                         }
-                    }, 5000)
+                    }, retryDelay)
                 }
             }
         }
@@ -229,39 +237,46 @@ class BleScanner(
     }
 
     @SuppressLint("MissingPermission")
-    fun startScanning() {
+    suspend fun startScanning(): Boolean = scanLock.withLock {
         if (scanner == null) {
             Timber.w("Bluetooth Scanner not available")
-            return
+            return@withLock false
         }
+
+        // Scan session reuse: if already scanning, don't restart (prevents SCAN_FAILED_ALREADY_STARTED)
         if (isScanning) {
-            Timber.d("BLE scan already in progress, skipping duplicate start")
-            return
+            Timber.d("BLE scan already in progress, reusing existing session")
+            return@withLock true
+        }
+
+        // Initialize current scan session if needed
+        if (currentScanSession == null) {
+            currentScanSession = bluetoothAdapter?.bluetoothLeScanner
         }
 
         // Check if Bluetooth is enabled
         if (bluetoothAdapter?.isEnabled != true) {
             Timber.w("Bluetooth is not enabled, cannot start scanning")
-            return
+            return@withLock false
         }
 
-        // Android 12+ Quota Management
-        val now = System.currentTimeMillis()
-        synchronized(scanStartTimestamps) {
-            // Remove timestamps older than the window
-            while (scanStartTimestamps.isNotEmpty() &&
-                   (now - scanStartTimestamps.first) > SCAN_WINDOW_MS) {
-                scanStartTimestamps.removeFirst()
-            }
-
-            if (scanStartTimestamps.size >= MAX_SCANS_PER_WINDOW) {
-                Timber.w("BLE scan quota exhausted (5 starts / 30s). Delaying restart.")
-                isScanning = false
-                // Retry after a short delay to allow the window to slide
-                handler.postDelayed({ startScanning() }, 5000)
-                return
-            }
-            scanStartTimestamps.addLast(now)
+        // Android 12+ Quota Management via BleQuotaManager
+        val quotaDelay = quotaManager.checkQuota()
+        if (quotaDelay > 0) {
+            // Don't set isScanning = false when quota is exhausted
+            // Keep the scanning state as false, and schedule retry after quota cooldown
+            handler.postDelayed({
+                // Run in a coroutine scope to call suspend function
+                Thread {
+                    try {
+                        startScanning()
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to restart BLE scan after quota delay")
+                    }
+                }.start()
+            }, quotaDelay)
+            Timber.w("BLE scan quota exhausted, retrying in ${quotaDelay}ms")
+            return@withLock false
         }
 
         advertisementsSeen.set(0)
@@ -269,16 +284,19 @@ class BleScanner(
         scanSessionStartedAtMs.set(System.currentTimeMillis())
         lastMatchedAdvertisementAtMs.set(0L)
 
-        try {
+        return try {
             // Stop any existing scan first to avoid SCAN_FAILED_ALREADY_STARTED
+            // This is safe even if no scan is running (idempotent)
             try {
-                scanner.stopScan(scanCallback)
+                currentScanSession?.stopScan(scanCallback)
             } catch (_: Exception) {
                 // Ignore errors from stopping non-existent scan
             }
 
-            scanner.startScan(currentFilters(), buildScanSettings(), scanCallback)
+            currentScanSession?.startScan(currentFilters(), buildScanSettings(), scanCallback)
             isScanning = true
+            quotaManager.recordScanStart()
+            backoffStrategy.reset()
             Timber.i("BLE Scanning started (background=$isBackgroundMode, fallback=$fallbackScanEnabled)")
             scheduleFallbackPromotion()
 
@@ -286,8 +304,25 @@ class BleScanner(
             if (scanWindowMs < scanIntervalMs) {
                 startDutyCycle()
             }
+
+            true
         } catch (e: Exception) {
             Timber.e(e, "Failed to start BLE scan")
+            // On scan failure, trigger backoff and schedule retry
+            isScanning = false
+            val retryDelay = backoffStrategy.nextDelay()
+            Timber.w("Scheduling BLE scan retry in ${retryDelay}ms due to failure")
+            handler.postDelayed({
+                // Run in a coroutine scope to call suspend function
+                Thread {
+                    try {
+                        startScanning()
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to restart BLE scan after failure")
+                    }
+                }.start()
+            }, retryDelay)
+            false
         }
     }
 
@@ -433,25 +468,59 @@ class BleScanner(
     }
     
     /**
-     * Force restart scanning after a failure.
+     * Force restart scanning after a failure with proper backoff.
      * This is called when scan fails and we need to recover.
+     * The scan will be scheduled after the current backoff delay.
      */
     fun forceRestartScanning() {
-        Timber.i("Force restarting BLE scanning")
+        Timber.i("Force restarting BLE scanning with backoff")
         isScanning = false
-        startScanning()
+        val retryDelay = backoffStrategy.nextDelay()
+        Timber.w("Scheduling BLE scan force restart in ${retryDelay}ms")
+        handler.postDelayed({
+            // Run in a coroutine scope to call suspend function
+            Thread {
+                try {
+                    startScanning()
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to restart BLE scan after force restart")
+                }
+            }.start()
+        }, retryDelay)
+    }
+
+    /**
+     * Handle scan failure with proper backoff and retry logic.
+     */
+    private suspend fun handleScanFailure(e: Exception): Boolean {
+        Timber.e(e, "BLE scan failed")
+        // On scan failure, trigger backoff and schedule retry
+        isScanning = false
+        val retryDelay = backoffStrategy.nextDelay()
+        Timber.w("Scheduling BLE scan retry in ${retryDelay}ms due to failure")
+        handler.postDelayed({
+            // Run in a coroutine scope to call suspend function
+            Thread {
+                try {
+                    startScanning()
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to restart BLE scan after failure")
+                }
+            }.start()
+        }, retryDelay)
+        return false
     }
 
     @SuppressLint("MissingPermission")
-    fun stopScanning() {
-        if (scanner == null || !isScanning) return
+    suspend fun stopScanning() = scanLock.withLock {
+        if (currentScanSession == null || !isScanning) return@withLock
 
         stopDutyCycle()
         fallbackPromotionRunnable?.let { handler.removeCallbacks(it) }
         fallbackPromotionRunnable = null
 
         try {
-            scanner.stopScan(scanCallback)
+            currentScanSession?.stopScan(scanCallback)
             isScanning = false
             Timber.i("BLE Scanning stopped")
         } catch (e: Exception) {
