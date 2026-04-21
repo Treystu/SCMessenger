@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.scmessenger.android.BuildConfig
 import com.scmessenger.android.data.MeshRepository
 import com.scmessenger.android.data.PreferencesRepository
+import com.scmessenger.android.network.DiagnosticsReporter
 import com.scmessenger.android.ui.diagnostics.DiagnosticsBundleFormatter
 import com.scmessenger.android.ui.diagnostics.DiagnosticsBundleInput
 import com.scmessenger.android.utils.Permissions
@@ -22,7 +23,8 @@ import javax.inject.Inject
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val meshRepository: MeshRepository,
-    private val preferencesRepository: PreferencesRepository
+    private val preferencesRepository: PreferencesRepository,
+    private val diagnosticsReporter: DiagnosticsReporter
 ) : ViewModel() {
 
     // Mesh settings
@@ -360,6 +362,18 @@ class SettingsViewModel @Inject constructor(
         meshRepository.clearDiagnosticsLogs()
     }
 
+    /** P0_ANDROID_007: Retry bootstrap with fallback strategy from diagnostics UI. */
+    fun retryBootstrap() {
+        viewModelScope.launch {
+            try {
+                meshRepository.bootstrapWithFallbackStrategy()
+                Timber.i("Bootstrap retry initiated")
+            } catch (e: Exception) {
+                Timber.e(e, "Bootstrap retry failed")
+            }
+        }
+    }
+
     fun buildTesterDiagnosticsBundle(): String {
         val missingPermissions = meshRepository.getMissingRuntimePermissions().map { permission ->
             "${Permissions.getPermissionName(permission)} ($permission)"
@@ -378,6 +392,22 @@ class SettingsViewModel @Inject constructor(
                 recentLogs = meshRepository.getDiagnosticsLogs(limit = 1500)
             )
         )
+    }
+
+    // ========================================================================
+    // DIAGNOSTICS
+    // ========================================================================
+
+    /**
+     * Get network diagnostics report from DiagnosticsReporter.
+     */
+    suspend fun getNetworkDiagnosticsReport(): DiagnosticsReporter.NetworkDiagnosticsReport? {
+        return try {
+            diagnosticsReporter.generateReport()
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to generate diagnostics report")
+            null
+        }
     }
 
 

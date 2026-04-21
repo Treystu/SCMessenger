@@ -1,6 +1,8 @@
 package com.scmessenger.android.utils
 
 import timber.log.Timber
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * Utility functions for peer key and peer ID conversion.
@@ -15,8 +17,9 @@ object PeerKeyUtils {
     /**
      * Extract public key from a libp2p peer ID.
      *
-     * Libp2p peer IDs starting with "12D3KooW" contain a base58-encoded
-     * public key in their structure.
+     * Libp2p peer IDs starting with "12D3KooW" use Ed25519 keys encoded as:
+     * - 0x12 (Ed25519 code) + 32-byte public key + 2-byte SHA256 checksum
+     * - This is base58-encoded to form the final peer ID
      *
      * @param peerId The libp2p peer ID to extract from
      * @return The extracted public key as hex string, or null if extraction fails
@@ -28,25 +31,35 @@ object PeerKeyUtils {
                 return null
             }
 
-            // Libp2p peer IDs use multibase and multihash encoding
-            // The public key is base58-encoded in the peer ID
-            // For Ed25519 keys: 12D3KooW... format contains the key
-            // We need to decode from base58 and extract the key portion
-
-            // For now, return the peer ID as-is if it looks like a public key
-            // The actual extraction requires base58 decoding and multihash parsing
-            if (peerId.length == 52 && peerId.startsWith("12D3KooW")) {
-                // This is a full libp2p peer ID - the public key portion is embedded
-                // For proper extraction, we would use a multibase/multihash library
-                // For now, return null to signal we need external processing
-                null
-            } else if (peerId.length == 64 && peerId.matches(Regex("[0-9a-fA-F]+"))) {
-                // This looks like a raw hex public key
-                peerId
-            } else {
-                Timber.w("Cannot extract public key from peer ID format: $peerId")
-                null
+            // Decode from base58
+            val decoded = base58Decode(peerId)
+            if (decoded == null || decoded.size < 35) {
+                Timber.w("Decoded peer ID too short: ${decoded?.size ?: 0}")
+                return null
             }
+
+            // Verify the format: first byte should be 0x12 (Ed25519)
+            if (decoded[0] != 0x12.toByte()) {
+                Timber.w("Invalid multihash prefix: 0x${decoded[0].toInt().toHex()}")
+                return null
+            }
+
+            // Extract the 32-byte public key (bytes 2-33)
+            val publicKeyBytes = decoded.copyOfRange(2, 34)
+
+            // Verify checksum (bytes 34+ should match first 2 bytes of SHA256(publicKey))
+            if (decoded.size >= 36) {
+                val storedChecksum = decoded.copyOfRange(decoded.size - 2, decoded.size)
+                val expectedChecksum = java.security.MessageDigest.getInstance("SHA256")
+                    .digest(publicKeyBytes)
+                    .copyOfRange(0, 2)
+                if (!storedChecksum.contentEquals(expectedChecksum)) {
+                    Timber.w("Checksum verification failed")
+                    return null
+                }
+            }
+
+            publicKeyBytes.joinToString("") { String.format("%02x", it) }
         } catch (e: Exception) {
             Timber.e("Failed to extract public key from peer ID $peerId: ${e.message}")
             null
@@ -54,10 +67,11 @@ object PeerKeyUtils {
     }
 
     /**
-     * Generate a libp2p peer ID from a public key.
+     * Generate a libp2p peer ID from a public key using proper multihash encoding.
      *
      * This generates a peer ID in the standard libp2p format:
-     * - 12D3KooW + base58-encoded(public_key_hash)
+     * - Ed25519 public key → multihash (0x12 + 32 bytes) + SHA256 checksum → base58
+     * - Format: 12D3KooW + base58-encoded(multihash)
      *
      * @param publicKey The public key as hex string (64 chars for Ed25519)
      * @return The generated libp2p peer ID
@@ -69,14 +83,36 @@ object PeerKeyUtils {
                 return generateFallbackPeerId(publicKey)
             }
 
-            // For proper libp2p peer ID generation, we need to:
-            // 1. Decode the hex public key
-            // 2. Compute the SHA256 hash
-            // 3. Encode using base58 with multihash prefix
+            // Decode hex public key to bytes
+            val publicKeyBytes = publicKey.hexToBytes()
+            if (publicKeyBytes.size != 32) {
+                Timber.w("Public key must be 32 bytes for Ed25519")
+                return generateFallbackPeerId(publicKey)
+            }
 
-            // Fallback: create a deterministic peer ID from the public key
-            // This is not a full libp2p peer ID but works for local identification
-            generateFallbackPeerId(publicKey)
+            // Create multihash: 0x12 (Ed25519) + 32-byte key
+            val multihash = ByteBuffer.allocate(34)
+                .put(0x12.toByte())
+                .put(publicKeyBytes)
+                .array()
+
+            // Add SHA256 checksum (first 2 bytes)
+            val sha256 = java.security.MessageDigest.getInstance("SHA256")
+            val checksum = sha256.digest(multihash).copyOfRange(0, 2)
+
+            val fullData = ByteBuffer.allocate(36)
+                .put(multihash)
+                .put(checksum)
+                .array()
+
+            // Encode to base58
+            val base58Encoded = base58Encode(fullData)
+            if (base58Encoded == null) {
+                Timber.w("Base58 encoding failed")
+                return generateFallbackPeerId(publicKey)
+            }
+
+            base58Encoded
         } catch (e: Exception) {
             Timber.e("Failed to generate peer ID from public key: ${e.message}")
             generateFallbackPeerId(publicKey)
@@ -135,5 +171,132 @@ object PeerKeyUtils {
      */
     fun extractPeerIdFromPublicKey(publicKey: String): String {
         return generateLibp2pPeerIdFromPublicKey(publicKey)
+    }
+
+    // --- Helper functions for base58 encoding/decoding ---
+
+    /**
+     * Convert a hex string to bytes.
+     */
+    private fun String.hexToBytes(): ByteArray {
+        check(length % 2 == 0) { "Hex string must have even length" }
+        return chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+    }
+
+    /**
+     * Convert a byte to hex string.
+     */
+    private fun Int.toHex(): String = String.format("%02x", this)
+
+    // --- Base58 encoding/decoding implementation ---
+    // Using a simple implementation without external dependencies
+
+    private val BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+    private val BASE58_CHARSET = BASE58_ALPHABET.toCharArray()
+    private val BASE58_MAP = IntArray(128) { -1 }
+    init {
+        for (i in BASE58_CHARSET.indices) {
+            BASE58_MAP[BASE58_CHARSET[i].code] = i
+        }
+    }
+
+    /**
+     * Encode bytes to base58 string.
+     */
+    private fun base58Encode(data: ByteArray): String? {
+        if (data.isEmpty()) return "1"
+
+        // Count leading zeros
+        var zeroCount = 0
+        while (zeroCount < data.size && data[zeroCount] == 0.toByte()) {
+            zeroCount++
+        }
+
+        // Convert to base58
+        val encoded = StringBuilder()
+        var carry = data.clone()
+
+        // Big integer division by 58
+        var leadingZero = true
+        while (true) {
+            var carryValue = 0
+            var j = 0
+            while (j < carry.size) {
+                carryValue = (carryValue shl 8) + (carry[j].toInt() and 0xFF)
+                carry[j] = (carryValue / 58).toByte()
+                carryValue %= 58
+                j++
+            }
+
+            if (carryValue > 0) {
+                val charIndex = carryValue
+                if (leadingZero && charIndex == 0) {
+                    encoded.append('1')
+                } else {
+                    encoded.append(BASE58_ALPHABET[charIndex])
+                    leadingZero = false
+                }
+            } else if (!leadingZero) {
+                break
+            }
+
+            // Remove processed bytes
+            val newCarry = ByteArray(carry.size - j)
+            System.arraycopy(carry, j, newCarry, 0, newCarry.size)
+            carry = newCarry
+        }
+
+        // Add leading '1's for leading zeros
+        for (i in 0 until zeroCount) {
+            encoded.insert(0, '1')
+        }
+
+        return encoded.toString().ifEmpty { null }
+    }
+
+    /**
+     * Decode base58 string to bytes.
+     */
+    private fun base58Decode(str: String): ByteArray? {
+        if (str.isEmpty()) return null
+
+        // Count leading '1's (leading zeros)
+        var zeroCount = 0
+        for (c in str) {
+            if (c == '1') zeroCount++
+            else break
+        }
+
+        // Decode each character
+        val bytes = ByteArray(str.length)
+        var position = 0
+
+        for (c in str) {
+            val digit = if (c.code < BASE58_MAP.size) BASE58_MAP[c.code] else -1
+            if (digit == -1) {
+                Timber.w("Invalid base58 character: $c")
+                return null
+            }
+
+            // Multiply by 58 and add digit
+            var carry = digit
+            for (i in position downTo 0) {
+                carry += bytes[i].toInt() * 58
+                bytes[i] = (carry and 0xFF).toByte()
+                carry = carry ushr 8
+            }
+
+            while (carry > 0) {
+                bytes[position] = (carry and 0xFF).toByte()
+                position++
+                carry = carry ushr 8
+            }
+        }
+
+        // Remove leading zeros
+        val result = ByteArray(bytes.size - zeroCount)
+        System.arraycopy(bytes, zeroCount, result, 0, result.size)
+
+        return result
     }
 }

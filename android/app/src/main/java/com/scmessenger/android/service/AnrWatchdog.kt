@@ -24,13 +24,19 @@ import java.util.concurrent.atomic.AtomicInteger
  * - Graceful degradation with user feedback
  * - System load reduction before critical failure
  * - Multiple warning levels before forced recovery
+ * - External callback interface for ANR events
  */
 class AnrWatchdog(
     private val context: Context,
     private val checkIntervalMs: Long = 5000L,
     private val anrThresholdMs: Long = 10000L,
-    private val maxConsecutiveBlocks: Int = 2
+    private val maxConsecutiveBlocks: Int = 2,
+    private val onAnrDetected: ((blockedMs: Long, consecutiveCount: Int) -> Unit)? = null
 ) {
+
+    interface OnAnrDetected {
+        fun onAnr(blockedMs: Long, consecutiveCount: Int)
+    }
     private val handler = Handler(Looper.getMainLooper())
     private val isRunning = AtomicBoolean(false)
 
@@ -111,9 +117,11 @@ class AnrWatchdog(
             }
             warningLevel3Threshold -> {
                 Timber.w("ANR Level 3: Emergency measures activated")
-                emergency降级()
+                reduceSystemLoad()
             }
         }
+
+        onAnrDetected?.invoke(blockedMs, consecutiveCount)
     }
 
     /**
@@ -134,27 +142,17 @@ class AnrWatchdog(
     }
 
     /**
-     * Emergency degradation - prioritize critical operations only.
-     */
-    private fun emergency降级() {
-        try {
-            // Force cleanup of non-essential resources
-            val intent = Intent(context, MeshForegroundService::class.java).apply {
-                action = MeshForegroundService.ACTION_PAUSE
-            }
-            context.startService(intent)
-            Timber.w("Emergency degradation: Non-essential resources released")
-        } catch (e: Exception) {
-            Timber.e(e, "Emergency degradation failed")
-        }
-    }
-
-    /**
      * Show busy indicator to user when ANR is detected.
+     * Posts a toast on the main thread since this runs on the watchdog thread.
      */
     private fun showBusyIndicator(message: String = "App not responding") {
-        // For now, log the message - actual UI notification would require
-        // a system alert which requires special permissions
+        handler.post {
+            try {
+                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to show busy indicator toast")
+            }
+        }
         Timber.w("User notification: $message")
     }
 

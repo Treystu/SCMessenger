@@ -13,18 +13,21 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Divider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.scmessenger.android.network.DiagnosticsReporter
+import com.scmessenger.android.network.DiagnosticsReporter.NetworkDiagnosticsReport
 
 /**
  * P0_ANDROID_007: User-facing network diagnostics dialog.
@@ -38,17 +41,15 @@ fun NetworkStatusDialog(
     onDismiss: () -> Unit,
     onRetryBootstrap: () -> Unit = {}
 ) {
-    val reportState = remember { mutableStateOf<DiagnosticsReporter.NetworkDiagnosticsReport?>(null) }
+    var report by remember { mutableStateOf<NetworkDiagnosticsReport?>(null) }
 
     LaunchedEffect(Unit) {
         try {
-            reportState.value = diagnosticsReporter.generateReport()
+            report = diagnosticsReporter.generateReport()
         } catch (e: Exception) {
             // Silently fail — diagnostics should never crash the UI
         }
     }
-
-    val report = reportState.value
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -66,35 +67,26 @@ fun NetworkStatusDialog(
                     // Network Type
                     DiagnosticRow(
                         label = "Network",
-                        value = report.networkType,
-                        isGood = report.networkType != "UNKNOWN"
+                        value = formatNetworkType(report!!.networkType),
+                        isGood = report!!.networkType in listOf(
+                            com.scmessenger.android.transport.NetworkType.WIFI,
+                            com.scmessenger.android.transport.NetworkType.ETHERNET,
+                            com.scmessenger.android.transport.NetworkType.VPN,
+                            com.scmessenger.android.transport.NetworkType.CELLULAR
+                        )
                     )
 
                     // Internet
                     DiagnosticRow(
                         label = "Internet",
-                        value = if (report.hasInternet) "Connected" else "Disconnected",
-                        isGood = report.hasInternet
-                    )
-
-                    // Validated
-                    DiagnosticRow(
-                        label = "Validated",
-                        value = if (report.hasValidatedInternet) "Yes" else "No",
-                        isGood = report.hasValidatedInternet
-                    )
-
-                    // Metered
-                    DiagnosticRow(
-                        label = "Metered",
-                        value = if (report.isMetered) "Yes" else "No",
-                        isGood = !report.isMetered
+                        value = if (report!!.hasInternet) "Connected" else "Disconnected",
+                        isGood = report!!.hasInternet
                     )
 
                     // DNS Results
-                    val failedDns = report.dnsResults.filterValues { !it }.keys
+                    val failedDns = report!!.dnsResults.filterValues { !it }.keys
                     if (failedDns.isNotEmpty()) {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        Divider(modifier = Modifier.padding(vertical = 4.dp))
                         Text("DNS Failures:", style = MaterialTheme.typography.labelMedium)
                         failedDns.forEach { domain ->
                             Text("  - $domain", style = MaterialTheme.typography.bodySmall)
@@ -102,30 +94,20 @@ fun NetworkStatusDialog(
                     }
 
                     // Relay Results
-                    val unreachableRelays = report.relayResults.filterValues { !it }.keys
+                    val unreachableRelays = report!!.relayResults.filterValues { !it }.keys
                     if (unreachableRelays.isNotEmpty()) {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        Divider(modifier = Modifier.padding(vertical = 4.dp))
                         Text("Unreachable Relays:", style = MaterialTheme.typography.labelMedium)
                         unreachableRelays.forEach { relay ->
                             Text("  - $relay", style = MaterialTheme.typography.bodySmall)
                         }
                     }
 
-                    // Circuit Breaker
-                    if (report.circuitBreakerStats.openCount > 0) {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                        Text(
-                            "Circuits Open: ${report.circuitBreakerStats.openCount}/${report.circuitBreakerStats.total}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-
                     // Recommendations
-                    if (report.recommendations.isNotEmpty()) {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    if (report!!.recommendations.isNotEmpty()) {
+                        Divider(modifier = Modifier.padding(vertical = 4.dp))
                         Text("Recommendations:", style = MaterialTheme.typography.labelMedium)
-                        report.recommendations.forEach { rec ->
+                        report!!.recommendations.forEach { rec ->
                             Text("  - $rec", style = MaterialTheme.typography.bodySmall)
                         }
                     }
@@ -161,4 +143,16 @@ private fun DiagnosticRow(label: String, value: String, isGood: Boolean) {
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Text(value, style = MaterialTheme.typography.bodyMedium)
     }
+}
+
+private fun formatNetworkType(type: com.scmessenger.android.transport.NetworkType): String = when (type) {
+    com.scmessenger.android.transport.NetworkType.WIFI -> "Wi-Fi"
+    com.scmessenger.android.transport.NetworkType.WIFI_RESTRICTED -> "Wi-Fi (Restricted)"
+    com.scmessenger.android.transport.NetworkType.CELLULAR -> "Cellular"
+    com.scmessenger.android.transport.NetworkType.CELLULAR_RESTRICTED -> "Cellular (Restricted)"
+    com.scmessenger.android.transport.NetworkType.CELLULAR_NO_INTERNET -> "Cellular (No Internet)"
+    com.scmessenger.android.transport.NetworkType.ETHERNET -> "Ethernet"
+    com.scmessenger.android.transport.NetworkType.VPN -> "VPN"
+    com.scmessenger.android.transport.NetworkType.BLUETOOTH -> "Bluetooth"
+    com.scmessenger.android.transport.NetworkType.UNKNOWN -> "Unknown"
 }

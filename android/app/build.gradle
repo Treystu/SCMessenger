@@ -183,13 +183,20 @@ task buildRustAndroid {
     outputs.dir('../../core/target/android-libs')
 
     doLast {
+        // Check if library already exists - if so, skip build
+        def libExists = file('../../core/target/android-libs/arm64-v8a/libscmessenger_core.so').exists()
+        if (libExists) {
+            println "Rust library already exists, skipping build"
+            return
+        }
+
         def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
         def taskNames = project.gradle.startParameter.taskNames.join(",")
         def isRelease = taskNames.contains("Release") || taskNames.contains("Bundle")
-        
+
         def rustProfile = isRelease ? ["--release"] : []
         def rustDir = isRelease ? "release" : "debug"
-        
+
         println "Starting buildRustAndroid task (Profile: ${rustDir})..."
 
         // Targets to build
@@ -207,7 +214,7 @@ task buildRustAndroid {
                 workingDir '../../'
                 // Ensure 16KB page alignment for Android 15+ compatibility
                 environment "RUSTFLAGS", "-C link-arg=-Wl,-z,max-page-size=16384"
-                
+
                 if (isWindows) {
                     commandLine 'cmd', '/c', "cargo ndk -t $target build ${rustProfile.join(' ')} -p scmessenger-core"
                 } else {
@@ -221,7 +228,7 @@ task buildRustAndroid {
             // Copy library to the expected location
             def sourceFile = file("../../target/${target}/${rustDir}/libscmessenger_core.so")
             def destDir = file("../../core/target/android-libs/${abi}")
-            
+
             destDir.mkdirs()
             copy {
                 from sourceFile

@@ -12,8 +12,8 @@ AGENT_WORK_DIR=".claude/agents/$AGENT_ID"
 AGENT_LOG="$AGENT_WORK_DIR/agent.log"
 AGENT_PID="$AGENT_WORK_DIR/pid"
 
-# Agent prompt instructions
-AGENT_PROMPT="You are an SCMessenger Autonomous Sub-Agent. Use the /loop 5m command to check the HANDOFF/todo/ directory. If you see a task file, claim it by renaming it to IN_PROGRESS_[filename].md. Execute the required code changes, run the local compilers to verify your work, and upon success, use bash to move the file to HANDOFF/done/. If you fail after 3 attempts, append your error logs and move it back to HANDOFF/todo/. Do not stop."
+# Agent prompt instructions — interactive mode with self-paced loop
+AGENT_PROMPT="You are an SCMessenger Autonomous Sub-Agent. Your task is in HANDOFF/todo/. Claim it by moving the file to HANDOFF/IN_PROGRESS/IN_PROGRESS_[filename].md. Implement the required code changes, verify with cargo build or gradle, then move to HANDOFF/done/. If you fail after 3 attempts, move it back to HANDOFF/todo/ with error logs appended. After completing your task, pick the next file from HANDOFF/todo/ and repeat. Use /loop 5m to self-pace."
 
 # Colors for output
 RED='\033[0;31m'
@@ -114,12 +114,12 @@ EOF
 start_agent() {
     log "INFO" "Starting agent $AGENT_ID with model $AGENT_MODEL"
 
-    # Launch via ollama launch wrapper for Ollama Cloud model routing.
-    # Syntax: ollama launch claude --model <model> -- --dangerously-skip-permissions -- "<prompt>"
-    # The prompt is passed as a positional argument to Claude Code.
-    ollama launch claude --model "$AGENT_MODEL" \
+    # Launch Claude Code in interactive mode with --dangerously-skip-permissions.
+    # Pipe the agent prompt via stdin so Claude enters interactive (not --print) mode.
+    # The prompt includes /loop 5m for persistent autonomous operation.
+    # This keeps the process alive instead of one-shot exit.
+    echo "$AGENT_PROMPT" | ollama launch claude --model "$AGENT_MODEL" \
         -- --dangerously-skip-permissions \
-        -- "$AGENT_PROMPT" \
         >> "$AGENT_LOG" 2>&1 &
 
     local agent_pid=$!
@@ -132,7 +132,7 @@ start_agent() {
     sleep 3
     if kill -0 "$agent_pid" 2>/dev/null; then
         log "INFO" "Agent process verified as running"
-        log "INFO" "Agent process started successfully - prompt delivered as positional argument"
+        log "INFO" "Agent process started successfully - interactive mode with piped prompt"
         return 0
     else
         log "ERROR" "Agent process failed to start"
@@ -145,28 +145,33 @@ monitor_agent() {
     local check_interval=30
     local consecutive_failures=0
     local max_failures=3
+    local max_runtime_minutes=30
+    local start_time=$(date +%s)
 
-    log "INFO" "Starting agent monitoring for PID: $agent_pid"
+    log "INFO" "Starting agent monitoring for PID: $agent_pid (max runtime: ${max_runtime_minutes}m)"
 
     while true; do
+        local now=$(date +%s)
+        local elapsed_seconds=$((now - start_time))
+
+        # Auto-stop after max runtime to prevent zombie monitors
+        if [ $elapsed_seconds -ge $((max_runtime_minutes * 60)) ]; then
+            log "INFO" "Agent monitor timeout after ${max_runtime_minutes}m, exiting monitor"
+            return 0
+        fi
+
         # Check if agent process is still running
         if ! kill -0 "$agent_pid" 2>/dev/null; then
             ((consecutive_failures++))
             log "WARN" "Agent process not running ($consecutive_failures/$max_failures)"
 
             if [ $consecutive_failures -ge $max_failures ]; then
-                log "ERROR" "Agent process failed, attempting restart..."
-                if restart_agent; then
-                    consecutive_failures=0
-                    agent_pid=$(cat "$AGENT_PID")
-                else
-                    log "ERROR" "Agent restart failed"
-                    return 1
-                fi
+                log "ERROR" "Agent process dead after $max_failures checks, exiting monitor"
+                return 1
             fi
         else
             consecutive_failures=0
-            log "DEBUG" "Agent process healthy"
+            log "DEBUG" "Agent process healthy (${elapsed_seconds}s elapsed)"
         fi
 
         sleep $check_interval

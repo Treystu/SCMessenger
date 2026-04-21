@@ -17,8 +17,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.scmessenger.android.network.DiagnosticsReporter
+import com.scmessenger.android.ui.diagnostics.DiagnosticsBundleFormatter
+import com.scmessenger.android.ui.diagnostics.DiagnosticsBundleInput
+import com.scmessenger.android.ui.dialogs.NetworkStatusDialog
 import com.scmessenger.android.ui.viewmodels.SettingsViewModel
 import androidx.core.content.FileProvider
+import timber.log.Timber
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,6 +33,7 @@ fun DiagnosticsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
+    var showNetworkDiagnostics by remember { mutableStateOf(false) }
     var logText by remember { mutableStateOf("Loading logs...") }
 
     fun refreshLogs() {
@@ -36,6 +42,23 @@ fun DiagnosticsScreen(
 
     LaunchedEffect(Unit) {
         refreshLogs()
+    }
+
+    if (showNetworkDiagnostics) {
+        NetworkStatusDialog(
+            diagnosticsReporter = DiagnosticsReporter(
+                context = context,
+                networkDiagnostics = com.scmessenger.android.network.NetworkDiagnostics(context),
+                networkTypeDetector = com.scmessenger.android.network.NetworkTypeDetector(context),
+                failureMetrics = com.scmessenger.android.utils.NetworkFailureMetrics()
+            ),
+            onDismiss = { showNetworkDiagnostics = false },
+            onRetryBootstrap = {
+                // Retry bootstrap - call the mesh repository method
+                viewModel.retryBootstrap()
+                showNetworkDiagnostics = false
+            }
+        )
     }
 
     Scaffold(
@@ -60,6 +83,9 @@ fun DiagnosticsScreen(
                     IconButton(onClick = { shareDiagnosticsBundle(context, viewModel.buildTesterDiagnosticsBundle()) }) {
                         Icon(Icons.Default.Share, contentDescription = "Share")
                     }
+                    IconButton(onClick = { showNetworkDiagnostics = true }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Network Diagnostics")
+                    }
                 }
             )
         }
@@ -71,14 +97,39 @@ fun DiagnosticsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            AssistChip(
-                onClick = {},
-                label = {
+            // Network diagnostics card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
                     Text(
-                        "pending -> stored -> forwarding -> delivered",
-                        style = MaterialTheme.typography.labelMedium
+                        text = "Network Diagnostics",
+                        style = MaterialTheme.typography.titleMedium
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Test connectivity, DNS resolution, relay reachability, and get actionable recommendations.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = { showNetworkDiagnostics = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Run Network Diagnostics")
+                    }
                 }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Log viewer
+            Text(
+                text = "Diagnostics Logs",
+                style = MaterialTheme.typography.titleSmall
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(

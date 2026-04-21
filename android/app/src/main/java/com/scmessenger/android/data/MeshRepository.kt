@@ -240,9 +240,33 @@ open class MeshRepository(private val context: Context) {
     private fun trackNetworkFailure(nodeId: String, reason: String, exception: Exception) {
         networkFailureMetrics.recordFailure(nodeId, reason, exception)
 
-        // Trigger fallback if needed (e.g., if node is marked unreachable)
+        // Trigger fallback if node is marked unreachable
         if (networkFailureMetrics.isNodeUnreachable(nodeId)) {
-            Timber.w("Node $nodeId marked unreachable, consider alternative bootstrap sources")
+            triggerFallbackProtocol(nodeId)
+        }
+    }
+
+    /**
+     * P0_ANDROID_007: When a bootstrap node becomes unreachable, attempt alternative sources.
+     * Falls back through: environment override → remote config → static fallback → WebSocket on standard ports.
+     */
+    private fun triggerFallbackProtocol(failedNodeId: String) {
+        Timber.w("Node $failedNodeId marked unreachable, triggering fallback protocol")
+        val fallbackNodes = resolveAllBootstrapSources()
+        if (fallbackNodes.isNotEmpty()) {
+            Timber.i("Fallback protocol: ${fallbackNodes.size} alternative bootstrap nodes available")
+            val bridge = swarmBridge ?: return
+            for (addr in fallbackNodes) {
+                if (addr != failedNodeId && relayCircuitBreaker.allowRequest(addr)) {
+                    try {
+                        bridge.dial(addr)
+                        Timber.i("Fallback bootstrap dial: %s", addr)
+                        return
+                    } catch (e: Exception) {
+                        enhanceNetworkErrorLogging(e, addr)
+                    }
+                }
+            }
         }
     }
 
@@ -264,6 +288,13 @@ open class MeshRepository(private val context: Context) {
     private val relayCircuitBreaker = CircuitBreaker()
     // P0_NETWORK_001: Network detector for cellular-aware transport selection
     private val networkDetector = NetworkDetector(context)
+    // P0_ANDROID_007: Diagnostics reporter for connectivity analysis
+    private val diagnosticsReporter = com.scmessenger.android.network.DiagnosticsReporter(
+        context,
+        com.scmessenger.android.network.NetworkDiagnostics(context),
+        com.scmessenger.android.network.NetworkTypeDetector(context),
+        networkFailureMetrics
+    )
 
     // Core & Network (lazy init)
     @Volatile private var ironCore: uniffi.api.IronCore? = null
@@ -6844,10 +6875,13 @@ open class MeshRepository(private val context: Context) {
         relayCircuitBreaker.resetAll()
 
         // Build prioritized address list based on network type
+        // P0_ANDROID_007: Use resolveAllBootstrapSources() to try environment, remote, then static fallbacks
+        val baseNodes = resolveAllBootstrapSources() + WEBSOCKET_FALLBACK_NODES
         val prioritizedAddresses = if (networkDetector.isCellularNetwork) {
-            WEBSOCKET_FALLBACK_NODES + DEFAULT_BOOTSTRAP_NODES
+            // On cellular, WebSocket on standard ports first (carriers block non-standard ports)
+            WEBSOCKET_FALLBACK_NODES + baseNodes.filter { it !in WEBSOCKET_FALLBACK_NODES }
         } else {
-            DEFAULT_BOOTSTRAP_NODES + WEBSOCKET_FALLBACK_NODES
+            baseNodes
         }
 
         // Proactively probe known relay ports to deprioritize blocked addresses
@@ -7636,152 +7670,4 @@ open class MeshRepository(private val context: Context) {
         return transportHealthMonitor.getSummary()
     }
 
-    // ========================================
-    // ========================================
-    // P0_ANDROID_006: Coroutine Cancellation Cascade Fix Functions
-    // NOTE: These functions are dead code — not called from any live path.
-    // P0_ANDROID_006 task should integrate them into operational paths.
-    // P0_ANDROID_005 must NOT depend on P0_ANDROID_006 code.
-    // ========================================
-
-    /**
-     * P0_ANDROID_006: Structured concurrency scope for mesh operations.
-     *
-     * Uses SupervisorJob to prevent cancellation cascades that cause
-     * JobCancellationException storms and main thread blocking.
-     */
-    private val meshCoroutineScope = kotlinx.coroutines.CoroutineScope(
-        kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob()
-    )
-
-    /**
-     * P0_ANDROID_006: Execute an operation with proper coroutine cancellation handling.
-     *
-     * This function properly handles CancellationException by rethrowing it
-     * (graceful cancellation) while catching other exceptions and logging them.
-     */
-    private suspend fun <T> executeWithCancellationHandling(
-        block: suspend () -> T
-    ): T? {
-        return try {
-            block()
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            // Graceful cancellation - just rethrow, don't log
-            Timber.d("Operation cancelled gracefully: ${e.message}")
-            throw e
-        } catch (e: Exception) {
-            // Non-cancellation exception - log and return null
-            Timber.e("Operation failed: ${e.message}")
-            null
-        }
-    }
-
-    /**
-     * P0_ANDROID_006: Execute an operation that should not be cancellable.
-     *
-     * Uses NonCancellable context to ensure critical cleanup operations
-     * always complete even if the parent is cancelled.
-     */
-    private suspend fun <T> executeNonCancellable(
-        block: suspend () -> T
-    ): T {
-        return kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-            block()
-        }
-    }
-
-    /**
-     * P0_ANDROID_006: Isolate a critical operation from cancellation cascades.
-     *
-     * Creates an independent coroutine scope that won't cancel when parent
-     * scopes are cancelled.
-     */
-    private fun isolateCriticalOperation(
-        block: suspend () -> Unit
-    ): kotlinx.coroutines.Job {
-        return meshCoroutineScope.launch {
-            block()
-        }
-    }
-
-    /**
-     * P0_ANDROID_006: Non-blocking resource cleanup.
-     *
-     * Performs cleanup operations asynchronously without blocking
-     * the main thread or waiting for completion.
-     */
-    private fun asyncCleanup(
-        cleanup: () -> Unit
-    ) {
-        meshCoroutineScope.launch {
-            try {
-                cleanup()
-            } catch (e: Exception) {
-                Timber.e("Async cleanup failed: ${e.message}")
-            }
-        }
-    }
-
-    /**
-     * P0_ANDROID_006: Cleanup cancelled operation resources.
-     *
-     * Cleans up resources without blocking on cancellation.
-     */
-    private suspend fun cleanupCancelledOperation() {
-        try {
-            // Perform non-blocking cleanup
-            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                // Cleanup logic here
-            }
-        } catch (e: Exception) {
-            Timber.d("Cleanup skipped: ${e.message}")
-        }
-    }
-
-    /**
-     * P0_ANDROID_006: Start independent operations that won't cancel each other.
-     *
-     * Uses SupervisorJob pattern to ensure failures in one operation
-     * don't cancel other independent operations.
-     */
-    private fun startIndependentOperations(
-        operations: List<suspend () -> Unit>
-    ) {
-        operations.forEach { operation ->
-            meshCoroutineScope.launch {
-                try {
-                    operation()
-                } catch (e: Exception) {
-                    Timber.w("Operation failed but won't cancel others: ${e.message}")
-                }
-            }
-        }
-    }
-
-    /**
-     * P0_ANDROID_006: Control cancellation propagation for specific operations.
-     *
-     * Creates standalone jobs that don't cancel with parent scopes when
-     * cancellation resistance is needed.
-     */
-    private fun startNonPropagatingOperation(
-        block: suspend () -> Unit
-    ): kotlinx.coroutines.Job {
-        val standaloneJob = kotlinx.coroutines.Job()
-        return meshCoroutineScope.launch(standaloneJob) {
-            block()
-        }
-    }
-
-    /**
-     * P0_ANDROID_006: Detect and handle coroutine cancellation cascades.
-     *
-     * Monitors for excessive cancellation exceptions and takes remedial action.
-     */
-    private fun handleCancellationCascade() {
-        // Cancel existing scope to break cascade chains
-        meshCoroutineScope.cancel("Cancellation cascade detected")
-
-        Timber.w("Cancellation cascade detected and handled — scope cancelled, recreation requires architectural change")
-    }
 }

@@ -17,7 +17,7 @@ import kotlin.random.Random
  */
 class BackoffStrategy(
     private val initialDelayMs: Long = 1000L,
-    private val maxDelayMs: Long = 30000L,
+    val maxDelayMs: Long = 30000L,
     private val multiplier: Double = 2.0,
     private val jitterFactor: Double = 0.2
 ) {

@@ -22,6 +22,10 @@ import androidx.core.content.ContextCompat
 import com.scmessenger.android.data.MeshRepository
 import javax.inject.Inject
 import java.util.concurrent.atomic.AtomicBoolean
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Main activity for SCMessenger.
@@ -90,11 +94,12 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Defer heavy UI work to background to avoid blocking
-        handler.postDelayed({
-            Timber.d("Deferring heavy UI initialization")
-            initializeUiComponents()
-        }, 100L)
+        // Defer heavy UI work to background using lifecycleScope (structured concurrency)
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                initializeUiComponents()
+            }
+        }
     }
 
     /**
@@ -111,12 +116,19 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Initialize UI components after a short delay to avoid blocking onCreate.
+     * Initialize heavy UI components on a background thread.
+     * Called from lifecycleScope on Dispatchers.IO to avoid blocking onCreate.
      */
     private fun initializeUiComponents() {
-        // This method is intentionally left empty for now.
-        // Heavy UI initialization can be added here if needed.
-        Timber.d("UI components initialization completed")
+        try {
+            // Initialize repository (heavy storage/FFI operations)
+            meshRepository.initializeRepository()
+
+            // Pre-warm compose state caches
+            Timber.d("UI components initialization completed")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to initialize UI components")
+        }
     }
 
     private fun checkPermissions() {

@@ -1,56 +1,49 @@
 package com.scmessenger.android.network
 
-import com.scmessenger.android.transport.NetworkDetector
-import com.scmessenger.android.utils.CircuitBreaker
+import android.content.Context
+import com.scmessenger.android.transport.NetworkType
 import com.scmessenger.android.utils.NetworkFailureMetrics
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * P0_ANDROID_007: Aggregates network diagnostics into reports with recommendations.
+ * P0_ANDROID_007: Aggregates network diagnostics into a user-facing report.
  *
- * Pulls from ConnectivityTester, NetworkDetector, CircuitBreaker, and
- * NetworkFailureMetrics to produce a comprehensive, user-friendly diagnostics report.
+ * Combines results from NetworkDiagnostics, NetworkTypeDetector, and NetworkFailureMetrics
+ * to identify the root cause of connectivity failures and provide recommendations.
  */
 @Singleton
 class DiagnosticsReporter @Inject constructor(
-    private val connectivityTester: ConnectivityTester,
-    private val networkDetector: NetworkDetector,
-    private val circuitBreaker: CircuitBreaker,
+    private val context: Context,
+    private val networkDiagnostics: NetworkDiagnostics,
+    private val networkTypeDetector: NetworkTypeDetector,
     private val failureMetrics: NetworkFailureMetrics
 ) {
     data class NetworkDiagnosticsReport(
         val timestampMs: Long = System.currentTimeMillis(),
-        val networkType: String,
+        val networkType: NetworkType,
         val hasInternet: Boolean,
-        val hasValidatedInternet: Boolean,
-        val isMetered: Boolean,
         val dnsResults: Map<String, Boolean>,
         val portResults: Map<Int, Boolean>,
         val relayResults: Map<String, Boolean>,
-        val circuitBreakerStats: CircuitBreaker.CircuitBreakerStats,
         val failureSummary: NetworkFailureMetrics.Summary,
         val recommendations: List<String>
     )
 
     suspend fun generateReport(): NetworkDiagnosticsReport {
-        val testResults = connectivityTester.testNetworkConnectivity()
-        val netDiags = networkDetector.getNetworkDiagnostics()
-        val cbStats = circuitBreaker.getStats()
+        val testResults = networkDiagnostics.testNetworkConnectivity()
+        val networkType = networkTypeDetector.detectNetworkType()
         val failureSummary = failureMetrics.getSummary()
 
-        val recommendations = generateRecommendations(testResults, failureSummary)
+        val recommendations = generateRecommendations(testResults, failureSummary, networkType)
 
         val report = NetworkDiagnosticsReport(
-            networkType = testResults.networkType.name,
+            networkType = networkType,
             hasInternet = testResults.internetConnectivity,
-            hasValidatedInternet = testResults.hasValidatedInternet,
-            isMetered = testResults.isMetered,
             dnsResults = testResults.dnsResolution,
             portResults = testResults.portReachability,
             relayResults = testResults.relayConnectivity,
-            circuitBreakerStats = cbStats,
             failureSummary = failureSummary,
             recommendations = recommendations
         )
@@ -67,8 +60,9 @@ class DiagnosticsReporter @Inject constructor(
     }
 
     private fun generateRecommendations(
-        testResults: ConnectivityTester.TestResults,
-        failureSummary: NetworkFailureMetrics.Summary
+        testResults: NetworkDiagnostics.NetworkTestResults,
+        failureSummary: NetworkFailureMetrics.Summary,
+        networkType: NetworkType
     ): List<String> {
         val recs = mutableListOf<String>()
 
@@ -76,12 +70,22 @@ class DiagnosticsReporter @Inject constructor(
             recs.add("No internet connectivity — check Wi-Fi or cellular data")
         }
 
+        when (networkType) {
+            NetworkType.CELLULAR_RESTRICTED ->
+                recs.add("Cellular network is restricting non-standard ports — WebSocket on port 443 should work")
+            NetworkType.CELLULAR_NO_INTERNET ->
+                recs.add("Cellular network has no internet — enable data or switch to Wi-Fi")
+            NetworkType.WIFI_RESTRICTED ->
+                recs.add("Wi-Fi connected but no internet validation — check captive portal or login page")
+            else -> { /* no specific network-type recommendation */ }
+        }
+
         if (failureSummary.totalDnsFailures > 0) {
             recs.add("DNS resolution failing — try alternative DNS (8.8.8.8 or 1.1.1.1)")
         }
 
         val blockedPorts = testResults.portReachability.filterValues { !it }.keys
-        if (blockedPorts.isNotEmpty() && testResults.networkType == com.scmessenger.android.transport.NetworkType.CELLULAR) {
+        if (blockedPorts.isNotEmpty() && networkType in listOf(NetworkType.CELLULAR, NetworkType.CELLULAR_RESTRICTED)) {
             recs.add("Ports ${blockedPorts.joinToString(",")} blocked on cellular — enable WebSocket fallback")
         }
 
@@ -97,17 +101,12 @@ class DiagnosticsReporter @Inject constructor(
             recs.add("All relay servers unreachable — check firewall or try a different network")
         }
 
-        if (testResults.isMetered && testResults.networkType == com.scmessenger.android.transport.NetworkType.CELLULAR) {
-            recs.add("Metered cellular connection — app will prefer WebSocket on standard ports")
-        }
-
         return recs
     }
 
     fun formatReportForUser(report: NetworkDiagnosticsReport): String = buildString {
         appendLine("Network Status: ${report.networkType}")
         appendLine("Internet: ${if (report.hasInternet) "Connected" else "Disconnected"}")
-        appendLine("Validated: ${if (report.hasValidatedInternet) "Yes" else "No"}")
 
         val failedDns = report.dnsResults.filterValues { !it }.keys
         if (failedDns.isNotEmpty()) {
@@ -117,10 +116,6 @@ class DiagnosticsReporter @Inject constructor(
         val failedRelays = report.relayResults.filterValues { !it }.keys
         if (failedRelays.isNotEmpty()) {
             appendLine("Relays Unreachable: ${failedRelays.joinToString(", ")}")
-        }
-
-        if (report.circuitBreakerStats.openCount > 0) {
-            appendLine("Circuits Open: ${report.circuitBreakerStats.openCount}")
         }
 
         if (report.recommendations.isNotEmpty()) {

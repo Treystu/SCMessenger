@@ -46,9 +46,9 @@ class NetworkDetector @Inject constructor(
     /** Network callback for real-time updates */
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
-    /** Whether we've detected a cellular network that likely blocks non-standard ports */
+    /** Whether we've detected a cellular network (including restricted) that likely blocks non-standard ports */
     val isCellularNetwork: Boolean
-        get() = _networkType.value == NetworkType.CELLULAR
+        get() = _networkType.value == NetworkType.CELLULAR || _networkType.value == NetworkType.CELLULAR_RESTRICTED
 
     /** Whether we should prefer WebSocket on standard ports */
     val shouldPreferWebSocket: Boolean
@@ -131,10 +131,10 @@ class NetworkDetector @Inject constructor(
 
         _networkType.value = type
 
-        // If cellular, populate blocked ports
-        if (type == NetworkType.CELLULAR) {
+        // If cellular (including restricted), populate blocked ports
+        if (type == NetworkType.CELLULAR || type == NetworkType.CELLULAR_RESTRICTED) {
             _blockedPorts.value = commonlyBlockedPorts
-            Timber.w("Cellular network detected — blocking ports: %s", commonlyBlockedPorts)
+            Timber.w("Cellular network detected (%s) — blocking ports: %s", type, commonlyBlockedPorts)
         } else {
             _blockedPorts.value = emptySet()
         }
@@ -160,8 +160,22 @@ class NetworkDetector @Inject constructor(
      */
     private fun classifyNetworkType(capabilities: NetworkCapabilities): NetworkType {
         return when {
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> NetworkType.WIFI
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> NetworkType.CELLULAR
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> {
+                if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
+                    NetworkType.WIFI_RESTRICTED
+                } else {
+                    NetworkType.WIFI
+                }
+            }
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> {
+                when {
+                    !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ->
+                        NetworkType.CELLULAR_NO_INTERNET
+                    !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) ->
+                        NetworkType.CELLULAR_RESTRICTED
+                    else -> NetworkType.CELLULAR
+                }
+            }
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> NetworkType.ETHERNET
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH) -> NetworkType.BLUETOOTH
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> NetworkType.VPN
@@ -199,6 +213,19 @@ class NetworkDetector @Inject constructor(
                 FallbackTransport.QUIC,
                 FallbackTransport.TCP,
                 FallbackTransport.WEBSOCKET_WS,
+            )
+            // Restricted networks: prioritize standard-port transports
+            NetworkType.CELLULAR_RESTRICTED, NetworkType.WIFI_RESTRICTED -> listOf(
+                FallbackTransport.WEBSOCKET_WSS,
+                FallbackTransport.TCP_STANDARD,
+                FallbackTransport.WEBSOCKET_WS,
+                FallbackTransport.QUIC,
+                FallbackTransport.TCP,
+            )
+            NetworkType.CELLULAR_NO_INTERNET -> listOf(
+                // No internet: only mDNS/BLE local transports will work
+                FallbackTransport.WEBSOCKET_WSS,
+                FallbackTransport.TCP_STANDARD,
             )
             NetworkType.BLUETOOTH, NetworkType.VPN -> listOf(
                 FallbackTransport.WEBSOCKET_WSS,
@@ -273,7 +300,10 @@ class NetworkDetector @Inject constructor(
 /** Network types detected by the NetworkDetector */
 enum class NetworkType {
     WIFI,
+    WIFI_RESTRICTED,
     CELLULAR,
+    CELLULAR_RESTRICTED,
+    CELLULAR_NO_INTERNET,
     ETHERNET,
     BLUETOOTH,
     VPN,

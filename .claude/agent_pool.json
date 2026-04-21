@@ -70,10 +70,10 @@
     {
       "name": "rust-coder",
       "launch_type": "cli",
-      "model": "glm-5.1:cloud",
+      "model": "qwen3-coder-next:cloud",
       "fallback_model": "glm-5.1:cloud",
-      "purpose": "Rust core implementation with proven model compatibility",
-      "task_patterns": ["RUST", "CORE", "PROTOCOL", "CRYPTO_IMPL"],
+      "purpose": "Rust core, protocol implementation, WASM — qwen3-coder-next has proven Rust output",
+      "task_patterns": ["RUST", "CORE", "PROTOCOL", "CRYPTO_IMPL", "WASM"],
       "max_per_type": 1
     }
   ]
