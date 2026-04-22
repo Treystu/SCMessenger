@@ -8,8 +8,10 @@ import com.scmessenger.android.service.PeerEvent
 import com.scmessenger.android.service.StatusEvent
 import com.scmessenger.android.utils.toEpochSeconds
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -71,7 +73,7 @@ class DashboardViewModel @Inject constructor(
      * Refresh all dashboard data.
      */
     fun refreshData() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 _isLoading.value = true
                 _error.value = null
@@ -280,7 +282,9 @@ class DashboardViewModel @Inject constructor(
     private fun observeNetworkEvents() {
         viewModelScope.launch {
             meshRepository.discoveredPeers.collect {
-                refreshData()
+                withContext(Dispatchers.IO) {
+                    refreshData()
+                }
             }
         }
 
