@@ -14,6 +14,10 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.SwipeToDismiss
+import androidx.compose.material.DismissValue
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.rememberDismissState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -264,7 +268,7 @@ fun ContactsScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun ContactItem(
     contact: uniffi.api.Contact,
@@ -275,14 +279,8 @@ fun ContactItem(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showEditNicknameDialog by remember { mutableStateOf(false) }
 
-    val dismissState = rememberDismissState(
-        confirmValueChange = { dismissValue ->
-            if (dismissValue == DismissValue.DismissedToEnd || dismissValue == DismissValue.DismissedToStart) {
-                showDeleteDialog = true
-            }
-            false  // Don't auto-dismiss, show dialog first
-        }
-    )
+    // Material 2 API for SwipeToDismiss
+    val dismissState = rememberDismissState()
 
     SwipeToDismiss(
         state = dismissState,

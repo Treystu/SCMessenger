@@ -275,7 +275,7 @@ class NetworkDetector @Inject constructor(
     ): Map<String, Boolean> = kotlinx.coroutines.coroutineScope {
         val results = ConcurrentHashMap<String, Boolean>()
         targets.map { (host, port) ->
-            kotlinx.coroutines.async(kotlinx.coroutines.Dispatchers.IO) {
+            async(kotlinx.coroutines.Dispatchers.IO) {
                 val key = "$host:$port"
                 val reachable = try {
                     val socket = java.net.Socket()

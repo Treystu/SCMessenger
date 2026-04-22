@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
@@ -231,13 +233,13 @@ open class MeshRepository(private val context: Context) {
         return com.scmessenger.android.utils.StorageManager.getAvailableStorageMB(context)
     }
 
-    private fun enhanceNetworkErrorLogging(exception: Exception, node: String) {
+    private suspend fun enhanceNetworkErrorLogging(exception: Exception, node: String) {
         val errorDetails = classifyBootstrapError(exception, node)
         Timber.w("Bootstrap failed for $node - $errorDetails")
         trackNetworkFailure(node, errorDetails, exception)
     }
 
-    private fun trackNetworkFailure(nodeId: String, reason: String, exception: Exception) {
+    private suspend fun trackNetworkFailure(nodeId: String, reason: String, exception: Exception) {
         networkFailureMetrics.recordFailure(nodeId, reason, exception)
 
         // Trigger fallback if node is marked unreachable
@@ -250,7 +252,7 @@ open class MeshRepository(private val context: Context) {
      * P0_ANDROID_007: When a bootstrap node becomes unreachable, attempt alternative sources.
      * Falls back through: environment override → remote config → static fallback → WebSocket on standard ports.
      */
-    private fun triggerFallbackProtocol(failedNodeId: String) {
+    private suspend fun triggerFallbackProtocol(failedNodeId: String) {
         Timber.w("Node $failedNodeId marked unreachable, triggering fallback protocol")
         val fallbackNodes = resolveAllBootstrapSources()
         if (fallbackNodes.isNotEmpty()) {
@@ -1982,15 +1984,26 @@ open class MeshRepository(private val context: Context) {
 
             // 4. Start Android transports. Individual transport failures should
             // not abort the entire mesh core lifecycle.
-            kotlin.runCatching { initializeAndStartBle() }
-                .onFailure { Timber.w(it, "BLE transport failed to initialize; continuing with remaining transports") }
-            kotlin.runCatching { initializeAndStartWifi() }
-                .onFailure { Timber.w(it, "WiFi transport failed to initialize; continuing with remaining transports") }
-            kotlin.runCatching { initializeAndStartSwarm() }
-                .onFailure { Timber.w(it, "Swarm transport failed to initialize; core service remains active") }
-            ensurePendingOutboxRetryLoop()
-            ensureCoverTrafficLoop()
-            repoScope.launch { flushPendingOutbox("service_started") }
+            repoScope.launch {
+                try {
+                    initializeAndStartBle()
+                } catch (e: Exception) {
+                    Timber.w(e, "BLE transport failed to initialize; continuing with remaining transports")
+                }
+                try {
+                    initializeAndStartWifi()
+                } catch (e: Exception) {
+                    Timber.w(e, "WiFi transport failed to initialize; continuing with remaining transports")
+                }
+                try {
+                    initializeAndStartSwarm()
+                } catch (e: Exception) {
+                    Timber.w(e, "Swarm transport failed to initialize; core service remains active")
+                }
+                ensurePendingOutboxRetryLoop()
+                ensureCoverTrafficLoop()
+                flushPendingOutbox("service_started")
+            }
 
             // 5. Update State
             _serviceState.value = meshService?.getState() ?: uniffi.api.ServiceState.STOPPED
@@ -2325,7 +2338,7 @@ open class MeshRepository(private val context: Context) {
             }
         }
     }
-    private fun initializeAndStartBle() {
+    private suspend fun initializeAndStartBle() {
         val settings = loadSettings()
         if (!settings.bleEnabled) {
             Timber.d("BLE disabled in settings")
@@ -2365,7 +2378,9 @@ open class MeshRepository(private val context: Context) {
                 }
             )
         }
-        bleScanner?.startScanning()
+        repoScope.launch {
+            bleScanner?.startScanning()
+        }
 
         // BLE Advertiser: Broadcasts our presence
         if (bleAdvertiser == null) {
@@ -2909,14 +2924,26 @@ open class MeshRepository(private val context: Context) {
         pendingReceiptSendJobs.values.forEach { it.cancel() }
         pendingReceiptSendJobs.clear()
 
-        kotlin.runCatching { bleScanner?.stopScanning() }
-            .onFailure { Timber.w(it, "Failed to stop BLE scanner") }
-        kotlin.runCatching { bleAdvertiser?.stopAdvertising() }
-            .onFailure { Timber.w(it, "Failed to stop BLE advertiser") }
-        kotlin.runCatching { bleGattServer?.stop() }
-            .onFailure { Timber.w(it, "Failed to stop BLE GATT server") }
-        kotlin.runCatching { bleGattClient?.cleanup() }
-            .onFailure { Timber.w(it, "Failed to cleanup BLE GATT client") }
+        try {
+            kotlinx.coroutines.runBlocking { bleScanner?.stopScanning() }
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to stop BLE scanner")
+        }
+        try {
+            bleAdvertiser?.stopAdvertising()
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to stop BLE advertiser")
+        }
+        try {
+            bleGattServer?.stop()
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to stop BLE GATT server")
+        }
+        try {
+            bleGattClient?.cleanup()
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to cleanup BLE GATT client")
+        }
 
         kotlin.runCatching { wifiTransportManager?.stopDiscovery() }
             .onFailure { Timber.w(it, "Failed to stop WiFi transport") }
@@ -3788,12 +3815,27 @@ open class MeshRepository(private val context: Context) {
             Timber.d("Permission refresh skipped: mesh service is not running")
             return
         }
-        kotlin.runCatching { initializeAndStartBle() }
-            .onFailure { Timber.w(it, "BLE transport failed to start after permission grant") }
-        kotlin.runCatching { initializeAndStartWifi() }
-            .onFailure { Timber.w(it, "WiFi transport failed to start after permission grant") }
-        kotlin.runCatching { initializeAndStartSwarm() }
-            .onFailure { Timber.w(it, "Swarm transport failed to refresh after permission grant") }
+        repoScope.launch {
+            try {
+                initializeAndStartBle()
+            } catch (e: Exception) {
+                Timber.w(e, "BLE transport failed to start after permission grant")
+            }
+        }
+        repoScope.launch {
+            try {
+                initializeAndStartWifi()
+            } catch (e: Exception) {
+                Timber.w(e, "WiFi transport failed to start after permission grant")
+            }
+        }
+        repoScope.launch {
+            try {
+                initializeAndStartSwarm()
+            } catch (e: Exception) {
+                Timber.w(e, "Swarm transport failed to refresh after permission grant")
+            }
+        }
     }
 
     suspend fun createIdentity() {
@@ -6899,7 +6941,7 @@ open class MeshRepository(private val context: Context) {
             // Boost priority for addresses whose ports are confirmed reachable
             val port = extractPortFromMultiaddr(addr)
             val host = Regex("""/ip4/([^/]+)|/dns4/([^/]+)""").find(addr)?.groupValues?.let {
-                it[1].ifEmpty { _ -> it[2] }.ifEmpty { "" }
+                if (it[1].isNotEmpty()) it[1] else (it[2] ?: "")
             } ?: ""
             val key = "$host:$port"
             portProbeResults[key] != false // true or null (unprobed) → high priority; false → low
@@ -6915,7 +6957,7 @@ open class MeshRepository(private val context: Context) {
         val result = kotlinx.coroutines.withTimeoutOrNull(3_000L) {
             kotlinx.coroutines.coroutineScope {
                 val deferreds = candidateAddresses.map { addr ->
-                    kotlinx.coroutines.async(kotlinx.coroutines.Dispatchers.IO) {
+                    async(Dispatchers.IO) {
                         try {
                             val bridge = swarmBridge ?: return@async BootstrapAttempt.Failure(addr, "no bridge")
                             bridge.dial(addr)
@@ -6965,7 +7007,7 @@ open class MeshRepository(private val context: Context) {
             // via the TransportManager, so we just need to confirm connectivity
             var checks = 0
             while (checks < 10) {
-                val peerCount = getMeshStats().peerCount.toInt()
+                val peerCount = meshService?.getStats()?.peersDiscovered?.toInt() ?: 0
                 if (peerCount > 0) {
                     Timber.i("mDNS fallback: connected to %d LAN peer(s)", peerCount)
                     return@withTimeoutOrNull BootstrapResult.MdnsFallback("lan-peer")

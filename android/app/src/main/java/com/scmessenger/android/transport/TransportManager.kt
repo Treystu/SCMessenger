@@ -88,7 +88,7 @@ class TransportManager(
         isRunning = true
 
         // Start BLE
-        bleScanner?.startScanning()
+        scope.launch { bleScanner?.startScanning() }
         bleAdvertiser?.startAdvertising()
         bleGattServer?.start()
         bleL2capManager?.startListening()
@@ -113,7 +113,7 @@ class TransportManager(
         isRunning = false
 
         // Stop BLE
-        bleScanner?.stopScanning()
+        scope.launch { bleScanner?.stopScanning() }
         bleAdvertiser?.stopAdvertising()
         bleGattServer?.stop()
         bleL2capManager?.stopListening()
@@ -364,7 +364,7 @@ class TransportManager(
     fun enableTransport(transport: TransportType) {
         when (transport) {
             TransportType.BLE -> {
-                bleScanner?.startScanning()
+                scope.launch { bleScanner?.startScanning() }
                 bleAdvertiser?.startAdvertising()
             }
             TransportType.WIFI_AWARE -> {
@@ -388,7 +388,7 @@ class TransportManager(
     fun disableTransport(transport: TransportType) {
         when (transport) {
             TransportType.BLE -> {
-                bleScanner?.stopScanning()
+                scope.launch { bleScanner?.stopScanning() }
                 bleAdvertiser?.stopAdvertising()
             }
             TransportType.WIFI_AWARE -> {
@@ -433,7 +433,7 @@ class TransportManager(
         activeTransports.remove(TransportType.BLE)
 
         // Reduce BLE scan frequency by pausing scanner
-        bleScanner?.stopScanning()
+        scope.launch { bleScanner?.stopScanning() }
         bleAdvertiser?.stopAdvertising()
 
         // Prioritize other transports (WiFi Aware and WiFi Direct)
@@ -457,7 +457,7 @@ class TransportManager(
         // Check if BLE was previously disabled
         if (activeTransports[TransportType.BLE] != true) {
             // Resume BLE scanning
-            bleScanner?.startScanning()
+            scope.launch { bleScanner?.startScanning() }
             bleAdvertiser?.startAdvertising()
             activeTransports[TransportType.BLE] = true
 

@@ -4,6 +4,7 @@ import android.content.Context
 import com.scmessenger.android.transport.NetworkType
 import com.scmessenger.android.utils.NetworkFailureMetrics
 import timber.log.Timber
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -15,7 +16,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class DiagnosticsReporter @Inject constructor(
-    private val context: Context,
+    @ApplicationContext private val context: Context,
     private val networkDiagnostics: NetworkDiagnostics,
     private val networkTypeDetector: NetworkTypeDetector,
     private val failureMetrics: NetworkFailureMetrics

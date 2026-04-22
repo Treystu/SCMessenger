@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
 import com.scmessenger.android.utils.BackoffStrategy
+import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
@@ -59,6 +60,7 @@ class BleScanner(
     private var scanWindowMs: Long = 10000L  // 10 seconds
     private var scanIntervalMs: Long = 30000L  // 30 seconds
     private val handler = Handler(Looper.getMainLooper())
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var dutyCycleRunnable: Runnable? = null
 
     // Scan result caching to avoid duplicate processing
@@ -161,7 +163,7 @@ class BleScanner(
                             try {
                                 scanner?.stopScan(this)
                             } catch (_: Exception) {}
-                            startScanning()
+                            scope.launch { startScanning() }
                         }
                     }, retryDelay)
                 }
@@ -171,7 +173,7 @@ class BleScanner(
                     Timber.w("BLE scan failed with error $errorCode, retrying in ${retryDelay}ms")
                     handler.postDelayed({
                         if (!isScanning) {
-                            startScanning()
+                            scope.launch { startScanning() }
                         }
                     }, retryDelay)
                 }
@@ -185,7 +187,7 @@ class BleScanner(
                     Timber.w("BLE scan failed with unknown error $errorCode, retrying in ${retryDelay}ms")
                     handler.postDelayed({
                         if (!isScanning) {
-                            startScanning()
+                            scope.launch { startScanning() }
                         }
                     }, retryDelay)
                 }
@@ -203,8 +205,10 @@ class BleScanner(
 
         // Restart scanning if active
         if (isScanning) {
-            stopScanning()
-            startScanning()
+            scope.launch {
+                stopScanning()
+                startScanning()
+            }
         }
     }
 
@@ -266,14 +270,13 @@ class BleScanner(
             // Don't set isScanning = false when quota is exhausted
             // Keep the scanning state as false, and schedule retry after quota cooldown
             handler.postDelayed({
-                // Run in a coroutine scope to call suspend function
-                Thread {
+                scope.launch {
                     try {
                         startScanning()
                     } catch (e: Exception) {
                         Timber.e(e, "Failed to restart BLE scan after quota delay")
                     }
-                }.start()
+                }
             }, quotaDelay)
             Timber.w("BLE scan quota exhausted, retrying in ${quotaDelay}ms")
             return@withLock false
@@ -313,14 +316,13 @@ class BleScanner(
             val retryDelay = backoffStrategy.nextDelay()
             Timber.w("Scheduling BLE scan retry in ${retryDelay}ms due to failure")
             handler.postDelayed({
-                // Run in a coroutine scope to call suspend function
-                Thread {
+                scope.launch {
                     try {
                         startScanning()
                     } catch (e: Exception) {
                         Timber.e(e, "Failed to restart BLE scan after failure")
                     }
-                }.start()
+                }
             }, retryDelay)
             false
         }
@@ -478,14 +480,13 @@ class BleScanner(
         val retryDelay = backoffStrategy.nextDelay()
         Timber.w("Scheduling BLE scan force restart in ${retryDelay}ms")
         handler.postDelayed({
-            // Run in a coroutine scope to call suspend function
-            Thread {
+            scope.launch {
                 try {
                     startScanning()
                 } catch (e: Exception) {
                     Timber.e(e, "Failed to restart BLE scan after force restart")
                 }
-            }.start()
+            }
         }, retryDelay)
     }
 
@@ -499,14 +500,13 @@ class BleScanner(
         val retryDelay = backoffStrategy.nextDelay()
         Timber.w("Scheduling BLE scan retry in ${retryDelay}ms due to failure")
         handler.postDelayed({
-            // Run in a coroutine scope to call suspend function
-            Thread {
+            scope.launch {
                 try {
                     startScanning()
                 } catch (e: Exception) {
                     Timber.e(e, "Failed to restart BLE scan after failure")
                 }
-            }.start()
+            }
         }, retryDelay)
         return false
     }
