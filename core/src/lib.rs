@@ -689,12 +689,23 @@ impl IronCore {
             drift::RelayConfig::default(),
         )));
 
-        let abuse_reputation = Arc::new(abuse::EnhancedAbuseReputationManager::new(
-            1000,
-            abuse::spam_detection::SpamDetectionEngine::new_heuristics_only(
-                abuse::spam_detection::SpamDetectionConfig::default(),
-            ),
-        ));
+        // P0_ANTI_ABUSE_001: Reputation scores persist across sessions via StorageBackend
+        let abuse_reputation = if storage_ready {
+            Arc::new(abuse::EnhancedAbuseReputationManager::with_backend(
+                1000,
+                abuse::spam_detection::SpamDetectionEngine::new_heuristics_only(
+                    abuse::spam_detection::SpamDetectionConfig::default(),
+                ),
+                root_backend.clone(),
+            ))
+        } else {
+            Arc::new(abuse::EnhancedAbuseReputationManager::new(
+                1000,
+                abuse::spam_detection::SpamDetectionEngine::new_heuristics_only(
+                    abuse::spam_detection::SpamDetectionConfig::default(),
+                ),
+            ))
+        };
 
         // P1_CORE_003: Mycorrhizal routing engine — starts with zero-key identity,
         // replaced once identity is initialized. Provides intelligent path selection

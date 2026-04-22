@@ -1,8 +1,0 @@
-{
-  "slug": "scm-debug-mesh",
-  "name": "🕸️ SCM Mesh Debug",
-  "roleDefinition": "Mesh networking and relay debugging specialist. Analyzes libp2p swarm, relay flaps, NAT traversal, peer discovery.",
-  "customInstructions": "Use scripts/mince_logs.py for analysis. Reference MESH_DEBUG_RCA docs. Check relay/ and transport/ modules.",
-  "groups": ["read", "edit", "command"],
-  "source": "project"
-}

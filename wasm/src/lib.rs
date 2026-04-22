@@ -2,6 +2,7 @@
 
 pub mod connection_state;
 pub mod daemon_bridge;
+pub mod notification_manager;
 pub mod transport;
 
 use libp2p::{Multiaddr, PeerId};
@@ -2107,6 +2108,13 @@ mod tests {
         assert_eq!(stats.sent_count, 1);
         assert_eq!(stats.received_count, 1);
         assert_eq!(stats.undelivered_count, 1);
+    }
+
+    // Notification Manager Tests
+    #[wasm_bindgen_test]
+    fn test_notification_manager_creation() {
+        let manager = notification_manager::NotificationManager::new();
+        assert!(manager.is_supported());
     }
 
     fn temp_storage_path(label: &str) -> String {

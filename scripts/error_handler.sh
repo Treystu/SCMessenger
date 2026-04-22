@@ -36,7 +36,23 @@ circuit_breaker_state() {
         "set")
             local new_state="$3"
             local failures="$4"
-            echo "{\"state\": \"$new_state\", \"failures\": $failures, \"last_failure\": \"$(date -Iseconds)\", \"last_success\": \"$(date -Iseconds)\"}" > "$state_file"
+            local event_type="${5:-unknown}"
+            local ts=$(date -Iseconds)
+            # Preserve existing timestamps — only update the relevant one
+            local existing_last_failure="null"
+            local existing_last_success="null"
+            if [ -f "$state_file" ]; then
+                existing_last_failure=$(cat "$state_file" | ./scripts/jq_wrapper.sh -r '.last_failure // "null"' 2>/dev/null || echo "null")
+                existing_last_success=$(cat "$state_file" | ./scripts/jq_wrapper.sh -r '.last_success // "null"' 2>/dev/null || echo "null")
+            fi
+            local last_failure_val="$existing_last_failure"
+            local last_success_val="$existing_last_success"
+            if [ "$new_state" = "open" ] || [ "$event_type" = "failure" ]; then
+                last_failure_val="\"$ts\""
+            elif [ "$new_state" = "closed" ] && [ "$failures" = "0" ]; then
+                last_success_val="\"$ts\""
+            fi
+            echo "{\"state\": \"$new_state\", \"failures\": $failures, \"last_failure\": $last_failure_val, \"last_success\": $last_success_val}" > "$state_file"
             ;;
         "failure")
             local current_state=$(circuit_breaker_state "$service" "get")
@@ -47,10 +63,10 @@ circuit_breaker_state() {
             local threshold=$(echo "$config" | "./scripts/jq_wrapper.sh" -r '.circuit_breaker.failure_threshold // 3')
 
             if [ "$new_failures" -ge "$threshold" ]; then
-                circuit_breaker_state "$service" "set" "open" "$new_failures"
+                circuit_breaker_state "$service" "set" "open" "$new_failures" "failure"
                 echo "Circuit breaker opened for $service after $new_failures failures"
             else
-                circuit_breaker_state "$service" "set" "closed" "$new_failures"
+                circuit_breaker_state "$service" "set" "closed" "$new_failures" "failure"
                 echo "Failure recorded for $service ($new_failures/$threshold)"
             fi
             ;;

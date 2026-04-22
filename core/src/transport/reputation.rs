@@ -3,14 +3,20 @@
 //! Tracks abuse signals (rate limit hits, invalid messages, spam patterns)
 //! alongside relay quality. Produces a composite reputation score that
 //! influences rate limits and relay decisions.
+//!
+//! P0_ANTI_ABUSE_001: Reputation scores persist across sessions via StorageBackend.
+//! Time-based decay gradually returns inactive peers toward neutral.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use parking_lot::RwLock;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use crate::store::backend::StorageBackend;
 
 /// Composite reputation score for a peer, ranging from 0.0 (abusive) to 100.0 (trusted).
 /// A score of 50.0 is neutral (new peer default).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ReputationScore(f64);
 
 impl ReputationScore {
@@ -50,7 +56,7 @@ impl std::fmt::Display for ReputationScore {
 }
 
 /// Types of abuse signals that contribute to reputation scoring.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum AbuseSignal {
     /// Peer exceeded per-peer rate limit
     RateLimited,
@@ -73,7 +79,7 @@ pub enum AbuseSignal {
 }
 
 /// Per-peer abuse statistics that persist across sessions.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PeerAbuseStats {
     pub peer_id: String,
     pub rate_limit_hits: u32,
@@ -85,6 +91,10 @@ pub struct PeerAbuseStats {
     pub failed_relays: u32,
     pub successful_deliveries: u32,
     pub connection_timeouts: u32,
+    /// Epoch seconds when the last signal was recorded (for persistence + decay).
+    pub last_signal_epoch_secs: Option<u64>,
+    /// In-memory instant for decay calculations (not serialized).
+    #[serde(skip)]
     pub last_signal_at: Option<Instant>,
     pub reputation_score: ReputationScore,
 }
@@ -102,7 +112,8 @@ impl PeerAbuseStats {
             failed_relays: 0,
             successful_deliveries: 0,
             connection_timeouts: 0,
-            last_signal_at: None,
+            last_signal_epoch_secs: None,
+            last_signal_at: Some(Instant::now()),
             reputation_score: ReputationScore::neutral(),
         }
     }
@@ -121,6 +132,7 @@ impl PeerAbuseStats {
             AbuseSignal::ConnectionTimeout => self.connection_timeouts += 1,
         }
         self.last_signal_at = Some(Instant::now());
+        self.last_signal_epoch_secs = Some(current_epoch_secs());
         self.reputation_score = self.calculate_score();
     }
 
@@ -165,16 +177,166 @@ impl PeerAbuseStats {
 
 /// Abuse reputation manager that tracks per-peer abuse signals and computes
 /// composite reputation scores. Thread-safe via RwLock.
+/// Supports persistence via StorageBackend and time-based reputation decay.
 pub struct AbuseReputationManager {
     peers: RwLock<HashMap<String, PeerAbuseStats>>,
     max_tracked_peers: usize,
+    /// Optional storage backend for persisting reputation data across sessions.
+    storage: Option<Arc<dyn StorageBackend>>,
+    /// Time-to-live for reputation entries: peers with no signals for this long
+    /// have their scores decayed toward neutral.
+    decay_ttl: Duration,
 }
 
+const STORAGE_PREFIX: &[u8] = b"reputation:";
+
 impl AbuseReputationManager {
+    /// Create a new in-memory reputation manager (no persistence).
     pub fn new(max_tracked_peers: usize) -> Self {
         Self {
             peers: RwLock::new(HashMap::new()),
             max_tracked_peers,
+            storage: None,
+            decay_ttl: Duration::from_secs(7 * 24 * 3600), // 7 days default
+        }
+    }
+
+    /// Create a reputation manager with persistent storage.
+    /// Loads existing reputation data from storage on creation.
+    pub fn with_backend(max_tracked_peers: usize, backend: Arc<dyn StorageBackend>) -> Self {
+        let manager = Self {
+            peers: RwLock::new(HashMap::new()),
+            max_tracked_peers,
+            storage: Some(backend),
+            decay_ttl: Duration::from_secs(7 * 24 * 3600),
+        };
+        manager.load_from_storage();
+        manager
+    }
+
+    /// Load all persisted reputation entries from storage.
+    fn load_from_storage(&self) {
+        if let Some(ref storage) = self.storage {
+            match storage.scan_prefix(STORAGE_PREFIX) {
+                Ok(entries) => {
+                    let mut peers = self.peers.write();
+                    for (_, value) in entries {
+                        if let Ok(stats) = serde_json::from_slice::<PeerAbuseStats>(&value) {
+                            // Reconstruct Instant from epoch time (approximate)
+                            let stats = PeerAbuseStats {
+                                last_signal_at: stats.last_signal_epoch_secs
+                                    .map(|_| Instant::now()),
+                                ..stats
+                            };
+                            peers.insert(stats.peer_id.clone(), stats);
+                        }
+                    }
+                    // Enforce capacity limit after loading
+                    if peers.len() > self.max_tracked_peers {
+                        let mut entries: Vec<_> = peers.iter()
+                            .map(|(k, s)| (k.clone(), s.reputation_score.value() as u32))
+                            .collect();
+                        entries.sort_by_key(|(_, v)| *v);
+                        let remove_count = peers.len() - self.max_tracked_peers;
+                        for (key, _) in entries.iter().take(remove_count) {
+                            peers.remove(key);
+                        }
+                    }
+                    tracing::info!("Loaded {} reputation entries from storage", peers.len());
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load reputation data from storage: {}", e);
+                }
+            }
+        }
+    }
+
+    /// Persist a single peer's reputation data to storage.
+    fn persist_peer(&self, peer_id: &str, stats: &PeerAbuseStats) {
+        if let Some(ref storage) = self.storage {
+            let key = [STORAGE_PREFIX, peer_id.as_bytes()].concat();
+            match serde_json::to_vec(stats) {
+                Ok(value) => {
+                    if let Err(e) = storage.put(&key, &value) {
+                        tracing::debug!("Failed to persist reputation for {}: {}", peer_id, e);
+                    }
+                }
+                Err(e) => {
+                    tracing::debug!("Failed to serialize reputation for {}: {}", peer_id, e);
+                }
+            }
+        }
+    }
+
+    /// Remove a peer's reputation data from storage.
+    fn remove_peer_from_storage(&self, peer_id: &str) {
+        if let Some(ref storage) = self.storage {
+            let key = [STORAGE_PREFIX, peer_id.as_bytes()].concat();
+            if let Err(e) = storage.remove(&key) {
+                tracing::debug!("Failed to remove reputation for {}: {}", peer_id, e);
+            }
+        }
+    }
+
+    /// Apply time-based reputation decay for all tracked peers.
+    /// Peers with no signals for longer than `decay_ttl` have their scores
+    /// gradually moved toward neutral (50.0).
+    pub fn apply_decay(&self) {
+        let now_epoch = current_epoch_secs();
+        let decay_secs = self.decay_ttl.as_secs();
+        let mut peers = self.peers.write();
+        let mut to_persist = Vec::new();
+
+        for (peer_id, stats) in peers.iter_mut() {
+            if let Some(last_epoch) = stats.last_signal_epoch_secs {
+                let elapsed_secs = now_epoch.saturating_sub(last_epoch);
+                if elapsed_secs > decay_secs {
+                    // Decay factor: how far past the TTL (capped at 1.0)
+                    let decay_ratio = ((elapsed_secs - decay_secs) as f64 / decay_secs as f64).min(1.0);
+                    // Move score toward neutral by the decay ratio (max 50% per call)
+                    let current = stats.reputation_score.value();
+                    let neutral = ReputationScore::NEUTRAL;
+                    let new_value = current + (neutral - current) * decay_ratio * 0.5;
+                    stats.reputation_score = ReputationScore::new(new_value);
+
+                    // Also decay signal counts proportionally
+                    let count_decay = 1.0 - (decay_ratio * 0.3);
+                    stats.rate_limit_hits = (stats.rate_limit_hits as f64 * count_decay) as u32;
+                    stats.oversized_messages = (stats.oversized_messages as f64 * count_decay) as u32;
+                    stats.invalid_format_count = (stats.invalid_format_count as f64 * count_decay) as u32;
+                    stats.duplicate_count = (stats.duplicate_count as f64 * count_decay) as u32;
+                    stats.invalid_destination_count = (stats.invalid_destination_count as f64 * count_decay) as u32;
+                    stats.failed_relays = (stats.failed_relays as f64 * count_decay) as u32;
+                    stats.connection_timeouts = (stats.connection_timeouts as f64 * count_decay) as u32;
+
+                    to_persist.push(peer_id.clone());
+                }
+            }
+        }
+
+        // Persist decayed entries
+        drop(peers);
+        let peers = self.peers.read();
+        for peer_id in to_persist {
+            if let Some(stats) = peers.get(&peer_id) {
+                self.persist_peer(&peer_id, stats);
+            }
+        }
+    }
+
+    /// Flush all reputation data to persistent storage.
+    pub fn flush_to_storage(&self) {
+        if self.storage.is_none() {
+            return;
+        }
+        let peers = self.peers.read();
+        for (peer_id, stats) in peers.iter() {
+            self.persist_peer(peer_id, stats);
+        }
+        if let Some(ref storage) = self.storage {
+            if let Err(e) = storage.flush() {
+                tracing::debug!("Failed to flush reputation storage: {}", e);
+            }
         }
     }
 
@@ -189,6 +351,7 @@ impl AbuseReputationManager {
                 .min_by_key(|(_, stats)| stats.reputation_score.value() as u32)
                 .map(|(k, _)| k.clone())
             {
+                self.remove_peer_from_storage(&lowest_key);
                 peers.remove(&lowest_key);
             }
         }
@@ -197,7 +360,11 @@ impl AbuseReputationManager {
             .entry(peer_id.to_string())
             .or_insert_with(|| PeerAbuseStats::new(peer_id.to_string()));
         stats.record_signal(signal);
-        stats.reputation_score
+        let score = stats.reputation_score;
+        let stats_clone = stats.clone();
+        drop(peers);
+        self.persist_peer(peer_id, &stats_clone);
+        score
     }
 
     /// Get the reputation score for a peer. Returns NEUTRAL if not tracked.
@@ -228,17 +395,27 @@ impl AbuseReputationManager {
     }
 
     /// Prune entries that haven't had a signal in the given duration.
+    /// Also removes them from persistent storage.
     pub fn prune_stale(&self, max_age: Duration) -> usize {
         let mut peers = self.peers.write();
         let now = Instant::now();
         let before = peers.len();
-        peers.retain(|_, stats| {
-            stats
+        let mut to_remove = Vec::new();
+        peers.retain(|key, stats| {
+            let keep = stats
                 .last_signal_at
                 .map(|t| now.duration_since(t) < max_age)
-                .unwrap_or(false)
+                .unwrap_or(false);
+            if !keep {
+                to_remove.push(key.clone());
+            }
+            keep
         });
-        before - peers.len()
+        drop(peers);
+        for key in to_remove {
+            self.remove_peer_from_storage(&key);
+        }
+        before - self.peers.read().len()
     }
 
     /// Get the number of tracked peers.
@@ -250,6 +427,13 @@ impl AbuseReputationManager {
     pub fn is_empty(&self) -> bool {
         self.peers.read().is_empty()
     }
+}
+
+fn current_epoch_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 
 #[cfg(test)]
@@ -335,5 +519,93 @@ mod tests {
         }
         // Score should be slightly below neutral (5*3=15 positive, 2*5=10 negative, net +5)
         assert!(stats.reputation_score.value() > 50.0);
+    }
+
+    #[test]
+    fn test_persistence_roundtrip() {
+        let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+        let manager = AbuseReputationManager::with_backend(100, backend.clone());
+
+        // Record some signals
+        manager.record_signal("peer1", AbuseSignal::SuccessfulDelivery);
+        manager.record_signal("peer1", AbuseSignal::SuccessfulDelivery);
+        manager.record_signal("peer2", AbuseSignal::RateLimited);
+
+        let score1 = manager.get_score("peer1");
+        let score2 = manager.get_score("peer2");
+        assert!(score1.value() > 50.0);
+        assert!(score2.value() < 50.0);
+
+        // Flush to storage
+        manager.flush_to_storage();
+
+        // Load into a new manager — should restore the data
+        let manager2 = AbuseReputationManager::with_backend(100, backend);
+        let restored1 = manager2.get_score("peer1");
+        let restored2 = manager2.get_score("peer2");
+        assert!((restored1.value() - score1.value()).abs() < 0.01);
+        assert!((restored2.value() - score2.value()).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_persistence_eviction_cleans_storage() {
+        let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+        let manager = AbuseReputationManager::with_backend(2, backend.clone());
+
+        manager.record_signal("peer1", AbuseSignal::RateLimited);
+        manager.record_signal("peer2", AbuseSignal::RateLimited);
+        manager.record_signal("peer3", AbuseSignal::SuccessfulDelivery); // evicts lowest
+
+        // peer3 should exist, one of peer1/peer2 should be evicted
+        assert_eq!(manager.len(), 2);
+
+        // Storage should not have the evicted peer
+        let stored_keys: Vec<_> = backend.scan_prefix(STORAGE_PREFIX)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(k, _)| String::from_utf8_lossy(&k).to_string())
+            .collect();
+        assert_eq!(stored_keys.len(), 2);
+    }
+
+    #[test]
+    fn test_decay_moves_toward_neutral() {
+        let manager = AbuseReputationManager::new(100);
+
+        // Create a peer with bad reputation
+        for _ in 0..20 {
+            manager.record_signal("bad_peer", AbuseSignal::RateLimited);
+        }
+        let bad_score = manager.get_score("bad_peer");
+        assert!(bad_score.value() < 20.0);
+
+        // Manually set the last_signal_epoch to simulate aging
+        {
+            let mut peers = manager.peers.write();
+            if let Some(stats) = peers.get_mut("bad_peer") {
+                // Set last signal to 14 days ago (2x the 7-day decay TTL)
+                stats.last_signal_epoch_secs = Some(current_epoch_secs() - 14 * 24 * 3600);
+            }
+        }
+
+        manager.apply_decay();
+
+        // After decay, score should have moved toward neutral
+        let decayed_score = manager.get_score("bad_peer");
+        assert!(decayed_score.value() > bad_score.value());
+        assert!(decayed_score.value() < ReputationScore::NEUTRAL);
+    }
+
+    #[test]
+    fn test_epoch_secs_recorded() {
+        let mut stats = PeerAbuseStats::new("test".to_string());
+        assert!(stats.last_signal_epoch_secs.is_none());
+        stats.record_signal(AbuseSignal::SuccessfulDelivery);
+        assert!(stats.last_signal_epoch_secs.is_some());
+        // Should be approximately now
+        let now = current_epoch_secs();
+        let recorded = stats.last_signal_epoch_secs.unwrap();
+        assert!(now >= recorded);
+        assert!(now - recorded < 5); // within 5 seconds
     }
 }

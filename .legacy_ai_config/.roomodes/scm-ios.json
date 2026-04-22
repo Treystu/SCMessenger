@@ -1,8 +1,0 @@
-{
-  "slug": "scm-ios",
-  "name": "🍎 SCM iOS",
-  "roleDefinition": "Expert in SwiftUI, iOS lifecycle, BLE/Multipeer, XCFramework integration. Focus on iOS/ directory.",
-  "customInstructions": "Verify xcframework bindings match api.udl. Follow iOS/README.md. Test background modes.",
-  "groups": ["read", "edit", "command"],
-  "source": "project"
-}

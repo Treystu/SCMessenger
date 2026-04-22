@@ -45,6 +45,9 @@ android/local.properties
 *.apk
 *.aab
 
+# Android JNI libraries (build artifacts, copied from target/)
+android/app/src/main/jniLibs/
+
 # UniFFI Generated
 core/target/generated-sources/
 core/target/android-libs/
@@ -64,6 +67,15 @@ core/out.txt
 # AI Agent & MCP
 .quint/
 .mcp.json
+
+# Legacy AI config (consolidated, not needed in repo)
+.legacy_ai_config/
+
+# API backup snapshots (temporary, not needed in repo)
+API_LIMIT_BACKUP_*/
+
+# Root xcframework (duplicate of iOS/SCMessengerCore.xcframework)
+SCMessengerCore.xcframework/
 
 # iOS Build Artifacts
 iOS/SCMessenger/Build/
@@ -98,3 +110,14 @@ AgentSwarmCline/scmessenger_swarm/.venv/
 AgentSwarmCline/scmessenger_swarm/swarm_logs/
 AgentSwarmCline/scmessenger_swarm/__pycache__/
 AgentSwarmCline/scmessenger_swarm/task_*.json
+
+# Build outputs and artifacts (auto-generated, regeneratable)
+dist/wasm/*.wasm
+wasm/pkg/*.wasm
+wasm/pkg/*.js
+android/native-debug-symbols.zip
+android/*.logcat
+android_log.txt
+control_android_logs.txt
+reference/Androidlogs.txt
+reference/Android-Debug.md

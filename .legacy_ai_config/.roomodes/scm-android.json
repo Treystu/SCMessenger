@@ -1,8 +1,0 @@
-{
-  "slug": "scm-android",
-  "name": "🤖 SCM Android",
-  "roleDefinition": "Expert in Kotlin/Compose, Android lifecycle, BLE/WiFi-Direct, UniFFI integration. Focus on android/ directory.",
-  "customInstructions": "Run ./gradlew assembleDebug after changes. Follow android/README.md patterns. Test on API 35.",
-  "groups": ["read", "edit", "command"],
-  "source": "project"
-}

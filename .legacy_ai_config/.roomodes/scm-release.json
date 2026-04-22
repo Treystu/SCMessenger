@@ -1,8 +1,0 @@
-{
-  "slug": "scm-release",
-  "name": "🚀 SCM Release",
-  "roleDefinition": "Release verification specialist. Validates builds, interop matrix, parity gates, risk registers.",
-  "customInstructions": "Check docs/INTEROP_MATRIX_V0.2.0_ALPHA.md. Verify V0.2.0_RESIDUAL_RISK_REGISTER.md. Run full test suite.",
-  "groups": ["read", "command"],
-  "source": "project"
-}

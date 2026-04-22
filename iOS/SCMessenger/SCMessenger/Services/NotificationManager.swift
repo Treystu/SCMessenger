@@ -298,4 +298,88 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             logger.info("Open notification route for \(peerId)")
         }
     }
+
+    // MARK: - Verification Methods
+
+    /// Verifies notification permission flow with comprehensive status reporting
+    func verifyPermissionFlow() async -> PermissionVerificationResult {
+        let settings = await center.notificationSettings()
+
+        switch settings.authorizationStatus {
+        case .notDetermined:
+            logger.info("Permission: not determined, requesting...")
+            let granted = await requestPermission()
+            return PermissionVerificationResult(
+                status: granted ? .granted : .denied,
+                requiredAction: .requested,
+                success: granted
+            )
+
+        case .denied:
+            logger.warning("Permission: denied - user needs to enable in Settings")
+            return PermissionVerificationResult(
+                status: .denied,
+                requiredAction: .manualEnable,
+                success: false
+            )
+
+        case .authorized, .provisional, .ephemeral:
+            logger.info("Permission: authorized")
+            return PermissionVerificationResult(
+                status: .authorized,
+                requiredAction: .none,
+                success: true
+            )
+
+        @unknown default:
+            logger.error("Permission: unknown status")
+            return PermissionVerificationResult(
+                status: .unknown,
+                requiredAction: .none,
+                success: false
+            )
+        }
+    }
+
+    /// Returns current notification permission status as a string
+    func currentPermissionStatus() -> String {
+        let settings = center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .notDetermined:
+            return "not_determined"
+        case .denied:
+            return "denied"
+        case .authorized:
+            return "authorized"
+        case .provisional:
+            return "provisional"
+        case .ephemeral:
+            return "ephemeral"
+        @unknown default:
+            return "unknown"
+        }
+    }
+
+    /// Returns whether notifications are currently enabled
+    func areNotificationsEnabled() -> Bool {
+        let settings = center.notificationSettings()
+        return settings.authorizationStatus == .authorized ||
+               settings.authorizationStatus == .provisional ||
+               settings.authorizationStatus == .ephemeral
+    }
+}
+
+/// Result of permission verification
+struct PermissionVerificationResult {
+    enum PermissionStatus {
+        case authorized, denied, notDetermined, unknown
+    }
+
+    enum RequiredAction {
+        case none, requested, manualEnable
+    }
+
+    let status: PermissionStatus
+    let requiredAction: RequiredAction
+    let success: Bool
 }

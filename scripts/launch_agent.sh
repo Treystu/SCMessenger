@@ -4,16 +4,31 @@
 
 set -euo pipefail
 
+# Source cross-platform process helpers
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../.claude/scripts/process_alive.sh"
+
 # Configuration
 AGENT_MODEL="${1:-glm-5.1:cloud}"
 AGENT_ID="${2:-agent_$(date +%s)}"
+AGENT_TASK_FILE="${3:-}"
+AGENT_COMMAND="${4:-start}"
 OLLAMA_HOST="${OLLAMA_HOST:-localhost:11434}"
 AGENT_WORK_DIR=".claude/agents/$AGENT_ID"
 AGENT_LOG="$AGENT_WORK_DIR/agent.log"
+AGENT_STDERR="$AGENT_WORK_DIR/stderr.log"
 AGENT_PID="$AGENT_WORK_DIR/pid"
 
-# Agent prompt instructions — interactive mode with self-paced loop
+# Build agent prompt — include task file content if provided
 AGENT_PROMPT="You are an SCMessenger Autonomous Sub-Agent. Your task is in HANDOFF/todo/. Claim it by moving the file to HANDOFF/IN_PROGRESS/IN_PROGRESS_[filename].md. Implement the required code changes, verify with cargo build or gradle, then move to HANDOFF/done/. If you fail after 3 attempts, move it back to HANDOFF/todo/ with error logs appended. After completing your task, pick the next file from HANDOFF/todo/ and repeat. Use /loop 5m to self-pace."
+
+if [ -n "$AGENT_TASK_FILE" ] && [ -f "$AGENT_TASK_FILE" ]; then
+    AGENT_PROMPT="You are an SCMessenger Autonomous Sub-Agent. You have been assigned a specific task. Read and execute the task file below completely. Follow all instructions precisely. After completing your task, move it to the appropriate HANDOFF directory. Use /loop 5m to self-pace.
+
+=== ASSIGNED TASK FILE: $AGENT_TASK_FILE ===
+$(cat "$AGENT_TASK_FILE")
+=== END TASK FILE ==="
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -118,9 +133,10 @@ start_agent() {
     # Pipe the agent prompt via stdin so Claude enters interactive (not --print) mode.
     # The prompt includes /loop 5m for persistent autonomous operation.
     # This keeps the process alive instead of one-shot exit.
+    # Separate stderr to avoid Windows STATUS_BREAKPOINT (0x80000003) corrupting the log.
     echo "$AGENT_PROMPT" | ollama launch claude --model "$AGENT_MODEL" \
         -- --dangerously-skip-permissions \
-        >> "$AGENT_LOG" 2>&1 &
+        >> "$AGENT_LOG" 2>"$AGENT_STDERR" &
 
     local agent_pid=$!
     echo "$agent_pid" > "$AGENT_PID"
@@ -130,8 +146,12 @@ start_agent() {
 
     # Verify agent is running
     sleep 3
-    if kill -0 "$agent_pid" 2>/dev/null; then
+    if process_alive "$agent_pid"; then
         log "INFO" "Agent process verified as running"
+        # Check for benign Windows startup error
+        if grep -q "0x80000003" "$AGENT_STDERR" 2>/dev/null; then
+            log "INFO" "Windows STATUS_BREAKPOINT detected in startup (benign on Windows, process is running)"
+        fi
         log "INFO" "Agent process started successfully - interactive mode with piped prompt"
         return 0
     else
@@ -152,6 +172,11 @@ monitor_agent() {
 
     while true; do
         local now=$(date +%s)
+        # Guard against empty/invalid date output on Windows Git Bash
+        if [ -z "$now" ] || ! [[ "$now" =~ ^[0-9]+$ ]]; then
+            sleep $check_interval
+            continue
+        fi
         local elapsed_seconds=$((now - start_time))
 
         # Auto-stop after max runtime to prevent zombie monitors
@@ -161,7 +186,7 @@ monitor_agent() {
         fi
 
         # Check if agent process is still running
-        if ! kill -0 "$agent_pid" 2>/dev/null; then
+        if ! process_alive "$agent_pid"; then
             ((consecutive_failures++))
             log "WARN" "Agent process not running ($consecutive_failures/$max_failures)"
 
@@ -184,8 +209,8 @@ restart_agent() {
     # Stop existing agent
     if [ -f "$AGENT_PID" ]; then
         local old_pid=$(cat "$AGENT_PID")
-        if kill -0 "$old_pid" 2>/dev/null; then
-            kill "$old_pid" 2>/dev/null || true
+        if process_alive "$old_pid"; then
+            powershell.exe -NoProfile -Command "Stop-Process -Id $old_pid -Force" 2>/dev/null || true
         fi
     fi
 
@@ -204,8 +229,8 @@ stop_agent() {
 
     if [ -f "$AGENT_PID" ]; then
         local agent_pid=$(cat "$AGENT_PID")
-        if kill -0 "$agent_pid" 2>/dev/null; then
-            kill "$agent_pid"
+        if process_alive "$agent_pid"; then
+            powershell.exe -NoProfile -Command "Stop-Process -Id $agent_pid -Force" 2>/dev/null || true
             log "INFO" "Agent stopped successfully"
         else
             log "WARN" "Agent process not running"
@@ -222,7 +247,7 @@ stop_agent() {
 agent_status() {
     if [ -f "$AGENT_PID" ]; then
         local agent_pid=$(cat "$AGENT_PID")
-        if kill -0 "$agent_pid" 2>/dev/null; then
+        if process_alive "$agent_pid"; then
             echo "Agent $AGENT_ID is running (PID: $agent_pid)"
             return 0
         else
@@ -237,13 +262,14 @@ agent_status() {
 
 # Handle help before argument parsing
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
-    echo "Usage: launch_agent.sh [MODEL] [AGENT_ID] {start|stop|restart|status|--help}"
+    echo "Usage: launch_agent.sh [MODEL] [AGENT_ID] [TASK_FILE] {start|stop|restart|status|--help}"
     echo ""
     echo "Launch autonomous sub-agent with specific Ollama model"
     echo ""
     echo "Arguments:"
     echo "  MODEL      Ollama model name (default: glm-5.1:cloud)"
     echo "  AGENT_ID   Unique agent identifier (default: agent_TIMESTAMP)"
+    echo "  TASK_FILE  Optional task file to include in agent prompt"
     echo ""
     echo "Commands:"
     echo "  start     Start the agent"
@@ -255,7 +281,7 @@ if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
 fi
 
 # Main execution
-case "${3:-start}" in
+case "$AGENT_COMMAND" in
     "start")
         if ! check_ollama_model; then
             log "ERROR" "Cannot start agent - model $AGENT_MODEL not available"

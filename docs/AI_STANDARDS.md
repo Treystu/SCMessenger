@@ -46,7 +46,10 @@ The agent pool (`.claude/agent_pool.json`) defines 8 CLI-only agent profiles wit
 | **triage-router** | `gemini-3-flash-preview:cloud` | Quick triage, lint, minor edits, CI gatekeeping | LINT, TRIAGE, QUICK, CI |
 | **gatekeeper-reviewer** | `kimi-k2-thinking:cloud` | Pre-merge review, final verification gate | MERGE, RELEASE, FINAL_REVIEW |
 | **swarm-orchestrator** | `mistral-large-3:675b:cloud` | Pipeline management, multi-agent coordination | ORCHESTRATE, PIPELINE, SWARM |
-| **rust-coder** | `glm-5.1:cloud` | Rust core, protocol implementation | RUST, CORE, PROTOCOL, CRYPTO_IMPL |
+| **rust-coder** | `qwen3-coder-next:cloud` | Rust core, protocol implementation | RUST, CORE, PROTOCOL, CRYPTO_IMPL |
+
+### Model Routing Source of Truth
+**`agent_pool.json`** is the single source of truth for model assignments. The table below is for reference only — if it conflicts with `agent_pool.json`, the pool config wins.
 
 ### Task Routing Patterns
 Task file keywords auto-route to agent types:

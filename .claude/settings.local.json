@@ -4,7 +4,10 @@
       "Bash(./scripts/verify_task_completion.sh drift *)",
       "Bash(cargo check *)",
       "Bash(kill 1634)",
-      "Bash(rm -rf .claude/agents/security-auditor_1776429958)"
+      "Bash(rm -rf .claude/agents/security-auditor_1776429958)",
+      "Bash(rm -rf \".claude/agents/implementer_1776734222\")",
+      "Bash(./.claude/orchestrator_manager.sh pool *)",
+      "Bash(xargs ls *)"
     ]
   }
 }

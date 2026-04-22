@@ -6,6 +6,7 @@
 //! 3. Sophisticated abuse pattern recognition
 //! 4. Automatic blocking integration
 
+use std::sync::Arc;
 use crate::transport::reputation::{AbuseReputationManager, AbuseSignal, ReputationScore};
 use crate::abuse::spam_detection::{SpamDetectionEngine, SpamSignal};
 
@@ -24,6 +25,29 @@ impl EnhancedAbuseReputationManager {
             base_manager: AbuseReputationManager::new(max_tracked_peers),
             spam_detector,
         }
+    }
+
+    /// Create with persistent storage backend.
+    /// Reputation data will be loaded from storage and persisted across sessions.
+    pub fn with_backend(
+        max_tracked_peers: usize,
+        spam_detector: SpamDetectionEngine,
+        backend: Arc<dyn crate::store::backend::StorageBackend>,
+    ) -> Self {
+        Self {
+            base_manager: AbuseReputationManager::with_backend(max_tracked_peers, backend),
+            spam_detector,
+        }
+    }
+
+    /// Apply time-based reputation decay to all tracked peers.
+    pub fn apply_decay(&self) {
+        self.base_manager.apply_decay();
+    }
+
+    /// Flush reputation data to persistent storage.
+    pub fn flush_to_storage(&self) {
+        self.base_manager.flush_to_storage();
     }
 
     /// Record an abuse signal and update reputation score.

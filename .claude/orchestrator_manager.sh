@@ -1,7 +1,12 @@
 #!/bin/bash
-# Orchestrator State Management (v3.0)
+# Orchestrator State Management (v3.2)
 # Handles activation, deactivation, multi-agent slot management (MAX=2)
 # Now supports native Agent tool subagents + CLI-based Ollama agents
+# v3.2: PowerShell-based process checking for Windows, self-preservation PID guard
+
+# Source cross-platform process helpers
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/scripts/process_alive.sh"
 
 STATE_FILE=".claude/orchestrator_state.json"
 AGENT_ROOT=".claude/agents"
@@ -9,69 +14,75 @@ POOL_CONFIG=".claude/agent_pool.json"
 MAX_SUBAGENTS=2
 ORCHESTRATOR_PID_FILE=".claude/orchestrator.pid"
 
-# Get orchestrator PID (claude.exe process that invoked this script)
+# Get orchestrator PID from file (stored during activation)
 get_orchestrator_pid() {
     if [ -f "$ORCHESTRATOR_PID_FILE" ]; then
-        cat "$ORCHESTRATOR_PID_FILE"
-        return
+        local pid=$(cat "$ORCHESTRATOR_PID_FILE")
+        if [ -n "$pid" ]; then
+            echo "$pid"
+            return
+        fi
     fi
-    # Try to find the parent claude.exe PID
-    local ppid=$$
-    if command -v wmic > /dev/null 2>&1; then
-        # Windows: find claude.exe process that is parent of this script
-        local claude_pid=$(wmic process where "processid='$ppid'" get parentprocessid /value 2>/dev/null | grep -o '[0-9]\+')
-        echo "$claude_pid"
-    else
-        # Unix: assume orchestrator is the parent of this script (should be claude process)
-        echo "$PPID"
-    fi
+    echo ""
 }
 
 store_orchestrator_pid() {
-    local pid=$(get_orchestrator_pid)
-    if [ -n "$pid" ]; then
-        echo "$pid" > "$ORCHESTRATOR_PID_FILE"
-        echo "Orchestrator PID stored: $pid"
-    else
-        echo "Warning: Could not determine orchestrator PID" >&2
+    # On Windows, $PPID points to an intermediate shell, not claude.exe.
+    # Walk up the process tree to find the claude.exe ancestor.
+    local shell_pid=$$
+    local parent_pid=$PPID
+    # Try to find a claude.exe process in the parent chain
+    local found_pid=$(powershell.exe -NoProfile -Command "
+        \$p = Get-Process -Id $parent_pid -ErrorAction SilentlyContinue
+        while (\$p -and \$p.ProcessName -ne 'claude') {
+            \$p = Get-Process -Id \$p.Id -ErrorAction SilentlyContinue | ForEach-Object { Get-Process -Id \$_.Id -ErrorAction SilentlyContinue }
+            break
+        }
+        if (\$p -and \$p.ProcessName -eq 'claude') { Write-Output \$p.Id } else { Write-Output '' }
+    " 2>/dev/null)
+    # Fallback: if the parent chain walk failed, use PPID as best guess
+    if [ -z "$found_pid" ]; then
+        found_pid="$parent_pid"
     fi
+    echo "$found_pid" > "$ORCHESTRATOR_PID_FILE"
+    echo "Orchestrator PID stored: $found_pid"
 }
 
 remove_orchestrator_pid() {
     rm -f "$ORCHESTRATOR_PID_FILE"
 }
 
-count_active_agents() {
-    local count=0
-
-    # Count CLI agents (PID-based)
-    if [ -d "$AGENT_ROOT" ]; then
-        for pidfile in "$AGENT_ROOT"/*/pid; do
-            if [ -f "$pidfile" ]; then
-                pid=$(cat "$pidfile")
-                if kill -0 "$pid" 2>/dev/null; then
-                    ((count++))
-                fi
+# Clean up stale PID files (agents whose processes have died)
+clean_stale_pids() {
+    if [ ! -d "$AGENT_ROOT" ]; then
+        return
+    fi
+    local orch_pid=$(get_orchestrator_pid)
+    for pidfile in "$AGENT_ROOT"/*/pid; do
+        if [ -f "$pidfile" ]; then
+            local pid=$(cat "$pidfile")
+            local dir=$(dirname "$pidfile")
+            local id=$(basename "$dir")
+            # Skip if this is the orchestrator
+            if [ -n "$orch_pid" ] && [ "$pid" = "$orch_pid" ]; then
+                echo "Cleaning orchestrator PID from agent tracking: $id"
+                rm -rf "$dir"
+                continue
             fi
-        done
-    fi
-
-    # Count actual running native Claude processes (Windows)
-    if command -v wmic > /dev/null 2>&1; then
-        # Windows system - use wmic to count claude.exe processes
-        claude_count=$(wmic process where "name like '%claude%'" get processid 2>/dev/null | grep -c "[0-9]")
-        if [ "$claude_count" -gt 0 ]; then
-            count=$((count + claude_count - 1))  # Subtract 1 to exclude the current orchestrator process
+            # Check if the process is still alive
+            if ! process_alive "$pid"; then
+                echo "Cleaning stale agent: $id (PID $pid no longer exists)"
+                rm -rf "$dir"
+            fi
         fi
-    else
-        # Unix system - use ps to count claude processes
-        claude_count=$(ps aux | grep -E "[c]laude" | grep -v grep | wc -l)
-        if [ "$claude_count" -gt 0 ]; then
-            count=$((count + claude_count - 1))  # Subtract 1 to exclude the current orchestrator process
-        fi
-    fi
+    done
+}
 
-    echo $count
+count_active_agents() {
+    # Count tracked agents only — no process scanning
+    local cli=$(count_cli_agents)
+    local native=$(count_native_agents)
+    echo $((cli + native))
 }
 
 count_cli_agents() {
@@ -80,7 +91,7 @@ count_cli_agents() {
         for pidfile in "$AGENT_ROOT"/*/pid; do
             if [ -f "$pidfile" ]; then
                 pid=$(cat "$pidfile")
-                if kill -0 "$pid" 2>/dev/null; then
+                if process_alive "$pid"; then
                     ((count++))
                 fi
             fi
@@ -90,9 +101,8 @@ count_cli_agents() {
 }
 
 count_native_agents() {
+    # Count native agents via marker files only — no process scanning
     local count=0
-
-    # Count native agents via marker files (existing method)
     if [ -d "$AGENT_ROOT" ]; then
         for marker in "$AGENT_ROOT"/*/native_marker; do
             if [ -f "$marker" ]; then
@@ -100,22 +110,6 @@ count_native_agents() {
             fi
         done
     fi
-
-    # Count actual running native Claude processes (Windows)
-    if command -v wmic > /dev/null 2>&1; then
-        # Windows system - use wmic to count claude.exe processes
-        claude_count=$(wmic process where "name like '%claude%'" get processid 2>/dev/null | grep -c "[0-9]")
-        if [ "$claude_count" -gt 0 ]; then
-            count=$((count + claude_count - 1))  # Subtract 1 to exclude the current orchestrator process
-        fi
-    else
-        # Unix system - use ps to count claude processes
-        claude_count=$(ps aux | grep -E "[c]laude" | grep -v grep | wc -l)
-        if [ "$claude_count" -gt 0 ]; then
-            count=$((count + claude_count - 1))  # Subtract 1 to exclude the current orchestrator process
-        fi
-    fi
-
     echo $count
 }
 
@@ -128,14 +122,20 @@ list_agents() {
         echo "No sub-agents currently running."
         return
     fi
+    local orch_pid=$(get_orchestrator_pid)
     printf "%-25s %-15s %-10s %-10s %-10s\n" "AGENT_ID" "TYPE" "MODEL" "PID" "STATUS"
-    # List CLI agents
+    # List CLI agents (check tracked PIDs, skip orchestrator)
     for dir in "$AGENT_ROOT"/*; do
         if [ -d "$dir" ] && [ -f "$dir/pid" ]; then
             id=$(basename "$dir")
             pid=$(cat "$dir/pid")
             model=$(grep "AGENT_MODEL" "$dir/config" 2>/dev/null | cut -d'=' -f2)
-            if kill -0 "$pid" 2>/dev/null; then
+            # Self-preservation: never list the orchestrator as an agent
+            if [ -n "$orch_pid" ] && [ "$pid" = "$orch_pid" ]; then
+                printf "%-25s %-15s %-10s %-10s %-10s\n" "$id" "CLI" "$model" "$pid" "ORCHESTRATOR"
+                continue
+            fi
+            if process_alive "$pid"; then
                 printf "%-25s %-15s %-10s %-10s %-10s\n" "$id" "CLI" "$model" "$pid" "RUNNING"
             else
                 printf "%-25s %-15s %-10s %-10s %-10s\n" "$id" "CLI" "$model" "$pid" "STALE"
@@ -300,10 +300,10 @@ EOF
         fi
 
         echo "Launching CLI agent: $agent_id with model $model"
-        if ! ./scripts/launch_agent.sh "$model" "$agent_id" start 2>/dev/null; then
+        if ! ./scripts/launch_agent.sh "$model" "$agent_id" "$task_file" start 2>/dev/null; then
             if [ -n "$fallback_model" ]; then
                 echo "Primary model $model unavailable, falling back to $fallback_model"
-                ./scripts/launch_agent.sh "$fallback_model" "$agent_id" start
+                ./scripts/launch_agent.sh "$fallback_model" "$agent_id" "$task_file" start
             else
                 echo "Error: Primary model $model unavailable and no fallback configured."
                 return 1
@@ -325,11 +325,21 @@ pool_stop() {
         return 1
     fi
 
+    local orch_pid=$(get_orchestrator_pid)
+
     # Check if native or CLI agent
     if [ -f "$AGENT_ROOT/$agent_id/native_marker" ]; then
         rm -f "$AGENT_ROOT/$agent_id/native_marker"
         echo "Stopped native agent: $agent_id"
     elif [ -f "$AGENT_ROOT/$agent_id/pid" ]; then
+        local agent_pid=$(cat "$AGENT_ROOT/$agent_id/pid")
+        # Self-preservation: never kill the orchestrator process
+        if [ -n "$orch_pid" ] && [ "$agent_pid" = "$orch_pid" ]; then
+            echo "CRITICAL: Agent PID $agent_pid matches orchestrator PID. Refusing to kill."
+            echo "Removing stale tracking file instead."
+            rm -rf "$AGENT_ROOT/$agent_id"
+            return 1
+        fi
         ./scripts/launch_agent.sh "dummy" "$agent_id" stop
         rm -rf "$AGENT_ROOT/$agent_id"
         echo "Stopped CLI agent: $agent_id"
@@ -360,6 +370,8 @@ pool_status() {
 case "$1" in
     "activate")
         touch ".claude/orchestrator_active"
+        store_orchestrator_pid
+        clean_stale_pids
         echo "Orchestrator Gatekeeper activated."
         ;;
     "list")
@@ -384,6 +396,16 @@ case "$1" in
         fi
         id="$2"
         if [ -d "$AGENT_ROOT/$id" ]; then
+            # Self-preservation: never kill the orchestrator process
+            local orch_pid=$(get_orchestrator_pid)
+            if [ -f "$AGENT_ROOT/$id/pid" ] && [ -n "$orch_pid" ]; then
+                local agent_pid=$(cat "$AGENT_ROOT/$id/pid")
+                if [ "$agent_pid" = "$orch_pid" ]; then
+                    echo "CRITICAL: Agent PID $agent_pid matches orchestrator PID. Refusing to kill."
+                    rm -rf "$AGENT_ROOT/$id"
+                    exit 1
+                fi
+            fi
             ./scripts/launch_agent.sh "dummy" "$id" stop
             rm -rf "$AGENT_ROOT/$id"
         else
@@ -415,6 +437,8 @@ case "$1" in
         ;;
     "deactivate")
         rm -f ".claude/orchestrator_active"
+        remove_orchestrator_pid
+        clean_stale_pids
         echo "Orchestrator Gatekeeper deactivated."
         ;;
     "status")

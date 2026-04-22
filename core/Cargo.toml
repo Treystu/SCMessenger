@@ -107,7 +107,6 @@ uniffi = { workspace = true, features = ["build"] }
 default = []
 gen-bindings = ["dep:uniffi_bindgen", "dep:camino"]
 wasm = ["uniffi/wasm-unstable-single-threaded"]
-phase2_apis = []
 kani-proofs = []
 
 [[bin]]
