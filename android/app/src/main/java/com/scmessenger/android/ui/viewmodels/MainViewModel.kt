@@ -8,7 +8,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import com.scmessenger.android.utils.StorageManager
 import javax.inject.Inject
@@ -94,7 +96,7 @@ class MainViewModel @Inject constructor(
     }
 
     fun refreshIdentityState() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             Timber.d("refreshIdentityState() called")
             val initialized = meshRepository.isIdentityInitialized()
             Timber.d("Identity initialized state: $initialized")
@@ -152,7 +154,7 @@ class MainViewModel @Inject constructor(
     }
 
     fun refreshStorageStatus() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val available = meshRepository.getAvailableStorageMB()
             _availableStorageMB.value = available
             _isStorageLow.value = available < StorageManager.CRITICAL_STORAGE_THRESHOLD_MB
