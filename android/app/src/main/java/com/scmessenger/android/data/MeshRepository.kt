@@ -265,7 +265,9 @@ open class MeshRepository(private val context: Context) {
                         Timber.i("Fallback bootstrap dial: %s", addr)
                         return
                     } catch (e: Exception) {
-                        enhanceNetworkErrorLogging(e, addr)
+                        // Log fallback failure directly — do NOT call enhanceNetworkErrorLogging
+                        // to prevent infinite recursion (trackNetworkFailure → triggerFallbackProtocol loop)
+                        Timber.w(e, "Fallback bootstrap dial failed for $addr")
                     }
                 }
             }
