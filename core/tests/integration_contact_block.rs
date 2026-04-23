@@ -17,10 +17,7 @@
 //!   cargo test --test integration_contact_block
 
 use scmessenger_core::IronCore;
-use std::string::String;
-use std::vec::Vec;
 use std::option::Option::{Some, None};
-use std::prelude::rust_2024::*;
 
 // ============================================================================
 // Helpers

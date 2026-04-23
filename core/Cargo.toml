@@ -99,6 +99,10 @@ tokio-test = "0.4"
 tempfile = "3.8"
 libp2p = { workspace = true }
 proptest = "1.5"
+anyhow = { workspace = true }
+bincode = { workspace = true }
+tokio = { workspace = true, features = ["sync", "macros", "rt", "time"] }
+rand = { workspace = true }
 
 [build-dependencies]
 uniffi = { workspace = true, features = ["build"] }
@@ -108,6 +112,7 @@ default = []
 gen-bindings = ["dep:uniffi_bindgen", "dep:camino"]
 wasm = ["uniffi/wasm-unstable-single-threaded"]
 kani-proofs = []
+phase2_apis = []
 
 [[bin]]
 name = "gen_kotlin"
@@ -118,3 +123,47 @@ required-features = ["gen-bindings"]
 name = "gen_swift"
 path = "src/bin/gen_swift.rs"
 required-features = ["gen-bindings"]
+
+# Integration test crates
+[[test]]
+name = "integration_contact_block"
+path = "tests/integration_contact_block.rs"
+[[test]]
+name = "integration_e2e"
+path = "tests/integration_e2e.rs"
+[[test]]
+name = "integration_nat_reflection"
+path = "tests/integration_nat_reflection.rs"
+[[test]]
+name = "integration_offline_partition_matrix"
+path = "tests/integration_offline_partition_matrix.rs"
+[[test]]
+name = "integration_ironcore_roundtrip"
+path = "tests/integration_ironcore_roundtrip.rs"
+[[test]]
+name = "integration_registration_protocol"
+path = "tests/integration_registration_protocol.rs"
+[[test]]
+name = "integration_relay_custody"
+path = "tests/integration_relay_custody.rs"
+[[test]]
+name = "integration_retry_lifecycle"
+path = "tests/integration_retry_lifecycle.rs"
+[[test]]
+name = "integration_receipt_convergence"
+path = "tests/integration_receipt_convergence.rs"
+[[test]]
+name = "integration_all_phases"
+path = "tests/integration_all_phases.rs"
+[[test]]
+name = "test_address_observation"
+path = "tests/test_address_observation.rs"
+[[test]]
+name = "test_multiport"
+path = "tests/test_multiport.rs"
+[[test]]
+name = "test_persistence_restart"
+path = "tests/test_persistence_restart.rs"
+[[test]]
+name = "test_mesh_routing"
+path = "tests/test_mesh_routing.rs"

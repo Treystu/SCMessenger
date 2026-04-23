@@ -3492,7 +3492,14 @@ open class MeshRepository(private val context: Context) {
         ensureServiceInitialized()
         kotlin.runCatching { ensureLocalIdentityFederation() }
             .onFailure { Timber.w(it, "Failed to hydrate identity before getIdentityInfo") }
-        return ironCore?.getIdentityInfo()
+        val result = ironCore?.getIdentityInfo()
+        Timber.d(
+            "getIdentityInfo: result=%s, initialized=%s, nickname=%s",
+            result?.identityId,
+            result?.initialized,
+            result?.nickname
+        )
+        return result
     }
 
     fun setNickname(nickname: String) {
@@ -3501,11 +3508,20 @@ open class MeshRepository(private val context: Context) {
             Timber.w("Refusing to set blank nickname")
             return
         }
+        Timber.d("setNickname: Requested nickname='%s', trimmed='%s'", nickname, trimmed)
         val core = ironCore
             ?: throw IllegalStateException("Cannot set nickname: IronCore is not initialized")
         try {
+            Timber.d("setNickname: Calling core.setNickname()")
             core.setNickname(trimmed)
             Timber.i("Nickname set to: $trimmed")
+            // Verify the nickname was persisted
+            val info = ironCore?.getIdentityInfo()
+            Timber.d(
+                "setNickname: Verification - nickname=%s, initialized=%s",
+                info?.nickname,
+                info?.initialized
+            )
         } catch (e: Exception) {
             Timber.e(e, "Rust core failed to set nickname")
             throw IllegalStateException("Failed to persist nickname: ${e.message}", e)

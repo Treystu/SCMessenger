@@ -67,11 +67,20 @@ impl IdentityStore {
     /// Save nickname to storage
     pub fn save_nickname(&self, nickname: &str) -> Result<()> {
         match self {
-            Self::Memory => Ok(()), // Memory store doesn't persist
+            Self::Memory => {
+                tracing::debug!("IdentityStore::save_nickname: Memory store - no-op");
+                Ok(())
+            }
             Self::Persistent(db) => {
+                tracing::debug!(
+                    "IdentityStore::save_nickname: Persisting to sled: key=NICKNAME_KEY, value={:?}",
+                    nickname
+                );
                 db.put(NICKNAME_KEY, nickname.as_bytes())
                     .map_err(|e| anyhow::anyhow!(e))?;
+                tracing::debug!("IdentityStore::save_nickname: Flushing sled DB");
                 db.flush().map_err(|e| anyhow::anyhow!(e))?;
+                tracing::debug!("IdentityStore::save_nickname: Persisted successfully");
                 Ok(())
             }
         }
@@ -172,12 +181,25 @@ impl IdentityStore {
     /// Load nickname from storage
     pub fn load_nickname(&self) -> Result<Option<String>> {
         match self {
-            Self::Memory => Ok(None),
+            Self::Memory => {
+                tracing::debug!("IdentityStore::load_nickname: Memory store - returning None");
+                Ok(None)
+            }
             Self::Persistent(db) => {
-                if let Some(bytes) = db.get(NICKNAME_KEY).map_err(|e| anyhow::anyhow!(e))? {
-                    Ok(Some(String::from_utf8(bytes)?))
-                } else {
-                    Ok(None)
+                tracing::debug!("IdentityStore::load_nickname: Reading from sled for NICKNAME_KEY");
+                match db.get(NICKNAME_KEY).map_err(|e| anyhow::anyhow!(e))? {
+                    Some(bytes) => {
+                        let nickname = String::from_utf8(bytes)?;
+                        tracing::debug!(
+                            "IdentityStore::load_nickname: Loaded from sled: {:?}",
+                            nickname
+                        );
+                        Ok(Some(nickname))
+                    }
+                    None => {
+                        tracing::debug!("IdentityStore::load_nickname: NICKNAME_KEY not found in sled");
+                        Ok(None)
+                    }
                 }
             }
         }

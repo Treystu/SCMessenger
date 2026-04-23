@@ -594,25 +594,47 @@ impl IronCore {
 
         #[allow(unused_variables)]
         let identity = if let Some(path) = &storage_path {
+            tracing::debug!(
+                "IronCore::init: Creating identity manager with storage at {:?}, storage_ready={}",
+                path,
+                storage_ready
+            );
             if !storage_ready {
+                tracing::debug!("IronCore::init: Storage not ready, using in-memory IdentityManager");
                 Arc::new(RwLock::new(IdentityManager::new()))
             } else {
                 #[cfg(not(target_arch = "wasm32"))]
+                let identity_path = Path::new(path).join("identity");
+                #[cfg(not(target_arch = "wasm32"))]
                 let backend = Arc::new(
                     crate::store::backend::SledStorage::new(
-                        Path::new(path).join("identity").to_string_lossy().as_ref(),
+                        identity_path.to_string_lossy().as_ref(),
                     )
-                    .unwrap(),
+                    .unwrap_or_else(|e| {
+                        tracing::error!("Failed to open identity storage at {:?}: {}", identity_path, e);
+                        panic!("Failed to open identity storage");
+                    })
                 );
                 #[cfg(target_arch = "wasm32")]
                 let backend = Arc::new(crate::store::backend::MemoryStorage::new());
 
-                Arc::new(RwLock::new(
-                    IdentityManager::with_backend(backend.clone())
-                        .unwrap_or_else(|_| IdentityManager::new()),
-                ))
+                tracing::debug!("IronCore::init: Calling IdentityManager::with_backend");
+                let manager = IdentityManager::with_backend(backend.clone());
+                let manager = match manager {
+                    Ok(m) => {
+                        tracing::debug!("IronCore::init: IdentityManager::with_backend succeeded");
+                        m
+                    }
+                    Err(e) => {
+                        tracing::error!("IronCore::init: IdentityManager::with_backend failed: {}", e);
+                        tracing::error!("IronCore::init: Falling back to in-memory IdentityManager");
+                        IdentityManager::new()
+                    }
+                };
+                Arc::new(RwLock::new(manager))
             }
         } else {
+            tracing::debug!("IronCore::init: No storage path, creating in-memory IdentityManager");
             Arc::new(RwLock::new(IdentityManager::new()))
         };
 
@@ -1071,13 +1093,21 @@ impl IronCore {
                 .map(|kp| kp.public().to_peer_id().to_string())
         });
 
+        let nickname = identity.nickname();
+        tracing::debug!(
+            "IronCore::get_identity_info: nickname={:?}, initialized={}, public_key_hex={:?}",
+            nickname,
+            identity.keys().is_some(),
+            identity.public_key_hex()
+        );
+
         IdentityInfo {
             identity_id: identity.identity_id(),
             public_key_hex: identity.public_key_hex(),
             device_id: identity.device_id(),
             seniority_timestamp: identity.seniority_timestamp(),
             initialized: identity.keys().is_some(),
-            nickname: identity.nickname(),
+            nickname,
             libp2p_peer_id,
         }
     }
@@ -1089,10 +1119,21 @@ impl IronCore {
 
     /// Set the user's nickname
     pub fn set_nickname(&self, nickname: String) -> Result<(), IronCoreError> {
-        self.identity
+        let trimmed = nickname.trim();
+        if trimmed.is_empty() {
+            tracing::warn!("IronCore::set_nickname: Empty nickname - rejecting");
+            return Err(IronCoreError::InvalidInput);
+        }
+        tracing::debug!("IronCore::set_nickname: Setting nickname to {:?}", trimmed);
+        let result = self
+            .identity
             .write()
             .set_nickname(nickname)
-            .map_err(|_| IronCoreError::StorageError)
+            .map_err(|_| IronCoreError::StorageError);
+        if result.is_ok() {
+            tracing::debug!("IronCore::set_nickname: Successfully set nickname");
+        }
+        result
     }
 
     /// Get device ID for this installation (WS13.1)

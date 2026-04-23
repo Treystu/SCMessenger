@@ -37,6 +37,10 @@ impl IdentityManager {
             device_metadata: None,
         };
 
+        tracing::debug!(
+            "IdentityManager::with_backend: Initializing with persistent storage"
+        );
+
         // Load any previously-persisted identity material without generating
         // a new identity. Fresh installs remain uninitialized.
         manager.hydrate_from_store()?;
@@ -44,13 +48,27 @@ impl IdentityManager {
     }
 
     fn hydrate_from_store(&mut self) -> Result<()> {
+        tracing::debug!("IdentityManager::hydrate_from_store: Loading from persistent store");
         if let Some(nickname) = self.store.load_nickname()? {
+            tracing::debug!(
+                "IdentityManager::hydrate_from_store: Loaded nickname from store: {:?}",
+                nickname
+            );
             self.nickname = Some(nickname);
+        } else {
+            tracing::debug!("IdentityManager::hydrate_from_store: No nickname found in store");
         }
         if let Some(keys) = self.store.load_keys()? {
+            tracing::debug!("IdentityManager::hydrate_from_store: Loaded keys from store");
             self.keys = Some(keys);
+        } else {
+            tracing::debug!("IdentityManager::hydrate_from_store: No keys found in store");
         }
         self.device_metadata = self.store.load_device_metadata()?;
+        tracing::debug!(
+            "IdentityManager::hydrate_from_store: Loaded device_metadata={:?}",
+            self.device_metadata
+        );
         self.ensure_device_metadata()?;
         Ok(())
     }

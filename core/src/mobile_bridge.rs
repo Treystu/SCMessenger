@@ -223,16 +223,30 @@ impl MeshService {
         *state = ServiceState::Starting;
         drop(state);
 
+        tracing::info!(
+            "MeshService::start: storage_path={:?}, log_directory={:?}",
+            self.storage_path,
+            self.log_directory
+        );
+
         // Initialize IronCore
         let core = if let Some(ref log_dir) = self.log_directory {
             if let Some(ref path) = self.storage_path {
-                crate::IronCore::with_storage_and_logs(path.clone(), log_dir.clone())
+                tracing::info!("MeshService::start: Creating IronCore::with_storage_and_logs");
+                let core = crate::IronCore::with_storage_and_logs(path.clone(), log_dir.clone());
+                tracing::info!("MeshService::start: IronCore::with_storage_and_logs completed");
+                core
             } else {
+                tracing::info!("MeshService::start: Creating IronCore::new (no storage path)");
                 crate::IronCore::new()
             }
         } else if let Some(ref path) = self.storage_path {
-            crate::IronCore::with_storage(path.clone())
+            tracing::info!("MeshService::start: Creating IronCore::with_storage at {:?}", path);
+            let core = crate::IronCore::with_storage(path.clone());
+            tracing::info!("MeshService::start: IronCore::with_storage completed");
+            core
         } else {
+            tracing::info!("MeshService::start: Creating IronCore::new (no storage)");
             crate::IronCore::new()
         };
 
