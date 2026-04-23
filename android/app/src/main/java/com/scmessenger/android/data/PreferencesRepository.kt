@@ -34,6 +34,7 @@ open class PreferencesRepository(private val context: Context) {
         private val MANUAL_ADJUSTMENT_PROFILE = stringPreferencesKey("manual_adjustment_profile")
         private val BLE_ROTATION_ENABLED = booleanPreferencesKey("ble_rotation_enabled")
         private val BLE_ROTATION_INTERVAL_SEC = intPreferencesKey("ble_rotation_interval_sec")
+        private val IDENTITY_NICKNAME = stringPreferencesKey("identity_nickname")
     }
 
     // ========================================================================
@@ -193,5 +194,24 @@ open class PreferencesRepository(private val context: Context) {
             prefs[BLE_ROTATION_INTERVAL_SEC] = intervalSec
         }
         Timber.d("BLE rotation interval: ${intervalSec}s")
+    }
+
+    // ========================================================================
+    // IDENTITY NICKNAME (defensive fallback for Rust-core persistence regressions)
+    // ========================================================================
+
+    val identityNickname: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[IDENTITY_NICKNAME]
+    }
+
+    suspend fun setIdentityNickname(nickname: String?) {
+        context.dataStore.edit { prefs ->
+            if (nickname.isNullOrBlank()) {
+                prefs.remove(IDENTITY_NICKNAME)
+            } else {
+                prefs[IDENTITY_NICKNAME] = nickname.trim()
+            }
+        }
+        Timber.i("Identity nickname cached: ${nickname?.trim()}")
     }
 }

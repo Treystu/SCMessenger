@@ -124,7 +124,17 @@ class SettingsViewModel @Inject constructor(
     fun loadIdentity() {
         viewModelScope.launch {
             try {
-                _identityInfo.value = meshRepository.getIdentityInfo()
+                val info = meshRepository.getIdentityInfo()
+                // Defensive fallback: if Rust core returns blank nickname, use cached preference
+                if (info?.nickname.isNullOrBlank()) {
+                    val cached = preferencesRepository.identityNickname.first()
+                    if (!cached.isNullOrBlank()) {
+                        Timber.w("Rust core nickname blank; using DataStore fallback: $cached")
+                        _identityInfo.value = info?.copy(nickname = cached)
+                        return@launch
+                    }
+                }
+                _identityInfo.value = info
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load identity")
             }

@@ -156,6 +156,8 @@ class MainViewModel @Inject constructor(
                 if (_isReady.value) {
                     preferencesRepository.setOnboardingCompleted(true)
                     preferencesRepository.setInstallChoiceCompleted(true)
+                    // Defensive: cache nickname in DataStore as fallback for Rust-core regression
+                    preferencesRepository.setIdentityNickname(trimmedNickname)
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to create identity")
