@@ -3,7 +3,7 @@
 **Priority:** P0
 **Type:** BUILD
 **Platform:** Android
-**Estimated Effort:** 2–4 hours
+**Estimated LoC Impact:** 150–300 LoC (across 6 Kotlin files)
 
 ## Objective
 Fix 30+ Kotlin compilation errors preventing `./gradlew :app:compileDebugKotlin` from passing. These errors block the Android build entirely.

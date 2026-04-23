@@ -3,7 +3,7 @@
 **Priority:** P0
 **Type:** BUILD
 **Platform:** WASM (Rust Core)
-**Estimated Effort:** 1–2 hours
+**Estimated LoC Impact:** 50–100 LoC (cfg gating + type fixes)
 
 ## Objective
 Fix 28 compilation errors on the `wasm32-unknown-unknown` target in the `scmessenger-core` crate. These errors prevent the WASM thin client from building. `P0_WASM_002` (thin client compilation fixes) is marked done in `HANDOFF/done/` but the core crate still has ungated native-only code.

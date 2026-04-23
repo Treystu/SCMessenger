@@ -862,7 +862,7 @@ impl IronCore {
             log_manager.clone(),
         ));
         let blocked_manager = Arc::new(store::blocked::BlockedManager::new(root_backend.clone()));
-        let relay_registry = Arc::new(store::RelayRegistry::new(root_backend));
+        let relay_registry = Arc::new(store::RelayRegistry::new(root_backend.clone()));
 
         let identity = if let Some(path) = &storage_path {
             let identity_path = Path::new(path).join("identity");

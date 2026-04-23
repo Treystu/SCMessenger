@@ -269,6 +269,7 @@ impl BootstrapManager {
                             warn!("Direct swarm connection failed for {}: {}", addr, err_str);
 
                             // P0_NETWORK_002: Try WebSocket fallback if this is a WebSocket-capable address
+                            #[cfg(not(target_arch = "wasm32"))]
                             if self.is_websocket_address(&addr) {
                                 debug!("Attempting WebSocket fallback for {}", addr);
                                 match self.try_websocket_connection(&addr).await {
@@ -291,6 +292,13 @@ impl BootstrapManager {
                                 }
                             } else {
                                 // Not a WebSocket address, record the original failure
+                                self.record_failure(&addr, &err_str);
+                                self.circuit_breaker.record_failure(&addr_str, &err_str);
+                                self.relay_discovery.record_failure(&peer_id, &err_str);
+                            }
+                            #[cfg(target_arch = "wasm32")]
+                            {
+                                // On WASM, WebSocket fallback is not available
                                 self.record_failure(&addr, &err_str);
                                 self.circuit_breaker.record_failure(&addr_str, &err_str);
                                 self.relay_discovery.record_failure(&peer_id, &err_str);
@@ -409,6 +417,7 @@ impl BootstrapManager {
     }
 
     /// Check if address is WebSocket-capable
+    #[cfg(not(target_arch = "wasm32"))]
     fn is_websocket_address(&self, addr: &Multiaddr) -> bool {
         addr.iter().any(|proto| {
             matches!(proto, libp2p::multiaddr::Protocol::Ws(_) | libp2p::multiaddr::Protocol::Wss(_))
@@ -416,6 +425,7 @@ impl BootstrapManager {
     }
 
     /// Try WebSocket connection as fallback
+    #[cfg(not(target_arch = "wasm32"))]
     async fn try_websocket_connection(&self, addr: &Multiaddr) -> Result<(), InternetTransportError> {
         // Import WebSocket transport
         use crate::transport::websocket::{WebSocketTransport, diagnose_websocket_error};

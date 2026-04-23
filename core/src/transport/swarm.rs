@@ -668,6 +668,7 @@ fn transport_type_to_routing_transport(_mode: kad::Mode) -> RoutingTransportType
 }
 
 /// Convert routing engine decision to ranked routes for dispatch
+#[cfg(not(target_arch = "wasm32"))]
 fn routing_decision_to_ranked_routes(
     decision: &RoutingDecision,
     target_peer: &PeerId,
@@ -3212,6 +3213,7 @@ pub async fn start_swarm_with_config(
                     // Process commands from the application layer
                     Some(command) = command_rx.recv() => {
                         match command {
+                            #[cfg(not(target_arch = "wasm32"))]
                             SwarmCommand::SendMessage { peer_id, envelope_data, recipient_identity_id, intended_device_id, reply } => {
                                 // PHASE 6: Multi-path delivery with routing engine integration
                                 let message_id = format!("{}-{}", peer_id, SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis());
@@ -3286,6 +3288,30 @@ pub async fn start_swarm_with_config(
                                     recipient_identity_id,
                                     intended_device_id,
                                 });
+                            }
+                            #[cfg(target_arch = "wasm32")]
+                            SwarmCommand::SendMessage { peer_id, envelope_data, recipient_identity_id, intended_device_id, reply } => {
+                                // WASM: Simple direct send without complex routing
+                                let message_id = format!("{}-{}", peer_id, SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis());
+                                let request_id = swarm.behaviour_mut().messaging.send_request(
+                                    &peer_id,
+                                    MessageRequest {
+                                        envelope_data: envelope_data.clone(),
+                                    },
+                                );
+                                pending_messages.insert(message_id.clone(), PendingMessage {
+                                    target_peer: peer_id,
+                                    envelope_data,
+                                    reply_tx: reply,
+                                    current_path_index: 0,
+                                    attempt_start: SystemTime::now(),
+                                    dispatch_attempts: 1,
+                                    pass_count: 0,
+                                    retry_notified: false,
+                                    recipient_identity_id,
+                                    intended_device_id,
+                                });
+                                request_to_message.insert(request_id, message_id);
                             }
 
                             SwarmCommand::RegisterIdentity { peer_id, request, reply } => {
@@ -3729,7 +3755,7 @@ pub async fn start_swarm_with_config(
                                             // Check if sender is blocked before processing message
                                             let sender_blocked = if let Some(ref core_handle) = core_handle {
                                                 // WASM version doesn't have device ID in request, so pass None
-                                                core_handle.is_peer_blocked(peer.to_string(), None).unwrap_or(false)
+                                                core_handle.upgrade().map(|c| c.is_peer_blocked(peer.to_string(), None).unwrap_or(false)).unwrap_or(false)
                                             } else {
                                                 false
                                             };

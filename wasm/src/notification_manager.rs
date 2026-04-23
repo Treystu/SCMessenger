@@ -1,8 +1,11 @@
 // scmessenger-wasm — WebAssembly notification management for browser environments
+// Simplified version using direct JavaScript API calls via js_sys
 
 use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsValue;
+use web_sys::{window, Storage, Node, Element, HtmlElement};
 
 /// Notification permission state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -107,46 +110,114 @@ impl NotificationManager {
     pub async fn request_permission(&self) -> bool {
         #[cfg(target_arch = "wasm32")]
         {
-            // Use web_sys directly for browser APIs
-            use wasm_bindgen::JsCast;
-            use web_sys::{window, Notification};
+            // Check if Notification API is available
+            let notification_available = js_sys::Reflect::get(
+                &js_sys::global(),
+                &JsValue::from_str("Notification"),
+            )
+            .ok()
+            .map(|v| v.is_object())
+            .unwrap_or(false);
 
-            let window = match window() {
-                Some(w) => w,
-                None => return false,
-            };
-
-            // Check if notifications are supported
-            if !Notification::supported() {
+            if !notification_available {
                 *self.permission.borrow_mut() = NotificationPermission::Denied;
                 return false;
             }
 
-            // Check current permission
-            if Notification::permission() == NotificationPermission::Granted.into() {
-                *self.permission.borrow_mut() = NotificationPermission::Granted;
-                return true;
+            // Get the notification permission using navigator.permission API
+            let _window = match window() {
+                Some(w) => w,
+                None => {
+                    *self.permission.borrow_mut() = NotificationPermission::Default;
+                    return false;
+                }
+            };
+
+            // Get navigator.permission()
+            let permission_result = js_sys::Reflect::get(
+                &js_sys::global(),
+                &JsValue::from_str("navigator"),
+            )
+            .ok();
+
+            if let Some(permission_obj) = permission_result {
+                if permission_obj.is_object() {
+                    let permission_fn = js_sys::Reflect::get(
+                        &permission_obj,
+                        &JsValue::from_str("permission"),
+                    )
+                    .ok();
+
+                    if let Some(req_fn) = permission_fn {
+                        if req_fn.is_function() {
+                            let req_fn: js_sys::Function = req_fn.unchecked_into();
+                            // Call navigator.permission() and await
+                            let promise = js_sys::Promise::from(js_sys::Reflect::apply(
+                                &req_fn,
+                                &JsValue::UNDEFINED,
+                                &js_sys::Array::new(),
+                            ).unwrap());
+                            let js_future = wasm_bindgen_futures::JsFuture::from(promise);
+                            if let Ok(permission_val) = js_future.await {
+                                let permission_str = permission_val.as_string().unwrap_or_default();
+                                if permission_str == "granted" {
+                                    *self.permission.borrow_mut() = NotificationPermission::Granted;
+                                    save_notification_settings("granted");
+                                    return true;
+                                }
+                                if permission_str == "denied" {
+                                    *self.permission.borrow_mut() = NotificationPermission::Denied;
+                                    save_notification_settings("denied");
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
-            // Request permission
-            match Notification::request_permission().await {
-                Ok(permission) => {
-                    let granted = permission == NotificationPermission::Granted.into();
-                    if granted {
-                        *self.permission.borrow_mut() = NotificationPermission::Granted;
-                        save_notification_settings("granted");
-                    } else {
-                        *self.permission.borrow_mut() = NotificationPermission::Denied;
-                        save_notification_settings("denied");
+            // Fallback: Request permission using window.Notification.requestPermission()
+            let notification_obj = js_sys::Reflect::get(
+                &js_sys::global(),
+                &JsValue::from_str("Notification"),
+            )
+            .ok();
+
+            if let Some(notif_obj) = notification_obj {
+                if notif_obj.is_object() {
+                    let req_fn = js_sys::Reflect::get(
+                        &notif_obj,
+                        &JsValue::from_str("requestPermission"),
+                    )
+                    .ok();
+
+                    if let Some(request_fn) = req_fn {
+                        if request_fn.is_function() {
+                            let request_fn: js_sys::Function = request_fn.unchecked_into();
+                            let promise = js_sys::Promise::from(js_sys::Reflect::apply(
+                                &request_fn,
+                                &JsValue::UNDEFINED,
+                                &js_sys::Array::new(),
+                            ).unwrap());
+                            let js_future = wasm_bindgen_futures::JsFuture::from(promise);
+                            if let Ok(permission_val) = js_future.await {
+                                let permission_str = permission_val.as_string().unwrap_or_default();
+                                let granted = permission_str == "granted";
+                                if granted {
+                                    *self.permission.borrow_mut() = NotificationPermission::Granted;
+                                    save_notification_settings("granted");
+                                } else {
+                                    *self.permission.borrow_mut() = NotificationPermission::Denied;
+                                    save_notification_settings("denied");
+                                }
+                                return granted;
+                            }
+                        }
                     }
-                    granted
-                }
-                Err(_) => {
-                    *self.permission.borrow_mut() = NotificationPermission::Denied;
-                    save_notification_settings("denied");
-                    false
                 }
             }
+
+            false
         }
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -166,8 +237,15 @@ impl NotificationManager {
     pub fn is_supported(&self) -> bool {
         #[cfg(target_arch = "wasm32")]
         {
-            use web_sys::Notification;
-            Notification::supported()
+            // Check if Notification constructor is available
+            let notification_available = js_sys::Reflect::get(
+                &js_sys::global(),
+                &JsValue::from_str("Notification"),
+            )
+            .ok()
+            .map(|v| v.is_object())
+            .unwrap_or(false);
+            notification_available
         }
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -178,40 +256,50 @@ impl NotificationManager {
 
     /// Show a notification with the given options
     #[wasm_bindgen(js_name = showNotification)]
-    pub async fn show_notification(&self, title: String, body: String, options: JsValue) {
+    pub async fn show_notification(&self, title: String, body: String, _options: JsValue) {
         #[cfg(target_arch = "wasm32")]
         {
-            use wasm_bindgen::JsCast;
-            use web_sys::{window, Notification, NotificationOptions};
+            // Use the browser's Notification API directly
+            let notification_result = js_sys::Reflect::get(
+                &js_sys::global(),
+                &JsValue::from_str("Notification"),
+            )
+            .ok();
 
-            // Parse default options
-            let _ = options; // placeholder - would parse if needed
+            if let Some(notification_obj) = notification_result {
+                if notification_obj.is_object() {
+                    let notification = js_sys::Reflect::construct(
+                        &notification_obj.unchecked_into::<js_sys::Function>(),
+                        &js_sys::Array::from_iter([
+                            JsValue::from_str(title.as_str()),
+                            JsValue::from_str(body.as_str()),
+                        ]),
+                    ).unwrap_or(JsValue::UNDEFINED);
 
-            let notification_options = NotificationOptions::new();
-            notification_options.set_body(body.as_str());
+                    if !notification.is_undefined() {
+                        // Set click handler
+                        if let Some(win) = web_sys::window() {
+                            let notification_clone = notification.clone();
+                            let click_handler = Closure::wrap(Box::new(move || {
+                                web_sys::console::log_1(&JsValue::from_str(&format!("Notification clicked: {}", title)));
+                                let _ = win.focus();
+                            }) as Box<dyn FnMut()>);
 
-            if let Some(icon) = BrowserNotificationOptions::default().icon {
-                notification_options.set_icon(icon.as_str());
-            }
-
-            if let Ok(notification) = Notification::new_with_options(title.as_str(), &notification_options) {
-                // Set click handler
-                if let Some(win) = window() {
-                    let notification_clone = notification.clone();
-                    let click_handler = Closure::wrap(Box::new(move || {
-                        console_log!("Notification clicked: {}", title);
-                        win.focus();
-                    }) as Box<dyn FnMut()>);
-
-                    notification_clone.set_onclick(Some(click_handler.as_ref().unchecked_ref()));
-                    click_handler.forget();
+                            let _ = js_sys::Reflect::set(
+                                &notification_clone,
+                                &JsValue::from_str("onclick"),
+                                click_handler.as_ref().unchecked_ref(),
+                            );
+                            click_handler.forget();
+                        }
+                    }
                 }
             }
         }
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            console_log("Notification not supported outside browser");
+            web_sys::console::log_1(&JsValue::from_str("Notification not supported outside browser"));
         }
     }
 
@@ -220,7 +308,7 @@ impl NotificationManager {
     pub fn close_all_notifications(&self) {
         #[cfg(target_arch = "wasm32")]
         {
-            console_log("closeAllNotifications: Tracking notifications in real implementation");
+            web_sys::console::log_1(&JsValue::from_str("closeAllNotifications: Tracking notifications in real implementation"));
         }
     }
 
@@ -267,39 +355,57 @@ impl NotificationManager {
     pub fn show_permission_guidance(&self) {
         #[cfg(target_arch = "wasm32")]
         {
-            use web_sys::window;
-
             let window = match window() {
                 Some(w) => w,
                 None => return,
             };
 
+            let document = match window.document() {
+                Some(d) => d,
+                None => return,
+            };
+
             // Build HTML for guidance overlay using string concatenation
-            let guidance_html = format!(
-                r#"<div id="scm_msg_guide" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 9999; max-width: 400px;"><h3 style="margin-top: 0;">Notifications Disabled</h3><p style="margin-bottom: 1rem;">Please enable notifications in your browser settings to receive messages.</p><div style="display: flex; gap: 10px;"><a id="open_settings_btn" href="#" style="flex: 1; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; text-align: center;">Open Settings</a><button id="close_guide_btn" style="flex: 1; padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">Cancel</button></div></div>"#
-            );
+            let guidance_html = String::from("<div id=\"scm_msg_guide\" style=\"position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 9999; max-width: 400px;\"><h3 style=\"margin-top: 0;\">Notifications Disabled</h3><p style=\"margin-bottom: 1rem;\">Please enable notifications in your browser settings to receive messages.</p><div style=\"display: flex; gap: 10px;\"><a id=\"open_settings_btn\" href=\"#\" style=\"flex: 1; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; text-align: center;\">Open Settings</a><button id=\"close_guide_btn\" style=\"flex: 1; padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;\">Cancel</button></div></div>");
 
-            if let Ok(div) = window.document().unwrap().create_element("div") {
-                div.set_inner_html(&guidance_html);
-
-                if let Some(body) = window.document().unwrap().body() {
-                    body.append_child(&div).ok();
-
-                    // Setup event handlers
-                    if let Ok(Some(link)) = div.query_selector("#open_settings_btn") {
-                        link.set_attribute("href", "javascript:void(0);").ok();
-                    }
-
-                    if let Ok(Some(button)) = div.query_selector("#close-guide-btn") {
-                        let div_clone = div.clone();
-                        let close_cb = Closure::wrap(Box::new(move || {
-                            div_clone.parent_node().map(|p| p.remove_child(&div_clone));
-                        }) as Box<dyn FnMut()>);
-
-                        button.set_onclick(Some(close_cb.as_ref().unchecked_ref()));
-                        close_cb.forget();
+            // Create the div element using JavaScript
+            let div = match js_sys::Reflect::get(&document, &JsValue::from_str("createElement")) {
+                Ok(create_element_fn) if create_element_fn.is_function() => {
+                    let create_element_fn: js_sys::Function = create_element_fn.unchecked_into();
+                    let result = js_sys::Reflect::apply(&create_element_fn, &document, &js_sys::Array::from_iter([JsValue::from("div")]));
+                    match result {
+                        Ok(div) => div,
+                        Err(_) => return,
                     }
                 }
+                _ => return,
+            };
+
+            // Set inner HTML
+            let _ = js_sys::Reflect::set(&div, &JsValue::from_str("innerHTML"), &JsValue::from_str(&guidance_html));
+
+            // Convert to Node for append_child
+            let div_node: &Node = div.unchecked_ref();
+            if let Some(body) = document.body() {
+                let _ = body.append_child(div_node);
+            }
+
+            // Convert to Element for query_selector and set_attribute
+            let div: &Element = div.unchecked_ref();
+            if let Ok(Some(link)) = div.query_selector("#open_settings_btn") {
+                let _ = link.set_attribute("href", "javascript:void(0)");
+            }
+
+            if let Ok(Some(button)) = div.query_selector("#close_guide_btn") {
+                let div_clone = div.clone();
+                let close_cb = Closure::wrap(Box::new(move || {
+                    div_clone.parent_node().map(|p: Node| p.remove_child(div_clone.unchecked_ref()));
+                }) as Box<dyn FnMut()>);
+
+                // Convert button to HtmlElement for set_onclick
+                let button: &HtmlElement = button.unchecked_ref();
+                let _ = button.set_onclick(Some(close_cb.as_ref().unchecked_ref()));
+                close_cb.forget();
             }
         }
     }
@@ -316,11 +422,22 @@ impl Default for NotificationManager {
 fn get_user_agent() -> String {
     #[cfg(target_arch = "wasm32")]
     {
-        use web_sys::window;
-        window()
-            .and_then(|w| w.navigator().ok())
-            .and_then(|n| n.user_agent().ok())
-            .unwrap_or_else(|| "Unknown".to_string())
+        let window = match window() {
+            Some(w) => w,
+            None => return "Unknown".to_string(),
+        };
+
+        let navigator = match js_sys::Reflect::get(&window, &JsValue::from_str("navigator")) {
+            Ok(n) => n,
+            Err(_) => return "Unknown".to_string(),
+        };
+
+        let user_agent = match js_sys::Reflect::get(&navigator, &JsValue::from_str("userAgent")) {
+            Ok(ua) => ua.as_string(),
+            Err(_) => None,
+        };
+
+        user_agent.unwrap_or_else(|| "Unknown".to_string())
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -332,10 +449,17 @@ fn get_user_agent() -> String {
 fn get_notification_settings() -> Option<String> {
     #[cfg(target_arch = "wasm32")]
     {
-        use web_sys::window;
-        window()
-            .and_then(|w| w.local_storage().ok())
-            .and_then(|s| s.get_item("notificationPermission").ok())
+        let window = window()?;
+        let storage_value = match js_sys::Reflect::get(&window, &JsValue::from_str("localStorage")) {
+            Ok(s) => s,
+            Err(_) => return None,
+        };
+        let storage: Storage = storage_value.unchecked_into();
+        match storage.get_item("notificationPermission") {
+            Ok(Some(js_val)) => Some(js_val),
+            Ok(None) => None,
+            Err(_) => None,
+        }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -347,22 +471,17 @@ fn get_notification_settings() -> Option<String> {
 fn save_notification_settings(_state: &str) {
     #[cfg(target_arch = "wasm32")]
     {
-        use web_sys::window;
-        if let Some(storage) = window().and_then(|w| w.local_storage().ok()) {
-            storage.set_item("notificationPermission", _state).ok();
-        }
-    }
-}
+        let window = match window() {
+            Some(w) => w,
+            None => return,
+        };
 
-fn console_log(msg: &str) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        web_sys::console::log_1(&JsValue::from_str(msg));
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        eprintln!("{}", msg);
+        let storage_value = match js_sys::Reflect::get(&window, &JsValue::from_str("localStorage")) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        let storage: Storage = storage_value.unchecked_into();
+        let _ = storage.set_item("notificationPermission", _state);
     }
 }
 

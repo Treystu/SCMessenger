@@ -28,7 +28,7 @@ hex = { workspace = true }
 rand = { workspace = true }
 zeroize = { workspace = true }
 bs58 = "0.5"
-uniffi = { workspace = true }
+uniffi = { workspace = true, features = ["wasm-unstable-single-threaded"] }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
