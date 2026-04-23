@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import timber.log.Timber
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
@@ -242,6 +243,13 @@ open class MeshRepository(private val context: Context) {
     private suspend fun trackNetworkFailure(nodeId: String, reason: String, exception: Exception) {
         networkFailureMetrics.recordFailure(nodeId, reason, exception)
 
+        // P0_ANDROID_010: Prevent recursive fallback triggering (StackOverflowError)
+        // Atomic check-and-set ensures only one concurrent fallback attempt
+        if (inFallbackProtocol.get()) {
+            Timber.w("Skipping recursive fallback for $nodeId - already in fallback protocol")
+            return
+        }
+
         // Trigger fallback if node is marked unreachable
         if (networkFailureMetrics.isNodeUnreachable(nodeId)) {
             triggerFallbackProtocol(nodeId)
@@ -253,24 +261,33 @@ open class MeshRepository(private val context: Context) {
      * Falls back through: environment override → remote config → static fallback → WebSocket on standard ports.
      */
     private suspend fun triggerFallbackProtocol(failedNodeId: String) {
-        Timber.w("Node $failedNodeId marked unreachable, triggering fallback protocol")
-        val fallbackNodes = resolveAllBootstrapSources()
-        if (fallbackNodes.isNotEmpty()) {
-            Timber.i("Fallback protocol: ${fallbackNodes.size} alternative bootstrap nodes available")
-            val bridge = swarmBridge ?: return
-            for (addr in fallbackNodes) {
-                if (addr != failedNodeId && relayCircuitBreaker.allowRequest(addr)) {
-                    try {
-                        bridge.dial(addr)
-                        Timber.i("Fallback bootstrap dial: %s", addr)
-                        return
-                    } catch (e: Exception) {
-                        // Log fallback failure directly — do NOT call enhanceNetworkErrorLogging
-                        // to prevent infinite recursion (trackNetworkFailure → triggerFallbackProtocol loop)
-                        Timber.w(e, "Fallback bootstrap dial failed for $addr")
+        // P0_ANDROID_010: Atomic compareAnd-set ensures race-free recursion guard
+        if (!inFallbackProtocol.compareAndSet(false, true)) {
+            Timber.w("Skipping re-entrant fallback for $failedNodeId - already in progress")
+            return
+        }
+        try {
+            Timber.w("Node $failedNodeId marked unreachable, triggering fallback protocol")
+            val fallbackNodes = resolveAllBootstrapSources()
+            if (fallbackNodes.isNotEmpty()) {
+                Timber.i("Fallback protocol: ${fallbackNodes.size} alternative bootstrap nodes available")
+                val bridge = swarmBridge ?: return
+                for (addr in fallbackNodes) {
+                    if (addr != failedNodeId && relayCircuitBreaker.allowRequest(addr)) {
+                        try {
+                            bridge.dial(addr)
+                            Timber.i("Fallback bootstrap dial: %s", addr)
+                            return
+                        } catch (e: Exception) {
+                            // Log fallback failure directly — do NOT call enhanceNetworkErrorLogging
+                            // to prevent infinite recursion (trackNetworkFailure → triggerFallbackProtocol loop)
+                            Timber.w(e, "Fallback bootstrap dial failed for $addr")
+                        }
                     }
                 }
             }
+        } finally {
+            inFallbackProtocol.set(false)
         }
     }
 
@@ -375,6 +392,11 @@ open class MeshRepository(private val context: Context) {
 
     // P0_ANDROID_005: Retry lock for thread-safe attempt count updates
     private val retryLock = kotlinx.coroutines.sync.Mutex()
+
+    // P0_ANDROID_010: Atomic recursion guard for fallback protocol
+    // Prevents enhanceNetworkErrorLogging → trackNetworkFailure → triggerFallbackProtocol
+    // from re-entering concurrently. AtomicBoolean ensures check-and-set is race-free.
+    private val inFallbackProtocol = AtomicBoolean(false)
 
     // P4: Dedup cache — suppress redundant dial-throttle log lines
     // for the same address within a 5-minute window.
@@ -2866,12 +2888,28 @@ open class MeshRepository(private val context: Context) {
             if (!info.initialized) {
                 val restored = restoreIdentityFromBackup(core)
                 if (restored) {
+                    // P0_ANDROID_010: Grant consent after successful backup restore.
+                    // The Rust core starts with consent_granted=false, but if we have a
+                    // persisted identity backup, the user already consented in a prior session.
+                    core.grantConsent()
                     info = core.getIdentityInfo()
                 }
             }
             if (!info.initialized) {
                 Timber.i("Identity not initialized; onboarding required")
                 return
+            }
+
+            // P0_ANDROID_010: Ensure consent is granted whenever identity is initialized.
+            // This handles the case where identity was loaded from sled but consent wasn't set
+            // (e.g., after a process restart where consent_granted resets to false).
+            try {
+                if (!core.isConsentGranted()) {
+                    core.grantConsent()
+                }
+            } catch (_: Exception) {
+                // isConsentGranted may not exist in all versions; grant unconditionally
+                core.grantConsent()
             }
 
             val nickname = info.nickname?.trim().orEmpty()
@@ -2902,7 +2940,13 @@ open class MeshRepository(private val context: Context) {
         val activeCore = core ?: return
         try {
             val backup = activeCore.exportIdentityBackup("")
-            identityBackupPrefs.edit().putString(IDENTITY_BACKUP_KEY, backup).apply()
+            // P0_ANDROID_010: Use commit() for synchronous write.
+            // apply() is async and can lose the backup if the process is killed
+            // before the disk write completes (e.g., during an ANR crash).
+            val committed = identityBackupPrefs.edit().putString(IDENTITY_BACKUP_KEY, backup).commit()
+            if (!committed) {
+                Timber.e("Failed to commit identity backup to SharedPreferences")
+            }
         } catch (e: Exception) {
             Timber.w("Failed to persist identity backup payload: ${e.message}")
         }
@@ -3796,17 +3840,51 @@ open class MeshRepository(private val context: Context) {
     fun isIdentityInitialized(): Boolean {
         // Check if we have an identity backup first (fast path)
         if (identityBackupPrefs.contains(IDENTITY_BACKUP_KEY)) {
+            // P0_ANDROID_010: Verify Rust core also has the identity.
+            // The backup may exist in SharedPreferences but the Rust core may have
+            // lost its sled database (e.g., after an unclean shutdown). If the service
+            // is running and the core reports uninitialized, trigger a restore.
+            if (meshService?.getState() == uniffi.api.ServiceState.RUNNING && ironCore != null) {
+                val coreInitialized = ironCore?.getIdentityInfo()?.initialized == true
+                if (!coreInitialized) {
+                    Timber.w("Backup exists but Rust core identity is lost — attempting restore")
+                    try {
+                        val restored = restoreIdentityFromBackup(ironCore!!)
+                        if (restored) {
+                            ironCore?.grantConsent()
+                            Timber.i("Identity restored from backup during isIdentityInitialized check")
+                        }
+                    } catch (e: Exception) {
+                        Timber.w(e, "Failed to restore identity during isIdentityInitialized check")
+                    }
+                }
+            }
             return true
         }
-        
+
         // Only start service if we already have it running or explicitly need it
         if (meshService?.getState() == uniffi.api.ServiceState.RUNNING && ironCore != null) {
             return ironCore?.getIdentityInfo()?.initialized == true
         }
-        
+
         // If service is not running, check if identity files exist on disk
         val identityFile = File(storagePath, "identity.db")
         return identityFile.exists()
+    }
+
+    /**
+     * Grant explicit user consent for cryptographic identity generation.
+     * Must be called BEFORE initializeIdentity() or createIdentity().
+     * Persists consent in the Rust core (sled-backed).
+     */
+    fun grantConsent() {
+        try {
+            ensureServiceInitialized()
+            ironCore?.grantConsent()
+            Timber.i("Consent granted in Rust core")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to grant consent")
+        }
     }
 
     fun hasRequiredRuntimePermissions(): Boolean = hasAllPermissions(Permissions.required)
@@ -3848,6 +3926,10 @@ open class MeshRepository(private val context: Context) {
                     Timber.e("IronCore is null after ensureServiceInitialized! Cannot create identity.")
                     throw IllegalStateException("Mesh service initialization failed")
                 }
+                // P0_ANDROID_010: Grant consent before identity initialization.
+                // The Rust core requires consent_granted=true for initialize_identity().
+                // OnboardingScreen's consent checkbox gates the UI; this propagates consent to the core.
+                ironCore?.grantConsent()
                 Timber.d("Calling ironCore.initializeIdentity()...")
                 ironCore?.initializeIdentity()
                 ensureLocalIdentityFederation()

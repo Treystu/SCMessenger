@@ -95,6 +95,17 @@ class MainViewModel @Inject constructor(
         refreshIdentityState()
     }
 
+    fun grantConsent() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                meshRepository.grantConsent()
+                Timber.i("Consent granted via MainViewModel")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to grant consent")
+            }
+        }
+    }
+
     fun refreshIdentityState() {
         viewModelScope.launch(Dispatchers.IO) {
             Timber.d("refreshIdentityState() called")

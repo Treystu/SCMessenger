@@ -192,7 +192,10 @@ fun OnboardingScreen(
                         }
 
                         Button(
-                            onClick = { hasAcceptedConsent = true },
+                            onClick = {
+                                hasAcceptedConsent = true
+                                viewModel.grantConsent()
+                            },
                             enabled = consentChecked,
                             modifier = Modifier.fillMaxWidth()
                         ) {
