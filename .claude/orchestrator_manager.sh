@@ -1,7 +1,8 @@
 #!/bin/bash
-# Orchestrator State Management (v3.2)
+# Orchestrator State Management (v3.3)
 # Handles activation, deactivation, multi-agent slot management (MAX=2)
 # Now supports native Agent tool subagents + CLI-based Ollama agents
+# v3.3: STRICT OS-LEVEL PROCESS GATING — fixes pool_stop arg bug, adds assert_process_limit
 # v3.2: PowerShell-based process checking for Windows, self-preservation PID guard
 
 # Source cross-platform process helpers
@@ -12,7 +13,32 @@ STATE_FILE=".claude/orchestrator_state.json"
 AGENT_ROOT=".claude/agents"
 POOL_CONFIG=".claude/agent_pool.json"
 MAX_SUBAGENTS=2
+MAX_OS_PROCESSES=3
 ORCHESTRATOR_PID_FILE=".claude/orchestrator.pid"
+
+# ─── STRICT OS-LEVEL PROCESS GATING ────────────────────────────────────────
+# Two-Tier Topology: Max 3 OS processes (Lead Orchestrator + 2 Workers)
+# This MUST be checked BEFORE every agent launch.
+
+count_os_claude_processes() {
+    # Count actual claude.exe processes via PowerShell (Windows)
+    local count=$(powershell.exe -NoProfile -Command "@(Get-Process -Name claude -ErrorAction SilentlyContinue).Count" 2>/dev/null)
+    if [ -z "$count" ] || ! [[ "$count" =~ ^[0-9]+$ ]]; then
+        echo "0"
+        return
+    fi
+    echo "$count"
+}
+
+assert_process_limit() {
+    local os_count=$(count_os_claude_processes)
+    if [ "$os_count" -ge "$MAX_OS_PROCESSES" ]; then
+        echo "CRITICAL: OS process limit reached ($os_count/$MAX_OS_PROCESSES claude.exe processes)."
+        echo "Refusing to launch agent. Stop an existing agent first."
+        return 1
+    fi
+    return 0
+}
 
 # Get orchestrator PID from file (stored during activation)
 get_orchestrator_pid() {
@@ -206,6 +232,11 @@ pool_launch() {
         return 1
     fi
 
+    # STRICT GATE: Check actual OS process count (Two-Tier Topology: max 3)
+    if ! assert_process_limit; then
+        return 1
+    fi
+
     # Find agent profile in pool config
     if [ ! -f "$POOL_CONFIG" ]; then
         echo "Error: Agent pool config not found at $POOL_CONFIG"
@@ -340,7 +371,7 @@ pool_stop() {
             rm -rf "$AGENT_ROOT/$agent_id"
             return 1
         fi
-        ./scripts/launch_agent.sh "dummy" "$agent_id" stop
+        ./scripts/launch_agent.sh "dummy" "$agent_id" "" stop
         rm -rf "$AGENT_ROOT/$agent_id"
         echo "Stopped CLI agent: $agent_id"
     else
@@ -406,7 +437,7 @@ case "$1" in
                     exit 1
                 fi
             fi
-            ./scripts/launch_agent.sh "dummy" "$id" stop
+            ./scripts/launch_agent.sh "dummy" "$id" "" stop
             rm -rf "$AGENT_ROOT/$id"
         else
             echo "Error: Agent [$id] not found."
