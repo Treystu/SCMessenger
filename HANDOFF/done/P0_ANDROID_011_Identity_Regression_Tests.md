@@ -26,5 +26,17 @@ P0_ANDROID_010 identified that the Android identity flow was broken by three roo
 5. **Integration test: ConsentRequired handling** — Verify that `createIdentity()` handles `ConsentRequired` from the Rust core gracefully (should not happen after fix, but regression test needed).
 
 ## Verification Checklist
-- [ ] All tests pass: `./gradlew :app:testDebugUnitTest`
-- [ ] Tests cover all three root causes from P0_ANDROID_010
+- [x] All tests pass: `./gradlew :app:testDebugUnitTest`
+- [x] Tests cover all three root causes from P0_ANDROID_010
+
+## Implementation (Completed 2026-04-22)
+
+Created `IdentityFlowRegressionTest.kt` with 8 tests covering all three root causes:
+
+1. **AtomicBoolean guard tests** (3 tests): `compareAndSet` prevents concurrent entry, recursive re-entry, and survives high-contention scenarios
+2. **Synchronous backup tests** (2 tests): `commit()` is used instead of `apply()`, and failure is detected
+3. **Consent grant tests** (3 tests): `grantConsent` called before `initializeIdentity`, `ConsentRequired` thrown without consent, consent re-granted on process restart, `isIdentityInitialized` fast path triggers restore when core identity is lost
+
+Also fixed pre-existing test compilation errors:
+- `MockTestHelper.kt`: Added missing `ttl` parameter to `prepareMessage` mock
+- `SettingsViewModelTest.kt`: Added `DiagnosticsReporter` mock to constructor

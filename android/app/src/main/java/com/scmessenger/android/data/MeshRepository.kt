@@ -366,6 +366,11 @@ open class MeshRepository(private val context: Context) {
     private var serviceStartedAtEpochSec: Long = 0L
     @Volatile
     private var lastRelayBootstrapDialMs: Long = 0L
+    // P1_ANDROID_013: Track consecutive full-bootstrap failures for exponential backoff
+    @Volatile
+    private var consecutiveBootstrapFailures: Int = 0
+    @Volatile
+    private var nextBootstrapAttemptMs: Long = 0L
     private val dialThrottleState = java.util.concurrent.ConcurrentHashMap<String, Pair<Int, Long>>()
 
     // Reinstall detection: true when SharedPreferences has identity backup but contacts.db
@@ -3946,22 +3951,35 @@ open class MeshRepository(private val context: Context) {
     }
 
     // Helper to ensure service is initialized lazily
-    private fun ensureServiceInitialized() {
-        if (meshService == null || meshService?.getState() != uniffi.api.ServiceState.RUNNING) {
-            Timber.d("Lazy starting MeshService for Identity access...")
-            try {
-                // If service not running, launch it properly
-                val settings = loadSettings()
-                val config = uniffi.api.MeshServiceConfig(
-                    discoveryIntervalMs = 30000u,
-                    batteryFloorPct = settings.batteryFloor
-                )
-                startMeshService(config)
+    @Volatile
+    private var isServiceStarting = false
 
-                Timber.d("MeshService started lazily")
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to start MeshService lazily")
-            }
+    private fun ensureServiceInitialized() {
+        val state = meshService?.getState()
+        if (state == uniffi.api.ServiceState.RUNNING) {
+            return
+        }
+
+        // Skip if already starting (prevents pile-up on @Synchronized startMeshService)
+        if (state == uniffi.api.ServiceState.STARTING || isServiceStarting) {
+            Timber.d("MeshService is already starting, skipping redundant init")
+            return
+        }
+
+        Timber.d("Lazy starting MeshService for Identity access...")
+        isServiceStarting = true
+        try {
+            val settings = loadSettings()
+            val config = uniffi.api.MeshServiceConfig(
+                discoveryIntervalMs = 30000u,
+                batteryFloorPct = settings.batteryFloor
+            )
+            startMeshService(config)
+            Timber.d("MeshService started lazily")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to start MeshService lazily")
+        } finally {
+            isServiceStarting = false
         }
 
         // Refresh ironCore reference just in case
@@ -6902,6 +6920,11 @@ open class MeshRepository(private val context: Context) {
     private suspend fun primeRelayBootstrapConnections() {
         val bridge = swarmBridge ?: return
         val nowMs = System.currentTimeMillis()
+
+        // P1_ANDROID_013: Respect exponential backoff from consecutive failures
+        if (nowMs < nextBootstrapAttemptMs) {
+            return
+        }
         if (nowMs - lastRelayBootstrapDialMs < 10_000L) return
         lastRelayBootstrapDialMs = nowMs
 
@@ -6919,6 +6942,7 @@ open class MeshRepository(private val context: Context) {
             DEFAULT_BOOTSTRAP_NODES + WEBSOCKET_FALLBACK_NODES
         }
 
+        var anySuccess = false
         for (addr in addresses) {
             try {
                 // Check circuit breaker before attempting
@@ -6929,10 +6953,32 @@ open class MeshRepository(private val context: Context) {
                 if (!shouldAttemptDial(addr)) continue
                 bridge.dial(addr)
                 Timber.d("Bootstrap dial initiated: %s", addr)
+                anySuccess = true
             } catch (e: Exception) {
-                enhanceNetworkErrorLogging(e, addr)
-                relayCircuitBreaker.recordFailure(addr, classifyBootstrapError(e, addr))
+                // P1_ANDROID_013: Record failure metrics directly without triggering
+                // enhanceNetworkErrorLogging for each failure. The fallback protocol
+                // is now handled by the racing bootstrap, not per-dial error logging.
+                val errorDetail = classifyBootstrapError(e, addr)
+                Timber.w("Bootstrap dial failed for $addr - $errorDetail")
+                relayCircuitBreaker.recordFailure(addr, errorDetail)
+                networkFailureMetrics.recordFailure(addr, errorDetail, e)
             }
+        }
+
+        // P1_ANDROID_013: Update consecutive failure tracking and backoff
+        if (!anySuccess) {
+            consecutiveBootstrapFailures++
+            val backoffMs = when {
+                consecutiveBootstrapFailures <= 1 -> 10_000L
+                consecutiveBootstrapFailures <= 3 -> 30_000L
+                else -> 60_000L.coerceAtMost(1000L * (1L shl consecutiveBootstrapFailures.coerceAtMost(6)))
+            }
+            nextBootstrapAttemptMs = nowMs + backoffMs
+            Timber.w("Bootstrap all-failed (consecutive=%d), next attempt in %dms",
+                consecutiveBootstrapFailures, backoffMs)
+        } else {
+            consecutiveBootstrapFailures = 0
+            nextBootstrapAttemptMs = 0L
         }
     }
 
@@ -7049,8 +7095,12 @@ open class MeshRepository(private val context: Context) {
                             Timber.i("Bootstrap connected: %s", addr)
                             BootstrapAttempt.Success(addr)
                         } catch (e: Exception) {
-                            enhanceNetworkErrorLogging(e, addr)
-                            relayCircuitBreaker.recordFailure(addr, classifyBootstrapError(e, addr))
+                            // P1_ANDROID_013: Record failure metrics directly without triggering
+                            // enhanceNetworkErrorLogging, which would cascade into fallback protocol
+                            val detail = classifyBootstrapError(e, addr)
+                            relayCircuitBreaker.recordFailure(addr, detail)
+                            networkFailureMetrics.recordFailure(addr, detail, e)
+                            Timber.d("Bootstrap race attempt failed for $addr: $detail")
                             BootstrapAttempt.Failure(addr, e.message ?: "unknown")
                         }
                     }
@@ -7171,27 +7221,32 @@ open class MeshRepository(private val context: Context) {
      */
     private fun classifyBootstrapError(exception: Exception, nodeAddr: String? = null): String {
         val port = nodeAddr?.let { extractPortFromMultiaddr(it) }
-        val detail = when (exception) {
-            is java.net.UnknownHostException -> "DNS resolution failed for ${exception.message ?: "unknown host"}"
-            is java.net.ConnectException -> {
+
+        // P1_ANDROID_013: Distinguish "device offline" from "server unreachable" from "timeout"
+        val isDeviceOffline = networkDetector.networkType.value == com.scmessenger.android.transport.NetworkType.UNKNOWN
+        val detail = when {
+            isDeviceOffline -> "Device offline — no active network"
+            exception is java.net.UnknownHostException ->
+                "DNS resolution failed for ${exception.message ?: "unknown host"}"
+            exception is java.net.ConnectException -> {
                 if (networkDetector.isCellularNetwork && port != null && port !in setOf(80, 443)) {
                     "Port $port blocked on cellular — carrier filtering non-standard ports"
                 } else {
                     "Connection refused — port blocked or service down"
                 }
             }
-            is java.net.SocketTimeoutException -> "Connection timeout after dial period"
-            is javax.net.ssl.SSLException -> "TLS handshake failed: ${exception.message}"
-            is java.net.PortUnreachableException -> {
+            exception is java.net.SocketTimeoutException -> "Connection timeout after dial period"
+            exception is javax.net.ssl.SSLException -> "TLS handshake failed: ${exception.message}"
+            exception is java.net.PortUnreachableException -> {
                 if (networkDetector.isCellularNetwork) {
                     "UDP port unreachable on cellular — carrier blocking QUIC/UDP, try WebSocket"
                 } else {
                     "Port unreachable (likely firewall-blocked)"
                 }
             }
-            is java.net.NoRouteToHostException -> "No route to host (network unreachable)"
-            is java.net.SocketException -> "Socket error: ${exception.message}"
-            is java.io.IOException -> "Network I/O error: ${exception.message}"
+            exception is java.net.NoRouteToHostException -> "No route to host (network unreachable)"
+            exception is java.net.SocketException -> "Socket error: ${exception.message}"
+            exception is java.io.IOException -> "Network I/O error: ${exception.message}"
             else -> "Unknown network error: ${exception.javaClass.simpleName}: ${exception.message}"
         }
         // Record failure metrics for diagnostics reporting

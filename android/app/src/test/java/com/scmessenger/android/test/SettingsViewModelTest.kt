@@ -2,6 +2,7 @@ package com.scmessenger.android.test
 
 import com.scmessenger.android.data.MeshRepository
 import com.scmessenger.android.data.PreferencesRepository
+import com.scmessenger.android.network.DiagnosticsReporter
 import com.scmessenger.android.ui.viewmodels.SettingsViewModel
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -27,6 +28,7 @@ class SettingsViewModelTest {
 
     private lateinit var repository: MeshRepository
     private lateinit var preferences: PreferencesRepository
+    private lateinit var diagnosticsReporter: DiagnosticsReporter
     private lateinit var viewModel: SettingsViewModel
     private val testDispatcher = StandardTestDispatcher()
 
@@ -72,7 +74,8 @@ class SettingsViewModelTest {
         every { preferences.bleRotationEnabled } returns MutableStateFlow(true)
         every { preferences.bleRotationIntervalSec } returns MutableStateFlow(900)
 
-        viewModel = SettingsViewModel(repository, preferences)
+        diagnosticsReporter = mockk<DiagnosticsReporter>(relaxed = true)
+        viewModel = SettingsViewModel(repository, preferences, diagnosticsReporter)
     }
 
     @After

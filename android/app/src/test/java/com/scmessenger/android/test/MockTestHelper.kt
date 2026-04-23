@@ -56,7 +56,7 @@ object MockTestHelper {
      */
     fun createMockIronCore(): IronCore {
         return mockk<IronCore>(relaxed = true) {
-            every { prepareMessage(any(), any()) } returns ByteArray(64) { it.toByte() }
+            every { prepareMessage(any(), any(), any()) } returns ByteArray(64) { it.toByte() }
             // receiveMessage is no longer available or has different signature
             /*
             every { receiveMessage(any(), any()) } returns MessageEnvelope(
