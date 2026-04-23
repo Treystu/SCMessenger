@@ -1,0 +1,16 @@
+// SCMessenger CLI Library
+//
+// Re-exports modules for testing
+
+pub mod api;
+pub mod ble_daemon;
+pub mod ble_mesh;
+pub mod bootstrap;
+pub mod cli;
+pub mod config;
+pub mod contacts;
+pub mod history;
+pub mod ledger;
+pub mod server;
+pub mod transport_api;
+pub mod transport_bridge;

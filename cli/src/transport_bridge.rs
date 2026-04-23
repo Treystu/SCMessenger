@@ -206,7 +206,9 @@ impl TransportBridge {
 
     /// Get transport capabilities for a specific peer
     pub fn get_peer_capabilities(&self, peer_id: &PeerId) -> Option<&[TransportType]> {
-        self.peer_capabilities.get(peer_id).map(|v| v.as_slice())
+        self.peer_capabilities
+            .get(peer_id)
+            .map(|v| v.as_slice() as &[TransportType])
     }
 
     /// Get capabilities for all known peers
@@ -216,10 +218,17 @@ impl TransportBridge {
         self.peer_capabilities
             .iter()
             .map(|(peer_id, caps)| {
-                (
-                    peer_id.to_string(),
-                    caps.iter().map(|c| format!("{:?}", c)).collect(),
-                )
+                let caps_strings: Vec<String> = caps
+                    .iter()
+                    .map(|c| match c {
+                        TransportType::BLE => "BLE".to_string(),
+                        TransportType::WiFiAware => "WiFiAware".to_string(),
+                        TransportType::WiFiDirect => "WiFiDirect".to_string(),
+                        TransportType::Internet => "Internet".to_string(),
+                        TransportType::Local => "Local".to_string(),
+                    })
+                    .collect();
+                (peer_id.to_string(), caps_strings)
             })
             .collect()
     }
