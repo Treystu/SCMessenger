@@ -473,7 +473,6 @@ fun IdentitySection(
     onCopyExport: () -> Unit,
     onShowIdentityQr: () -> Unit
 ) {
-    var nicknameText by remember(identityInfo.nickname) { mutableStateOf(identityInfo.nickname ?: "") }
     val context = LocalContext.current
 
     Card(
@@ -489,17 +488,32 @@ fun IdentitySection(
             )
 
             // Nickname Input
+            var pendingNickname by remember(identityInfo.nickname) { mutableStateOf(identityInfo.nickname ?: "") }
             OutlinedTextField(
-                value = nicknameText,
+                value = pendingNickname,
                 onValueChange = {
-                    nicknameText = it
-                    // Simple debounce could pass it immediately for now
-                    onNicknameChange(it)
+                    pendingNickname = it
+                    // DO NOT call onNicknameChange here — it triggers a Rust FFI roundtrip per keystroke
                 },
                 label = { Text("Nickname") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onDone = {
+                        onNicknameChange(pendingNickname.trim())
+                    }
+                )
             )
+            Spacer(modifier = Modifier.height(4.dp))
+            Button(
+                onClick = { onNicknameChange(pendingNickname.trim()) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Save Nickname")
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
