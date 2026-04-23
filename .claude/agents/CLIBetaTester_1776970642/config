@@ -1,0 +1,5 @@
+AGENT_ID=CLIBetaTester_1776970642
+AGENT_MODEL=qwen3-coder:480b:cloud
+OLLAMA_HOST=localhost:11434
+WORKING_DIR=/c/Users/kanal/Documents/SCMessenger/SCMessenger
+START_TIME=1776970644

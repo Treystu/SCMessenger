@@ -1,0 +1,24 @@
+{
+  "name": "core_cli_driver",
+  "description": "Allows the agent to act as a user of the local SCMessenger Core CLI. Can start the node, send JSON-RPC WebSocket payloads to test messaging, and dump system logs if a crash occurs.",
+  "script": ".claude/skills/core_cli_driver.sh",
+  "commands": [
+    {
+      "name": "start",
+      "description": "Start the SCMessenger CLI daemon in the background and pipe output to .claude/core_daemon.log"
+    },
+    {
+      "name": "rpc",
+      "description": "Send a JSON-RPC payload to ws://127.0.0.1:9002 and print the response",
+      "args": ["json_payload"]
+    },
+    {
+      "name": "dump_logs",
+      "description": "Retrieve the last 100 lines of the daemon log (OS-aware: PowerShell on Windows, tail on Mac/Linux)"
+    },
+    {
+      "name": "stop",
+      "description": "Terminate the SCMessenger CLI daemon (OS-aware: Stop-Process on Windows, pkill on Mac/Linux)"
+    }
+  ]
+}

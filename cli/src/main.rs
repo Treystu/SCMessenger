@@ -426,6 +426,7 @@ async fn cmd_init(name: Option<String>) -> Result<()> {
 
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    core.grant_consent();
     core.initialize_identity()
         .context("Failed to initialize identity")?;
 
@@ -1029,6 +1030,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    core.grant_consent();
     core.initialize_identity()
         .context("Failed to load identity")?;
 

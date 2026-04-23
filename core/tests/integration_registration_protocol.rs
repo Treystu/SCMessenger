@@ -1,19 +1,20 @@
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use scmessenger_core::identity::IdentityKeys;
 use scmessenger_core::transport::{
-    start_swarm, DeregistrationRequest, RegistrationRequest, SwarmEvent,
+    start_swarm, DeregistrationRequest, RegistrationRequest,
 };
+use scmessenger_core::transport::swarm::SwarmEvent2;
 use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
 
 async fn wait_for_tcp_listener(
-    rx: &mut mpsc::Receiver<SwarmEvent>,
+    rx: &mut mpsc::Receiver<SwarmEvent2>,
     max_wait: Duration,
 ) -> Multiaddr {
     timeout(max_wait, async {
         loop {
             match rx.recv().await {
-                Some(SwarmEvent::ListeningOn(addr)) if addr.to_string().contains("/tcp/") => {
+                Some(SwarmEvent2::ListeningOn(addr)) if addr.to_string().contains("/tcp/") => {
                     return addr;
                 }
                 Some(_) => {}
@@ -26,7 +27,7 @@ async fn wait_for_tcp_listener(
 }
 
 async fn wait_for_peer_ready(
-    rx: &mut mpsc::Receiver<SwarmEvent>,
+    rx: &mut mpsc::Receiver<SwarmEvent2>,
     expected_peer: PeerId,
     max_wait: Duration,
 ) {
@@ -35,10 +36,10 @@ async fn wait_for_peer_ready(
         let mut identified = false;
         loop {
             match rx.recv().await {
-                Some(SwarmEvent::PeerDiscovered(peer_id)) if peer_id == expected_peer => {
+                Some(SwarmEvent2::PeerDiscovered(peer_id)) if peer_id == expected_peer => {
                     discovered = true;
                 }
-                Some(SwarmEvent::PeerIdentified { peer_id, .. }) if peer_id == expected_peer => {
+                Some(SwarmEvent2::PeerIdentified { peer_id, .. }) if peer_id == expected_peer => {
                     identified = true;
                 }
                 Some(_) => {}
@@ -67,6 +68,7 @@ async fn registration_protocol_accepts_valid_signed_registration_request() {
         receiver_keypair,
         Some("/ip4/127.0.0.1/tcp/0".parse().unwrap()),
         receiver_tx,
+        None,
         false,
     )
     .await
@@ -78,6 +80,7 @@ async fn registration_protocol_accepts_valid_signed_registration_request() {
         sender_keypair,
         Some("/ip4/127.0.0.1/tcp/0".parse().unwrap()),
         sender_tx,
+        None,
         false,
     )
     .await
@@ -121,6 +124,7 @@ async fn registration_protocol_rejects_malformed_identity_id_without_mutation() 
         receiver_keypair,
         Some("/ip4/127.0.0.1/tcp/0".parse().unwrap()),
         receiver_tx,
+        None,
         false,
     )
     .await
@@ -132,6 +136,7 @@ async fn registration_protocol_rejects_malformed_identity_id_without_mutation() 
         sender_keypair,
         Some("/ip4/127.0.0.1/tcp/0".parse().unwrap()),
         sender_tx,
+        None,
         false,
     )
     .await
@@ -182,6 +187,7 @@ async fn registration_protocol_rejects_tampered_signed_deregistration_request() 
         receiver_keypair,
         Some("/ip4/127.0.0.1/tcp/0".parse().unwrap()),
         receiver_tx,
+        None,
         false,
     )
     .await
@@ -193,6 +199,7 @@ async fn registration_protocol_rejects_tampered_signed_deregistration_request() 
         sender_keypair,
         Some("/ip4/127.0.0.1/tcp/0".parse().unwrap()),
         sender_tx,
+        None,
         false,
     )
     .await

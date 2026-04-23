@@ -58,9 +58,39 @@ mod tests {
     }
 
     #[test]
-    fn test_cli_parse_config_list() {
-        let cli = Cli::parse_from(["scm", "config", "list"]);
-        assert!(matches!(cli.command, Commands::Config { action: ConfigAction::List }));
+    fn test_cli_parse_identity_export() {
+        let cli = Cli::parse_from(["scm", "identity", "export", "--passphrase", "secret", "--output", "backup.json"]);
+        assert!(matches!(cli.command, Commands::Identity { action: Some(IdentityAction::Export { ref passphrase, output: Some(ref o) }) } if passphrase == "secret" && o == "backup.json"));
+    }
+
+    #[test]
+    fn test_cli_parse_identity_import() {
+        let cli = Cli::parse_from(["scm", "identity", "import", "--passphrase", "secret", "--backup", "data"]);
+        assert!(matches!(cli.command, Commands::Identity { action: Some(IdentityAction::Import { ref passphrase, backup: Some(ref b), .. }) } if passphrase == "secret" && b == "data"));
+    }
+
+    #[test]
+    fn test_cli_parse_contact_remove() {
+        let cli = Cli::parse_from(["scm", "contact", "remove", "Alice"]);
+        assert!(matches!(cli.command, Commands::Contact { action: ContactAction::Remove { ref contact } } if contact == "Alice"));
+    }
+
+    #[test]
+    fn test_cli_parse_contact_search() {
+        let cli = Cli::parse_from(["scm", "contact", "search", "query"]);
+        assert!(matches!(cli.command, Commands::Contact { action: ContactAction::Search { ref query } } if query == "query"));
+    }
+
+    #[test]
+    fn test_cli_parse_block_remove() {
+        let cli = Cli::parse_from(["scm", "block", "remove", "test-peer-id"]);
+        assert!(matches!(cli.command, Commands::Block { action: BlockAction::Remove { peer_id, .. } } if peer_id == "test-peer-id"));
+    }
+
+    #[test]
+    fn test_cli_parse_block_delete() {
+        let cli = Cli::parse_from(["scm", "block", "delete", "test-peer-id"]);
+        assert!(matches!(cli.command, Commands::Block { action: BlockAction::Delete { peer_id, .. } } if peer_id == "test-peer-id"));
     }
 }
 

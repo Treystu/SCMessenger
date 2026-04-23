@@ -27,7 +27,9 @@ pub use behaviour::{
 };
 pub use mesh_routing::{
     BootstrapCapability, DeliveryAttempt, MultiPathDelivery, RelayReputation, RelayStats,
-    ReputationTracker, RetryStrategy,
+    ReputationTracker, RetryStrategy, ROUTE_REASON_DIRECT_FIRST, ROUTE_REASON_RELAY_RECENCY_SUCCESS,
+    ROUTE_REASON_RELAY_SUCCESS_SCORE, ROUTE_REASON_RELAY_TIEBREAK_LAST_SUCCESS,
+    ROUTE_REASON_RELAY_TIEBREAK_PEER_ID,
 };
 pub use routing::{
     engine::{NextHop, RoutingDecision, RoutingEngine, RoutingLayer, RoutingMaintenance, RoutingSummary},

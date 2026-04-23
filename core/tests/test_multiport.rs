@@ -276,9 +276,10 @@ async fn test_multiport_swarm_integration() {
         None,
         event_tx,
         Some(config),
-        Vec::new(),
-        None,
-        false,
+        Vec::new(), // bootstrap_addrs
+        None,      // storage_path
+        None,      // core_handle
+        false,     // headless
     )
     .await;
 

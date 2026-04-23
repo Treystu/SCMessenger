@@ -10,7 +10,8 @@
 // All equivalent logic is exercised by unit tests (cargo test --lib).
 
 use libp2p::{identity::Keypair, Multiaddr};
-use scmessenger_core::transport::{start_swarm_with_config, MultiPortConfig, SwarmEvent};
+use scmessenger_core::transport::{start_swarm_with_config, MultiPortConfig};
+use scmessenger_core::transport::swarm::SwarmEvent2;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -55,7 +56,8 @@ async fn test_all_six_phases_integrated() {
         alice_event_tx,
         Some(multiport_config.clone()),
         Vec::new(),
-        None,
+        None, // storage_path
+        None, // core_handle
         false,
     )
     .await
@@ -67,7 +69,7 @@ async fn test_all_six_phases_integrated() {
     let alice_addr: Option<Multiaddr>;
     loop {
         match timeout(Duration::from_secs(5), alice_event_rx.recv()).await {
-            Ok(Some(SwarmEvent::ListeningOn(addr))) => {
+            Ok(Some(SwarmEvent2::ListeningOn(addr))) => {
                 println!("  Alice listening on: {}", addr);
                 if addr.to_string().contains("/tcp/") {
                     alice_addr = Some(addr);
@@ -89,7 +91,8 @@ async fn test_all_six_phases_integrated() {
         bob_event_tx,
         Some(multiport_config.clone()),
         Vec::new(),
-        None,
+        None, // storage_path
+        None, // core_handle
         false,
     )
     .await
@@ -101,7 +104,7 @@ async fn test_all_six_phases_integrated() {
     let bob_addr: Option<Multiaddr>;
     loop {
         match timeout(Duration::from_secs(5), bob_event_rx.recv()).await {
-            Ok(Some(SwarmEvent::ListeningOn(addr))) => {
+            Ok(Some(SwarmEvent2::ListeningOn(addr))) => {
                 println!("  Bob listening on: {}", addr);
                 if addr.to_string().contains("/tcp/") {
                     bob_addr = Some(addr);
@@ -135,7 +138,7 @@ async fn test_all_six_phases_integrated() {
         tokio::select! {
             event = alice_event_rx.recv() => {
                 match event {
-                    Some(SwarmEvent::PeerDiscovered(peer)) if peer == bob_peer_id => {
+                    Some(SwarmEvent2::PeerDiscovered(peer)) if peer == bob_peer_id => {
                         println!("✓ Alice connected to Bob");
                         alice_connected_to_bob = true;
                     }
@@ -144,7 +147,7 @@ async fn test_all_six_phases_integrated() {
             }
             event = bob_event_rx.recv() => {
                 match event {
-                    Some(SwarmEvent::PeerDiscovered(peer)) if peer == alice_peer_id => {
+                    Some(SwarmEvent2::PeerDiscovered(peer)) if peer == alice_peer_id => {
                         println!("✓ Bob connected to Alice");
                         bob_connected_to_alice = true;
                     }
@@ -197,7 +200,7 @@ async fn test_all_six_phases_integrated() {
             // Wait for Bob to receive it
             loop {
                 match timeout(Duration::from_secs(5), bob_event_rx.recv()).await {
-                    Ok(Some(SwarmEvent::MessageReceived {
+                    Ok(Some(SwarmEvent2::MessageReceived {
                         peer_id,
                         envelope_data,
                     })) if peer_id == alice_peer_id => {
@@ -278,7 +281,8 @@ async fn test_message_retry_on_failure() {
         alice_event_tx,
         Some(multiport_config),
         Vec::new(),
-        None,
+        None, // storage_path
+        None, // core_handle
         false,
     )
     .await
@@ -362,7 +366,8 @@ async fn test_relay_protocol() {
         alice_event_tx,
         Some(multiport_config.clone()),
         Vec::new(),
-        None,
+        None, // storage_path
+        None, // core_handle
         false,
     )
     .await
@@ -375,7 +380,8 @@ async fn test_relay_protocol() {
         bob_event_tx,
         Some(multiport_config.clone()),
         Vec::new(),
-        None,
+        None, // storage_path
+        None, // core_handle
         false,
     )
     .await
@@ -388,7 +394,8 @@ async fn test_relay_protocol() {
         charlie_event_tx,
         Some(multiport_config),
         Vec::new(),
-        None,
+        None, // storage_path
+        None, // core_handle
         false,
     )
     .await
@@ -401,7 +408,7 @@ async fn test_relay_protocol() {
     // Wait for Bob's address
     loop {
         match timeout(Duration::from_secs(5), bob_event_rx.recv()).await {
-            Ok(Some(SwarmEvent::ListeningOn(addr))) => {
+            Ok(Some(SwarmEvent2::ListeningOn(addr))) => {
                 if addr.to_string().contains("/tcp/") {
                     bob_addr = Some(addr);
                     break;
@@ -415,7 +422,7 @@ async fn test_relay_protocol() {
     // Wait for Charlie's address
     loop {
         match timeout(Duration::from_secs(5), charlie_event_rx.recv()).await {
-            Ok(Some(SwarmEvent::ListeningOn(addr))) => {
+            Ok(Some(SwarmEvent2::ListeningOn(addr))) => {
                 if addr.to_string().contains("/tcp/") {
                     charlie_addr = Some(addr);
                     break;

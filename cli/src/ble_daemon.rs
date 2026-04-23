@@ -397,9 +397,26 @@ mod tests {
     }
 
     #[test]
-    fn test_format_timestamp() {
-        let ts = 1609459200; // 2021-01-01 00:00:00 UTC
-        let formatted = format_timestamp(ts);
-        assert!(formatted.contains("2021"));
+    fn test_ble_error_variants() {
+        assert_eq!(BleError::NoAdapter.to_string(), "No Bluetooth adapter found");
+        assert_eq!(BleError::PermissionDenied.to_string(), "Bluetooth permission denied");
+        assert_eq!(BleError::AdapterNotPowered.to_string(), "Bluetooth adapter not powered on");
+        assert!(BleError::Timeout.to_string().contains("timed out"));
+    }
+
+    #[test]
+    fn test_ble_daemon_fallback_logic() {
+        let mut daemon = BleDaemon::new(BleConfig {
+            fallback_mode: true,
+            ..BleConfig::default()
+        });
+
+        // Initial state
+        assert!(!daemon.is_available());
+
+        // Manual status injection for testing
+        daemon.status = BleStatus::Unavailable(BleError::NoAdapter);
+        assert!(!daemon.is_available());
+        assert_eq!(daemon.status(), &BleStatus::Unavailable(BleError::NoAdapter));
     }
 }

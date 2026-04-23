@@ -31,11 +31,22 @@ count_os_claude_processes() {
 }
 
 assert_process_limit() {
-    local os_count=$(count_os_claude_processes)
-    if [ "$os_count" -ge "$MAX_OS_PROCESSES" ]; then
-        echo "CRITICAL: OS process limit reached ($os_count/$MAX_OS_PROCESSES claude.exe processes)."
+    # Count only TRACKED agent processes that are actually alive.
+    # Do NOT count all claude.exe — IDE extensions, desktop app, etc. are not agents.
+    local agent_count=$(count_cli_agents)
+    # Allow 1 orchestrator + up to MAX_SUBAGENTS workers = MAX_OS_PROCESSES total
+    if [ "$agent_count" -ge "$MAX_SUBAGENTS" ]; then
+        echo "CRITICAL: Agent slot limit reached ($agent_count/$MAX_SUBAGENTS tracked agents alive)."
         echo "Refusing to launch agent. Stop an existing agent first."
         return 1
+    fi
+    # Also sanity-check: if total OS claude.exe exceeds MAX_OS_PROCESSES + 2 buffer,
+    # something else is spawning claude processes; warn but don't block.
+    local os_count=$(count_os_claude_processes)
+    local max_buffer=$((MAX_OS_PROCESSES + 2))
+    if [ "$os_count" -gt "$max_buffer" ]; then
+        echo "WARNING: $os_count claude.exe processes detected (expected max ~$max_buffer)."
+        echo "Non-agent Claude processes (IDE, desktop) may be consuming slots."
     fi
     return 0
 }
@@ -105,10 +116,9 @@ clean_stale_pids() {
 }
 
 count_active_agents() {
-    # Count tracked agents only — no process scanning
-    local cli=$(count_cli_agents)
-    local native=$(count_native_agents)
-    echo $((cli + native))
+    # CLI-launched agents (ollama spawn) are the only source of truth.
+    # Native sub-agents (internal Agent tool) are not tracked separately.
+    count_cli_agents
 }
 
 count_cli_agents() {
@@ -120,19 +130,6 @@ count_cli_agents() {
                 if process_alive "$pid"; then
                     ((count++))
                 fi
-            fi
-        done
-    fi
-    echo $count
-}
-
-count_native_agents() {
-    # Count native agents via marker files only — no process scanning
-    local count=0
-    if [ -d "$AGENT_ROOT" ]; then
-        for marker in "$AGENT_ROOT"/*/native_marker; do
-            if [ -f "$marker" ]; then
-                ((count++))
             fi
         done
     fi
@@ -383,11 +380,7 @@ pool_stop() {
 pool_status() {
     echo "=== Agent Pool Status ==="
     active_count=$(count_active_agents)
-    native_count=$(count_native_agents)
-    cli_count=$(count_cli_agents)
-    echo "Total Slots:  $active_count/$MAX_SUBAGENTS"
-    echo "Native:       $native_count"
-    echo "CLI:          $cli_count"
+    echo "Slots:  $active_count/$MAX_SUBAGENTS"
     echo ""
     if [ "$active_count" -eq 0 ]; then
         echo "No agents active. Use 'pool launch <name>' to start one."

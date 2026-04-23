@@ -1,16 +1,16 @@
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
-use scmessenger_core::transport::{start_swarm, SwarmEvent};
+use scmessenger_core::transport::swarm::{start_swarm, SwarmEvent2};
 use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
 
 async fn wait_for_tcp_listener(
-    rx: &mut mpsc::Receiver<SwarmEvent>,
+    rx: &mut mpsc::Receiver<SwarmEvent2>,
     max_wait: Duration,
 ) -> Multiaddr {
     timeout(max_wait, async {
         loop {
             match rx.recv().await {
-                Some(SwarmEvent::ListeningOn(addr)) if addr.to_string().contains("/tcp/") => {
+                Some(SwarmEvent2::ListeningOn(addr)) if addr.to_string().contains("/tcp/") => {
                     return addr;
                 }
                 Some(_) => {}
@@ -23,7 +23,7 @@ async fn wait_for_tcp_listener(
 }
 
 async fn wait_for_peer_ready(
-    rx: &mut mpsc::Receiver<SwarmEvent>,
+    rx: &mut mpsc::Receiver<SwarmEvent2>,
     expected_peer: PeerId,
     max_wait: Duration,
 ) {
@@ -32,10 +32,10 @@ async fn wait_for_peer_ready(
         let mut identified = false;
         loop {
             match rx.recv().await {
-                Some(SwarmEvent::PeerDiscovered(peer_id)) if peer_id == expected_peer => {
+                Some(SwarmEvent2::PeerDiscovered(peer_id)) if peer_id == expected_peer => {
                     discovered = true;
                 }
-                Some(SwarmEvent::PeerIdentified { peer_id, .. }) if peer_id == expected_peer => {
+                Some(SwarmEvent2::PeerIdentified { peer_id, .. }) if peer_id == expected_peer => {
                     identified = true;
                 }
                 Some(_) => {}
@@ -51,14 +51,14 @@ async fn wait_for_peer_ready(
 }
 
 async fn wait_for_envelope(
-    rx: &mut mpsc::Receiver<SwarmEvent>,
+    rx: &mut mpsc::Receiver<SwarmEvent2>,
     expected_payload: &[u8],
     max_wait: Duration,
 ) -> PeerId {
     timeout(max_wait, async {
         loop {
             match rx.recv().await {
-                Some(SwarmEvent::MessageReceived {
+                Some(SwarmEvent2::MessageReceived {
                     peer_id,
                     envelope_data,
                 }) if envelope_data == expected_payload => return peer_id,
@@ -83,13 +83,13 @@ async fn offline_recipient_receives_after_reconnect_without_sender_resend() {
     let recipient_peer_id = recipient_key.public().to_peer_id();
 
     let (relay_tx, mut relay_rx) = mpsc::channel(256);
-    let relay_handle = start_swarm(relay_key, None, relay_tx, false)
+    let relay_handle = start_swarm(relay_key, None, relay_tx, None, false)
         .await
         .expect("failed to start relay");
     let relay_addr = wait_for_tcp_listener(&mut relay_rx, Duration::from_secs(10)).await;
 
     let (sender_tx, mut sender_rx) = mpsc::channel(256);
-    let sender_handle = start_swarm(sender_key, None, sender_tx, false)
+    let sender_handle = start_swarm(sender_key, None, sender_tx, None, false)
         .await
         .expect("failed to start sender");
     let _sender_addr = wait_for_tcp_listener(&mut sender_rx, Duration::from_secs(10)).await;
@@ -124,7 +124,7 @@ async fn offline_recipient_receives_after_reconnect_without_sender_resend() {
 
     // Recipient reconnects later and should receive the message without sender resend.
     let (recipient_tx, mut recipient_rx) = mpsc::channel(256);
-    let recipient_handle = start_swarm(recipient_key, None, recipient_tx, false)
+    let recipient_handle = start_swarm(recipient_key, None, recipient_tx, None, false)
         .await
         .expect("failed to start recipient");
     let _recipient_addr = wait_for_tcp_listener(&mut recipient_rx, Duration::from_secs(10)).await;

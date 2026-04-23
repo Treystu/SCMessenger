@@ -117,8 +117,61 @@ class SettingsViewModel @Inject constructor(
     val identityInfo: StateFlow<uniffi.api.IdentityInfo?> = _identityInfo.asStateFlow()
 
     init {
-        loadSettings()
-        loadIdentity()
+        // Defer heavy initialization to background thread to avoid blocking Settings screen
+        // Settings screen should appear within 2 seconds for good UX
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                // Load settings first (depends on MeshRepository which may trigger service startup)
+                loadSettingsInternal()
+                // Then load identity
+                loadIdentityInternal()
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to initialize SettingsViewModel")
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Internal settings loader that runs on IO dispatcher.
+     * Called from init block on viewModelScope (Main) but executes on IO.
+     */
+    private suspend fun loadSettingsInternal() {
+        try {
+            val settings = meshRepository.loadSettings()
+            _settings.value = settings
+            Timber.d("Loaded mesh settings: $settings")
+        } catch (e: Exception) {
+            _error.value = "Failed to load settings: ${e.message}"
+            Timber.e(e, "Failed to load mesh settings")
+        }
+    }
+
+    /**
+     * Internal identity loader that runs on IO dispatcher.
+     * Called from init block on viewModelScope (Main) but executes on IO.
+     * Uses non-blocking identity access to avoid main thread blocking during service startup.
+     */
+    private suspend fun loadIdentityInternal() {
+        try {
+            // Use non-blocking identity access to avoid blocking main thread
+            // during service startup when identity might not be fully initialized yet
+            val info = meshRepository.getIdentityInfoNonBlocking()
+            // Defensive fallback: if Rust core returns blank nickname, use cached preference
+            if (info?.nickname.isNullOrBlank()) {
+                val cached = preferencesRepository.identityNickname.first()
+                if (!cached.isNullOrBlank()) {
+                    Timber.w("Rust core nickname blank; using DataStore fallback: $cached")
+                    _identityInfo.value = info?.copy(nickname = cached)
+                    return
+                }
+            }
+            _identityInfo.value = info
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to load identity")
+        }
     }
 
     fun loadIdentity() {

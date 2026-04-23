@@ -3488,6 +3488,21 @@ open class MeshRepository(private val context: Context) {
     // MESSAGE HISTORY
     // ========================================================================
 
+    /**
+     * Get identity info without blocking.
+     * Returns null if the service is not yet initialized; call again after a delay if needed.
+     * This is non-blocking and safe to call from the main thread during UI composition.
+     */
+    fun getIdentityInfoNonBlocking(): uniffi.api.IdentityInfo? {
+        val state = meshService?.getState()
+        if (state != uniffi.api.ServiceState.RUNNING) {
+            // Service not running, return null - identity will be populated later
+            return null
+        }
+        // Service is running, now safe to call getIdentityInfo
+        return getIdentityInfo()
+    }
+
     fun getIdentityInfo(): uniffi.api.IdentityInfo? {
         ensureServiceInitialized()
         kotlin.runCatching { ensureLocalIdentityFederation() }
@@ -3977,40 +3992,52 @@ open class MeshRepository(private val context: Context) {
     @Volatile
     private var isServiceStarting = false
 
+    /**
+     * Defer service initialization to background thread.
+     * Called from IO dispatcher to avoid blocking the main thread.
+     */
+    private fun ensureServiceInitializedDeferred() {
+        repoScope.launch {
+            val state = meshService?.getState()
+            if (state == uniffi.api.ServiceState.RUNNING) {
+                return@launch
+            }
+
+            // Skip if already starting (prevents pile-up on @Synchronized startMeshService)
+            if (state == uniffi.api.ServiceState.STARTING || isServiceStarting) {
+                Timber.d("MeshService is already starting, skipping redundant init")
+                return@launch
+            }
+
+            Timber.d("Lazy starting MeshService for Identity access...")
+            isServiceStarting = true
+            try {
+                val settings = loadSettings()
+                val config = uniffi.api.MeshServiceConfig(
+                    discoveryIntervalMs = 30000u,
+                    batteryFloorPct = settings.batteryFloor
+                )
+                startMeshService(config)
+                Timber.d("MeshService started lazily")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to start MeshService lazily")
+            } finally {
+                isServiceStarting = false
+            }
+
+            // Refresh ironCore reference just in case
+            if (ironCore == null) {
+                ironCore = meshService?.getCore()
+                Timber.d("IronCore reference refreshed: ${ironCore != null}")
+            }
+            ensureLocalIdentityFederation()
+        }
+    }
+
     private fun ensureServiceInitialized() {
-        val state = meshService?.getState()
-        if (state == uniffi.api.ServiceState.RUNNING) {
-            return
-        }
-
-        // Skip if already starting (prevents pile-up on @Synchronized startMeshService)
-        if (state == uniffi.api.ServiceState.STARTING || isServiceStarting) {
-            Timber.d("MeshService is already starting, skipping redundant init")
-            return
-        }
-
-        Timber.d("Lazy starting MeshService for Identity access...")
-        isServiceStarting = true
-        try {
-            val settings = loadSettings()
-            val config = uniffi.api.MeshServiceConfig(
-                discoveryIntervalMs = 30000u,
-                batteryFloorPct = settings.batteryFloor
-            )
-            startMeshService(config)
-            Timber.d("MeshService started lazily")
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to start MeshService lazily")
-        } finally {
-            isServiceStarting = false
-        }
-
-        // Refresh ironCore reference just in case
-        if (ironCore == null) {
-            ironCore = meshService?.getCore()
-            Timber.d("IronCore reference refreshed: ${ironCore != null}")
-        }
-        ensureLocalIdentityFederation()
+        // Start initialization on background dispatcher
+        // This prevents blocking the calling thread (often Main)
+        ensureServiceInitializedDeferred()
     }
 
     private fun hasAllPermissions(permissions: List<String>): Boolean =

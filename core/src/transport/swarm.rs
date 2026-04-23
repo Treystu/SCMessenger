@@ -2814,7 +2814,7 @@ pub async fn start_swarm_with_config(
                                 tracing::trace!("Ping event: {:?}", event);
                             }
 
-                            #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+                            #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "windows")))]
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Mdns(
                                 mdns::Event::Discovered(peers)
                             )) => {
@@ -2838,7 +2838,7 @@ pub async fn start_swarm_with_config(
                                 }
                             }
 
-                            #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+                            #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "windows")))]
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Mdns(
                                 mdns::Event::Expired(peers)
                             )) => {
@@ -3000,7 +3000,7 @@ pub async fn start_swarm_with_config(
                                 }
                             }
 
-                            #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+                            #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "windows")))]
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Upnp(event)) => {
                                 use libp2p::upnp;
                                 match event {
@@ -4361,7 +4361,7 @@ pub async fn start_swarm_with_config(
 #[cfg(not(target_arch = "wasm32"))]
 use futures::StreamExt;
 use libp2p::identify;
-#[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "windows")))]
 use libp2p::mdns;
 use libp2p::{gossipsub, request_response};
 

@@ -3,7 +3,12 @@
 // Tests relay capability, reputation tracking, retry logic, and mesh discovery
 
 use libp2p::PeerId;
-use scmessenger_core::transport::mesh_routing::*;
+use scmessenger_core::transport::{
+    BootstrapCapability, DeliveryAttempt, MultiPathDelivery, RelayReputation, RelayStats,
+    ReputationTracker, RetryStrategy,
+    ROUTE_REASON_DIRECT_FIRST, ROUTE_REASON_RELAY_RECENCY_SUCCESS,
+};
+use scmessenger_core::transport::mesh_routing::advance_route_cursor;
 use std::time::Duration;
 
 #[test]

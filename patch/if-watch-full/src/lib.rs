@@ -19,10 +19,17 @@ pub struct Watcher;
 
 impl Watcher {
     pub fn new() -> Result<Self, std::io::Error> {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            "if-watch not supported on Android",
-        ))
+        #[cfg(target_os = "android")]
+        {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "if-watch not supported on Android",
+            ))
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            Ok(Watcher)
+        }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &IpNet> {
@@ -58,7 +65,14 @@ pub mod tokio {
 
     impl IfWatcher {
         pub fn new() -> Result<Self, std::io::Error> {
-            Watcher::new().map(|w| IfWatcher(w))
+            #[cfg(target_os = "android")]
+            {
+                Watcher::new().map(|w| IfWatcher(w))
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                Ok(IfWatcher(Watcher))
+            }
         }
 
         pub fn iter(&self) -> impl Iterator<Item = &IpNet> {
@@ -109,7 +123,14 @@ pub mod smol {
 
     impl IfWatcher {
         pub fn new() -> Result<Self, std::io::Error> {
-            Watcher::new().map(|w| IfWatcher(w))
+            #[cfg(target_os = "android")]
+            {
+                Watcher::new().map(|w| IfWatcher(w))
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                Ok(IfWatcher(Watcher))
+            }
         }
 
         pub fn iter(&self) -> impl Iterator<Item = &IpNet> {

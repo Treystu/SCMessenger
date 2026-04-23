@@ -12,10 +12,8 @@
 use anyhow::Result as AnyhowResult;
 use libp2p::identity::Keypair;
 use libp2p::PeerId;
-use scmessenger_core::transport::{
-    nat::{NatConfig, NatTraversal, PeerAddressDiscovery},
-    swarm::{start_swarm, SwarmEvent2, SwarmHandle},
-};
+use scmessenger_core::transport::swarm::{start_swarm, SwarmEvent2, SwarmHandle};
+use scmessenger_core::transport::nat::{NatConfig, NatTraversal, PeerAddressDiscovery};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -28,7 +26,7 @@ async fn test_two_node_address_reflection() {
     let (event_tx1, mut event_rx1) = mpsc::channel(256);
     let (event_tx2, mut _event_rx2) = mpsc::channel(256);
 
-    let _swarm1: SwarmHandle = start_swarm(keypair1, None, event_tx1, false)
+    let _swarm1: SwarmHandle = start_swarm(keypair1, None, event_tx1, None, false)
         .await
         .expect("Failed to start swarm1");
 
@@ -49,7 +47,7 @@ async fn test_two_node_address_reflection() {
     assert!(listen_addr.is_some(), "Node 1 should be listening");
     let node1_addr = listen_addr.unwrap();
 
-    let swarm2: SwarmHandle = start_swarm(keypair2, None, event_tx2, false)
+    let swarm2: SwarmHandle = start_swarm(keypair2, None, event_tx2, None, false)
         .await
         .expect("Failed to start swarm2");
 
@@ -87,7 +85,7 @@ async fn test_peer_address_discovery_with_live_swarm() {
     let (event_tx2, mut _event_rx2) = mpsc::channel(256);
 
     let _swarm_reflector: SwarmHandle =
-        start_swarm(keypair_reflector.clone(), None, event_tx1, false)
+        start_swarm(keypair_reflector.clone(), None, event_tx1, None, false)
             .await
             .expect("Failed to start reflector swarm");
 
@@ -108,7 +106,7 @@ async fn test_peer_address_discovery_with_live_swarm() {
     assert!(reflector_addr.is_some());
 
     let swarm_requester: SwarmHandle =
-        start_swarm(keypair_requester.clone(), None, event_tx2, false)
+        start_swarm(keypair_requester.clone(), None, event_tx2, None, false)
             .await
             .expect("Failed to start requester swarm");
 
@@ -152,19 +150,19 @@ async fn test_nat_traversal_with_live_swarms() {
     let (event_tx2, mut event_rx2) = mpsc::channel(256);
     let (event_tx3, mut _event_rx3) = mpsc::channel(256);
 
-    let _swarm1: SwarmHandle = start_swarm(keypair1.clone(), None, event_tx1, false)
+    let _swarm1: SwarmHandle = start_swarm(keypair1.clone(), None, event_tx1, None, false)
         .await
         .expect("Failed to start swarm1");
 
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let _swarm2: SwarmHandle = start_swarm(keypair2.clone(), None, event_tx2, false)
+    let _swarm2: SwarmHandle = start_swarm(keypair2.clone(), None, event_tx2, None, false)
         .await
         .expect("Failed to start swarm2");
 
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let swarm3: SwarmHandle = start_swarm(keypair3.clone(), None, event_tx3, false)
+    let swarm3: SwarmHandle = start_swarm(keypair3.clone(), None, event_tx3, None, false)
         .await
         .expect("Failed to start swarm3");
 
@@ -250,7 +248,7 @@ async fn test_multiple_address_reflections() {
     let (event_tx1, mut event_rx1) = mpsc::channel(256);
     let (event_tx2, mut _event_rx2) = mpsc::channel(256);
 
-    let _swarm1: SwarmHandle = start_swarm(keypair1, None, event_tx1, false)
+    let _swarm1: SwarmHandle = start_swarm(keypair1, None, event_tx1, None, false)
         .await
         .expect("Failed to start swarm1");
 
@@ -270,7 +268,7 @@ async fn test_multiple_address_reflections() {
 
     assert!(addr1.is_some());
 
-    let swarm2: SwarmHandle = start_swarm(keypair2, None, event_tx2, false)
+    let swarm2: SwarmHandle = start_swarm(keypair2, None, event_tx2, None, false)
         .await
         .expect("Failed to start swarm2");
 
@@ -303,7 +301,7 @@ async fn test_address_reflection_timeout() {
     let (event_tx1, mut event_rx1) = mpsc::channel(256);
     let (event_tx2, mut _event_rx2) = mpsc::channel(256);
 
-    let swarm1: SwarmHandle = start_swarm(keypair1, None, event_tx1, false)
+    let swarm1: SwarmHandle = start_swarm(keypair1, None, event_tx1, None, false)
         .await
         .expect("Failed to start swarm1");
 
@@ -321,7 +319,7 @@ async fn test_address_reflection_timeout() {
     .await
     .ok();
 
-    let swarm2: SwarmHandle = start_swarm(keypair2, None, event_tx2, false)
+    let swarm2: SwarmHandle = start_swarm(keypair2, None, event_tx2, None, false)
         .await
         .expect("Failed to start swarm2");
 

@@ -126,6 +126,59 @@ fn test_cli_parse_history_count() {
 }
 
 #[test]
+fn test_identity_backup_restore_roundtrip_logic() {
+    use scmessenger_cli::cli::IdentityAction;
+
+    // Simulate export
+    let export_cli = Cli::parse_from(["scm", "identity", "export", "--passphrase", "mypass", "--output", "backup.json"]);
+    if let Commands::Identity { action: Some(IdentityAction::Export { passphrase, output }) } = export_cli.command {
+        assert_eq!(passphrase, "mypass");
+        assert_eq!(output, Some("backup.json".to_string()));
+    } else {
+        panic!("Failed to parse export command");
+    }
+
+    // Simulate import
+    let import_cli = Cli::parse_from(["scm", "identity", "import", "--passphrase", "mypass", "--input", "backup.json"]);
+    if let Commands::Identity { action: Some(IdentityAction::Import { passphrase, input, .. }) } = import_cli.command {
+        assert_eq!(passphrase, "mypass");
+        assert_eq!(input, Some("backup.json".to_string()));
+    } else {
+        panic!("Failed to parse import command");
+    }
+}
+
+#[test]
+fn test_block_unblock_cascade_logic() {
+    use scmessenger_cli::cli::BlockAction;
+
+    // Block
+    let block_cli = Cli::parse_from(["scm", "block", "add", "peer-123", "--reason", "spam"]);
+    if let Commands::Block { action: BlockAction::Add { peer_id, reason, .. } } = block_cli.command {
+        assert_eq!(peer_id, "peer-123");
+        assert_eq!(reason, Some("spam".to_string()));
+    } else {
+        panic!("Failed to parse block command");
+    }
+
+    // Unblock
+    let unblock_cli = Cli::parse_from(["scm", "block", "remove", "peer-123"]);
+    if let Commands::Block { action: BlockAction::Remove { peer_id, .. } } = unblock_cli.command {
+        assert_eq!(peer_id, "peer-123");
+    } else {
+        panic!("Failed to parse unblock command");
+    }
+
+    // Cascade delete
+    let delete_cli = Cli::parse_from(["scm", "block", "delete", "peer-123"]);
+    if let Commands::Block { action: BlockAction::Delete { peer_id, .. } } = delete_cli.command {
+        assert_eq!(peer_id, "peer-123");
+    } else {
+        panic!("Failed to parse block delete command");
+    }
+}
+
+#[test]
 fn test_cli_parse_mark_sent() {
     let cli = Cli::parse_from(["scm", "mark-sent", "msg-123"]);
     assert!(matches!(cli.command, Commands::MarkSent { ref message_id } if message_id == "msg-123"));
