@@ -40,6 +40,11 @@ fun SettingsScreen(
 
     val context = LocalContext.current
 
+    // Refresh identity whenever Settings screen is entered (nickname may have changed during onboarding)
+    LaunchedEffect(Unit) {
+        settingsViewModel.loadIdentity()
+    }
+
     val statsText = remember(serviceStats) { serviceViewModel.getStatsText() }
 
     Column(

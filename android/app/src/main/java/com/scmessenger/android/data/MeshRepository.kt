@@ -3501,9 +3501,16 @@ open class MeshRepository(private val context: Context) {
             Timber.w("Refusing to set blank nickname")
             return
         }
-        ironCore?.setNickname(trimmed)
-        Timber.i("Nickname set to: $trimmed")
-        persistIdentityBackup(ironCore)
+        val core = ironCore
+            ?: throw IllegalStateException("Cannot set nickname: IronCore is not initialized")
+        try {
+            core.setNickname(trimmed)
+            Timber.i("Nickname set to: $trimmed")
+        } catch (e: Exception) {
+            Timber.e(e, "Rust core failed to set nickname")
+            throw IllegalStateException("Failed to persist nickname: ${e.message}", e)
+        }
+        persistIdentityBackup(core)
         // If swarm start was postponed before identity/nickname was ready, resume now.
         initializeAndStartSwarm()
         updateBleIdentityBeacon()

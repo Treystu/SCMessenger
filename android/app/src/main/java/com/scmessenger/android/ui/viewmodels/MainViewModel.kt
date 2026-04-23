@@ -143,8 +143,15 @@ class MainViewModel @Inject constructor(
                 meshRepository.createIdentity()
                 meshRepository.setNickname(trimmedNickname)
 
+                // Verify nickname persisted (defensive: catch silent Rust-core failures)
+                val info = meshRepository.getIdentityInfo()
+                if (info?.nickname.isNullOrBlank()) {
+                    Timber.w("Nickname was blank after setNickname; retrying once")
+                    meshRepository.setNickname(trimmedNickname)
+                }
+
                 val initialized = meshRepository.isIdentityInitialized()
-                Timber.i("Identity creation result initialized: $initialized")
+                Timber.i("Identity creation result initialized: $initialized; nickname=${info?.nickname}")
                 _isReady.value = initialized
                 if (_isReady.value) {
                     preferencesRepository.setOnboardingCompleted(true)
