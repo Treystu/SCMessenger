@@ -95,15 +95,36 @@ object Permissions {
      * Get rationale explanation for a permission.
      */
     fun getRationale(permission: String): String = when (permission) {
-        in bluetooth -> "Bluetooth is required for discovering and messaging with nearby peers."
+        Manifest.permission.BLUETOOTH_SCAN ->
+            "SCMessenger uses Bluetooth to discover nearby mesh nodes."
 
-        in location -> "Location access is required for WiFi Aware peer discovery. " +
-                      "SCMessenger does not track or store your location."
+        Manifest.permission.BLUETOOTH_ADVERTISE ->
+            "SCMessenger advertises your device so others can find you."
 
-        in nearbyWifi -> "Nearby WiFi devices permission enables WiFi Aware for " +
-                        "direct peer-to-peer messaging without infrastructure."
+        Manifest.permission.BLUETOOTH_CONNECT ->
+            "Required to connect to discovered mesh nodes."
 
-        in notifications -> "Notifications keep you informed when new messages arrive."
+        Manifest.permission.BLUETOOTH,
+        Manifest.permission.BLUETOOTH_ADMIN ->
+            "Bluetooth is required for discovering and messaging with nearby peers."
+
+        Manifest.permission.ACCESS_FINE_LOCATION ->
+            "Android requires location permission for Bluetooth Low Energy scanning. " +
+            "Your location is never shared."
+
+        Manifest.permission.ACCESS_COARSE_LOCATION ->
+            "Location access is required for WiFi Aware peer discovery. " +
+            "SCMessenger does not track or store your location."
+
+        Manifest.permission.NEARBY_WIFI_DEVICES ->
+            "Nearby WiFi devices permission enables WiFi Aware for " +
+            "direct peer-to-peer messaging without infrastructure."
+
+        Manifest.permission.POST_NOTIFICATIONS ->
+            "Notifications alert you when new messages arrive."
+
+        Manifest.permission.CAMERA ->
+            "Camera is used to scan QR codes for adding contacts."
 
         else -> "This permission is required for mesh networking."
     }

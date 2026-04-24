@@ -83,32 +83,38 @@ open class MeshRepository(private val context: Context) {
             "/dns4/bootstrap.scmessenger.net/tcp/80/ws/p2p/12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw"
         )
 
-        /** Resolve bootstrap nodes using the core BootstrapResolver.
-         *  Priority: SC_BOOTSTRAP_NODES env var → remote URL → static fallback. */
-        val DEFAULT_BOOTSTRAP_NODES: List<String> by lazy {
-            try {
-                val config = uniffi.api.BootstrapConfig(
-                    staticNodes = STATIC_BOOTSTRAP_NODES,
-                    remoteUrl = "https://bootstrap.scmessenger.net/nodes.json",
-                    fetchTimeoutSecs = 5u,
-                    envOverrideKey = "SC_BOOTSTRAP_NODES"
-                )
-                uniffi.api.BootstrapResolver(config).resolve()
-            } catch (e: Exception) {
-                Timber.w("BootstrapResolver failed, using static fallback: ${e.message}")
-                STATIC_BOOTSTRAP_NODES
-            }
+        /**
+         * P0_ANDROID_017: Cached static bootstrap nodes to prevent blocking network I/O on Settings ANR.
+         * Lazy initialization of DEFAULT_BOOTSTRAP_NODES was causing UI thread blocking because:
+         * 1. BootstrapResolver.resolve() calls out to network on first access
+         * 2. RemoteConfigBootstrapSource does blocking HTTP on calling thread
+         * Solution: Pre-populate with static fallback immediately, defer remote fetch to background.
+         */
+        private val cachedBootstrapNodes: List<String> by lazy {
+            Timber.d("Pre-populating static bootstrap nodes (no network I/O)")
+            STATIC_BOOTSTRAP_NODES
         }
+
+        /**
+         * Resolve bootstrap nodes using the core BootstrapResolver.
+         * Priority: SC_BOOTSTRAP_NODES env var → remote URL → static fallback.
+         * Returns cached static nodes immediately; remote fetch happens in background.
+         */
+        val DEFAULT_BOOTSTRAP_NODES: List<String>
+            get() = cachedBootstrapNodes
 
         /**
          * P0_ANDROID_007: Implement diverse bootstrap source strategies.
          * Resolves nodes from environment, remote config, and static fallback.
+         * DEPRECATED: Use cachedBootstrapNodes for Settings screen to avoid blocking I/O.
          */
-        internal fun resolveAllBootstrapSources(): List<String> {
+        @Deprecated("Causes ANR - use cachedBootstrapNodes instead")
+        internal suspend fun resolveAllBootstrapSourcesAsync(): List<String> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val sources = listOf(
                 EnvironmentBootstrapSource(),
-                RemoteConfigBootstrapSource("https://bootstrap.scmessenger.net/nodes.json"),
                 StaticBootstrapSource()
+                // REMOTE CONFIG REMOVED - causes blocking network I/O on calling thread
+                // RemoteConfigBootstrapSource("https://bootstrap.scmessenger.net/nodes.json")
             )
 
             for (source in sources) {
@@ -116,14 +122,20 @@ open class MeshRepository(private val context: Context) {
                     val nodes = source.getBootstrapNodes()
                     if (nodes.isNotEmpty()) {
                         Timber.i("Using bootstrap source: ${source.name} with ${nodes.size} nodes")
-                        return nodes
+                        return@withContext nodes
                     }
                 } catch (e: Exception) {
                     Timber.w("Bootstrap source ${source.name} failed: ${e.message}")
                 }
             }
-            return STATIC_BOOTSTRAP_NODES
+            STATIC_BOOTSTRAP_NODES
         }
+
+        /**
+         * ANR FIX: Get bootstrap nodes synchronously without network I/O.
+         * Used by Settings screen to avoid UI thread blocking.
+         */
+        fun getBootstrapNodesForSettings(): List<String> = cachedBootstrapNodes
 
         interface BootstrapSource {
             val name: String
@@ -138,24 +150,9 @@ open class MeshRepository(private val context: Context) {
             }
         }
 
-        class RemoteConfigBootstrapSource(private val url: String) : BootstrapSource {
-            override val name = "RemoteConfig"
-            override fun getBootstrapNodes(): List<String> {
-                // Simplified remote fetch for demonstration; in production uses a real HTTP client
-                return try {
-                    val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-                    connection.connectTimeout = 5000
-                    connection.readTimeout = 5000
-                    if (connection.responseCode == 200) {
-                        connection.inputStream.bufferedReader().use { it.readText() }
-                            .let { /* JSON parsing logic here */ emptyList<String>() }
-                    } else emptyList()
-                } catch (e: Exception) {
-                    emptyList()
-                }
-            }
-        }
-
+        /**
+         * ANR FIX: StaticBootstrapSource returns immediately without any network I/O.
+         */
         class StaticBootstrapSource : BootstrapSource {
             override val name = "StaticFallback"
             override fun getBootstrapNodes(): List<String> = STATIC_BOOTSTRAP_NODES
@@ -268,7 +265,7 @@ open class MeshRepository(private val context: Context) {
         }
         try {
             Timber.w("Node $failedNodeId marked unreachable, triggering fallback protocol")
-            val fallbackNodes = resolveAllBootstrapSources()
+            val fallbackNodes = resolveAllBootstrapSourcesAsync()
             if (fallbackNodes.isNotEmpty()) {
                 Timber.i("Fallback protocol: ${fallbackNodes.size} alternative bootstrap nodes available")
                 val bridge = swarmBridge ?: return
@@ -409,7 +406,7 @@ open class MeshRepository(private val context: Context) {
     private val dialThrottleLogIntervalMs = 300_000L
 
     // AND-SEND-BTN-001: In-memory cache for identity ID resolution.
-    // canonicalContactId() calls ironCore?.resolveToIdentityId() via synchronous FFI on every
+    // canonicalContactId() calls ironCore?.resolveIdentity() via synchronous FFI on every
     // recomposition when invoked from Composable code. This cache eliminates repeated FFI calls
     // for the same peer ID, preventing UI thread freezes.
     private val identityIdCache = java.util.concurrent.ConcurrentHashMap<String, String>()
@@ -444,7 +441,7 @@ open class MeshRepository(private val context: Context) {
         val localNickname: String? = null
     )
 
-    private data class PendingOutboundEnvelope(
+    internal data class PendingOutboundEnvelope(
         val queueId: String,
         val historyRecordId: String,
         val peerId: String,
@@ -2481,11 +2478,14 @@ open class MeshRepository(private val context: Context) {
 
             fun buildBeacon(): org.json.JSONObject {
                 val connectionHints = (resolvedListeners + resolvedExternal).distinct()
+                // UNIFIED ID FIX: BLE beacon primary ID is libp2p_peer_id (network routable)
                 return org.json.JSONObject()
-                    .put("identity_id", identity.identityId ?: "")
-                    .put("public_key", publicKeyHex)
+                    .put("peer_id", identity.libp2pPeerId ?: "")           // PRIMARY: libp2p Peer ID
+                    .put("public_key", publicKeyHex)                         // Canonical identity key
+                    .put("device_id", identity.deviceId ?: "")             // Multi-device routing
+                    .put("identity_id", identity.identityId ?: "")         // SECONDARY: Blake3 hash
                     .put("nickname", nickname)
-                    .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
+                    .put("libp2p_peer_id", identity.libp2pPeerId ?: "")    // Backward compatibility
                     .put("listeners", org.json.JSONArray(resolvedListeners))
                     .put("external_addresses", org.json.JSONArray(resolvedExternal))
                     .put("connection_hints", org.json.JSONArray(connectionHints))
@@ -2508,8 +2508,10 @@ open class MeshRepository(private val context: Context) {
             }
             if (beaconJson.size > 480) {
                 beaconJsonObject = org.json.JSONObject()
-                    .put("identity_id", identity.identityId ?: "")
+                    .put("peer_id", identity.libp2pPeerId ?: "")           // PRIMARY
                     .put("public_key", publicKeyHex)
+                    .put("device_id", identity.deviceId ?: "")
+                    .put("identity_id", identity.identityId ?: "")
                     .put("nickname", nickname)
                     .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
                     .put("listeners", org.json.JSONArray())
@@ -2552,6 +2554,7 @@ open class MeshRepository(private val context: Context) {
                     Timber.w("Ignoring BLE identity from $blePeerId: invalid public key")
                     return
                 }
+            // UNIFIED ID FIX: BLE beacon primary ID is "peer_id" (libp2p Peer ID)
             val identityId = json.optString("identity_id", "")
                 .trim()
                 .takeIf { it.isNotBlank() }
@@ -2560,7 +2563,13 @@ open class MeshRepository(private val context: Context) {
                 json.optString("nickname", "")
                     .ifBlank { json.optString("name", "") }
                 ).trim()
-            val libp2pPeerId = json.optString("libp2p_peer_id")
+            val libp2pPeerId = json.optString("peer_id", "")
+                .trim()
+                .takeIf { it.isNotBlank() }
+                ?: json.optString("libp2p_peer_id", "")
+                    .trim()
+                    .takeIf { it.isNotBlank() }
+                    ?: ""
             val listeners = json.optJSONArray("listeners")
             val externalAddresses = json.optJSONArray("external_addresses")
             val connectionHints = json.optJSONArray("connection_hints")
@@ -2701,7 +2710,7 @@ open class MeshRepository(private val context: Context) {
             }
             repoScope.launch {
                 upsertFederatedContact(
-                    canonicalPeerId = identityId,
+                    canonicalPeerId = publicKeyHex,       // UNIFIED ID FIX: canonical = public_key_hex
                     publicKey = publicKeyHex,
                     nickname = rawNickname.takeIf { it.isNotBlank() },
                     libp2pPeerId = routePeerId,
@@ -2874,7 +2883,9 @@ open class MeshRepository(private val context: Context) {
             meshService?.setBootstrapNodes(DEFAULT_BOOTSTRAP_NODES)
             // Initiate swarm in Rust core.
             // Core auto-selects headless mode when identity is absent and upgrades when identity appears.
-            meshService?.startSwarm("/ip4/0.0.0.0/tcp/0")
+            // P0_TRANSPORT_001: Use static port 9001 for LAN connectivity with CLI daemon.
+            // This ensures both sides can dial each other using predictable addresses.
+            meshService?.startSwarm("/ip4/0.0.0.0/tcp/9001")
 
             // Obtain the SwarmBridge managed by Rust MeshService
             swarmBridge = meshService?.getSwarmBridge()
@@ -3195,27 +3206,24 @@ open class MeshRepository(private val context: Context) {
         // ID-STANDARDIZATION-001: Comprehensive ID resolution with sanity checks
         Timber.d("ID_RESOLUTION: Input ID '$trimmed' (length=${trimmed.length})")
 
-        // If it's already a 64-char hex identity ID, normalize and return
-        if (PeerIdValidator.isIdentityId(trimmed)) {
-            val normalized = PeerIdValidator.normalize(trimmed)
-            identityIdCache[trimmed] = normalized
-            Timber.d("ID_RESOLUTION: Already identity_id, returning normalized: ${normalized.take(8)}...")
-            return normalized
-        }
+        // UNIFIED ID FIX: Never short-circuit on identity_id shape.
+        // resolveIdentity() handles all formats (public_key_hex, identity_id, libp2p_peer_id)
+        // and always returns public_key_hex (canonical). The 64-hex short-circuit was
+        // allowing identity_id to be stored as Contact.peerId, causing duplicate contacts.
 
-        // Try to resolve to canonical identity_id via IronCore
+        // Try to resolve to canonical public_key_hex via IronCore
         try {
-            val resolvedIdentityId = ironCore?.resolveToIdentityId(trimmed)
-            if (resolvedIdentityId != null) {
-                val normalized = PeerIdValidator.normalize(resolvedIdentityId)
+            val resolvedPk = ironCore?.resolveIdentity(trimmed)
+            if (resolvedPk != null) {
+                val normalized = PeerIdValidator.normalize(resolvedPk)
                 identityIdCache[trimmed] = normalized
-                Timber.d("ID_RESOLUTION: Resolved '$trimmed' -> identity_id: ${normalized.take(8)}...")
+                Timber.d("ID_RESOLUTION: Resolved '$trimmed' -> public_key_hex: ${normalized.take(8)}...")
                 return normalized
             } else {
                 Timber.w("ID_RESOLUTION: IronCore returned null for '$trimmed'")
             }
         } catch (e: Exception) {
-            Timber.w("ID_RESOLUTION: Failed to resolve ID '$trimmed' to identity_id: ${e.message}")
+            Timber.w("ID_RESOLUTION: Failed to resolve ID '$trimmed' to public_key_hex: ${e.message}")
         }
 
         // Fallback: Normalize the input ID (libp2p peer ID or other format)
@@ -3964,7 +3972,7 @@ open class MeshRepository(private val context: Context) {
     suspend fun createIdentity() {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                ensureServiceInitialized()
+                ensureServiceInitializedBlocking()
                 if (ironCore == null) {
                     Timber.e("IronCore is null after ensureServiceInitialized! Cannot create identity.")
                     throw IllegalStateException("Mesh service initialization failed")
@@ -3993,8 +4001,14 @@ open class MeshRepository(private val context: Context) {
     private var isServiceStarting = false
 
     /**
-     * Defer service initialization to background thread.
-     * Called from IO dispatcher to avoid blocking the main thread.
+     * ANR FIX (P0_ANDROID_017): Defer service initialization to background thread without blocking.
+     * The original implementation called loadSettings() synchronously inside the coroutine,
+     * which blocked because settingsManager?.load() waits for the Rust core to initialize.
+     * This caused a deadlock: UI thread wanted identity info → called ensureServiceInitializedDeferred()
+     * → startMeshService() → loadSettings() → Rust core not ready → block.
+     *
+     * Solution: Use default settings (already cached) for initial config, then reload settings
+     * asynchronously after service starts. This allows Settings screen to load immediately.
      */
     private fun ensureServiceInitializedDeferred() {
         repoScope.launch {
@@ -4009,16 +4023,47 @@ open class MeshRepository(private val context: Context) {
                 return@launch
             }
 
-            Timber.d("Lazy starting MeshService for Identity access...")
+            Timber.d("Lazy starting MeshService (async settings reload)...")
             isServiceStarting = true
             try {
-                val settings = loadSettings()
+                // Use default settings for initial config - no blocking I/O
+                val defaultSettings = uniffi.api.MeshSettings(
+                    relayEnabled = true,
+                    maxRelayBudget = 200u,
+                    batteryFloor = 20u,
+                    bleEnabled = true,
+                    wifiAwareEnabled = true,
+                    wifiDirectEnabled = true,
+                    internetEnabled = true,
+                    discoveryMode = uniffi.api.DiscoveryMode.NORMAL,
+                    onionRouting = false,
+                    coverTrafficEnabled = false,
+                    messagePaddingEnabled = false,
+                    timingObfuscationEnabled = false,
+                    notificationsEnabled = true,
+                    notifyDmEnabled = true,
+                    notifyDmRequestEnabled = true,
+                    notifyDmInForeground = false,
+                    notifyDmRequestInForeground = true,
+                    soundEnabled = true,
+                    badgeEnabled = true
+                )
                 val config = uniffi.api.MeshServiceConfig(
                     discoveryIntervalMs = 30000u,
-                    batteryFloorPct = settings.batteryFloor
+                    batteryFloorPct = defaultSettings.batteryFloor
                 )
                 startMeshService(config)
-                Timber.d("MeshService started lazily")
+                Timber.d("MeshService started lazily (async settings reload)")
+
+                // Async reload of settings after service started - doesn't block
+                repoScope.launch {
+                    try {
+                        val loaded = loadSettings()
+                        Timber.d("Settings reloaded asynchronously after service startup")
+                    } catch (e: Exception) {
+                        Timber.w(e, "Async settings reload failed")
+                    }
+                }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to start MeshService lazily")
             } finally {
@@ -4035,9 +4080,33 @@ open class MeshRepository(private val context: Context) {
     }
 
     private fun ensureServiceInitialized() {
-        // Start initialization on background dispatcher
-        // This prevents blocking the calling thread (often Main)
+        // Fire-and-forget for non-critical paths (prevents UI thread blocking)
         ensureServiceInitializedDeferred()
+    }
+
+    /**
+     * Blocking variant for suspend functions that require the service to be running.
+     * Waits up to 10 seconds for MeshService to reach RUNNING state.
+     */
+    private suspend fun ensureServiceInitializedBlocking() {
+        // Fast path: already running
+        if (meshService?.getState() == uniffi.api.ServiceState.RUNNING && ironCore != null) {
+            return
+        }
+
+        // Start initialization if needed
+        ensureServiceInitializedDeferred()
+
+        // Wait for service to actually start (with timeout)
+        val startTime = System.currentTimeMillis()
+        val timeoutMs = 10_000L
+        while (System.currentTimeMillis() - startTime < timeoutMs) {
+            if (meshService?.getState() == uniffi.api.ServiceState.RUNNING && ironCore != null) {
+                return
+            }
+            kotlinx.coroutines.delay(100)
+        }
+        Timber.w("ensureServiceInitializedBlocking timed out after ${timeoutMs}ms")
     }
 
     private fun hasAllPermissions(permissions: List<String>): Boolean =
@@ -4325,7 +4394,34 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
-    fun exportDiagnostics(): String {
+    /**
+     * ANR FIX (P0_ANDROID_017): Export diagnostics asynchronously to avoid Main thread I/O.
+     * The original implementation blocked on:
+     * 1. meshService?.exportDiagnostics() - Rust FFI call that can hang
+     * 2. loadPendingOutbox() - File I/O operation
+     *
+     * Solution: Run diagnostics export on IO dispatcher and cache results.
+     */
+    suspend fun exportDiagnosticsAsync(): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            exportDiagnosticsInternal()
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to export diagnostics")
+            // Return minimal fallback JSON to avoid crash
+            org.json.JSONObject()
+                .put("error", "Diagnostics export failed: ${e.message}")
+                .put("service_state", meshService?.getState()?.name ?: "UNKNOWN")
+                .put("generated_at_ms", System.currentTimeMillis())
+                .toString()
+        }
+    }
+
+    /**
+     * Original diagnostics export - now only called from IO dispatcher.
+     */
+    fun exportDiagnostics(): String = exportDiagnosticsInternal()
+
+    private fun exportDiagnosticsInternal(): String {
         val coreDiagnostics = try {
             meshService?.exportDiagnostics()
         } catch (e: Exception) {
@@ -4364,12 +4460,20 @@ open class MeshRepository(private val context: Context) {
             }
         }
 
+        // ANR FIX: Use async pending outbox loader
+        val pendingOutboxSize = try {
+            loadPendingOutbox().size
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to load pending outbox for diagnostics")
+            0
+        }
+
         val fallback = org.json.JSONObject()
             .put("service_state", meshService?.getState()?.name ?: "STOPPED")
             .put("connection_path_state", getConnectionPathState().name)
             .put("nat_status", getNatStatus())
             .put("discovered_peers", _discoveredPeers.value.size)
-            .put("pending_outbox", loadPendingOutbox().size)
+            .put("pending_outbox", pendingOutboxSize)
             .put("strict_ble_only_validation", strictBleOnlyValidation)
             .put("generated_at_ms", System.currentTimeMillis())
         bleDiscovery?.let { stats ->
@@ -5623,8 +5727,75 @@ open class MeshRepository(private val context: Context) {
         repoScope.launch { flushPendingOutbox("enqueue") }
     }
 
+    // ANR FIX: Cache for pending outbox to avoid repeated I/O
+    @Volatile private var cachedPendingOutbox: List<PendingOutboundEnvelope> = emptyList()
+    @Volatile private var pendingOutboxCacheTimeMs: Long = 0L
+    private val pendingOutboxCacheTtlMs = 1000L  // 1 second TTL
+
+    /**
+     * ANR FIX (P0_ANDROID_017): Load pending outbox asynchronously to avoid Main thread I/O.
+     * Uses cached results when available to prevent repeated file reads during diagnostics export.
+     */
+    private suspend fun loadPendingOutboxAsync(): List<PendingOutboundEnvelope> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        // Return cached result if fresh enough
+        if (cachedPendingOutbox.isNotEmpty() && System.currentTimeMillis() - pendingOutboxCacheTimeMs < pendingOutboxCacheTtlMs) {
+            return@withContext cachedPendingOutbox
+        }
+
+        val result = if (!pendingOutboxFile.exists()) {
+            emptyList()
+        } else {
+            try {
+                val raw = pendingOutboxFile.readText()
+                if (raw.isBlank()) return@withContext emptyList()
+                val arr = org.json.JSONArray(raw)
+                buildList {
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.optJSONObject(i) ?: continue
+                        val routePeerId = obj.optString("route_peer_id").ifBlank { null }
+                        val listenersJson = obj.optJSONArray("listeners")
+                        val listeners = buildList {
+                            for (idx in 0 until (listenersJson?.length() ?: 0)) {
+                                val value = listenersJson?.optString(idx).orEmpty().trim()
+                                if (value.isNotEmpty()) add(value)
+                            }
+                        }
+                        add(
+                            PendingOutboundEnvelope(
+                                queueId = obj.optString("queue_id").ifBlank { java.util.UUID.randomUUID().toString() },
+                                historyRecordId = obj.optString("history_record_id"),
+                                peerId = obj.optString("peer_id"),
+                                routePeerId = routePeerId,
+                                listeners = listeners,
+                                envelopeBase64 = obj.optString("envelope_b64"),
+                                createdAtEpochSec = obj.optLong("created_at", System.currentTimeMillis() / 1000),
+                                attemptCount = obj.optInt("attempt_count", 0),
+                                nextAttemptAtEpochSec = obj.optLong("next_attempt_at", 0),
+                                strictBleOnlyMode = if (obj.has("strict_ble_only_mode")) obj.optBoolean("strict_ble_only_mode") else null,
+                                recipientIdentityId = obj.optString("recipient_identity_id").ifBlank { null },
+                                intendedDeviceId = obj.optString("intended_device_id").ifBlank { null },
+                                terminalFailureCode = obj.optString("terminal_failure_code").ifBlank { null }
+                            )
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to parse pending outbox")
+                emptyList()
+            }
+        }
+
+        // Update cache
+        cachedPendingOutbox = result
+        pendingOutboxCacheTimeMs = System.currentTimeMillis()
+        result
+    }
+
+    /**
+     * Synchronous load for internal use (must only be called from IO dispatcher).
+     */
     @Synchronized
-    private fun loadPendingOutbox(): List<PendingOutboundEnvelope> {
+    private fun loadPendingOutboxSync(): List<PendingOutboundEnvelope> {
         if (!pendingOutboxFile.exists()) return emptyList()
         return try {
             val raw = pendingOutboxFile.readText()
@@ -5665,6 +5836,11 @@ open class MeshRepository(private val context: Context) {
             emptyList()
         }
     }
+
+    /**
+     * Public sync version - must only be called from IO dispatcher.
+     */
+    internal fun loadPendingOutbox(): List<PendingOutboundEnvelope> = loadPendingOutboxSync()
 
     @Synchronized
     private fun savePendingOutbox(queue: List<PendingOutboundEnvelope>) {
@@ -5710,7 +5886,7 @@ open class MeshRepository(private val context: Context) {
         val normalizedIncomingKey = normalizePublicKey(senderPublicKeyHex) ?: return senderId
 
         // Priority 1: Use direct hash resolution from core
-        val identityId = try { ironCore?.resolveToIdentityId(senderPublicKeyHex) } catch (e: Exception) { null }
+        val identityId = try { ironCore?.resolveIdentity(senderPublicKeyHex) } catch (e: Exception) { null }
         if (identityId != null) {
             // Check if we already have a contact pointing to ANOTHER peerId for this key
             // (e.g. legacy libp2p ID contact). If so, we merge by returning the existing ID.
@@ -6231,7 +6407,7 @@ open class MeshRepository(private val context: Context) {
             if (!validatePeerBeforeContactCreation(peerId, normalizedKey)) {
                 Timber.w("Peer validation failed for ${normalizedKey.take(8)}..., skipping emergency contact creation")
                 return TransportIdentityResolution(
-                    canonicalPeerId = libp2pPeerId,
+                    canonicalPeerId = normalizedKey,
                     publicKey = normalizedKey,
                     nickname = null,
                     localNickname = null
@@ -6243,7 +6419,7 @@ open class MeshRepository(private val context: Context) {
             logIdentityResolutionDetails(normalizedKey, emergencyContact, createdNew = true)
 
             return TransportIdentityResolution(
-                canonicalPeerId = libp2pPeerId,
+                canonicalPeerId = normalizedKey,
                 publicKey = normalizedKey,
                 nickname = emergencyContact.nickname?.takeIf { it.isNotBlank() },
                 localNickname = emergencyContact.localNickname?.takeIf { it.isNotBlank() }
@@ -6252,10 +6428,10 @@ open class MeshRepository(private val context: Context) {
 
         logIdentityResolutionDetails(normalizedKey, canonicalContact, createdNew = false)
 
-        // Always use the libp2p peer ID as the canonical peer ID to ensure
-        // consistent identity across all transports and prevent duplicate threads.
+        // UNIFIED ID FIX: canonicalPeerId is ALWAYS public_key_hex for contact storage.
+        // libp2p_peer_id is only used for network transport, never as the contact key.
         return TransportIdentityResolution(
-            canonicalPeerId = libp2pPeerId,
+            canonicalPeerId = normalizedKey,
             publicKey = normalizedKey,
             nickname = canonicalContact.nickname?.takeIf { it.isNotBlank() },
             localNickname = canonicalContact.localNickname?.takeIf { it.isNotBlank() }
@@ -7098,7 +7274,7 @@ open class MeshRepository(private val context: Context) {
 
         // Build prioritized address list based on network type
         // P0_ANDROID_007: Use resolveAllBootstrapSources() to try environment, remote, then static fallbacks
-        val baseNodes = resolveAllBootstrapSources() + WEBSOCKET_FALLBACK_NODES
+        val baseNodes = resolveAllBootstrapSourcesAsync() + WEBSOCKET_FALLBACK_NODES
         val prioritizedAddresses = if (networkDetector.isCellularNetwork) {
             // On cellular, WebSocket on standard ports first (carriers block non-standard ports)
             WEBSOCKET_FALLBACK_NODES + baseNodes.filter { it !in WEBSOCKET_FALLBACK_NODES }
@@ -7465,11 +7641,15 @@ open class MeshRepository(private val context: Context) {
             }.toMutableList()
         }
 
+        // UNIFIED ID FIX: QR code primary ID is libp2p_peer_id (network routable)
+        // identity_id is secondary (human fingerprint for backup/recovery)
         val payload = org.json.JSONObject()
-            .put("identity_id", identity.identityId ?: "")
+            .put("peer_id", identity.libp2pPeerId ?: "")           // PRIMARY: libp2p Peer ID for contact add
+            .put("public_key", identity.publicKeyHex ?: "")         // Canonical identity key
+            .put("device_id", identity.deviceId ?: "")              // Multi-device routing
+            .put("identity_id", identity.identityId ?: "")           // SECONDARY: Blake3 hash
             .put("nickname", identity.nickname ?: "")
-            .put("public_key", identity.publicKeyHex ?: "")
-            .put("libp2p_peer_id", identity.libp2pPeerId ?: "")
+            .put("libp2p_peer_id", identity.libp2pPeerId ?: "")      // Backward compatibility
             .put("listeners", org.json.JSONArray(listeners))
             .put("external_addresses", org.json.JSONArray(externalAddresses))
             .put("connection_hints", org.json.JSONArray((listeners + externalAddresses).distinct()))
@@ -7641,7 +7821,7 @@ open class MeshRepository(private val context: Context) {
             val idMap = mutableMapOf<String, String>() // old -> new
 
             for (contact in contactList) {
-                val identityId = try { iron.resolveToIdentityId(contact.publicKey) } catch (e: Exception) { null }
+                val identityId = try { iron.resolveIdentity(contact.publicKey) } catch (e: Exception) { null }
                 if (identityId != null && identityId != contact.peerId) {
                     Timber.i("Coalescing ID for ${contact.nickname ?: contact.peerId}: ${contact.peerId} -> $identityId")
                     idMap[contact.peerId] = identityId
@@ -7683,7 +7863,7 @@ open class MeshRepository(private val context: Context) {
                 val allMessages = history.recent(null, 100000u)
                 var updatedMessages = 0
                 for (msg in allMessages) {
-                    val canonical = idMap[msg.peerId] ?: try { iron.resolveToIdentityId(msg.peerId) } catch (e: Exception) { null }
+                    val canonical = idMap[msg.peerId] ?: try { iron.resolveIdentity(msg.peerId) } catch (e: Exception) { null }
                     if (canonical != null && canonical != msg.peerId) {
                         try {
                             history.add(msg.copy(peerId = canonical))

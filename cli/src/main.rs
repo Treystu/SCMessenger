@@ -15,7 +15,7 @@ mod transport_bridge;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use colored::*;
-use libp2p::Multiaddr;
+use libp2p::{Multiaddr, PeerId};
 use scmessenger_core::message::{decode_envelope, MessageType};
 use scmessenger_core::store::{Contact, ContactManager, MessageDirection, Outbox, QueuedMessage};
 use scmessenger_core::transport::abstraction::TransportType;
@@ -662,10 +662,10 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             scmessenger_core::crypto::validate_ed25519_public_key(&public_key)
                 .context("Invalid public key")?;
 
-            // Guard: reject Blake3 identity_id where a libp2p Peer ID is required
+            // Guard: reject public key / identity_id where a libp2p Peer ID is required
             if looks_like_blake3_id(&peer_id) {
                 eprintln!(
-                    "{} That looks like a Blake3 identity ID (64 hex chars), not a libp2p Peer ID.",
+                    "{} That looks like a public key or identity ID (64 hex chars), not a libp2p Peer ID.",
                     "⚠ Error:".red()
                 );
                 eprintln!("  Use the 'Peer ID (Network)' shown by: scm identity");
@@ -702,7 +702,19 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
             let contacts = core.contacts_store_manager();
 
-            let mut contact = Contact::new(peer_id.clone(), public_key);
+            // UNIFIED ID FIX: derive canonical public_key_hex from libp2p Peer ID
+            // and verify it matches the user-supplied public key.
+            let canonical_pk = core
+                .extract_public_key_from_peer_id(peer_id.clone())
+                .context("Failed to derive public key from Peer ID — is it a valid libp2p Peer ID?")?;
+            if canonical_pk.to_lowercase() != public_key.to_lowercase() {
+                eprintln!("{} The provided public key does not match the Peer ID.", "⚠ Error:".red());
+                eprintln!("  Peer ID {} resolves to public key: {}", peer_id.dimmed(), canonical_pk.yellow());
+                eprintln!("  You provided public key: {}", public_key.dimmed());
+                return Ok(());
+            }
+
+            let mut contact = Contact::new(canonical_pk.clone(), public_key);
             if let Some(nickname) = name.clone() {
                 contact.nickname = Some(nickname);
             }
@@ -715,7 +727,8 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             if let Some(nickname) = name {
                 println!("  Name: {}", nickname.bright_cyan());
             }
-            println!("  Peer ID: {}", peer_id);
+            println!("  Canonical ID: {}", canonical_pk.yellow());
+            println!("  Peer ID (Network): {}", peer_id.dimmed());
         }
 
         _ => {
@@ -1262,6 +1275,35 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
             let mut l = ledger_save_clone.lock().await;
             if let Err(e) = l.save(&data_dir_save) {
                 tracing::error!("Failed to save ledger: {}", e);
+            }
+        }
+    });
+
+    // P0_TRANSPORT_001: Periodic address refresh - before dialing from ledger,
+    // send an Identify probe to refresh peer addresses. This ensures we have
+    // current listen addresses even if peers restarted with new ports.
+    let swarm_refresh_clone = swarm_handle.clone();
+    let ledger_refresh_clone = ledger.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(120)).await;
+
+            let addrs = {
+                let l = ledger_refresh_clone.lock().await;
+                l.dialable_addresses(Some(&local_peer_id.to_string()))
+            };
+
+            // For each peer, try to refresh their address via Identify
+            // This asks the peer: "What is your current listening address?"
+            for (_multiaddr_str, peer_id_opt) in &addrs {
+                if let Some(ref peer_id_str) = peer_id_opt {
+                    if let Ok(peer_id) = peer_id_str.parse::<PeerId>() {
+                        // Attempt to request address reflection
+                        // If this succeeds, we'll get the current address
+                        // If it fails (no connection), we'll still dial with current address
+                        let _ = swarm_refresh_clone.request_address_reflection(peer_id).await;
+                    }
+                }
             }
         }
     });
@@ -2307,18 +2349,6 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
 }
 
 async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
-    // Guard: catch the common mistake of supplying a Blake3 identity_id instead
-    // of a contact nickname / libp2p Peer ID.
-    if looks_like_blake3_id(&recipient) {
-        eprintln!(
-            "{} That looks like a Blake3 identity ID (64 hex chars), not a contact nickname or libp2p Peer ID.",
-            "⚠ Error:".red()
-        );
-        eprintln!("  Use a contact nickname, or the 'Peer ID (Network)' shown by: scm identity");
-        eprintln!("  The Peer ID starts with '12D3Koo...' and is ~52 characters.");
-        return Ok(());
-    }
-
     // Try to use API if a node is running
     if api::is_api_available().await {
         api::send_message_via_api(&recipient, &message)

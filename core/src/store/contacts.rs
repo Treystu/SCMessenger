@@ -83,16 +83,47 @@ impl ContactManager {
     }
 
     fn derive_public_key_from_peer_id(&self, peer_id: &str) -> Result<String, IronCoreError> {
-        // In libp2p, the PeerId is essentially a multihash of the public key.
-        // Since we don't want to pull in the full libp2p crate for this helper if possible,
-        // and based on the MeshRepository.kt implementation, we can use the ironCore
-        // bridge's extraction logic. For the core storage layer, we'll use a simplified
-        // extraction if available or return the peer_id as a fallback key if the
-        // bridge uses it as the primary index.
+        let trimmed = peer_id.trim();
 
-        // Actual implementation should use the PeerId parsing logic to extract the key.
-        // For now, we'll treat the peer_id as the unique identifier.
-        Ok(peer_id.to_string())
+        // If it's 64 hex chars, validate it's a genuine Ed25519 public key.
+        // identity_id is also 64 hex chars (Blake3 hash) but NOT a valid Ed25519 key.
+        // Rejecting identity_id here prevents reconcile_from_history from creating
+        // contacts with public_key = identity_id, which breaks future encryption.
+        if trimmed.len() == 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
+            if let Ok(bytes) = hex::decode(trimmed) {
+                if bytes.len() == 32 {
+                    if let Ok(arr) = <[u8; 32]>::try_from(bytes.as_slice()) {
+                        if ed25519_dalek::VerifyingKey::from_bytes(&arr).is_ok() {
+                            return Ok(trimmed.to_lowercase());
+                        }
+                    }
+                }
+            }
+            // 64-hex but not a valid Ed25519 key → likely identity_id; cannot derive pubkey.
+            return Err(IronCoreError::InvalidInput);
+        }
+
+        // Try to decode as libp2p PeerId (base58) and extract Ed25519 public key.
+        // Matches the protobuf prefix used by libp2p identity multihash:
+        // 0x00 0x24 0x08 0x01 0x12 0x20 <32 bytes>
+        if let Ok(bytes) = bs58::decode(trimmed).into_vec() {
+            if bytes.len() == 38
+                && bytes[0] == 0x00
+                && bytes[1] == 0x24
+                && bytes[2] == 0x08
+                && bytes[3] == 0x01
+                && bytes[4] == 0x12
+                && bytes[5] == 0x20
+            {
+                return Ok(hex::encode(&bytes[6..38]));
+            }
+            // Fallback: take last 32 bytes for non-standard PeerIds
+            if bytes.len() >= 32 {
+                return Ok(hex::encode(&bytes[bytes.len() - 32..]));
+            }
+        }
+
+        Err(IronCoreError::InvalidInput)
     }
 
     pub fn add(&self, contact: Contact) -> Result<(), IronCoreError> {

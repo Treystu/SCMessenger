@@ -113,6 +113,7 @@ gen-bindings = ["dep:uniffi_bindgen", "dep:camino"]
 wasm = ["uniffi/wasm-unstable-single-threaded"]
 kani-proofs = []
 phase2_apis = []
+test-utils = []
 
 [[bin]]
 name = "gen_kotlin"

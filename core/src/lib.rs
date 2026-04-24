@@ -3315,3 +3315,31 @@ mod tests {
         assert_ne!(resolved, identity_id.to_lowercase());
     }
 }
+
+// ============================================================================
+// TEST SUPPORT MODULE
+// ============================================================================
+/// Test utilities available when compiling with `#[cfg(test)]` or `test-utils` feature
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_support {
+    use super::identity::IdentityKeys;
+
+    /// Create a test peer identity for testing
+    pub fn test_identity() -> IdentityKeys {
+        IdentityKeys::generate()
+    }
+
+    /// Helper to get a random port for test servers
+    pub fn random_port() -> u16 {
+        use std::net::{TcpListener, UdpSocket};
+
+        // Try TCP first, fallback to UDP
+        if let Ok(listener) = TcpListener::bind("127.0.0.1:0") {
+            listener.local_addr().unwrap().port()
+        } else if let Ok(socket) = UdpSocket::bind("127.0.0.1:0") {
+            socket.local_addr().unwrap().port()
+        } else {
+            0
+        }
+    }
+}

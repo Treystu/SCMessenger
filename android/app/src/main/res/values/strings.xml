@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">SCMessenger</string>
+    <string name="privacy_policy_url">https://scmessenger.net/privacy</string>
+    <string name="privacy_policy_source">file:///android_asset/privacy_policy.html</string>
     
     <!-- Service notifications -->
     <string name="mesh_service_notification_title">Mesh Network Active</string>

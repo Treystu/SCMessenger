@@ -21,13 +21,15 @@ fun parseContactImportPayload(raw: String): ContactImportParseResult {
 
     val json = runCatching { JSONObject(raw) }.getOrNull()
 
+    // UNIFIED ID FIX: peer_id is libp2p Peer ID (network routable), NOT identity_id
     val peerId = firstNonBlank(
-        json?.optString("identity_id"),
-        json?.optString("identityId"),
-        json?.optString("peerId"),
-        """"identity_id"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1),
-        """"identityId"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1),
-        """"peerId"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
+        json?.optString("peer_id"),          // PRIMARY: libp2p Peer ID
+        json?.optString("libp2p_peer_id"),   // Fallback
+        json?.optString("libp2pPeerId"),     // Fallback
+        json?.optString("peerId"),           // Legacy fallback
+        """"peer_id"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1),
+        """"libp2p_peer_id"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1),
+        """"identity_id"\s*:\s*"([^"]+)"""".toRegex().find(raw)?.groupValues?.get(1)
     )
 
     val publicKey = firstNonBlank(

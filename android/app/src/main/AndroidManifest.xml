@@ -58,14 +58,19 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.SCMessenger"
+        android:theme="@style/Theme.SCMessenger.Splash"
         tools:targetApi="31">
-        
+
+        <!-- Privacy policy metadata for Play Store -->
+        <meta-data
+            android:name="privacy_policy_url"
+            android:value="@string/privacy_policy_url" />
+
         <!-- Main Activity -->
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.SCMessenger"
+            android:theme="@style/Theme.SCMessenger.Splash"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

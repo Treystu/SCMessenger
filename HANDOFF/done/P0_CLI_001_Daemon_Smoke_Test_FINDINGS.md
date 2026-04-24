@@ -50,3 +50,32 @@ bash .claude/skills/core_cli_driver.sh stop
 - All agent output should be saved to `HANDOFF/IN_PROGRESS/`
 - If the test succeeds, move this file to `HANDOFF/done/`
 - If issues are found, append findings and leave in `HANDOFF/IN_PROGRESS/`
+===== FINDINGS APPENDED =====
+
+## Test Execution Summary
+
+The smoke test revealed that the SCMessenger CLI daemon is operational but experiencing connectivity issues:
+
+1. **Daemon Status**: Running successfully (process confirmed)
+2. **HTTP Interface**: Accessible and serving web content
+3. **WebSocket Issues**: Connection rejected due to origin validation
+4. **Peer Discovery**: Actively dialing peers but no successful connections
+5. **RPC Testing**: Blocked by Python path issues on Windows
+
+## Detailed Findings
+
+See full report at: CORE_DAEMON_TEST_20260423_1905.md
+
+## Root Cause Analysis
+
+- WebSocket origin rejection preventing RPC communication
+- QUIC listener binding failures
+- Cross-platform compatibility issues with Python scripts
+
+## Recommendations
+
+1. Fix WebSocket origin validation in daemon
+2. Address QUIC listener configuration issues
+3. Improve Python path handling in Windows environment
+4. Investigate peer connection establishment failures
+=====

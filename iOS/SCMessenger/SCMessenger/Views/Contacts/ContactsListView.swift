@@ -488,8 +488,19 @@ struct AddContactView: View {
             notesParts.append("listeners:\(addrs)")
         }
         let notesValue: String? = notesParts.isEmpty ? nil : notesParts.joined(separator: ";")
+
+        // UNIFIED ID FIX: Canonicalize peerId to public_key_hex before storage.
+        // resolveIdentity handles all input formats (libp2p_peer_id, identity_id, public_key_hex).
+        let canonicalPeerId: String
+        if let resolved = repository.ironCore?.resolveIdentity(anyId: finalPeerId) {
+            canonicalPeerId = resolved
+        } else {
+            // Fallback: publicKey is already validated as canonical hex
+            canonicalPeerId = finalPublicKey
+        }
+
         let contact = Contact(
-            peerId: finalPeerId,
+            peerId: canonicalPeerId,
             nickname: nickname,
             localNickname: nil,
             publicKey: finalPublicKey,
@@ -509,8 +520,8 @@ struct AddContactView: View {
 
             if andChat {
                 let normalizedNickname = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
-                let displayName = normalizedNickname.isEmpty ? String(finalPeerId.prefix(8)) + "..." : normalizedNickname
-                pendingChatConversation = Conversation(peerId: finalPeerId, peerNickname: displayName)
+                let displayName = normalizedNickname.isEmpty ? String(canonicalPeerId.prefix(8)) + "..." : normalizedNickname
+                pendingChatConversation = Conversation(peerId: canonicalPeerId, peerNickname: displayName)
             } else {
                 pendingChatConversation = nil
             }
@@ -558,7 +569,11 @@ struct AddContactView: View {
         let nickname = (json["nickname"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let peerId = ((json["identity_id"] as? String)
+        // UNIFIED ID FIX: "peer_id" is libp2p Peer ID (network routable), NOT identity_id
+        let peerId = ((json["peer_id"] as? String)
+            ?? (json["libp2p_peer_id"] as? String)
+            ?? (json["libp2pPeerId"] as? String)
+            ?? (json["identity_id"] as? String)
             ?? (json["identityId"] as? String)
             ?? (json["peerId"] as? String))?
             .trimmingCharacters(in: .whitespacesAndNewlines)

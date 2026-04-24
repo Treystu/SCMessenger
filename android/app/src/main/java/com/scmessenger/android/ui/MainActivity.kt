@@ -18,8 +18,11 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.scmessenger.android.data.MeshRepository
+import com.scmessenger.android.utils.Permissions
 import javax.inject.Inject
 import java.util.concurrent.atomic.AtomicBoolean
 import androidx.lifecycle.lifecycleScope
@@ -71,6 +74,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
 
         // Enable edge-to-edge and proper IME handling
@@ -158,14 +162,53 @@ class MainActivity : ComponentActivity() {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
 
-        if (toRequest.isNotEmpty()) {
-            Timber.i("Requesting permissions: $toRequest")
-            requestPermissionLauncher.launch(toRequest.toTypedArray())
-        } else {
-            // All permissions already granted, reset immediately
+        if (toRequest.isEmpty()) {
             permissionRequestInProgress.set(false)
             Timber.d("All permissions already granted")
+            return
         }
+
+        // Determine which permissions need a rationale dialog
+        val rationalePermissions = toRequest.filter {
+            shouldShowRequestPermissionRationale(it)
+        }
+
+        if (rationalePermissions.isNotEmpty()) {
+            showPermissionRationale(rationalePermissions, toRequest)
+        } else {
+            Timber.i("Requesting permissions: $toRequest")
+            requestPermissionLauncher.launch(toRequest.toTypedArray())
+        }
+    }
+
+    /**
+     * Show a rationale dialog explaining why permissions are needed before requesting them.
+     */
+    private fun showPermissionRationale(
+        rationalePermissions: List<String>,
+        allToRequest: List<String>
+    ) {
+        val message = buildString {
+            appendLine("SCMessenger needs the following permissions to function:")
+            appendLine()
+            rationalePermissions.forEach { permission ->
+                appendLine("• ${Permissions.getPermissionName(permission)}: ${Permissions.getRationale(permission)}")
+            }
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Permission Required")
+            .setMessage(message.trim())
+            .setPositiveButton("Grant") { _, _ ->
+                Timber.i("Requesting permissions after rationale: $allToRequest")
+                requestPermissionLauncher.launch(allToRequest.toTypedArray())
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                Timber.w("User cancelled permission rationale")
+                schedulePermissionReset()
+            }
+            .setCancelable(false)
+            .show()
     }
 
     override fun onResume() {

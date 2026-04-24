@@ -61,6 +61,9 @@ final class MeshRepository {
     private let diagnosticsIOQueue = DispatchQueue(label: "com.scmessenger.diagnostics.io", qos: .utility)
     private var diagnosticsBuffer: [String] = []
     private let diagnosticsMaxLines = 1000
+    private var cachedDiagnostics: String = ""
+    private var diagnosticsCacheTime: Date = .distantPast
+    private let diagnosticsCacheTTL: TimeInterval = 1.0  // 1 second
     private var heartbeatTimer: Timer?
 
     // MARK: - Bootstrap Nodes for NAT Traversal
@@ -75,15 +78,11 @@ final class MeshRepository {
 
     /// Resolved bootstrap nodes using the core BootstrapResolver.
     /// Priority: SC_BOOTSTRAP_NODES env var → remote URL → static fallback.
-    static let defaultBootstrapNodes: [String] = {
-        let config = BootstrapConfig(
-            staticNodes: staticBootstrapNodes,
-            remoteUrl: "https://bootstrap.scmessenger.net/nodes.json",
-            fetchTimeoutSecs: 5,
-            envOverrideKey: "SC_BOOTSTRAP_NODES"
-        )
-        return BootstrapResolver(config: config).resolve()
-    }()
+    /// ANR FIX: Return static fallback immediately, no network I/O at class load time.
+    static var defaultBootstrapNodes: [String] {
+        // Return static fallback immediately, no network I/O
+        staticBootstrapNodes
+    }
 
     private static func isEnabledFlag(_ raw: String?) -> Bool {
         guard let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() else {
@@ -547,7 +546,8 @@ final class MeshRepository {
                 throw MeshError.notInitialized("SettingsManager not initialized for lazy start")
             }
 
-            let settings = (try? settingsManager.load()) ?? settingsManager.defaultSettings()
+            // ASYNC FIX: Use default settings initially to avoid blocking I/O during service start
+            let settings = settingsManager.defaultSettings()
 
             let config = MeshServiceConfig(
                 discoveryIntervalMs: 30000,
@@ -555,6 +555,12 @@ final class MeshRepository {
             )
 
             try startMeshService(config: config)
+            // Async reload of settings after service started
+            Task { [weak self] in
+                if let loaded = try? self?.settingsManager?.load() {
+                    self?.logger.info("Settings reloaded asynchronously after service startup")
+                }
+            }
             logVerbose("✓ MeshService started lazily")
         }
 
@@ -617,8 +623,9 @@ final class MeshRepository {
 
             // Initialize internet transport if enabled.
             // Core auto-selects headless mode when identity is absent and upgrades when identity appears.
-            let settings = try? settingsManager?.load()
-            if settings?.internetEnabled == true {
+            // ASYNC FIX: Use default settings initially to avoid blocking I/O during service start
+            let defaultSettings = settingsManager?.defaultSettings()
+            if defaultSettings?.internetEnabled == true {
                 // Configure bootstrap nodes for NAT traversal.
                 // Priority: Ledger (cached) → Remote → Static.
                 var bootstrapAddrs = Self.defaultBootstrapNodes
@@ -631,10 +638,17 @@ final class MeshRepository {
                 }
 
                 meshService?.setBootstrapNodes(addrs: bootstrapAddrs)
-                // Listen on random port
-                try? meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/0")
+                // P0_TRANSPORT_001: Use static port 9001 for LAN connectivity with CLI daemon.
+                // This ensures both sides can dial each other using predictable addresses.
+                try? meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001")
                 broadcastIdentityBeacon()
                 logger.info("Internet transport (Swarm) initiated with \(bootstrapAddrs.count) bootstrap nodes")
+            }
+            // Async reload of settings after service started
+            Task { [weak self] in
+                if let loaded = try? self?.settingsManager?.load() {
+                    self?.logger.info("Settings reloaded asynchronously after service startup")
+                }
             }
 
             serviceState = .running
@@ -782,7 +796,8 @@ final class MeshRepository {
             do {
                 // Configure bootstrap nodes for NAT traversal
                 meshService?.setBootstrapNodes(addrs: Self.defaultBootstrapNodes)
-                try meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/0")
+                // P0_TRANSPORT_001: Use static port 9001 for LAN connectivity with CLI daemon.
+                try meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001")
                 broadcastIdentityBeacon()
                 logger.info("✓ Internet transport (Swarm) started manually")
             } catch {
@@ -2466,9 +2481,10 @@ final class MeshRepository {
         let selfKey = normalizePublicKey(ironCore?.getIdentityInfo().publicKeyHex)
         if selfKey == normalizedKey { return nil }
 
+        // UNIFIED ID FIX: canonicalPeerId is ALWAYS public_key_hex for contact storage.
         guard let contacts = try? contactManager?.list() else {
             return TransportIdentityResolution(
-                canonicalPeerId: libp2pPeerId,
+                canonicalPeerId: normalizedKey,
                 publicKey: normalizedKey,
                 nickname: nil
             )
@@ -2485,7 +2501,7 @@ final class MeshRepository {
         let canonicalContact = routeLinked ?? keyMatches.first
 
         return TransportIdentityResolution(
-            canonicalPeerId: canonicalContact?.peerId ?? libp2pPeerId,
+            canonicalPeerId: canonicalContact?.peerId ?? normalizedKey,
             publicKey: normalizedKey,
             nickname: canonicalContact?.nickname
         )
@@ -2615,6 +2631,23 @@ final class MeshRepository {
     }
 
     func exportDiagnostics() -> String {
+        // Return cached if fresh
+        if Date().timeIntervalSince(diagnosticsCacheTime) < diagnosticsCacheTTL,
+           !cachedDiagnostics.isEmpty {
+            return cachedDiagnostics
+        }
+        // For main thread calls, return stale cache and trigger async refresh
+        Task { await exportDiagnosticsAsync() }
+        return cachedDiagnostics
+    }
+
+    func exportDiagnosticsAsync() async -> String {
+        return await Task.detached(priority: .utility) {
+            self.exportDiagnosticsInternal()
+        }.value
+    }
+
+    private func exportDiagnosticsInternal() -> String {
         let multipeerStats = multipeerTransport?.diagnosticsSnapshot()
         if let diagnostics = meshService?.exportDiagnostics(),
            !diagnostics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -2638,9 +2671,15 @@ final class MeshRepository {
                 }
                 if let mergedData = try? JSONSerialization.data(withJSONObject: object),
                    let merged = String(data: mergedData, encoding: .utf8) {
+                    // Update cache
+                    self.cachedDiagnostics = merged
+                    self.diagnosticsCacheTime = Date()
                     return merged
                 }
             }
+            // Update cache
+            self.cachedDiagnostics = diagnostics
+            self.diagnosticsCacheTime = Date()
             return diagnostics
         }
 
@@ -2669,6 +2708,9 @@ final class MeshRepository {
               let json = String(data: data, encoding: .utf8) else {
             return "{}"
         }
+        // Update cache
+        self.cachedDiagnostics = json
+        self.diagnosticsCacheTime = Date()
         return json
     }
 
@@ -2704,15 +2746,40 @@ final class MeshRepository {
         guard let contactManager = contactManager else {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
-        try contactManager.add(contact: contact)
-        let routing = parseRoutingHintsFromNotes(contact.notes)
+
+        // UNIFIED ID FIX: Canonicalize peerId to public_key_hex before storage.
+        let canonicalPeerId: String
+        if let resolved = ironCore?.resolveIdentity(anyId: contact.peerId) {
+            canonicalPeerId = resolved
+        } else {
+            canonicalPeerId = contact.peerId
+        }
+
+        let finalContact: Contact
+        if canonicalPeerId != contact.peerId {
+            finalContact = Contact(
+                peerId: canonicalPeerId,
+                nickname: contact.nickname,
+                localNickname: contact.localNickname,
+                publicKey: contact.publicKey,
+                addedAt: contact.addedAt,
+                lastSeen: contact.lastSeen,
+                notes: contact.notes,
+                lastKnownDeviceId: contact.lastKnownDeviceId
+            )
+        } else {
+            finalContact = contact
+        }
+
+        try contactManager.add(contact: finalContact)
+        let routing = parseRoutingHintsFromNotes(finalContact.notes)
         annotateIdentityInLedger(
             routePeerId: routing.libp2pPeerId,
             listeners: routing.listeners,
-            publicKey: contact.publicKey,
-            nickname: contact.nickname
+            publicKey: finalContact.publicKey,
+            nickname: finalContact.nickname
         )
-        logger.info("✓ Contact added: \(contact.peerId)")
+        logger.info("✓ Contact added: \(finalContact.peerId)")
     }
 
     func removeContact(peerId: String) throws {
@@ -3652,7 +3719,7 @@ final class MeshRepository {
             try? contactManager?.updateLastSeen(peerId: libp2pPeerId)
         }
         upsertFederatedContact(
-            canonicalPeerId: identityId,
+            canonicalPeerId: normalizedKey,       // UNIFIED ID FIX: canonical = public_key_hex
             publicKey: normalizedKey,
             nickname: nonEmptyNickname,
             libp2pPeerId: nonEmptyLibp2p,
@@ -6015,10 +6082,16 @@ final class MeshRepository {
         }
 
         let payload: [String: Any] = [
+            // PRIMARY: libp2p Peer ID for cross-OS QR scanning (matches Android's "peer_id")
+            "peer_id": identity.libp2pPeerId ?? "",
+            // CANONICAL: Hex-encoded Ed25519 public key
+            "public_key": identity.publicKeyHex ?? "",
+            // MULTI-DEVICE: Routing identifier for multi-device setups
+            "device_id": identity.deviceId ?? "",
+            // LEGACY: Blake3 hash of public key (backward compatibility)
             "identity_id": identity.identityId ?? "",
             "nickname": identity.nickname ?? "",
-            "public_key": identity.publicKeyHex ?? "",
-            "libp2p_peer_id": identity.libp2pPeerId ?? "",
+            "libp2p_peer_id": identity.libp2pPeerId ?? "",  // Backward compatibility
             "listeners": listeners,
             "external_addresses": externalAddresses,
             "connection_hints": Array(Set(listeners + externalAddresses)),
@@ -6029,6 +6102,15 @@ final class MeshRepository {
             return "{}"
         }
         return json
+    }
+
+    func getIdentityQrPayload() -> String {
+        guard let identity = getFullIdentityInfo(),
+              let peerId = identity.libp2pPeerId,
+              let publicKey = identity.publicKeyHex else {
+            return ""
+        }
+        return "\(peerId):\(publicKey)"
     }
 
     func getIdentitySnippet() -> String {
@@ -6090,7 +6172,7 @@ final class MeshRepository {
             var idMap: [String: String] = [:]
 
             for contact in contacts {
-                if let identityId = try? ironCore.resolveToIdentityId(anyId: contact.publicKey),
+                if let identityId = try? ironCore.resolveIdentity(anyId: contact.publicKey),
                    identityId != contact.peerId {
                     logger.info("Migrating contact \(contact.peerId) -> \(identityId)")
                     idMap[contact.peerId] = identityId
@@ -6116,7 +6198,7 @@ final class MeshRepository {
             let allMessages = try historyManager.recent(peerFilter: Optional<String>.none, limit: 100000)
             var updatedCount = 0
             for msg in allMessages {
-                let canonical = idMap[msg.peerId] ?? (try? ironCore.resolveToIdentityId(anyId: msg.peerId))
+                let canonical = idMap[msg.peerId] ?? (try? ironCore.resolveIdentity(anyId: msg.peerId))
                 if let canonical = canonical, canonical != msg.peerId {
                     let updatedMsg = MessageRecord(
                         id: msg.id,

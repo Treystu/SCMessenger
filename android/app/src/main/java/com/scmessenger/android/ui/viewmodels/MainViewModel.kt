@@ -189,13 +189,17 @@ class MainViewModel @Inject constructor(
                 _importSuccess.value = false
                 val json = org.json.JSONObject(jsonString)
                 val publicKey = json.optString("public_key")
+                // UNIFIED ID FIX: public_key is the canonical contact key.
+                // identity_id is secondary (human fingerprint). peer_id is the libp2p network ID.
+                val peerId = json.optString("peer_id").takeIf { it.isNotBlank() }
                 val identityId = json.optString("identity_id")
-                if (publicKey.isBlank() || identityId.isBlank()) {
-                    _importError.value = "Invalid identity format — missing public_key or identity_id"
+                if (publicKey.isBlank()) {
+                    _importError.value = "Invalid identity format — missing public_key"
                     return@launch
                 }
                 val nickname = json.optString("nickname").takeIf { it.isNotBlank() }
-                val libp2pPeerId = json.optString("libp2p_peer_id").takeIf { it.isNotBlank() }
+                val libp2pPeerId = peerId
+                    ?: json.optString("libp2p_peer_id").takeIf { it.isNotBlank() }
                 val listenersArr = json.optJSONArray("listeners")
                 val listeners = listenersArr?.let { arr ->
                     (0 until arr.length()).map { i -> arr.getString(i) }
@@ -206,8 +210,9 @@ class MainViewModel @Inject constructor(
                         if (listeners.isNotEmpty()) append(";listeners:${listeners.joinToString(",")}")
                     }
                 }
+                // Store contact with public_key as the canonical peerId
                 val contact = uniffi.api.Contact(
-                    peerId = identityId,
+                    peerId = publicKey,
                     nickname = nickname,
                     localNickname = null,
                     publicKey = publicKey,

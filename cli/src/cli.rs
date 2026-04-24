@@ -24,7 +24,7 @@ mod tests {
             "abcd1234efgh5678",
             "--name", "Alice",
         ]);
-        assert!(matches!(cli.command, Commands::Contact { action: ContactAction::Add { peer_id, public_key, name: Some(n) } } if peer_id.starts_with("12D3Koo") && n == "Alice"));
+        assert!(matches!(cli.command, Commands::Contact { action: ContactAction::Add { peer_id, public_key: _, name: Some(n) } } if peer_id.starts_with("12D3Koo") && n == "Alice"));
     }
 
     #[test]

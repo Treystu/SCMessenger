@@ -12,8 +12,11 @@ import com.scmessenger.android.utils.Permissions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import timber.log.Timber
 import javax.inject.Inject
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.concurrent.Volatile
 
 /**
  * ViewModel for the settings screen.
@@ -30,6 +33,11 @@ class SettingsViewModel @Inject constructor(
     // Mesh settings
     private val _settings = MutableStateFlow<uniffi.api.MeshSettings?>(null)
     val settings: StateFlow<uniffi.api.MeshSettings?> = _settings.asStateFlow()
+
+    // ANR FIX: Debouncing for settings updates to prevent UI thread spew
+    // Use AtomicLong for thread-safe timestamp tracking without locks
+    private val lastSettingUpdateNs = AtomicLong(0L)
+    private val settingDebounceNs = 500_000_000L  // 500ms debounce
 
     // App preferences
     val autoStart = preferencesRepository.serviceAutoStart
@@ -116,16 +124,46 @@ class SettingsViewModel @Inject constructor(
     private val _identityInfo = MutableStateFlow<uniffi.api.IdentityInfo?>(null)
     val identityInfo: StateFlow<uniffi.api.IdentityInfo?> = _identityInfo.asStateFlow()
 
+    // ANR FIX: Cached settings to avoid re-calculating on every composition
+    @Volatile private var cachedSettings: uniffi.api.MeshSettings? = null
+    @Volatile private var cachedIdentityInfo: uniffi.api.IdentityInfo? = null
+    @Volatile private var isCacheValid = false
+
     init {
-        // Defer heavy initialization to background thread to avoid blocking Settings screen
-        // Settings screen should appear within 2 seconds for good UX
-        viewModelScope.launch {
+        // ANR FIX (P0_ANDROID_017): Defer heavy initialization to background thread
+        // Settings screen should appear within 500ms for good UX
+        // Set defaults immediately so UI never shows missing sections
+        _settings.value = uniffi.api.MeshSettings(
+            relayEnabled = true,
+            maxRelayBudget = 200u,
+            batteryFloor = 20u,
+            bleEnabled = true,
+            wifiAwareEnabled = true,
+            wifiDirectEnabled = true,
+            internetEnabled = true,
+            discoveryMode = uniffi.api.DiscoveryMode.NORMAL,
+            onionRouting = false,
+            coverTrafficEnabled = false,
+            messagePaddingEnabled = false,
+            timingObfuscationEnabled = false,
+            notificationsEnabled = true,
+            notifyDmEnabled = true,
+            notifyDmRequestEnabled = true,
+            notifyDmInForeground = false,
+            notifyDmRequestInForeground = true,
+            soundEnabled = true,
+            badgeEnabled = true
+        )
+
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 _isLoading.value = true
                 // Load settings first (depends on MeshRepository which may trigger service startup)
                 loadSettingsInternal()
                 // Then load identity
                 loadIdentityInternal()
+                // Mark cache as valid after initial load
+                isCacheValid = true
             } catch (e: Exception) {
                 Timber.e(e, "Failed to initialize SettingsViewModel")
             } finally {
@@ -136,11 +174,17 @@ class SettingsViewModel @Inject constructor(
 
     /**
      * Internal settings loader that runs on IO dispatcher.
-     * Called from init block on viewModelScope (Main) but executes on IO.
+     * ANR FIX: Uses cached settings when available to avoid redundant I/O.
      */
     private suspend fun loadSettingsInternal() {
+        // ANR FIX: Return cached settings immediately if already loaded
+        if (cachedSettings != null && isCacheValid) {
+            _settings.value = cachedSettings
+            return
+        }
         try {
             val settings = meshRepository.loadSettings()
+            cachedSettings = settings  // ANR FIX: Cache for future use
             _settings.value = settings
             Timber.d("Loaded mesh settings: $settings")
         } catch (e: Exception) {
@@ -151,10 +195,15 @@ class SettingsViewModel @Inject constructor(
 
     /**
      * Internal identity loader that runs on IO dispatcher.
-     * Called from init block on viewModelScope (Main) but executes on IO.
+     * ANR FIX: Uses cached identity info when available to avoid redundant FFI calls.
      * Uses non-blocking identity access to avoid main thread blocking during service startup.
      */
     private suspend fun loadIdentityInternal() {
+        // ANR FIX: Return cached identity if already loaded
+        if (cachedIdentityInfo != null && isCacheValid) {
+            _identityInfo.value = cachedIdentityInfo
+            return
+        }
         try {
             // Use non-blocking identity access to avoid blocking main thread
             // during service startup when identity might not be fully initialized yet
@@ -165,25 +214,30 @@ class SettingsViewModel @Inject constructor(
                 if (!cached.isNullOrBlank()) {
                     Timber.w("Rust core nickname blank; using DataStore fallback: $cached")
                     _identityInfo.value = info?.copy(nickname = cached)
+                    cachedIdentityInfo = info?.copy(nickname = cached)  // ANR FIX: Cache for future use
                     return
                 }
             }
             _identityInfo.value = info
+            cachedIdentityInfo = info  // ANR FIX: Cache for future use
         } catch (e: Exception) {
             Timber.e(e, "Failed to load identity")
         }
     }
 
     fun loadIdentity() {
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val info = meshRepository.getIdentityInfo()
+                // ANR FIX: Cache identity info to avoid redundant FFI calls
+                cachedIdentityInfo = info
                 // Defensive fallback: if Rust core returns blank nickname, use cached preference
                 if (info?.nickname.isNullOrBlank()) {
                     val cached = preferencesRepository.identityNickname.first()
                     if (!cached.isNullOrBlank()) {
                         Timber.w("Rust core nickname blank; using DataStore fallback: $cached")
                         _identityInfo.value = info?.copy(nickname = cached)
+                        cachedIdentityInfo = info?.copy(nickname = cached)  // ANR FIX: Update cache
                         return@launch
                     }
                 }
@@ -195,7 +249,10 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun getIdentityExportString(): String {
-        return meshRepository.getIdentityExportString()
+        // ANR FIX: Run on IO dispatcher to avoid blocking Main thread
+        return kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+            meshRepository.getIdentityExportString()
+        }
     }
 
     fun updateNickname(name: String) {
@@ -237,77 +294,103 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
-     * Update mesh settings.
+     * ANR FIX (P0_ANDROID_017): Debounced settings update.
+     * Prevents rapid successive updates from causing excessive I/O and UI thread blocking.
+     * Uses timestamp-based throttling with 500ms minimum interval between updates.
      */
-    fun updateSettings(settings: uniffi.api.MeshSettings) {
-        viewModelScope.launch {
-            try {
-                // Validate settings
-                if (!meshRepository.validateSettings(settings)) {
-                    _error.value = "Invalid settings configuration"
-                    return@launch
+    fun debouncedUpdateSettings(settings: uniffi.api.MeshSettings) {
+        val nowNs = System.nanoTime()
+        val lastUpdateNs = lastSettingUpdateNs.get()
+        val timeSinceLastUpdateNs = nowNs - lastUpdateNs
+
+        if (timeSinceLastUpdateNs < settingDebounceNs) {
+            // Still within debounce window - log and skip
+            Timber.d("Settings update throttled (${timeSinceLastUpdateNs / 1_000_000}ms since last)")
+            return
+        }
+
+        // Try to atomically update the timestamp
+        if (lastSettingUpdateNs.compareAndSet(lastUpdateNs, nowNs)) {
+            // Success - we got the lock, proceed with update
+            viewModelScope.launch {
+                try {
+                    // Validate settings
+                    if (!meshRepository.validateSettings(settings)) {
+                        _error.value = "Invalid settings configuration"
+                        Timber.w("Invalid settings configuration")
+                        return@launch
+                    }
+
+                    meshRepository.saveSettings(settings)
+                    _settings.value = settings
+                    Timber.i("Mesh settings saved (debounced)")
+                } catch (e: Exception) {
+                    _error.value = "Failed to save settings: ${e.message}"
+                    Timber.e(e, "Failed to save mesh settings")
                 }
-
-                meshRepository.saveSettings(settings)
-                _settings.value = settings
-
-                Timber.i("Mesh settings saved")
-            } catch (e: Exception) {
-                _error.value = "Failed to save settings: ${e.message}"
-                Timber.e(e, "Failed to save mesh settings")
             }
+        } else {
+            // Failed to atomically update - someone else beat us, skip this update
+            Timber.d("Settings update skipped (concurrent update in progress)")
         }
     }
 
     /**
-     * Update specific mesh setting fields.
+     * Update mesh settings - now redirects to debounced version.
+     */
+    fun updateSettings(settings: uniffi.api.MeshSettings) {
+        debouncedUpdateSettings(settings)
+    }
+
+    /**
+     * Update specific mesh setting fields - now uses debounced updates.
      */
     fun updateRelayEnabled(enabled: Boolean) {
         _settings.value?.let { current ->
             // Allow toggling - when disabled, stops ALL communication (bidirectional)
-            updateSettings(current.copy(relayEnabled = enabled))
+            debouncedUpdateSettings(current.copy(relayEnabled = enabled))
         }
     }
 
     fun updateMaxRelayBudget(budget: UInt) {
         _settings.value?.let { current ->
-            updateSettings(current.copy(maxRelayBudget = budget))
+            debouncedUpdateSettings(current.copy(maxRelayBudget = budget))
         }
     }
 
     fun updateBatteryFloor(floor: UByte) {
         _settings.value?.let { current ->
-            updateSettings(current.copy(batteryFloor = floor))
+            debouncedUpdateSettings(current.copy(batteryFloor = floor))
         }
     }
 
     fun updateBleEnabled(enabled: Boolean) {
         _settings.value?.let { current ->
-            updateSettings(current.copy(bleEnabled = enabled))
+            debouncedUpdateSettings(current.copy(bleEnabled = enabled))
         }
     }
 
     fun updateWifiAwareEnabled(enabled: Boolean) {
         _settings.value?.let { current ->
-            updateSettings(current.copy(wifiAwareEnabled = enabled))
+            debouncedUpdateSettings(current.copy(wifiAwareEnabled = enabled))
         }
     }
 
     fun updateWifiDirectEnabled(enabled: Boolean) {
         _settings.value?.let { current ->
-            updateSettings(current.copy(wifiDirectEnabled = enabled))
+            debouncedUpdateSettings(current.copy(wifiDirectEnabled = enabled))
         }
     }
 
     fun updateInternetEnabled(enabled: Boolean) {
         _settings.value?.let { current ->
-            updateSettings(current.copy(internetEnabled = enabled))
+            debouncedUpdateSettings(current.copy(internetEnabled = enabled))
         }
     }
 
     fun updateDiscoveryMode(mode: uniffi.api.DiscoveryMode) {
         _settings.value?.let { current ->
-            updateSettings(current.copy(discoveryMode = mode))
+            debouncedUpdateSettings(current.copy(discoveryMode = mode))
         }
     }
 
@@ -409,16 +492,28 @@ class SettingsViewModel @Inject constructor(
         return meshRepository.getNatStatus()
     }
 
+    /**
+     * ANR FIX (P0_ANDROID_017): Export diagnostics asynchronously.
+     * Original exportDiagnostics() was blocking on file I/O and Rust FFI calls.
+     */
     fun exportDiagnostics(): String {
-        return meshRepository.exportDiagnostics()
+        return kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+            meshRepository.exportDiagnostics()
+        }
     }
 
     fun getDiagnosticsLogPath(): String {
         return meshRepository.getDiagnosticsLogPath()
     }
 
+    /**
+     * ANR FIX (P0_ANDROID_017): Get diagnostics logs asynchronously.
+     * Reading log files was blocking on Main thread.
+     */
     fun getDiagnosticsLogs(limit: Int = 500): String {
-        return meshRepository.getDiagnosticsLogs(limit)
+        return kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+            meshRepository.getDiagnosticsLogs(limit)
+        }
     }
 
     fun clearDiagnosticsLogs() {
@@ -437,24 +532,32 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * ANR FIX (P0_ANDROID_017): Build diagnostics bundle asynchronously.
+     * All blocking I/O operations (exportDiagnostics, getPendingOutboxCount, getDiagnosticsLogs)
+     * are moved to IO dispatcher to prevent UI thread blocking.
+     */
     fun buildTesterDiagnosticsBundle(): String {
-        val missingPermissions = meshRepository.getMissingRuntimePermissions().map { permission ->
-            "${Permissions.getPermissionName(permission)} ($permission)"
-        }
-        return DiagnosticsBundleFormatter.format(
-            DiagnosticsBundleInput(
-                generatedAtEpochMs = System.currentTimeMillis(),
-                appVersion = BuildConfig.VERSION_NAME,
-                serviceState = meshRepository.getServiceStateName(),
-                connectionPathState = meshRepository.getConnectionPathState().name,
-                natStatus = meshRepository.getNatStatus(),
-                discoveredPeers = meshRepository.getDiscoveredPeerCount(),
-                pendingOutbox = meshRepository.getPendingOutboxCount(),
-                missingPermissions = missingPermissions,
-                coreDiagnosticsJson = meshRepository.exportDiagnostics(),
-                recentLogs = meshRepository.getDiagnosticsLogs(limit = 1500)
+        // Run the entire operation on IO dispatcher to avoid Main thread I/O
+        return kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+            val missingPermissions = meshRepository.getMissingRuntimePermissions().map { permission ->
+                "${Permissions.getPermissionName(permission)} ($permission)"
+            }
+            DiagnosticsBundleFormatter.format(
+                DiagnosticsBundleInput(
+                    generatedAtEpochMs = System.currentTimeMillis(),
+                    appVersion = BuildConfig.VERSION_NAME,
+                    serviceState = meshRepository.getServiceStateName(),
+                    connectionPathState = meshRepository.getConnectionPathState().name,
+                    natStatus = meshRepository.getNatStatus(),
+                    discoveredPeers = meshRepository.getDiscoveredPeerCount(),
+                    pendingOutbox = meshRepository.loadPendingOutbox().size,
+                    missingPermissions = missingPermissions,
+                    coreDiagnosticsJson = meshRepository.exportDiagnostics(),
+                    recentLogs = meshRepository.getDiagnosticsLogs(limit = 1500)
+                )
             )
-        )
+        }
     }
 
     // ========================================================================

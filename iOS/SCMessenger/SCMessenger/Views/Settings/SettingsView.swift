@@ -154,12 +154,26 @@ struct SettingsView: View {
                         .textInputAutocapitalization(.words)
                     }
 
+                    if let peerId = repository.getFullIdentityInfo()?.libp2pPeerId {
+                        HStack {
+                            Text("Peer ID (Network)")
+                            Spacer()
+                            Text(peerId.prefix(16) + "...")
+                                .font(.system(.body, design: .monospaced))
+                        }
+                        Button {
+                            UIPasteboard.general.string = peerId
+                        } label: {
+                            Label("Copy Peer ID", systemImage: "doc.on.doc")
+                        }
+                    }
+
                     HStack {
-                        Text("Identity ID")
+                        Text("Identity Hash")
                         Spacer()
                         Text(repository.getIdentitySnippet())
                             .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(Theme.onSurfaceVariant)
+                            .foregroundStyle(.secondary)
                     }
 
                     Button {
@@ -167,7 +181,7 @@ struct SettingsView: View {
                             UIPasteboard.general.string = id
                         }
                     } label: {
-                        Label("Copy Identity ID", systemImage: "doc.on.doc")
+                        Label("Copy Identity Hash", systemImage: "doc.on.doc")
                     }
 
                     Button {
@@ -272,7 +286,7 @@ struct SettingsView: View {
             }
         }
         .sheet(isPresented: $showingIdentityQr) {
-            IdentityQrSheet(payload: viewModel?.getIdentityExportString() ?? "{}")
+            IdentityQrSheet(payload: repository.getIdentityQrPayload())
         }
         .confirmationDialog(
             "Delete All Data & Reset App?",

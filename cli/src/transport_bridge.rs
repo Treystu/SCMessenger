@@ -208,7 +208,7 @@ impl TransportBridge {
     pub fn get_peer_capabilities(&self, peer_id: &PeerId) -> Option<&[TransportType]> {
         self.peer_capabilities
             .get(peer_id)
-            .map(|v| v.as_slice() as &[TransportType])
+            .map(|v: &Vec<TransportType>| v.as_slice())
     }
 
     /// Get capabilities for all known peers
@@ -217,7 +217,7 @@ impl TransportBridge {
     ) -> std::collections::HashMap<String, Vec<String>> {
         self.peer_capabilities
             .iter()
-            .map(|(peer_id, caps)| {
+            .map(|(peer_id, caps): (&PeerId, &Vec<TransportType>)| {
                 let caps_strings: Vec<String> = caps
                     .iter()
                     .map(|c| match c {

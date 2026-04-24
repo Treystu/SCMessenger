@@ -45,6 +45,13 @@ fun SettingsScreen(
         settingsViewModel.loadIdentity()
     }
 
+    // Reload identity when service comes online (identity may become available after startup)
+    LaunchedEffect(serviceState) {
+        if (serviceState == uniffi.api.ServiceState.RUNNING) {
+            settingsViewModel.loadIdentity()
+        }
+    }
+
     val statsText = remember(serviceStats) { serviceViewModel.getStatsText() }
 
     Column(
@@ -517,7 +524,7 @@ fun IdentitySection(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Identity ID
+            // Peer ID (Network)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -525,7 +532,37 @@ fun IdentitySection(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Identity ID",
+                        text = "Peer ID (Network)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = identityInfo.libp2pPeerId?.take(16) ?: "????????",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                }
+
+                IconButton(onClick = {
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("Peer ID", identityInfo.libp2pPeerId ?: "")
+                    clipboard.setPrimaryClip(clip)
+                }) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy Peer ID")
+                }
+            }
+
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // Identity Hash
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Identity Hash",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -538,10 +575,10 @@ fun IdentitySection(
 
                 IconButton(onClick = {
                     val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    val clip = android.content.ClipData.newPlainText("Identity ID", identityInfo.identityId ?: "")
+                    val clip = android.content.ClipData.newPlainText("Identity Hash", identityInfo.identityId ?: "")
                     clipboard.setPrimaryClip(clip)
                 }) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy ID")
+                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy Identity Hash")
                 }
             }
 

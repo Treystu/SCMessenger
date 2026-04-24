@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 
 @MainActor
 @Observable
@@ -18,10 +19,22 @@ final class SettingsViewModel {
     var isSaving = false
     var error: String?
     var successMessage: String?
+    private var lastSettingUpdateTime: Date = .distantPast
+    private let settingDebounceInterval: TimeInterval = 0.5  // 500ms
 
     init(repository: MeshRepository) {
         self.repository = repository
         self.loadNickname()
+    }
+
+    private func debouncedUpdateSettings(_ update: @escaping () -> Void) {
+        let now = Date()
+        if now.timeIntervalSince(lastSettingUpdateTime) < settingDebounceInterval {
+            os_log("Settings update throttled")
+            return
+        }
+        lastSettingUpdateTime = now
+        update()
     }
 
     // MARK: - Identity
@@ -83,7 +96,7 @@ final class SettingsViewModel {
         guard var currentSettings = settings else { return }
         currentSettings.relayEnabled = !currentSettings.relayEnabled
         settings = currentSettings
-        saveSettings()
+        debouncedUpdateSettings { self.saveSettings() }
     }
 
     // MARK: - Transport Toggles (mirrors Android MeshSettingsScreen)
@@ -92,28 +105,28 @@ final class SettingsViewModel {
         guard var currentSettings = settings else { return }
         currentSettings.bleEnabled = enabled
         settings = currentSettings
-        saveSettings()
+        debouncedUpdateSettings { self.saveSettings() }
     }
 
     func updateWifiAwareEnabled(_ enabled: Bool) {
         guard var currentSettings = settings else { return }
         currentSettings.wifiAwareEnabled = enabled
         settings = currentSettings
-        saveSettings()
+        debouncedUpdateSettings { self.saveSettings() }
     }
 
     func updateWifiDirectEnabled(_ enabled: Bool) {
         guard var currentSettings = settings else { return }
         currentSettings.wifiDirectEnabled = enabled
         settings = currentSettings
-        saveSettings()
+        debouncedUpdateSettings { self.saveSettings() }
     }
 
     func updateInternetEnabled(_ enabled: Bool) {
         guard var currentSettings = settings else { return }
         currentSettings.internetEnabled = enabled
         settings = currentSettings
-        saveSettings()
+        debouncedUpdateSettings { self.saveSettings() }
     }
 
     // MARK: - Discovery & Mesh Settings
@@ -122,7 +135,7 @@ final class SettingsViewModel {
         guard var currentSettings = settings else { return }
         currentSettings.discoveryMode = mode
         settings = currentSettings
-        saveSettings()
+        debouncedUpdateSettings { self.saveSettings() }
     }
 
 
@@ -131,7 +144,7 @@ final class SettingsViewModel {
         guard var currentSettings = settings else { return }
         currentSettings.batteryFloor = floor
         settings = currentSettings
-        saveSettings()
+        debouncedUpdateSettings { self.saveSettings() }
     }
 
     // MARK: - Privacy / Onion Routing
@@ -140,7 +153,7 @@ final class SettingsViewModel {
         guard var currentSettings = settings else { return }
         currentSettings.onionRouting = enabled
         settings = currentSettings
-        saveSettings()
+        debouncedUpdateSettings { self.saveSettings() }
     }
 
     // MARK: - BLE Privacy
@@ -169,7 +182,7 @@ final class SettingsViewModel {
             guard var currentSettings = settings else { return }
             currentSettings.notificationsEnabled = newValue
             settings = currentSettings
-            saveSettings()
+            debouncedUpdateSettings { self.saveSettings() }
             if newValue {
                 Task {
                     _ = await NotificationManager.shared.requestPermissionIfNeeded()
@@ -184,7 +197,7 @@ final class SettingsViewModel {
             guard var currentSettings = settings else { return }
             currentSettings.notifyDmEnabled = newValue
             settings = currentSettings
-            saveSettings()
+            debouncedUpdateSettings { self.saveSettings() }
         }
     }
 
@@ -194,7 +207,7 @@ final class SettingsViewModel {
             guard var currentSettings = settings else { return }
             currentSettings.notifyDmRequestEnabled = newValue
             settings = currentSettings
-            saveSettings()
+            debouncedUpdateSettings { self.saveSettings() }
         }
     }
 
@@ -204,7 +217,7 @@ final class SettingsViewModel {
             guard var currentSettings = settings else { return }
             currentSettings.notifyDmInForeground = newValue
             settings = currentSettings
-            saveSettings()
+            debouncedUpdateSettings { self.saveSettings() }
         }
     }
 
@@ -214,7 +227,7 @@ final class SettingsViewModel {
             guard var currentSettings = settings else { return }
             currentSettings.notifyDmRequestInForeground = newValue
             settings = currentSettings
-            saveSettings()
+            debouncedUpdateSettings { self.saveSettings() }
         }
     }
 
@@ -224,7 +237,7 @@ final class SettingsViewModel {
             guard var currentSettings = settings else { return }
             currentSettings.soundEnabled = newValue
             settings = currentSettings
-            saveSettings()
+            debouncedUpdateSettings { self.saveSettings() }
         }
     }
 
@@ -234,7 +247,7 @@ final class SettingsViewModel {
             guard var currentSettings = settings else { return }
             currentSettings.badgeEnabled = newValue
             settings = currentSettings
-            saveSettings()
+            debouncedUpdateSettings { self.saveSettings() }
         }
     }
 
@@ -252,7 +265,7 @@ final class SettingsViewModel {
             guard var s = settings else { return }
             s.coverTrafficEnabled = newValue
             settings = s
-            saveSettings()
+            debouncedUpdateSettings { self.saveSettings() }
         }
     }
 
@@ -263,7 +276,7 @@ final class SettingsViewModel {
             guard var s = settings else { return }
             s.messagePaddingEnabled = newValue
             settings = s
-            saveSettings()
+            debouncedUpdateSettings { self.saveSettings() }
         }
     }
 
@@ -274,7 +287,7 @@ final class SettingsViewModel {
             guard var s = settings else { return }
             s.timingObfuscationEnabled = newValue
             settings = s
-            saveSettings()
+            debouncedUpdateSettings { self.saveSettings() }
         }
     }
 

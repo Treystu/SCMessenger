@@ -1,5 +1,0 @@
-AGENT_ID=triage-router_1776918995
-AGENT_MODEL=gemini-3-flash-preview:cloud
-OLLAMA_HOST=localhost:11434
-WORKING_DIR=/c/Users/kanal/Documents/SCMessenger/SCMessenger
-START_TIME=1776918996

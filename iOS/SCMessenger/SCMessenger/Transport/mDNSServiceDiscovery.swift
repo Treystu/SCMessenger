@@ -82,6 +82,24 @@ final class mDNSServiceDiscovery: NSObject {
             port: port
         )
         localService?.delegate = self
+
+        // Set TXT records for cross-platform compatibility (match Android format)
+        if let identity = meshRepository?.getFullIdentityInfo(),
+           let peerId = identity.libp2pPeerId,
+           let publicKey = identity.publicKeyHex {
+            let txtRecord: [String: String] = [
+                "peer_id": peerId,
+                "pubkey": String(publicKey.prefix(16)) + "...",
+                "device_id": identity.deviceId ?? "",
+                "version": "1.0",
+                "transport": "tcp"
+            ]
+            if let txtData = NetService.dataFromTXTRecord(txtRecord) {
+                localService?.setTXTRecord(txtData)
+                logger.debug("mDNS TXT record set: \(txtRecord)")
+            }
+        }
+
         localService?.publish()
         isAdvertising = true
     }

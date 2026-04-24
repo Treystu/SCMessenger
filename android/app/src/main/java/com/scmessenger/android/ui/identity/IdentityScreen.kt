@@ -178,11 +178,11 @@ private fun IdentityContent(
             )
         }
 
-        // Peer ID
+        // Identity Hash (human fingerprint)
         Card {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Peer ID",
+                    text = "Identity Hash",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -196,7 +196,25 @@ private fun IdentityContent(
             }
         }
 
-        // Public Key
+        // Peer ID (Network) — libp2p Peer ID for contact add / routing
+        Card {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Peer ID (Network)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                CopyableText(
+                    text = identityInfo.libp2pPeerId ?: "Unknown",
+                    monospace = true
+                )
+            }
+        }
+
+        // Public Key (canonical identity)
         Card {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
