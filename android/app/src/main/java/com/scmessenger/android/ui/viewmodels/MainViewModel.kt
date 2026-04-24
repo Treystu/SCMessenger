@@ -1,11 +1,13 @@
 package com.scmessenger.android.ui.viewmodels
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.scmessenger.android.data.MeshRepository
 import com.scmessenger.android.data.PreferencesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +66,12 @@ class MainViewModel @Inject constructor(
     private val _availableStorageMB = MutableStateFlow(0L)
     val availableStorageMB = _availableStorageMB.asStateFlow()
 
+    private val _pendingDeepLink = MutableStateFlow<DeepLinkData?>(null)
+    val pendingDeepLink: StateFlow<DeepLinkData?> = _pendingDeepLink.asStateFlow()
+
+    private val _themeMode = MutableStateFlow(PreferencesRepository.ThemeMode.SYSTEM)
+    val themeMode: StateFlow<PreferencesRepository.ThemeMode> = _themeMode.asStateFlow()
+
     init {
         Timber.d("MainViewModel init")
         refreshStorageStatus()
@@ -79,6 +87,12 @@ class MainViewModel @Inject constructor(
             preferencesRepository.installChoiceCompleted.collect { completed ->
                 Timber.d("Preference installChoiceCompleted: $completed")
                 _installChoiceCompleted.value = completed
+            }
+        }
+        viewModelScope.launch {
+            preferencesRepository.themeMode.collect { mode ->
+                Timber.d("Preference themeMode: $mode")
+                _themeMode.value = mode
             }
         }
 
@@ -246,4 +260,33 @@ class MainViewModel @Inject constructor(
             preferencesRepository.setOnboardingCompleted(true)
         }
     }
+
+    fun handleDeepLink(uri: Uri) {
+        val publicKey = uri.getQueryParameter("public_key")?.trim()
+        if (publicKey.isNullOrBlank()) {
+            Timber.w("Deep link missing public_key: $uri")
+            return
+        }
+        val data = DeepLinkData(
+            publicKey = publicKey,
+            peerId = uri.getQueryParameter("peer_id")?.trim(),
+            nickname = uri.getQueryParameter("nickname")?.trim(),
+            identityId = uri.getQueryParameter("identity_id")?.trim()
+        )
+        Timber.i("Deep link parsed: peerId=${data.peerId}, nickname=${data.nickname}")
+        _pendingDeepLink.value = data
+    }
+
+    fun consumeDeepLink(): DeepLinkData? {
+        val data = _pendingDeepLink.value
+        _pendingDeepLink.value = null
+        return data
+    }
 }
+
+data class DeepLinkData(
+    val publicKey: String,
+    val peerId: String?,
+    val nickname: String?,
+    val identityId: String?
+)

@@ -14,6 +14,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.mlkit.common.MlKitException
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
@@ -39,14 +41,17 @@ import timber.log.Timber
 fun AddContactScreen(
     onNavigateBack: () -> Unit,
     onContactAdded: () -> Unit = {},
+    prefilledPeerId: String = "",
+    prefilledPublicKey: String = "",
+    prefilledNickname: String = "",
     viewModel: ContactsViewModel = hiltViewModel()
 ) {
     val error by viewModel.error.collectAsState()
 
     var selectedTab by remember { mutableStateOf(0) }
-    var peerId by remember { mutableStateOf("") }
-    var publicKey by remember { mutableStateOf("") }
-    var nickname by remember { mutableStateOf("") }
+    var peerId by remember(prefilledPeerId) { mutableStateOf(prefilledPeerId) }
+    var publicKey by remember(prefilledPublicKey) { mutableStateOf(prefilledPublicKey) }
+    var nickname by remember(prefilledNickname) { mutableStateOf(prefilledNickname) }
     var notes by remember { mutableStateOf("") }
     var libp2pPeerId by remember { mutableStateOf<String?>(null) }
     var listeners by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -264,7 +269,7 @@ private fun ManualEntryTab(
                     color = MaterialTheme.colorScheme.onPrimary
                 )
             } else {
-                Icon(Icons.Default.Add, contentDescription = null)
+                Icon(Icons.Default.Add, contentDescription = "Add contact")
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Add Contact")
             }
@@ -309,31 +314,51 @@ private fun QRScanTab(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Button(onClick = {
-            val options = GmsBarcodeScannerOptions.Builder()
-                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-                .build()
-            val scanner = GmsBarcodeScanning.getClient(context, options)
-            scanner.startScan()
-                .addOnSuccessListener { barcode ->
-                    val rawValue = barcode.rawValue
-                    if (rawValue.isNullOrBlank()) {
-                        onScanError("QR code was empty. Please try again.")
-                    } else {
-                        onScanned(rawValue)
-                    }
+        val gmsAvailable = remember {
+            GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
+        }
+
+        Button(
+            onClick = {
+                if (!gmsAvailable) {
+                    onScanError("Google Play Services is not available on this device. Please use manual entry or paste the identity string.")
+                    return@Button
                 }
-                .addOnFailureListener { e ->
-                    Timber.w(e, "QR scan failed")
-                    if (e is MlKitException && e.errorCode == CommonStatusCodes.CANCELED) {
-                        return@addOnFailureListener
+                val options = GmsBarcodeScannerOptions.Builder()
+                    .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                    .build()
+                val scanner = GmsBarcodeScanning.getClient(context, options)
+                scanner.startScan()
+                    .addOnSuccessListener { barcode ->
+                        val rawValue = barcode.rawValue
+                        if (rawValue.isNullOrBlank()) {
+                            onScanError("QR code was empty. Please try again.")
+                        } else {
+                            onScanned(rawValue)
+                        }
                     }
-                    onScanError("Unable to scan QR code. Please try again.")
-                }
-        }) {
-            Icon(Icons.Default.CameraAlt, contentDescription = null)
+                    .addOnFailureListener { e ->
+                        Timber.w(e, "QR scan failed")
+                        if (e is MlKitException && e.errorCode == CommonStatusCodes.CANCELED) {
+                            return@addOnFailureListener
+                        }
+                        onScanError("Unable to scan QR code. Please try again.")
+                    }
+            },
+            enabled = gmsAvailable
+        ) {
+            Icon(Icons.Default.CameraAlt, contentDescription = "Scan QR code")
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Scan QR Code")
+            Text(if (gmsAvailable) "Scan QR Code" else "QR Scanning Unavailable")
+        }
+
+        if (!gmsAvailable) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Google Play Services is required for QR scanning. Use manual entry or paste instead.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
         }
     }
 }

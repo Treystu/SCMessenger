@@ -2952,6 +2952,13 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
+    /** P1_ANDROID_003: Public entry-point for manual identity import from backup string. */
+    fun restoreIdentityFromBackup(backup: String) {
+        val core = ironCore ?: throw IllegalStateException("Core not initialized")
+        core.importIdentityBackup(backup, "")
+        Timber.i("Restored identity from manually pasted backup payload")
+    }
+
     private fun persistIdentityBackup(core: uniffi.api.IronCore?) {
         val activeCore = core ?: return
         try {
@@ -2987,7 +2994,7 @@ open class MeshRepository(private val context: Context) {
         pendingReceiptSendJobs.clear()
 
         try {
-            kotlinx.coroutines.runBlocking { bleScanner?.stopScanning() }
+            repoScope.launch { bleScanner?.stopScanning() }
         } catch (e: Exception) {
             Timber.w(e, "Failed to stop BLE scanner")
         }
@@ -3355,7 +3362,7 @@ open class MeshRepository(private val context: Context) {
     // ========================================================================
 
     fun blockPeer(peerId: String, deviceId: String? = null, reason: String? = null) {
-        ensureServiceInitialized()
+        ensureServiceInitializedFireAndForget()
         try {
             ironCore?.blockPeer(peerId, deviceId, reason)
             Timber.i("Blocked peer: $peerId (device: $deviceId, reason: $reason)")
@@ -3365,7 +3372,7 @@ open class MeshRepository(private val context: Context) {
     }
 
     fun unblockPeer(peerId: String, deviceId: String? = null) {
-        ensureServiceInitialized()
+        ensureServiceInitializedFireAndForget()
         try {
             ironCore?.unblockPeer(peerId, deviceId)
             Timber.i("Unblocked peer: $peerId (device: $deviceId)")
@@ -3379,7 +3386,7 @@ open class MeshRepository(private val context: Context) {
      * Future payloads from this peer are dropped at the ingress layer.
      */
     fun blockAndDeletePeer(peerId: String, deviceId: String? = null, reason: String? = null) {
-        ensureServiceInitialized()
+        ensureServiceInitializedFireAndForget()
         try {
             ironCore?.blockAndDeletePeer(peerId, deviceId, reason)
             Timber.i("Blocked and deleted peer: $peerId (device: $deviceId, reason: $reason)")
@@ -3389,7 +3396,7 @@ open class MeshRepository(private val context: Context) {
     }
 
     fun isBlocked(peerId: String, deviceId: String? = null): Boolean {
-        ensureServiceInitialized()
+        ensureServiceInitializedFireAndForget()
         return try {
             ironCore?.isPeerBlocked(peerId, deviceId) ?: false
         } catch (e: Exception) {
@@ -3399,7 +3406,7 @@ open class MeshRepository(private val context: Context) {
     }
 
     fun listBlockedPeers(): List<uniffi.api.BlockedIdentity> {
-        ensureServiceInitialized()
+        ensureServiceInitializedFireAndForget()
         return try {
             ironCore?.listBlockedPeers() ?: emptyList()
         } catch (e: Exception) {
@@ -3409,7 +3416,7 @@ open class MeshRepository(private val context: Context) {
     }
 
     fun getBlockedCount(): UInt {
-        ensureServiceInitialized()
+        ensureServiceInitializedFireAndForget()
         return try {
             ironCore?.blockedCount() ?: 0u
         } catch (e: Exception) {
@@ -3423,7 +3430,7 @@ open class MeshRepository(private val context: Context) {
     // ========================================================================
 
     fun signData(data: ByteArray): uniffi.api.SignatureResult? {
-        ensureServiceInitialized()
+        ensureServiceInitializedFireAndForget()
         return try {
             ironCore?.signData(data)
         } catch (e: Exception) {
@@ -3433,7 +3440,7 @@ open class MeshRepository(private val context: Context) {
     }
 
     fun verifySignature(data: ByteArray, signature: ByteArray, publicKeyHex: String): Boolean {
-        ensureServiceInitialized()
+        ensureServiceInitializedFireAndForget()
         return try {
             ironCore?.verifySignature(data, signature, publicKeyHex) ?: false
         } catch (e: Exception) {
@@ -3512,7 +3519,7 @@ open class MeshRepository(private val context: Context) {
     }
 
     fun getIdentityInfo(): uniffi.api.IdentityInfo? {
-        ensureServiceInitialized()
+        ensureServiceInitializedFireAndForget()
         kotlin.runCatching { ensureLocalIdentityFederation() }
             .onFailure { Timber.w(it, "Failed to hydrate identity before getIdentityInfo") }
         val result = ironCore?.getIdentityInfo()
@@ -3930,7 +3937,7 @@ open class MeshRepository(private val context: Context) {
      */
     fun grantConsent() {
         try {
-            ensureServiceInitialized()
+            ensureServiceInitializedFireAndForget()
             ironCore?.grantConsent()
             Timber.i("Consent granted in Rust core")
         } catch (e: Exception) {
@@ -3972,8 +3979,7 @@ open class MeshRepository(private val context: Context) {
     suspend fun createIdentity() {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                ensureServiceInitializedBlocking()
-                if (ironCore == null) {
+                if (!ensureServiceInitialized() || ironCore == null) {
                     Timber.e("IronCore is null after ensureServiceInitialized! Cannot create identity.")
                     throw IllegalStateException("Mesh service initialization failed")
                 }
@@ -4079,19 +4085,19 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
-    private fun ensureServiceInitialized() {
+    private fun ensureServiceInitializedFireAndForget() {
         // Fire-and-forget for non-critical paths (prevents UI thread blocking)
         ensureServiceInitializedDeferred()
     }
 
     /**
-     * Blocking variant for suspend functions that require the service to be running.
-     * Waits up to 10 seconds for MeshService to reach RUNNING state.
+     * Non-blocking variant for suspend functions that require the service to be running.
+     * Waits up to 10 seconds for MeshService to reach RUNNING state using delay().
      */
-    private suspend fun ensureServiceInitializedBlocking() {
+    private suspend fun ensureServiceInitialized(): Boolean {
         // Fast path: already running
         if (meshService?.getState() == uniffi.api.ServiceState.RUNNING && ironCore != null) {
-            return
+            return true
         }
 
         // Start initialization if needed
@@ -4102,11 +4108,12 @@ open class MeshRepository(private val context: Context) {
         val timeoutMs = 10_000L
         while (System.currentTimeMillis() - startTime < timeoutMs) {
             if (meshService?.getState() == uniffi.api.ServiceState.RUNNING && ironCore != null) {
-                return
+                return true
             }
             kotlinx.coroutines.delay(100)
         }
-        Timber.w("ensureServiceInitializedBlocking timed out after ${timeoutMs}ms")
+        Timber.w("ensureServiceInitialized timed out after ${timeoutMs}ms")
+        return false
     }
 
     private fun hasAllPermissions(permissions: List<String>): Boolean =

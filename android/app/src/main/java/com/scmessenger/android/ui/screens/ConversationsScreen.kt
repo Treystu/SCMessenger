@@ -4,11 +4,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.DismissDirection
-import androidx.compose.material.DismissValue
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.SwipeToDismiss
-import androidx.compose.material.rememberDismissState
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Delete
@@ -223,7 +221,6 @@ fun StatItem(label: String, value: String) {
 }
 
 @Composable
-@OptIn(ExperimentalMaterialApi::class)
 fun ConversationItem(
     displayName: String,
     peerId: String,
@@ -233,19 +230,20 @@ fun ConversationItem(
 ) {
     val lastMessage = messages.firstOrNull() ?: return
     val undeliveredCount = messages.count { !it.delivered }
-    val dismissState = rememberDismissState(
-        confirmStateChange = { value ->
-            if (value == DismissValue.DismissedToStart) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) {
                 onRequestDelete()
             }
             false
         },
     )
 
-    SwipeToDismiss(
+    SwipeToDismissBox(
         state = dismissState,
-        directions = setOf(DismissDirection.EndToStart),
-        background = {
+        enableDismissFromEndToStart = true,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
             Box(
                 modifier = Modifier
                     .fillMaxSize(),
@@ -270,7 +268,7 @@ fun ConversationItem(
                 }
             }
         },
-        dismissContent = {
+        content = {
         Card(
             modifier = Modifier
                 .fillMaxWidth()

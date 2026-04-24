@@ -8,6 +8,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -24,8 +25,6 @@ class BootReceiver : BroadcastReceiver() {
     @Inject
     lateinit var preferencesRepository: PreferencesRepository
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
             intent.action == "android.intent.action.QUICKBOOT_POWERON") {
@@ -33,14 +32,19 @@ class BootReceiver : BroadcastReceiver() {
             Timber.i("Boot completed, checking auto-start preference")
 
             // Check if auto-start is enabled
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             scope.launch {
-                val autoStart = preferencesRepository.serviceAutoStart.first()
+                try {
+                    val autoStart = preferencesRepository.serviceAutoStart.first()
 
-                if (autoStart) {
-                    Timber.i("Auto-start enabled, starting mesh service")
-                    startMeshService(context)
-                } else {
-                    Timber.d("Auto-start disabled, not starting service")
+                    if (autoStart) {
+                        Timber.i("Auto-start enabled, starting mesh service")
+                        startMeshService(context)
+                    } else {
+                        Timber.d("Auto-start disabled, not starting service")
+                    }
+                } finally {
+                    scope.cancel()
                 }
             }
         }

@@ -12,6 +12,7 @@ import com.scmessenger.android.data.MeshRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import timber.log.Timber
 
@@ -28,8 +29,6 @@ import timber.log.Timber
  * - Background message queueing
  */
 class ShareReceiver : BroadcastReceiver() {
-
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
@@ -164,6 +163,7 @@ class ShareReceiver : BroadcastReceiver() {
         peerId: String,
         content: String
     ) {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope.launch {
             try {
                 repository.sendMessage(peerId, content)
@@ -172,6 +172,8 @@ class ShareReceiver : BroadcastReceiver() {
             } catch (e: Exception) {
                 Timber.e(e, "Failed to send shared message")
                 Toast.makeText(context, "Failed to send message", Toast.LENGTH_SHORT).show()
+            } finally {
+                scope.cancel()
             }
         }
     }

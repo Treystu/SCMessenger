@@ -25,10 +25,17 @@ import com.scmessenger.android.data.MeshRepository
 import com.scmessenger.android.utils.Permissions
 import javax.inject.Inject
 import java.util.concurrent.atomic.AtomicBoolean
+import androidx.activity.viewModels
+import android.content.Intent
+import com.scmessenger.android.ui.viewmodels.MainViewModel
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.isSystemInDarkTheme
+import com.scmessenger.android.data.PreferencesRepository
 
 /**
  * Main activity for SCMessenger.
@@ -39,6 +46,8 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
     @Inject
     lateinit var meshRepository: MeshRepository
+
+    private val mainViewModel: MainViewModel by viewModels()
 
     private val permissionRequestInProgress = AtomicBoolean(false)
     private val permissionRequestDebounceMs = 500L
@@ -88,12 +97,28 @@ class MainActivity : ComponentActivity() {
         checkPermissions()
 
         setContent {
-            SCMessengerTheme {
+            val themeMode by mainViewModel.themeMode.collectAsState()
+            val darkTheme = when (themeMode) {
+                PreferencesRepository.ThemeMode.LIGHT -> false
+                PreferencesRepository.ThemeMode.DARK -> true
+                PreferencesRepository.ThemeMode.SYSTEM -> isSystemInDarkTheme()
+            }
+            SCMessengerTheme(darkTheme = darkTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
                     MeshApp()
+                }
+            }
+        }
+
+        // Handle deep links for cold start
+        intent?.let {
+            if (it.action == Intent.ACTION_VIEW) {
+                it.data?.let { uri ->
+                    Timber.d("Handling deep link on cold start: $uri")
+                    mainViewModel.handleDeepLink(uri)
                 }
             }
         }
@@ -217,6 +242,18 @@ class MainActivity : ComponentActivity() {
         checkPermissions()
         if (meshRepository.hasRequiredRuntimePermissions()) {
             meshRepository.onRuntimePermissionsGranted()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        intent?.let {
+            if (it.action == Intent.ACTION_VIEW) {
+                it.data?.let { uri ->
+                    Timber.d("Handling deep link on new intent: $uri")
+                    mainViewModel.handleDeepLink(uri)
+                }
+            }
         }
     }
 

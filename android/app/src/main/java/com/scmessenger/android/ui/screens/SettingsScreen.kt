@@ -7,16 +7,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.scmessenger.android.BuildConfig
+import com.scmessenger.android.R
 import com.scmessenger.android.ui.viewmodels.MeshServiceViewModel
 import com.scmessenger.android.ui.viewmodels.SettingsViewModel
+import com.scmessenger.android.data.PreferencesRepository
 
 /**
  * Settings screen with mesh configuration and app preferences.
@@ -33,12 +38,27 @@ fun SettingsScreen(
     val identityInfo by settingsViewModel.identityInfo.collectAsState()
     val autoStart by settingsViewModel.autoStart.collectAsState()
     val notificationsEnabled by settingsViewModel.notificationsEnabled.collectAsState()
+    val themeMode by settingsViewModel.themeMode.collectAsState()
     val isLoading by settingsViewModel.isLoading.collectAsState()
     val serviceState by serviceViewModel.serviceState.collectAsState()
     val isRunning by serviceViewModel.isRunning.collectAsState()
     val serviceStats by serviceViewModel.serviceStats.collectAsState()
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    val importResult by settingsViewModel.importResult.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    var showImportDialog by remember { mutableStateOf(false) }
+    var importText by remember { mutableStateOf("") }
+
+    LaunchedEffect(importResult) {
+        importResult?.let {
+            snackbarHostState.showSnackbar(it)
+            settingsViewModel.clearImportResult()
+        }
+    }
 
     // Refresh identity whenever Settings screen is entered (nickname may have changed during onboarding)
     LaunchedEffect(Unit) {
@@ -54,12 +74,13 @@ fun SettingsScreen(
 
     val statsText = remember(serviceStats) { serviceViewModel.getStatsText() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
         Text(
             text = "Settings",
             style = MaterialTheme.typography.headlineMedium,
@@ -83,12 +104,15 @@ fun SettingsScreen(
                 identityInfo = resolvedIdentityInfo,
                 onNicknameChange = { settingsViewModel.updateNickname(it) },
                 onCopyExport = {
-                    val export = settingsViewModel.getIdentityExportString()
-                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    val clip = android.content.ClipData.newPlainText("Identity Export", export)
-                    clipboard.setPrimaryClip(clip)
+                    scope.launch {
+                        val export = settingsViewModel.getIdentityExportString()
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("Identity Export", export)
+                        clipboard.setPrimaryClip(clip)
+                    }
                 },
-                onShowIdentityQr = onNavigateToIdentity
+                onShowIdentityQr = onNavigateToIdentity,
+                onImportIdentity = { showImportDialog = true }
             )
         } else {
             IdentityUnavailableSection(
@@ -110,6 +134,14 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
 
+
+        // Theme Section
+        ThemeSection(
+            themeMode = themeMode,
+            onThemeModeChange = { settingsViewModel.setThemeMode(it) }
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         // App Preferences Section
         AppPreferencesSection(
@@ -148,6 +180,45 @@ fun SettingsScreen(
             onResetAll = { settingsViewModel.resetAllData() }
         )
     }
+
+    if (showImportDialog) {
+        AlertDialog(
+            onDismissRequest = { showImportDialog = false },
+            title = { Text("Import Identity Backup") },
+            text = {
+                OutlinedTextField(
+                    value = importText,
+                    onValueChange = { importText = it },
+                    label = { Text("Paste backup string") },
+                    minLines = 3,
+                    maxLines = 6
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        settingsViewModel.importIdentityBackup(importText)
+                        showImportDialog = false
+                        importText = ""
+                    },
+                    enabled = importText.isNotBlank()
+                ) {
+                    Text("Import")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    SnackbarHost(
+        hostState = snackbarHostState,
+        modifier = Modifier.align(Alignment.BottomCenter)
+    )
+}
 }
 
 @Composable
@@ -255,7 +326,7 @@ fun ServiceControlSection(
 
             if (isRunning) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Divider()
+                HorizontalDivider()
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = stats,
@@ -393,6 +464,66 @@ fun AppPreferencesSection(
 }
 
 @Composable
+fun ThemeSection(
+    themeMode: PreferencesRepository.ThemeMode,
+    onThemeModeChange: (PreferencesRepository.ThemeMode) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "Theme",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            ThemeRadioOption(
+                label = "System Default",
+                selected = themeMode == PreferencesRepository.ThemeMode.SYSTEM,
+                onClick = { onThemeModeChange(PreferencesRepository.ThemeMode.SYSTEM) }
+            )
+            ThemeRadioOption(
+                label = "Light",
+                selected = themeMode == PreferencesRepository.ThemeMode.LIGHT,
+                onClick = { onThemeModeChange(PreferencesRepository.ThemeMode.LIGHT) }
+            )
+            ThemeRadioOption(
+                label = "Dark",
+                selected = themeMode == PreferencesRepository.ThemeMode.DARK,
+                onClick = { onThemeModeChange(PreferencesRepository.ThemeMode.DARK) }
+            )
+        }
+    }
+}
+
+@Composable
+fun ThemeRadioOption(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(
+            selected = selected,
+            onClick = onClick
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge
+        )
+    }
+}
+
+@Composable
 fun SwitchPreference(
     title: String,
     subtitle: String,
@@ -448,7 +579,7 @@ fun InfoSection(
 
             InfoRow("Contacts", contactCount.toString())
             InfoRow("Messages", messageCount.toString())
-            InfoRow("Version", "0.2.0")
+            InfoRow("Version", BuildConfig.VERSION_NAME)
         }
     }
 }
@@ -478,7 +609,8 @@ fun IdentitySection(
     identityInfo: uniffi.api.IdentityInfo,
     onNicknameChange: (String) -> Unit,
     onCopyExport: () -> Unit,
-    onShowIdentityQr: () -> Unit
+    onShowIdentityQr: () -> Unit,
+    onImportIdentity: () -> Unit
 ) {
     val context = LocalContext.current
 
@@ -552,7 +684,7 @@ fun IdentitySection(
                 }
             }
 
-            Divider(modifier = Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             // Identity Hash
             Row(
@@ -582,7 +714,7 @@ fun IdentitySection(
                 }
             }
 
-            Divider(modifier = Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             // Public Key
              Row(
@@ -619,7 +751,7 @@ fun IdentitySection(
                 onClick = onCopyExport,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Share, contentDescription = "Share identity export", modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Copy Full Identity Export")
             }
@@ -631,6 +763,15 @@ fun IdentitySection(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Show Identity QR")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = onImportIdentity,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Import Identity")
             }
         }
     }
@@ -669,6 +810,7 @@ fun IdentityUnavailableSection(
 fun PrivacySection(
     onNavigateToBlockedPeers: () -> Unit
 ) {
+    val context = LocalContext.current
     Card(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -685,9 +827,24 @@ fun PrivacySection(
                 onClick = onNavigateToBlockedPeers,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Filled.Block, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.Block, contentDescription = "Manage blocked peers", modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Manage Blocked Peers")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = {
+                    val intent = android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse(context.getString(R.string.privacy_policy_url))
+                    )
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Privacy Policy")
             }
         }
     }

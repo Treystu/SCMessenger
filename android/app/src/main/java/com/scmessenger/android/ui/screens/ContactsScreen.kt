@@ -14,10 +14,9 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Sensors
-import androidx.compose.material.SwipeToDismiss
-import androidx.compose.material.DismissValue
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.rememberDismissState
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -203,7 +202,7 @@ fun ContactsScreen(
                         }
                         if (contacts.isNotEmpty()) {
                             item {
-                                Divider(modifier = Modifier.padding(vertical = 4.dp))
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                                 Text(
                                     text = "Contacts (${contacts.size})",
                                     style = MaterialTheme.typography.labelMedium,
@@ -268,7 +267,7 @@ fun ContactsScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactItem(
     contact: uniffi.api.Contact,
@@ -279,14 +278,13 @@ fun ContactItem(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showEditNicknameDialog by remember { mutableStateOf(false) }
 
-    // Material 2 API for SwipeToDismiss
-    val dismissState = rememberDismissState()
+    val dismissState = rememberSwipeToDismissBoxState()
 
-    SwipeToDismiss(
+    SwipeToDismissBox(
         state = dismissState,
-        background = {
+        backgroundContent = {
             val color = when (dismissState.targetValue) {
-                DismissValue.DismissedToEnd, DismissValue.DismissedToStart -> MaterialTheme.colorScheme.error
+                SwipeToDismissBoxValue.StartToEnd, SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.error
                 else -> Color.Transparent
             }
             Box(
@@ -296,7 +294,7 @@ fun ContactItem(
                     .padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterEnd
             ) {
-                if (dismissState.targetValue != DismissValue.Default) {
+                if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) {
                     Icon(
                         imageVector = Icons.Default.Delete,
                         contentDescription = "Delete",
@@ -306,7 +304,7 @@ fun ContactItem(
                 }
             }
         },
-        dismissContent = {
+        content = {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -498,7 +496,7 @@ fun NearbyPeerItem(
             FilledTonalButton(onClick = if (peer.hasFullIdentity) onConnect else onAdd) {
                 Icon(
                     imageVector = Icons.Default.PersonAdd,
-                    contentDescription = null,
+                    contentDescription = "Add contact",
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
@@ -551,7 +549,7 @@ fun AddContactDialog(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.ContentPaste, contentDescription = "Paste", modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Paste Identity Export")
                 }
@@ -589,13 +587,13 @@ fun AddContactDialog(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.CameraAlt, contentDescription = "Scan QR code", modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Scan Contact QR")
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                Divider()
+                HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
 
                 parseError?.let {

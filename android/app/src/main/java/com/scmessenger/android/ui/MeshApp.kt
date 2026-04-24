@@ -12,6 +12,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
@@ -23,6 +26,7 @@ import com.scmessenger.android.ui.contacts.AddContactScreen
 import com.scmessenger.android.ui.identity.IdentityScreen
 import com.scmessenger.android.ui.screens.*
 import com.scmessenger.android.ui.viewmodels.MainViewModel
+import com.scmessenger.android.ui.viewmodels.DeepLinkData
 
 /**
  * Root composable for the SCMessenger app.
@@ -37,9 +41,19 @@ fun MeshApp() {
     val isStorageLow by mainViewModel.isStorageLow.collectAsState()
     val availableStorageMB by mainViewModel.availableStorageMB.collectAsState()
     val navController = rememberNavController()
+    val pendingDeepLink by mainViewModel.pendingDeepLink.collectAsState()
 
     LaunchedEffect(Unit) {
         mainViewModel.refreshIdentityState()
+    }
+
+    // Navigate to AddContact when a deep link arrives and identity is ready
+    LaunchedEffect(pendingDeepLink, hasIdentity) {
+        if (pendingDeepLink != null && hasIdentity) {
+            navController.navigate(Screen.AddContact.route) {
+                launchSingleTop = true
+            }
+        }
     }
 
     LaunchedEffect(hasIdentity) {
@@ -111,9 +125,14 @@ fun MeshNavHost(
             }
 
             composable(Screen.AddContact.route) {
+                val mainVm: MainViewModel = hiltViewModel()
+                val deepLinkData = remember { mainVm.consumeDeepLink() }
                 AddContactScreen(
                     onNavigateBack = { navController.popBackStack() },
-                    onContactAdded = { navController.popBackStack() }
+                    onContactAdded = { navController.popBackStack() },
+                    prefilledPeerId = deepLinkData?.peerId ?: "",
+                    prefilledPublicKey = deepLinkData?.publicKey ?: "",
+                    prefilledNickname = deepLinkData?.nickname ?: ""
                 )
             }
         }

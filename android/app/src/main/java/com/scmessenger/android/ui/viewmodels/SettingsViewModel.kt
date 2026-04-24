@@ -124,10 +124,14 @@ class SettingsViewModel @Inject constructor(
     private val _identityInfo = MutableStateFlow<uniffi.api.IdentityInfo?>(null)
     val identityInfo: StateFlow<uniffi.api.IdentityInfo?> = _identityInfo.asStateFlow()
 
+    // Import result
+    private val _importResult = MutableStateFlow<String?>(null)
+    val importResult: StateFlow<String?> = _importResult.asStateFlow()
+
     // ANR FIX: Cached settings to avoid re-calculating on every composition
-    @Volatile private var cachedSettings: uniffi.api.MeshSettings? = null
-    @Volatile private var cachedIdentityInfo: uniffi.api.IdentityInfo? = null
-    @Volatile private var isCacheValid = false
+    private var cachedSettings: uniffi.api.MeshSettings? = null
+    private var cachedIdentityInfo: uniffi.api.IdentityInfo? = null
+    private var isCacheValid = false
 
     init {
         // ANR FIX (P0_ANDROID_017): Defer heavy initialization to background thread
@@ -248,11 +252,29 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun getIdentityExportString(): String {
+    suspend fun getIdentityExportString(): String {
         // ANR FIX: Run on IO dispatcher to avoid blocking Main thread
-        return kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             meshRepository.getIdentityExportString()
         }
+    }
+
+    /** P1_ANDROID_003: Import identity from a backup string. */
+    fun importIdentityBackup(backup: String) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                meshRepository.restoreIdentityFromBackup(backup)
+                _importResult.value = "Identity restored successfully"
+                loadIdentity() // Refresh UI after import
+            } catch (e: Exception) {
+                _importResult.value = "Failed to restore identity: ${e.message}"
+                Timber.e(e, "Failed to restore identity from backup")
+            }
+        }
+    }
+
+    fun clearImportResult() {
+        _importResult.value = null
     }
 
     fun updateNickname(name: String) {
@@ -496,8 +518,8 @@ class SettingsViewModel @Inject constructor(
      * ANR FIX (P0_ANDROID_017): Export diagnostics asynchronously.
      * Original exportDiagnostics() was blocking on file I/O and Rust FFI calls.
      */
-    fun exportDiagnostics(): String {
-        return kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+    suspend fun exportDiagnostics(): String {
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             meshRepository.exportDiagnostics()
         }
     }
@@ -510,8 +532,8 @@ class SettingsViewModel @Inject constructor(
      * ANR FIX (P0_ANDROID_017): Get diagnostics logs asynchronously.
      * Reading log files was blocking on Main thread.
      */
-    fun getDiagnosticsLogs(limit: Int = 500): String {
-        return kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+    suspend fun getDiagnosticsLogs(limit: Int = 500): String {
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             meshRepository.getDiagnosticsLogs(limit)
         }
     }
@@ -537,9 +559,9 @@ class SettingsViewModel @Inject constructor(
      * All blocking I/O operations (exportDiagnostics, getPendingOutboxCount, getDiagnosticsLogs)
      * are moved to IO dispatcher to prevent UI thread blocking.
      */
-    fun buildTesterDiagnosticsBundle(): String {
+    suspend fun buildTesterDiagnosticsBundle(): String {
         // Run the entire operation on IO dispatcher to avoid Main thread I/O
-        return kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val missingPermissions = meshRepository.getMissingRuntimePermissions().map { permission ->
                 "${Permissions.getPermissionName(permission)} ($permission)"
             }

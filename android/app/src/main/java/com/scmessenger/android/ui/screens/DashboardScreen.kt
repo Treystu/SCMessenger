@@ -27,12 +27,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.scmessenger.android.ui.viewmodels.MeshServiceViewModel
 import com.scmessenger.android.ui.viewmodels.DashboardViewModel
+import com.scmessenger.android.ui.viewmodels.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     serviceViewModel: MeshServiceViewModel = hiltViewModel(),
-    dashboardViewModel: DashboardViewModel = hiltViewModel()
+    dashboardViewModel: DashboardViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val serviceState by serviceViewModel.serviceState.collectAsState()
     val isRunning by serviceViewModel.isRunning.collectAsState()
@@ -41,6 +43,8 @@ fun DashboardScreen(
     val fullPeers by dashboardViewModel.fullPeersCount.collectAsState()
     val headlessPeers by dashboardViewModel.headlessPeersCount.collectAsState()
     val totalPeers by dashboardViewModel.totalPeersCount.collectAsState()
+
+    val meshSettings by settingsViewModel.settings.collectAsState()
 
     Scaffold(
         topBar = {
@@ -94,7 +98,12 @@ fun DashboardScreen(
 
             // Connection Methods Status
             item {
-                ConnectionStatusCard()
+                ConnectionStatusCard(
+                    bleEnabled = meshSettings?.bleEnabled ?: false,
+                    wifiAwareEnabled = meshSettings?.wifiAwareEnabled ?: false,
+                    wifiDirectEnabled = meshSettings?.wifiDirectEnabled ?: false,
+                    internetRelayEnabled = meshSettings?.relayEnabled == true && meshSettings?.internetEnabled == true
+                )
             }
 
             // Detailed Stats
@@ -139,7 +148,7 @@ fun DashboardScreen(
             } else {
                 items(peers) { peer ->
                     PeerItem(peer)
-                    Divider(
+                    HorizontalDivider(
                         modifier = Modifier.padding(vertical = 4.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant
                     )
@@ -299,7 +308,12 @@ fun StatCard(
 }
 
 @Composable
-fun ConnectionStatusCard() {
+fun ConnectionStatusCard(
+    bleEnabled: Boolean,
+    wifiAwareEnabled: Boolean,
+    wifiDirectEnabled: Boolean,
+    internetRelayEnabled: Boolean
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
@@ -309,9 +323,10 @@ fun ConnectionStatusCard() {
             )
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                TransportItem("BLE", Icons.Filled.Bluetooth, true) // Ideally get from ViewModel
-                TransportItem("WiFi Aware", Icons.Filled.Wifi, true)
-                TransportItem("WiFi Direct", Icons.Filled.Router, true)
+                TransportItem("BLE", Icons.Filled.Bluetooth, bleEnabled)
+                TransportItem("WiFi Aware", Icons.Filled.Wifi, wifiAwareEnabled)
+                TransportItem("WiFi Direct", Icons.Filled.Router, wifiDirectEnabled)
+                TransportItem("Internet Relay", Icons.Filled.NetworkWifi, internetRelayEnabled)
             }
         }
     }

@@ -35,9 +35,6 @@
     <!-- Boot receiver -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     
-    <!-- Wake lock for maintaining connections -->
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    
     <!-- Features -->
     <uses-feature
         android:name="android.hardware.bluetooth_le"
@@ -82,6 +79,22 @@
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
+            </intent-filter>
+
+            <!-- Deep link: scmessenger://add -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="scmessenger" android:host="add" />
+            </intent-filter>
+
+            <!-- Deep link: https://scmessenger.net/add -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="scmessenger.net" android:pathPrefix="/add" />
             </intent-filter>
         </activity>
         

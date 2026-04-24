@@ -82,11 +82,24 @@ class MeshForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val action = intent?.action
+        val shouldStartForeground = action == null || action == ACTION_START || action == ACTION_RESUME
+
+        // Android 12+ requires startForeground() within 5 seconds of onStartCommand returning.
+        // Promote to foreground synchronously; async initialization continues in the coroutine.
+        if (shouldStartForeground) {
+            if (!tryStartForeground()) {
+                Timber.e("Synchronous foreground promotion denied; aborting service start")
+                stopSelf()
+                return START_NOT_STICKY
+            }
+        }
+
         serviceScope.launch {
             val repoRunning = withContext(Dispatchers.Default) {
                 meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING
             }
-            when (decideCommand(intent?.action, isRunning, repoRunning)) {
+            when (decideCommand(action, isRunning, repoRunning)) {
                 StartDecision.Start -> startMeshService()
                 StartDecision.Stop -> stopMeshService()
                 StartDecision.Pause -> pauseMeshService()
@@ -104,29 +117,19 @@ class MeshForegroundService : Service() {
                 meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING
             }
             if (isRunning || repoRunning) {
-                if (!tryStartForeground()) {
-                    Timber.e("Foreground promotion denied while mesh repository is already running")
-                    stopSelf()
-                    return@launch
-                }
                 isRunning = true
                 updateNotification()
-                Timber.w("Mesh service already running; foreground promotion refreshed")
+                Timber.w("Mesh service already running; notification refreshed")
                 return@launch
             }
 
             Timber.i("Starting mesh service")
+            // Foreground promotion already done synchronously in onStartCommand.
 
-            // Start foreground with notification. Android 14+ can reject this if
-            // app state/permissions are not currently eligible.
-            if (!tryStartForeground()) {
-                Timber.e("Foreground start denied by OS; aborting mesh startup")
-                stopSelf()
-                return@launch
-            }
-
-            // Acquire WakeLock for scan windows
-            acquireWakeLock()
+            // BATTERY FIX (P0_ANDROID_STABILITY_001): Removed persistent WakeLock acquisition.
+            // startForeground() with a notification already keeps the process alive for a foreground service.
+            // A persistent PARTIAL_WAKE_LOCK causes Play Store battery-drain flags.
+            // If needed for active BLE scan windows, acquire selectively and release immediately.
 
             // Initialize platform bridge to monitor system state
             platformBridge.initialize()
@@ -195,8 +198,8 @@ class MeshForegroundService : Service() {
                 // Start periodic AutoAdjust profile computation
                 startPeriodicAdjustments()
 
-                // Start periodic WakeLock renewal
-                startPeriodicWakeLockRenewal()
+                // BATTERY FIX (P0_ANDROID_STABILITY_001): Removed periodic WakeLock renewal.
+                // Persistent wakelocks are unnecessary with FOREGROUND_SERVICE + startForeground().
 
                 Timber.i("Mesh service started successfully")
 
@@ -266,17 +269,6 @@ class MeshForegroundService : Service() {
             }
         } catch (e: Exception) {
             Timber.e(e, "Failed to release WakeLock")
-        }
-    }
-
-    private fun startPeriodicWakeLockRenewal() {
-        serviceScope.launch {
-            while (isActive && isRunning) {
-                delay(9 * 60 * 1000L) // Re-acquire every 9 minutes
-                if (isRunning) {
-                    acquireWakeLock()
-                }
-            }
         }
     }
 

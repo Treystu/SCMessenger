@@ -54,6 +54,10 @@ class ChatViewModel @Inject constructor(
     private val _isTyping = MutableStateFlow(false)
     val isTyping: StateFlow<Boolean> = _isTyping.asStateFlow()
 
+    // Loading state
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
     // Online status
     private val _isOnline = MutableStateFlow(false)
     val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
@@ -82,6 +86,7 @@ class ChatViewModel @Inject constructor(
     private fun loadMessages() {
         viewModelScope.launch {
             try {
+                _isLoading.value = true
                 val currentPeer = _peerId.value ?: return@launch
                 val messageList = meshRepository.getConversation(currentPeer, limit = _conversationLimit.value)
 
@@ -111,6 +116,8 @@ class ChatViewModel @Inject constructor(
             } catch (e: Exception) {
                 _error.value = "Failed to load messages: ${e.message}"
                 Timber.e(e, "Failed to load messages")
+            } finally {
+                _isLoading.value = false
             }
         }
     }

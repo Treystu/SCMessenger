@@ -38,6 +38,11 @@ class MeshApplication : Application() {
             }
         }
 
+        // Initialize notification channels before any notification can be posted
+        // (including the mesh foreground service notification)
+        com.scmessenger.android.utils.NotificationHelper.createNotificationChannels(this)
+        Timber.i("Notification channels created")
+
         Timber.i("SCMessenger application started")
 
         // Application-level initialization

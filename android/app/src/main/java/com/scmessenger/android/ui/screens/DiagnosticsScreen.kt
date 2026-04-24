@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -33,11 +34,14 @@ fun DiagnosticsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var showNetworkDiagnostics by remember { mutableStateOf(false) }
     var logText by remember { mutableStateOf("Loading logs...") }
 
     fun refreshLogs() {
-        logText = viewModel.getDiagnosticsLogs(limit = 250)
+        scope.launch {
+            logText = viewModel.getDiagnosticsLogs(limit = 250)
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -80,7 +84,11 @@ fun DiagnosticsScreen(
                     }) {
                         Icon(imageVector = Icons.Default.Delete, contentDescription = "Clear")
                     }
-                    IconButton(onClick = { shareDiagnosticsBundle(context, viewModel.buildTesterDiagnosticsBundle()) }) {
+                    IconButton(onClick = {
+                        scope.launch {
+                            shareDiagnosticsBundle(context, viewModel.buildTesterDiagnosticsBundle())
+                        }
+                    }) {
                         Icon(Icons.Default.Share, contentDescription = "Share")
                     }
                     IconButton(onClick = { showNetworkDiagnostics = true }) {
