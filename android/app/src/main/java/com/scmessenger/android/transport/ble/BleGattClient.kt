@@ -543,11 +543,15 @@ class BleGattClient(
                             val gattRef = activeConnections[deviceAddress] ?: return@launch
                             val stateRef = connectionStates[deviceAddress]
                             if (stateRef == ConnectionState.DISCONNECTED) return@launch
-                            runCatching { gattRef.discoverServices() }
-                                .onFailure { ex ->
-                                    Timber.w(ex, "Retry service discovery failed on %s", deviceAddress)
-                                    disconnect(deviceAddress)
-                                }
+                            try {
+                                gattRef.discoverServices()
+                            } catch (e: SecurityException) {
+                                Timber.w("SecurityException during service discovery on %s (missing BLUETOOTH_CONNECT permission)", deviceAddress)
+                                disconnect(deviceAddress)
+                            } catch (e: Exception) {
+                                Timber.w(e, "Retry service discovery failed on %s", deviceAddress)
+                                disconnect(deviceAddress)
+                            }
                         }
                     } else {
                         Timber.w(

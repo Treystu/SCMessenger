@@ -162,6 +162,8 @@ class BleScanner(
                         if (!isScanning) {
                             try {
                                 scanner?.stopScan(this)
+                            } catch (_: SecurityException) {
+                                Timber.w("SecurityException stopping BLE scan (missing BLUETOOTH_SCAN permission)")
                             } catch (_: Exception) {}
                             scope.launch { startScanning() }
                         }
@@ -436,7 +438,7 @@ class BleScanner(
         val serviceUuidMatch = record?.serviceUuids?.any { it.uuid == SERVICE_UUID } == true
         val serviceDataMatch = record?.getServiceData(PARCEL_UUID) != null
         val advertisedName = record?.deviceName?.trim()
-        val deviceName = result.device.name?.trim()
+        val deviceName = try { result.device.name?.trim() } catch (_: SecurityException) { null }
         val nameMatch = advertisedName == ADVERTISED_NAME || deviceName == ADVERTISED_NAME
 
         return serviceUuidMatch || serviceDataMatch || nameMatch
