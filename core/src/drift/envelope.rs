@@ -128,8 +128,8 @@ impl EnvelopeType {
 }
 
 impl DriftEnvelope {
-    /// Fixed overhead size: 18 + 14 + 152 + 2 = 186 bytes
-    pub const FIXED_OVERHEAD: usize = 186;
+    /// Fixed overhead size: 18 + 14 + 152 + 2 + 1 = 187 bytes (includes ratchet flag)
+    pub const FIXED_OVERHEAD: usize = 187;
 
     /// Maximum ciphertext size (2^16 - 1 bytes due to u16 length field)
     pub const MAX_CIPHERTEXT: usize = 65535;

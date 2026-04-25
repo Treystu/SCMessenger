@@ -56,11 +56,32 @@ fun MeshApp() {
         }
     }
 
+    // Issue #6: Debounce hasIdentity changes to prevent transient false from causing
+    // navigation jumps. We track the "stable" identity state to avoid flicker.
+    var hasStableIdentity by remember { mutableStateOf(hasIdentity) }
+
     LaunchedEffect(hasIdentity) {
+        // Debounce: only update stable identity after a short delay
+        // This prevents transient false values from triggering navigation jumps
+        kotlinx.coroutines.delay(300L)
+        hasStableIdentity = hasIdentity
+    }
+
+    // Navigate to add contact when deep link arrives
+    LaunchedEffect(pendingDeepLink, hasStableIdentity) {
+        if (pendingDeepLink != null && hasStableIdentity) {
+            navController.navigate(Screen.AddContact.route) {
+                launchSingleTop = true
+            }
+        }
+    }
+
+    // Navigation guard: only trigger when stable identity state changes
+    LaunchedEffect(hasStableIdentity) {
         val currentRoute = navController.currentBackStackEntry?.destination?.route
-        val allowedRoutes = roleBasedBottomNavItems(hasIdentity).map { it.route }.toSet()
+        val allowedRoutes = roleBasedBottomNavItems(hasStableIdentity).map { it.route }.toSet()
         if (currentRoute != null && currentRoute !in allowedRoutes && !currentRoute.startsWith("chat/")) {
-            navController.navigate(startDestinationForRole(hasIdentity)) {
+            navController.navigate(startDestinationForRole(hasStableIdentity)) {
                 launchSingleTop = true
             }
         }

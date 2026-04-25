@@ -43,6 +43,16 @@ fun IdentityScreen(
     val error by viewModel.error.collectAsState()
     val successMessage by viewModel.successMessage.collectAsState()
 
+    // Collect QR code data from a coroutine to avoid blocking Main thread on FFI calls
+    var qrCodeData by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(identityInfo) {
+        if (identityInfo?.initialized == true) {
+            qrCodeData = viewModel.getQrCodeData()
+        } else {
+            qrCodeData = null
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -75,7 +85,7 @@ fun IdentityScreen(
                 identityInfo == null || identityInfo?.initialized != true -> {
                     // Identity not initialized
                     IdentityNotInitializedView(
-                        onCreateIdentity = { viewModel.createIdentity() },
+                        onCreateIdentity = { nickname -> viewModel.createIdentity(nickname) },
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
@@ -85,7 +95,7 @@ fun IdentityScreen(
                     val resolvedIdentity = identityInfo ?: return@Box
                     IdentityContent(
                         identityInfo = resolvedIdentity,
-                        qrCodeData = viewModel.getQrCodeData(),
+                        qrCodeData = qrCodeData,
                         error = error,
                         successMessage = successMessage,
                         onClearError = { viewModel.clearError() },
@@ -99,9 +109,11 @@ fun IdentityScreen(
 
 @Composable
 private fun IdentityNotInitializedView(
-    onCreateIdentity: () -> Unit,
+    onCreateIdentity: (nickname: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var nickname by remember { mutableStateOf("") }
+
     Column(
         modifier = modifier.padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -118,7 +130,15 @@ private fun IdentityNotInitializedView(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Button(onClick = onCreateIdentity) {
+        OutlinedTextField(
+            value = nickname,
+            onValueChange = { nickname = it },
+            label = { Text("Nickname") },
+            modifier = Modifier.fillMaxWidth(0.8f),
+            singleLine = true
+        )
+
+        Button(onClick = { onCreateIdentity(nickname) }) {
             Text("Create Identity")
         }
     }

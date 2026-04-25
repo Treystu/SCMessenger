@@ -179,7 +179,6 @@ struct NodeInfoPayload {
 struct NetworkStatsPayload {
     connected_peers: usize,
     known_peers: usize,
-    bootstrap_nodes: Vec<String>,
     topics: Vec<String>,
 }
 
@@ -189,7 +188,6 @@ struct LedgerEntryPayload {
     multiaddr: String,
     last_peer_id: Option<String>,
     last_seen: u64,
-    is_bootstrap: bool,
     known_topics: Vec<String>,
     label: Option<String>,
 }
@@ -209,7 +207,6 @@ struct JoinBundleResponse {
     version: u32,
     created_at: u64,
     created_by_peer_id: String,
-    bootstrap_nodes: Vec<String>,
     known_peers: Vec<JoinBundlePeer>,
     topics: Vec<String>,
 }
@@ -546,7 +543,6 @@ async fn handle_network_info(ctx: Arc<WebContext>) -> Result<impl warp::Reply, w
             multiaddr: e.multiaddr.clone(),
             last_peer_id: e.last_peer_id.clone(),
             last_seen: e.last_seen,
-            is_bootstrap: e.is_bootstrap,
             known_topics: e.known_topics.clone(),
             label: e.label.clone(),
         })
@@ -562,7 +558,6 @@ async fn handle_network_info(ctx: Arc<WebContext>) -> Result<impl warp::Reply, w
         network: NetworkStatsPayload {
             connected_peers: peers_guard.len(),
             known_peers: filtered_ledger_entries.len(), // Only count nodes with topics
-            bootstrap_nodes: ctx.bootstrap_nodes.clone(),
             topics,
         },
         ledger: filtered_ledger_entries, // Only legitimate nodes with topics
@@ -603,7 +598,6 @@ async fn handle_join_bundle(ctx: Arc<WebContext>) -> Result<impl warp::Reply, wa
         version: 1,
         created_at: now,
         created_by_peer_id: ctx.node_peer_id.clone(),
-        bootstrap_nodes: ctx.bootstrap_nodes.clone(),
         known_peers,
         topics,
     };
@@ -620,7 +614,7 @@ async fn handle_install_native(
     ctx: Arc<WebContext>,
     params: InstallParams,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let nodes_json = serde_json::to_string(&ctx.bootstrap_nodes).unwrap_or_else(|_| "[]".into());
+    let nodes_json = "[]".to_string();
     let peer_id = &ctx.node_peer_id;
     let version = env!("CARGO_PKG_VERSION");
     let host = params.host.unwrap_or_else(|| "localhost:9000".to_string());
@@ -711,8 +705,7 @@ async fn handle_install_docker(
     ctx: Arc<WebContext>,
     params: InstallParams,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    // Construct comma-separated bootstrap string for the env var
-    let nodes_str = ctx.bootstrap_nodes.join(",");
+    let nodes_str = String::new();
     let host = params.host.unwrap_or_else(|| "localhost:9000".to_string());
     // Extract just the hostname/IP from host (remove port if present)
     let hostname = host.split(':').next().unwrap_or("localhost");

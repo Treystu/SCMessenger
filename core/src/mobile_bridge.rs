@@ -138,7 +138,6 @@ pub struct MeshService {
     storage_path: Option<String>,
     log_directory: Option<String>,
     swarm_bridge: std::sync::Arc<SwarmBridge>,
-    bootstrap_addrs: Mutex<Vec<String>>,
     nat_status: std::sync::Arc<Mutex<String>>,
     relay_budget: std::sync::Arc<Mutex<u32>>,
     swarm_headless_mode: std::sync::Arc<Mutex<Option<bool>>>,
@@ -160,7 +159,6 @@ impl MeshService {
             storage_path: None,
             log_directory: None,
             swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
-            bootstrap_addrs: Mutex::new(Vec::new()),
             nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             swarm_headless_mode: std::sync::Arc::new(Mutex::new(None)),
@@ -180,7 +178,6 @@ impl MeshService {
             storage_path: Some(storage_path),
             log_directory: None,
             swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
-            bootstrap_addrs: Mutex::new(Vec::new()),
             nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             swarm_headless_mode: std::sync::Arc::new(Mutex::new(None)),
@@ -204,7 +201,6 @@ impl MeshService {
             storage_path: Some(storage_path),
             log_directory: Some(log_directory),
             swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
-            bootstrap_addrs: Mutex::new(Vec::new()),
             nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             swarm_headless_mode: std::sync::Arc::new(Mutex::new(None)),
@@ -316,16 +312,6 @@ impl MeshService {
         *self.platform_bridge.lock() = bridge;
     }
 
-    /// Configure bootstrap node multiaddrs for NAT traversal.
-    /// Call this BEFORE start_swarm() to have bootstrap nodes dialed on startup.
-    pub fn set_bootstrap_nodes(&self, addrs: Vec<String>) {
-        tracing::info!("Setting {} bootstrap node(s)", addrs.len());
-        for addr in &addrs {
-            tracing::info!("  Bootstrap: {}", addr);
-        }
-        *self.bootstrap_addrs.lock() = addrs;
-    }
-
     /// Get current NAT status string.
     pub fn get_nat_status(&self) -> String {
         self.nat_status.lock().clone()
@@ -334,23 +320,14 @@ impl MeshService {
     pub fn get_connection_path_state(&self) -> ConnectionPathState {
         let peers = self.swarm_bridge.get_peers();
         let listeners = self.swarm_bridge.get_listeners();
-        let bootstrap = self.bootstrap_addrs.lock().clone();
         let nat = self.nat_status.lock().clone();
 
         if peers.is_empty() {
-            return if bootstrap.is_empty() {
-                ConnectionPathState::Disconnected
-            } else {
-                ConnectionPathState::Bootstrapping
-            };
+            return ConnectionPathState::Disconnected;
         }
 
         if !listeners.is_empty() && nat != "symmetric" {
             return ConnectionPathState::DirectPreferred;
-        }
-
-        if !bootstrap.is_empty() {
-            return ConnectionPathState::RelayFallback;
         }
 
         ConnectionPathState::RelayOnly
@@ -362,7 +339,6 @@ impl MeshService {
             "service_state": format!("{:?}", self.get_state()),
             "connection_path_state": format!("{:?}", self.get_connection_path_state()),
             "nat_status": self.get_nat_status(),
-            "bootstrap_addrs": self.bootstrap_addrs.lock().clone(),
             "peers": self.swarm_bridge.get_peers(),
             "listeners": self.swarm_bridge.get_listeners(),
             "external_addrs": self.swarm_bridge.get_external_addresses(),
@@ -496,7 +472,6 @@ impl MeshService {
         let swarm_bridge = self.swarm_bridge.clone();
         let core = self.core.clone();
         let relay_budget_init = self.relay_budget.clone();
-        let bootstrap_addrs = self.bootstrap_addrs.lock().clone();
         let nat_status = self.nat_status.clone();
         let swarm_mode_state = self.swarm_headless_mode.clone();
         let service_storage_path = self.storage_path.clone();
@@ -524,25 +499,6 @@ impl MeshService {
                     Ok(rt) => {
                         rt.block_on(async move {
                             let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(100);
-                            let bootstrap_multiaddrs: Vec<libp2p::Multiaddr> = bootstrap_addrs
-                                .iter()
-                                .filter_map(|raw| match raw.parse::<libp2p::Multiaddr>() {
-                                    Ok(addr) => Some(addr),
-                                    Err(e) => {
-                                        tracing::warn!(
-                                            "Invalid bootstrap multiaddr '{}': {}",
-                                            raw,
-                                            e
-                                        );
-                                        None
-                                    }
-                                })
-                                .collect();
-
-                            tracing::info!(
-                                "Starting swarm with {} bootstrap addr(s)",
-                                bootstrap_multiaddrs.len()
-                            );
 
                             let iron_core_handle = {
                                 let core_guard = core.lock();
@@ -554,7 +510,7 @@ impl MeshService {
                                 listen_multiaddr,
                                 event_tx,
                                 None,
-                                bootstrap_multiaddrs,
+                                Vec::new(),
                                 service_storage_path,
                                 iron_core_handle.map(|c| {
                                     // CRITICAL: We need a Weak<IronCore> that points to a live Arc.
@@ -1253,111 +1209,6 @@ impl MeshSettingsManager {
 
     pub fn default_settings(&self) -> MeshSettings {
         MeshSettings::default()
-    }
-}
-
-// ============================================================================
-// BOOTSTRAP CONFIGURATION
-// ============================================================================
-
-/// Configuration for bootstrap node resolution.
-///
-/// Resolution order: `env_override_key` → `remote_url` → `static_nodes`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BootstrapConfig {
-    /// Static fallback multiaddr strings.
-    pub static_nodes: Vec<String>,
-    /// Optional remote URL to fetch a JSON array of multiaddr strings.
-    pub remote_url: Option<String>,
-    /// Timeout for the remote fetch, in seconds.
-    pub fetch_timeout_secs: u32,
-    /// Optional environment variable name for a comma-separated override list.
-    pub env_override_key: Option<String>,
-}
-
-/// Resolves bootstrap node addresses using a deterministic priority chain.
-pub struct BootstrapResolver {
-    config: BootstrapConfig,
-}
-
-impl BootstrapResolver {
-    pub fn new(config: BootstrapConfig) -> Self {
-        Self { config }
-    }
-
-    /// Resolve bootstrap nodes: env → remote → static.
-    pub fn resolve(&self) -> Vec<String> {
-        // 1. Environment override (highest priority)
-        if let Some(ref env_key) = self.config.env_override_key {
-            if let Ok(val) = std::env::var(env_key) {
-                let addrs: Vec<String> = val
-                    .split(',')
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .collect();
-                if !addrs.is_empty() {
-                    tracing::info!(
-                        "Bootstrap resolved via env var '{}': {} addr(s)",
-                        env_key,
-                        addrs.len()
-                    );
-                    return addrs;
-                }
-            }
-        }
-
-        // 2. Remote URL fetch (medium priority) — non-WASM only
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(ref url) = self.config.remote_url {
-            match self.fetch_remote(url) {
-                Ok(addrs) if !addrs.is_empty() => {
-                    tracing::info!("Bootstrap resolved via remote URL: {} addr(s)", addrs.len());
-                    return addrs;
-                }
-                Ok(_) => {
-                    tracing::warn!(
-                        "Remote bootstrap URL returned empty list; falling back to static"
-                    );
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "Remote bootstrap fetch failed: {}; falling back to static",
-                        e
-                    );
-                }
-            }
-        }
-
-        // 3. Static fallback (lowest priority)
-        tracing::info!(
-            "Bootstrap resolved via static fallback: {} addr(s)",
-            self.config.static_nodes.len()
-        );
-        self.config.static_nodes.clone()
-    }
-
-    /// Return the raw static fallback list without env/remote resolution.
-    pub fn static_fallback(&self) -> Vec<String> {
-        self.config.static_nodes.clone()
-    }
-
-    /// Attempt to fetch bootstrap nodes from a remote URL (non-WASM only).
-    /// Expects a JSON array of strings: `["/ip4/1.2.3.4/tcp/9001/p2p/..."]`
-    #[cfg(not(target_arch = "wasm32"))]
-    fn fetch_remote(&self, url: &str) -> Result<Vec<String>, String> {
-        let timeout = web_time::Duration::from_secs(self.config.fetch_timeout_secs as u64);
-        let resp = ureq::AgentBuilder::new()
-            .timeout(timeout)
-            .build()
-            .get(url)
-            .call()
-            .map_err(|e| format!("HTTP request failed: {}", e))?;
-        let body = resp
-            .into_string()
-            .map_err(|e| format!("Failed to read response body: {}", e))?;
-        let addrs: Vec<String> =
-            serde_json::from_str(&body).map_err(|e| format!("Failed to parse JSON: {}", e))?;
-        Ok(addrs)
     }
 }
 
@@ -2302,12 +2153,11 @@ mod tests {
     }
 
     #[test]
-    fn test_connection_path_state_parity_independent_of_role_mode() {
+    fn test_connection_path_state_disconnected_by_default() {
         let service = MeshService::new(MeshServiceConfig {
             discovery_interval_ms: 5_000,
             battery_floor_pct: 20,
         });
-        service.set_bootstrap_nodes(vec!["/dns4/bootstrap.example/tcp/443/wss".to_string()]);
 
         *service.swarm_headless_mode.lock() = Some(true);
         let headless_state = service.get_connection_path_state();
@@ -2319,7 +2169,7 @@ mod tests {
             headless_state, full_state,
             "connection-path semantics should not differ by role mode"
         );
-        assert_eq!(headless_state, ConnectionPathState::Bootstrapping);
+        assert_eq!(headless_state, ConnectionPathState::Disconnected);
     }
 
     #[test]
@@ -2458,15 +2308,14 @@ mod tests {
     }
 
     #[test]
-    fn test_connection_path_state_bootstrapping_without_peers() {
+    fn test_connection_path_state_disconnected_without_peers() {
         let svc = MeshService::new(MeshServiceConfig {
             discovery_interval_ms: 5_000,
             battery_floor_pct: 20,
         });
-        svc.set_bootstrap_nodes(vec!["/dns4/bootstrap.example/tcp/443/wss".to_string()]);
         assert_eq!(
             svc.get_connection_path_state(),
-            ConnectionPathState::Bootstrapping
+            ConnectionPathState::Disconnected
         );
     }
 

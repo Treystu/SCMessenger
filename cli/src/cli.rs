@@ -320,15 +320,4 @@ pub enum ConfigAction {
         key: String,
     },
     List,
-    Bootstrap {
-        #[command(subcommand)]
-        action: BootstrapAction,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum BootstrapAction {
-    Add { multiaddr: String },
-    Remove { multiaddr: String },
-    List,
 }

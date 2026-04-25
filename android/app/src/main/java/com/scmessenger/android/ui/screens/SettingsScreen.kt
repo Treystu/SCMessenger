@@ -36,6 +36,7 @@ fun SettingsScreen(
 ) {
     val meshSettings by settingsViewModel.settings.collectAsState()
     val identityInfo by settingsViewModel.identityInfo.collectAsState()
+    val hasIdentity by settingsViewModel.hasIdentity.collectAsState()
     val autoStart by settingsViewModel.autoStart.collectAsState()
     val notificationsEnabled by settingsViewModel.notificationsEnabled.collectAsState()
     val themeMode by settingsViewModel.themeMode.collectAsState()
@@ -68,6 +69,13 @@ fun SettingsScreen(
     // Reload identity when service comes online (identity may become available after startup)
     LaunchedEffect(serviceState) {
         if (serviceState == uniffi.api.ServiceState.RUNNING) {
+            settingsViewModel.loadIdentity()
+        }
+    }
+
+    // Reload identity when identity state changes (e.g. created from IdentityScreen)
+    LaunchedEffect(hasIdentity) {
+        if (hasIdentity) {
             settingsViewModel.loadIdentity()
         }
     }

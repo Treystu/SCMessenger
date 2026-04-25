@@ -78,7 +78,6 @@ class NetworkDiagnostics @Inject constructor(
         val domains = listOf(
             "google.com",
             "cloudflare.com",
-            "bootstrap.scmessenger.net",
             "relay.scmessenger.net"
         )
         return domains.associateWith { domain ->
@@ -107,12 +106,7 @@ class NetworkDiagnostics @Inject constructor(
     }
 
     private fun testRelaySpecificConnectivity(): Map<String, Boolean> {
-        val relayHosts = mapOf(
-            "GCP relay (34.135.34.73:9001)" to ("34.135.34.73" to 9001),
-            "GCP relay (34.135.34.73:443)" to ("34.135.34.73" to 443),
-            "OSX relay (104.28.216.43:9010)" to ("104.28.216.43" to 9010),
-            "bootstrap.scmessenger.net:443" to ("bootstrap.scmessenger.net" to 443)
-        )
+        val relayHosts = mapOf<String, Pair<String, Int>>()
         return relayHosts.mapValues { (_, hostPort) ->
             val (host, port) = hostPort
             try {

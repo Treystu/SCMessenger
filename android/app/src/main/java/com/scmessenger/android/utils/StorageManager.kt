@@ -15,6 +15,10 @@ object StorageManager {
     private const val LOG_MAX_HISTORY = 5
     private const val NOISY_STORAGE_THRESHOLD_BYTES = 100 * 1024 * 1024L // 100MB
 
+    // Critical files that must be protected from pruning
+    private const val IDENTITY_DB = "identity.db"
+    private const val IDENTITY_BACKUP_PREFS = "identity_backup_prefs.xml"
+
     /**
      * Performs maintenance tasks on application startup.
      * Consolidates logs, clears cache, and prunes noisy non-critical storage.
@@ -30,6 +34,9 @@ object StorageManager {
 
         // 3. Prune oversized non-critical storage
         pruneNoisyStorage(context)
+
+        // 4. Prune files older than 30 days (but protect critical files)
+        pruneOldFiles(context)
 
         Timber.d("Startup maintenance complete. Available storage: ${getAvailableStorageMB(context)} MB")
     }
@@ -95,6 +102,39 @@ object StorageManager {
                 if (size > NOISY_STORAGE_THRESHOLD_BYTES) {
                     Timber.w("Pruning noisy non-critical storage at '$path' (${size / 1024 / 1024} MB)")
                     dir.listFiles()?.forEach { it.delete() }
+                }
+            }
+        }
+    }
+
+    /**
+     * P0_ANDROID_IDENTITY_003: Prunes files older than 30 days while protecting critical data.
+     * Excludes: identity.db, identity_backup_prefs.xml (SharedPreferences backup)
+     */
+    private fun pruneOldFiles(context: Context) {
+        val filesDir = context.filesDir
+        val cutoffTime = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000) // 30 days ago
+
+        // List of protected critical files
+        val protectedFiles = setOf(IDENTITY_DB, IDENTITY_BACKUP_PREFS)
+
+        filesDir.listFiles()?.forEach { file ->
+            // Skip directories - we only prune files
+            if (file.isDirectory) return@forEach
+
+            // Skip protected files
+            if (protectedFiles.contains(file.name)) {
+                Timber.d("Skipping protected file: ${file.name}")
+                return@forEach
+            }
+
+            // Prune files older than 30 days
+            if (file.lastModified() < cutoffTime) {
+                try {
+                    Timber.d("Pruning old file: ${file.name} (modified: ${file.lastModified()})")
+                    file.delete()
+                } catch (e: Exception) {
+                    Timber.w(e, "Failed to prune old file: ${file.name}")
                 }
             }
         }

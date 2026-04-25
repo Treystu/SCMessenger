@@ -134,20 +134,51 @@ mod tests {
 
     #[test]
     fn test_envelope_roundtrip() {
-        let envelope = Envelope {
-            sender_public_key: vec![1u8; 32],
-            ephemeral_public_key: vec![2u8; 32],
-            nonce: vec![3u8; 24],
-            ciphertext: vec![4u8; 100],
+        // Test DriftEnvelope instead of deprecated Envelope
+        use crate::drift::DriftEnvelope;
+        use rand::RngCore;
+
+        // Create a DriftEnvelope directly
+        let mut rng = rand::thread_rng();
+        let mut sender_pk = [0u8; 32];
+        let mut ephemeral_pk = [0u8; 32];
+        let mut recipient_hint = [0u8; 4];
+        let mut nonce = [0u8; 24];
+        let mut signature = [0u8; 64];
+
+        rng.fill_bytes(&mut sender_pk);
+        rng.fill_bytes(&mut ephemeral_pk);
+        rng.fill_bytes(&mut recipient_hint);
+        rng.fill_bytes(&mut nonce);
+        rng.fill_bytes(&mut signature);
+
+        let ciphertext = vec![4u8; 100];
+
+        let drift_env = DriftEnvelope {
+            version: 1,
+            envelope_type: crate::drift::EnvelopeType::EncryptedMessage,
+            compressed: false,
+            message_id: [0u8; 16],
+            recipient_hint,
+            created_at: 1234567890,
+            ttl_expiry: 1234567990,
+            hop_count: 0,
+            priority: 0,
+            sender_public_key: sender_pk,
+            ephemeral_public_key: ephemeral_pk,
+            nonce,
+            signature,
+            ciphertext: ciphertext.clone(),
             ratchet_dh_public: None,
             ratchet_message_number: None,
         };
 
-        let bytes = encode_envelope(&envelope).unwrap();
-        let restored = decode_envelope(&bytes).unwrap();
+        // Test roundtrip
+        let bytes = drift_env.to_bytes().unwrap();
+        let restored = DriftEnvelope::from_bytes(&bytes).unwrap();
 
-        assert_eq!(envelope.sender_public_key, restored.sender_public_key);
-        assert_eq!(envelope.nonce, restored.nonce);
-        assert_eq!(envelope.ciphertext, restored.ciphertext);
+        assert_eq!(drift_env.sender_public_key, restored.sender_public_key);
+        assert_eq!(drift_env.nonce, restored.nonce);
+        assert_eq!(ciphertext, restored.ciphertext);
     }
 }

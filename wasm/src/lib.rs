@@ -5,6 +5,7 @@ pub mod daemon_bridge;
 pub mod notification_manager;
 pub mod transport;
 
+use anyhow::Error;
 use libp2p::{Multiaddr, PeerId};
 use parking_lot::Mutex;
 use scmessenger_core::{
@@ -678,7 +679,8 @@ impl IronCore {
         handle
             .subscribe_topic(topic)
             .await
-            .map_err(|e| js_value_from_str(&format!("Failed to subscribe topic: {}", e)))
+            .map_err(|e: anyhow::Error| js_value_from_str(&format!("Failed to subscribe topic: {}", e)))?;
+        Ok(())
     }
 
     /// Unsubscribe from a gossipsub topic.
@@ -693,7 +695,8 @@ impl IronCore {
         handle
             .unsubscribe_topic(topic)
             .await
-            .map_err(|e| js_value_from_str(&format!("Failed to unsubscribe topic: {}", e)))
+            .map_err(|e: anyhow::Error| js_value_from_str(&format!("Failed to unsubscribe topic: {}", e)))?;
+        Ok(())
     }
 
     /// Publish data to a gossipsub topic.
@@ -708,7 +711,8 @@ impl IronCore {
         handle
             .publish_topic(topic, data)
             .await
-            .map_err(|e| js_value_from_str(&format!("Failed to publish topic: {}", e)))
+            .map_err(|e: anyhow::Error| js_value_from_str(&format!("Failed to publish topic: {}", e)))?;
+        Ok(())
     }
 
     // ── Network Operations ───────────────────────────────────────────────
@@ -729,7 +733,8 @@ impl IronCore {
         handle
             .dial(addr)
             .await
-            .map_err(|e| js_value_from_str(&format!("Failed to dial: {}", e)))
+            .map_err(|e: anyhow::Error| js_value_from_str(&format!("Failed to dial: {}", e)))?;
+        Ok(())
     }
 
     /// Send data to all currently connected peers.
@@ -781,12 +786,12 @@ impl IronCore {
             .clone()
             .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
 
-        let listeners = handle
+        let listeners: Vec<Multiaddr> = handle
             .get_listeners()
             .await
-            .map_err(|e| js_value_from_str(&format!("Failed to get listeners: {}", e)))?;
+            .map_err(|e: anyhow::Error| js_value_from_str(&format!("Failed to get listeners: {}", e)))?;
 
-        let listener_strings: Vec<String> = listeners.into_iter().map(|a| a.to_string()).collect();
+        let listener_strings: Vec<String> = listeners.into_iter().map(|a: Multiaddr| a.to_string()).collect();
         serde_wasm_bindgen::to_value(&listener_strings)
             .map_err(|e| js_value_from_str(&format!("Failed to serialize listeners: {}", e)))
     }
@@ -1595,7 +1600,7 @@ async fn start_swarm_runtime(
         .collect::<Result<Vec<_>, _>>()?;
 
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(100);
-    let handle = scmessenger_core::transport::start_swarm_with_config(
+    let handle: scmessenger_core::transport::SwarmHandle = scmessenger_core::transport::start_swarm_with_config(
         libp2p_keys,
         None,
         event_tx,
@@ -1606,11 +1611,11 @@ async fn start_swarm_runtime(
         headless_mode,
     )
     .await
-    .map_err(|e| js_value_from_str(&format!("Failed to start swarm: {}", e)))?;
+    .map_err(|e: anyhow::Error| js_value_from_str(&format!("Failed to start swarm: {}", e)))?;
 
     *swarm_handle.lock() = Some(handle);
 
-    let swarm_handle_for_loop = Arc::clone(&swarm_handle);
+    let swarm_handle_for_loop: Arc<Mutex<Option<scmessenger_core::transport::SwarmHandle>>> = Arc::clone(&swarm_handle);
     wasm_bindgen_futures::spawn_local(async move {
         while let Some(event) = event_rx.recv().await {
             match event {
@@ -1682,7 +1687,7 @@ fn resolve_swarm_keypair_and_mode(
     inner: &RustIronCore,
 ) -> Result<(libp2p::identity::Keypair, bool), JsValue> {
     if let Some(identity_keys) = inner.get_identity_keys() {
-        let libp2p_keys: libp2p::identity::Keypair = identity_keys.to_libp2p_keypair().map_err(|e| {
+        let libp2p_keys: libp2p::identity::Keypair = identity_keys.to_libp2p_keypair().map_err(|e: Error| {
             js_value_from_str(&format!(
                 "Failed to derive libp2p keypair from identity: {}",
                 e

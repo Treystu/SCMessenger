@@ -42,7 +42,7 @@ class MainViewModel @Inject constructor(
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = false
+        initialValue = true
     )
 
     private val _isCreatingIdentity = MutableStateFlow(false)
@@ -141,8 +141,13 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Create a new identity with retry logic for _isReady verification.
+     * Issue #5: Added retry/verify loop to ensure _isReady reflects actual state
+     * after identity creation (service may still be starting when first checked).
+     */
     fun createIdentity(nickname: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             _isCreatingIdentity.value = true
             _identityError.value = null
             try {
@@ -158,14 +163,29 @@ class MainViewModel @Inject constructor(
                 meshRepository.setNickname(trimmedNickname)
 
                 // Verify nickname persisted (defensive: catch silent Rust-core failures)
-                val info = meshRepository.getIdentityInfo()
+                var info = meshRepository.getIdentityInfo()
                 if (info?.nickname.isNullOrBlank()) {
                     Timber.w("Nickname was blank after setNickname; retrying once")
                     meshRepository.setNickname(trimmedNickname)
+                    info = meshRepository.getIdentityInfo()
                 }
 
-                val initialized = meshRepository.isIdentityInitialized()
-                Timber.i("Identity creation result initialized: $initialized; nickname=${info?.nickname}")
+                // Issue #5: Retry loop for _isReady verification
+                // The service may still be starting, so we poll for up to 2 seconds
+                // to ensure _isReady accurately reflects the identity state.
+                var initialized = meshRepository.isIdentityInitialized()
+                var retryCount = 0
+                val maxRetries = 5
+                val retryDelayMs = 100L
+
+                while (!initialized && retryCount < maxRetries) {
+                    kotlinx.coroutines.delay(retryDelayMs)
+                    initialized = meshRepository.isIdentityInitialized()
+                    retryCount++
+                    Timber.d("isIdentityInitialized retry $retryCount/$maxRetries: $initialized")
+                }
+
+                Timber.i("Identity creation result initialized: $initialized; nickname=${info?.nickname}; retries=$retryCount")
                 _isReady.value = initialized
                 if (_isReady.value) {
                     preferencesRepository.setOnboardingCompleted(true)

@@ -12,10 +12,6 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
-    /// Bootstrap nodes for initial network connection
-    #[serde(default)]
-    pub bootstrap_nodes: Vec<String>,
-
     /// Default port for listening
     #[serde(default)]
     pub listen_port: u16,
@@ -35,6 +31,10 @@ pub struct Config {
     /// Network settings
     #[serde(default)]
     pub network: NetworkConfig,
+
+    /// User-configured bootstrap nodes (community ledger)
+    #[serde(default)]
+    pub bootstrap_nodes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,12 +60,12 @@ pub struct NetworkConfig {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            bootstrap_nodes: crate::bootstrap::default_bootstrap_nodes(),
             listen_port: 9000, // Default to 9000 instead of random
             enable_mdns: true,
             enable_dht: true,
             storage_path: None,
             network: NetworkConfig::default(),
+            bootstrap_nodes: Vec::new(), // No hardcoded bootstrap nodes (community ledger)
         }
     }
 }
@@ -118,12 +118,8 @@ impl Config {
         if config_file.exists() {
             let contents =
                 std::fs::read_to_string(&config_file).context("Failed to read config file")?;
-            let mut config: Config =
+            let config: Config =
                 serde_json::from_str(&contents).context("Failed to parse config file")?;
-
-            // Merge with default bootstrap nodes (in case new defaults were added)
-            config.bootstrap_nodes =
-                crate::bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes);
 
             Ok(config)
         } else {
@@ -139,22 +135,6 @@ impl Config {
         let config_file = Self::config_file()?;
         let contents = serde_json::to_string_pretty(self).context("Failed to serialize config")?;
         std::fs::write(&config_file, contents).context("Failed to write config file")?;
-        Ok(())
-    }
-
-    /// Add a bootstrap node
-    pub fn add_bootstrap_node(&mut self, node: String) -> Result<()> {
-        if !self.bootstrap_nodes.contains(&node) {
-            self.bootstrap_nodes.push(node);
-            self.save()?;
-        }
-        Ok(())
-    }
-
-    /// Remove a bootstrap node
-    pub fn remove_bootstrap_node(&mut self, node: &str) -> Result<()> {
-        self.bootstrap_nodes.retain(|n| n != node);
-        self.save()?;
         Ok(())
     }
 
@@ -190,6 +170,16 @@ impl Config {
             "enable_relay" => {
                 self.network.enable_relay = value.parse().context("Invalid boolean value")?;
             }
+            "bootstrap_node_add" => {
+                if !value.is_empty() {
+                    self.bootstrap_nodes.push(value.to_string());
+                }
+            }
+            "bootstrap_node_remove" => {
+                if !value.is_empty() {
+                    self.bootstrap_nodes.retain(|n| n != value);
+                }
+            }
             _ => anyhow::bail!("Unknown config key: {}", key),
         }
         self.save()?;
@@ -207,6 +197,7 @@ impl Config {
             "connection_timeout" => Some(self.network.connection_timeout.to_string()),
             "enable_nat_traversal" => Some(self.network.enable_nat_traversal.to_string()),
             "enable_relay" => Some(self.network.enable_relay.to_string()),
+            "bootstrap_nodes" => Some(self.bootstrap_nodes.join(",")),
             _ => None,
         }
     }
@@ -238,9 +229,49 @@ impl Config {
             ),
             (
                 "bootstrap_nodes".to_string(),
-                self.bootstrap_nodes.len().to_string(),
+                self.bootstrap_nodes.join(","),
             ),
         ]
+    }
+
+    /// Helper to strip /p2p/PeerID suffix from a multiaddr string
+    fn strip_peer_id(multiaddr: &str) -> String {
+        if let Some(idx) = multiaddr.find("/p2p/") {
+            multiaddr[..idx].to_string()
+        } else {
+            multiaddr.to_string()
+        }
+    }
+
+    /// Add a bootstrap node to the config
+    pub fn add_bootstrap_node(&mut self, multiaddr: String) -> Result<()> {
+        // Check for duplicates by IP:Port only (strip PeerID)
+        let stripped = Self::strip_peer_id(&multiaddr);
+        if self.bootstrap_nodes.iter().any(|n| {
+            Self::strip_peer_id(n) == stripped
+        }) {
+            anyhow::bail!("Bootstrap node already exists");
+        }
+        self.bootstrap_nodes.push(multiaddr);
+        self.save()?;
+        Ok(())
+    }
+
+    /// Remove a bootstrap node from the config
+    pub fn remove_bootstrap_node(&mut self, multiaddr: &str) -> Result<()> {
+        let stripped = Self::strip_peer_id(multiaddr);
+        let removed_count = self.bootstrap_nodes
+            .iter()
+            .filter(|n| Self::strip_peer_id(n) == stripped)
+            .count();
+        if removed_count == 0 {
+            anyhow::bail!("Bootstrap node not found");
+        }
+        self.bootstrap_nodes.retain(|n| {
+            Self::strip_peer_id(n) != stripped
+        });
+        self.save()?;
+        Ok(())
     }
 }
 
@@ -254,11 +285,6 @@ mod tests {
         assert_eq!(config.listen_port, 9000);
         assert!(config.enable_mdns);
         assert!(config.enable_dht);
-        // Should have embedded bootstrap nodes
-        assert!(
-            !config.bootstrap_nodes.is_empty(),
-            "Default config should include bootstrap nodes"
-        );
     }
 
     #[test]

@@ -597,12 +597,13 @@ mod tests {
     fn test_connection_stats_quality_score() {
         let peer_id = identity::Keypair::generate_ed25519().public().to_peer_id();
         let mut stats = ConnectionStats::new(peer_id);
-        
+
         // Simulate good connection
+        stats.update_state(ConnectionState::Connected);
         stats.record_successful_connection();
         stats.record_message_success(1024, 50);
         stats.record_message_success(2048, 60);
-        
+
         let score = stats.quality_score();
         assert!(score > 0.8, "Good connection should have high quality score");
         assert!(stats.is_healthy(), "Good connection should be healthy");

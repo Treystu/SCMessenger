@@ -60,82 +60,11 @@ open class MeshRepository(private val context: Context) {
          *  block TCP on non-standard ports but allow UDP. The swarm automatically
          *  binds both TCP and QUIC listeners, so we advertise both endpoints.
          */
-        private val STATIC_BOOTSTRAP_NODES: List<String> = listOf(
-            // GCP relay — QUIC/UDP (cellular-friendly, primary)
-            "/ip4/34.135.34.73/udp/9001/quic-v1/p2p/12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw",
-            // GCP relay — TCP (fallback for WiFi/enterprise networks)
-            "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw",
-            // OSX home relay — QUIC/UDP (cellular-friendly)
-            "/ip4/104.28.216.43/udp/9010/quic-v1/p2p/12D3KooWHpmuhytgzLcM4nj1hZvN5b4crB1wka3LCNfKRCd7yHj9",
-            // OSX home relay — TCP (fallback)
-            "/ip4/104.28.216.43/tcp/9010/p2p/12D3KooWHpmuhytgzLcM4nj1hZvN5b4crB1wka3LCNfKRCd7yHj9"
-        )
-
-        /**
-         * P0_NETWORK_001: WebSocket fallback bootstrap nodes on standard ports.
-         * These bypass carrier-level port filtering on cellular networks
-         * that block non-standard ports like 9001/9010.
-         */
-        private val WEBSOCKET_FALLBACK_NODES: List<String> = listOf(
-            // WebSocket on standard HTTPS port (most likely to bypass filtering)
-            "/dns4/bootstrap.scmessenger.net/tcp/443/ws/p2p/12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw",
-            // WebSocket on standard HTTP port
-            "/dns4/bootstrap.scmessenger.net/tcp/80/ws/p2p/12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw"
-        )
-
-        /**
-         * P0_ANDROID_017: Cached static bootstrap nodes to prevent blocking network I/O on Settings ANR.
-         * Lazy initialization of DEFAULT_BOOTSTRAP_NODES was causing UI thread blocking because:
-         * 1. BootstrapResolver.resolve() calls out to network on first access
-         * 2. RemoteConfigBootstrapSource does blocking HTTP on calling thread
-         * Solution: Pre-populate with static fallback immediately, defer remote fetch to background.
-         */
-        private val cachedBootstrapNodes: List<String> by lazy {
-            Timber.d("Pre-populating static bootstrap nodes (no network I/O)")
-            STATIC_BOOTSTRAP_NODES
-        }
-
-        /**
-         * Resolve bootstrap nodes using the core BootstrapResolver.
-         * Priority: SC_BOOTSTRAP_NODES env var → remote URL → static fallback.
-         * Returns cached static nodes immediately; remote fetch happens in background.
-         */
-        val DEFAULT_BOOTSTRAP_NODES: List<String>
-            get() = cachedBootstrapNodes
-
-        /**
-         * P0_ANDROID_007: Implement diverse bootstrap source strategies.
-         * Resolves nodes from environment, remote config, and static fallback.
-         * DEPRECATED: Use cachedBootstrapNodes for Settings screen to avoid blocking I/O.
-         */
-        @Deprecated("Causes ANR - use cachedBootstrapNodes instead")
-        internal suspend fun resolveAllBootstrapSourcesAsync(): List<String> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val sources = listOf(
-                EnvironmentBootstrapSource(),
-                StaticBootstrapSource()
-                // REMOTE CONFIG REMOVED - causes blocking network I/O on calling thread
-                // RemoteConfigBootstrapSource("https://bootstrap.scmessenger.net/nodes.json")
-            )
-
-            for (source in sources) {
-                try {
-                    val nodes = source.getBootstrapNodes()
-                    if (nodes.isNotEmpty()) {
-                        Timber.i("Using bootstrap source: ${source.name} with ${nodes.size} nodes")
-                        return@withContext nodes
-                    }
-                } catch (e: Exception) {
-                    Timber.w("Bootstrap source ${source.name} failed: ${e.message}")
-                }
-            }
-            STATIC_BOOTSTRAP_NODES
-        }
-
         /**
          * ANR FIX: Get bootstrap nodes synchronously without network I/O.
          * Used by Settings screen to avoid UI thread blocking.
          */
-        fun getBootstrapNodesForSettings(): List<String> = cachedBootstrapNodes
+        fun getBootstrapNodesForSettings(): List<String> = emptyList()
 
         interface BootstrapSource {
             val name: String
@@ -148,14 +77,6 @@ open class MeshRepository(private val context: Context) {
                 val env = System.getenv("SC_BOOTSTRAP_NODES") ?: return emptyList()
                 return env.split(",").map { it.trim() }.filter { it.isNotEmpty() }
             }
-        }
-
-        /**
-         * ANR FIX: StaticBootstrapSource returns immediately without any network I/O.
-         */
-        class StaticBootstrapSource : BootstrapSource {
-            override val name = "StaticFallback"
-            override fun getBootstrapNodes(): List<String> = STATIC_BOOTSTRAP_NODES
         }
 
         internal fun isMeshParticipationEnabled(settings: uniffi.api.MeshSettings?): Boolean {
@@ -265,7 +186,7 @@ open class MeshRepository(private val context: Context) {
         }
         try {
             Timber.w("Node $failedNodeId marked unreachable, triggering fallback protocol")
-            val fallbackNodes = resolveAllBootstrapSourcesAsync()
+            val fallbackNodes = emptyList<String>()
             if (fallbackNodes.isNotEmpty()) {
                 Timber.i("Fallback protocol: ${fallbackNodes.size} alternative bootstrap nodes available")
                 val bridge = swarmBridge ?: return
@@ -2879,8 +2800,6 @@ open class MeshRepository(private val context: Context) {
 
         try {
             ensureLocalIdentityFederation()
-            // Configure bootstrap nodes for NAT traversal
-            meshService?.setBootstrapNodes(DEFAULT_BOOTSTRAP_NODES)
             // Initiate swarm in Rust core.
             // Core auto-selects headless mode when identity is absent and upgrades when identity appears.
             // P0_TRANSPORT_001: Use static port 9001 for LAN connectivity with CLI daemon.
@@ -2969,6 +2888,17 @@ open class MeshRepository(private val context: Context) {
             val committed = identityBackupPrefs.edit().putString(IDENTITY_BACKUP_KEY, backup).commit()
             if (!committed) {
                 Timber.e("Failed to commit identity backup to SharedPreferences")
+            }
+
+            // P0_ANDROID_IDENTITY_003: Create disk-based sentinel file as backup redundancy.
+            // If SharedPreferences backup is lost (app data clear, migration, corruption),
+            // the sentinel file serves as a secondary indicator of prior identity creation.
+            val sentinelFile = File(storagePath, IDENTITY_BACKUP_PREFS + ".sentinel")
+            try {
+                sentinelFile.createNewFile()
+                Timber.d("Created identity backup sentinel file")
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to create identity backup sentinel file")
             }
         } catch (e: Exception) {
             Timber.w("Failed to persist identity backup payload: ${e.message}")
@@ -3895,6 +3825,13 @@ open class MeshRepository(private val context: Context) {
     suspend fun dialPeer(multiaddr: String) = dial(multiaddr)
 
     // Identity Management
+    /**
+     * P0_ANDROID_IDENTITY_003: Hardened identity detection with redundant backup mechanisms.
+     * Uses a multi-tier approach:
+     * 1. SharedPreferences backup (fast path)
+     * 2. Disk-based sentinel file (fallback for SharedPreferences loss)
+     * 3. Rust core identity database check (authoritative)
+     */
     fun isIdentityInitialized(): Boolean {
         // Check if we have an identity backup first (fast path)
         if (identityBackupPrefs.contains(IDENTITY_BACKUP_KEY)) {
@@ -3917,6 +3854,15 @@ open class MeshRepository(private val context: Context) {
                     }
                 }
             }
+            return true
+        }
+
+        // P0_ANDROID_IDENTITY_003: Fallback - check for disk-based sentinel file
+        // If SharedPreferences backup is lost (app data clear, migration, corruption),
+        // check for the sentinel file as a secondary indicator of prior identity creation.
+        val sentinelFile = File(storagePath, IDENTITY_BACKUP_PREFS + ".sentinel")
+        if (sentinelFile.exists()) {
+            Timber.i("Identity backup sentinel file found, identity exists")
             return true
         }
 
@@ -6987,11 +6933,7 @@ open class MeshRepository(private val context: Context) {
         val circuits = mutableListOf<String>()
 
         // 1. Static Bootstrap Relays (prioritized by network type)
-        val prioritizedNodes = if (networkDetector.isCellularNetwork) {
-            WEBSOCKET_FALLBACK_NODES + DEFAULT_BOOTSTRAP_NODES
-        } else {
-            DEFAULT_BOOTSTRAP_NODES + WEBSOCKET_FALLBACK_NODES
-        }
+        val prioritizedNodes = emptyList<String>()
 
         prioritizedNodes.forEach { bootstrap ->
             val relayInfo = parseBootstrapRelay(bootstrap)
@@ -7032,9 +6974,7 @@ open class MeshRepository(private val context: Context) {
 
     fun isBootstrapRelayPeer(peerId: String): Boolean {
         if (peerId.isBlank()) return false
-        return DEFAULT_BOOTSTRAP_NODES.any { addr ->
-            parseBootstrapRelay(addr)?.second == peerId
-        }
+        return false
     }
 
     /**
@@ -7168,12 +7108,7 @@ open class MeshRepository(private val context: Context) {
             networkDetector.networkType.value, isCellular, transportPriority)
 
         // Build address list: primary nodes + WebSocket fallback if cellular
-        val addresses = if (isCellular) {
-            // On cellular, prioritize WebSocket on standard ports first
-            WEBSOCKET_FALLBACK_NODES + DEFAULT_BOOTSTRAP_NODES
-        } else {
-            DEFAULT_BOOTSTRAP_NODES + WEBSOCKET_FALLBACK_NODES
-        }
+        val addresses = emptyList<String>()
 
         var anySuccess = false
         for (addr in addresses) {
@@ -7222,7 +7157,7 @@ open class MeshRepository(private val context: Context) {
         if (nowMs - lastRelayBootstrapDialMs < 10_000L) return
         lastRelayBootstrapDialMs = nowMs
 
-        DEFAULT_BOOTSTRAP_NODES.forEach { addr ->
+        emptyList<String>().forEach { addr ->
             try {
                 if (!shouldAttemptDial(addr)) return@forEach
                 bridge.dial(addr)
@@ -7280,14 +7215,8 @@ open class MeshRepository(private val context: Context) {
         relayCircuitBreaker.resetAll()
 
         // Build prioritized address list based on network type
-        // P0_ANDROID_007: Use resolveAllBootstrapSources() to try environment, remote, then static fallbacks
-        val baseNodes = resolveAllBootstrapSourcesAsync() + WEBSOCKET_FALLBACK_NODES
-        val prioritizedAddresses = if (networkDetector.isCellularNetwork) {
-            // On cellular, WebSocket on standard ports first (carriers block non-standard ports)
-            WEBSOCKET_FALLBACK_NODES + baseNodes.filter { it !in WEBSOCKET_FALLBACK_NODES }
-        } else {
-            baseNodes
-        }
+        val baseNodes = emptyList<String>()
+        val prioritizedAddresses = emptyList<String>()
 
         // Proactively probe known relay ports to deprioritize blocked addresses
         val probeTargets = listOf(

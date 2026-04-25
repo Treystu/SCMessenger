@@ -1,0 +1,5 @@
+AGENT_ID=implementer_1777060639
+AGENT_MODEL=qwen3-coder-next:cloud
+OLLAMA_HOST=localhost:11434
+WORKING_DIR=/c/Users/kanal/Documents/SCMessenger/SCMessenger
+START_TIME=1777060641

@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.scmessenger.android.data.MeshRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -44,7 +46,7 @@ class IdentityViewModel @Inject constructor(
      * Load identity information.
      */
     fun loadIdentity() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 _isLoading.value = true
                 _error.value = null
@@ -69,14 +71,21 @@ class IdentityViewModel @Inject constructor(
     /**
      * Create a new identity (first-time setup).
      */
-    fun createIdentity() {
-        viewModelScope.launch {
+    fun createIdentity(nickname: String? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 _isLoading.value = true
                 _error.value = null
 
                 meshRepository.createIdentity()
-                loadIdentity()
+
+                // Set nickname after creation if provided
+                if (nickname != null && nickname.isNotBlank()) {
+                    meshRepository.setNickname(nickname)
+                }
+
+                // Inline loadIdentity to avoid race with _successMessage
+                _identityInfo.value = meshRepository.getIdentityInfo()
 
                 _successMessage.value = "Identity created successfully"
                 Timber.i("Identity created")
@@ -92,15 +101,18 @@ class IdentityViewModel @Inject constructor(
     /**
      * Get QR code data for sharing identity.
      * Returns canonical identity export JSON so contact imports fully autofill.
+     * Suspend function to avoid blocking Main thread on FFI calls.
      */
-    fun getQrCodeData(): String? {
-        return try {
-            val identity = _identityInfo.value ?: return null
-            if (!identity.initialized) return null
-            meshRepository.getIdentityExportString()
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to generate QR code data")
-            null
+    suspend fun getQrCodeData(): String? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val identity = _identityInfo.value ?: return@withContext null
+                if (!identity.initialized) return@withContext null
+                meshRepository.getIdentityExportString()
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to generate QR code data")
+                null
+            }
         }
     }
 

@@ -10,6 +10,7 @@ import com.scmessenger.android.ui.diagnostics.DiagnosticsBundleFormatter
 import com.scmessenger.android.ui.diagnostics.DiagnosticsBundleInput
 import com.scmessenger.android.utils.Permissions
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -123,6 +124,8 @@ class SettingsViewModel @Inject constructor(
     // Identity
     private val _identityInfo = MutableStateFlow<uniffi.api.IdentityInfo?>(null)
     val identityInfo: StateFlow<uniffi.api.IdentityInfo?> = _identityInfo.asStateFlow()
+    val hasIdentity: StateFlow<Boolean> = _identityInfo.map { it?.initialized == true }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     // Import result
     private val _importResult = MutableStateFlow<String?>(null)
@@ -278,7 +281,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun updateNickname(name: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 meshRepository.setNickname(name)
                 loadIdentity() // Refresh to reflect change

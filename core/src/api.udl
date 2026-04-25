@@ -329,11 +329,6 @@ interface MeshService {
     void start_swarm(string listen_addr);
     SwarmBridge get_swarm_bridge();
 
-    /// Configure bootstrap nodes for NAT traversal and internet roaming.
-    /// These are multiaddr strings like "/ip4/1.2.3.4/tcp/4001" or
-    /// "/dns4/bootstrap.scmessenger.net/tcp/4001".
-    void set_bootstrap_nodes(sequence<string> addrs);
-
     /// Get the current NAT status as a string: "open", "restricted", "symmetric", or "unknown".
     string get_nat_status();
     ConnectionPathState get_connection_path_state();
@@ -447,37 +442,6 @@ interface MeshSettingsManager {
     void validate(MeshSettings settings);
 
     MeshSettings default_settings();
-};
-
-// ============================================================================
-// BOOTSTRAP CONFIGURATION
-// ============================================================================
-
-// Bootstrap resolution order: env_override → remote_url fetch → static_nodes fallback.
-// The BootstrapResolver deterministically applies this priority chain.
-dictionary BootstrapConfig {
-    // Static fallback multiaddr strings (always consulted if env/remote are empty).
-    sequence<string> static_nodes;
-    // Optional remote URL to fetch a JSON array of multiaddr strings.
-    // Fetched with a timeout of `fetch_timeout_secs`; on failure, falls back to static_nodes.
-    string? remote_url;
-    // Timeout for the remote fetch, in seconds (default: 5).
-    u32 fetch_timeout_secs;
-    // Optional environment variable name containing a comma-separated list of multiaddrs.
-    // If set and non-empty, this overrides both remote_url and static_nodes.
-    string? env_override_key;
-};
-
-interface BootstrapResolver {
-    constructor(BootstrapConfig config);
-
-    /// Resolve bootstrap nodes using the priority chain: env → remote → static.
-    /// This is a synchronous, deterministic resolution (remote fetch is attempted
-    /// but falls back on timeout/error). Call this once at startup.
-    sequence<string> resolve();
-
-    /// Return the raw static fallback list without env/remote resolution.
-    sequence<string> static_fallback();
 };
 
 // ============================================================================

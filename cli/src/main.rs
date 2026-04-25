@@ -5,7 +5,6 @@
 mod api;
 mod ble_daemon;
 mod ble_mesh;
-mod bootstrap;
 mod config;
 mod ledger;
 mod server;
@@ -51,7 +50,7 @@ fn load_or_create_headless_network_keypair(
     }
 
     // Key file absent or corrupt — try migrating from IronCore identity to
-    // preserve the relay PeerId across upgrades (avoids breaking pinned bootstrap addrs).
+    // preserve the relay PeerId across upgrades.
     if let Ok(keypair) = core.get_libp2p_keypair() {
         tracing::info!("Migrating relay network key from existing IronCore identity");
         if let Ok(encoded) = keypair.to_protobuf_encoding() {
@@ -129,7 +128,7 @@ enum Commands {
         #[arg(short, long)]
         port: Option<u16>,
     },
-    /// Run headless relay/bootstrap node (no interactive console)
+    /// Run headless relay node (no interactive console)
     Relay {
         /// P2P listen multiaddr (default: /ip4/0.0.0.0/tcp/9001)
         #[arg(short, long, default_value = "/ip4/0.0.0.0/tcp/9001")]
@@ -309,17 +308,6 @@ enum ConfigAction {
     Get {
         key: String,
     },
-    List,
-    Bootstrap {
-        #[command(subcommand)]
-        action: BootstrapAction,
-    },
-}
-
-#[derive(Subcommand)]
-enum BootstrapAction {
-    Add { multiaddr: String },
-    Remove { multiaddr: String },
     List,
 }
 
@@ -633,20 +621,6 @@ fn print_full_identity(core: &IronCore, config: &config::Config) -> Result<()> {
     );
 
     println!();
-    println!("{}", "Relays / Bootstrap Nodes".bold());
-    let nodes = if config.bootstrap_nodes.is_empty() {
-        crate::bootstrap::default_bootstrap_nodes()
-    } else {
-        crate::bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes.clone())
-    };
-
-    if nodes.is_empty() {
-        println!("  (None configured)");
-    } else {
-        for (i, node) in nodes.iter().enumerate() {
-            println!("  {}. {}", i + 1, node.dimmed());
-        }
-    }
 
     Ok(())
 }
@@ -906,39 +880,7 @@ async fn cmd_config(action: ConfigAction) -> Result<()> {
                 println!("  {:<20} {}", key.bright_cyan(), value);
             }
 
-            println!();
-            println!("{}", "Bootstrap nodes:".bold());
-            if config.bootstrap_nodes.is_empty() {
-                println!("  {}", "(none configured)".dimmed());
-            } else {
-                for (i, node) in config.bootstrap_nodes.iter().enumerate() {
-                    println!("  {}. {}", i + 1, node);
-                }
-            }
         }
-
-        ConfigAction::Bootstrap { action } => match action {
-            BootstrapAction::Add { multiaddr } => {
-                config.add_bootstrap_node(multiaddr.clone())?;
-                println!("{} Added bootstrap node: {}", "✓".green(), multiaddr);
-            }
-
-            BootstrapAction::Remove { multiaddr } => {
-                config.remove_bootstrap_node(&multiaddr)?;
-                println!("{} Removed bootstrap node", "✓".green());
-            }
-
-            BootstrapAction::List => {
-                println!("{}", "Bootstrap Nodes".bold());
-                if config.bootstrap_nodes.is_empty() {
-                    println!("  {}", "(none configured)".dimmed());
-                } else {
-                    for (i, node) in config.bootstrap_nodes.iter().enumerate() {
-                        println!("  {}. {}", i + 1, node);
-                    }
-                }
-            }
-        },
     }
 
     Ok(())
@@ -1107,12 +1049,6 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     // intentional to unify identity and network IDs, but may require updating
     // peer expectations/ledgers on migration.
 
-    // ── Seed ledger with bootstrap nodes (after local_peer_id is available) ────
-    let all_bootstrap = bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes.clone());
-    for node in &all_bootstrap {
-        connection_ledger.add_bootstrap(node, Some(&local_peer_id.to_string()));
-    }
-
     println!("{} Peer ID: {}", "✓".green(), local_peer_id);
     println!();
 
@@ -1130,7 +1066,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let web_ctx = Arc::new(server::WebContext {
         node_peer_id: local_peer_id.to_string(),
         node_public_key: info.public_key_hex.clone().unwrap_or_default(),
-        bootstrap_nodes: all_bootstrap.clone(),
+        bootstrap_nodes: config.bootstrap_nodes.clone(),
         ledger: ledger.clone(),
         peers: peers.clone(),
         start_time: std::time::Instant::now(),
@@ -1171,8 +1107,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     }
 
     // Subscribe to default topics
-    for topic in bootstrap::default_topics() {
-        let _ = swarm_handle.subscribe_topic(topic).await;
+    for topic in ["sc-lobby", "sc-mesh"] {
+        let _ = swarm_handle.subscribe_topic(topic.to_string()).await;
     }
 
     println!();
@@ -1199,9 +1135,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         ble_mesh::run_ble_peripheral_advertising(core_ble_adv).await;
     });
 
-    // ── Promiscuous Bootstrap Dialing ────────────────────────────────────
-    // Dial bootstrap nodes by IP:Port ONLY (stripped of PeerID).
-    // Also dial any peers from the persistent ledger that pass backoff.
+    // ── Dial known peers from persistent ledger ──────────────────────────
+    // Dial any peers from the persistent ledger that pass backoff.
     {
         println!();
         println!(
@@ -1749,12 +1684,12 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                 }
                             }
                             server::UiCommand::ConfigBootstrapAdd { multiaddr } => {
-                                 if let Ok(mut cfg) = config::Config::load() {
-                                    let _ = cfg.add_bootstrap_node(multiaddr);
+                                if let Ok(mut cfg) = config::Config::load() {
+                                    let _ = cfg.add_bootstrap_node(multiaddr.clone());
                                 }
                             }
                             server::UiCommand::ConfigBootstrapRemove { multiaddr } => {
-                                 if let Ok(mut cfg) = config::Config::load() {
+                                if let Ok(mut cfg) = config::Config::load() {
                                     let _ = cfg.remove_bootstrap_node(&multiaddr);
                                 }
                             }
@@ -2003,7 +1938,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
 
     // Load config for bootstrap nodes
     let config = config::Config::load()?;
-    let all_bootstrap = bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes.clone());
+    let all_bootstrap = config.bootstrap_nodes.clone();
     println!(
         "  Bootstrap:    {} node(s)",
         all_bootstrap.len().to_string().bright_cyan()
@@ -2058,8 +1993,9 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     for topic in known_topics {
         let _ = swarm_handle.subscribe_topic(topic).await;
     }
-    for topic in bootstrap::default_topics() {
-        let _ = swarm_handle.subscribe_topic(topic).await;
+    // Subscribe to default topics (hardcoded - matches bootstrap.rs)
+    for topic in ["sc-lobby", "sc-mesh"] {
+        let _ = swarm_handle.subscribe_topic(topic.to_string()).await;
     }
     println!("{} Subscribed to mesh topics", "✓".green());
 

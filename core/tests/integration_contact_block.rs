@@ -70,11 +70,11 @@ fn test_blocked_message_persisted_but_hidden() {
         .expect("prepare_message must succeed");
 
     // Bob blocks Alice BEFORE receiving the message.
-    bob.block_peer(alice_id.clone(), Some("test block".to_string()))
+    bob.block_peer(alice_id.clone(), None, Some("test block".to_string()))
         .expect("block_peer must succeed");
 
     assert!(
-        bob.is_peer_blocked(alice_id.clone())
+        bob.is_peer_blocked(alice_id.clone(), None)
             .expect("is_peer_blocked must succeed"),
         "Alice must be marked as blocked on Bob's node"
     );
@@ -150,7 +150,7 @@ fn test_unblock_restores_hidden_message_visibility() {
         .prepare_message(pubkey(&bob), plaintext.to_string(), None)
         .expect("prepare_message must succeed");
 
-    bob.block_peer(alice_id.clone(), None)
+    bob.block_peer(alice_id.clone(), None, None)
         .expect("block_peer must succeed");
 
     bob.receive_message(envelope)
@@ -166,11 +166,11 @@ fn test_unblock_restores_hidden_message_visibility() {
     assert!(hidden_records[0].hidden, "record must be marked hidden");
 
     // Unblock Alice — this must unhide all her retained messages.
-    bob.unblock_peer(alice_id.clone())
+    bob.unblock_peer(alice_id.clone(), None)
         .expect("unblock_peer must succeed");
 
     assert!(
-        !bob.is_peer_blocked(alice_id.clone())
+        !bob.is_peer_blocked(alice_id.clone(), None)
             .expect("is_peer_blocked must succeed"),
         "Alice must be unblocked"
     );
@@ -231,7 +231,7 @@ fn test_block_and_delete_purges_messages_and_drops_future_payloads() {
     );
 
     // --- Action: block AND delete Alice ---
-    bob.block_and_delete_peer(alice_id.clone(), Some("permanent block".to_string()))
+    bob.block_and_delete_peer(alice_id.clone(), None, Some("permanent block".to_string()))
         .expect("block_and_delete_peer must succeed");
 
     // 3a. Existing messages must be purged.

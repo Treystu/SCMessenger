@@ -7,7 +7,8 @@
       "Bash(rm -rf .claude/agents/security-auditor_1776429958)",
       "Bash(rm -rf \".claude/agents/implementer_1776734222\")",
       "Bash(./.claude/orchestrator_manager.sh pool *)",
-      "Bash(xargs ls *)"
+      "Bash(xargs ls *)",
+      "WebFetch(domain:ollama.com)"
     ]
   }
 }
