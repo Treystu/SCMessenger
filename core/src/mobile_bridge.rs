@@ -539,6 +539,7 @@ impl MeshService {
         let nat_status = self.nat_status.clone();
         let swarm_mode_state = self.swarm_headless_mode.clone();
         let service_storage_path = self.storage_path.clone();
+        let stats = self.stats.clone();
 
         // Spawn a dedicated OS thread that owns its own Tokio runtime.
         // This is the safest approach for mobile: we cannot rely on being
@@ -608,17 +609,39 @@ impl MeshService {
                                                 if let Some(core_ref) = core_guard.as_ref() {
                                                     match core_ref.receive_message(envelope_data.clone()) {
                                                         Ok(msg) => {
-                                                            tracing::info!(
-                                                                "Received message {} from {}",
-                                                                msg.id,
-                                                                peer_id
-                                                            );
-                                                            eprintln!(
-                                                                "[IronCore] ✓ Received message {} from {} (type={:?})",
-                                                                msg.id,
-                                                                peer_id,
-                                                                msg.message_type
-                                                            );
+                                                            if msg.message_type == crate::message::MessageType::OnionRelay {
+                                                                // RELAY: Forward to next hop
+                                                                let next_hop_hex = msg.recipient_id.clone();
+                                                                let payload = msg.payload.clone();
+                                                                
+                                                                eprintln!("[IronCore] 🧅 Onion relay: forwarding to {}", next_hop_hex);
+                                                                if let Ok(next_hop_bytes) = hex::decode(&next_hop_hex) {
+                                                                    if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from(&next_hop_bytes[..32]) {
+                                                                        let next_peer_id = libp2p::PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_pk));
+                                                                        
+                                                                        let bridge_clone = swarm_bridge.clone();
+                                                                        let stats_clone = stats.clone();
+                                                                        tokio::spawn(async move {
+                                                                            let _ = bridge_clone.send_message(next_peer_id.to_string(), payload, None, None);
+                                                                        });
+                                                                        
+                                                                        let mut s = stats_clone.lock();
+                                                                        s.messages_relayed += 1;
+                                                                    }
+                                                                }
+                                                            } else {
+                                                                tracing::info!(
+                                                                    "Received message {} from {}",
+                                                                    msg.id,
+                                                                    peer_id
+                                                                );
+                                                                eprintln!(
+                                                                    "[IronCore] ✓ Received message {} from {} (type={:?})",
+                                                                    msg.id,
+                                                                    peer_id,
+                                                                    msg.message_type
+                                                                );
+                                                            }
                                                         }
                                                         Err(e) => {
                                                             let err_detail = format!("{:?}", e);
@@ -1045,13 +1068,28 @@ impl MeshService {
         if let Some(core) = self.get_core() {
             match core.receive_message(data) {
                 Ok(msg) => {
-                    tracing::info!("Message received from {}: {:?}", peer_id, msg.id);
-                    eprintln!(
-                        "[IronCore] ✓ BLE message received from {}: {}",
-                        peer_id, msg.id
-                    );
-                    let mut stats = self.stats.lock();
-                    stats.messages_relayed += 1;
+                    if msg.message_type == crate::message::MessageType::OnionRelay {
+                        // RELAY: Forward to next hop
+                        let next_hop_hex = msg.recipient_id.clone();
+                        let payload = msg.payload.clone();
+                        
+                        eprintln!("[IronCore] 🧅 BLE Onion relay: forwarding to {}", next_hop_hex);
+                        
+                        // For BLE, we might want to try both BLE and Internet
+                        let bridge_clone = self.swarm_bridge.clone();
+                        tokio::spawn(async move {
+                            let _ = bridge_clone.send_message(next_hop_hex, payload, None, None);
+                        });
+                        
+                        let mut stats = self.stats.lock();
+                        stats.messages_relayed += 1;
+                    } else {
+                        tracing::info!("Message received from {}: {:?}", peer_id, msg.id);
+                        eprintln!(
+                            "[IronCore] ✓ BLE message received from {}: {}",
+                            peer_id, msg.id
+                        );
+                    }
                 }
                 Err(e) => {
                     tracing::error!("Failed to process received message: {:?}", e);

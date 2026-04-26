@@ -3394,7 +3394,7 @@
       }
     },
     {
-      "task_file": "HANDOFF/todo/task_wire_peel_onion_layer.md",
+      "task_file": "HANDOFF/done/task_wire_peel_onion_layer.md",
       "task_name": "peel_onion_layer",
       "function": "peel_onion_layer",
       "resolved_symbol": "peel_onion_layer",
@@ -3538,7 +3538,7 @@
       }
     },
     {
-      "task_file": "HANDOFF/todo/task_wire_prepare_onion_message.md",
+      "task_file": "HANDOFF/done/task_wire_prepare_onion_message.md",
       "task_name": "prepare_onion_message",
       "function": "prepare_onion_message",
       "resolved_symbol": "prepare_onion_message",

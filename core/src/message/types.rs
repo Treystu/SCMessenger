@@ -9,6 +9,8 @@ pub enum MessageType {
     Text,
     /// Delivery/read receipt
     Receipt,
+    /// Onion relay packet (internal use for forwarding)
+    OnionRelay,
 }
 
 /// Delivery status of a message

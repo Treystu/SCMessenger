@@ -5,6 +5,7 @@
 
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::XChaCha20Poly1305;
+use curve25519_dalek::edwards::CompressedEdwardsY;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use x25519_dalek::{EphemeralSecret, PublicKey};
@@ -152,7 +153,14 @@ pub fn construct_onion(
     // Wrap with each relay in reverse order (from second-to-last to first)
     for i in (0..path.len() - 1).rev() {
         let relay_pk = path[i];
-        let relay_public_key = PublicKey::from(relay_pk);
+        
+        // Convert Ed25519 public key to X25519 for DH
+        let compressed = CompressedEdwardsY::from_slice(&relay_pk)
+            .map_err(|_| OnionError::InvalidEnvelope)?;
+        let edwards_point = compressed.decompress()
+            .ok_or(OnionError::InvalidEnvelope)?;
+        let montgomery = edwards_point.to_montgomery();
+        let relay_public_key = PublicKey::from(montgomery.to_bytes());
 
         // Generate new ephemeral key for this layer
         let ephemeral_secret = EphemeralSecret::random_from_rng(rand::thread_rng());

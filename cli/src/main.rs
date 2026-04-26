@@ -1523,6 +1523,26 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
                                 if let Ok(msg) = core_rx.receive_message(envelope_data) {
                                     match msg.message_type {
+                                        MessageType::OnionRelay => {
+                                            // Forward onion-routed packet to next hop
+                                            let next_hop_hex = msg.recipient_id.clone();
+                                            let payload = msg.payload.clone();
+                                            
+                                            if let Ok(next_hop_bytes) = hex::decode(&next_hop_hex) {
+                                                // Convert Ed25519 PK to libp2p PeerId
+                                                if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from(&next_hop_bytes[..32]) {
+                                                    let next_peer_id = libp2p::PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_pk));
+                                                    
+                                                    tracing::info!("Relaying onion packet from {} to next hop {}", peer_id, next_peer_id);
+                                                    let swarm_clone = swarm_handle.clone();
+                                                    tokio::spawn(async move {
+                                                        if let Err(e) = swarm_clone.send_message(next_peer_id, payload, None, None).await {
+                                                            tracing::warn!("Failed to relay onion packet to {}: {}", next_peer_id, e);
+                                                        }
+                                                    });
+                                                }
+                                            }
+                                        }
                                         MessageType::Text => {
                                             let text = msg.text_content().unwrap_or_else(|| "<binary>".into());
                                             let sender_name = contacts_rx.get(peer_id.to_string())
@@ -2311,8 +2331,27 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
                         }
                     }
                     SwarmEvent::MessageReceived { peer_id, envelope_data } => {
-                        // Headless relay mode intentionally does not decrypt app payloads.
-                        // Swarm-level forwarding remains active regardless of local identity state.
+                        // In relay mode, we automatically peel and forward onion layers
+                        if let Ok(msg) = core_arc.receive_message(envelope_data.clone()) {
+                            if msg.message_type == scmessenger_core::MessageType::OnionRelay {
+                                let next_hop_hex = msg.recipient_id.clone();
+                                let payload = msg.payload.clone();
+                                
+                                if let Ok(next_hop_bytes) = hex::decode(&next_hop_hex) {
+                                    if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from(&next_hop_bytes[..32]) {
+                                        let next_peer_id = libp2p::PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_pk));
+                                        
+                                        tracing::info!("Relay node: forwarding onion packet to {}", next_peer_id);
+                                        let swarm_clone = swarm_handle.clone();
+                                        tokio::spawn(async move {
+                                            let _ = swarm_clone.send_message(next_peer_id, payload, None, None).await;
+                                        });
+                                    }
+                                }
+                            }
+                        }
+
+                        // Also log standard envelopes for debugging
                         if let Ok(env) = decode_envelope(&envelope_data) {
                             let sender_key = hex::encode(&env.sender_public_key);
                             tracing::debug!(

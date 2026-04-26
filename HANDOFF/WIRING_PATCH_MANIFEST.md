@@ -8,10 +8,10 @@ Total tasks: **325**
 
 | Task | Function | Resolved symbol | Target | Definition line | External refs | Patch template |
 |---|---|---|---|---:|---:|---|
-| `peel_onion_layer` | `peel_onion_layer` | `peel_onion_layer` | `core/src/lib.rs` | 1777 | 0 | `WIRE peel_onion_layer call path + tests` |
+| `peel_onion_layer` [DONE] | `peel_onion_layer` | `peel_onion_layer` | `core/src/lib.rs` | 1777 | 0 | `WIRE peel_onion_layer call path + tests` |
 | `peer_rate_limit_multiplier` | `peer_rate_limit_multiplier` | `peer_rate_limit_multiplier` | `core/src/lib.rs` | 2587 | 0 | `WIRE peer_rate_limit_multiplier call path + tests` |
 | `peer_spam_score` | `peer_spam_score` | `peer_spam_score` | `core/src/lib.rs` | 2592 | 0 | `WIRE peer_spam_score call path + tests` |
-| `prepare_onion_message` | `prepare_onion_message` | `prepare_onion_message` | `core/src/lib.rs` | 1702 | 0 | `WIRE prepare_onion_message call path + tests` |
+| `prepare_onion_message` [DONE] | `prepare_onion_message` | `prepare_onion_message` | `core/src/lib.rs` | 1702 | 0 | `WIRE prepare_onion_message call path + tests` |
 | `random_port` | `random_port` | `random_port` | `core/src/lib.rs` | 3382 | 0 | `WIRE random_port call path + tests` |
 | `ratchet_has_session` | `ratchet_has_session` | `ratchet_has_session` | `core/src/lib.rs` | 2147 | 0 | `WIRE ratchet_has_session call path + tests` |
 | `ratchet_reset_session` | `ratchet_reset_session` | `ratchet_reset_session` | `core/src/lib.rs` | 2154 | 0 | `WIRE ratchet_reset_session call path + tests` |

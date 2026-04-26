@@ -1773,20 +1773,24 @@ impl IronCore {
     }
 
     /// Peel one layer of an onion-routed envelope (relay-side operation).
-    /// Returns only the remaining data for the next hop or final destination.
+    /// Returns the next hop and the remaining data.
     pub fn peel_onion_layer(
         &self,
         onion_data: Vec<u8>,
         relay_secret_key: Vec<u8>,
-    ) -> Result<Vec<u8>, IronCoreError> {
+    ) -> Result<PeelResult, IronCoreError> {
         if relay_secret_key.len() != 32 {
             return Err(IronCoreError::InvalidInput);
         }
         let mut key_array = [0u8; 32];
         key_array.copy_from_slice(&relay_secret_key);
 
-        let (_next_hop, remaining_data) = self.peel_onion_layer_internal(onion_data, key_array)?;
-        Ok(remaining_data)
+        let (next_hop, remaining_data) = self.peel_onion_layer_internal(onion_data, key_array)?;
+        
+        Ok(PeelResult {
+            next_hop: next_hop.map(|h| h.to_vec()),
+            remaining_data,
+        })
     }
 
     /// Compute timing jitter delay for relay forwarding.
@@ -1831,8 +1835,49 @@ impl IronCore {
         notification::classify_notification(message, ui_state, settings)
     }
 
-    /// Decrypt a received envelope and return the plaintext message.
+    /// Decrypt and process an incoming message envelope.
+    ///
+    /// Detects if the message is onion-routed and automatically peels a layer
+    /// if this node is a relay or the final destination.
     pub fn receive_message(&self, envelope_bytes: Vec<u8>) -> Result<Message, IronCoreError> {
+        // 1. Try to process as Onion Routing packet
+        if let Ok(onion_env) = bincode::deserialize::<privacy::OnionEnvelope>(&envelope_bytes) {
+            tracing::debug!("Detected onion-routed message ({} bytes)", envelope_bytes.len());
+            
+            // Get node's X25519 secret key from Ed25519 identity
+            let id_manager = self.identity.read();
+            if let Some(keys) = id_manager.keys() {
+                // Convert Ed25519 secret to X25519
+                let x25519_secret = crypto::ed25519_to_x25519_secret(&keys.signing_key);
+                let x25519_secret_bytes = x25519_secret.to_bytes();
+                
+                // Peel layer
+                if let Ok((next_hop, remaining)) = privacy::onion::peel_layer(&onion_env, &x25519_secret_bytes) {
+                    if let Some(hop_ed25519_pk) = next_hop {
+                        // This node is a RELAY. 
+                        // Return an OnionRelay message to signal the transport layer to forward it.
+                        let next_hop_hex = hex::encode(hop_ed25519_pk);
+                        tracing::info!("Onion layer peeled: relaying to next hop {}", &next_hop_hex[..8]);
+                        
+                        return Ok(Message {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            sender_id: id_manager.identity_id().unwrap_or_default(),
+                            recipient_id: next_hop_hex,
+                            message_type: message::MessageType::OnionRelay,
+                            payload: remaining,
+                            timestamp: web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).unwrap_or_default().as_secs(),
+                        });
+                    } else {
+                        // This node is the FINAL DESTINATION.
+                        // The remaining data is the actual encrypted envelope.
+                        tracing::info!("Onion layer peeled: this node is the final destination");
+                        return self.receive_message(remaining);
+                    }
+                }
+            }
+        }
+
+        // 2. Standard envelope processing
         let identity = self.identity.read();
         let keys = identity.keys().ok_or_else(|| {
             eprintln!("[IronCore] receive_message FAILED: identity keys not initialized");

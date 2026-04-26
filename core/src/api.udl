@@ -9,6 +9,12 @@ namespace api {
 enum MessageType {
     "Text",
     "Receipt",
+    "OnionRelay",
+};
+
+dictionary PeelResult {
+    bytes? next_hop;
+    bytes remaining_data;
 };
 
 // ============================================================================
@@ -231,7 +237,8 @@ interface IronCore {
     bytes prepare_onion_message(bytes envelope_data, string relay_public_keys_json);
     /// Peel one layer of an onion-routed envelope (relay-side operation).
     [Throws=IronCoreError]
-    bytes peel_onion_layer(bytes onion_data, bytes relay_secret_key);
+    [Throws=IronCoreError]
+    PeelResult peel_onion_layer(bytes onion_data, bytes relay_secret_key);
     /// Compute timing jitter delay for relay forwarding (milliseconds).
     u64 relay_jitter_delay(string priority);
 
