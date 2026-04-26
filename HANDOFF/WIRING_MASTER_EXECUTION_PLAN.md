@@ -256,14 +256,18 @@ Use `FEATURE_PARITY.md` as canonical state table update point.
 
 Given 350 tasks, recommended batch model:
 - **Batch size:** 20–35 related tasks
-- **Expected batches:** 12–15
+- **Expected batches:** 8 (B1..B8)
 - **Cadence:** each batch includes code + checks + docs + task moves
 
 Suggested order:
-1. Core hotspots (Batches 1–4)
-2. Android hotspots (Batches 5–9)
-3. WASM/CLI and parity closure (Batches 10–12)
-4. Hardening/residual edge cases (Batches 13–15)
+1. Core entrypoints (`B1`)
+2. Core transport/routing (`B2`)
+3. Android repository (`B3`)
+4. Android UI (`B4`)
+5. Android transport/service (`B5`)
+6. WASM (`B6`)
+7. CLI (`B7`)
+8. Cross-cutting closure (`B8`)
 
 ---
 
@@ -282,7 +286,7 @@ If any gate fails, batch cannot be marked complete.
 
 ## 7) Risk Register + Mitigation
 
-1. **Hotspot merge conflicts** (`lib.rs`, `MeshRepository.kt`, `wasm/lib.rs`)
+1. **Hotspot merge conflicts** (`core/src/lib.rs`, `android/.../MeshRepository.kt`, `wasm/src/lib.rs`)
    - Mitigation: strict hotspot-batching and short-lived branches.
 2. **False “wired” claims from test-only call paths**
    - Mitigation: require production call-path evidence in task closeout.
@@ -327,6 +331,7 @@ To eliminate ambiguity before implementation, use these generated artifacts:
 - `HANDOFF/WIRING_PATCH_MANIFEST.json` — machine-readable patch queue with exact file + anchor line for each task.
 - `HANDOFF/WIRING_PATCH_MANIFEST.md` — human-readable patch queue grouped by execution batch.
 - `scripts/generate_wiring_patch_manifest.py` — regeneration script (run after task moves or refactors).
+- Generator behavior: fails fast if any task has unresolved anchor coordinates; known task→symbol aliases are recorded in manifest as `resolved_symbol`.
 
 **Required workflow before touching implementation code:**
 1. Regenerate manifest from current `HANDOFF/todo`.
