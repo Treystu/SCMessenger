@@ -27,7 +27,7 @@ Total tasks: **350**.
 | 21 | `add_websocket` | WASM | `wasm/src/connection_state.rs` | `HANDOFF/todo/task_wire_add_websocket.md` |
 | 22 | `advertise_service` | CLI | `cli/src/ble_daemon.rs` | `HANDOFF/todo/task_wire_advertise_service.md` |
 | 23 | `all_connections` | Core | `core/src/transport/observation.rs` | `HANDOFF/todo/task_wire_all_connections.md` |
-| 24 | `annotate_identity` | Core | `core/src/mobile_bridge.rs` | `HANDOFF/todo/task_wire_annotate_identity.md` |
+| 24 | `annotate_identity` | Core | `core/src/mobile_bridge.rs` | `HANDOFF/done/task_wire_annotate_identity.md` |
 | 25 | `applyAdvertiseSettings` | Android | `android/app/src/main/java/com/scmessenger/android/transport/ble/BleAdvertiser.kt` | `HANDOFF/todo/task_wire_applyAdvertiseSettings.md` |
 | 26 | `applyScanSettings` | Android | `android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt` | `HANDOFF/todo/task_wire_applyScanSettings.md` |
 | 27 | `apply_policy_config` | Core | `core/src/drift/relay.rs` | `HANDOFF/todo/task_wire_apply_policy_config.md` |
@@ -57,8 +57,8 @@ Total tasks: **350**.
 | 51 | `clearSearch` | Android | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt` | `HANDOFF/todo/task_wire_clearSearch.md` |
 | 52 | `clear_unreachable_peer` | Core | `core/src/routing/optimized_engine.rs` | `HANDOFF/todo/task_wire_clear_unreachable_peer.md` |
 | 53 | `close_all_notifications` | WASM | `wasm/src/notification_manager.rs` | `HANDOFF/todo/task_wire_close_all_notifications.md` |
-| 54 | `compute_ble_adjustment` | Core | `core/src/mobile_bridge.rs` | `HANDOFF/todo/task_wire_compute_ble_adjustment.md` |
-| 55 | `compute_relay_adjustment` | Core | `core/src/mobile_bridge.rs` | `HANDOFF/todo/task_wire_compute_relay_adjustment.md` |
+| 54 | `compute_ble_adjustment` | Core | `core/src/mobile_bridge.rs` | `HANDOFF/done/task_wire_compute_ble_adjustment.md` |
+| 55 | `compute_relay_adjustment` | Core | `core/src/mobile_bridge.rs` | `HANDOFF/done/task_wire_compute_relay_adjustment.md` |
 | 56 | `contact_new_has_no_last_known_device_id` | Core | `core/src/store/contacts.rs` | `HANDOFF/todo/task_wire_contact_new_has_no_last_known_device_id.md` |
 | 57 | `contact_roundtrips_through_serde_with_default_device_id` | Core | `core/src/store/contacts.rs` | `HANDOFF/todo/task_wire_contact_roundtrips_through_serde_with_default_device_id.md` |
 | 58 | `converge_delivered_for_message_removes_matching_pending_records` | Core | `core/src/store/relay_custody.rs` | `HANDOFF/todo/task_wire_converge_delivered_for_message_removes_matching_pending_records.md` |

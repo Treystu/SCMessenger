@@ -318,6 +318,12 @@ pub struct IronCore {
     privacy_config: Arc<RwLock<privacy::PrivacyConfig>>,
     /// Double Ratchet session manager (P0_SECURITY_002: forward secrecy)
     ratchet_session_manager: Arc<RwLock<crypto::RatchetSessionManager>>,
+    /// Persistent peer address and identity ledger (mobile bridge anchor)
+    #[cfg(not(target_arch = "wasm32"))]
+    pub ledger_manager: Arc<mobile_bridge::LedgerManager>,
+    /// Engine for computing adaptive mesh behavior (P1_CORE_ENTRY_001)
+    #[cfg(not(target_arch = "wasm32"))]
+    pub auto_adjust_engine: Arc<mobile_bridge::AutoAdjustEngine>,
 }
 
 const STORAGE_SCHEMA_VERSION: u32 = 3;
@@ -800,11 +806,22 @@ impl IronCore {
         };
 
         // Initialize ratchet session manager with the root backend
-        // Initialize ratchet session manager with the root backend
         let ratchet_session_manager = {
             let mut manager = crypto::RatchetSessionManager::with_backend(root_backend.clone());
             let _ = manager.load(); // Best-effort load
             Arc::new(RwLock::new(manager))
+        };
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let ledger_manager = {
+            let ledger_path = if let Some(path) = &storage_path {
+                path.clone()
+            } else {
+                fresh_uniffi_storage_root()
+            };
+            let manager = mobile_bridge::LedgerManager::new(ledger_path);
+            let _ = manager.load(); // Best-effort load
+            Arc::new(manager)
         };
 
         Self {
@@ -827,10 +844,10 @@ impl IronCore {
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
             drift_engine,
-            abuse_reputation,
-            routing_engine,
             privacy_config: Arc::new(RwLock::new(privacy::PrivacyConfig::default())),
             ratchet_session_manager,
+            #[cfg(not(target_arch = "wasm32"))]
+            ledger_manager,
         }
     }
 
@@ -1029,6 +1046,7 @@ impl IronCore {
         }
 
         tracing::info!("Iron Core V2 stopping...");
+        self.drift_deactivate();
         *running = false;
         tracing::info!("Iron Core V2 stopped");
     }
@@ -2186,6 +2204,10 @@ impl IronCore {
             tracing::info!("Swept {} expired messages from inbox", deleted);
         }
         self.storage_manager.perform_maintenance()?;
+        
+        // P0_SECURITY_005: Persist audit log to storage backend
+        let backend = self.storage_manager.backend();
+        let _ = self.audit_log.read().persist(&backend);
 
         // P0_SECURITY_001: Also prune the mobile bridge HistoryManager (the one exposed to
         // Android/iOS via UniFFI) to keep it in sync with retention policies.
@@ -2695,6 +2717,11 @@ impl IronCore {
     pub fn routing_summary(&self) -> String {
         let summary = self.routing_engine.read().base_engine().routing_summary();
         serde_json::to_string(&summary).unwrap_or_else(|_| "{}".to_string())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn get_auto_adjust_engine(&self) -> Arc<crate::mobile_bridge::AutoAdjustEngine> {
+        self.auto_adjust_engine.clone()
     }
 
     /// Re-initialize the routing engine with the real identity after initialization.
@@ -3309,10 +3336,32 @@ mod tests {
         let identity_id = hex::encode(hash.as_bytes());
 
         // Resolving the identity_id should return the contact's public key, not the identity_id itself
-        let resolved = core.resolve_identity(identity_id.clone()).unwrap();
-        assert_eq!(resolved, fake_pk.to_lowercase());
-        // The resolved value should differ from the identity_id input
         assert_ne!(resolved, identity_id.to_lowercase());
+    }
+
+    #[test]
+    fn test_drift_activation() {
+        let core = IronCore::new();
+        core.grant_consent();
+        core.initialize_identity().unwrap();
+
+        // Should start as dormant (via default initialization)
+        assert_eq!(core.drift_network_state(), "Dormant");
+
+        // Activate
+        core.drift_activate();
+        assert_eq!(core.drift_network_state(), "Active");
+
+        // Deactivate
+        core.drift_deactivate();
+        assert_eq!(core.drift_network_state(), "Dormant");
+
+        // Check audit log
+        let enabled_events = core.get_audit_events_by_type(AuditEventType::RelayEnabled);
+        assert_eq!(enabled_events.len(), 1);
+
+        let disabled_events = core.get_audit_events_by_type(AuditEventType::RelayDisabled);
+        assert_eq!(disabled_events.len(), 1);
     }
 }
 

@@ -1,14 +1,14 @@
-TARGET: core\src\lib.rs
+TARGET: core\src\mobile_bridge.rs
 
 SYSTEM DIRECTIVE: COMPREHENSIVE DEAD-END RESOLUTION
-The function 'drift_network_state' is defined in 'core\src\lib.rs' but is NEVER called anywhere in the repository. Your job is to fully integrate it into the overarching application loop. It may need to be wired into 1, 2, or 3+ different locations.
+The function 'on_motion_changed' is defined in 'core\src\mobile_bridge.rs' but is NEVER called anywhere in the repository. Your job is to fully integrate it into the overarching application loop. It may need to be wired into 1, 2, or 3+ different locations.
 
 You MUST follow this strict analytical loop. Do not skip phases.
 
 PHASE 1: CONTEXT GATHERING (Search & Ponder)
-1. Open 'core\src\lib.rs' and read the implementation of 'drift_network_state'. Understand its parameters, return type, and exact purpose.
+1. Open 'core\src\mobile_bridge.rs' and read the implementation of 'on_motion_changed'. Understand its parameters, return type, and exact purpose.
 2. Use your terminal search tools (grep, cat, ls) to hunt for related concepts, APIs, UI buttons, or parent managers where similar functions are called.
-3. Identify EVERY valid location in the codebase where 'drift_network_state' MUST be invoked to work fully. 
+3. Identify EVERY valid location in the codebase where 'on_motion_changed' MUST be invoked to work fully. 
 
 PHASE 2: THE INTEGRATION PLAN
 Write a concise list of exactly which files you are going to modify and where the function will be injected. 
@@ -21,4 +21,16 @@ PHASE 4: TEST & ITERATE
 2. Read the terminal output. 
 3. IF COMPILE FAILS: Enter ITERATION. Read the exact error, fix the syntax or imports, and run the test again. 
 4. IF SUCCESSFUL: Verify you successfully wired all targets from Phase 2. If the integration is 100% complete and compiles cleanly, output exactly:
+
+## Task Closeout Evidence
+
+### Wired Call Path(s)
+1. **Input (MeshService::on_motion_changed)**: Updates core `DeviceProfile` with motion context.
+2. **Output (PlatformBridge::on_motion_changed)**: Notifies bridge of converged motion state.
+
+### Files Modified
+- [mobile_bridge.rs](file:///c:/Users/kanal/Documents/SCMessenger/SCMessenger/core/src/mobile_bridge.rs)
+- [api.udl](file:///c:/Users/kanal/Documents/SCMessenger/SCMessenger/core/src/api.udl)
+
 STATUS: SUCCESS_STOP
+

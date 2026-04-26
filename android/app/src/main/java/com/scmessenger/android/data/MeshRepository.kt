@@ -741,7 +741,7 @@ open class MeshRepository(private val context: Context) {
             }
             contactManager = uniffi.api.ContactManager(storagePath)
             ledgerManager = uniffi.api.LedgerManager(storagePath)
-            autoAdjustEngine = uniffi.api.AutoAdjustEngine()
+            autoAdjustEngine = meshService?.getAutoAdjustEngine() ?: uniffi.api.AutoAdjustEngine()
 
             // Pre-load data where applicable
             ledgerManager?.load()
@@ -4562,7 +4562,14 @@ open class MeshRepository(private val context: Context) {
             null
         }
 
-        return loaded ?: settingsManager?.defaultSettings()
+        return loaded ?: getDefaultSettings()
+    }
+
+    /**
+     * Get the default mesh settings from the Rust core.
+     */
+    fun getDefaultSettings(): uniffi.api.MeshSettings {
+        return settingsManager?.defaultSettings()
             ?: uniffi.api.MeshSettings(
                 relayEnabled = true,
                 maxRelayBudget = 200u,

@@ -2,74 +2,50 @@
 
 This file provides exact edit coordinates and patch templates for each wiring task without implementing runtime logic.
 
-Total tasks: **350**
+Total tasks: **325**
 
 ## B1-core-entrypoints
 
 | Task | Function | Resolved symbol | Target | Definition line | External refs | Patch template |
 |---|---|---|---|---:|---:|---|
-| `annotate_identity` | `annotate_identity` | `annotate_identity` | `core/src/mobile_bridge.rs` | 1665 | 0 | `WIRE annotate_identity call path + tests` |
-| `compute_ble_adjustment` | `compute_ble_adjustment` | `compute_ble_adjustment` | `core/src/mobile_bridge.rs` | 1029 | 0 | `WIRE compute_ble_adjustment call path + tests` |
-| `compute_relay_adjustment` | `compute_relay_adjustment` | `compute_relay_adjustment` | `core/src/mobile_bridge.rs` | 1049 | 0 | `WIRE compute_relay_adjustment call path + tests` |
-| `default_settings` | `default_settings` | `default_settings` | `core/src/mobile_bridge.rs` | 1210 | 0 | `WIRE default_settings call path + tests` |
-| `drift_activate` | `drift_activate` | `drift_activate` | `core/src/lib.rs` | 2485 | 0 | `WIRE drift_activate call path + tests` |
-| `drift_deactivate` | `drift_deactivate` | `drift_deactivate` | `core/src/lib.rs` | 2493 | 0 | `WIRE drift_deactivate call path + tests` |
-| `drift_network_state` | `drift_network_state` | `drift_network_state` | `core/src/lib.rs` | 2501 | 0 | `WIRE drift_network_state call path + tests` |
-| `drift_store_size` | `drift_store_size` | `drift_store_size` | `core/src/lib.rs` | 2509 | 0 | `WIRE drift_store_size call path + tests` |
-| `export_audit_log` | `export_audit_log` | `export_audit_log` | `core/src/lib.rs` | 2466 | 0 | `WIRE export_audit_log call path + tests` |
-| `get_audit_events_since` | `get_audit_events_since` | `get_audit_events_since` | `core/src/lib.rs` | 2455 | 0 | `WIRE get_audit_events_since call path + tests` |
-| `get_audit_log` | `get_audit_log` | `get_audit_log` | `core/src/lib.rs` | 2436 | 0 | `WIRE get_audit_log call path + tests` |
-| `get_enhanced_peer_reputation` | `get_enhanced_peer_reputation` | `get_enhanced_peer_reputation` | `core/src/lib.rs` | 2558 | 0 | `WIRE get_enhanced_peer_reputation call path + tests` |
-| `get_peer_reputation` | `get_peer_reputation` | `get_peer_reputation` | `core/src/lib.rs` | 2552 | 0 | `WIRE get_peer_reputation call path + tests` |
-| `get_privacy_config` | `get_privacy_config` | `get_privacy_config` | `core/src/lib.rs` | 1649 | 0 | `WIRE get_privacy_config call path + tests` |
-| `get_swarm_bridge` | `get_swarm_bridge` | `get_swarm_bridge` | `core/src/mobile_bridge.rs` | 709 | 0 | `WIRE get_swarm_bridge call path + tests` |
-| `on_battery_changed` | `on_battery_changed` | `on_battery_changed` | `core/src/mobile_bridge.rs` | 951 | 0 | `WIRE on_battery_changed call path + tests` |
-| `on_ble_data_received` | `on_ble_data_received` | `on_ble_data_received` | `core/src/mobile_bridge.rs` | 954 | 0 | `WIRE on_ble_data_received call path + tests` |
-| `on_entering_background` | `on_entering_background` | `on_entering_background` | `core/src/mobile_bridge.rs` | 955 | 0 | `WIRE on_entering_background call path + tests` |
-| `on_entering_foreground` | `on_entering_foreground` | `on_entering_foreground` | `core/src/mobile_bridge.rs` | 956 | 0 | `WIRE on_entering_foreground call path + tests` |
-| `on_motion_changed` | `on_motion_changed` | `on_motion_changed` | `core/src/mobile_bridge.rs` | 953 | 0 | `WIRE on_motion_changed call path + tests` |
-| `on_network_changed` | `on_network_changed` | `on_network_changed` | `core/src/mobile_bridge.rs` | 952 | 0 | `WIRE on_network_changed call path + tests` |
-| `peel_onion_layer` | `peel_onion_layer` | `peel_onion_layer` | `core/src/lib.rs` | 1759 | 0 | `WIRE peel_onion_layer call path + tests` |
-| `peer_rate_limit_multiplier` | `peer_rate_limit_multiplier` | `peer_rate_limit_multiplier` | `core/src/lib.rs` | 2565 | 0 | `WIRE peer_rate_limit_multiplier call path + tests` |
-| `peer_spam_score` | `peer_spam_score` | `peer_spam_score` | `core/src/lib.rs` | 2570 | 0 | `WIRE peer_spam_score call path + tests` |
-| `prepare_onion_message` | `prepare_onion_message` | `prepare_onion_message` | `core/src/lib.rs` | 1684 | 0 | `WIRE prepare_onion_message call path + tests` |
-| `random_port` | `random_port` | `random_port` | `core/src/lib.rs` | 3333 | 0 | `WIRE random_port call path + tests` |
-| `ratchet_has_session` | `ratchet_has_session` | `ratchet_has_session` | `core/src/lib.rs` | 2129 | 0 | `WIRE ratchet_has_session call path + tests` |
-| `ratchet_reset_session` | `ratchet_reset_session` | `ratchet_reset_session` | `core/src/lib.rs` | 2136 | 0 | `WIRE ratchet_reset_session call path + tests` |
-| `ratchet_session_count` | `ratchet_session_count` | `ratchet_session_count` | `core/src/lib.rs` | 2124 | 0 | `WIRE ratchet_session_count call path + tests` |
-| `relay_jitter_delay` | `relay_jitter_delay` | `relay_jitter_delay` | `core/src/lib.rs` | 1779 | 0 | `WIRE relay_jitter_delay call path + tests` |
-| `routing_tick` | `routing_tick` | `routing_tick` | `core/src/lib.rs` | 2683 | 0 | `WIRE routing_tick call path + tests` |
-| `send_ble_packet` | `send_ble_packet` | `send_ble_packet` | `core/src/mobile_bridge.rs` | 957 | 0 | `WIRE send_ble_packet call path + tests` |
-| `send_message_status` | `send_message_status` | `send_message_status` | `core/src/mobile_bridge.rs` | 1854 | 0 | `WIRE send_message_status call path + tests` |
-| `set_delegate` | `set_delegate` | `set_delegate` | `core/src/lib.rs` | 2145 | 0 | `WIRE set_delegate call path + tests` |
-| `set_privacy_config` | `set_privacy_config` | `set_privacy_config` | `core/src/lib.rs` | 1656 | 0 | `WIRE set_privacy_config call path + tests` |
-| `validate_audit_chain` | `validate_audit_chain` | `validate_audit_chain` | `core/src/lib.rs` | 2473 | 0 | `WIRE validate_audit_chain call path + tests` |
+| `peel_onion_layer` | `peel_onion_layer` | `peel_onion_layer` | `core/src/lib.rs` | 1777 | 0 | `WIRE peel_onion_layer call path + tests` |
+| `peer_rate_limit_multiplier` | `peer_rate_limit_multiplier` | `peer_rate_limit_multiplier` | `core/src/lib.rs` | 2587 | 0 | `WIRE peer_rate_limit_multiplier call path + tests` |
+| `peer_spam_score` | `peer_spam_score` | `peer_spam_score` | `core/src/lib.rs` | 2592 | 0 | `WIRE peer_spam_score call path + tests` |
+| `prepare_onion_message` | `prepare_onion_message` | `prepare_onion_message` | `core/src/lib.rs` | 1702 | 0 | `WIRE prepare_onion_message call path + tests` |
+| `random_port` | `random_port` | `random_port` | `core/src/lib.rs` | 3382 | 0 | `WIRE random_port call path + tests` |
+| `ratchet_has_session` | `ratchet_has_session` | `ratchet_has_session` | `core/src/lib.rs` | 2147 | 0 | `WIRE ratchet_has_session call path + tests` |
+| `ratchet_reset_session` | `ratchet_reset_session` | `ratchet_reset_session` | `core/src/lib.rs` | 2154 | 0 | `WIRE ratchet_reset_session call path + tests` |
+| `ratchet_session_count` | `ratchet_session_count` | `ratchet_session_count` | `core/src/lib.rs` | 2142 | 0 | `WIRE ratchet_session_count call path + tests` |
+| `relay_jitter_delay` | `relay_jitter_delay` | `relay_jitter_delay` | `core/src/lib.rs` | 1797 | 0 | `WIRE relay_jitter_delay call path + tests` |
+| `routing_tick` | `routing_tick` | `routing_tick` | `core/src/lib.rs` | 2705 | 0 | `WIRE routing_tick call path + tests` |
+| `set_delegate` | `set_delegate` | `set_delegate` | `core/src/lib.rs` | 2163 | 0 | `WIRE set_delegate call path + tests` |
+| `validate_audit_chain` | `validate_audit_chain` | `validate_audit_chain` | `core/src/lib.rs` | 2495 | 1 | `WIRE validate_audit_chain call path + tests` |
 
 ## B2-core-transport-routing
 
 | Task | Function | Resolved symbol | Target | Definition line | External refs | Patch template |
 |---|---|---|---|---:|---:|---|
-| `abusive_peer_burst_is_rate_limited_but_other_peer_still_passes` | `abusive_peer_burst_is_rate_limited_but_other_peer_still_passes` | `abusive_peer_burst_is_rate_limited_but_other_peer_still_passes` | `core/src/transport/swarm.rs` | 4383 | 0 | `WIRE abusive_peer_burst_is_rate_limited_but_other_peer_still_passes call path + tests` |
+| `abusive_peer_burst_is_rate_limited_but_other_peer_still_passes` | `abusive_peer_burst_is_rate_limited_but_other_peer_still_passes` | `abusive_peer_burst_is_rate_limited_but_other_peer_still_passes` | `core/src/transport/swarm.rs` | 4386 | 0 | `WIRE abusive_peer_burst_is_rate_limited_but_other_peer_still_passes call path + tests` |
 | `active_paths` | `active_paths` | `active_paths` | `core/src/routing/multipath.rs` | 53 | 0 | `WIRE active_paths call path + tests` |
 | `add_discovered_peer` | `add_discovered_peer` | `add_discovered_peer` | `core/src/transport/wifi_aware.rs` | 201 | 0 | `WIRE add_discovered_peer call path + tests` |
-| `add_kad_address` | `add_kad_address` | `add_kad_address` | `core/src/transport/swarm.rs` | 1285 | 0 | `WIRE add_kad_address call path + tests` |
+| `add_kad_address` | `add_kad_address` | `add_kad_address` | `core/src/transport/swarm.rs` | 1286 | 0 | `WIRE add_kad_address call path + tests` |
 | `all_connections` | `all_connections` | `all_connections` | `core/src/transport/observation.rs` | 198 | 0 | `WIRE all_connections call path + tests` |
 | `audit_count` | `audit_count` | `audit_count` | `core/src/store/relay_custody.rs` | 723 | 0 | `WIRE audit_count call path + tests` |
 | `best_relays` | `best_relays` | `best_relays` | `core/src/transport/mesh_routing.rs` | 214 | 1 | `WIRE best_relays call path + tests` |
 | `calculate_dynamic_ttl` | `calculate_dynamic_ttl` | `calculate_dynamic_ttl` | `core/src/routing/adaptive_ttl.rs` | 150 | 2 | `WIRE calculate_dynamic_ttl call path + tests` |
 | `can_bootstrap_others` | `can_bootstrap_others` | `can_bootstrap_others` | `core/src/transport/mesh_routing.rs` | 610 | 2 | `WIRE can_bootstrap_others call path + tests` |
-| `cheap_heuristics_reject_invalid_payload_shapes` | `cheap_heuristics_reject_invalid_payload_shapes` | `cheap_heuristics_reject_invalid_payload_shapes` | `core/src/transport/swarm.rs` | 4448 | 0 | `WIRE cheap_heuristics_reject_invalid_payload_shapes call path + tests` |
+| `cheap_heuristics_reject_invalid_payload_shapes` | `cheap_heuristics_reject_invalid_payload_shapes` | `cheap_heuristics_reject_invalid_payload_shapes` | `core/src/transport/swarm.rs` | 4451 | 0 | `WIRE cheap_heuristics_reject_invalid_payload_shapes call path + tests` |
 | `cleanup_stale_connections` | `cleanup_stale_connections` | `cleanup_stale_connections` | `core/src/transport/health.rs` | 409 | 0 | `WIRE cleanup_stale_connections call path + tests` |
 | `clear_unreachable_peer` | `clear_unreachable_peer` | `clear_unreachable_peer` | `core/src/routing/optimized_engine.rs` | 255 | 0 | `WIRE clear_unreachable_peer call path + tests` |
 | `converge_delivered_for_message_removes_matching_pending_records` | `converge_delivered_for_message_removes_matching_pending_records` | `converge_delivered_for_message_removes_matching_pending_records` | `core/src/store/relay_custody.rs` | 1760 | 0 | `WIRE converge_delivered_for_message_removes_matching_pending_records call path + tests` |
-| `convergence_marker_accepts_when_custody_exists_locally` | `convergence_marker_accepts_when_custody_exists_locally` | `convergence_marker_accepts_when_custody_exists_locally` | `core/src/transport/swarm.rs` | 4507 | 0 | `WIRE convergence_marker_accepts_when_custody_exists_locally call path + tests` |
-| `convergence_marker_rejects_invalid_shape` | `convergence_marker_rejects_invalid_shape` | `convergence_marker_rejects_invalid_shape` | `core/src/transport/swarm.rs` | 4464 | 0 | `WIRE convergence_marker_rejects_invalid_shape call path + tests` |
-| `convergence_marker_requires_local_tracking_context` | `convergence_marker_requires_local_tracking_context` | `convergence_marker_requires_local_tracking_context` | `core/src/transport/swarm.rs` | 4478 | 0 | `WIRE convergence_marker_requires_local_tracking_context call path + tests` |
+| `convergence_marker_accepts_when_custody_exists_locally` | `convergence_marker_accepts_when_custody_exists_locally` | `convergence_marker_accepts_when_custody_exists_locally` | `core/src/transport/swarm.rs` | 4510 | 0 | `WIRE convergence_marker_accepts_when_custody_exists_locally call path + tests` |
+| `convergence_marker_rejects_invalid_shape` | `convergence_marker_rejects_invalid_shape` | `convergence_marker_rejects_invalid_shape` | `core/src/transport/swarm.rs` | 4467 | 0 | `WIRE convergence_marker_rejects_invalid_shape call path + tests` |
+| `convergence_marker_requires_local_tracking_context` | `convergence_marker_requires_local_tracking_context` | `convergence_marker_requires_local_tracking_context` | `core/src/transport/swarm.rs` | 4481 | 0 | `WIRE convergence_marker_requires_local_tracking_context call path + tests` |
 | `current_discovery_phase` | `current_discovery_phase` | `current_discovery_phase` | `core/src/routing/optimized_engine.rs` | 169 | 0 | `WIRE current_discovery_phase call path + tests` |
 | `custody_audit_persists_across_restart` | `custody_audit_persists_across_restart` | `custody_audit_persists_across_restart` | `core/src/store/relay_custody.rs` | 2076 | 0 | `WIRE custody_audit_persists_across_restart call path + tests` |
 | `custody_deduplicates_same_destination_and_message_id` | `custody_deduplicates_same_destination_and_message_id` | `custody_deduplicates_same_destination_and_message_id` | `core/src/store/relay_custody.rs` | 1729 | 0 | `WIRE custody_deduplicates_same_destination_and_message_id call path + tests` |
 | `custody_transitions_are_recorded` | `custody_transitions_are_recorded` | `custody_transitions_are_recorded` | `core/src/store/relay_custody.rs` | 1686 | 0 | `WIRE custody_transitions_are_recorded call path + tests` |
-| `duplicate_window_suppresses_immediate_replay_then_expires` | `duplicate_window_suppresses_immediate_replay_then_expires` | `duplicate_window_suppresses_immediate_replay_then_expires` | `core/src/transport/swarm.rs` | 4411 | 0 | `WIRE duplicate_window_suppresses_immediate_replay_then_expires call path + tests` |
+| `duplicate_window_suppresses_immediate_replay_then_expires` | `duplicate_window_suppresses_immediate_replay_then_expires` | `duplicate_window_suppresses_immediate_replay_then_expires` | `core/src/transport/swarm.rs` | 4414 | 0 | `WIRE duplicate_window_suppresses_immediate_replay_then_expires call path + tests` |
 | `expire_old_observations` | `expire_old_observations` | `expire_old_observations` | `core/src/transport/observation.rs` | 96 | 0 | `WIRE expire_old_observations call path + tests` |
 | `for_local_peer_prefers_explicit_custody_dir_override` | `for_local_peer_prefers_explicit_custody_dir_override` | `for_local_peer_prefers_explicit_custody_dir_override` | `core/src/store/relay_custody.rs` | 2133 | 0 | `WIRE for_local_peer_prefers_explicit_custody_dir_override call path + tests` |
 | `force_state_for_test` | `force_state_for_test` | `force_state_for_test` | `core/src/store/relay_custody.rs` | 1409 | 0 | `WIRE force_state_for_test call path + tests` |
@@ -89,10 +65,10 @@ Total tasks: **350**
 | `mark_refresh_failed` | `mark_refresh_failed` | `mark_refresh_failed` | `core/src/routing/resume_prefetch.rs` | 283 | 0 | `WIRE mark_refresh_failed call path + tests` |
 | `negative_cache_stats` | `negative_cache_stats` | `negative_cache_stats` | `core/src/routing/optimized_engine.rs` | 184 | 0 | `WIRE negative_cache_stats call path + tests` |
 | `next_refresh_hint` | `next_refresh_hint` | `next_refresh_hint` | `core/src/routing/resume_prefetch.rs` | 291 | 0 | `WIRE next_refresh_hint call path + tests` |
-| `normal_low_volume_usage_is_unaffected` | `normal_low_volume_usage_is_unaffected` | `normal_low_volume_usage_is_unaffected` | `core/src/transport/swarm.rs` | 4397 | 0 | `WIRE normal_low_volume_usage_is_unaffected call path + tests` |
+| `normal_low_volume_usage_is_unaffected` | `normal_low_volume_usage_is_unaffected` | `normal_low_volume_usage_is_unaffected` | `core/src/transport/swarm.rs` | 4400 | 0 | `WIRE normal_low_volume_usage_is_unaffected call path + tests` |
 | `on_read` | `on_read` | `on_read` | `core/src/transport/ble/gatt.rs` | 289 | 0 | `WIRE on_read call path + tests` |
 | `on_write` | `on_write` | `on_write` | `core/src/transport/ble/gatt.rs` | 282 | 0 | `WIRE on_write call path + tests` |
-| `peer_id_public_key_extraction_roundtrips_for_ed25519_peers` | `peer_id_public_key_extraction_roundtrips_for_ed25519_peers` | `peer_id_public_key_extraction_roundtrips_for_ed25519_peers` | `core/src/transport/swarm.rs` | 4544 | 0 | `WIRE peer_id_public_key_extraction_roundtrips_for_ed25519_peers call path + tests` |
+| `peer_id_public_key_extraction_roundtrips_for_ed25519_peers` | `peer_id_public_key_extraction_roundtrips_for_ed25519_peers` | `peer_id_public_key_extraction_roundtrips_for_ed25519_peers` | `core/src/transport/swarm.rs` | 4547 | 0 | `WIRE peer_id_public_key_extraction_roundtrips_for_ed25519_peers call path + tests` |
 | `peers_needing_reconnect` | `peers_needing_reconnect` | `peers_needing_reconnect` | `core/src/transport/manager.rs` | 446 | 0 | `WIRE peers_needing_reconnect call path + tests` |
 | `prefetch_manager_mut` | `prefetch_manager_mut` | `prefetch_manager_mut` | `core/src/routing/optimized_engine.rs` | 214 | 0 | `WIRE prefetch_manager_mut call path + tests` |
 | `prefetch_stats` | `prefetch_stats` | `prefetch_stats` | `core/src/routing/optimized_engine.rs` | 189 | 0 | `WIRE prefetch_stats call path + tests` |
@@ -119,9 +95,9 @@ Total tasks: **350**
 | `storage_pressure_quota_bands_follow_locked_policy` | `storage_pressure_quota_bands_follow_locked_policy` | `storage_pressure_quota_bands_follow_locked_policy` | `core/src/store/relay_custody.rs` | 1802 | 0 | `WIRE storage_pressure_quota_bands_follow_locked_policy call path + tests` |
 | `storage_pressure_state_uses_synthetic_snapshot_when_probe_unavailable` | `storage_pressure_state_uses_synthetic_snapshot_when_probe_unavailable` | `storage_pressure_state_uses_synthetic_snapshot_when_probe_unavailable` | `core/src/store/relay_custody.rs` | 2115 | 0 | `WIRE storage_pressure_state_uses_synthetic_snapshot_when_probe_unavailable call path + tests` |
 | `timeout_budget_summary` | `timeout_budget_summary` | `timeout_budget_summary` | `core/src/routing/optimized_engine.rs` | 179 | 0 | `WIRE timeout_budget_summary call path + tests` |
-| `token_bucket_refills_after_elapsed_time` | `token_bucket_refills_after_elapsed_time` | `token_bucket_refills_after_elapsed_time` | `core/src/transport/swarm.rs` | 4435 | 0 | `WIRE token_bucket_refills_after_elapsed_time call path + tests` |
+| `token_bucket_refills_after_elapsed_time` | `token_bucket_refills_after_elapsed_time` | `token_bucket_refills_after_elapsed_time` | `core/src/transport/swarm.rs` | 4438 | 0 | `WIRE token_bucket_refills_after_elapsed_time call path + tests` |
 | `transport_type_to_routing_transport` | `transport_type_to_routing_transport` | `transport_type_to_routing_transport` | `core/src/transport/swarm.rs` | 664 | 0 | `WIRE transport_type_to_routing_transport call path + tests` |
-| `verify_registration_message_rejects_peer_identity_mismatch` | `verify_registration_message_rejects_peer_identity_mismatch` | `verify_registration_message_rejects_peer_identity_mismatch` | `core/src/transport/swarm.rs` | 4554 | 0 | `WIRE verify_registration_message_rejects_peer_identity_mismatch call path + tests` |
+| `verify_registration_message_rejects_peer_identity_mismatch` | `verify_registration_message_rejects_peer_identity_mismatch` | `verify_registration_message_rejects_peer_identity_mismatch` | `core/src/transport/swarm.rs` | 4557 | 0 | `WIRE verify_registration_message_rejects_peer_identity_mismatch call path + tests` |
 
 ## B3-android-repository
 
@@ -134,24 +110,24 @@ Total tasks: **350**
 | `getBootstrapNodesForSettings` | `getBootstrapNodesForSettings` | `getBootstrapNodesForSettings` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 67 | 0 | `WIRE getBootstrapNodesForSettings call path + tests` |
 | `getInboxCount` | `getInboxCount` | `getInboxCount` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 3415 | 0 | `WIRE getInboxCount call path + tests` |
 | `getKnownTopicsList` | `getKnownTopicsList` | `getKnownTopicsList` | `android/app/src/main/java/com/scmessenger/android/data/TopicManager.kt` | 163 | 0 | `WIRE getKnownTopicsList call path + tests` |
-| `getMessage` | `getMessage` | `getMessage` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 4076 | 1 | `WIRE getMessage call path + tests` |
-| `getNetworkDiagnosticsSnapshot` | `getNetworkDiagnosticsSnapshot` | `getNetworkDiagnosticsSnapshot` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 7473 | 0 | `WIRE getNetworkDiagnosticsSnapshot call path + tests` |
-| `getNetworkFailureSummary` | `getNetworkFailureSummary` | `getNetworkFailureSummary` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 7468 | 0 | `WIRE getNetworkFailureSummary call path + tests` |
+| `getMessage` | `getMessage` | `getMessage` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 4076 | 14 | `WIRE getMessage call path + tests` |
+| `getNetworkDiagnosticsSnapshot` | `getNetworkDiagnosticsSnapshot` | `getNetworkDiagnosticsSnapshot` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 7480 | 0 | `WIRE getNetworkDiagnosticsSnapshot call path + tests` |
+| `getNetworkFailureSummary` | `getNetworkFailureSummary` | `getNetworkFailureSummary` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 7475 | 0 | `WIRE getNetworkFailureSummary call path + tests` |
 | `getRetryDelay` | `getRetryDelay` | `getRetryDelay` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 623 | 0 | `WIRE getRetryDelay call path + tests` |
 | `getSubscribedTopicsList` | `getSubscribedTopicsList` | `getSubscribedTopicsList` | `android/app/src/main/java/com/scmessenger/android/data/TopicManager.kt` | 156 | 0 | `WIRE getSubscribedTopicsList call path + tests` |
-| `getTransportHealthSummary` | `getTransportHealthSummary` | `getTransportHealthSummary` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 8016 | 0 | `WIRE getTransportHealthSummary call path + tests` |
+| `getTransportHealthSummary` | `getTransportHealthSummary` | `getTransportHealthSummary` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 8023 | 0 | `WIRE getTransportHealthSummary call path + tests` |
 | `incrementAttemptCount` | `incrementAttemptCount` | `incrementAttemptCount` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 613 | 0 | `WIRE incrementAttemptCount call path + tests` |
-| `loadPendingOutboxAsync` | `loadPendingOutboxAsync` | `loadPendingOutboxAsync` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 5692 | 0 | `WIRE loadPendingOutboxAsync call path + tests` |
+| `loadPendingOutboxAsync` | `loadPendingOutboxAsync` | `loadPendingOutboxAsync` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 5699 | 0 | `WIRE loadPendingOutboxAsync call path + tests` |
 | `logMessageDeliveryAttempt` | `logMessageDeliveryAttempt` | `logMessageDeliveryAttempt` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 645 | 0 | `WIRE logMessageDeliveryAttempt call path + tests` |
 | `markCorrupted` | `markCorrupted` | `markCorrupted` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 472 | 0 | `WIRE markCorrupted call path + tests` |
-| `observeNetworkStats` | `observeNetworkStats` | `observeNetworkStats` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 7626 | 0 | `WIRE observeNetworkStats call path + tests` |
-| `observePeers` | `observePeers` | `observePeers` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 7611 | 0 | `WIRE observePeers call path + tests` |
+| `observeNetworkStats` | `observeNetworkStats` | `observeNetworkStats` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 7633 | 0 | `WIRE observeNetworkStats call path + tests` |
+| `observePeers` | `observePeers` | `observePeers` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 7618 | 0 | `WIRE observePeers call path + tests` |
 | `onPeerDisconnected` | `onPeerDisconnected` | `onPeerDisconnected` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 1444 | 25 | `WIRE onPeerDisconnected call path + tests` |
 | `onPeerIdentified` | `onPeerIdentified` | `onPeerIdentified` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 1225 | 17 | `WIRE onPeerIdentified call path + tests` |
 | `onReceiptReceived` | `onReceiptReceived` | `onReceiptReceived` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 1860 | 17 | `WIRE onReceiptReceived call path + tests` |
-| `primeRelayBootstrapConnectionsLegacy` | `primeRelayBootstrapConnectionsLegacy` | `primeRelayBootstrapConnectionsLegacy` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 7154 | 0 | `WIRE primeRelayBootstrapConnectionsLegacy call path + tests` |
+| `primeRelayBootstrapConnectionsLegacy` | `primeRelayBootstrapConnectionsLegacy` | `primeRelayBootstrapConnectionsLegacy` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 7161 | 0 | `WIRE primeRelayBootstrapConnectionsLegacy call path + tests` |
 | `recordConnectionFailure` | `recordConnectionFailure` | `recordConnectionFailure` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 4207 | 1 | `WIRE recordConnectionFailure call path + tests` |
-| `recordTransportEvent` | `recordTransportEvent` | `recordTransportEvent` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 8004 | 0 | `WIRE recordTransportEvent call path + tests` |
+| `recordTransportEvent` | `recordTransportEvent` | `recordTransportEvent` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 8011 | 0 | `WIRE recordTransportEvent call path + tests` |
 | `resetServiceStats` | `resetServiceStats` | `resetServiceStats` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 3003 | 1 | `WIRE resetServiceStats call path + tests` |
 | `searchContacts` | `searchContacts` | `searchContacts` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 3277 | 1 | `WIRE searchContacts call path + tests` |
 | `setContactNickname` | `setContactNickname` | `setContactNickname` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 3281 | 1 | `WIRE setContactNickname call path + tests` |
@@ -163,31 +139,31 @@ Total tasks: **350**
 
 | Task | Function | Resolved symbol | Target | Definition line | External refs | Patch template |
 |---|---|---|---|---:|---:|---|
+| `clearAllHistory` | `clearAllHistory` | `clearAllHistory` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt` | 198 | 0 | `WIRE clearAllHistory call path + tests` |
+| `clearInput` | `clearInput` | `clearInput` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ChatViewModel.kt` | 224 | 0 | `WIRE clearInput call path + tests` |
+| `clearSearch` | `clearSearch` | `clearSearch` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt` | 549 | 0 | `WIRE clearSearch call path + tests` |
 | `ConnectionQualityIndicator` | `ConnectionQualityIndicator` | `ConnectionQualityIndicator` | `android/app/src/main/java/com/scmessenger/android/ui/components/StatusIndicator.kt` | 122 | 0 | `WIRE ConnectionQualityIndicator call path + tests` |
 | `ContactDetailScreen` | `ContactDetailScreen` | `ContactDetailScreen` | `android/app/src/main/java/com/scmessenger/android/ui/contacts/ContactDetailScreen.kt` | 38 | 0 | `WIRE ContactDetailScreen call path + tests` |
 | `ErrorState` | `ErrorState` | `ErrorState` | `android/app/src/main/java/com/scmessenger/android/ui/components/ErrorBanner.kt` | 138 | 0 | `WIRE ErrorState call path + tests` |
+| `getNetworkDiagnosticsReport` | `getNetworkDiagnosticsReport` | `getNetworkDiagnosticsReport` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt` | 614 | 0 | `WIRE getNetworkDiagnosticsReport call path + tests` |
 | `IdenticonFromHex` | `IdenticonFromHex` | `IdenticonFromHex` | `android/app/src/main/java/com/scmessenger/android/ui/components/Identicon.kt` | 115 | 0 | `WIRE IdenticonFromHex call path + tests` |
 | `InfoBanner` | `InfoBanner` | `InfoBanner` | `android/app/src/main/java/com/scmessenger/android/ui/components/ErrorBanner.kt` | 176 | 0 | `WIRE InfoBanner call path + tests` |
 | `LabeledCopyableText` | `LabeledCopyableText` | `LabeledCopyableText` | `android/app/src/main/java/com/scmessenger/android/ui/components/CopyableText.kt` | 89 | 0 | `WIRE LabeledCopyableText call path + tests` |
+| `loadConversation` | `loadConversation` | `loadConversation` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt` | 114 | 0 | `WIRE loadConversation call path + tests` |
+| `loadMoreMessages` | `loadMoreMessages` | `loadMoreMessages` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ChatViewModel.kt` | 358 | 2 | `WIRE loadMoreMessages call path + tests` |
 | `MeshSettingsScreen` | `MeshSettingsScreen` | `MeshSettingsScreen` | `android/app/src/main/java/com/scmessenger/android/ui/settings/MeshSettingsScreen.kt` | 32 | 2 | `WIRE MeshSettingsScreen call path + tests` |
 | `MessageInput` | `MessageInput` | `MessageInput` | `android/app/src/main/java/com/scmessenger/android/ui/chat/MessageInput.kt` | 20 | 0 | `WIRE MessageInput call path + tests` |
 | `PeerListScreen` | `PeerListScreen` | `PeerListScreen` | `android/app/src/main/java/com/scmessenger/android/ui/dashboard/PeerListScreen.kt` | 36 | 0 | `WIRE PeerListScreen call path + tests` |
 | `PowerSettingsScreen` | `PowerSettingsScreen` | `PowerSettingsScreen` | `android/app/src/main/java/com/scmessenger/android/ui/settings/PowerSettingsScreen.kt` | 30 | 2 | `WIRE PowerSettingsScreen call path + tests` |
-| `TopologyScreen` | `TopologyScreen` | `TopologyScreen` | `android/app/src/main/java/com/scmessenger/android/ui/dashboard/TopologyScreen.kt` | 40 | 0 | `WIRE TopologyScreen call path + tests` |
-| `TruncatedCopyableText` | `TruncatedCopyableText` | `TruncatedCopyableText` | `android/app/src/main/java/com/scmessenger/android/ui/components/CopyableText.kt` | 130 | 0 | `WIRE TruncatedCopyableText call path + tests` |
-| `WarningBanner` | `WarningBanner` | `WarningBanner` | `android/app/src/main/java/com/scmessenger/android/ui/components/ErrorBanner.kt` | 157 | 0 | `WIRE WarningBanner call path + tests` |
-| `clearAllHistory` | `clearAllHistory` | `clearAllHistory` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt` | 198 | 0 | `WIRE clearAllHistory call path + tests` |
-| `clearInput` | `clearInput` | `clearInput` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ChatViewModel.kt` | 224 | 0 | `WIRE clearInput call path + tests` |
-| `clearSearch` | `clearSearch` | `clearSearch` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt` | 549 | 0 | `WIRE clearSearch call path + tests` |
-| `getNetworkDiagnosticsReport` | `getNetworkDiagnosticsReport` | `getNetworkDiagnosticsReport` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt` | 595 | 0 | `WIRE getNetworkDiagnosticsReport call path + tests` |
-| `loadConversation` | `loadConversation` | `loadConversation` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt` | 114 | 0 | `WIRE loadConversation call path + tests` |
-| `loadMoreMessages` | `loadMoreMessages` | `loadMoreMessages` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ChatViewModel.kt` | 358 | 2 | `WIRE loadMoreMessages call path + tests` |
 | `resolveDeliveryState` | `resolveDeliveryState` | `resolveDeliveryState` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt` | 395 | 0 | `WIRE resolveDeliveryState call path + tests` |
 | `setPeer` | `setPeer` | `setPeer` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ChatViewModel.kt` | 76 | 6 | `WIRE setPeer call path + tests` |
+| `TopologyScreen` | `TopologyScreen` | `TopologyScreen` | `android/app/src/main/java/com/scmessenger/android/ui/dashboard/TopologyScreen.kt` | 40 | 0 | `WIRE TopologyScreen call path + tests` |
+| `TruncatedCopyableText` | `TruncatedCopyableText` | `TruncatedCopyableText` | `android/app/src/main/java/com/scmessenger/android/ui/components/CopyableText.kt` | 130 | 0 | `WIRE TruncatedCopyableText call path + tests` |
 | `updateBatteryFloor` | `updateBatteryFloor` | `updateBatteryFloor` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt` | 386 | 2 | `WIRE updateBatteryFloor call path + tests` |
 | `updateDiscoveryMode` | `updateDiscoveryMode` | `updateDiscoveryMode` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt` | 416 | 2 | `WIRE updateDiscoveryMode call path + tests` |
 | `updateInputText` | `updateInputText` | `updateInputText` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ChatViewModel.kt` | 216 | 2 | `WIRE updateInputText call path + tests` |
 | `updateMaxRelayBudget` | `updateMaxRelayBudget` | `updateMaxRelayBudget` | `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt` | 380 | 0 | `WIRE updateMaxRelayBudget call path + tests` |
+| `WarningBanner` | `WarningBanner` | `WarningBanner` | `android/app/src/main/java/com/scmessenger/android/ui/components/ErrorBanner.kt` | 157 | 0 | `WIRE WarningBanner call path + tests` |
 
 ## B5-android-transport-service
 
@@ -257,32 +233,31 @@ Total tasks: **350**
 | `add_websocket` | `add_websocket` | `add_websocket` | `wasm/src/connection_state.rs` | 257 | 0 | `WIRE add_websocket call path + tests` |
 | `close_all_notifications` | `close_all_notifications` | `close_all_notifications` | `wasm/src/notification_manager.rs` | 308 | 0 | `WIRE close_all_notifications call path + tests` |
 | `detect_browser` | `detect_browser` | `detect_browser` | `wasm/src/notification_manager.rs` | 323 | 0 | `WIRE detect_browser call path + tests` |
-| `drain_received_messages` | `drain_received_messages` | `drain_received_messages` | `wasm/src/lib.rs` | 859 | 0 | `WIRE drain_received_messages call path + tests` |
+| `drain_received_messages` | `drain_received_messages` | `drain_received_messages` | `wasm/src/lib.rs` | 922 | 0 | `WIRE drain_received_messages call path + tests` |
 | `get_browser_options` | `get_browser_options` | `get_browser_options` | `wasm/src/notification_manager.rs` | 329 | 0 | `WIRE get_browser_options call path + tests` |
-| `get_contact_manager` | `get_contact_manager` | `get_contact_manager` | `wasm/src/lib.rs` | 1026 | 0 | `WIRE get_contact_manager call path + tests` |
-| `get_daemon_socket_url` | `get_daemon_socket_url` | `get_daemon_socket_url` | `wasm/src/lib.rs` | 336 | 0 | `WIRE get_daemon_socket_url call path + tests` |
-| `get_default_settings` | `get_default_settings` | `get_default_settings` | `wasm/src/lib.rs` | 902 | 0 | `WIRE get_default_settings call path + tests` |
-| `get_history_manager` | `get_history_manager` | `get_history_manager` | `wasm/src/lib.rs` | 1033 | 0 | `WIRE get_history_manager call path + tests` |
-| `get_identity_from_daemon` | `get_identity_from_daemon` | `get_identity_from_daemon` | `wasm/src/lib.rs` | 407 | 0 | `WIRE get_identity_from_daemon call path + tests` |
+| `get_contact_manager` | `get_contact_manager` | `get_contact_manager` | `wasm/src/lib.rs` | 1097 | 0 | `WIRE get_contact_manager call path + tests` |
+| `get_daemon_socket_url` | `get_daemon_socket_url` | `get_daemon_socket_url` | `wasm/src/lib.rs` | 350 | 0 | `WIRE get_daemon_socket_url call path + tests` |
+| `get_history_manager` | `get_history_manager` | `get_history_manager` | `wasm/src/lib.rs` | 1104 | 0 | `WIRE get_history_manager call path + tests` |
+| `get_identity_from_daemon` | `get_identity_from_daemon` | `get_identity_from_daemon` | `wasm/src/lib.rs` | 421 | 0 | `WIRE get_identity_from_daemon call path + tests` |
 | `get_identity_wire_shape` | `get_identity_wire_shape` | `get_identity_wire_shape` | `wasm/src/daemon_bridge.rs` | 36 | 0 | `WIRE get_identity_wire_shape call path + tests` |
-| `get_iron_core_mode` | `get_iron_core_mode` | `get_iron_core_mode` | `wasm/src/lib.rs` | 322 | 0 | `WIRE get_iron_core_mode call path + tests` |
+| `get_iron_core_mode` | `get_iron_core_mode` | `get_iron_core_mode` | `wasm/src/lib.rs` | 336 | 0 | `WIRE get_iron_core_mode call path + tests` |
 | `get_permission` | `get_permission` | `get_permission` | `wasm/src/notification_manager.rs` | 317 | 0 | `WIRE get_permission call path + tests` |
-| `get_settings` | `get_settings` | `get_settings` | `wasm/src/lib.rs` | 877 | 0 | `WIRE get_settings call path + tests` |
-| `initialize_identity_from_daemon` | `initialize_identity_from_daemon` | `initialize_identity_from_daemon` | `wasm/src/lib.rs` | 375 | 0 | `WIRE initialize_identity_from_daemon call path + tests` |
+| `get_settings` | `get_settings` | `get_settings` | `wasm/src/lib.rs` | 940 | 31 | `WIRE get_settings call path + tests` |
+| `initialize_identity_from_daemon` | `initialize_identity_from_daemon` | `initialize_identity_from_daemon` | `wasm/src/lib.rs` | 389 | 0 | `WIRE initialize_identity_from_daemon call path + tests` |
 | `is_permission_granted` | `is_permission_granted` | `is_permission_granted` | `wasm/src/notification_manager.rs` | 231 | 0 | `WIRE is_permission_granted call path + tests` |
 | `notification_roundtrip_for_ui_state` | `notification_roundtrip_for_ui_state` | `notification_roundtrip_for_ui_state` | `wasm/src/daemon_bridge.rs` | 45 | 0 | `WIRE notification_roundtrip_for_ui_state call path + tests` |
-| `parse_response` | `parse_response` | `parse_response` | `wasm/src/daemon_bridge.rs` | 21 | 0 | `WIRE parse_response call path + tests` |
+| `parse_response` | `parse_response` | `parse_response` | `wasm/src/daemon_bridge.rs` | 21 | 7 | `WIRE parse_response call path + tests` |
 | `remove_rtc_connection` | `remove_rtc_connection` | `remove_rtc_connection` | `wasm/src/connection_state.rs` | 286 | 0 | `WIRE remove_rtc_connection call path + tests` |
 | `remove_websocket` | `remove_websocket` | `remove_websocket` | `wasm/src/connection_state.rs` | 265 | 0 | `WIRE remove_websocket call path + tests` |
 | `request_permission` | `request_permission` | `request_permission` | `wasm/src/notification_manager.rs` | 110 | 0 | `WIRE request_permission call path + tests` |
-| `send_prepared_envelope` | `send_prepared_envelope` | `send_prepared_envelope` | `wasm/src/lib.rs` | 551 | 0 | `WIRE send_prepared_envelope call path + tests` |
-| `set_daemon_socket_url` | `set_daemon_socket_url` | `set_daemon_socket_url` | `wasm/src/lib.rs` | 330 | 0 | `WIRE set_daemon_socket_url call path + tests` |
-| `set_iron_core_mode` | `set_iron_core_mode` | `set_iron_core_mode` | `wasm/src/lib.rs` | 313 | 0 | `WIRE set_iron_core_mode call path + tests` |
+| `send_prepared_envelope` | `send_prepared_envelope` | `send_prepared_envelope` | `wasm/src/lib.rs` | 565 | 0 | `WIRE send_prepared_envelope call path + tests` |
+| `set_daemon_socket_url` | `set_daemon_socket_url` | `set_daemon_socket_url` | `wasm/src/lib.rs` | 344 | 0 | `WIRE set_daemon_socket_url call path + tests` |
+| `set_iron_core_mode` | `set_iron_core_mode` | `set_iron_core_mode` | `wasm/src/lib.rs` | 327 | 0 | `WIRE set_iron_core_mode call path + tests` |
 | `show_permission_guidance` | `show_permission_guidance` | `show_permission_guidance` | `wasm/src/notification_manager.rs` | 355 | 0 | `WIRE show_permission_guidance call path + tests` |
-| `start_receive_loop` | `start_receive_loop` | `start_receive_loop` | `wasm/src/lib.rs` | 833 | 0 | `WIRE start_receive_loop call path + tests` |
-| `stop_swarm` | `stop_swarm` | `stop_swarm` | `wasm/src/lib.rs` | 538 | 0 | `WIRE stop_swarm call path + tests` |
-| `update_settings` | `update_settings` | `update_settings` | `wasm/src/lib.rs` | 885 | 0 | `WIRE update_settings call path + tests` |
-| `validate_settings` | `validate_settings` | `validate_settings` | `wasm/src/lib.rs` | 807 | 0 | `WIRE validate_settings call path + tests` |
+| `start_receive_loop` | `start_receive_loop` | `start_receive_loop` | `wasm/src/lib.rs` | 896 | 0 | `WIRE start_receive_loop call path + tests` |
+| `stop_swarm` | `stop_swarm` | `stop_swarm` | `wasm/src/lib.rs` | 552 | 0 | `WIRE stop_swarm call path + tests` |
+| `update_settings` | `update_settings` | `update_settings` | `wasm/src/lib.rs` | 948 | 0 | `WIRE update_settings call path + tests` |
+| `validate_settings` | `validate_settings` | `validate_settings` | `wasm/src/lib.rs` | 870 | 0 | `WIRE validate_settings call path + tests` |
 
 ## B7-cli
 
@@ -299,7 +274,7 @@ Total tasks: **350**
 | `get_available_paths` | `get_available_paths` | `get_available_paths` | `cli/src/transport_bridge.rs` | 189 | 0 | `WIRE get_available_paths call path + tests` |
 | `get_best_forwarding_path` | `get_best_forwarding_path` | `get_best_forwarding_path` | `cli/src/transport_bridge.rs` | 279 | 0 | `WIRE get_best_forwarding_path call path + tests` |
 | `get_forwarding_capability` | `get_forwarding_capability` | `get_forwarding_capability` | `cli/src/transport_bridge.rs` | 252 | 0 | `WIRE get_forwarding_capability call path + tests` |
-| `get_history_via_api` | `get_history_via_api` | `get_history_via_api` | `cli/src/api.rs` | 169 | 0 | `WIRE get_history_via_api call path + tests` |
+| `get_history_via_api` | `get_history_via_api` | `get_history_via_api` | `cli/src/api.rs` | 181 | 0 | `WIRE get_history_via_api call path + tests` |
 | `is_ble_available` | `is_ble_available` | `is_ble_available` | `cli/src/ble_daemon.rs` | 286 | 0 | `WIRE is_ble_available call path + tests` |
 | `scan_for_advertisements` | `scan_for_advertisements` | `scan_for_advertisements` | `cli/src/ble_daemon.rs` | 229 | 0 | `WIRE scan_for_advertisements call path + tests` |
 | `set_notes` | `set_notes` | `set_notes` | `cli/src/contacts.rs` | 165 | 0 | `WIRE set_notes call path + tests` |
@@ -309,13 +284,13 @@ Total tasks: **350**
 
 | Task | Function | Resolved symbol | Target | Definition line | External refs | Patch template |
 |---|---|---|---|---:|---:|---|
-| `add_step` | `add_step` | `add_step` | `core/src/dspy/modules.rs` | 84 | 0 | `WIRE add_step call path + tests` |
+| `add_step` | `add_step` | `add_step` | `core/src/dspy/modules.rs` | 84 | 3 | `WIRE add_step call path + tests` |
 | `apply_policy_config` | `apply_policy_config` | `apply_policy_config` | `core/src/drift/relay.rs` | 366 | 0 | `WIRE apply_policy_config call path + tests` |
 | `blake3_hash` | `blake3_hash` | `blake3_hash` | `core/src/dspy/signatures.rs` | 136 | 0 | `WIRE blake3_hash call path + tests` |
 | `blocked_only_peer_ids` | `blocked_only_peer_ids` | `blocked_only_peer_ids` | `core/src/store/blocked.rs` | 230 | 0 | `WIRE blocked_only_peer_ids call path + tests` |
-| `buildForegroundServiceNotification` | `buildForegroundServiceNotification` | `buildForegroundServiceNotification` | `android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt` | 175 | 0 | `WIRE buildForegroundServiceNotification call path + tests` |
 | `build_optimization_pipeline` | `build_optimization_pipeline` | `build_optimization_pipeline` | `core/src/dspy/teleprompt.rs` | 241 | 0 | `WIRE build_optimization_pipeline call path + tests` |
 | `build_security_audit_pipeline` | `build_security_audit_pipeline` | `build_security_audit_pipeline` | `core/src/dspy/modules.rs` | 240 | 0 | `WIRE build_security_audit_pipeline call path + tests` |
+| `buildForegroundServiceNotification` | `buildForegroundServiceNotification` | `buildForegroundServiceNotification` | `android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt` | 175 | 0 | `WIRE buildForegroundServiceNotification call path + tests` |
 | `chain_ratchet_produces_distinct_keys` | `chain_ratchet_produces_distinct_keys` | `chain_ratchet_produces_distinct_keys` | `core/src/crypto/kani_proofs.rs` | 51 | 0 | `WIRE chain_ratchet_produces_distinct_keys call path + tests` |
 | `clearAllRequestNotifications` | `clearAllRequestNotifications` | `clearAllRequestNotifications` | `android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt` | 492 | 0 | `WIRE clearAllRequestNotifications call path + tests` |
 | `clearMessageNotifications` | `clearMessageNotifications` | `clearMessageNotifications` | `android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt` | 479 | 0 | `WIRE clearMessageNotifications call path + tests` |
@@ -340,15 +315,15 @@ Total tasks: **350**
 | `foreground_direct_messages_follow_foreground_toggle` | `foreground_direct_messages_follow_foreground_toggle` | `foreground_direct_messages_follow_foreground_toggle` | `core/src/notification.rs` | 475 | 0 | `WIRE foreground_direct_messages_follow_foreground_toggle call path + tests` |
 | `formatReportForUser` | `formatReportForUser` | `formatReportForUser` | `android/app/src/main/java/com/scmessenger/android/network/DiagnosticsReporter.kt` | 108 | 0 | `WIRE formatReportForUser call path + tests` |
 | `generate_cover_traffic_if_due` | `generate_cover_traffic_if_due` | `generate_cover_traffic_if_due` | `core/src/drift/relay.rs` | 179 | 0 | `WIRE generate_cover_traffic_if_due call path + tests` |
+| `get_last_profile` | `get_last_profile` | `get_last_profile` | `core/src/mobile/auto_adjust.rs` | 268 | 0 | `WIRE get_last_profile call path + tests` |
+| `get_overrides` | `get_overrides` | `get_overrides` | `core/src/mobile/auto_adjust.rs` | 263 | 0 | `WIRE get_overrides call path + tests` |
+| `get_signable_data` | `get_signable_data` | `get_signable_data` | `core/src/relay/invite.rs` | 90 | 0 | `WIRE get_signable_data call path + tests` |
+| `get_signature` | `get_signature` | `get_signature` | `core/src/dspy/signatures.rs` | 156 | 3 | `WIRE get_signature call path + tests` |
 | `getHealthyRelays` | `getHealthyRelays` | `getHealthyRelays` | `android/app/src/main/java/com/scmessenger/android/utils/CircuitBreaker.kt` | 199 | 0 | `WIRE getHealthyRelays call path + tests` |
 | `getLastFailure` | `getLastFailure` | `getLastFailureReason` | `android/app/src/main/java/com/scmessenger/android/utils/CircuitBreaker.kt` | 178 | 1 | `WIRE getLastFailure call path + tests` |
 | `getLastFailureReason` | `getLastFailureReason` | `getLastFailureReason` | `android/app/src/main/java/com/scmessenger/android/utils/CircuitBreaker.kt` | 178 | 1 | `WIRE getLastFailureReason call path + tests` |
 | `getNotificationStats` | `getNotificationStats` | `getNotificationStats` | `android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt` | 620 | 0 | `WIRE getNotificationStats call path + tests` |
 | `getOpenCircuits` | `getOpenCircuits` | `getOpenCircuits` | `android/app/src/main/java/com/scmessenger/android/utils/CircuitBreaker.kt` | 194 | 0 | `WIRE getOpenCircuits call path + tests` |
-| `get_last_profile` | `get_last_profile` | `get_last_profile` | `core/src/mobile/auto_adjust.rs` | 268 | 0 | `WIRE get_last_profile call path + tests` |
-| `get_overrides` | `get_overrides` | `get_overrides` | `core/src/mobile/auto_adjust.rs` | 263 | 0 | `WIRE get_overrides call path + tests` |
-| `get_signable_data` | `get_signable_data` | `get_signable_data` | `core/src/relay/invite.rs` | 90 | 0 | `WIRE get_signable_data call path + tests` |
-| `get_signature` | `get_signature` | `get_signature` | `core/src/dspy/signatures.rs` | 156 | 0 | `WIRE get_signature call path + tests` |
 | `hasDnsFailures` | `hasDnsFailures` | `hasDnsFailures` | `android/app/src/main/java/com/scmessenger/android/utils/NetworkFailureMetrics.kt` | 61 | 0 | `WIRE hasDnsFailures call path + tests` |
 | `hasPortBlocking` | `hasPortBlocking` | `hasPortBlocking` | `android/app/src/main/java/com/scmessenger/android/utils/NetworkFailureMetrics.kt` | 63 | 0 | `WIRE hasPortBlocking call path + tests` |
 | `isAtMaxDelay` | `isAtMaxDelay` | `isAtMaxDelay` | `android/app/src/main/java/com/scmessenger/android/utils/BackoffStrategy.kt` | 79 | 0 | `WIRE isAtMaxDelay call path + tests` |
@@ -363,7 +338,7 @@ Total tasks: **350**
 | `nonce_length_invariant` | `nonce_length_invariant` | `nonce_length_invariant` | `core/src/crypto/kani_proofs.rs` | 44 | 0 | `WIRE nonce_length_invariant call path + tests` |
 | `notif_mesh_topology` | `notif_mesh_topology` | `notif_mesh_topology` | `core/src/wasm_support/rpc.rs` | 205 | 0 | `WIRE notif_mesh_topology call path + tests` |
 | `notification_serialization` | `notification_serialization` | `notification_serialization` | `core/src/wasm_support/rpc.rs` | 264 | 0 | `WIRE notification_serialization call path + tests` |
-| `overall_score` | `overall_score` | `overall_score` | `core/src/abuse/reputation.rs` | 169 | 0 | `WIRE overall_score call path + tests` |
+| `overall_score` | `overall_score` | `overall_score` | `core/src/abuse/reputation.rs` | 169 | 28 | `WIRE overall_score call path + tests` |
 | `override_ble_advertise_interval` | `override_ble_advertise_interval` | `override_ble_advertise_interval` | `core/src/mobile/auto_adjust.rs` | 243 | 0 | `WIRE override_ble_advertise_interval call path + tests` |
 | `override_relay_priority_threshold` | `override_relay_priority_threshold` | `override_relay_priority_threshold` | `core/src/mobile/auto_adjust.rs` | 253 | 0 | `WIRE override_relay_priority_threshold call path + tests` |
 | `proptest_different_ciphertexts_same_plaintext` | `proptest_different_ciphertexts_same_plaintext` | `proptest_different_ciphertexts_same_plaintext` | `core/src/crypto/proptest_harness.rs` | 57 | 0 | `WIRE proptest_different_ciphertexts_same_plaintext call path + tests` |

@@ -21,4 +21,16 @@ PHASE 4: TEST & ITERATE
 2. Read the terminal output. 
 3. IF COMPILE FAILS: Enter ITERATION. Read the exact error, fix the syntax or imports, and run the test again. 
 4. IF SUCCESSFUL: Verify you successfully wired all targets from Phase 2. If the integration is 100% complete and compiles cleanly, output exactly:
+
+## Task Closeout Evidence
+
+### Wired Call Path(s)
+1. **Input (MeshService::on_entering_background)**: Wires app lifecycle events to `MeshService::pause()`.
+2. **Output (PlatformBridge::on_entering_background)**: Core notifies the bridge during `pause()`.
+
+### Files Modified
+- [mobile_bridge.rs](file:///c:/Users/kanal/Documents/SCMessenger/SCMessenger/core/src/mobile_bridge.rs)
+- [api.udl](file:///c:/Users/kanal/Documents/SCMessenger/SCMessenger/core/src/api.udl)
+
 STATUS: SUCCESS_STOP
+

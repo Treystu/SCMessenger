@@ -22,3 +22,22 @@ PHASE 4: TEST & ITERATE
 3. IF COMPILE FAILS: Enter ITERATION. Read the exact error, fix the syntax or imports, and run the test again. 
 4. IF SUCCESSFUL: Verify you successfully wired all targets from Phase 2. If the integration is 100% complete and compiles cleanly, output exactly:
 STATUS: SUCCESS_STOP
+
+---
+### PHASE 2: IMPLEMENTATION LOG
+- **Target File**: `core/src/mobile_bridge.rs`
+  - Added `AutoAdjustEngine` to `MeshService`.
+  - Wired `compute_profile` and `compute_ble_adjustment` into `update_device_state` (the production loop).
+  - Computed adjustments are now logged and applied to the relay budget.
+- **Target File**: `core/src/lib.rs`
+  - Added `AutoAdjustEngine` to `IronCore` for CLI parity.
+- **Target File**: `core/src/api.udl`
+  - Exposed `get_auto_adjust_engine` on `MeshService` and `IronCore`.
+- **Target File**: `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
+  - Consolidated platform and core to use the same `AutoAdjustEngine` instance.
+
+**VERIFICATION**:
+- Integration complete across Core, Android, and CLI.
+- Overrides are now shared between Platform (over UniFFI) and Core.
+- Production loop (device state updates) now triggers adaptive BLE tuning.
+

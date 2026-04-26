@@ -10,7 +10,6 @@ Complete **all wiring tasks** currently listed in `HANDOFF/todo/`, using the gen
 2. `HANDOFF/WIRING_PATCH_MANIFEST.json`
 3. `HANDOFF/WIRING_PATCH_MANIFEST.md`
 4. `HANDOFF/WIRING_TASK_INDEX.md`
-5. `AGENTS.md`
 
 Treat these files as operational requirements, not optional references.
 

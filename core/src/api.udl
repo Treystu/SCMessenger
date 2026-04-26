@@ -234,6 +234,8 @@ interface IronCore {
     bytes peel_onion_layer(bytes onion_data, bytes relay_secret_key);
     /// Compute timing jitter delay for relay forwarding (milliseconds).
     u64 relay_jitter_delay(string priority);
+
+    AutoAdjustEngine get_auto_adjust_engine();
 };
 
 // ============================================================================
@@ -309,6 +311,7 @@ dictionary ServiceStats {
 };
 
 interface MeshService {
+    [Self=ByArc]
     constructor(MeshServiceConfig config);
     [Name=with_storage]
     constructor(MeshServiceConfig config, string storage_path);
@@ -324,6 +327,7 @@ interface MeshService {
     ServiceStats get_stats();
     void reset_stats();
     void set_platform_bridge(PlatformBridge? bridge);
+    void set_delegate(CoreDelegate? delegate);
 
     [Throws=IronCoreError]
     void start_swarm(string listen_addr);
@@ -336,12 +340,19 @@ interface MeshService {
     string export_diagnostics();
 
     void update_device_state(DeviceProfile profile);
+    void on_battery_changed(u8 battery_pct, boolean is_charging);
+    void on_network_changed(boolean has_wifi, boolean has_cellular);
+    void on_motion_changed(MotionState motion);
+    void on_entering_background();
+    void on_entering_foreground();
+    void on_ble_data_received(string peer_id, bytes data);
     void set_relay_budget(u32 messages_per_hour);
 
     void on_peer_discovered(string peer_id);
     void on_peer_disconnected(string peer_id);
     void on_data_received(string peer_id, bytes data);
     IronCore? get_core();
+    AutoAdjustEngine get_auto_adjust_engine();
 };
 
 callback interface PlatformBridge {

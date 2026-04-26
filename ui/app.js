@@ -711,6 +711,16 @@ const SCM = {
       } catch(e) { SCM.showSnackbar("Settings error: " + e); }
     },
 
+    resetSettingsToDefault() {
+      if (!confirm("Reset mesh network settings to defaults?")) return;
+      try {
+        const defaults = SCM.state.core.getDefaultSettings();
+        SCM.state.core.updateSettings(defaults);
+        SCM.showSnackbar("Settings reset. Reloading...");
+        setTimeout(() => location.reload(), 1000);
+      } catch (e) { SCM.showSnackbar("Reset failed: " + e); }
+    },
+
     setDiscoveryMode(mode) {
       const s = SCM.state.core.getSettings();
       s.discoveryMode = mode;

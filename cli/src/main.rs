@@ -179,6 +179,25 @@ enum Commands {
     HistoryDelete { id: String },
     /// Run self-tests
     Test,
+    /// Manage audit log
+    Audit {
+        #[command(subcommand)]
+        action: AuditAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum AuditAction {
+    /// Export the entire audit log as JSON
+    Export {
+        /// Optional output file path
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+    /// Verify the cryptographic integrity of the audit log
+    Verify,
+    /// Show a summary of audit log statistics
+    Stats,
 }
 
 #[derive(Subcommand)]
@@ -309,6 +328,21 @@ enum ConfigAction {
         key: String,
     },
     List,
+    /// Manage privacy-enhancing features (onion routing, padding, etc.)
+    Privacy {
+        /// Enable/disable message padding
+        #[arg(short, long)]
+        padding: Option<bool>,
+        /// Enable/disable onion routing
+        #[arg(short, long)]
+        onion: Option<bool>,
+        /// Enable/disable cover traffic
+        #[arg(short, long)]
+        cover: Option<bool>,
+        /// Enable/disable timing obfuscation (jitter)
+        #[arg(short, long)]
+        timing: Option<bool>,
+    },
 }
 
 #[tokio::main]
@@ -385,6 +419,7 @@ async fn main() -> Result<()> {
         }
         Commands::HistoryDelete { id } => cmd_history_delete(id).await,
         Commands::Test => cmd_test().await,
+        Commands::Audit { action } => cmd_audit(action).await,
     }
 }
 
@@ -880,6 +915,32 @@ async fn cmd_config(action: ConfigAction) -> Result<()> {
                 println!("  {:<20} {}", key.bright_cyan(), value);
             }
 
+        }
+
+        ConfigAction::Privacy { padding, onion, cover, timing } => {
+            let data_dir = config::Config::data_dir()?;
+            let storage_path = data_dir.join("storage");
+            let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+            
+            let mut p: privacy::PrivacyConfig = serde_json::from_str(&core.get_privacy_config())?;
+            
+            if padding.is_none() && onion.is_none() && cover.is_none() && timing.is_none() {
+                // Just show current config if no flags provided
+                println!("{}", "Privacy Configuration".bold());
+                println!("  Message Padding:   {}", if p.message_padding_enabled { "ON".green() } else { "OFF".red() });
+                println!("  Onion Routing:      {}", if p.onion_routing_enabled { "ON".green() } else { "OFF".red() });
+                println!("  Cover Traffic:      {}", if p.cover_traffic_enabled { "ON".green() } else { "OFF".red() });
+                println!("  Timing Obfuscation: {}", if p.timing_obfuscation_enabled { "ON".green() } else { "OFF".red() });
+                return Ok(());
+            }
+
+            if let Some(v) = padding { p.message_padding_enabled = v; }
+            if let Some(v) = onion { p.onion_routing_enabled = v; }
+            if let Some(v) = cover { p.cover_traffic_enabled = v; }
+            if let Some(v) = timing { p.timing_obfuscation_enabled = v; }
+            
+            core.set_privacy_config(serde_json::to_string(&p)?)?;
+            println!("{} Privacy configuration updated.", "✓".green());
         }
     }
 
@@ -2383,7 +2444,23 @@ async fn cmd_status() -> Result<()> {
         println!("{}", "Runtime Network Surface".bold());
 
         match api::get_peers_via_api().await {
-            Ok(peers) => println!("Peers: {}", peers.len()),
+            Ok(peers) => {
+                println!("Peers: {}", peers.len());
+                for peer in peers {
+                    let rep_color = if peer.reputation > 80.0 {
+                        "green"
+                    } else if peer.reputation < 30.0 {
+                        "red"
+                    } else {
+                        "yellow"
+                    };
+                    println!(
+                        "  - {} (reputation: {})",
+                        peer.peer_id.dimmed(),
+                        format!("{:.1}", peer.reputation).color(rep_color)
+                    );
+                }
+            }
             Err(e) => println!("Peers: {} ({})", "unavailable".yellow(), e),
         }
 
@@ -2409,6 +2486,21 @@ async fn cmd_status() -> Result<()> {
         match api::get_connection_path_state_via_api().await {
             Ok(state) => println!("Connection Path State: {}", state.bright_cyan()),
             Err(e) => println!("Connection Path State: {} ({})", "unavailable".yellow(), e),
+        }
+
+        match api::get_drift_state_via_api().await {
+            Ok(status) => {
+                let state_color = if status.state == "Active" {
+                    status.state.bright_green()
+                } else {
+                    status.state.yellow()
+                };
+                println!(
+                    "Drift Protocol:        {} (store: {} msgs)",
+                    state_color, status.store_size
+                );
+            }
+            Err(e) => println!("Drift Protocol:        {} ({})", "unavailable".yellow(), e),
         }
 
         match api::export_diagnostics_via_api().await {
@@ -2801,6 +2893,43 @@ fn prune_logs(log_dir: &std::path::Path, max_days: u64) -> Result<()> {
                     }
                 }
             }
+        }
+    }
+    Ok(())
+}
+
+async fn cmd_audit(action: AuditAction) -> Result<()> {
+    let config = config::Config::load()?;
+    let data_dir = config::Config::data_dir()?;
+    let storage_path = data_dir.join("storage");
+    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+
+    match action {
+        AuditAction::Export { output } => {
+            let json = core.export_audit_log().map_err(|e| anyhow::anyhow!("{:?}", e))?;
+            if let Some(path) = output {
+                std::fs::write(&path, json)?;
+                println!("{} Audit log exported to {}", "✓".green(), path);
+            } else {
+                println!("{}", json);
+            }
+        }
+        AuditAction::Verify => {
+            match core.validate_audit_chain() {
+                Ok(_) => println!("{} Audit chain integrity verified: OK", "✓".green()),
+                Err(e) => println!("{} Audit chain validation failed: {:?}", "✗".red(), e),
+            }
+        }
+        AuditAction::Stats => {
+             let events = core.get_audit_events_since(0);
+             println!("{}", "Audit Log Statistics".bold());
+             println!("  Total Events:   {}", events.len());
+             if let Some(first) = events.first() {
+                 println!("  First Event:    {}", format_timestamp(first.timestamp_unix_secs));
+             }
+             if let Some(last) = events.last() {
+                 println!("  Last Event:     {}", format_timestamp(last.timestamp_unix_secs));
+             }
         }
     }
     Ok(())

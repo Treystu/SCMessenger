@@ -40,8 +40,14 @@ pub struct AddContactResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct PeerEntry {
+    pub peer_id: String,
+    pub reputation: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GetPeersResponse {
-    pub peers: Vec<String>,
+    pub peers: Vec<PeerEntry>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -76,6 +82,12 @@ pub struct GetListenersResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConnectionPathStateResponse {
     pub state: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DriftStatusResponse {
+    pub state: String,
+    pub store_size: u32,
 }
 
 // Check if API is available
@@ -151,7 +163,7 @@ pub async fn add_contact_via_api(
 }
 
 #[allow(dead_code)]
-pub async fn get_peers_via_api() -> Result<Vec<String>> {
+pub async fn get_peers_via_api() -> Result<Vec<PeerEntry>> {
     let client = hyper::Client::new();
     let req = Request::builder()
         .method(Method::GET)
@@ -237,6 +249,18 @@ pub async fn get_connection_path_state_via_api() -> Result<String> {
     let response: ConnectionPathStateResponse = serde_json::from_slice(&body_bytes)?;
     Ok(response.state)
 }
+pub async fn get_drift_state_via_api() -> Result<DriftStatusResponse> {
+    let client = hyper::Client::new();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}/api/drift-status", API_ADDR))
+        .body(Body::empty())?;
+
+    let resp = client.request(req).await?;
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let response: DriftStatusResponse = serde_json::from_slice(&body_bytes)?;
+    Ok(response)
+}
 
 pub async fn export_diagnostics_via_api() -> Result<String> {
     let client = hyper::Client::new();
@@ -283,6 +307,7 @@ async fn handle_request(
             handle_get_connection_path_state(req, ctx).await
         }
         (&Method::GET, "/api/diagnostics") => handle_export_diagnostics(req, ctx).await,
+        (&Method::GET, "/api/drift-status") => handle_get_drift_status(req, ctx).await,
         (&Method::POST, "/api/shutdown") => {
             // Spawn a task to exit after a brief delay to allow response to send
             tokio::spawn(async {
@@ -376,16 +401,23 @@ async fn handle_add_contact(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<
 }
 
 async fn handle_get_peers(_req: Request<Body>, ctx: Arc<ApiContext>) -> Result<Response<Body>> {
-    let peer_ids: Vec<String> = ctx
+    let peers: Vec<PeerEntry> = ctx
         .swarm_handle
         .get_peers()
         .await
         .unwrap_or_default()
         .into_iter()
-        .map(|p| p.to_string())
+        .map(|p| {
+            let pid = p.to_string();
+            let reputation = ctx.core.get_peer_reputation(pid.clone());
+            PeerEntry {
+                peer_id: pid,
+                reputation,
+            }
+        })
         .collect();
 
-    let response = GetPeersResponse { peers: peer_ids };
+    let response = GetPeersResponse { peers };
 
     Ok(Response::builder()
         .status(StatusCode::OK)
@@ -509,6 +541,10 @@ fn export_diagnostics(
         "external_addrs": external_addrs,
         "inbox_count": core.inbox_count(),
         "outbox_count": core.outbox_count(),
+        "drift": {
+            "state": core.drift_network_state(),
+            "store_size": core.drift_store_size(),
+        },
         "history_stats": stats.as_ref().map(|s| serde_json::json!({
             "total_messages": s.total_messages,
             "sent_count": s.sent_count,
@@ -600,6 +636,18 @@ async fn handle_export_diagnostics(
         .status(StatusCode::OK)
         .header("content-type", "application/json")
         .body(Body::from(diagnostics))?)
+}
+
+async fn handle_get_drift_status(_req: Request<Body>, ctx: Arc<ApiContext>) -> Result<Response<Body>> {
+    let response = DriftStatusResponse {
+        state: ctx.core.drift_network_state(),
+        store_size: ctx.core.drift_store_size(),
+    };
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&response)?))?)
 }
 
 pub async fn start_api_server(ctx: ApiContext) -> Result<()> {

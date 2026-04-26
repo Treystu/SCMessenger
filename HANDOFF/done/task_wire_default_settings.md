@@ -22,3 +22,32 @@ PHASE 4: TEST & ITERATE
 3. IF COMPILE FAILS: Enter ITERATION. Read the exact error, fix the syntax or imports, and run the test again. 
 4. IF SUCCESSFUL: Verify you successfully wired all targets from Phase 2. If the integration is 100% complete and compiles cleanly, output exactly:
 STATUS: SUCCESS_STOP
+
+### EVIDENCE
+1. **Core Wiring**: `MeshSettingsManager::default_settings` is already exposed via UniFFI but was under-utilized. 
+2. **Android Integration**: 
+   - Updated `MeshRepository.kt` to expose `getDefaultSettings()`:
+     ```kotlin
+     fun getDefaultSettings(): uniffi.api.MeshSettings {
+         return settingsManager?.defaultSettings() ?: ...
+     }
+     ```
+   - Updated `SettingsViewModel.kt` to include `resetSettingsToDefault()`:
+     ```kotlin
+     fun resetSettingsToDefault() {
+         viewModelScope.launch(Dispatchers.IO) {
+             val defaults = meshRepository.getDefaultSettings()
+             debouncedUpdateSettings(defaults)
+         }
+     }
+     ```
+3. **Verification**: Added unit test `test_mesh_settings_default` in `core/src/mobile_bridge.rs`:
+   ```rust
+   #[test]
+   fn test_mesh_settings_default() {
+       let manager = MeshSettingsManager::new(path);
+       let settings = manager.default_settings();
+       assert!(settings.relay_enabled);
+       // ...
+   }
+   ```

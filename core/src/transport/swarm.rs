@@ -1091,6 +1091,7 @@ pub enum SwarmEvent2 {
     /// A peer's identity was confirmed (after Identify protocol)
     PeerIdentified {
         peer_id: PeerId,
+        public_key: Option<String>,
         agent_version: String,
         listen_addrs: Vec<Multiaddr>,
         protocols: Vec<String>,
@@ -2991,8 +2992,10 @@ pub async fn start_swarm_with_config(
                                 if should_report {
                                     reported_peer_info.insert(peer_id, (info.agent_version.clone(), info.listen_addrs.clone()));
                                     // Emit event for application layer
+                                    let public_key_hex = info.public_key.clone().try_into_ed25519().map(|pk| hex::encode(pk.to_bytes()));
                                     let _ = event_tx.send(SwarmEvent2::PeerIdentified {
                                         peer_id,
+                                        public_key: public_key_hex,
                                         agent_version: info.agent_version.clone(),
                                         listen_addrs: info.listen_addrs.clone(),
                                         protocols: info.protocols.iter().map(|p| p.to_string()).collect(),

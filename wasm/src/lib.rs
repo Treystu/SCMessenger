@@ -232,10 +232,17 @@ impl IronCore {
             rx_messages: Arc::new(Mutex::new(Vec::new())),
             swarm_handle: Arc::new(Mutex::new(None)),
             settings_manager: None,
-            settings: Arc::new(Mutex::new(defaults)),
+            settings: Arc::new(Mutex::new(defaults.clone())),
             mode: Arc::new(Mutex::new(IronCoreMode::Full)),
             daemon_socket_url: Arc::new(Mutex::new(None)),
+        };
+
+        // P1_CORE_001: Sync drift state
+        if defaults.relay_enabled {
+            core.inner.drift_activate();
         }
+
+        core
     }
 
     #[wasm_bindgen(js_name = withStorage)]
@@ -250,15 +257,22 @@ impl IronCore {
             internet_enabled: true,
             ..MeshSettings::default()
         });
-        Self {
+        let core = Self {
             inner: Arc::new(RustIronCore::with_storage(storage_path)),
             rx_messages: Arc::new(Mutex::new(Vec::new())),
             swarm_handle: Arc::new(Mutex::new(None)),
             settings_manager: Some(manager),
-            settings: Arc::new(Mutex::new(loaded)),
+            settings: Arc::new(Mutex::new(loaded.clone())),
             mode: Arc::new(Mutex::new(IronCoreMode::Full)),
             daemon_socket_url: Arc::new(Mutex::new(None)),
+        };
+
+        // P1_CORE_001: Sync drift state
+        if loaded.relay_enabled {
+            core.inner.drift_activate();
         }
+
+        core
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -802,6 +816,55 @@ impl IronCore {
         "unknown".to_string()
     }
 
+    #[wasm_bindgen(js_name = getDriftState)]
+    pub fn get_drift_state(&self) -> String {
+        self.inner.drift_network_state()
+    }
+
+    #[wasm_bindgen(js_name = getDriftStoreSize)]
+    pub fn get_drift_store_size(&self) -> u32 {
+        self.inner.drift_store_size()
+    }
+
+    #[wasm_bindgen(js_name = getAuditLog)]
+    pub fn get_audit_log(&self) -> JsValue {
+        let log = self.inner.get_audit_log();
+        serde_wasm_bindgen::to_value(&log).unwrap_or(JsValue::NULL)
+    }
+
+    #[wasm_bindgen(js_name = getAuditEventsSince)]
+    pub fn get_audit_events_since(&self, since: u64) -> JsValue {
+        let events = self.inner.get_audit_events_since(since);
+        serde_wasm_bindgen::to_value(&events).unwrap_or(JsValue::NULL)
+    }
+
+    #[wasm_bindgen(js_name = getPeerReputation)]
+    pub fn get_peer_reputation(&self, peer_id: String) -> f64 {
+        self.inner.get_peer_reputation(peer_id)
+    }
+
+    #[wasm_bindgen(js_name = getEnhancedPeerReputation)]
+    pub fn get_enhanced_peer_reputation(&self, peer_id: String) -> JsValue {
+        let (score, confidence, flagged) = self.inner.get_enhanced_peer_reputation(peer_id);
+        serde_wasm_bindgen::to_value(&(score, confidence, flagged)).unwrap_or(JsValue::NULL)
+    }
+
+    #[wasm_bindgen(js_name = getPrivacyConfig)]
+    pub fn get_privacy_config(&self) -> JsValue {
+        let config = self.inner.privacy_config();
+        serde_wasm_bindgen::to_value(&config).unwrap_or(JsValue::NULL)
+    }
+
+    #[wasm_bindgen(js_name = setPrivacyConfig)]
+    pub fn set_privacy_config(&self, js_config: JsValue) -> Result<(), JsValue> {
+        let config: privacy::PrivacyConfig = serde_wasm_bindgen::from_value(js_config)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let json = serde_json::to_string(&config).unwrap();
+        self.inner
+            .set_privacy_config(json)
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+    }
+
     /// Validate the given settings against invariant rules.
     #[wasm_bindgen(js_name = validateSettings)]
     pub fn validate_settings(&self, js_settings: JsValue) -> Result<(), JsValue> {
@@ -893,7 +956,15 @@ impl IronCore {
                 .map_err(|e| js_value_from_str(&format!("Failed to save settings: {:?}", e)))?;
         }
 
-        *self.settings.lock() = settings;
+        *self.settings.lock() = settings.clone();
+
+        // P1_CORE_001: Sync drift protocol state with relay toggle
+        if settings.relay_enabled {
+            self.inner.drift_activate();
+        } else {
+            self.inner.drift_deactivate();
+        }
+
         Ok(())
     }
 
