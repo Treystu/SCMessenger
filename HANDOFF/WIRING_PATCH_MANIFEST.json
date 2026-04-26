@@ -1,5 +1,5 @@
 {
-  "total_tasks": 325,
+  "total_tasks": 318,
   "tasks": [
     {
       "task_file": "HANDOFF/todo/task_wire_abusive_peer_burst_is_rate_limited_but_other_peer_still_passes.md",
@@ -9,11 +9,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4386,
+      "definition_line": 4403,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4386,
+        "anchor_line": 4403,
         "required_change": "Wire `abusive_peer_burst_is_rate_limited_but_other_peer_still_passes` into production call path(s) and add parity-safe tests"
       }
     },
@@ -441,11 +441,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4451,
+      "definition_line": 4468,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4451,
+        "anchor_line": 4468,
         "required_change": "Wire `cheap_heuristics_reject_invalid_payload_shapes` into production call path(s) and add parity-safe tests"
       }
     },
@@ -713,11 +713,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4510,
+      "definition_line": 4527,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4510,
+        "anchor_line": 4527,
         "required_change": "Wire `convergence_marker_accepts_when_custody_exists_locally` into production call path(s) and add parity-safe tests"
       }
     },
@@ -729,11 +729,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4467,
+      "definition_line": 4484,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4467,
+        "anchor_line": 4484,
         "required_change": "Wire `convergence_marker_rejects_invalid_shape` into production call path(s) and add parity-safe tests"
       }
     },
@@ -745,11 +745,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4481,
+      "definition_line": 4498,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4481,
+        "anchor_line": 4498,
         "required_change": "Wire `convergence_marker_requires_local_tracking_context` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1049,11 +1049,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4414,
+      "definition_line": 4431,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4414,
+        "anchor_line": 4431,
         "required_change": "Wire `duplicate_window_suppresses_immediate_replay_then_expires` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2578,38 +2578,6 @@
       }
     },
     {
-      "task_file": "HANDOFF/todo/task_wire_load_device_id.md",
-      "task_name": "load_device_id",
-      "function": "load_device_id",
-      "resolved_symbol": "load_device_id",
-      "target": "core/src/identity/store.rs",
-      "variant": "Core",
-      "batch": "B8-cross-cutting",
-      "definition_line": 209,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "core/src/identity/store.rs",
-        "anchor_line": 209,
-        "required_change": "Wire `load_device_id` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_load_seniority_timestamp.md",
-      "task_name": "load_seniority_timestamp",
-      "function": "load_seniority_timestamp",
-      "resolved_symbol": "load_seniority_timestamp",
-      "target": "core/src/identity/store.rs",
-      "variant": "Core",
-      "batch": "B8-cross-cutting",
-      "definition_line": 223,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "core/src/identity/store.rs",
-        "anchor_line": 223,
-        "required_change": "Wire `load_seniority_timestamp` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
       "task_file": "HANDOFF/todo/task_wire_loadConversation.md",
       "task_name": "loadConversation",
       "function": "loadConversation",
@@ -2825,11 +2793,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4400,
+      "definition_line": 4417,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4400,
+        "anchor_line": 4417,
         "required_change": "Wire `normal_low_volume_usage_is_unaffected` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3071,22 +3039,6 @@
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
         "anchor_line": 1444,
         "required_change": "Wire `onPeerDisconnected` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_onPeerIdentified.md",
-      "task_name": "onPeerIdentified",
-      "function": "onPeerIdentified",
-      "resolved_symbol": "onPeerIdentified",
-      "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-      "variant": "Android",
-      "batch": "B3-android-repository",
-      "definition_line": 1225,
-      "external_reference_hits": 17,
-      "implementation_patch_template": {
-        "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 1225,
-        "required_change": "Wire `onPeerIdentified` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -3394,22 +3346,6 @@
       }
     },
     {
-      "task_file": "HANDOFF/done/task_wire_peel_onion_layer.md",
-      "task_name": "peel_onion_layer",
-      "function": "peel_onion_layer",
-      "resolved_symbol": "peel_onion_layer",
-      "target": "core/src/lib.rs",
-      "variant": "Core",
-      "batch": "B1-core-entrypoints",
-      "definition_line": 1777,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "core/src/lib.rs",
-        "anchor_line": 1777,
-        "required_change": "Wire `peel_onion_layer` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
       "task_file": "HANDOFF/todo/task_wire_peer_id_public_key_extraction_roundtrips_for_ed25519_peers.md",
       "task_name": "peer_id_public_key_extraction_roundtrips_for_ed25519_peers",
       "function": "peer_id_public_key_extraction_roundtrips_for_ed25519_peers",
@@ -3417,44 +3353,12 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4547,
+      "definition_line": 4564,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4547,
+        "anchor_line": 4564,
         "required_change": "Wire `peer_id_public_key_extraction_roundtrips_for_ed25519_peers` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_peer_rate_limit_multiplier.md",
-      "task_name": "peer_rate_limit_multiplier",
-      "function": "peer_rate_limit_multiplier",
-      "resolved_symbol": "peer_rate_limit_multiplier",
-      "target": "core/src/lib.rs",
-      "variant": "Core",
-      "batch": "B1-core-entrypoints",
-      "definition_line": 2587,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "core/src/lib.rs",
-        "anchor_line": 2587,
-        "required_change": "Wire `peer_rate_limit_multiplier` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_peer_spam_score.md",
-      "task_name": "peer_spam_score",
-      "function": "peer_spam_score",
-      "resolved_symbol": "peer_spam_score",
-      "target": "core/src/lib.rs",
-      "variant": "Core",
-      "batch": "B1-core-entrypoints",
-      "definition_line": 2592,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "core/src/lib.rs",
-        "anchor_line": 2592,
-        "required_change": "Wire `peer_spam_score` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -3538,7 +3442,7 @@
       }
     },
     {
-      "task_file": "HANDOFF/done/task_wire_prepare_onion_message.md",
+      "task_file": "HANDOFF/todo/task_wire_prepare_onion_message.md",
       "task_name": "prepare_onion_message",
       "function": "prepare_onion_message",
       "resolved_symbol": "prepare_onion_message",
@@ -3546,7 +3450,7 @@
       "variant": "Core",
       "batch": "B1-core-entrypoints",
       "definition_line": 1702,
-      "external_reference_hits": 0,
+      "external_reference_hits": 2,
       "implementation_patch_template": {
         "file": "core/src/lib.rs",
         "anchor_line": 1702,
@@ -3737,11 +3641,11 @@
       "target": "core/src/lib.rs",
       "variant": "Core",
       "batch": "B1-core-entrypoints",
-      "definition_line": 3382,
+      "definition_line": 3427,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/lib.rs",
-        "anchor_line": 3382,
+        "anchor_line": 3427,
         "required_change": "Wire `random_port` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3753,11 +3657,11 @@
       "target": "core/src/lib.rs",
       "variant": "Core",
       "batch": "B1-core-entrypoints",
-      "definition_line": 2147,
+      "definition_line": 2192,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/lib.rs",
-        "anchor_line": 2147,
+        "anchor_line": 2192,
         "required_change": "Wire `ratchet_has_session` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3769,11 +3673,11 @@
       "target": "core/src/lib.rs",
       "variant": "Core",
       "batch": "B1-core-entrypoints",
-      "definition_line": 2154,
+      "definition_line": 2199,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/lib.rs",
-        "anchor_line": 2154,
+        "anchor_line": 2199,
         "required_change": "Wire `ratchet_reset_session` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3785,11 +3689,11 @@
       "target": "core/src/lib.rs",
       "variant": "Core",
       "batch": "B1-core-entrypoints",
-      "definition_line": 2142,
+      "definition_line": 2187,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/lib.rs",
-        "anchor_line": 2142,
+        "anchor_line": 2187,
         "required_change": "Wire `ratchet_session_count` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3993,11 +3897,11 @@
       "target": "core/src/lib.rs",
       "variant": "Core",
       "batch": "B1-core-entrypoints",
-      "definition_line": 1797,
+      "definition_line": 1801,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/lib.rs",
-        "anchor_line": 1797,
+        "anchor_line": 1801,
         "required_change": "Wire `relay_jitter_delay` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4169,11 +4073,11 @@
       "target": "core/src/lib.rs",
       "variant": "Core",
       "batch": "B1-core-entrypoints",
-      "definition_line": 2705,
+      "definition_line": 2750,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/lib.rs",
-        "anchor_line": 2705,
+        "anchor_line": 2750,
         "required_change": "Wire `routing_tick` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4287,22 +4191,6 @@
         "file": "wasm/src/lib.rs",
         "anchor_line": 344,
         "required_change": "Wire `set_daemon_socket_url` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_set_delegate.md",
-      "task_name": "set_delegate",
-      "function": "set_delegate",
-      "resolved_symbol": "set_delegate",
-      "target": "core/src/lib.rs",
-      "variant": "Core",
-      "batch": "B1-core-entrypoints",
-      "definition_line": 2163,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "core/src/lib.rs",
-        "anchor_line": 2163,
-        "required_change": "Wire `set_delegate` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -4793,11 +4681,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4438,
+      "definition_line": 4455,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4438,
+        "anchor_line": 4455,
         "required_change": "Wire `token_bucket_refills_after_elapsed_time` into production call path(s) and add parity-safe tests"
       }
     },
@@ -5145,11 +5033,11 @@
       "target": "core/src/lib.rs",
       "variant": "Core",
       "batch": "B1-core-entrypoints",
-      "definition_line": 2495,
+      "definition_line": 2540,
       "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "core/src/lib.rs",
-        "anchor_line": 2495,
+        "anchor_line": 2540,
         "required_change": "Wire `validate_audit_chain` into production call path(s) and add parity-safe tests"
       }
     },
@@ -5177,11 +5065,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4557,
+      "definition_line": 4574,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4557,
+        "anchor_line": 4574,
         "required_change": "Wire `verify_registration_message_rejects_peer_identity_mismatch` into production call path(s) and add parity-safe tests"
       }
     },

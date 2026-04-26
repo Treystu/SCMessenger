@@ -136,7 +136,7 @@ pub struct MeshService {
     state: Mutex<ServiceState>,
     stats: Mutex<ServiceStats>,
     pub(crate) nearby_ble_peers: Arc<Mutex<HashSet<String>>>,
-    core: std::sync::Arc<Mutex<Option<crate::IronCore>>>,
+    core: std::sync::Arc<Mutex<Option<std::sync::Arc<crate::IronCore>>>>,
     platform_bridge: std::sync::Arc<Mutex<Option<Box<dyn PlatformBridge>>>>,
     storage_path: Option<String>,
     log_directory: Option<String>,
@@ -264,6 +264,7 @@ impl MeshService {
 
         // Start the core
         core.start()?;
+        let core = Arc::new(core);
 
         // Register this service as the core delegate for all protocol events
         core.set_delegate(Some(Box::new(MeshServiceCoreDelegate {
@@ -578,10 +579,7 @@ impl MeshService {
                                 Vec::new(),
                                 service_storage_path,
                                 iron_core_handle.map(|c| {
-                                    // CRITICAL: We need a Weak<IronCore> that points to a live Arc.
-                                    // Since IronCore itself is a collection of Arcs, we need to wrap
-                                    // the IronCore struct in an Arc to downgrade it correctly.
-                                    Arc::downgrade(&Arc::new(c))
+                                    Arc::downgrade(&c)
                                 }),
                                 headless_mode,
                             )
@@ -621,7 +619,13 @@ impl MeshService {
                                                                         
                                                                         let bridge_clone = swarm_bridge.clone();
                                                                         let stats_clone = stats.clone();
+                                                                        let core_owned = core_ref.clone();
                                                                         tokio::spawn(async move {
+                                                                            // B1_CORE_ENTRY_006: Apply timing jitter to thwart correlation attacks
+                                                                            let delay_ms = core_owned.relay_jitter_delay("Normal".to_string());
+                                                                            if delay_ms > 0 {
+                                                                                tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                                                                            }
                                                                             let _ = bridge_clone.send_message(next_peer_id.to_string(), payload, None, None);
                                                                         });
                                                                         
@@ -1157,7 +1161,7 @@ impl MeshService {
 
     /// Helper to get the core instance exposed to UniFFI
     pub fn get_core(&self) -> Option<std::sync::Arc<crate::IronCore>> {
-        self.core.lock().clone().map(std::sync::Arc::new)
+        self.core.lock().clone()
     }
 
     /// Check if service is running

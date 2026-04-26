@@ -561,6 +561,11 @@ impl MultiPathDelivery {
     pub fn reputation(&self) -> &ReputationTracker {
         &self.reputation
     }
+
+    /// Get best relay peers (sorted by reputation)
+    pub fn best_relays(&self, count: usize) -> Vec<PeerId> {
+        self.reputation.best_relays(count)
+    }
 }
 
 // ============================================================================

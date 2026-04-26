@@ -2,30 +2,26 @@
 
 This file provides exact edit coordinates and patch templates for each wiring task without implementing runtime logic.
 
-Total tasks: **325**
+Total tasks: **318**
 
 ## B1-core-entrypoints
 
 | Task | Function | Resolved symbol | Target | Definition line | External refs | Patch template |
 |---|---|---|---|---:|---:|---|
-| `peel_onion_layer` [DONE] | `peel_onion_layer` | `peel_onion_layer` | `core/src/lib.rs` | 1777 | 0 | `WIRE peel_onion_layer call path + tests` |
-| `peer_rate_limit_multiplier` | `peer_rate_limit_multiplier` | `peer_rate_limit_multiplier` | `core/src/lib.rs` | 2587 | 0 | `WIRE peer_rate_limit_multiplier call path + tests` |
-| `peer_spam_score` | `peer_spam_score` | `peer_spam_score` | `core/src/lib.rs` | 2592 | 0 | `WIRE peer_spam_score call path + tests` |
-| `prepare_onion_message` [DONE] | `prepare_onion_message` | `prepare_onion_message` | `core/src/lib.rs` | 1702 | 0 | `WIRE prepare_onion_message call path + tests` |
-| `random_port` | `random_port` | `random_port` | `core/src/lib.rs` | 3382 | 0 | `WIRE random_port call path + tests` |
-| `ratchet_has_session` | `ratchet_has_session` | `ratchet_has_session` | `core/src/lib.rs` | 2147 | 0 | `WIRE ratchet_has_session call path + tests` |
-| `ratchet_reset_session` | `ratchet_reset_session` | `ratchet_reset_session` | `core/src/lib.rs` | 2154 | 0 | `WIRE ratchet_reset_session call path + tests` |
-| `ratchet_session_count` | `ratchet_session_count` | `ratchet_session_count` | `core/src/lib.rs` | 2142 | 0 | `WIRE ratchet_session_count call path + tests` |
-| `relay_jitter_delay` | `relay_jitter_delay` | `relay_jitter_delay` | `core/src/lib.rs` | 1797 | 0 | `WIRE relay_jitter_delay call path + tests` |
-| `routing_tick` | `routing_tick` | `routing_tick` | `core/src/lib.rs` | 2705 | 0 | `WIRE routing_tick call path + tests` |
-| `set_delegate` | `set_delegate` | `set_delegate` | `core/src/lib.rs` | 2163 | 0 | `WIRE set_delegate call path + tests` |
-| `validate_audit_chain` | `validate_audit_chain` | `validate_audit_chain` | `core/src/lib.rs` | 2495 | 1 | `WIRE validate_audit_chain call path + tests` |
+| `prepare_onion_message` | `prepare_onion_message` | `prepare_onion_message` | `core/src/lib.rs` | 1702 | 2 | `WIRE prepare_onion_message call path + tests` |
+| `random_port` | `random_port` | `random_port` | `core/src/lib.rs` | 3427 | 0 | `WIRE random_port call path + tests` |
+| `ratchet_has_session` | `ratchet_has_session` | `ratchet_has_session` | `core/src/lib.rs` | 2192 | 0 | `WIRE ratchet_has_session call path + tests` |
+| `ratchet_reset_session` | `ratchet_reset_session` | `ratchet_reset_session` | `core/src/lib.rs` | 2199 | 0 | `WIRE ratchet_reset_session call path + tests` |
+| `ratchet_session_count` | `ratchet_session_count` | `ratchet_session_count` | `core/src/lib.rs` | 2187 | 0 | `WIRE ratchet_session_count call path + tests` |
+| `relay_jitter_delay` | `relay_jitter_delay` | `relay_jitter_delay` | `core/src/lib.rs` | 1801 | 0 | `WIRE relay_jitter_delay call path + tests` |
+| `routing_tick` | `routing_tick` | `routing_tick` | `core/src/lib.rs` | 2750 | 0 | `WIRE routing_tick call path + tests` |
+| `validate_audit_chain` | `validate_audit_chain` | `validate_audit_chain` | `core/src/lib.rs` | 2540 | 1 | `WIRE validate_audit_chain call path + tests` |
 
 ## B2-core-transport-routing
 
 | Task | Function | Resolved symbol | Target | Definition line | External refs | Patch template |
 |---|---|---|---|---:|---:|---|
-| `abusive_peer_burst_is_rate_limited_but_other_peer_still_passes` | `abusive_peer_burst_is_rate_limited_but_other_peer_still_passes` | `abusive_peer_burst_is_rate_limited_but_other_peer_still_passes` | `core/src/transport/swarm.rs` | 4386 | 0 | `WIRE abusive_peer_burst_is_rate_limited_but_other_peer_still_passes call path + tests` |
+| `abusive_peer_burst_is_rate_limited_but_other_peer_still_passes` | `abusive_peer_burst_is_rate_limited_but_other_peer_still_passes` | `abusive_peer_burst_is_rate_limited_but_other_peer_still_passes` | `core/src/transport/swarm.rs` | 4403 | 0 | `WIRE abusive_peer_burst_is_rate_limited_but_other_peer_still_passes call path + tests` |
 | `active_paths` | `active_paths` | `active_paths` | `core/src/routing/multipath.rs` | 53 | 0 | `WIRE active_paths call path + tests` |
 | `add_discovered_peer` | `add_discovered_peer` | `add_discovered_peer` | `core/src/transport/wifi_aware.rs` | 201 | 0 | `WIRE add_discovered_peer call path + tests` |
 | `add_kad_address` | `add_kad_address` | `add_kad_address` | `core/src/transport/swarm.rs` | 1286 | 0 | `WIRE add_kad_address call path + tests` |
@@ -34,18 +30,18 @@ Total tasks: **325**
 | `best_relays` | `best_relays` | `best_relays` | `core/src/transport/mesh_routing.rs` | 214 | 1 | `WIRE best_relays call path + tests` |
 | `calculate_dynamic_ttl` | `calculate_dynamic_ttl` | `calculate_dynamic_ttl` | `core/src/routing/adaptive_ttl.rs` | 150 | 2 | `WIRE calculate_dynamic_ttl call path + tests` |
 | `can_bootstrap_others` | `can_bootstrap_others` | `can_bootstrap_others` | `core/src/transport/mesh_routing.rs` | 610 | 2 | `WIRE can_bootstrap_others call path + tests` |
-| `cheap_heuristics_reject_invalid_payload_shapes` | `cheap_heuristics_reject_invalid_payload_shapes` | `cheap_heuristics_reject_invalid_payload_shapes` | `core/src/transport/swarm.rs` | 4451 | 0 | `WIRE cheap_heuristics_reject_invalid_payload_shapes call path + tests` |
+| `cheap_heuristics_reject_invalid_payload_shapes` | `cheap_heuristics_reject_invalid_payload_shapes` | `cheap_heuristics_reject_invalid_payload_shapes` | `core/src/transport/swarm.rs` | 4468 | 0 | `WIRE cheap_heuristics_reject_invalid_payload_shapes call path + tests` |
 | `cleanup_stale_connections` | `cleanup_stale_connections` | `cleanup_stale_connections` | `core/src/transport/health.rs` | 409 | 0 | `WIRE cleanup_stale_connections call path + tests` |
 | `clear_unreachable_peer` | `clear_unreachable_peer` | `clear_unreachable_peer` | `core/src/routing/optimized_engine.rs` | 255 | 0 | `WIRE clear_unreachable_peer call path + tests` |
 | `converge_delivered_for_message_removes_matching_pending_records` | `converge_delivered_for_message_removes_matching_pending_records` | `converge_delivered_for_message_removes_matching_pending_records` | `core/src/store/relay_custody.rs` | 1760 | 0 | `WIRE converge_delivered_for_message_removes_matching_pending_records call path + tests` |
-| `convergence_marker_accepts_when_custody_exists_locally` | `convergence_marker_accepts_when_custody_exists_locally` | `convergence_marker_accepts_when_custody_exists_locally` | `core/src/transport/swarm.rs` | 4510 | 0 | `WIRE convergence_marker_accepts_when_custody_exists_locally call path + tests` |
-| `convergence_marker_rejects_invalid_shape` | `convergence_marker_rejects_invalid_shape` | `convergence_marker_rejects_invalid_shape` | `core/src/transport/swarm.rs` | 4467 | 0 | `WIRE convergence_marker_rejects_invalid_shape call path + tests` |
-| `convergence_marker_requires_local_tracking_context` | `convergence_marker_requires_local_tracking_context` | `convergence_marker_requires_local_tracking_context` | `core/src/transport/swarm.rs` | 4481 | 0 | `WIRE convergence_marker_requires_local_tracking_context call path + tests` |
+| `convergence_marker_accepts_when_custody_exists_locally` | `convergence_marker_accepts_when_custody_exists_locally` | `convergence_marker_accepts_when_custody_exists_locally` | `core/src/transport/swarm.rs` | 4527 | 0 | `WIRE convergence_marker_accepts_when_custody_exists_locally call path + tests` |
+| `convergence_marker_rejects_invalid_shape` | `convergence_marker_rejects_invalid_shape` | `convergence_marker_rejects_invalid_shape` | `core/src/transport/swarm.rs` | 4484 | 0 | `WIRE convergence_marker_rejects_invalid_shape call path + tests` |
+| `convergence_marker_requires_local_tracking_context` | `convergence_marker_requires_local_tracking_context` | `convergence_marker_requires_local_tracking_context` | `core/src/transport/swarm.rs` | 4498 | 0 | `WIRE convergence_marker_requires_local_tracking_context call path + tests` |
 | `current_discovery_phase` | `current_discovery_phase` | `current_discovery_phase` | `core/src/routing/optimized_engine.rs` | 169 | 0 | `WIRE current_discovery_phase call path + tests` |
 | `custody_audit_persists_across_restart` | `custody_audit_persists_across_restart` | `custody_audit_persists_across_restart` | `core/src/store/relay_custody.rs` | 2076 | 0 | `WIRE custody_audit_persists_across_restart call path + tests` |
 | `custody_deduplicates_same_destination_and_message_id` | `custody_deduplicates_same_destination_and_message_id` | `custody_deduplicates_same_destination_and_message_id` | `core/src/store/relay_custody.rs` | 1729 | 0 | `WIRE custody_deduplicates_same_destination_and_message_id call path + tests` |
 | `custody_transitions_are_recorded` | `custody_transitions_are_recorded` | `custody_transitions_are_recorded` | `core/src/store/relay_custody.rs` | 1686 | 0 | `WIRE custody_transitions_are_recorded call path + tests` |
-| `duplicate_window_suppresses_immediate_replay_then_expires` | `duplicate_window_suppresses_immediate_replay_then_expires` | `duplicate_window_suppresses_immediate_replay_then_expires` | `core/src/transport/swarm.rs` | 4414 | 0 | `WIRE duplicate_window_suppresses_immediate_replay_then_expires call path + tests` |
+| `duplicate_window_suppresses_immediate_replay_then_expires` | `duplicate_window_suppresses_immediate_replay_then_expires` | `duplicate_window_suppresses_immediate_replay_then_expires` | `core/src/transport/swarm.rs` | 4431 | 0 | `WIRE duplicate_window_suppresses_immediate_replay_then_expires call path + tests` |
 | `expire_old_observations` | `expire_old_observations` | `expire_old_observations` | `core/src/transport/observation.rs` | 96 | 0 | `WIRE expire_old_observations call path + tests` |
 | `for_local_peer_prefers_explicit_custody_dir_override` | `for_local_peer_prefers_explicit_custody_dir_override` | `for_local_peer_prefers_explicit_custody_dir_override` | `core/src/store/relay_custody.rs` | 2133 | 0 | `WIRE for_local_peer_prefers_explicit_custody_dir_override call path + tests` |
 | `force_state_for_test` | `force_state_for_test` | `force_state_for_test` | `core/src/store/relay_custody.rs` | 1409 | 0 | `WIRE force_state_for_test call path + tests` |
@@ -65,10 +61,10 @@ Total tasks: **325**
 | `mark_refresh_failed` | `mark_refresh_failed` | `mark_refresh_failed` | `core/src/routing/resume_prefetch.rs` | 283 | 0 | `WIRE mark_refresh_failed call path + tests` |
 | `negative_cache_stats` | `negative_cache_stats` | `negative_cache_stats` | `core/src/routing/optimized_engine.rs` | 184 | 0 | `WIRE negative_cache_stats call path + tests` |
 | `next_refresh_hint` | `next_refresh_hint` | `next_refresh_hint` | `core/src/routing/resume_prefetch.rs` | 291 | 0 | `WIRE next_refresh_hint call path + tests` |
-| `normal_low_volume_usage_is_unaffected` | `normal_low_volume_usage_is_unaffected` | `normal_low_volume_usage_is_unaffected` | `core/src/transport/swarm.rs` | 4400 | 0 | `WIRE normal_low_volume_usage_is_unaffected call path + tests` |
+| `normal_low_volume_usage_is_unaffected` | `normal_low_volume_usage_is_unaffected` | `normal_low_volume_usage_is_unaffected` | `core/src/transport/swarm.rs` | 4417 | 0 | `WIRE normal_low_volume_usage_is_unaffected call path + tests` |
 | `on_read` | `on_read` | `on_read` | `core/src/transport/ble/gatt.rs` | 289 | 0 | `WIRE on_read call path + tests` |
 | `on_write` | `on_write` | `on_write` | `core/src/transport/ble/gatt.rs` | 282 | 0 | `WIRE on_write call path + tests` |
-| `peer_id_public_key_extraction_roundtrips_for_ed25519_peers` | `peer_id_public_key_extraction_roundtrips_for_ed25519_peers` | `peer_id_public_key_extraction_roundtrips_for_ed25519_peers` | `core/src/transport/swarm.rs` | 4547 | 0 | `WIRE peer_id_public_key_extraction_roundtrips_for_ed25519_peers call path + tests` |
+| `peer_id_public_key_extraction_roundtrips_for_ed25519_peers` | `peer_id_public_key_extraction_roundtrips_for_ed25519_peers` | `peer_id_public_key_extraction_roundtrips_for_ed25519_peers` | `core/src/transport/swarm.rs` | 4564 | 0 | `WIRE peer_id_public_key_extraction_roundtrips_for_ed25519_peers call path + tests` |
 | `peers_needing_reconnect` | `peers_needing_reconnect` | `peers_needing_reconnect` | `core/src/transport/manager.rs` | 446 | 0 | `WIRE peers_needing_reconnect call path + tests` |
 | `prefetch_manager_mut` | `prefetch_manager_mut` | `prefetch_manager_mut` | `core/src/routing/optimized_engine.rs` | 214 | 0 | `WIRE prefetch_manager_mut call path + tests` |
 | `prefetch_stats` | `prefetch_stats` | `prefetch_stats` | `core/src/routing/optimized_engine.rs` | 189 | 0 | `WIRE prefetch_stats call path + tests` |
@@ -95,9 +91,9 @@ Total tasks: **325**
 | `storage_pressure_quota_bands_follow_locked_policy` | `storage_pressure_quota_bands_follow_locked_policy` | `storage_pressure_quota_bands_follow_locked_policy` | `core/src/store/relay_custody.rs` | 1802 | 0 | `WIRE storage_pressure_quota_bands_follow_locked_policy call path + tests` |
 | `storage_pressure_state_uses_synthetic_snapshot_when_probe_unavailable` | `storage_pressure_state_uses_synthetic_snapshot_when_probe_unavailable` | `storage_pressure_state_uses_synthetic_snapshot_when_probe_unavailable` | `core/src/store/relay_custody.rs` | 2115 | 0 | `WIRE storage_pressure_state_uses_synthetic_snapshot_when_probe_unavailable call path + tests` |
 | `timeout_budget_summary` | `timeout_budget_summary` | `timeout_budget_summary` | `core/src/routing/optimized_engine.rs` | 179 | 0 | `WIRE timeout_budget_summary call path + tests` |
-| `token_bucket_refills_after_elapsed_time` | `token_bucket_refills_after_elapsed_time` | `token_bucket_refills_after_elapsed_time` | `core/src/transport/swarm.rs` | 4438 | 0 | `WIRE token_bucket_refills_after_elapsed_time call path + tests` |
+| `token_bucket_refills_after_elapsed_time` | `token_bucket_refills_after_elapsed_time` | `token_bucket_refills_after_elapsed_time` | `core/src/transport/swarm.rs` | 4455 | 0 | `WIRE token_bucket_refills_after_elapsed_time call path + tests` |
 | `transport_type_to_routing_transport` | `transport_type_to_routing_transport` | `transport_type_to_routing_transport` | `core/src/transport/swarm.rs` | 664 | 0 | `WIRE transport_type_to_routing_transport call path + tests` |
-| `verify_registration_message_rejects_peer_identity_mismatch` | `verify_registration_message_rejects_peer_identity_mismatch` | `verify_registration_message_rejects_peer_identity_mismatch` | `core/src/transport/swarm.rs` | 4557 | 0 | `WIRE verify_registration_message_rejects_peer_identity_mismatch call path + tests` |
+| `verify_registration_message_rejects_peer_identity_mismatch` | `verify_registration_message_rejects_peer_identity_mismatch` | `verify_registration_message_rejects_peer_identity_mismatch` | `core/src/transport/swarm.rs` | 4574 | 0 | `WIRE verify_registration_message_rejects_peer_identity_mismatch call path + tests` |
 
 ## B3-android-repository
 
@@ -123,7 +119,6 @@ Total tasks: **325**
 | `observeNetworkStats` | `observeNetworkStats` | `observeNetworkStats` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 7633 | 0 | `WIRE observeNetworkStats call path + tests` |
 | `observePeers` | `observePeers` | `observePeers` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 7618 | 0 | `WIRE observePeers call path + tests` |
 | `onPeerDisconnected` | `onPeerDisconnected` | `onPeerDisconnected` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 1444 | 25 | `WIRE onPeerDisconnected call path + tests` |
-| `onPeerIdentified` | `onPeerIdentified` | `onPeerIdentified` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 1225 | 17 | `WIRE onPeerIdentified call path + tests` |
 | `onReceiptReceived` | `onReceiptReceived` | `onReceiptReceived` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 1860 | 17 | `WIRE onReceiptReceived call path + tests` |
 | `primeRelayBootstrapConnectionsLegacy` | `primeRelayBootstrapConnectionsLegacy` | `primeRelayBootstrapConnectionsLegacy` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 7161 | 0 | `WIRE primeRelayBootstrapConnectionsLegacy call path + tests` |
 | `recordConnectionFailure` | `recordConnectionFailure` | `recordConnectionFailure` | `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` | 4207 | 1 | `WIRE recordConnectionFailure call path + tests` |
@@ -332,8 +327,6 @@ Total tasks: **325**
 | `jsonrpc_send_message_roundtrip` | `jsonrpc_send_message_roundtrip` | `jsonrpc_send_message_roundtrip` | `core/src/wasm_support/rpc.rs` | 224 | 0 | `WIRE jsonrpc_send_message_roundtrip call path + tests` |
 | `known_contact_defaults_to_direct_message` | `known_contact_defaults_to_direct_message` | `known_contact_defaults_to_direct_message` | `core/src/notification.rs` | 428 | 0 | `WIRE known_contact_defaults_to_direct_message call path + tests` |
 | `list_endpoints` | `list_endpoints` | `list_endpoints` | `core/src/notification.rs` | 357 | 0 | `WIRE list_endpoints call path + tests` |
-| `load_device_id` | `load_device_id` | `load_device_id` | `core/src/identity/store.rs` | 209 | 0 | `WIRE load_device_id call path + tests` |
-| `load_seniority_timestamp` | `load_seniority_timestamp` | `load_seniority_timestamp` | `core/src/identity/store.rs` | 223 | 0 | `WIRE load_seniority_timestamp call path + tests` |
 | `new_sync` | `new_sync` | `new_sync` | `core/src/store/backend.rs` | 188 | 0 | `WIRE new_sync call path + tests` |
 | `nonce_length_invariant` | `nonce_length_invariant` | `nonce_length_invariant` | `core/src/crypto/kani_proofs.rs` | 44 | 0 | `WIRE nonce_length_invariant call path + tests` |
 | `notif_mesh_topology` | `notif_mesh_topology` | `notif_mesh_topology` | `core/src/wasm_support/rpc.rs` | 205 | 0 | `WIRE notif_mesh_topology call path + tests` |

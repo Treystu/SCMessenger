@@ -103,6 +103,8 @@ interface IronCore {
     void start();
     void stop();
     boolean is_running();
+    void on_app_resume();
+    void on_app_background();
 
     // Consent Gate (PHIL-004)
     void grant_consent();
@@ -224,6 +226,23 @@ interface IronCore {
     void routing_update_reliability(string peer_id_hex, boolean success);
     string routing_tick();
     string routing_summary();
+    void routing_clear_unreachable_peer(string peer_id_hex);
+    string routing_current_discovery_phase();
+    string routing_negative_cache_stats();
+    string routing_prefetch_stats();
+    string routing_timeout_budget_summary();
+    u64 routing_calculate_dynamic_ttl(u64 base_ttl, u8 battery_level, u32 peer_count);
+    void routing_register_path(string peer_id_hex, u64 path_id, u64 latency_ms);
+    void routing_mark_path_failed(u64 path_id);
+
+    u32 custody_audit_count();
+    RegistrationStateInfo custody_get_registration_state_info(string identity_id);
+    string custody_registration_transitions(string identity_id);
+
+    sequence<string> swarm_get_best_relays(u32 count);
+    sequence<string> swarm_get_bootstrap_candidates();
+    boolean swarm_can_bootstrap_others();
+    sequence<sequence<string>> swarm_get_best_paths(string target_peer_id, u32 count);
 
     // Privacy Features (P1_CORE_003: privacy modules activation)
     /// Get current privacy configuration as JSON
@@ -237,12 +256,13 @@ interface IronCore {
     bytes prepare_onion_message(bytes envelope_data, string relay_public_keys_json);
     /// Peel one layer of an onion-routed envelope (relay-side operation).
     [Throws=IronCoreError]
-    [Throws=IronCoreError]
     PeelResult peel_onion_layer(bytes onion_data, bytes relay_secret_key);
     /// Compute timing jitter delay for relay forwarding (milliseconds).
     u64 relay_jitter_delay(string priority);
 
     AutoAdjustEngine get_auto_adjust_engine();
+
+    u16 random_port();
 };
 
 // ============================================================================

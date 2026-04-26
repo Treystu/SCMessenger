@@ -192,20 +192,20 @@ impl RelayAbuseGuardrails {
         None
     }
 
-    fn consume_peer_token(&mut self, peer_id: &str, now_ms: u64) -> bool {
+    fn consume_peer_token(&mut self, peer_id: &str, now_ms: u64, multiplier: f64) -> bool {
         self.prune_peer_buckets(now_ms);
 
         let bucket = self
             .per_peer_buckets
             .entry(peer_id.to_string())
             .or_insert(TokenBucketState {
-                tokens: RELAY_PEER_BUCKET_BURST_CAPACITY,
+                tokens: RELAY_PEER_BUCKET_BURST_CAPACITY * multiplier,
                 last_refill_ms: now_ms,
             });
         let elapsed_ms = now_ms.saturating_sub(bucket.last_refill_ms);
         if elapsed_ms > 0 {
-            let refill = (elapsed_ms as f64 / 1000.0) * RELAY_PEER_BUCKET_REFILL_PER_SEC;
-            bucket.tokens = (bucket.tokens + refill).min(RELAY_PEER_BUCKET_BURST_CAPACITY);
+            let refill = (elapsed_ms as f64 / 1000.0) * RELAY_PEER_BUCKET_REFILL_PER_SEC * multiplier;
+            bucket.tokens = (bucket.tokens + refill).min(RELAY_PEER_BUCKET_BURST_CAPACITY * multiplier);
             bucket.last_refill_ms = now_ms;
         }
         if bucket.tokens < 1.0 {
@@ -1065,6 +1065,21 @@ pub enum SwarmCommand {
     GetListeners { reply: mpsc::Sender<Vec<Multiaddr>> },
     /// Update the relay message budget (messages relayed per hour)
     SetRelayBudget { budget: u32 },
+    /// Get best relay peers (sorted by reputation)
+    GetBestRelays {
+        count: usize,
+        reply: mpsc::Sender<Vec<PeerId>>,
+    },
+    /// Get bootstrap candidates (all stable peers)
+    GetBootstrapCandidates {
+        reply: mpsc::Sender<Vec<PeerId>>,
+    },
+    /// Get best paths to a target (Phase 2 multipath)
+    GetBestPaths {
+        target: PeerId,
+        count: usize,
+        reply: mpsc::Sender<Vec<Vec<PeerId>>>,
+    },
     /// Shutdown the swarm
     Shutdown,
 }
@@ -1358,6 +1373,55 @@ impl SwarmHandle {
             })
             .await
             .map_err(|_| anyhow::anyhow!("Swarm task not running"))
+    }
+
+    /// Get best relay peers (sorted by reputation)
+    pub async fn get_best_relays(&self, count: usize) -> Result<Vec<PeerId>> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(SwarmCommand::GetBestRelays {
+                count,
+                reply: reply_tx,
+            })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+
+        reply_rx
+            .recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("No reply from swarm"))
+    }
+
+    /// Get bootstrap candidates (all stable peers)
+    pub async fn get_bootstrap_candidates(&self) -> Result<Vec<PeerId>> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(SwarmCommand::GetBootstrapCandidates { reply: reply_tx })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+
+        reply_rx
+            .recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("No reply from swarm"))
+    }
+
+    /// Get best paths to a target (Phase 2 multipath)
+    pub async fn get_best_paths(&self, target: PeerId, count: usize) -> Result<Vec<Vec<PeerId>>> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(SwarmCommand::GetBestPaths {
+                target,
+                count,
+                reply: reply_tx,
+            })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+
+        reply_rx
+            .recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("No reply from swarm"))
     }
 
     /// Shut down the swarm
@@ -2299,12 +2363,29 @@ pub async fn start_swarm_with_config(
                                                 error: Some("relay_inflight_capped".to_string()),
                                                 message_id: request.message_id.clone(),
                                             }
-                                        } else if !relay_guardrails.consume_peer_token(
-                                            &peer.to_string(),
-                                            now_ms,
-                                        ) {
+                                        } else if {
+                                            let (multiplier, spam_score) = if let Some(core) = core_handle.as_ref().and_then(|w| w.upgrade()) {
+                                                (
+                                                    core.peer_rate_limit_multiplier(peer.to_string()),
+                                                    core.peer_spam_score(peer.to_string())
+                                                )
+                                            } else {
+                                                (1.0, 0.0)
+                                            };
+
+                                            if spam_score > 0.8 {
+                                                tracing::warn!("Relay REJECTED: high spam score for peer {}", peer);
+                                                true // Reject
+                                            } else {
+                                                !relay_guardrails.consume_peer_token(
+                                                    &peer.to_string(),
+                                                    now_ms,
+                                                    multiplier,
+                                                )
+                                            }
+                                        } {
                                             tracing::warn!(
-                                                "Relay request rate-limited for peer {} (message {})",
+                                                "Relay request rejected (rate-limited or spam) for peer {} (message {})",
                                                 peer,
                                                 request.message_id
                                             );
@@ -2314,7 +2395,7 @@ pub async fn start_swarm_with_config(
                                             }).await;
                                             RelayResponse {
                                                 accepted: false,
-                                                error: Some("relay_peer_rate_limited".to_string()),
+                                                error: Some("relay_peer_rejected".to_string()),
                                                 message_id: request.message_id.clone(),
                                             }
                                         } else {
@@ -3462,7 +3543,19 @@ pub async fn start_swarm_with_config(
                                 tracing::info!("🔄 Relay budget updated: {} msgs/hour", budget);
                             }
 
-                SwarmCommand::Shutdown => {
+                            SwarmCommand::GetBestRelays { count, reply } => {
+                                let relays = multi_path_delivery.best_relays(count);
+                                let _ = reply.send(relays).await;
+                            }
+                            SwarmCommand::GetBootstrapCandidates { reply } => {
+                                let candidates = bootstrap_capability.get_bootstrap_candidates().to_vec();
+                                let _ = reply.send(candidates).await;
+                            }
+                            SwarmCommand::GetBestPaths { target, count, reply } => {
+                                let paths = multi_path_delivery.get_best_paths(&target, count);
+                                let _ = reply.send(paths).await;
+                            }
+                            SwarmCommand::Shutdown => {
                                 tracing::info!("Swarm shutting down");
                                 break;
                             }
@@ -4388,12 +4481,12 @@ mod tests {
         let now_ms = 1_000_000;
         let mut accepted = 0usize;
         for _ in 0..50 {
-            if guardrails.consume_peer_token("peer-abusive", now_ms) {
+            if guardrails.consume_peer_token("peer-abusive", now_ms, 1.0) {
                 accepted += 1;
             }
         }
         assert!(accepted <= RELAY_PEER_BUCKET_BURST_CAPACITY as usize);
-        assert!(guardrails.consume_peer_token("peer-normal", now_ms));
+        assert!(guardrails.consume_peer_token("peer-normal", now_ms, 1.0));
     }
 
     #[test]
@@ -4403,7 +4496,7 @@ mod tests {
         for step in 0..10 {
             let now_ms = start_ms + (step * 1_000) as u64;
             assert!(
-                guardrails.consume_peer_token("peer-family", now_ms),
+                guardrails.consume_peer_token("peer-family", now_ms, 1.0),
                 "expected token to be available at step {}",
                 step
             );
