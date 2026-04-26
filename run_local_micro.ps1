@@ -2,6 +2,19 @@
 # SCMessenger Local Micro-Worker State Machine (Windows Native)
 # Guarantees context clears by forcing a fresh process for every task.
 
+
+# 1. Trick Claude Code into thinking it has a valid Anthropic account
+$env:ANTHROPIC_API_KEY="sk-ant-dummy-key-for-local-ollama"
+
+# 2. OVERRIDE THE ROGUE VRAM LIMIT (Forces 8k context instead of 131k!)
+$env:OLLAMA_CONTEXT_LENGTH="8192"
+
+# 3. FORCE Claude Code to wait up to 5 minutes
+$env:ANTHROPIC_TIMEOUT="300000"
+$env:ANTHROPIC_MAX_RETRIES="3"
+
+# 4. FORCE Ollama to keep the model locked in RAM permanently
+$env:OLLAMA_KEEP_ALIVE="-1"
 $TodoDir = "HANDOFF\todo"
 $DoneDir = "HANDOFF\done"
 $BacklogDir = "HANDOFF\backlog"
@@ -16,8 +29,6 @@ $null = New-Item -ItemType Directory -Force -Path $LogDir
 
 # Load the lobotomized system prompt from your global Claude directory
 $SystemPrompt = Get-Content -Path $PromptFile -Raw
-
-Write-Host "Starting Local Micro-Worker Swarm (ministral-3:8b)..." -ForegroundColor Cyan
 
 # Grab all pending tasks
 $Tasks = Get-ChildItem -Path $TodoDir -Filter "*.md"
@@ -42,7 +53,7 @@ foreach ($Task in $Tasks) {
     # Launch Claude Code, execute the task, and tee the output to our log file
     # Note the double dashes '--' to safely pass the prompt to Claude via the wrapper
     Write-Host "Starting Local Micro-Worker Swarm (qwen-micro)..." -ForegroundColor Cyan
-    & ollama launch claude --model qwen-micro -- -p $FullPrompt | Tee-Object -FilePath $LogFile
+    & ollama launch claude --model qwen-micro -- --debug -- -p $FullPrompt | Tee-Object -FilePath $LogFile
     
     # Read the log to evaluate the model's self-reported status
     $LogOutput = Get-Content -Path $LogFile -Raw
