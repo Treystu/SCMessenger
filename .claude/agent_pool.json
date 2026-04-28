@@ -1,5 +1,5 @@
 {
-  "version": "2.1",
+  "version": "2.2",
   "max_concurrent": 2,
   "default_agent": "architect",
   "launch_mode": "cli_only",
@@ -17,7 +17,7 @@
       "name": "implementer",
       "launch_type": "cli",
       "model": "qwen3-coder-next:cloud",
-      "fallback_model": "qwen3.5:397b:cloud",
+      "fallback_model": "glm-5.1:cloud",
       "purpose": "Rapid feature landing, general coding, bug fixes, feature implementation",
       "task_patterns": ["IMPLEMENTATION", "BUG", "FIX", "FEATURE", "WASM", "IOS", "ANDROID"],
       "max_per_type": 2
@@ -26,7 +26,7 @@
       "name": "precision-validator",
       "launch_type": "cli",
       "model": "deepseek-v3.2:cloud",
-      "fallback_model": "qwen3.5:397b:cloud",
+      "fallback_model": "deepseek-v4-pro:cloud",
       "purpose": "Cryptography, math, protocol validation, security audit, unsafe block verification",
       "task_patterns": ["SECURITY", "CRYPTO", "AUDIT", "VERIFY", "REVIEW", "GATE"],
       "max_per_type": 1
@@ -44,7 +44,7 @@
       "name": "triage-router",
       "launch_type": "cli",
       "model": "gemini-3-flash-preview:cloud",
-      "fallback_model": "qwen3.5:397b:cloud",
+      "fallback_model": "deepseek-v4-flash:cloud",
       "purpose": "Quick triage, lint fixes, minor edits under 50 LOC, CI gatekeeping, parsing",
       "task_patterns": ["LINT", "TRIAGE", "QUICK", "CI"],
       "max_per_type": 1
@@ -53,7 +53,7 @@
       "name": "gatekeeper-reviewer",
       "launch_type": "cli",
       "model": "kimi-k2-thinking:cloud",
-      "fallback_model": "qwen3.5:397b:cloud",
+      "fallback_model": "kimi-k2.6:cloud",
       "purpose": "Pre-merge verification, final code review gate",
       "task_patterns": ["MERGE", "RELEASE", "FINAL_REVIEW"],
       "max_per_type": 1
@@ -62,7 +62,7 @@
       "name": "swarm-orchestrator",
       "launch_type": "cli",
       "model": "mistral-large-3:675b:cloud",
-      "fallback_model": "qwen3.5:397b:cloud",
+      "fallback_model": "cogito-2.1:671b:cloud",
       "purpose": "Pipeline management, multi-agent coordination",
       "task_patterns": ["ORCHESTRATE", "PIPELINE", "SWARM"],
       "max_per_type": 1
@@ -70,9 +70,9 @@
     {
       "name": "rust-coder",
       "launch_type": "cli",
-      "model": "qwen3-coder-next:cloud",
-      "fallback_model": "qwen3.5:397b:cloud",
-      "purpose": "Rust core, protocol implementation, WASM — qwen3-coder-next has proven Rust output",
+      "model": "glm-5.1:cloud",
+      "fallback_model": "qwen3-coder-next:cloud",
+      "purpose": "Rust core, protocol implementation, WASM — glm-5.1 has proven Rust output",
       "task_patterns": ["RUST", "CORE", "PROTOCOL", "CRYPTO_IMPL", "WASM"],
       "max_per_type": 1
     },
@@ -80,11 +80,67 @@
       "name": "CLIBetaTester",
       "launch_type": "cli",
       "model": "qwen3-coder:480b:cloud",
-      "fallback_model": "qwen3.5:397b:cloud",
+      "fallback_model": "glm-5.1:cloud",
       "purpose": "Acts as an aggressive Beta User against the Rust Core daemon. Tests the JSON-RPC bridge and libp2p mesh.",
       "system_prompt_additions": "You are the CLIBetaTester. Your job is to interact with the SCMessenger Core daemon using the core_cli_driver skill. Start the node, inject unexpected JSON-RPC payloads, simulate offline/online network states, and attempt to send messages. If the daemon crashes or hangs, use the dump_logs command, save the stack trace to HANDOFF/IN_PROGRESS/CORE_CRASH_REPORT_<timestamp>.md, and request RCA.",
       "task_patterns": ["BETA", "CLI", "CORE_TEST", "CRASH", "STRESS"],
       "max_per_type": 1
+    },
+    {
+      "name": "deep-analyst",
+      "launch_type": "cli",
+      "model": "deepseek-v4-pro:cloud",
+      "fallback_model": "deepseek-v3.2:cloud",
+      "purpose": "Deep analysis, complex bug RCA, protocol correctness proofs, multi-step reasoning",
+      "task_patterns": ["RCA", "ANALYSIS", "PROOF", "CORRECTNESS", "DEEP_DIVE"],
+      "max_per_type": 1
+    },
+    {
+      "name": "vision-analyst",
+      "launch_type": "cli",
+      "model": "qwen3-vl:235b:cloud",
+      "fallback_model": "nematron-3-super:cloud",
+      "purpose": "Visual analysis of screenshots, diagrams, UI mockups, log visualizations",
+      "task_patterns": ["VISION", "SCREENSHOT", "UI_REVIEW", "DIAGRAM"],
+      "max_per_type": 1
     }
+  ],
+  "available_models": [
+    {"name": "glm-5.1", "params": "1.5T", "specialty": "general reasoning, Rust"},
+    {"name": "deepseek-v4-pro", "params": "1.6T", "specialty": "deep analysis"},
+    {"name": "deepseek-v4-flash", "params": "140B", "specialty": "fast reasoning"},
+    {"name": "kimi-k2.6", "params": "595B", "specialty": "latest Kimi"},
+    {"name": "kimi-k2-thinking", "params": "1.1T", "specialty": "extended thinking"},
+    {"name": "qwen3-coder:480b", "params": "510B", "specialty": "coding"},
+    {"name": "qwen3-coder-next", "params": "81B", "specialty": "next-gen coding"},
+    {"name": "qwen3.5:397b", "params": "397B", "specialty": "general fallback"},
+    {"name": "mistral-large-3:675b", "params": "682B", "specialty": "pipeline coordination"},
+    {"name": "cogito-2.1:671b", "params": "688B", "specialty": "deliberative reasoning"},
+    {"name": "deepseek-v3.2", "params": "688B", "specialty": "crypto/math/protocol"},
+    {"name": "deepseek-v3.1:671b", "params": "688B", "specialty": "previous flagship"},
+    {"name": "gemma4:31b", "params": "31B", "specialty": "lightweight worker"},
+    {"name": "gemini-3-flash-preview", "params": "variable", "specialty": "quick triage"},
+    {"name": "glm-5", "params": "756B", "specialty": "GLM 5 base"},
+    {"name": "glm-4.7", "params": "696B", "specialty": "previous GLM"},
+    {"name": "glm-4.6", "params": "696B", "specialty": "earlier GLM"},
+    {"name": "minimax-m2.7", "params": "480B", "specialty": "latest MiniMax"},
+    {"name": "minimax-m2.5", "params": "230B", "specialty": "MiniMax v2.5"},
+    {"name": "minimax-m2.1", "params": "230B", "specialty": "MiniMax v2.1"},
+    {"name": "minimax-m2", "params": "230B", "specialty": "MiniMax base"},
+    {"name": "nematron-3-super", "params": "230B", "specialty": "strong validation"},
+    {"name": "devstral-2:123b", "params": "128B", "specialty": "developer tooling"},
+    {"name": "devstral-small-2:24b", "params": "51B", "specialty": "lightweight dev"},
+    {"name": "qwen3-vl:235b", "params": "470B", "specialty": "vision-language"},
+    {"name": "gpt-oss:120b", "params": "65B", "specialty": "open-source GPT"},
+    {"name": "gpt-oss:20b", "params": "13B", "specialty": "lightweight GPT"},
+    {"name": "gemma3:27b", "params": "55B", "specialty": "Gemma 27B"},
+    {"name": "gemma3:12b", "params": "24B", "specialty": "Gemma 12B"},
+    {"name": "gemma3:4b", "params": "8.6B", "specialty": "Gemma 4B"},
+    {"name": "ministral-3:14b", "params": "15.7B", "specialty": "minimal Mistral"},
+    {"name": "ministral-3:8b", "params": "10.4B", "specialty": "minimal Mistral"},
+    {"name": "ministral-3:3b", "params": "4.7B", "specialty": "minimal Mistral"},
+    {"name": "rnj-1:8b", "params": "16B", "specialty": "lightweight"},
+    {"name": "kimi-k2:1t", "params": "1.1T", "specialty": "Kimi K2 base"},
+    {"name": "kimi-k2.5", "params": "1.1T", "specialty": "Kimi K2.5"}
   ]
 }
