@@ -3073,7 +3073,7 @@ pub async fn start_swarm_with_config(
                                 if should_report {
                                     reported_peer_info.insert(peer_id, (info.agent_version.clone(), info.listen_addrs.clone()));
                                     // Emit event for application layer
-                                    let public_key_hex = info.public_key.clone().try_into_ed25519().map(|pk| hex::encode(pk.to_bytes()));
+                                    let public_key_hex = info.public_key.clone().try_into_ed25519().ok().map(|pk| hex::encode(pk.to_bytes()));
                                     let _ = event_tx.send(SwarmEvent2::PeerIdentified {
                                         peer_id,
                                         public_key: public_key_hex,

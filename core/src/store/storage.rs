@@ -1,3 +1,4 @@
+use crate::store::backend::StorageBackend;
 use crate::store::history::HistoryManager;
 use crate::store::logs::LogManager;
 use crate::IronCoreError;
@@ -82,6 +83,12 @@ impl StorageManager {
         stats.free_bytes = free;
 
         tracing::debug!("Disk stats updated: free {} / total {}", free, total);
+    }
+
+    /// Return the underlying storage backend, delegated from the HistoryManager.
+    /// Used by consumers that need to persist auxiliary data (e.g. audit log).
+    pub fn backend(&self) -> Arc<dyn StorageBackend> {
+        self.history.backend()
     }
 
     /// Perform maintenance to enforce retention policies and ensure free disk space.

@@ -134,7 +134,7 @@ pub struct ServiceStats {
 pub struct MeshService {
     _config: Mutex<MeshServiceConfig>,
     state: Mutex<ServiceState>,
-    stats: Mutex<ServiceStats>,
+    stats: Arc<Mutex<ServiceStats>>,
     pub(crate) nearby_ble_peers: Arc<Mutex<HashSet<String>>>,
     core: std::sync::Arc<Mutex<Option<std::sync::Arc<crate::IronCore>>>>,
     platform_bridge: std::sync::Arc<Mutex<Option<Box<dyn PlatformBridge>>>>,
@@ -157,44 +157,48 @@ pub struct MeshService {
 
 impl MeshService {
     pub fn new(config: MeshServiceConfig) -> Self {
+        let swarm_bridge = std::sync::Arc::new(SwarmBridge::new());
+        let nearby_ble_peers = swarm_bridge.nearby_ble_peers.clone();
         Self {
             _config: Mutex::new(config),
             state: Mutex::new(ServiceState::Stopped),
-            stats: Mutex::new(ServiceStats::default()),
+            stats: Arc::new(Mutex::new(ServiceStats::default())),
             core: std::sync::Arc::new(Mutex::new(None)),
             platform_bridge: std::sync::Arc::new(Mutex::new(None)),
             storage_path: None,
             log_directory: None,
-            swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
+            swarm_bridge,
             nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             swarm_headless_mode: std::sync::Arc::new(Mutex::new(None)),
             current_device_profile: Mutex::new(None),
             device_state: RwLock::new(None),
             auto_adjust: Arc::new(AutoAdjustEngine::new()),
-            nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
+            nearby_ble_peers,
             external_delegate: Arc::new(Mutex::new(None)),
         }
     }
 
     /// Create MeshService with persistent storage
     pub fn with_storage(config: MeshServiceConfig, storage_path: String) -> Self {
+        let swarm_bridge = std::sync::Arc::new(SwarmBridge::new());
+        let nearby_ble_peers = swarm_bridge.nearby_ble_peers.clone();
         Self {
             _config: Mutex::new(config),
             state: Mutex::new(ServiceState::Stopped),
-            stats: Mutex::new(ServiceStats::default()),
+            stats: Arc::new(Mutex::new(ServiceStats::default())),
             core: std::sync::Arc::new(Mutex::new(None)),
             platform_bridge: std::sync::Arc::new(Mutex::new(None)),
             storage_path: Some(storage_path),
             log_directory: None,
-            swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
+            swarm_bridge,
             nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             swarm_headless_mode: std::sync::Arc::new(Mutex::new(None)),
             current_device_profile: Mutex::new(None),
             device_state: RwLock::new(None),
             auto_adjust: Arc::new(AutoAdjustEngine::new()),
-            nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
+            nearby_ble_peers,
             external_delegate: Arc::new(Mutex::new(None)),
         }
     }
@@ -205,22 +209,24 @@ impl MeshService {
         storage_path: String,
         log_directory: String,
     ) -> Self {
+        let swarm_bridge = std::sync::Arc::new(SwarmBridge::new());
+        let nearby_ble_peers = swarm_bridge.nearby_ble_peers.clone();
         Self {
             _config: Mutex::new(config),
             state: Mutex::new(ServiceState::Stopped),
-            stats: Mutex::new(ServiceStats::default()),
+            stats: Arc::new(Mutex::new(ServiceStats::default())),
             core: std::sync::Arc::new(Mutex::new(None)),
             platform_bridge: std::sync::Arc::new(Mutex::new(None)),
             storage_path: Some(storage_path),
             log_directory: Some(log_directory),
-            swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
+            swarm_bridge,
             nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             swarm_headless_mode: std::sync::Arc::new(Mutex::new(None)),
             current_device_profile: Mutex::new(None),
             device_state: RwLock::new(None),
             auto_adjust: Arc::new(AutoAdjustEngine::new()),
-            nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
+            nearby_ble_peers,
             external_delegate: Arc::new(Mutex::new(None)),
         }
     }
@@ -578,8 +584,8 @@ impl MeshService {
                                 None,
                                 Vec::new(),
                                 service_storage_path,
-                                iron_core_handle.map(|c| {
-                                    Arc::downgrade(&c)
+                                iron_core_handle.as_ref().map(|c| {
+                                    Arc::downgrade(c)
                                 }),
                                 headless_mode,
                             )
@@ -588,6 +594,9 @@ impl MeshService {
                                 Ok(handle) => {
                                     tracing::info!("Swarm started, wiring bridge");
                                     swarm_bridge.set_handle(handle.clone());
+                                    if let Some(core_ref) = iron_core_handle.as_ref() {
+                                        core_ref.set_swarm_handle(handle.clone());
+                                    }
                                     *swarm_mode_state.lock() = Some(headless_mode);
                                     // Apply stored relay budget
                                     let budget = *relay_budget_init.lock();
@@ -611,26 +620,35 @@ impl MeshService {
                                                                 // RELAY: Forward to next hop
                                                                 let next_hop_hex = msg.recipient_id.clone();
                                                                 let payload = msg.payload.clone();
-                                                                
+
                                                                 eprintln!("[IronCore] 🧅 Onion relay: forwarding to {}", next_hop_hex);
                                                                 if let Ok(next_hop_bytes) = hex::decode(&next_hop_hex) {
-                                                                    if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from(&next_hop_bytes[..32]) {
-                                                                        let next_peer_id = libp2p::PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_pk));
-                                                                        
-                                                                        let bridge_clone = swarm_bridge.clone();
-                                                                        let stats_clone = stats.clone();
-                                                                        let core_owned = core_ref.clone();
-                                                                        tokio::spawn(async move {
-                                                                            // B1_CORE_ENTRY_006: Apply timing jitter to thwart correlation attacks
-                                                                            let delay_ms = core_owned.relay_jitter_delay("Normal".to_string());
-                                                                            if delay_ms > 0 {
-                                                                                tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
-                                                                            }
-                                                                            let _ = bridge_clone.send_message(next_peer_id.to_string(), payload, None, None);
-                                                                        });
-                                                                        
-                                                                        let mut s = stats_clone.lock();
-                                                                        s.messages_relayed += 1;
+                                                                    if let Some(next_hop_key_bytes) = next_hop_bytes
+                                                                        .get(..32)
+                                                                        .and_then(|bytes| <&[u8; 32]>::try_from(bytes).ok())
+                                                                    {
+                                                                        if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from_bytes(next_hop_key_bytes) {
+                                                                            let next_peer_id = libp2p::PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_pk));
+
+                                                                            let bridge_clone = swarm_bridge.clone();
+                                                                            let stats_clone = stats.clone();
+                                                                            let core_owned = core_ref.clone();
+                                                                            tokio::spawn(async move {
+                                                                                // B1_CORE_ENTRY_006: Apply timing jitter to thwart correlation attacks
+                                                                                let delay_ms = core_owned.relay_jitter_delay("Normal".to_string());
+                                                                                if delay_ms > 0 {
+                                                                                    tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                                                                                }
+                                                                                let _ = bridge_clone.send_message(next_peer_id.to_string(), payload, None, None);
+                                                                            });
+
+                                                                            let mut s = stats_clone.lock();
+                                                                            s.messages_relayed += 1;
+                                                                        } else {
+                                                                            tracing::warn!("Failed to parse onion relay next hop as ed25519 public key");
+                                                                        }
+                                                                    } else {
+                                                                        tracing::warn!("Onion relay next hop hex decoded to fewer than 32 bytes");
                                                                     }
                                                                 }
                                                             } else {
@@ -922,9 +940,6 @@ impl MeshService {
         // Persist the new DeviceState.
         *self.device_state.write() = Some(new_state.clone());
 
-        // Also keep the legacy DeviceProfile for callers that still use it.
-        *self.current_device_profile.lock() = Some(profile);
-
         // Derive and apply behavior adjustments using the new engine.
         let adj_profile = self.auto_adjust.compute_profile(profile.clone());
         let ble_adj = self.auto_adjust.compute_ble_adjustment(adj_profile);
@@ -958,6 +973,9 @@ impl MeshService {
             bridge.on_network_changed(profile.has_wifi, false); // Cellular not in profile yet
             bridge.on_motion_changed(profile.motion_state);
         }
+
+        // Also keep the legacy DeviceProfile for callers that still use it.
+        *self.current_device_profile.lock() = Some(profile);
     }
 
     /// Compute recommended behavior from a device state snapshot.
@@ -1185,7 +1203,7 @@ struct MeshServiceCoreDelegate {
 impl crate::CoreDelegate for MeshServiceCoreDelegate {
     fn on_peer_discovered(&self, peer_id: String) {
         if let Some(service) = self.service.upgrade() {
-            service.on_peer_discovered(peer_id);
+            service.on_peer_discovered(peer_id.clone());
             if let Some(delegate) = service.external_delegate.lock().as_ref() {
                 delegate.on_peer_discovered(peer_id);
             }
@@ -1194,7 +1212,7 @@ impl crate::CoreDelegate for MeshServiceCoreDelegate {
 
     fn on_peer_disconnected(&self, peer_id: String) {
         if let Some(service) = self.service.upgrade() {
-            service.on_peer_disconnected(peer_id);
+            service.on_peer_disconnected(peer_id.clone());
             if let Some(delegate) = service.external_delegate.lock().as_ref() {
                 delegate.on_peer_disconnected(peer_id);
             }
@@ -1257,10 +1275,25 @@ pub trait PlatformBridge: Send + Sync {
 
 #[derive(Debug, Clone)]
 pub struct DeviceProfile {
+    pub peer_id: Option<String>,
+    pub device_id: Option<String>,
     pub battery_pct: u8,
     pub is_charging: bool,
     pub has_wifi: bool,
     pub motion_state: MotionState,
+}
+
+impl Default for DeviceProfile {
+    fn default() -> Self {
+        Self {
+            peer_id: None,
+            device_id: None,
+            battery_pct: 100,
+            is_charging: false,
+            has_wifi: false,
+            motion_state: MotionState::Still,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2059,6 +2092,7 @@ impl LedgerManager {
 pub struct SwarmBridge {
     handle: Arc<Mutex<Option<SwarmHandle>>>,
     captured_handle: Option<tokio::runtime::Handle>,
+    pub nearby_ble_peers: Arc<Mutex<HashSet<String>>>,
 }
 
 impl Default for SwarmBridge {
@@ -2105,6 +2139,7 @@ impl SwarmBridge {
         Self {
             handle: Arc::new(Mutex::new(None)),
             captured_handle: Some(get_global_runtime()),
+            nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -2119,6 +2154,13 @@ impl SwarmBridge {
         self.captured_handle
             .clone()
             .unwrap_or_else(get_global_runtime)
+    }
+
+    /// Dispatch a packet to a BLE-reachable peer.
+    /// SwarmBridge does not own a platform bridge, so this is a no-op stub; the
+    /// real dispatch path is through MeshService::dispatch_ble_packet.
+    pub fn dispatch_ble_packet(&self, _peer_id: String, _data: Vec<u8>) {
+        tracing::warn!("SwarmBridge::dispatch_ble_packet: BLE dispatch not wired through SwarmBridge; packet dropped");
     }
 
     /// Send an encrypted message envelope to a peer.
@@ -2542,6 +2584,7 @@ mod tests {
             is_charging: false,
             has_wifi: true,
             motion_state: MotionState::Still,
+            ..DeviceProfile::default()
         };
         let state = DeviceState::from_profile(&profile);
         assert_eq!(state.battery_level, 55);
@@ -2565,6 +2608,7 @@ mod tests {
             is_charging: false,
             has_wifi: true,
             motion_state: MotionState::Still,
+            ..DeviceProfile::default()
         };
         svc.update_device_state(profile);
 
@@ -2589,6 +2633,7 @@ mod tests {
             is_charging: false,
             has_wifi: true,
             motion_state: MotionState::Walking,
+            ..DeviceProfile::default()
         });
 
         // Transition to low battery
@@ -2597,6 +2642,7 @@ mod tests {
             is_charging: false,
             has_wifi: false,
             motion_state: MotionState::Walking,
+            ..DeviceProfile::default()
         });
 
         let adj = svc.recommended_behavior().unwrap();
@@ -2610,6 +2656,7 @@ mod tests {
             is_charging: false,
             has_wifi: false,
             motion_state: MotionState::Still,
+            ..DeviceProfile::default()
         });
 
         let adj = svc.recommended_behavior().unwrap();

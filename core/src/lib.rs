@@ -32,7 +32,7 @@ pub mod contacts_bridge;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod mobile_bridge;
 
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use std::path::Path;
 use std::sync::Arc;
 use thiserror::Error;
@@ -235,6 +235,13 @@ pub struct RegistrationStateInfo {
     pub seniority_timestamp: Option<u64>,
 }
 
+/// Result of peeling one onion layer — next hop address and remaining payload.
+#[derive(Clone)]
+pub struct PeelResult {
+    pub next_hop: Option<Vec<u8>>,
+    pub remaining_data: Vec<u8>,
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 struct IdentityBackupV1 {
     version: u8,
@@ -324,6 +331,9 @@ pub struct IronCore {
     /// Engine for computing adaptive mesh behavior (P1_CORE_ENTRY_001)
     #[cfg(not(target_arch = "wasm32"))]
     pub auto_adjust_engine: Arc<mobile_bridge::AutoAdjustEngine>,
+    /// Running swarm handle for transport queries exposed through IronCore.
+    #[cfg(not(target_arch = "wasm32"))]
+    swarm_handle: Arc<Mutex<Option<crate::transport::swarm::SwarmHandle>>>,
 }
 
 const STORAGE_SCHEMA_VERSION: u32 = 3;
@@ -848,6 +858,12 @@ impl IronCore {
             ratchet_session_manager,
             #[cfg(not(target_arch = "wasm32"))]
             ledger_manager,
+            abuse_reputation,
+            routing_engine,
+            #[cfg(not(target_arch = "wasm32"))]
+            auto_adjust_engine: Arc::new(mobile_bridge::AutoAdjustEngine::new()),
+            #[cfg(not(target_arch = "wasm32"))]
+            swarm_handle: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -2898,8 +2914,9 @@ impl IronCore {
         // However, some nodes might have their own local custody store if they are relays.
         // We can create a temporary one to check the storage if it's persistent.
         if let Some(peer_id) = self.libp2p_peer_id() {
-             let store = store::relay_custody::RelayCustodyStore::for_local_peer(&peer_id);
-             store.audit_count() as u32
+            let local_peer_id = peer_id.to_string();
+            let store = store::relay_custody::RelayCustodyStore::for_local_peer(&local_peer_id);
+            store.audit_count() as u32
         } else {
             0
         }
@@ -2908,13 +2925,14 @@ impl IronCore {
     /// Get registration state info for an identity ID (Blake3 hash).
     pub fn custody_get_registration_state_info(&self, identity_id: String) -> RegistrationStateInfo {
         if let Some(peer_id) = self.libp2p_peer_id() {
-             let store = store::relay_custody::RelayCustodyStore::for_local_peer(&peer_id);
-             let info = store.get_registration_state_info(&identity_id);
-             RegistrationStateInfo {
-                 state: info.state,
-                 device_id: info.device_id,
-                 seniority_timestamp: info.seniority_timestamp,
-             }
+            let local_peer_id = peer_id.to_string();
+            let store = store::relay_custody::RelayCustodyStore::for_local_peer(&local_peer_id);
+            let info = store.get_registration_state_info(&identity_id);
+            RegistrationStateInfo {
+                state: info.state,
+                device_id: info.device_id,
+                seniority_timestamp: info.seniority_timestamp,
+            }
         } else {
             RegistrationStateInfo {
                 state: "unknown".to_string(),
@@ -2927,9 +2945,10 @@ impl IronCore {
     /// Get registration transitions for an identity as JSON.
     pub fn custody_registration_transitions(&self, identity_id: String) -> String {
         if let Some(peer_id) = self.libp2p_peer_id() {
-             let store = store::relay_custody::RelayCustodyStore::for_local_peer(&peer_id);
-             let transitions = store.registration_transitions_for_identity(&identity_id);
-             serde_json::to_string(&transitions).unwrap_or_else(|_| "[]".to_string())
+            let local_peer_id = peer_id.to_string();
+            let store = store::relay_custody::RelayCustodyStore::for_local_peer(&local_peer_id);
+            let transitions = store.registration_transitions_for_identity(&identity_id);
+            serde_json::to_string(&transitions).unwrap_or_else(|_| "[]".to_string())
         } else {
             "[]".to_string()
         }
@@ -2980,7 +2999,7 @@ impl IronCore {
             Some(h) => h,
             None => return vec![],
         };
-        let target = match target_peer_id.parse::<PeerId>() {
+        let target = match target_peer_id.parse::<libp2p::PeerId>() {
             Ok(p) => p,
             Err(_) => return vec![],
         };
@@ -2994,6 +3013,58 @@ impl IronCore {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn get_auto_adjust_engine(&self) -> Arc<crate::mobile_bridge::AutoAdjustEngine> {
         self.auto_adjust_engine.clone()
+    }
+
+    /// Return a random available port number. Used by the transport layer to find
+    /// a free port for listening when no explicit port is configured.
+    ///
+    /// Returns `0` if no free port can be found (OS refused the ephemeral bind).
+    /// Callers must treat `0` as a failure sentinel and not attempt to bind to it.
+    pub fn random_port(&self) -> u16 {
+        use std::net::TcpListener;
+        TcpListener::bind("127.0.0.1:0")
+            .ok()
+            .and_then(|l| l.local_addr().ok())
+            .map(|a| a.port())
+            .unwrap_or(0)
+    }
+
+    // ========================================================================
+    // IDENTITY ACCESSORS (wired for mobile_bridge + custody callers)
+    // ========================================================================
+
+    /// Return the current identity_id (Blake3 hash of public key), if initialized.
+    pub fn identity_id(&self) -> Option<String> {
+        self.identity.read().identity_id()
+    }
+
+    /// Return the current device_id (UUID v4), if initialized.
+    pub fn device_id(&self) -> Option<String> {
+        self.identity.read().device_id()
+    }
+
+    /// Return the libp2p PeerId derived from the current identity key, if initialized.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn libp2p_peer_id(&self) -> Option<libp2p::PeerId> {
+        let id = self.identity.read();
+        let public_key_bytes = id.keys()?.signing_key.verifying_key().to_bytes();
+        let public_key =
+            libp2p::identity::ed25519::PublicKey::try_from_bytes(&public_key_bytes).ok()?;
+        Some(libp2p::PeerId::from_public_key(
+            &libp2p::identity::PublicKey::from(public_key),
+        ))
+    }
+
+    /// Return the swarm handle for transport operations, if the swarm is running.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn get_swarm_handle(&self) -> Option<crate::transport::swarm::SwarmHandle> {
+        self.swarm_handle.lock().clone()
+    }
+
+    /// Store the running swarm handle so query helpers can return live data.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn set_swarm_handle(&self, handle: crate::transport::swarm::SwarmHandle) {
+        *self.swarm_handle.lock() = Some(handle);
     }
 
     /// Re-initialize the routing engine with the real identity after initialization.

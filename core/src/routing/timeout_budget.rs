@@ -14,7 +14,7 @@
 use web_time::{Duration, Instant};
 
 /// Discovery phases in order of increasing cost
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum DiscoveryPhase {
     /// Phase 1: Local cache lookup (cheapest, ~1ms)
     LocalCache,
@@ -192,7 +192,7 @@ impl TimeoutBudget {
 }
 
 /// Summary of budget usage for logging/metrics
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct BudgetSummary {
     pub total_budget: Duration,
     pub elapsed: Duration,

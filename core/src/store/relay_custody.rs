@@ -104,6 +104,13 @@ pub struct RegistrationStateInfo {
     pub seniority_timestamp: Option<u64>,
 }
 
+/// A relay that has an active registration, as returned by `RelayRegistry::list_active`.
+#[derive(Debug, Clone)]
+pub struct ActiveRelayInfo {
+    /// Identity-id (Blake3 hex of the Ed25519 public key) — used as the routing key.
+    pub public_key_hex: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CustodyError {
     DeviceMismatch,
@@ -1097,6 +1104,27 @@ impl Default for RelayCustodyStore {
 impl RelayRegistry {
     pub fn new(backend: Arc<dyn StorageBackend>) -> Self {
         Self { backend }
+    }
+
+    /// Return all actively-registered relay identities.
+    /// Each entry's `public_key_hex` is the identity_id (Blake3 hex of the public key),
+    /// which serves as the routing identifier for onion-circuit construction.
+    pub fn list_active(&self) -> Vec<ActiveRelayInfo> {
+        self.backend
+            .scan_prefix(REGISTRATION_STATE_PREFIX.as_bytes())
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|(_, value)| bincode::deserialize::<RegistrationRecord>(&value).ok())
+            .filter_map(|record| {
+                if matches!(record.state, RegistrationState::Active { .. }) {
+                    Some(ActiveRelayInfo {
+                        public_key_hex: record.identity_id,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     fn register(

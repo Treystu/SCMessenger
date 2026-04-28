@@ -74,33 +74,33 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 
 Custom modes, rules, and skills for optimized agent workflows:
 
-**Custom Modes** (`.roomodes/`):
-- [`scm-rust`](.roomodes/scm-rust.json) - Rust core development
-- [`scm-android`](.roomodes/scm-android.json) - Android/Kotlin development
-- [`scm-ios`](.roomodes/scm-ios.json) - iOS/Swift development
-- [`scm-protocol`](.roomodes/scm-protocol.json) - Protocol/crypto review
-- [`scm-docs`](.roomodes/scm-docs.json) - Documentation specialist
-- [`scm-release`](.roomodes/scm-release.json) - Release verification
-- [`scm-debug-mesh`](.roomodes/scm-debug-mesh.json) - Mesh/relay debugging
+**Custom Modes** (`.roomodes/`): historical references only; the `.roomodes/` directory is not tracked in this repository snapshot.
+- `scm-rust` - Rust core development
+- `scm-android` - Android/Kotlin development
+- `scm-ios` - iOS/Swift development
+- `scm-protocol` - Protocol/crypto review
+- `scm-docs` - Documentation specialist
+- `scm-release` - Release verification
+- `scm-debug-mesh` - Mesh/relay debugging
 
-**Project Rules** (`.roo/rules/`):
-- [`000-critical.md`](.roo/rules/000-critical.md) - Non-negotiable rules
-- [`010-documentation.md`](.roo/rules/010-documentation.md) - Doc sync requirements
-- [`020-crypto.md`](.roo/rules/020-crypto.md) - Cryptography constraints
-- [`030-platform-parity.md`](.roo/rules/030-platform-parity.md) - Cross-platform rules
-- [`040-build-verify.md`](.roo/rules/040-build-verify.md) - Build verification
-- [`050-identity.md`](.roo/rules/050-identity.md) - Identity model rules
-- [`060-testing.md`](.roo/rules/060-testing.md) - Test requirements
+**Project Rules** (`.roo/rules/`): historical references only; the `.roo/rules/` directory is not tracked in this repository snapshot.
+- `000-critical.md` - Non-negotiable rules
+- `010-documentation.md` - Doc sync requirements
+- `020-crypto.md` - Cryptography constraints
+- `030-platform-parity.md` - Cross-platform rules
+- `040-build-verify.md` - Build verification
+- `050-identity.md` - Identity model rules
+- `060-testing.md` - Test requirements
 
 **Skills** (`skills/`):
 - [`platform-parity-check`](skills/platform-parity-check/SKILL.md) - Cross-platform verification
 - [`release-gate-validator`](skills/release-gate-validator/SKILL.md) - Release readiness
 - [`mesh-diagnostics`](skills/mesh-diagnostics/SKILL.md) - Network troubleshooting
 
-**Memory Bank** (`.roo/memory-bank/`):
-- [`projectbrief.md`](.roo/memory-bank/projectbrief.md) - Project overview
-- [`techContext.md`](.roo/memory-bank/techContext.md) - Technology stack
-- [`activeContext.md`](.roo/memory-bank/activeContext.md) - Current focus
+**Memory Bank** (`.roo/memory-bank/`): historical references only; the `.roo/memory-bank/` directory is not tracked in this repository snapshot.
+- `projectbrief.md` - Project overview
+- `techContext.md` - Technology stack
+- `activeContext.md` - Current focus
 
 ## Component and Platform Docs
 
