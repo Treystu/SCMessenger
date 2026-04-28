@@ -934,9 +934,6 @@ impl MeshService {
         // Persist the new DeviceState.
         *self.device_state.write() = Some(new_state.clone());
 
-        // Also keep the legacy DeviceProfile for callers that still use it.
-        *self.current_device_profile.lock() = Some(profile.clone());
-
         // Derive and apply behavior adjustments using the new engine.
         let adj_profile = self.auto_adjust.compute_profile(profile.clone());
         let ble_adj = self.auto_adjust.compute_ble_adjustment(adj_profile);
@@ -970,6 +967,9 @@ impl MeshService {
             bridge.on_network_changed(profile.has_wifi, false); // Cellular not in profile yet
             bridge.on_motion_changed(profile.motion_state);
         }
+
+        // Also keep the legacy DeviceProfile for callers that still use it.
+        *self.current_device_profile.lock() = Some(profile);
     }
 
     /// Compute recommended behavior from a device state snapshot.

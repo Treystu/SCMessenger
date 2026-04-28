@@ -3033,8 +3033,12 @@ impl IronCore {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn libp2p_peer_id(&self) -> Option<libp2p::PeerId> {
         let id = self.identity.read();
-        let keypair = id.keys()?.to_libp2p_keypair().ok()?;
-        Some(libp2p::PeerId::from_public_key(&keypair.public()))
+        let public_key_bytes = id.keys()?.signing_key.verifying_key().to_bytes();
+        let public_key =
+            libp2p::identity::ed25519::PublicKey::try_from_bytes(&public_key_bytes).ok()?;
+        Some(libp2p::PeerId::from_public_key(
+            &libp2p::identity::PublicKey::from(public_key),
+        ))
     }
 
     /// Return the swarm handle for transport operations, if the swarm is running.
