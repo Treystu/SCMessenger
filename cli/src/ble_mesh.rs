@@ -17,6 +17,7 @@ use scmessenger_core::IronCore;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use crate::ble_daemon::{BleConfig, BleDaemon};
 use uuid::Uuid;
 
 use crate::server::{UiEvent, UiOutbound};
@@ -222,13 +223,39 @@ pub async fn run_ble_central_ingress(
 /// Run peripheral advertising.
 /// Note: btleplug doesn't fully support advertising cross-platform native.
 /// This logs intention for mobile peripheral discovery.
-pub async fn run_ble_peripheral_advertising(_core: Arc<IronCore>) {
+pub async fn run_ble_peripheral_advertising(core: Arc<IronCore>) {
     #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
     {
         tracing::info!(
-            "BLE: GATT advertising stub started for service {:x} (Awaiting full platform advertising support).",
+            "BLE: GATT advertising for service {:x} (Using BleDaemon bridge).",
             GATT_SERVICE_UUID
         );
+
+        let mut daemon = BleDaemon::new(BleConfig::default());
+
+        if let Err(e) = daemon.initialize().await {
+            tracing::warn!("BLE: Advertising daemon failed to initialize: {}", e);
+            return;
+        }
+
+        let svc_uuid = scm_service_uuid().to_string();
+        let peer_id_str = core
+            .get_identity_info()
+            .identity_id
+            .unwrap_or_else(|| "unknown".to_string());
+
+        if let Err(e) = daemon
+            .advertise_service(&svc_uuid, peer_id_str.as_bytes())
+            .await
+        {
+            tracing::error!("BLE: Failed to advertise SCM service: {}", e);
+        } else {
+            tracing::info!(
+                "BLE: Now advertising service {} for peer {}",
+                svc_uuid,
+                peer_id_str
+            );
+        }
 
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(3600)).await;

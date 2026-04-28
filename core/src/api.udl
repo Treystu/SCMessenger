@@ -385,6 +385,7 @@ interface MeshService {
     void on_entering_background();
     void on_entering_foreground();
     void on_ble_data_received(string peer_id, bytes data);
+    void on_wifi_aware_peer_discovered(string peer_id, bytes service_info, i32 rssi);
     void set_relay_budget(u32 messages_per_hour);
 
     void on_peer_discovered(string peer_id);

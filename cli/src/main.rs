@@ -156,6 +156,8 @@ enum Commands {
     HistoryEnforceRetention { max_messages: u32 },
     /// Remove history older than a unix timestamp (seconds)
     HistoryPruneBefore { before_timestamp: u64 },
+    /// Show all available transport paths
+    TransportPaths,
     /// Stop the running node
     Stop,
     /// Manage peer blocking
@@ -400,6 +402,7 @@ async fn main() -> Result<()> {
         Commands::Stop => cmd_stop().await,
         Commands::Send { recipient, message } => cmd_send_offline(recipient, message).await,
         Commands::Status => cmd_status().await,
+        Commands::TransportPaths => cmd_transport_paths().await,
         Commands::MarkSent { message_id } => cmd_mark_sent(message_id).await,
         Commands::HistoryClear { yes } => cmd_history_clear(yes).await,
         Commands::HistoryEnforceRetention { max_messages } => {
@@ -947,11 +950,72 @@ async fn cmd_config(action: ConfigAction) -> Result<()> {
     Ok(())
 }
 
+async fn cmd_transport_paths() -> Result<()> {
+    if !api::is_api_available().await {
+        println!(
+            "{}",
+            "Error: Node is not running. Start it first with 'scm start'.".red()
+        );
+        return Ok(());
+    }
+
+    match api::get_transport_paths_via_api().await {
+        Ok(paths) => {
+            println!("{}", "Available Transport Paths".bold());
+            println!();
+
+            if paths.is_empty() {
+                println!("No active transport paths discovered.");
+            } else {
+                for (peer_id, peer_paths) in paths {
+                    println!("Peer: {}", peer_id.cyan());
+                    for path in peer_paths {
+                        println!(
+                            "  - [{:?} -> {:?}] Reliability: {:.2}, Latency: {}ms",
+                            path.source, path.destination, path.reliability_score, path.latency_estimate
+                        );
+                    }
+                }
+            }
+        }
+        Err(e) => println!("Error fetching transport paths: {}", e),
+    }
+
+    Ok(())
+}
+
 async fn cmd_history(
     peer_filter: Option<String>,
     search_query: Option<String>,
     limit: usize,
 ) -> Result<()> {
+    // If the API is available, use it instead of opening the storage locally
+    if api::is_api_available().await {
+        let messages = api::get_history_via_api(peer_filter, search_query, Some(limit)).await?;
+        if messages.is_empty() {
+            println!("{}", "No messages found.".dimmed());
+            return Ok(());
+        }
+
+        println!("{} ({} messages) [via API]", "Message History".bold(), messages.len());
+        println!();
+
+        for msg in messages {
+            let direction = match msg.direction.as_str() {
+                "sent" => "→".bright_green(),
+                _ => "←".bright_blue(),
+            };
+
+            let time = format_timestamp(msg.timestamp).dimmed();
+            let peer = msg.peer_id;
+
+            println!("{} {} [{}]", direction, peer.bright_cyan(), time);
+            println!("   {}", msg.content);
+            println!();
+        }
+        return Ok(());
+    }
+
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
@@ -2105,6 +2169,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     let api_ctx = api::ApiContext {
         core: core_arc.clone(),
         swarm_handle: Arc::new(swarm_handle.clone()),
+        transport_bridge: transport_bridge.clone(),
     };
     tokio::spawn(async move {
         if let Err(e) = api::start_api_server(api_ctx).await {
@@ -2506,6 +2571,17 @@ async fn cmd_status() -> Result<()> {
         match api::get_listeners_via_api().await {
             Ok(listeners) => println!("Listeners: {}", listeners.len()),
             Err(e) => println!("Listeners: {} ({})", "unavailable".yellow(), e),
+        }
+
+        match api::get_transport_paths_via_api().await {
+            Ok(paths) => {
+                let mut total_paths = 0;
+                for p in paths.values() {
+                    total_paths += p.len();
+                }
+                println!("Available Paths: {}", total_paths);
+            }
+            Err(e) => println!("Available Paths: {} ({})", "unavailable".yellow(), e),
         }
 
         match api::get_external_address_via_api().await {

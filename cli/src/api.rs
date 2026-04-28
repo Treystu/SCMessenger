@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -53,6 +54,7 @@ pub struct GetPeersResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GetHistoryRequest {
     pub peer_id: Option<String>,
+    pub query: Option<String>,
     pub limit: Option<usize>,
 }
 
@@ -88,6 +90,11 @@ pub struct ConnectionPathStateResponse {
 pub struct DriftStatusResponse {
     pub state: String,
     pub store_size: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TransportPathsResponse {
+    pub paths: HashMap<String, Vec<crate::transport_bridge::TransportPath>>,
 }
 
 // Check if API is available
@@ -180,10 +187,15 @@ pub async fn get_peers_via_api() -> Result<Vec<PeerEntry>> {
 #[allow(dead_code)]
 pub async fn get_history_via_api(
     peer_id: Option<String>,
+    query: Option<String>,
     limit: Option<usize>,
 ) -> Result<Vec<HistoryMessage>> {
     let client = hyper::Client::new();
-    let req_body = GetHistoryRequest { peer_id, limit };
+    let req_body = GetHistoryRequest {
+        peer_id,
+        query,
+        limit,
+    };
 
     let json = serde_json::to_string(&req_body)?;
     let req = Request::builder()
@@ -237,6 +249,19 @@ pub async fn get_listeners_via_api() -> Result<Vec<String>> {
     Ok(response.listeners)
 }
 
+pub async fn get_transport_paths_via_api() -> Result<HashMap<String, Vec<crate::transport_bridge::TransportPath>>> {
+    let client = hyper::Client::new();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}/api/transport/paths", API_ADDR))
+        .body(Body::empty())?;
+
+    let resp = client.request(req).await?;
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let response: TransportPathsResponse = serde_json::from_slice(&body_bytes)?;
+    Ok(response.paths)
+}
+
 pub async fn get_connection_path_state_via_api() -> Result<String> {
     let client = hyper::Client::new();
     let req = Request::builder()
@@ -279,6 +304,7 @@ pub async fn export_diagnostics_via_api() -> Result<String> {
 pub struct ApiContext {
     pub core: Arc<scmessenger_core::IronCore>,
     pub swarm_handle: Arc<scmessenger_core::transport::SwarmHandle>,
+    pub transport_bridge: Arc<tokio::sync::Mutex<crate::transport_bridge::TransportBridge>>,
 }
 
 pub async fn stop_node_via_api() -> Result<()> {
@@ -301,6 +327,7 @@ async fn handle_request(
         (&Method::POST, "/api/contacts") => handle_add_contact(req, ctx).await,
         (&Method::GET, "/api/peers") => handle_get_peers(req, ctx).await,
         (&Method::GET, "/api/listeners") => handle_get_listeners(req, ctx).await,
+        (&Method::GET, "/api/transport/paths") => handle_get_transport_paths(req, ctx).await,
         (&Method::POST, "/api/history") => handle_get_history(req, ctx).await,
         (&Method::GET, "/api/external-address") => handle_get_external_address(req, ctx).await,
         (&Method::GET, "/api/connection-path-state") => {
@@ -442,13 +469,39 @@ async fn handle_get_listeners(_req: Request<Body>, ctx: Arc<ApiContext>) -> Resu
         .body(Body::from(serde_json::to_string(&response)?))?)
 }
 
+async fn handle_get_transport_paths(
+    _req: Request<Body>,
+    ctx: Arc<ApiContext>,
+) -> Result<Response<Body>> {
+    let bridge = ctx.transport_bridge.lock().await;
+    let paths = bridge.get_available_paths();
+
+    let mut response_paths = HashMap::new();
+    for (peer_id, peer_paths) in paths {
+        response_paths.insert(peer_id.to_string(), peer_paths);
+    }
+
+    let response = TransportPathsResponse {
+        paths: response_paths,
+    };
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&response)?))?)
+}
+
 async fn handle_get_history(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<Response<Body>> {
     let body_bytes = hyper::body::to_bytes(req.into_body()).await?;
     let request: GetHistoryRequest = serde_json::from_slice(&body_bytes)?;
 
     let history = ctx.core.history_store_manager();
 
-    let messages = if let Some(peer_id) = request.peer_id {
+    let messages = if let Some(query) = request.query {
+        history
+            .search(query, request.limit.unwrap_or(20) as u32)
+            .map_err(|e| anyhow::anyhow!("{:?}", e))?
+    } else if let Some(peer_id) = request.peer_id {
         history
             .conversation(peer_id, request.limit.unwrap_or(20) as u32)
             .map_err(|e| anyhow::anyhow!("{:?}", e))?

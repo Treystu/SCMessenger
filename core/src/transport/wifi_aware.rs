@@ -14,6 +14,7 @@ use libp2p::PeerId;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::{info, warn};
@@ -187,6 +188,7 @@ pub trait WifiAwarePlatformBridge: Send + Sync {
 pub struct MockWifiAwareBridge {
     available: bool,
     discovered_peers: Arc<RwLock<Vec<DiscoveredPeer>>>,
+    on_service_discovered: Arc<RwLock<Option<Box<dyn Fn(String, Vec<u8>, i32) + Send + Sync>>>>,
 }
 
 #[cfg(test)]
@@ -195,10 +197,14 @@ impl MockWifiAwareBridge {
         Self {
             available,
             discovered_peers: Arc::new(RwLock::new(Vec::new())),
+            on_service_discovered: Arc::new(RwLock::new(None)),
         }
     }
 
     pub fn add_discovered_peer(&self, peer: DiscoveredPeer) {
+        if let Some(ref cb) = *self.on_service_discovered.read() {
+            cb(peer.peer_id.to_string(), peer.service_info.clone(), peer.rssi);
+        }
         self.discovered_peers.write().push(peer);
     }
 }
@@ -256,16 +262,55 @@ impl WifiAwarePlatformBridge for MockWifiAwareBridge {
         Ok(())
     }
 
-    fn set_on_service_discovered(
-        &self,
-        _callback: Box<dyn Fn(String, Vec<u8>, i32) + Send + Sync>,
-    ) {
+    fn set_on_service_discovered(&self, callback: Box<dyn Fn(String, Vec<u8>, i32) + Send + Sync>) {
+        *self.on_service_discovered.write() = Some(callback);
     }
 
     fn set_on_message_received(&self, _callback: Box<dyn Fn(String, Vec<u8>) + Send + Sync>) {}
 
     fn set_on_data_path_confirmed(&self, _callback: Box<dyn Fn(String, SocketAddr) + Send + Sync>) {
     }
+}
+
+/// Dummy implementation of WifiAwarePlatformBridge that does nothing.
+/// Useful for platforms or configurations where WiFi Aware is not yet implemented.
+pub struct DummyWifiAwareBridge;
+
+#[async_trait]
+impl WifiAwarePlatformBridge for DummyWifiAwareBridge {
+    async fn is_available(&self) -> Result<bool, WifiAwareError> {
+        Ok(false)
+    }
+
+    async fn publish_service(&self, _name: &str, _info: &[u8]) -> Result<(), WifiAwareError> {
+        Ok(())
+    }
+
+    async fn subscribe_to_services(&self, _name: &str, _filter: Option<&[u8]>) -> Result<(), WifiAwareError> {
+        Ok(())
+    }
+
+    async fn unpublish_service(&self) -> Result<(), WifiAwareError> {
+        Ok(())
+    }
+
+    async fn unsubscribe_from_services(&self) -> Result<(), WifiAwareError> {
+        Ok(())
+    }
+
+    async fn create_data_path(&self, _peer_id: &str, _pmk: &[u8; 32]) -> Result<SocketAddr, WifiAwareError> {
+        Err(WifiAwareError::Unavailable)
+    }
+
+    async fn close_data_path(&self, _peer_id: &str) -> Result<(), WifiAwareError> {
+        Ok(())
+    }
+
+    fn set_on_service_discovered(&self, _callback: Box<dyn Fn(String, Vec<u8>, i32) + Send + Sync>) {}
+
+    fn set_on_message_received(&self, _callback: Box<dyn Fn(String, Vec<u8>) + Send + Sync>) {}
+
+    fn set_on_data_path_confirmed(&self, _callback: Box<dyn Fn(String, SocketAddr) + Send + Sync>) {}
 }
 
 // ============================================================================
@@ -276,9 +321,10 @@ impl WifiAwarePlatformBridge for MockWifiAwareBridge {
 pub struct WifiAwareTransport {
     config: WifiAwareConfig,
     state: Arc<RwLock<WifiAwareState>>,
-    bridge: Arc<dyn WifiAwarePlatformBridge>,
+    pub bridge: Arc<dyn WifiAwarePlatformBridge>,
     data_paths: Arc<RwLock<HashMap<String, DataPathInfo>>>,
     discovered_peers: Arc<RwLock<HashMap<String, DiscoveredPeer>>>,
+    on_discovered: Arc<RwLock<Option<Box<dyn Fn(DiscoveredPeer) + Send + Sync>>>>,
 }
 
 impl WifiAwareTransport {
@@ -299,12 +345,35 @@ impl WifiAwareTransport {
             bridge,
             data_paths: Arc::new(RwLock::new(HashMap::new())),
             discovered_peers: Arc::new(RwLock::new(HashMap::new())),
+            on_discovered: Arc::new(RwLock::new(None)),
         })
+    }
+
+    /// Set a callback for when a peer is discovered
+    pub fn set_on_discovered(&self, callback: Box<dyn Fn(DiscoveredPeer) + Send + Sync>) {
+        *self.on_discovered.write() = Some(callback);
     }
 
     /// Get current WiFi Aware state
     pub fn get_state(&self) -> WifiAwareState {
         *self.state.read()
+    }
+
+    /// Bind the transport to its platform bridge callbacks
+    pub fn bind_to_bridge(self: &Arc<Self>) {
+        let weak_self = Arc::downgrade(self);
+        self.bridge
+            .set_on_service_discovered(Box::new(move |peer_id_str, service_info, rssi| {
+                if let Some(transport) = weak_self.upgrade() {
+                    if let Ok(peer_id) = PeerId::from_str(&peer_id_str) {
+                        transport.add_discovered_peer(DiscoveredPeer {
+                            peer_id,
+                            service_info,
+                            rssi,
+                        });
+                    }
+                }
+            }));
     }
 
     /// Initialize and check WiFi Aware availability
@@ -449,6 +518,14 @@ impl WifiAwareTransport {
     /// Get discovered peers
     pub fn get_discovered_peers(&self) -> Vec<DiscoveredPeer> {
         self.discovered_peers.read().values().cloned().collect()
+    }
+
+    /// Add a discovered peer to the transport
+    pub fn add_discovered_peer(&self, peer: DiscoveredPeer) {
+        self.register_peer(peer.clone());
+        if let Some(ref cb) = *self.on_discovered.read() {
+            cb(peer);
+        }
     }
 
     /// Register a discovered peer
@@ -596,6 +673,29 @@ mod tests {
         assert_eq!(path.peer_id, peer_id);
         assert!(path.bandwidth_estimate > 0);
     }
+
+    #[tokio::test]
+    async fn test_mock_discovery_flow() {
+        let bridge = Arc::new(MockWifiAwareBridge::new(true));
+        let transport =
+            Arc::new(WifiAwareTransport::new(WifiAwareConfig::default(), bridge.clone()).unwrap());
+
+        transport.bind_to_bridge();
+
+        let peer_id = PeerId::random();
+        let peer = DiscoveredPeer {
+            peer_id,
+            service_info: vec![4, 5, 6],
+            rssi: -70,
+        };
+
+        bridge.add_discovered_peer(peer.clone());
+
+        let discovered = transport.get_discovered_peers();
+        assert_eq!(discovered.len(), 1);
+        assert_eq!(discovered[0].peer_id, peer_id);
+    }
+}
 
     #[tokio::test]
     async fn test_data_path_not_found() {

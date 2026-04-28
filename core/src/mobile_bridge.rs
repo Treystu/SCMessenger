@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub use crate::contacts_bridge::{Contact, ContactManager};
 use crate::transport::behaviour::SharedPeerEntry;
 use crate::transport::swarm::SwarmHandle;
+use crate::transport::wifi_aware::{DiscoveredPeer, WifiAwareTransport, WifiAwareConfig};
 use libp2p::{Multiaddr, PeerId};
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashSet;
@@ -137,6 +138,7 @@ pub struct MeshService {
     state: Mutex<ServiceState>,
     stats: Arc<Mutex<ServiceStats>>,
     pub(crate) nearby_ble_peers: Arc<Mutex<HashSet<String>>>,
+    pub(crate) wifi_aware: Arc<RwLock<Option<Arc<WifiAwareTransport>>>>,
     core: std::sync::Arc<Mutex<Option<std::sync::Arc<crate::IronCore>>>>,
     platform_bridge: std::sync::Arc<Mutex<Option<Box<dyn PlatformBridge>>>>,
     storage_path: Option<String>,
@@ -177,6 +179,7 @@ impl MeshService {
             device_state: RwLock::new(None),
             auto_adjust: Arc::new(AutoAdjustEngine::new()),
             nearby_ble_peers,
+            wifi_aware: Arc::new(RwLock::new(None)),
             external_delegate: Arc::new(Mutex::new(None)),
         }
     }
@@ -202,6 +205,7 @@ impl MeshService {
             device_state: RwLock::new(None),
             auto_adjust: Arc::new(AutoAdjustEngine::new()),
             nearby_ble_peers,
+            wifi_aware: Arc::new(RwLock::new(None)),
             external_delegate: Arc::new(Mutex::new(None)),
         }
     }
@@ -231,6 +235,7 @@ impl MeshService {
             device_state: RwLock::new(None),
             auto_adjust: Arc::new(AutoAdjustEngine::new()),
             nearby_ble_peers,
+            wifi_aware: Arc::new(RwLock::new(None)),
             external_delegate: Arc::new(Mutex::new(None)),
         }
     }
@@ -280,6 +285,36 @@ impl MeshService {
         core.set_delegate(Some(Box::new(MeshServiceCoreDelegate {
             service: Arc::downgrade(&self),
         })));
+
+        // Initialize WiFi Aware transport
+        {
+            let config = WifiAwareConfig::default();
+            let bridge = Arc::new(crate::transport::wifi_aware::DummyWifiAwareBridge);
+            if let Ok(transport) = WifiAwareTransport::new(config, bridge) {
+                let transport = Arc::new(transport);
+
+                // Wire discovery callback back to IronCore and Stats
+                let weak_service = Arc::downgrade(&self);
+                transport.set_on_discovered(Box::new(move |peer| {
+                    if let Some(service) = weak_service.upgrade() {
+                        let peer_id_str = peer.peer_id.to_string();
+                        tracing::info!("WiFi Aware peer discovered: {} (rssi: {})", peer_id_str, peer.rssi);
+
+                        // Notify IronCore routing engine
+                        if let Some(core_guard) = service.core.lock().as_ref() {
+                            core_guard.routing_peer_seen(peer_id_str, "wifi_aware".to_string());
+                        }
+
+                        // Update stats
+                        let mut stats = service.stats.lock();
+                        stats.peers_discovered += 1;
+                    }
+                }));
+
+                transport.bind_to_bridge();
+                *self.wifi_aware.write() = Some(transport);
+            }
+        }
 
         // Load identity metadata into service profile
         let id_manager = core.identity_id();
@@ -1044,6 +1079,21 @@ impl MeshService {
         let mut stats = self.stats.lock();
         stats.peers_discovered += 1;
         tracing::info!("Peer discovered: {}", peer_id);
+    }
+
+    pub fn on_wifi_aware_peer_discovered(&self, peer_id: String, service_info: Vec<u8>, rssi: i32) {
+        if let Ok(pid) = PeerId::from_str(&peer_id) {
+            let peer = DiscoveredPeer {
+                peer_id: pid,
+                service_info,
+                rssi,
+            };
+
+            // Update WiFi Aware transport
+            if let Some(transport) = self.wifi_aware.read().as_ref() {
+                transport.add_discovered_peer(peer);
+            }
+        }
     }
 
     pub fn on_peer_disconnected(&self, peer_id: String) {

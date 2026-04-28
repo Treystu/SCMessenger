@@ -16,6 +16,7 @@ pub mod relay_health;
 pub mod reputation;
 pub mod routing;
 pub mod swarm;
+pub mod wifi_aware;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod websocket;
 
