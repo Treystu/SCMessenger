@@ -337,8 +337,12 @@ dictionary ServiceStats {
     u64 uptime_secs;
 };
 
+dictionary PeelResult {
+    bytes? next_hop;
+    bytes remaining_data;
+};
+
 interface MeshService {
-    [Self=ByArc]
     constructor(MeshServiceConfig config);
     [Name=with_storage]
     constructor(MeshServiceConfig config, string storage_path);
@@ -397,6 +401,8 @@ callback interface PlatformBridge {
 // ============================================================================
 
 dictionary DeviceProfile {
+    string? peer_id;
+    string? device_id;
     u8 battery_pct;
     boolean is_charging;
     boolean has_wifi;

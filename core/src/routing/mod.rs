@@ -17,9 +17,7 @@ pub mod local;
 pub mod negative_cache;
 pub mod neighborhood;
 pub mod optimized_engine;
-#[cfg(feature = "phase2_apis")]
 pub mod reputation;
-#[cfg(feature = "phase2_apis")]
 pub mod multipath;
 pub mod resume_prefetch;
 pub mod smart_retry;

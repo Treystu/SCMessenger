@@ -84,6 +84,10 @@ impl StorageManager {
         tracing::debug!("Disk stats updated: free {} / total {}", free, total);
     }
 
+    pub fn backend(&self) -> Arc<dyn crate::store::backend::StorageBackend> {
+        self.history.backend()
+    }
+
     /// Perform maintenance to enforce retention policies and ensure free disk space.
     ///
     /// Strategy (in priority order):

@@ -922,7 +922,7 @@ async fn cmd_config(action: ConfigAction) -> Result<()> {
             let storage_path = data_dir.join("storage");
             let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
             
-            let mut p: privacy::PrivacyConfig = serde_json::from_str(&core.get_privacy_config())?;
+            let mut p: scmessenger_core::privacy::PrivacyConfig = serde_json::from_str(&core.get_privacy_config())?;
             
             if padding.is_none() && onion.is_none() && cover.is_none() && timing.is_none() {
                 // Just show current config if no flags provided
@@ -1530,7 +1530,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                             
                                             if let Ok(next_hop_bytes) = hex::decode(&next_hop_hex) {
                                                 // Convert Ed25519 PK to libp2p PeerId
-                                                if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from(&next_hop_bytes[..32]) {
+                                                if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from_bytes(&next_hop_bytes[..32]) {
                                                     let next_peer_id = libp2p::PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_pk));
                                                     
                                                     tracing::info!("Relaying onion packet from {} to next hop {}", peer_id, next_peer_id);
@@ -2338,7 +2338,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
                                 let payload = msg.payload.clone();
                                 
                                 if let Ok(next_hop_bytes) = hex::decode(&next_hop_hex) {
-                                    if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from(&next_hop_bytes[..32]) {
+                                    if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from_bytes(&next_hop_bytes[..32]) {
                                         let next_peer_id = libp2p::PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_pk));
                                         
                                         tracing::info!("Relay node: forwarding onion packet to {}", next_peer_id);

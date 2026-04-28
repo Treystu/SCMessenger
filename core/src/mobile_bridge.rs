@@ -42,12 +42,13 @@ pub enum ConnectionPathState {
     RelayOnly,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum MotionState {
     Still,
     Walking,
     Running,
     Automotive,
+    #[default]
     Unknown,
 }
 
@@ -134,7 +135,7 @@ pub struct ServiceStats {
 pub struct MeshService {
     _config: Mutex<MeshServiceConfig>,
     state: Mutex<ServiceState>,
-    stats: Mutex<ServiceStats>,
+    stats: Arc<Mutex<ServiceStats>>,
     pub(crate) nearby_ble_peers: Arc<Mutex<HashSet<String>>>,
     core: std::sync::Arc<Mutex<Option<std::sync::Arc<crate::IronCore>>>>,
     platform_bridge: std::sync::Arc<Mutex<Option<Box<dyn PlatformBridge>>>>,
@@ -157,44 +158,50 @@ pub struct MeshService {
 
 impl MeshService {
     pub fn new(config: MeshServiceConfig) -> Self {
+        let nearby_ble_peers = Arc::new(Mutex::new(HashSet::new()));
         Self {
             _config: Mutex::new(config),
             state: Mutex::new(ServiceState::Stopped),
-            stats: Mutex::new(ServiceStats::default()),
+            stats: Arc::new(Mutex::new(ServiceStats::default())),
             core: std::sync::Arc::new(Mutex::new(None)),
             platform_bridge: std::sync::Arc::new(Mutex::new(None)),
             storage_path: None,
             log_directory: None,
-            swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
+            swarm_bridge: std::sync::Arc::new(SwarmBridge::with_nearby_ble_peers(
+                nearby_ble_peers.clone(),
+            )),
             nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             swarm_headless_mode: std::sync::Arc::new(Mutex::new(None)),
             current_device_profile: Mutex::new(None),
             device_state: RwLock::new(None),
             auto_adjust: Arc::new(AutoAdjustEngine::new()),
-            nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
+            nearby_ble_peers,
             external_delegate: Arc::new(Mutex::new(None)),
         }
     }
 
     /// Create MeshService with persistent storage
     pub fn with_storage(config: MeshServiceConfig, storage_path: String) -> Self {
+        let nearby_ble_peers = Arc::new(Mutex::new(HashSet::new()));
         Self {
             _config: Mutex::new(config),
             state: Mutex::new(ServiceState::Stopped),
-            stats: Mutex::new(ServiceStats::default()),
+            stats: Arc::new(Mutex::new(ServiceStats::default())),
             core: std::sync::Arc::new(Mutex::new(None)),
             platform_bridge: std::sync::Arc::new(Mutex::new(None)),
             storage_path: Some(storage_path),
             log_directory: None,
-            swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
+            swarm_bridge: std::sync::Arc::new(SwarmBridge::with_nearby_ble_peers(
+                nearby_ble_peers.clone(),
+            )),
             nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             swarm_headless_mode: std::sync::Arc::new(Mutex::new(None)),
             current_device_profile: Mutex::new(None),
             device_state: RwLock::new(None),
             auto_adjust: Arc::new(AutoAdjustEngine::new()),
-            nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
+            nearby_ble_peers,
             external_delegate: Arc::new(Mutex::new(None)),
         }
     }
@@ -205,22 +212,25 @@ impl MeshService {
         storage_path: String,
         log_directory: String,
     ) -> Self {
+        let nearby_ble_peers = Arc::new(Mutex::new(HashSet::new()));
         Self {
             _config: Mutex::new(config),
             state: Mutex::new(ServiceState::Stopped),
-            stats: Mutex::new(ServiceStats::default()),
+            stats: Arc::new(Mutex::new(ServiceStats::default())),
             core: std::sync::Arc::new(Mutex::new(None)),
             platform_bridge: std::sync::Arc::new(Mutex::new(None)),
             storage_path: Some(storage_path),
             log_directory: Some(log_directory),
-            swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
+            swarm_bridge: std::sync::Arc::new(SwarmBridge::with_nearby_ble_peers(
+                nearby_ble_peers.clone(),
+            )),
             nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             swarm_headless_mode: std::sync::Arc::new(Mutex::new(None)),
             current_device_profile: Mutex::new(None),
             device_state: RwLock::new(None),
             auto_adjust: Arc::new(AutoAdjustEngine::new()),
-            nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
+            nearby_ble_peers,
             external_delegate: Arc::new(Mutex::new(None)),
         }
     }
@@ -578,8 +588,8 @@ impl MeshService {
                                 None,
                                 Vec::new(),
                                 service_storage_path,
-                                iron_core_handle.map(|c| {
-                                    Arc::downgrade(&c)
+                                iron_core_handle.as_ref().map(|c| {
+                                    Arc::downgrade(c)
                                 }),
                                 headless_mode,
                             )
@@ -588,6 +598,9 @@ impl MeshService {
                                 Ok(handle) => {
                                     tracing::info!("Swarm started, wiring bridge");
                                     swarm_bridge.set_handle(handle.clone());
+                                    if let Some(c) = iron_core_handle {
+                                        c.set_swarm_handle(handle.clone());
+                                    }
                                     *swarm_mode_state.lock() = Some(headless_mode);
                                     // Apply stored relay budget
                                     let budget = *relay_budget_init.lock();
@@ -614,8 +627,8 @@ impl MeshService {
                                                                 
                                                                 eprintln!("[IronCore] 🧅 Onion relay: forwarding to {}", next_hop_hex);
                                                                 if let Ok(next_hop_bytes) = hex::decode(&next_hop_hex) {
-                                                                    if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from(&next_hop_bytes[..32]) {
-                                                                        let next_peer_id = libp2p::PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_pk));
+                                                                if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from_bytes(&next_hop_bytes[..32]) {
+                                                                    let next_peer_id = libp2p::PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_pk));
                                                                         
                                                                         let bridge_clone = swarm_bridge.clone();
                                                                         let stats_clone = stats.clone();
@@ -923,33 +936,11 @@ impl MeshService {
         *self.device_state.write() = Some(new_state.clone());
 
         // Also keep the legacy DeviceProfile for callers that still use it.
-        *self.current_device_profile.lock() = Some(profile);
-
-        // Derive and apply behavior adjustments using the new engine.
-        let adj_profile = self.auto_adjust.compute_profile(profile.clone());
-        let ble_adj = self.auto_adjust.compute_ble_adjustment(adj_profile);
-        let relay_adj = self.auto_adjust.compute_relay_adjustment(adj_profile);
+        *self.current_device_profile.lock() = Some(profile.clone());
         
-        tracing::info!(
-            "Behavior adjustment computed: profile={:?}, scan={}ms, advertise={}ms, relay_budget={}",
-            adj_profile,
-            ble_adj.scan_interval_ms,
-            ble_adj.advertise_interval_ms,
-            relay_adj.max_per_hour
-        );
-
-        // Derive and apply behavior adjustments (legacy path for now).
-        let adj = Self::compute_behavior(&new_state);
-
-        if adj.minimal_operation {
-            tracing::warn!(
-                "Applying MINIMAL operation mode (battery={}%)",
-                new_state.battery_level
-            );
-        }
-
-        // Apply relay budget from the new engine (this fulfills the 'wiring' requirement)
-        self.set_relay_budget(relay_adj.max_per_hour);
+        // Apply relay budget from computed behavior
+        let behavior = Self::compute_behavior(&new_state);
+        self.set_relay_budget(behavior.relay_budget);
 
         // P0_RELIABILITY_001: Notify platform bridge of state change if it's subscribed.
         // This ensures the platform (Android/iOS) UI stays in sync with core adjustments.
@@ -1185,7 +1176,7 @@ struct MeshServiceCoreDelegate {
 impl crate::CoreDelegate for MeshServiceCoreDelegate {
     fn on_peer_discovered(&self, peer_id: String) {
         if let Some(service) = self.service.upgrade() {
-            service.on_peer_discovered(peer_id);
+            service.on_peer_discovered(peer_id.clone());
             if let Some(delegate) = service.external_delegate.lock().as_ref() {
                 delegate.on_peer_discovered(peer_id);
             }
@@ -1194,7 +1185,7 @@ impl crate::CoreDelegate for MeshServiceCoreDelegate {
 
     fn on_peer_disconnected(&self, peer_id: String) {
         if let Some(service) = self.service.upgrade() {
-            service.on_peer_disconnected(peer_id);
+            service.on_peer_disconnected(peer_id.clone());
             if let Some(delegate) = service.external_delegate.lock().as_ref() {
                 delegate.on_peer_disconnected(peer_id);
             }
@@ -1255,8 +1246,10 @@ pub trait PlatformBridge: Send + Sync {
 // AUTO-ADJUST ENGINE
 // ============================================================================
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct DeviceProfile {
+    pub peer_id: Option<String>,
+    pub device_id: Option<String>,
     pub battery_pct: u8,
     pub is_charging: bool,
     pub has_wifi: bool,
@@ -2059,6 +2052,7 @@ impl LedgerManager {
 pub struct SwarmBridge {
     handle: Arc<Mutex<Option<SwarmHandle>>>,
     captured_handle: Option<tokio::runtime::Handle>,
+    pub(crate) nearby_ble_peers: Arc<Mutex<HashSet<String>>>,
 }
 
 impl Default for SwarmBridge {
@@ -2104,7 +2098,16 @@ impl SwarmBridge {
     pub fn new() -> Self {
         Self {
             handle: Arc::new(Mutex::new(None)),
-            captured_handle: Some(get_global_runtime()),
+            captured_handle: None,
+            nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
+        }
+    }
+
+    pub fn with_nearby_ble_peers(nearby_ble_peers: Arc<Mutex<HashSet<String>>>) -> Self {
+        Self {
+            handle: Arc::new(Mutex::new(None)),
+            captured_handle: None,
+            nearby_ble_peers,
         }
     }
 
@@ -2119,6 +2122,13 @@ impl SwarmBridge {
         self.captured_handle
             .clone()
             .unwrap_or_else(get_global_runtime)
+    }
+
+    /// Internal helper to dispatch a packet via BLE side-channel
+    fn dispatch_ble_packet(&self, peer_id: String, data: Vec<u8>) {
+        // Implementation would call into a platform-specific BLE bridge.
+        // For now, we just log it as a placeholder for WS13 dual-stack routing.
+        tracing::debug!("BLE Dispatch: {} bytes to {}", data.len(), peer_id);
     }
 
     /// Send an encrypted message envelope to a peer.

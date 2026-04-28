@@ -38,6 +38,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use zeroize::Zeroize;
 
+use crate::routing::PeerId as MeshPeerId;
 use observability::{AuditEvent, AuditEventType, AuditLog as AuditLogType};
 
 pub use crypto::{decrypt_message, encrypt_message};
@@ -49,6 +50,9 @@ pub use notification::{
     NotificationEndpointRegistry, NotificationKind, NotificationMessageContext,
     NotificationPlatform, NotificationUiState,
 };
+
+// Re-export PeerId from libp2p for external users
+pub use libp2p::PeerId;
 
 // Mobile bridge exports for UniFFI
 #[cfg(not(target_arch = "wasm32"))]
@@ -270,8 +274,14 @@ pub trait CoreDelegate: Send + Sync {
     fn on_receipt_received(&self, message_id: String, status: String);
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PeelResult {
+    pub next_hop: Option<Vec<u8>>,
+    pub remaining_data: Vec<u8>,
+}
+
 // ============================================================================
-// IRON CORE IMPLEMENTATION
+// IRONCORE SERVICE
 // ============================================================================
 
 #[derive(Clone)]
@@ -324,6 +334,9 @@ pub struct IronCore {
     /// Engine for computing adaptive mesh behavior (P1_CORE_ENTRY_001)
     #[cfg(not(target_arch = "wasm32"))]
     pub auto_adjust_engine: Arc<mobile_bridge::AutoAdjustEngine>,
+    /// Active swarm handle for network operations
+    #[cfg(not(target_arch = "wasm32"))]
+    swarm_handle: Arc<RwLock<Option<transport::swarm::SwarmHandle>>>,
 }
 
 const STORAGE_SCHEMA_VERSION: u32 = 3;
@@ -824,6 +837,12 @@ impl IronCore {
             Arc::new(manager)
         };
 
+        #[cfg(not(target_arch = "wasm32"))]
+        let auto_adjust_engine = Arc::new(mobile_bridge::AutoAdjustEngine::new());
+        
+        #[cfg(not(target_arch = "wasm32"))]
+        let swarm_handle = Arc::new(RwLock::new(None));
+
         Self {
             identity,
             outbox: Arc::new(RwLock::new(outbox)),
@@ -844,10 +863,16 @@ impl IronCore {
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
             drift_engine,
+            abuse_reputation,
+            routing_engine,
             privacy_config: Arc::new(RwLock::new(privacy::PrivacyConfig::default())),
             ratchet_session_manager,
             #[cfg(not(target_arch = "wasm32"))]
             ledger_manager,
+            #[cfg(not(target_arch = "wasm32"))]
+            auto_adjust_engine,
+            #[cfg(not(target_arch = "wasm32"))]
+            swarm_handle,
         }
     }
 
@@ -1058,6 +1083,28 @@ impl IronCore {
 
     pub fn is_running(&self) -> bool {
         *self.running.read()
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn get_swarm_handle(&self) -> Option<transport::swarm::SwarmHandle> {
+        self.swarm_handle.read().clone()
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_swarm_handle(&self, handle: transport::swarm::SwarmHandle) {
+        *self.swarm_handle.write() = Some(handle);
+    }
+
+    pub fn identity_id(&self) -> Option<String> {
+        self.identity.read().identity_id()
+    }
+
+    pub fn device_id(&self) -> Option<String> {
+        self.get_device_id()
+    }
+
+    pub fn libp2p_peer_id(&self) -> Option<String> {
+        self.get_libp2p_keypair().ok().map(|kp| kp.public().to_peer_id().to_string())
     }
 
     /// Notify the core that the application has been resumed from the background.
@@ -2280,18 +2327,22 @@ impl IronCore {
         self.contacts.read().clone()
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn history_manager(&self) -> Arc<crate::mobile_bridge::HistoryManager> {
-        self.history_bridge_manager.clone()
-    }
-
     #[cfg(target_arch = "wasm32")]
     pub fn history_manager(&self) -> store::HistoryManager {
         self.history.read().clone()
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn history_manager(&self) -> Arc<crate::mobile_bridge::HistoryManager> {
+        self.history_bridge_manager.clone()
+    }
+
     pub fn history_store_manager(&self) -> store::HistoryManager {
         self.history.read().clone()
+    }
+
+    pub fn random_port(&self) -> u16 {
+        random_port()
     }
 
     pub fn update_disk_stats(&self, total_bytes: u64, free_bytes: u64) {
@@ -2970,7 +3021,14 @@ impl IronCore {
     /// Check if this node can help others bootstrap.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn swarm_can_bootstrap_others(&self) -> bool {
-        !self.swarm_get_bootstrap_candidates().is_empty()
+        let handle = match self.get_swarm_handle() {
+            Some(h) => h,
+            None => return false,
+        };
+
+        let rt = tokio::runtime::Handle::current();
+        rt.block_on(handle.can_bootstrap_others())
+            .unwrap_or(false)
     }
 
     /// Get the best paths to a target peer as a list of lists of peer IDs.

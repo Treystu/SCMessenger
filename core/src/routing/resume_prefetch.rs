@@ -384,7 +384,7 @@ impl ResumePrefetchManager {
 }
 
 /// Statistics for prefetch operations
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PrefetchStats {
     pub total_routes: usize,
     pub fresh_routes: usize,

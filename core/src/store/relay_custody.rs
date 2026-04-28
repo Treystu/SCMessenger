@@ -104,6 +104,12 @@ pub struct RegistrationStateInfo {
     pub seniority_timestamp: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActiveRelayInfo {
+    pub public_key_hex: String,
+    pub device_id: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CustodyError {
     DeviceMismatch,
@@ -1097,6 +1103,26 @@ impl Default for RelayCustodyStore {
 impl RelayRegistry {
     pub fn new(backend: Arc<dyn StorageBackend>) -> Self {
         Self { backend }
+    }
+
+    pub fn list_active(&self) -> Vec<ActiveRelayInfo> {
+        let prefix = REGISTRATION_STATE_PREFIX.as_bytes();
+        let records = self.backend.scan_prefix(prefix).unwrap_or_default();
+
+        records
+            .into_iter()
+            .filter_map(|(_key, value)| {
+                let record: RegistrationRecord = bincode::deserialize(&value).ok()?;
+                if let RegistrationState::Active { device_id, .. } = record.state {
+                    Some(ActiveRelayInfo {
+                        public_key_hex: record.identity_id,
+                        device_id,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     fn register(

@@ -1074,6 +1074,10 @@ pub enum SwarmCommand {
     GetBootstrapCandidates {
         reply: mpsc::Sender<Vec<PeerId>>,
     },
+    /// Can this node help others bootstrap?
+    CanBootstrapOthers {
+        reply: mpsc::Sender<bool>,
+    },
     /// Get best paths to a target (Phase 2 multipath)
     GetBestPaths {
         target: PeerId,
@@ -1397,6 +1401,20 @@ impl SwarmHandle {
         let (reply_tx, mut reply_rx) = mpsc::channel(1);
         self.command_tx
             .send(SwarmCommand::GetBootstrapCandidates { reply: reply_tx })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+
+        reply_rx
+            .recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("No reply from swarm"))
+    }
+
+    /// Can this node help others bootstrap?
+    pub async fn can_bootstrap_others(&self) -> Result<bool> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(SwarmCommand::CanBootstrapOthers { reply: reply_tx })
             .await
             .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
 
@@ -3073,7 +3091,7 @@ pub async fn start_swarm_with_config(
                                 if should_report {
                                     reported_peer_info.insert(peer_id, (info.agent_version.clone(), info.listen_addrs.clone()));
                                     // Emit event for application layer
-                                    let public_key_hex = info.public_key.clone().try_into_ed25519().map(|pk| hex::encode(pk.to_bytes()));
+                                    let public_key_hex = info.public_key.clone().try_into_ed25519().map(|pk| hex::encode(pk.to_bytes())).ok();
                                     let _ = event_tx.send(SwarmEvent2::PeerIdentified {
                                         peer_id,
                                         public_key: public_key_hex,
@@ -3550,6 +3568,10 @@ pub async fn start_swarm_with_config(
                             SwarmCommand::GetBootstrapCandidates { reply } => {
                                 let candidates = bootstrap_capability.get_bootstrap_candidates().to_vec();
                                 let _ = reply.send(candidates).await;
+                            }
+                            SwarmCommand::CanBootstrapOthers { reply } => {
+                                let can = bootstrap_capability.can_bootstrap_others();
+                                let _ = reply.send(can).await;
                             }
                             SwarmCommand::GetBestPaths { target, count, reply } => {
                                 let paths = multi_path_delivery.get_best_paths(&target, count);
