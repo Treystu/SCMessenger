@@ -3017,6 +3017,9 @@ impl IronCore {
 
     /// Return a random available port number. Used by the transport layer to find
     /// a free port for listening when no explicit port is configured.
+    ///
+    /// Returns `0` if no free port can be found (OS refused the ephemeral bind).
+    /// Callers must treat `0` as a failure sentinel and not attempt to bind to it.
     pub fn random_port(&self) -> u16 {
         use std::net::TcpListener;
         TcpListener::bind("127.0.0.1:0")

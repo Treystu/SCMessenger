@@ -2160,7 +2160,7 @@ impl SwarmBridge {
     /// SwarmBridge does not own a platform bridge, so this is a no-op stub; the
     /// real dispatch path is through MeshService::dispatch_ble_packet.
     pub fn dispatch_ble_packet(&self, _peer_id: String, _data: Vec<u8>) {
-        tracing::debug!("SwarmBridge::dispatch_ble_packet: BLE dispatch not wired through SwarmBridge");
+        tracing::warn!("SwarmBridge::dispatch_ble_packet: BLE dispatch not wired through SwarmBridge; packet dropped");
     }
 
     /// Send an encrypted message envelope to a peer.
