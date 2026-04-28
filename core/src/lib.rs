@@ -235,6 +235,13 @@ pub struct RegistrationStateInfo {
     pub seniority_timestamp: Option<u64>,
 }
 
+/// Result of peeling one onion layer — next hop address and remaining payload.
+#[derive(Clone)]
+pub struct PeelResult {
+    pub next_hop: Option<Vec<u8>>,
+    pub remaining_data: Vec<u8>,
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 struct IdentityBackupV1 {
     version: u8,
