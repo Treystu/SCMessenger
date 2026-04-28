@@ -2973,3 +2973,4 @@ async fn cmd_audit(action: AuditAction) -> Result<()> {
     }
     Ok(())
 }
+

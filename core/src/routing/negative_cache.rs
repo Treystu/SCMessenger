@@ -448,3 +448,4 @@ mod tests {
         assert_eq!(stats.entry_count, 2);
     }
 }
+

@@ -264,3 +264,4 @@ mod tests {
         assert!(history.get("recent_msg".to_string()).unwrap().is_some());
     }
 }
+

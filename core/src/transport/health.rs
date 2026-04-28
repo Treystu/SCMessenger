@@ -666,3 +666,4 @@ mod tests {
         assert!(score > 0.9, "Good transport metrics should have high health score");
     }
 }
+

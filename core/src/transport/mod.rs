@@ -61,3 +61,4 @@ pub use circuit_breaker::{CircuitBreakerConfig, CircuitBreakerManager, CircuitBr
 pub use swarm::{
     start_swarm, start_swarm_with_config, SwarmCommand, SwarmEvent2 as SwarmEvent, SwarmHandle,
 };
+

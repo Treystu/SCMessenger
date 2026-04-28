@@ -547,3 +547,4 @@ mod tests {
         assert!(manager.frequent_peers[0].message_count < 2);
     }
 }
+

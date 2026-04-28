@@ -378,3 +378,4 @@ mod tests {
         assert!(latency1 < latency2); // Local+WiFiDirect should be faster
     }
 }
+
