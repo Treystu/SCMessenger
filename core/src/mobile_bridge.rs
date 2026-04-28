@@ -614,7 +614,7 @@ impl MeshService {
                                                                 
                                                                 eprintln!("[IronCore] 🧅 Onion relay: forwarding to {}", next_hop_hex);
                                                                 if let Ok(next_hop_bytes) = hex::decode(&next_hop_hex) {
-                                                                    if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from(&next_hop_bytes[..32]) {
+                                                                    if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from_bytes(&next_hop_bytes[..32]) {
                                                                         let next_peer_id = libp2p::PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_pk));
                                                                         
                                                                         let bridge_clone = swarm_bridge.clone();
@@ -1185,7 +1185,7 @@ struct MeshServiceCoreDelegate {
 impl crate::CoreDelegate for MeshServiceCoreDelegate {
     fn on_peer_discovered(&self, peer_id: String) {
         if let Some(service) = self.service.upgrade() {
-            service.on_peer_discovered(peer_id);
+            service.on_peer_discovered(peer_id.clone());
             if let Some(delegate) = service.external_delegate.lock().as_ref() {
                 delegate.on_peer_discovered(peer_id);
             }
@@ -1194,7 +1194,7 @@ impl crate::CoreDelegate for MeshServiceCoreDelegate {
 
     fn on_peer_disconnected(&self, peer_id: String) {
         if let Some(service) = self.service.upgrade() {
-            service.on_peer_disconnected(peer_id);
+            service.on_peer_disconnected(peer_id.clone());
             if let Some(delegate) = service.external_delegate.lock().as_ref() {
                 delegate.on_peer_disconnected(peer_id);
             }
@@ -1257,10 +1257,25 @@ pub trait PlatformBridge: Send + Sync {
 
 #[derive(Debug, Clone)]
 pub struct DeviceProfile {
+    pub peer_id: Option<String>,
+    pub device_id: Option<String>,
     pub battery_pct: u8,
     pub is_charging: bool,
     pub has_wifi: bool,
     pub motion_state: MotionState,
+}
+
+impl Default for DeviceProfile {
+    fn default() -> Self {
+        Self {
+            peer_id: None,
+            device_id: None,
+            battery_pct: 100,
+            is_charging: false,
+            has_wifi: false,
+            motion_state: MotionState::Stationary,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

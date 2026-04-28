@@ -855,6 +855,10 @@ impl IronCore {
             ratchet_session_manager,
             #[cfg(not(target_arch = "wasm32"))]
             ledger_manager,
+            abuse_reputation,
+            routing_engine,
+            #[cfg(not(target_arch = "wasm32"))]
+            auto_adjust_engine: Arc::new(mobile_bridge::AutoAdjustEngine::new()),
         }
     }
 
@@ -3001,6 +3005,45 @@ impl IronCore {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn get_auto_adjust_engine(&self) -> Arc<crate::mobile_bridge::AutoAdjustEngine> {
         self.auto_adjust_engine.clone()
+    }
+
+    // ========================================================================
+    // IDENTITY ACCESSORS (wired for mobile_bridge + custody callers)
+    // ========================================================================
+
+    /// Return the current identity_id (Blake3 hash of public key), if initialized.
+    pub fn identity_id(&self) -> Option<String> {
+        self.identity.read().identity_id()
+    }
+
+    /// Return the current device_id (UUID v4), if initialized.
+    pub fn device_id(&self) -> Option<String> {
+        self.identity.read().device_id()
+    }
+
+    /// Return the libp2p PeerId derived from the current identity key, if initialized.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn libp2p_peer_id(&self) -> Option<libp2p::PeerId> {
+        let id = self.identity.read();
+        let pub_key_bytes = id.public_key_bytes()?;
+        if pub_key_bytes.len() < 32 {
+            return None;
+        }
+        let mut key_arr = [0u8; 32];
+        key_arr.copy_from_slice(&pub_key_bytes[..32]);
+        let ed_pk = libp2p::identity::ed25519::PublicKey::try_from_bytes(&key_arr).ok()?;
+        Some(libp2p::PeerId::from_public_key(
+            &libp2p::identity::PublicKey::from(ed_pk),
+        ))
+    }
+
+    /// Return the swarm handle for transport operations, if the swarm is running.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn get_swarm_handle(&self) -> Option<crate::transport::swarm::SwarmHandle> {
+        // SwarmHandle is stored externally by MeshService's SwarmBridge.
+        // IronCore does not own it directly — callers should use the SwarmBridge.
+        // This stub returns None; mobile_bridge wires the real path.
+        None
     }
 
     /// Re-initialize the routing engine with the real identity after initialization.
