@@ -1,8 +1,19 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-04-11
-Last verified: **2026-04-11** (WASM WebSocket Bridge Connectivity Fixed)
+Last updated: 2026-04-28
+Last verified: **2026-04-28** (Comment-targeted verification; full core build still blocked by pre-existing compile errors)
+
+---
+
+## 2026-04-28: Baseline compilation review follow-up
+
+**Status:** ✅ COMMENT FIXES VERIFIED
+
+- `DeviceProfile` now keeps optional `peer_id` and `device_id` aligned between Rust defaults, tests, and the UniFFI UDL surface.
+- `IronCore::libp2p_peer_id()` now derives the network identity from the existing identity keypair instead of a missing accessor.
+- `MeshService` stores the live `SwarmHandle` back into `IronCore`, so swarm query APIs can return live transport state while the service is running.
+- Onion relay forwarding now validates decoded next-hop key length before calling libp2p `try_from_bytes`.
 
 ---
 

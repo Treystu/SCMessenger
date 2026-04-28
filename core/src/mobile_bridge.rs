@@ -588,6 +588,9 @@ impl MeshService {
                                 Ok(handle) => {
                                     tracing::info!("Swarm started, wiring bridge");
                                     swarm_bridge.set_handle(handle.clone());
+                                    if let Some(core_ref) = iron_core_handle.as_ref() {
+                                        core_ref.set_swarm_handle(handle.clone());
+                                    }
                                     *swarm_mode_state.lock() = Some(headless_mode);
                                     // Apply stored relay budget
                                     let budget = *relay_budget_init.lock();
@@ -611,26 +614,35 @@ impl MeshService {
                                                                 // RELAY: Forward to next hop
                                                                 let next_hop_hex = msg.recipient_id.clone();
                                                                 let payload = msg.payload.clone();
-                                                                
+
                                                                 eprintln!("[IronCore] 🧅 Onion relay: forwarding to {}", next_hop_hex);
                                                                 if let Ok(next_hop_bytes) = hex::decode(&next_hop_hex) {
-                                                                    if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from_bytes(&next_hop_bytes[..32]) {
-                                                                        let next_peer_id = libp2p::PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_pk));
-                                                                        
-                                                                        let bridge_clone = swarm_bridge.clone();
-                                                                        let stats_clone = stats.clone();
-                                                                        let core_owned = core_ref.clone();
-                                                                        tokio::spawn(async move {
-                                                                            // B1_CORE_ENTRY_006: Apply timing jitter to thwart correlation attacks
-                                                                            let delay_ms = core_owned.relay_jitter_delay("Normal".to_string());
-                                                                            if delay_ms > 0 {
-                                                                                tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
-                                                                            }
-                                                                            let _ = bridge_clone.send_message(next_peer_id.to_string(), payload, None, None);
-                                                                        });
-                                                                        
-                                                                        let mut s = stats_clone.lock();
-                                                                        s.messages_relayed += 1;
+                                                                    if let Some(next_hop_key_bytes) = next_hop_bytes
+                                                                        .get(..32)
+                                                                        .and_then(|bytes| <&[u8; 32]>::try_from(bytes).ok())
+                                                                    {
+                                                                        if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from_bytes(next_hop_key_bytes) {
+                                                                            let next_peer_id = libp2p::PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_pk));
+
+                                                                            let bridge_clone = swarm_bridge.clone();
+                                                                            let stats_clone = stats.clone();
+                                                                            let core_owned = core_ref.clone();
+                                                                            tokio::spawn(async move {
+                                                                                // B1_CORE_ENTRY_006: Apply timing jitter to thwart correlation attacks
+                                                                                let delay_ms = core_owned.relay_jitter_delay("Normal".to_string());
+                                                                                if delay_ms > 0 {
+                                                                                    tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                                                                                }
+                                                                                let _ = bridge_clone.send_message(next_peer_id.to_string(), payload, None, None);
+                                                                            });
+
+                                                                            let mut s = stats_clone.lock();
+                                                                            s.messages_relayed += 1;
+                                                                        } else {
+                                                                            tracing::warn!("Failed to parse onion relay next hop as ed25519 public key");
+                                                                        }
+                                                                    } else {
+                                                                        tracing::warn!("Onion relay next hop hex decoded to fewer than 32 bytes");
                                                                     }
                                                                 }
                                                             } else {
@@ -923,7 +935,7 @@ impl MeshService {
         *self.device_state.write() = Some(new_state.clone());
 
         // Also keep the legacy DeviceProfile for callers that still use it.
-        *self.current_device_profile.lock() = Some(profile);
+        *self.current_device_profile.lock() = Some(profile.clone());
 
         // Derive and apply behavior adjustments using the new engine.
         let adj_profile = self.auto_adjust.compute_profile(profile.clone());
@@ -1273,7 +1285,7 @@ impl Default for DeviceProfile {
             battery_pct: 100,
             is_charging: false,
             has_wifi: false,
-            motion_state: MotionState::Stationary,
+            motion_state: MotionState::Still,
         }
     }
 }
@@ -2557,6 +2569,7 @@ mod tests {
             is_charging: false,
             has_wifi: true,
             motion_state: MotionState::Still,
+            ..DeviceProfile::default()
         };
         let state = DeviceState::from_profile(&profile);
         assert_eq!(state.battery_level, 55);
@@ -2580,6 +2593,7 @@ mod tests {
             is_charging: false,
             has_wifi: true,
             motion_state: MotionState::Still,
+            ..DeviceProfile::default()
         };
         svc.update_device_state(profile);
 
@@ -2604,6 +2618,7 @@ mod tests {
             is_charging: false,
             has_wifi: true,
             motion_state: MotionState::Walking,
+            ..DeviceProfile::default()
         });
 
         // Transition to low battery
@@ -2612,6 +2627,7 @@ mod tests {
             is_charging: false,
             has_wifi: false,
             motion_state: MotionState::Walking,
+            ..DeviceProfile::default()
         });
 
         let adj = svc.recommended_behavior().unwrap();
@@ -2625,6 +2641,7 @@ mod tests {
             is_charging: false,
             has_wifi: false,
             motion_state: MotionState::Still,
+            ..DeviceProfile::default()
         });
 
         let adj = svc.recommended_behavior().unwrap();

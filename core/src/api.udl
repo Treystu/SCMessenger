@@ -396,6 +396,8 @@ callback interface PlatformBridge {
 // ============================================================================
 
 dictionary DeviceProfile {
+    string? peer_id;
+    string? device_id;
     u8 battery_pct;
     boolean is_charging;
     boolean has_wifi;
