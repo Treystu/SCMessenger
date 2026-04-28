@@ -338,7 +338,6 @@ dictionary ServiceStats {
 };
 
 interface MeshService {
-    [Self=ByArc]
     constructor(MeshServiceConfig config);
     [Name=with_storage]
     constructor(MeshServiceConfig config, string storage_path);
