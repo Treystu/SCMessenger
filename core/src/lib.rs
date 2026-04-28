@@ -39,6 +39,7 @@ use thiserror::Error;
 use zeroize::Zeroize;
 
 use crate::routing::PeerId as MeshPeerId;
+use crate::routing::multipath::DeliveryPath;
 use observability::{AuditEvent, AuditEventType, AuditLog as AuditLogType};
 
 pub use crypto::{decrypt_message, encrypt_message};
@@ -324,6 +325,8 @@ pub struct IronCore {
     abuse_reputation: Arc<abuse::EnhancedAbuseReputationManager>,
     /// Mycorrhizal routing engine (P1_CORE_003: intelligent path selection)
     routing_engine: Arc<RwLock<routing::OptimizedRoutingEngine>>,
+    /// Multi-path delivery manager (Phase 2 placeholder API)
+    multipath: Arc<RwLock<routing::multipath::MultiPathDelivery>>,
     /// Privacy feature configuration (padding, onion, cover traffic, timing)
     privacy_config: Arc<RwLock<privacy::PrivacyConfig>>,
     /// Double Ratchet session manager (P0_SECURITY_002: forward secrecy)
@@ -843,6 +846,8 @@ impl IronCore {
         #[cfg(not(target_arch = "wasm32"))]
         let swarm_handle = Arc::new(RwLock::new(None));
 
+        let multipath = Arc::new(RwLock::new(routing::multipath::MultiPathDelivery::new()));
+
         Self {
             identity,
             outbox: Arc::new(RwLock::new(outbox)),
@@ -865,6 +870,7 @@ impl IronCore {
             drift_engine,
             abuse_reputation,
             routing_engine,
+            multipath,
             privacy_config: Arc::new(RwLock::new(privacy::PrivacyConfig::default())),
             ratchet_session_manager,
             #[cfg(not(target_arch = "wasm32"))]
@@ -2922,8 +2928,8 @@ impl IronCore {
         if let Some(peer_id_bytes) = hex_decode_peer_id(&peer_id_hex) {
              // Convert 32-byte peer ID to u64 for the placeholder API
              let mut id_u64 = 0u64;
-             for i in 0..8 {
-                 id_u64 |= (peer_id_bytes[i] as u64) << (i * 8);
+             for (i, byte) in peer_id_bytes.iter().enumerate().take(8) {
+                 id_u64 |= (*byte as u64) << (i * 8);
              }
              let path = routing::multipath::DeliveryPath {
                  path_id,
@@ -2931,15 +2937,35 @@ impl IronCore {
                  estimated_latency_ms: latency_ms,
                  active: true,
              };
-             // We don't have a persistent MultipathDelivery in IronCore yet,
-             // so we just log it for now as "wired".
+             
+             self.multipath.write().register_path(id_u64, path);
              tracing::info!("Routing register path: peer={} path={} latency={}ms", peer_id_hex, path_id, latency_ms);
         }
     }
 
     /// Mark a path as failed (Phase 2 placeholder API).
     pub fn routing_mark_path_failed(&self, path_id: u64) {
+        self.multipath.write().mark_path_failed(path_id);
         tracing::warn!("Routing path failed: {}", path_id);
+    }
+
+    /// Get all active paths for a peer (Phase 2 placeholder API).
+    pub fn routing_active_paths(&self, peer_id_hex: String) -> Vec<routing::multipath::DeliveryPath> {
+        if let Some(peer_id_bytes) = hex_decode_peer_id(&peer_id_hex) {
+             let mut id_u64 = 0u64;
+             for (i, byte) in peer_id_bytes.iter().enumerate().take(8) {
+                 id_u64 |= (*byte as u64) << (i * 8);
+             }
+             
+             self.multipath
+                 .read()
+                 .active_paths(id_u64)
+                 .into_iter()
+                 .cloned()
+                 .collect()
+        } else {
+            Vec::new()
+        }
     }
 
     /// Get audit record count from the relay custody store.

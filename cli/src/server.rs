@@ -2,6 +2,7 @@ use anyhow::Context;
 use colored::*;
 use futures::FutureExt; // for catch_unwind
 use futures::{SinkExt, StreamExt};
+use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -325,6 +326,13 @@ pub async fn start(
         .and_then(handle_join_bundle)
         .boxed();
 
+    // 4b. Transport Paths JSON API
+    let all_transport_paths_route = warp::path!("api" / "transport" / "available-paths")
+        .and(warp::get())
+        .and(ctx_filter.clone())
+        .and_then(handle_all_transport_paths)
+        .boxed();
+
     // 5. Install Script (Native Auto - merges binary download + config)
     let install_native_route = warp::path!("api" / "install")
         .and(warp::get())
@@ -475,6 +483,7 @@ pub async fn start(
         .or(download_linux_route)
         .or(transport_capabilities_route)
         .or(transport_paths_route)
+        .or(all_transport_paths_route)
         .or(transport_register_route)
         .with(cors)
         .boxed();
@@ -512,6 +521,11 @@ pub async fn start(
     });
 
     Ok((broadcast_tx, cmd_rx))
+}
+
+#[derive(Serialize)]
+pub struct TransportPathsResponse {
+    pub paths: HashMap<String, Vec<crate::transport_bridge::TransportPath>>,
 }
 
 // ============================================================================
@@ -571,6 +585,20 @@ async fn handle_network_info(ctx: Arc<WebContext>) -> Result<impl warp::Reply, w
     };
 
     Ok(warp::reply::json(&response))
+}
+
+async fn handle_all_transport_paths(ctx: Arc<WebContext>) -> Result<impl warp::Reply, warp::Rejection> {
+    let bridge = ctx.transport_bridge.lock().await;
+    let paths = bridge.get_available_paths();
+
+    let mut response_paths = HashMap::new();
+    for (peer_id, peer_paths) in paths {
+        response_paths.insert(peer_id.to_string(), peer_paths);
+    }
+
+    Ok(warp::reply::json(&TransportPathsResponse {
+        paths: response_paths,
+    }))
 }
 
 async fn handle_join_bundle(ctx: Arc<WebContext>) -> Result<impl warp::Reply, warp::Rejection> {
