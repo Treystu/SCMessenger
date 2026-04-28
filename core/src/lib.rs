@@ -3015,6 +3015,17 @@ impl IronCore {
         self.auto_adjust_engine.clone()
     }
 
+    /// Return a random available port number. Used by the transport layer to find
+    /// a free port for listening when no explicit port is configured.
+    pub fn random_port(&self) -> u16 {
+        use std::net::TcpListener;
+        TcpListener::bind("127.0.0.1:0")
+            .ok()
+            .and_then(|l| l.local_addr().ok())
+            .map(|a| a.port())
+            .unwrap_or(0)
+    }
+
     // ========================================================================
     // IDENTITY ACCESSORS (wired for mobile_bridge + custody callers)
     // ========================================================================

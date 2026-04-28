@@ -134,7 +134,7 @@ pub struct ServiceStats {
 pub struct MeshService {
     _config: Mutex<MeshServiceConfig>,
     state: Mutex<ServiceState>,
-    stats: Mutex<ServiceStats>,
+    stats: Arc<Mutex<ServiceStats>>,
     pub(crate) nearby_ble_peers: Arc<Mutex<HashSet<String>>>,
     core: std::sync::Arc<Mutex<Option<std::sync::Arc<crate::IronCore>>>>,
     platform_bridge: std::sync::Arc<Mutex<Option<Box<dyn PlatformBridge>>>>,
@@ -157,44 +157,48 @@ pub struct MeshService {
 
 impl MeshService {
     pub fn new(config: MeshServiceConfig) -> Self {
+        let swarm_bridge = std::sync::Arc::new(SwarmBridge::new());
+        let nearby_ble_peers = swarm_bridge.nearby_ble_peers.clone();
         Self {
             _config: Mutex::new(config),
             state: Mutex::new(ServiceState::Stopped),
-            stats: Mutex::new(ServiceStats::default()),
+            stats: Arc::new(Mutex::new(ServiceStats::default())),
             core: std::sync::Arc::new(Mutex::new(None)),
             platform_bridge: std::sync::Arc::new(Mutex::new(None)),
             storage_path: None,
             log_directory: None,
-            swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
+            swarm_bridge,
             nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             swarm_headless_mode: std::sync::Arc::new(Mutex::new(None)),
             current_device_profile: Mutex::new(None),
             device_state: RwLock::new(None),
             auto_adjust: Arc::new(AutoAdjustEngine::new()),
-            nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
+            nearby_ble_peers,
             external_delegate: Arc::new(Mutex::new(None)),
         }
     }
 
     /// Create MeshService with persistent storage
     pub fn with_storage(config: MeshServiceConfig, storage_path: String) -> Self {
+        let swarm_bridge = std::sync::Arc::new(SwarmBridge::new());
+        let nearby_ble_peers = swarm_bridge.nearby_ble_peers.clone();
         Self {
             _config: Mutex::new(config),
             state: Mutex::new(ServiceState::Stopped),
-            stats: Mutex::new(ServiceStats::default()),
+            stats: Arc::new(Mutex::new(ServiceStats::default())),
             core: std::sync::Arc::new(Mutex::new(None)),
             platform_bridge: std::sync::Arc::new(Mutex::new(None)),
             storage_path: Some(storage_path),
             log_directory: None,
-            swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
+            swarm_bridge,
             nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             swarm_headless_mode: std::sync::Arc::new(Mutex::new(None)),
             current_device_profile: Mutex::new(None),
             device_state: RwLock::new(None),
             auto_adjust: Arc::new(AutoAdjustEngine::new()),
-            nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
+            nearby_ble_peers,
             external_delegate: Arc::new(Mutex::new(None)),
         }
     }
@@ -205,22 +209,24 @@ impl MeshService {
         storage_path: String,
         log_directory: String,
     ) -> Self {
+        let swarm_bridge = std::sync::Arc::new(SwarmBridge::new());
+        let nearby_ble_peers = swarm_bridge.nearby_ble_peers.clone();
         Self {
             _config: Mutex::new(config),
             state: Mutex::new(ServiceState::Stopped),
-            stats: Mutex::new(ServiceStats::default()),
+            stats: Arc::new(Mutex::new(ServiceStats::default())),
             core: std::sync::Arc::new(Mutex::new(None)),
             platform_bridge: std::sync::Arc::new(Mutex::new(None)),
             storage_path: Some(storage_path),
             log_directory: Some(log_directory),
-            swarm_bridge: std::sync::Arc::new(SwarmBridge::new()),
+            swarm_bridge,
             nat_status: std::sync::Arc::new(Mutex::new("unknown".to_string())),
             relay_budget: std::sync::Arc::new(Mutex::new(200)),
             swarm_headless_mode: std::sync::Arc::new(Mutex::new(None)),
             current_device_profile: Mutex::new(None),
             device_state: RwLock::new(None),
             auto_adjust: Arc::new(AutoAdjustEngine::new()),
-            nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
+            nearby_ble_peers,
             external_delegate: Arc::new(Mutex::new(None)),
         }
     }
@@ -578,8 +584,8 @@ impl MeshService {
                                 None,
                                 Vec::new(),
                                 service_storage_path,
-                                iron_core_handle.map(|c| {
-                                    Arc::downgrade(&c)
+                                iron_core_handle.as_ref().map(|c| {
+                                    Arc::downgrade(c)
                                 }),
                                 headless_mode,
                             )
@@ -2086,6 +2092,7 @@ impl LedgerManager {
 pub struct SwarmBridge {
     handle: Arc<Mutex<Option<SwarmHandle>>>,
     captured_handle: Option<tokio::runtime::Handle>,
+    pub nearby_ble_peers: Arc<Mutex<HashSet<String>>>,
 }
 
 impl Default for SwarmBridge {
@@ -2132,6 +2139,7 @@ impl SwarmBridge {
         Self {
             handle: Arc::new(Mutex::new(None)),
             captured_handle: Some(get_global_runtime()),
+            nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -2146,6 +2154,13 @@ impl SwarmBridge {
         self.captured_handle
             .clone()
             .unwrap_or_else(get_global_runtime)
+    }
+
+    /// Dispatch a packet to a BLE-reachable peer.
+    /// SwarmBridge does not own a platform bridge, so this is a no-op stub; the
+    /// real dispatch path is through MeshService::dispatch_ble_packet.
+    pub fn dispatch_ble_packet(&self, _peer_id: String, _data: Vec<u8>) {
+        tracing::debug!("SwarmBridge::dispatch_ble_packet: BLE dispatch not wired through SwarmBridge");
     }
 
     /// Send an encrypted message envelope to a peer.

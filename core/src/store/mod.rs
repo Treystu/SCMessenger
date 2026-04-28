@@ -19,9 +19,9 @@ pub use history::{HistoryManager, HistoryStats, MessageDirection, MessageRecord}
 pub use inbox::{Inbox, ReceivedMessage};
 pub use outbox::{Outbox, QueuedMessage};
 pub use relay_custody::{
-    CustodyEnforcement, CustodyError, CustodyMessage, CustodyState, CustodyTransition,
-    RegistrationState, RegistrationStateInfo, RegistrationTransition, RelayCustodyStore,
-    RelayRegistry,
+    ActiveRelayInfo, CustodyEnforcement, CustodyError, CustodyMessage, CustodyState,
+    CustodyTransition, RegistrationState, RegistrationStateInfo, RegistrationTransition,
+    RelayCustodyStore, RelayRegistry,
 };
 pub use storage::{DiskStats, RetentionConfig, StorageManager};
 pub use sweeper::*;
