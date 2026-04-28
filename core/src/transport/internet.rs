@@ -11,6 +11,7 @@
 // - Relay circuit establishment using libp2p's relay protocol
 
 use crate::transport::swarm::SwarmHandle;
+use crate::transport::circuit_breaker::{CircuitBreakerManager, CircuitBreakerConfig};
 use libp2p::{Multiaddr, PeerId};
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -148,6 +149,7 @@ pub struct InternetRelay {
     active_relays: Arc<RwLock<HashMap<String, PeerRelayInfo>>>,
     relay_stats: Arc<RwLock<HashMap<String, RelayStats>>>,
     nat_status: Arc<RwLock<NatStatus>>,
+    pub circuit_breaker: Arc<CircuitBreakerManager>,
 }
 
 impl InternetRelay {
@@ -170,6 +172,7 @@ impl InternetRelay {
             active_relays: Arc::new(RwLock::new(HashMap::new())),
             relay_stats: Arc::new(RwLock::new(HashMap::new())),
             nat_status: Arc::new(RwLock::new(NatStatus::Unknown)),
+            circuit_breaker: Arc::new(CircuitBreakerManager::new(CircuitBreakerConfig::default())),
         })
     }
 
@@ -182,6 +185,11 @@ impl InternetRelay {
     pub fn set_nat_status(&self, status: NatStatus) {
         *self.nat_status.write() = status;
         info!("NAT status updated to: {:?}", status);
+    }
+
+    /// Get list of healthy relays from the circuit breaker
+    pub fn get_healthy_relays(&self) -> Vec<String> {
+        self.circuit_breaker.get_healthy_relays()
     }
 
     /// Connect to a known relay node
@@ -268,6 +276,12 @@ impl InternetRelay {
         relay_addr: Multiaddr,
         swarm: &SwarmHandle,
     ) -> Result<(), InternetTransportError> {
+        // Circuit breaker check
+        if !self.circuit_breaker.allow_request(&relay_addr.to_string()) {
+            warn!("Circuit breaker preventing connection to relay: {}", relay_addr);
+            return Err(InternetTransportError::ConnectionFailed("Circuit breaker open".to_string()));
+        }
+
         // Capacity guard — same check as connect_to_relay.
         let current_count = self.active_relays.read().len();
         if current_count >= self.config.max_relay_connections {

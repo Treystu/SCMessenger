@@ -695,7 +695,6 @@ mod tests {
         assert_eq!(discovered.len(), 1);
         assert_eq!(discovered[0].peer_id, peer_id);
     }
-}
 
     #[tokio::test]
     async fn test_data_path_not_found() {

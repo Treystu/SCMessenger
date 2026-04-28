@@ -154,6 +154,15 @@ impl ConnectionStats {
             .as_millis() as u64;
     }
 
+    /// Record disconnection
+    pub fn record_disconnection(&mut self) {
+        self.state = ConnectionState::Disconnected;
+        self.last_activity = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+    }
+
     /// Update current address
     pub fn update_current_address(&mut self, address: Multiaddr) {
         self.current_address = Some(address.clone());
@@ -341,6 +350,17 @@ impl TransportHealthMonitor {
         global.record_successful_connection();
     }
 
+    /// Record disconnection
+    pub fn record_disconnection(&self, peer_id: PeerId) {
+        let mut stats = self.connection_stats.lock().unwrap();
+        if let Some(entry) = stats.get_mut(&peer_id) {
+            entry.record_disconnection();
+        }
+        
+        let mut global = self.global_metrics.lock().unwrap();
+        global.record_disconnection();
+    }
+
     /// Record connection failure
     pub fn record_connection_failure(&self, peer_id: PeerId) {
         let mut stats = self.connection_stats.lock().unwrap();
@@ -500,6 +520,13 @@ impl GlobalTransportMetrics {
     /// Record connection failure
     pub fn record_connection_failure(&mut self) {
         self.total_connection_failures += 1;
+    }
+
+    /// Record disconnection
+    pub fn record_disconnection(&mut self) {
+        if self.current_active_connections > 0 {
+            self.current_active_connections -= 1;
+        }
     }
 
     /// Record message success

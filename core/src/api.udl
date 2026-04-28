@@ -98,6 +98,36 @@ dictionary DeliveryPath {
 // MAIN INTERFACE
 // ============================================================================
 
+dictionary ConnectionStatsWire {
+    string peer_id;
+    string state;
+    u64 duration_ms;
+    u64 messages_sent;
+    u64 message_failures;
+    u64 bytes_sent;
+    u64 bytes_received;
+    u64 avg_latency_ms;
+    u64 last_activity;
+    u32 connection_attempts;
+    u32 successful_connections;
+    u32 connection_failures;
+    string? current_address;
+};
+
+dictionary RelayStatsWire {
+    string peer_id;
+    u64 bytes_transferred;
+    u64 connected_at;
+    u64 last_activity;
+};
+
+dictionary PeerRelayInfoWire {
+    string peer_id;
+    sequence<string> relay_addresses;
+    boolean relay_capable;
+    u64 last_seen;
+};
+
 interface IronCore {
     constructor();
     [Name=with_storage]
@@ -251,6 +281,11 @@ interface IronCore {
     sequence<string> swarm_get_bootstrap_candidates();
     boolean swarm_can_bootstrap_others();
     sequence<sequence<string>> swarm_get_best_paths(string target_peer_id, u32 count);
+    void swarm_add_kad_address(string peer_id, string addr);
+    sequence<ConnectionStatsWire> swarm_get_all_connection_stats();
+    sequence<RelayStatsWire> swarm_get_all_relay_stats();
+    sequence<string> swarm_get_healthy_relays();
+    sequence<PeerRelayInfoWire> swarm_get_relay_peers();
 
     // Privacy Features (P1_CORE_003: privacy modules activation)
     /// Get current privacy configuration as JSON

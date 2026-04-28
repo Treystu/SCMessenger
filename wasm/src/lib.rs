@@ -10,7 +10,7 @@ use libp2p::{Multiaddr, PeerId};
 use parking_lot::Mutex;
 use scmessenger_core::{
     IdentityInfo, IronCore as RustIronCore, NotificationDecision, NotificationMessageContext,
-    NotificationUiState, SignatureResult,
+    NotificationUiState, SignatureResult, privacy,
 };
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
@@ -227,7 +227,7 @@ impl IronCore {
             internet_enabled: true,
             ..MeshSettings::default()
         };
-        Self {
+        let core = Self {
             inner: Arc::new(RustIronCore::new()),
             rx_messages: Arc::new(Mutex::new(Vec::new())),
             swarm_handle: Arc::new(Mutex::new(None)),

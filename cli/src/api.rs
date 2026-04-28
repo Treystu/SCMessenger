@@ -97,6 +97,21 @@ pub struct TransportPathsResponse {
     pub paths: HashMap<String, Vec<crate::transport_bridge::TransportPath>>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SwarmStatsResponse {
+    pub stats: Vec<scmessenger_core::ConnectionStatsWire>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RelayStatsResponse {
+    pub stats: Vec<scmessenger_core::RelayStatsWire>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HealthyRelaysResponse {
+    pub relays: Vec<String>,
+}
+
 // Check if API is available
 pub async fn is_api_available() -> bool {
     tokio::net::TcpStream::connect(API_ADDR).await.is_ok()
@@ -122,23 +137,17 @@ pub async fn send_message_via_api(recipient: &str, message: &str) -> Result<()> 
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let response: SendMessageResponse = serde_json::from_slice(&body_bytes)?;
 
-    if response.success {
-        Ok(())
-    } else {
+    if !response.success {
         anyhow::bail!(
-            "Failed to send message: {}",
-            response
-                .error
-                .unwrap_or_else(|| "Unknown error".to_string())
-        )
+            "API error: {}",
+            response.error.unwrap_or_else(|| "Unknown error".to_string())
+        );
     }
+
+    Ok(())
 }
 
-pub async fn add_contact_via_api(
-    peer_id: &str,
-    public_key: &str,
-    name: Option<String>,
-) -> Result<()> {
+pub async fn add_contact_via_api(peer_id: &str, public_key: &str, name: Option<String>) -> Result<()> {
     let client = hyper::Client::new();
     let req_body = AddContactRequest {
         peer_id: peer_id.to_string(),
@@ -157,19 +166,16 @@ pub async fn add_contact_via_api(
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let response: AddContactResponse = serde_json::from_slice(&body_bytes)?;
 
-    if response.success {
-        Ok(())
-    } else {
+    if !response.success {
         anyhow::bail!(
-            "Failed to add contact: {}",
-            response
-                .error
-                .unwrap_or_else(|| "Unknown error".to_string())
-        )
+            "API error: {}",
+            response.error.unwrap_or_else(|| "Unknown error".to_string())
+        );
     }
+
+    Ok(())
 }
 
-#[allow(dead_code)]
 pub async fn get_peers_via_api() -> Result<Vec<PeerEntry>> {
     let client = hyper::Client::new();
     let req = Request::builder()
@@ -180,60 +186,7 @@ pub async fn get_peers_via_api() -> Result<Vec<PeerEntry>> {
     let resp = client.request(req).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let response: GetPeersResponse = serde_json::from_slice(&body_bytes)?;
-
     Ok(response.peers)
-}
-
-#[allow(dead_code)]
-pub async fn get_history_via_api(
-    peer_id: Option<String>,
-    query: Option<String>,
-    limit: Option<usize>,
-) -> Result<Vec<HistoryMessage>> {
-    let client = hyper::Client::new();
-    let req_body = GetHistoryRequest {
-        peer_id,
-        query,
-        limit,
-    };
-
-    let json = serde_json::to_string(&req_body)?;
-    let req = Request::builder()
-        .method(Method::POST)
-        .uri(format!("http://{}/api/history", API_ADDR))
-        .header("content-type", "application/json")
-        .body(Body::from(json))?;
-
-    let resp = client.request(req).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-    let response: GetHistoryResponse = serde_json::from_slice(&body_bytes)?;
-
-    Ok(response.messages)
-}
-
-#[allow(dead_code)]
-pub async fn get_external_address_via_api() -> Result<Vec<String>> {
-    let client = hyper::Client::new();
-    let req = Request::builder()
-        .method(Method::GET)
-        .uri(format!("http://{}/api/external-address", API_ADDR))
-        .body(Body::empty())?;
-
-    let resp = client.request(req).await?;
-
-    // Check HTTP status before attempting to parse
-    let status = resp.status();
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-
-    if !status.is_success() {
-        let error_body = String::from_utf8_lossy(&body_bytes);
-        anyhow::bail!("API request failed with status {}: {}", status, error_body);
-    }
-
-    let response: GetExternalAddressResponse =
-        serde_json::from_slice(&body_bytes).context("Failed to parse external address response")?;
-
-    Ok(response.addresses)
 }
 
 pub async fn get_listeners_via_api() -> Result<Vec<String>> {
@@ -262,6 +215,44 @@ pub async fn get_transport_paths_via_api() -> Result<HashMap<String, Vec<crate::
     Ok(response.paths)
 }
 
+pub async fn get_history_via_api(
+    peer_id: Option<String>,
+    query: Option<String>,
+    limit: Option<usize>,
+) -> Result<Vec<HistoryMessage>> {
+    let client = hyper::Client::new();
+    let req_body = GetHistoryRequest {
+        peer_id,
+        query,
+        limit,
+    };
+
+    let json = serde_json::to_string(&req_body)?;
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("http://{}/api/history", API_ADDR))
+        .header("content-type", "application/json")
+        .body(Body::from(json))?;
+
+    let resp = client.request(req).await?;
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let response: GetHistoryResponse = serde_json::from_slice(&body_bytes)?;
+    Ok(response.messages)
+}
+
+pub async fn get_external_address_via_api() -> Result<Vec<String>> {
+    let client = hyper::Client::new();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}/api/external-address", API_ADDR))
+        .body(Body::empty())?;
+
+    let resp = client.request(req).await?;
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let response: GetExternalAddressResponse = serde_json::from_slice(&body_bytes)?;
+    Ok(response.addresses)
+}
+
 pub async fn get_connection_path_state_via_api() -> Result<String> {
     let client = hyper::Client::new();
     let req = Request::builder()
@@ -274,6 +265,7 @@ pub async fn get_connection_path_state_via_api() -> Result<String> {
     let response: ConnectionPathStateResponse = serde_json::from_slice(&body_bytes)?;
     Ok(response.state)
 }
+
 pub async fn get_drift_state_via_api() -> Result<DriftStatusResponse> {
     let client = hyper::Client::new();
     let req = Request::builder()
@@ -297,6 +289,45 @@ pub async fn export_diagnostics_via_api() -> Result<String> {
     let resp = client.request(req).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     String::from_utf8(body_bytes.to_vec()).context("Diagnostics response was not UTF-8")
+}
+
+pub async fn get_swarm_stats_via_api() -> Result<Vec<scmessenger_core::ConnectionStatsWire>> {
+    let client = hyper::Client::new();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}/api/swarm/stats", API_ADDR))
+        .body(Body::empty())?;
+
+    let resp = client.request(req).await?;
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let response: SwarmStatsResponse = serde_json::from_slice(&body_bytes)?;
+    Ok(response.stats)
+}
+
+pub async fn get_relay_stats_via_api() -> Result<Vec<scmessenger_core::RelayStatsWire>> {
+    let client = hyper::Client::new();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}/api/swarm/relay-stats", API_ADDR))
+        .body(Body::empty())?;
+
+    let resp = client.request(req).await?;
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let response: RelayStatsResponse = serde_json::from_slice(&body_bytes)?;
+    Ok(response.stats)
+}
+
+pub async fn get_healthy_relays_via_api() -> Result<Vec<String>> {
+    let client = hyper::Client::new();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}/api/swarm/healthy-relays", API_ADDR))
+        .body(Body::empty())?;
+
+    let resp = client.request(req).await?;
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let response: HealthyRelaysResponse = serde_json::from_slice(&body_bytes)?;
+    Ok(response.relays)
 }
 
 // Server implementation
@@ -335,6 +366,9 @@ async fn handle_request(
         }
         (&Method::GET, "/api/diagnostics") => handle_export_diagnostics(req, ctx).await,
         (&Method::GET, "/api/drift-status") => handle_get_drift_status(req, ctx).await,
+        (&Method::GET, "/api/swarm/stats") => handle_get_swarm_stats(req, ctx).await,
+        (&Method::GET, "/api/swarm/relay-stats") => handle_get_relay_stats(req, ctx).await,
+        (&Method::GET, "/api/swarm/healthy-relays") => handle_get_healthy_relays(req, ctx).await,
         (&Method::POST, "/api/shutdown") => {
             // Spawn a task to exit after a brief delay to allow response to send
             tokio::spawn(async {
@@ -501,31 +535,25 @@ async fn handle_get_history(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<
         history
             .search(query, request.limit.unwrap_or(20) as u32)
             .map_err(|e| anyhow::anyhow!("{:?}", e))?
-    } else if let Some(peer_id) = request.peer_id {
-        history
-            .conversation(peer_id, request.limit.unwrap_or(20) as u32)
-            .map_err(|e| anyhow::anyhow!("{:?}", e))?
     } else {
         history
-            .recent(None, request.limit.unwrap_or(20) as u32)
+            .conversation(
+                request.peer_id.as_deref().unwrap_or_default().to_string(),
+                request.limit.unwrap_or(20) as u32,
+            )
             .map_err(|e| anyhow::anyhow!("{:?}", e))?
     };
 
-    let history_messages: Vec<HistoryMessage> = messages
-        .into_iter()
-        .map(|m| HistoryMessage {
-            peer_id: m.peer_id,
-            content: m.content,
-            direction: match m.direction {
-                scmessenger_core::store::MessageDirection::Sent => "sent".to_string(),
-                scmessenger_core::store::MessageDirection::Received => "received".to_string(),
-            },
-            timestamp: m.timestamp,
-        })
-        .collect();
-
     let response = GetHistoryResponse {
-        messages: history_messages,
+        messages: messages
+            .into_iter()
+            .map(|m| HistoryMessage {
+                peer_id: m.peer_id,
+                content: m.content,
+                direction: format!("{:?}", m.direction),
+                timestamp: m.timestamp,
+            })
+            .collect(),
     };
 
     Ok(Response::builder()
@@ -538,75 +566,21 @@ async fn handle_get_external_address(
     _req: Request<Body>,
     ctx: Arc<ApiContext>,
 ) -> Result<Response<Body>> {
-    // Get external addresses from swarm
-    let addresses = match ctx.swarm_handle.get_external_addresses().await {
-        Ok(addresses) => addresses,
-        Err(e) => {
-            let body = format!("Failed to get external addresses: {}", e);
-            return Ok(Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .header("content-type", "text/plain; charset=utf-8")
-                .body(Body::from(body))?);
-        }
-    };
+    let addresses = ctx
+        .swarm_handle
+        .get_external_addresses()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|addr| addr.to_string())
+        .collect();
 
-    let response = GetExternalAddressResponse {
-        addresses: addresses.into_iter().map(|addr| addr.to_string()).collect(),
-    };
+    let response = GetExternalAddressResponse { addresses };
 
     Ok(Response::builder()
         .status(StatusCode::OK)
         .header("content-type", "application/json")
         .body(Body::from(serde_json::to_string(&response)?))?)
-}
-
-fn get_connection_path_state(
-    peers: &[String],
-    listeners: &[String],
-    external_addrs: &[String],
-) -> String {
-    if peers.is_empty() {
-        return "Bootstrapping".to_string();
-    }
-    if !listeners.is_empty() {
-        return "DirectPreferred".to_string();
-    }
-    if !external_addrs.is_empty() {
-        return "RelayFallback".to_string();
-    }
-    "RelayOnly".to_string()
-}
-
-fn export_diagnostics(
-    peers: &[String],
-    listeners: &[String],
-    external_addrs: &[String],
-    connection_path_state: &str,
-    core: &scmessenger_core::IronCore,
-) -> String {
-    let history = core.history_store_manager();
-    let stats = history.stats().ok();
-    let payload = serde_json::json!({
-        "running": true,
-        "connection_path_state": connection_path_state,
-        "peers": peers,
-        "listeners": listeners,
-        "external_addrs": external_addrs,
-        "inbox_count": core.inbox_count(),
-        "outbox_count": core.outbox_count(),
-        "drift": {
-            "state": core.drift_network_state(),
-            "store_size": core.drift_store_size(),
-        },
-        "history_stats": stats.as_ref().map(|s| serde_json::json!({
-            "total_messages": s.total_messages,
-            "sent_count": s.sent_count,
-            "received_count": s.received_count,
-            "undelivered_count": s.undelivered_count,
-        })),
-        "timestamp_ms": chrono::Utc::now().timestamp_millis(),
-    });
-    payload.to_string()
 }
 
 async fn handle_get_connection_path_state(
@@ -701,6 +675,91 @@ async fn handle_get_drift_status(_req: Request<Body>, ctx: Arc<ApiContext>) -> R
         .status(StatusCode::OK)
         .header("content-type", "application/json")
         .body(Body::from(serde_json::to_string(&response)?))?)
+}
+
+async fn handle_get_swarm_stats(
+    _req: Request<Body>,
+    ctx: Arc<ApiContext>,
+) -> Result<Response<Body>> {
+    let stats = ctx.core.swarm_get_all_connection_stats();
+    let response = SwarmStatsResponse { stats };
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&response)?))?)
+}
+
+async fn handle_get_relay_stats(
+    _req: Request<Body>,
+    ctx: Arc<ApiContext>,
+) -> Result<Response<Body>> {
+    let stats = ctx.core.swarm_get_all_relay_stats();
+    let response = RelayStatsResponse { stats };
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&response)?))?)
+}
+
+async fn handle_get_healthy_relays(
+    _req: Request<Body>,
+    ctx: Arc<ApiContext>,
+) -> Result<Response<Body>> {
+    let relays = ctx.core.swarm_get_healthy_relays();
+    let response = HealthyRelaysResponse { relays };
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&response)?))?)
+}
+
+fn get_connection_path_state(
+    peers: &[String],
+    listeners: &[String],
+    external_addrs: &[String],
+) -> String {
+    if peers.is_empty() {
+        return "Bootstrapping".to_string();
+    }
+    if !listeners.is_empty() {
+        return "DirectPreferred".to_string();
+    }
+    if !external_addrs.is_empty() {
+        return "RelayFallback".to_string();
+    }
+    "RelayOnly".to_string()
+}
+
+fn export_diagnostics(
+    peers: &[String],
+    listeners: &[String],
+    external_addrs: &[String],
+    connection_path_state: &str,
+    core: &scmessenger_core::IronCore,
+) -> String {
+    let history = core.history_store_manager();
+    let stats = history.stats().ok();
+    let payload = serde_json::json!({
+        "running": true,
+        "connection_path_state": connection_path_state,
+        "peers": peers,
+        "listeners": listeners,
+        "external_addrs": external_addrs,
+        "inbox_count": core.inbox_count(),
+        "outbox_count": core.outbox_count(),
+        "drift": {
+            "state": core.drift_network_state(),
+            "store_size": core.drift_store_size(),
+        },
+        "history_stats": stats.as_ref().map(|s| serde_json::json!({
+            "total_messages": s.total_messages,
+            "sent_count": s.sent_count,
+            "received_count": s.received_count,
+            "undelivered_count": s.undelivered_count,
+        })),
+        "timestamp_ms": chrono::Utc::now().timestamp_millis(),
+    });
+    payload.to_string()
 }
 
 pub async fn start_api_server(ctx: ApiContext) -> Result<()> {

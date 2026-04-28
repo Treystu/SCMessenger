@@ -4,36 +4,41 @@
 
 use libp2p::PeerId;
 use scmessenger_core::transport::abstraction::TransportType;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::str::FromStr;
+
+mod peer_id_serde {
+    use super::*;
+    use serde::{Deserializer, Serializer};
+
+    pub fn serialize<S>(peer_id: &PeerId, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&peer_id.to_string())
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<PeerId, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        PeerId::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
 
 /// Represents a transport path from WASM through CLI to destination
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TransportPath {
     pub source: TransportType,      // WASM → CLI transport
     pub bridge: TransportType,      // CLI internal transport
     pub destination: TransportType, // CLI → Peer transport
+    #[serde(with = "peer_id_serde")]
     pub peer_id: PeerId,            // Final destination peer
     pub reliability_score: f32,     // 0.0 (unreliable) to 1.0 (reliable)
     pub latency_estimate: u32,      // Estimated latency in ms
-}
-
-// Custom serialization for TransportPath to handle PeerId
-impl serde::Serialize for TransportPath {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("TransportPath", 7)?;
-        state.serialize_field("source", &format!("{:?}", self.source))?;
-        state.serialize_field("bridge", &format!("{:?}", self.bridge))?;
-        state.serialize_field("destination", &format!("{:?}", self.destination))?;
-        state.serialize_field("peer_id", &self.peer_id.to_string())?;
-        state.serialize_field("reliability_score", &self.reliability_score)?;
-        state.serialize_field("latency_estimate", &self.latency_estimate)?;
-        state.serialize_field("is_active", &true)?;
-        state.end()
-    }
+    pub is_active: bool,            // Whether path is currently usable
 }
 
 /// Transport bridge that manages all available paths
@@ -101,6 +106,7 @@ impl TransportBridge {
                     peer_id: *peer_id,
                     reliability_score: self.get_path_reliability(wasm_to_cli, *cli_to_peer),
                     latency_estimate: self.estimate_path_latency(wasm_to_cli, *cli_to_peer),
+                    is_active: true,
                 };
 
                 paths.push(path);

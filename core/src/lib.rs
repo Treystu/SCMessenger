@@ -33,12 +33,12 @@ pub mod contacts_bridge;
 pub mod mobile_bridge;
 
 use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
 use thiserror::Error;
 use zeroize::Zeroize;
 
-use crate::routing::PeerId as MeshPeerId;
 use crate::routing::multipath::DeliveryPath;
 use observability::{AuditEvent, AuditEventType, AuditLog as AuditLogType};
 
@@ -285,7 +285,39 @@ pub struct PeelResult {
 // IRONCORE SERVICE
 // ============================================================================
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct ConnectionStatsWire {
+    pub peer_id: String,
+    pub state: String,
+    pub duration_ms: u64,
+    pub messages_sent: u64,
+    pub message_failures: u64,
+    pub bytes_sent: u64,
+    pub bytes_received: u64,
+    pub avg_latency_ms: u64,
+    pub last_activity: u64,
+    pub connection_attempts: u32,
+    pub successful_connections: u32,
+    pub connection_failures: u32,
+    pub current_address: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct RelayStatsWire {
+    pub peer_id: String,
+    pub bytes_transferred: u64,
+    pub connected_at: u64,
+    pub last_activity: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct PeerRelayInfoWire {
+    pub peer_id: String,
+    pub relay_addresses: Vec<String>,
+    pub relay_capable: bool,
+    pub last_seen: u64,
+}
+
 pub struct IronCore {
     /// Identity and key management
     identity: Arc<RwLock<identity::IdentityManager>>,
@@ -331,6 +363,10 @@ pub struct IronCore {
     privacy_config: Arc<RwLock<privacy::PrivacyConfig>>,
     /// Double Ratchet session manager (P0_SECURITY_002: forward secrecy)
     ratchet_session_manager: Arc<RwLock<crypto::RatchetSessionManager>>,
+    /// Transport health monitor (per-peer and global metrics)
+    pub health_monitor: Arc<transport::health::TransportHealthMonitor>,
+    /// Internet relay manager (NAT traversal and store-and-forward)
+    pub internet_relay: Arc<transport::internet::InternetRelay>,
     /// Persistent peer address and identity ledger (mobile bridge anchor)
     #[cfg(not(target_arch = "wasm32"))]
     pub ledger_manager: Arc<mobile_bridge::LedgerManager>,
@@ -848,6 +884,15 @@ impl IronCore {
 
         let multipath = Arc::new(RwLock::new(routing::multipath::MultiPathDelivery::new()));
 
+        let health_monitor = Arc::new(transport::health::TransportHealthMonitor::new());
+
+        let internet_relay = Arc::new(
+            transport::internet::InternetRelay::new(
+                transport::internet::InternetTransportConfig::default(),
+            )
+            .expect("Failed to initialize InternetRelay"),
+        );
+
         Self {
             identity,
             outbox: Arc::new(RwLock::new(outbox)),
@@ -873,6 +918,8 @@ impl IronCore {
             multipath,
             privacy_config: Arc::new(RwLock::new(privacy::PrivacyConfig::default())),
             ratchet_session_manager,
+            health_monitor,
+            internet_relay,
             #[cfg(not(target_arch = "wasm32"))]
             ledger_manager,
             #[cfg(not(target_arch = "wasm32"))]
@@ -999,6 +1046,16 @@ impl IronCore {
             Arc::new(RwLock::new(manager))
         };
 
+        let multipath = Arc::new(RwLock::new(routing::multipath::MultiPathDelivery::new()));
+        let health_monitor = Arc::new(transport::health::TransportHealthMonitor::new());
+
+        let internet_relay = Arc::new(
+            transport::internet::InternetRelay::new(
+                transport::internet::InternetTransportConfig::default(),
+            )
+            .expect("Failed to initialize InternetRelay"),
+        );
+
         Self {
             identity,
             outbox: Arc::new(RwLock::new(outbox)),
@@ -1009,26 +1066,28 @@ impl IronCore {
             log_manager,
             blocked_manager,
             relay_registry,
-            // P0_SECURITY_005: Use pre-loaded audit log
             audit_log: Arc::new(RwLock::new(loaded_audit_log)),
             consent_granted: Arc::new(RwLock::new(false)),
+            #[cfg(not(target_arch = "wasm32"))]
+            contacts_bridge_manager,
+            #[cfg(not(target_arch = "wasm32"))]
+            history_bridge_manager,
             running: Arc::new(RwLock::new(false)),
             delegate: Arc::new(RwLock::new(None)),
-            drift_engine: Arc::new(RwLock::new(drift::RelayEngine::new(
-                &[0u8; 32],
-                drift::RelayConfig::default(),
-            ))),
-            abuse_reputation: Arc::new(abuse::EnhancedAbuseReputationManager::new(
-                1000,
-                abuse::spam_detection::SpamDetectionEngine::new_heuristics_only(
-                    abuse::spam_detection::SpamDetectionConfig::default(),
-                ),
-            )),
-            routing_engine: Arc::new(RwLock::new(
-                routing::OptimizedRoutingEngine::new([0u8; 32], [0u8; 4]),
-            )),
+            drift_engine,
+            abuse_reputation,
+            routing_engine,
+            multipath,
             privacy_config: Arc::new(RwLock::new(privacy::PrivacyConfig::default())),
             ratchet_session_manager,
+            health_monitor,
+            internet_relay,
+            #[cfg(not(target_arch = "wasm32"))]
+            ledger_manager,
+            #[cfg(not(target_arch = "wasm32"))]
+            auto_adjust_engine,
+            #[cfg(not(target_arch = "wasm32"))]
+            swarm_handle,
         }
     }
 
@@ -3073,6 +3132,75 @@ impl IronCore {
             Ok(paths) => paths.into_iter().map(|path| path.into_iter().map(|p| p.to_string()).collect()).collect(),
             Err(_) => vec![],
         }
+    }
+
+    /// Add a known address for a peer in the DHT.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn swarm_add_kad_address(&self, peer_id: String, addr: String) {
+        let handle = match self.get_swarm_handle() {
+            Some(h) => h,
+            None => return,
+        };
+        let peer = match peer_id.parse::<PeerId>() {
+            Ok(p) => p,
+            Err(_) => return,
+        };
+        let maddr = match addr.parse::<libp2p::Multiaddr>() {
+            Ok(a) => a,
+            Err(_) => return,
+        };
+        let fut = handle.add_kad_address(peer, maddr);
+        let _ = tokio::runtime::Handle::current().block_on(fut);
+    }
+
+    pub fn swarm_get_all_connection_stats(&self) -> Vec<ConnectionStatsWire> {
+        self.health_monitor
+            .get_all_connection_stats()
+            .into_iter()
+            .map(|(peer_id, stats)| ConnectionStatsWire {
+                peer_id: peer_id.to_string(),
+                state: format!("{:?}", stats.state),
+                duration_ms: stats.duration_ms,
+                messages_sent: stats.messages_sent,
+                message_failures: stats.message_failures,
+                bytes_sent: stats.bytes_sent,
+                bytes_received: stats.bytes_received,
+                avg_latency_ms: stats.avg_latency_ms,
+                last_activity: stats.last_activity,
+                connection_attempts: stats.connection_attempts,
+                successful_connections: stats.successful_connections,
+                connection_failures: stats.connection_failures,
+                current_address: stats.current_address.map(|a| a.to_string()),
+            })
+            .collect()
+    }
+
+    pub fn swarm_get_all_relay_stats(&self) -> Vec<RelayStatsWire> {
+        self.internet_relay.get_all_relay_stats().into_iter().map(|(peer_id, stats)| {
+            RelayStatsWire {
+                peer_id,
+                bytes_transferred: stats.bytes_transferred,
+                connected_at: stats.connected_at,
+                last_activity: stats.last_activity,
+            }
+        }).collect()
+    }
+
+    pub fn swarm_get_healthy_relays(&self) -> Vec<String> {
+        self.internet_relay.get_healthy_relays()
+    }
+
+    pub fn swarm_get_relay_peers(&self) -> Vec<PeerRelayInfoWire> {
+        self.internet_relay
+            .get_relay_peers()
+            .into_iter()
+            .map(|info| PeerRelayInfoWire {
+                peer_id: info.peer_id.to_string(),
+                relay_addresses: info.relay_addresses.into_iter().map(|a| a.to_string()).collect(),
+                relay_capable: info.relay_capable,
+                last_seen: info.last_seen,
+            })
+            .collect()
     }
 
     #[cfg(not(target_arch = "wasm32"))]

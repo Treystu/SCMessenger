@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 
 // Re-export the contacts bridge
 pub use crate::contacts_bridge::{Contact, ContactManager};
-use crate::transport::behaviour::SharedPeerEntry;
 use crate::transport::swarm::SwarmHandle;
 use crate::transport::wifi_aware::{DiscoveredPeer, WifiAwareTransport, WifiAwareConfig};
 use libp2p::{Multiaddr, PeerId};
@@ -792,6 +791,8 @@ impl MeshService {
                                                                 public_key.clone(),
                                                                 None, // Nickname not available in Identify
                                                             );
+                                                            // Automatically add identified listen addresses to Kademlia routing table
+                                                            let _ = handle.add_kad_address(peer_id, addr.clone()).await;
                                                         }
                                                     }
 
@@ -1163,7 +1164,7 @@ impl MeshService {
         self.update_device_state(profile);
     }
 
-    pub fn on_network_changed(&self, has_wifi: bool, has_cellular: bool) {
+    pub fn on_network_changed(&self, has_wifi: bool, _has_cellular: bool) {
         let mut profile = self
             .current_device_profile
             .lock()

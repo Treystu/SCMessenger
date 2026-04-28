@@ -186,6 +186,19 @@ enum Commands {
         #[command(subcommand)]
         action: AuditAction,
     },
+    /// Manage libp2p swarm and transport statistics
+    Swarm {
+        #[command(subcommand)]
+        action: SwarmAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum SwarmAction {
+    /// Show connection and relay health statistics
+    Stats,
+    /// Show healthy relays according to the circuit breaker
+    HealthyRelays,
 }
 
 #[derive(Subcommand)]
@@ -294,6 +307,8 @@ enum ContactAction {
         public_key: String,
         #[arg(short, long)]
         name: Option<String>,
+        #[arg(short, long)]
+        address: Option<String>,
     },
     List,
     Show {
@@ -423,6 +438,7 @@ async fn main() -> Result<()> {
         Commands::HistoryDelete { id } => cmd_history_delete(id).await,
         Commands::Test => cmd_test().await,
         Commands::Audit { action } => cmd_audit(action).await,
+        Commands::Swarm { action } => cmd_swarm(action).await,
     }
 }
 
@@ -669,21 +685,8 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             peer_id,
             public_key,
             name,
+            address,
         } => {
-            // Validate public key format before adding
-            scmessenger_core::crypto::validate_ed25519_public_key(&public_key)
-                .context("Invalid public key")?;
-
-            // Guard: reject public key / identity_id where a libp2p Peer ID is required
-            if looks_like_blake3_id(&peer_id) {
-                eprintln!(
-                    "{} That looks like a public key or identity ID (64 hex chars), not a libp2p Peer ID.",
-                    "⚠ Error:".red()
-                );
-                eprintln!("  Use the 'Peer ID (Network)' shown by: scm identity");
-                eprintln!("  It starts with '12D3Koo...' and is ~52 characters.");
-                return Ok(());
-            }
             if !looks_like_libp2p_peer_id(&peer_id) {
                 eprintln!(
                     "{} '{}' is not a valid libp2p Peer ID.",
@@ -705,6 +708,13 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                     println!("  Name: {}", nickname.bright_cyan());
                 }
                 println!("  Peer ID: {}", peer_id);
+
+                if address.is_some() {
+                    println!(
+                        "  {} Note: --address is only supported in standalone mode (no running daemon)",
+                        "⚠".yellow()
+                    );
+                }
                 return Ok(());
             }
 
@@ -712,6 +722,12 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             let data_dir = config::Config::data_dir()?;
             let storage_path = data_dir.join("storage");
             let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+
+            if let Some(addr) = address {
+                core.swarm_add_kad_address(peer_id.clone(), addr);
+                println!("  {} Address added to routing table", "✔".green());
+            }
+
             let contacts = core.contacts_store_manager();
 
             // UNIFIED ID FIX: derive canonical public_key_hex from libp2p Peer ID
@@ -720,8 +736,15 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                 .extract_public_key_from_peer_id(peer_id.clone())
                 .context("Failed to derive public key from Peer ID — is it a valid libp2p Peer ID?")?;
             if canonical_pk.to_lowercase() != public_key.to_lowercase() {
-                eprintln!("{} The provided public key does not match the Peer ID.", "⚠ Error:".red());
-                eprintln!("  Peer ID {} resolves to public key: {}", peer_id.dimmed(), canonical_pk.yellow());
+                eprintln!(
+                    "{} The provided public key does not match the Peer ID.",
+                    "⚠ Error:".red()
+                );
+                eprintln!(
+                    "  Peer ID {} resolves to public key: {}",
+                    peer_id.dimmed(),
+                    canonical_pk.yellow()
+                );
                 eprintln!("  You provided public key: {}", public_key.dimmed());
                 return Ok(());
             }
@@ -1372,6 +1395,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let api_ctx = api::ApiContext {
         core: core.clone(),
         swarm_handle: Arc::new(swarm_handle.clone()),
+        transport_bridge: transport_bridge.clone(),
     };
 
     tokio::spawn(async move {
@@ -2623,6 +2647,87 @@ async fn cmd_status() -> Result<()> {
                 println!("Diagnostics JSON bytes: {}", diag.len());
             }
             Err(e) => println!("Diagnostics: {} ({})", "unavailable".yellow(), e),
+        }
+    }
+
+    Ok(())
+}
+
+async fn cmd_swarm(action: SwarmAction) -> Result<()> {
+    if !api::is_api_available().await {
+        println!("{}", "No SCMessenger node is running.".yellow());
+        println!("Swarm statistics are only available when the node is active.");
+        return Ok(());
+    }
+
+    match action {
+        SwarmAction::Stats => {
+            println!("{}", "Connection Statistics".bold());
+            match api::get_swarm_stats_via_api().await {
+                Ok(stats) => {
+                    if stats.is_empty() {
+                        println!("  {}", "No active connections.".dimmed());
+                    } else {
+                        println!(
+                            "  {:<45} {:<10} {:<10} {:<10} {:<10} {:<10} {:<10}",
+                            "Peer ID", "State", "Latency", "Sent", "Failed", "BytesOut", "BytesIn"
+                        );
+                        for s in stats {
+                            println!(
+                                "  {:<45} {:<10} {:<10} {:<10} {:<10} {:<10} {:<10}",
+                                s.peer_id.dimmed(),
+                                s.state,
+                                format!("{}ms", s.avg_latency_ms),
+                                s.messages_sent,
+                                s.message_failures,
+                                s.bytes_sent,
+                                s.bytes_received
+                            );
+                        }
+                    }
+                }
+                Err(e) => println!("  {} {}", "Error:".red(), e),
+            }
+
+            println!();
+            println!("{}", "Relay Statistics".bold());
+            match api::get_relay_stats_via_api().await {
+                Ok(stats) => {
+                    if stats.is_empty() {
+                        println!("  {}", "No relay activity tracked.".dimmed());
+                    } else {
+                        println!(
+                            "  {:<45} {:<15} {:<15} {:<15}",
+                            "Relay Peer ID", "Bytes", "Connected", "Last Activity"
+                        );
+                        for s in stats {
+                            println!(
+                                "  {:<45} {:<15} {:<15} {:<15}",
+                                s.peer_id.dimmed(),
+                                s.bytes_transferred,
+                                format_timestamp(s.connected_at),
+                                format_timestamp(s.last_activity)
+                            );
+                        }
+                    }
+                }
+                Err(e) => println!("  {} {}", "Error:".red(), e),
+            }
+        }
+        SwarmAction::HealthyRelays => {
+            println!("{}", "Healthy Relays (Circuit Breaker)".bold());
+            match api::get_healthy_relays_via_api().await {
+                Ok(relays) => {
+                    if relays.is_empty() {
+                        println!("  {}", "No healthy relays found or circuit breaker is empty.".dimmed());
+                    } else {
+                        for r in relays {
+                            println!("  {} {}", "•".green(), r);
+                        }
+                    }
+                }
+                Err(e) => println!("  {} {}", "Error:".red(), e),
+            }
         }
     }
 

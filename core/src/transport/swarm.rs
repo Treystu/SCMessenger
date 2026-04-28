@@ -3149,6 +3149,11 @@ pub async fn start_swarm_with_config(
                                     connection_id.to_string(),
                                 );
 
+                                // Circuit Breaker: Record success for this relay/peer address
+                                if let Some(core) = core_handle.as_ref().and_then(|h| h.upgrade()) {
+                                    core.internet_relay.circuit_breaker.record_success(&remote_addr.to_string());
+                                }
+
                                 // Add to bootstrap capability (potential relay node)
                                 // ALL peers are mandatory relays
                                 bootstrap_capability.add_peer(peer_id);
@@ -4361,6 +4366,12 @@ pub async fn start_swarm_with_config(
                                     },
                                     connection_id.to_string(),
                                 );
+
+                                // Circuit Breaker: Record success for this relay/peer address
+                                if let Some(core) = core_handle.as_ref().and_then(|h| h.upgrade()) {
+                                    core.internet_relay.circuit_breaker.record_success(&endpoint.get_remote_address().to_string());
+                                }
+
                                 dispatch_pending_custody_for_peer(
                                     &mut swarm,
                                     &relay_custody_store,
