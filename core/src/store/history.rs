@@ -73,7 +73,7 @@ impl MessageRecord {
 fn current_timestamp() -> u64 {
     web_time::SystemTime::now()
         .duration_since(web_time::UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_secs()
 }
 
@@ -174,7 +174,7 @@ impl HistoryManager {
         }
 
         // Sort by timestamp descending
-        records.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        records.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
 
         if records.len() > limit as usize {
             records.truncate(limit as usize);
@@ -237,7 +237,7 @@ impl HistoryManager {
         }
 
         // Return newest matches first and cap at the requested limit.
-        records.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        records.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
         if records.len() > limit as usize {
             records.truncate(limit as usize);
         }
@@ -350,7 +350,7 @@ impl HistoryManager {
             })
             .collect();
 
-        records.sort_by(|a, b| a.1.timestamp.cmp(&b.1.timestamp));
+        records.sort_by_key(|a| a.1.timestamp);
 
         let to_remove = records.len() - max_messages as usize;
         for (key, _) in records.iter().take(to_remove) {

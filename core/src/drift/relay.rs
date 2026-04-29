@@ -114,7 +114,8 @@ pub struct RelayEngine {
     /// Cover traffic scheduler (privacy: traffic analysis resistance)
     cover_scheduler: Option<CoverTrafficScheduler>,
     /// Reputation manager for abuse-based relay decisions
-    reputation_manager: Option<std::sync::Arc<crate::abuse::reputation::EnhancedAbuseReputationManager>>,
+    reputation_manager:
+        Option<std::sync::Arc<crate::abuse::reputation::EnhancedAbuseReputationManager>>,
 }
 
 impl RelayEngine {
@@ -167,7 +168,10 @@ impl RelayEngine {
     }
 
     /// Set the reputation manager for abuse detection
-    pub fn set_reputation_manager(&mut self, manager: Arc<crate::abuse::reputation::EnhancedAbuseReputationManager>) {
+    pub fn set_reputation_manager(
+        &mut self,
+        manager: Arc<crate::abuse::reputation::EnhancedAbuseReputationManager>,
+    ) {
         self.reputation_manager = Some(manager);
     }
 
@@ -228,7 +232,8 @@ impl RelayEngine {
         // messages but don't count against rate limits. This ensures cover
         // traffic maintains its indistinguishability while allowing the
         // network to carry it freely.
-        let is_cover_traffic = envelope.envelope_type == super::envelope::EnvelopeType::CoverTraffic;
+        let is_cover_traffic =
+            envelope.envelope_type == super::envelope::EnvelopeType::CoverTraffic;
 
         // Privacy: Onion-routed messages are delivered locally if the
         // recipient_hint matches (meaning we're a hop in the onion path).

@@ -287,7 +287,7 @@ impl ContactManager {
         // We use a threshold of 1024 bytes as a reasonable indicator of data presence.
         if contact_count == 0 && db_size > 0 {
             // Check if we have actual data by scanning a few keys
-            let has_data = self.backend.scan_prefix(b"").unwrap_or_default().len() > 0;
+            let has_data = !self.backend.scan_prefix(b"").unwrap_or_default().is_empty();
             if has_data {
                 // Database has data but count() returns 0 - potential corruption
                 // This could happen if the data is stored but not properly deserialized
@@ -301,7 +301,7 @@ impl ContactManager {
 fn current_timestamp() -> u64 {
     web_time::SystemTime::now()
         .duration_since(web_time::UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_secs()
 }
 

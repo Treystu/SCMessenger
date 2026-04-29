@@ -5,7 +5,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
-use web_sys::{window, Storage, Node, Element, HtmlElement};
+#[cfg(target_arch = "wasm32")]
+use web_sys::{window, Document, Element, HtmlElement, Node, Storage};
 
 /// Notification permission state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -39,19 +40,14 @@ impl From<NotificationPermission> for String {
 }
 
 /// Browser type detection
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BrowserType {
     Chrome,
     Firefox,
     Safari,
     Edge,
+    #[default]
     Unknown,
-}
-
-impl Default for BrowserType {
-    fn default() -> Self {
-        BrowserType::Unknown
-    }
 }
 
 /// Browser notification options with browser-specific configurations
@@ -111,13 +107,11 @@ impl NotificationManager {
         #[cfg(target_arch = "wasm32")]
         {
             // Check if Notification API is available
-            let notification_available = js_sys::Reflect::get(
-                &js_sys::global(),
-                &JsValue::from_str("Notification"),
-            )
-            .ok()
-            .map(|v| v.is_object())
-            .unwrap_or(false);
+            let notification_available =
+                js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("Notification"))
+                    .ok()
+                    .map(|v| v.is_object())
+                    .unwrap_or(false);
 
             if !notification_available {
                 *self.permission.borrow_mut() = NotificationPermission::Denied;
@@ -134,29 +128,27 @@ impl NotificationManager {
             };
 
             // Get navigator.permission()
-            let permission_result = js_sys::Reflect::get(
-                &js_sys::global(),
-                &JsValue::from_str("navigator"),
-            )
-            .ok();
+            let permission_result =
+                js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("navigator")).ok();
 
             if let Some(permission_obj) = permission_result {
                 if permission_obj.is_object() {
-                    let permission_fn = js_sys::Reflect::get(
-                        &permission_obj,
-                        &JsValue::from_str("permission"),
-                    )
-                    .ok();
+                    let permission_fn =
+                        js_sys::Reflect::get(&permission_obj, &JsValue::from_str("permission"))
+                            .ok();
 
                     if let Some(req_fn) = permission_fn {
                         if req_fn.is_function() {
                             let req_fn: js_sys::Function = req_fn.unchecked_into();
                             // Call navigator.permission() and await
-                            let promise = js_sys::Promise::from(js_sys::Reflect::apply(
-                                &req_fn,
-                                &JsValue::UNDEFINED,
-                                &js_sys::Array::new(),
-                            ).unwrap());
+                            let promise = js_sys::Promise::from(
+                                js_sys::Reflect::apply(
+                                    &req_fn,
+                                    &JsValue::UNDEFINED,
+                                    &js_sys::Array::new(),
+                                )
+                                .unwrap(),
+                            );
                             let js_future = wasm_bindgen_futures::JsFuture::from(promise);
                             if let Ok(permission_val) = js_future.await {
                                 let permission_str = permission_val.as_string().unwrap_or_default();
@@ -177,28 +169,26 @@ impl NotificationManager {
             }
 
             // Fallback: Request permission using window.Notification.requestPermission()
-            let notification_obj = js_sys::Reflect::get(
-                &js_sys::global(),
-                &JsValue::from_str("Notification"),
-            )
-            .ok();
+            let notification_obj =
+                js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("Notification")).ok();
 
             if let Some(notif_obj) = notification_obj {
                 if notif_obj.is_object() {
-                    let req_fn = js_sys::Reflect::get(
-                        &notif_obj,
-                        &JsValue::from_str("requestPermission"),
-                    )
-                    .ok();
+                    let req_fn =
+                        js_sys::Reflect::get(&notif_obj, &JsValue::from_str("requestPermission"))
+                            .ok();
 
                     if let Some(request_fn) = req_fn {
                         if request_fn.is_function() {
                             let request_fn: js_sys::Function = request_fn.unchecked_into();
-                            let promise = js_sys::Promise::from(js_sys::Reflect::apply(
-                                &request_fn,
-                                &JsValue::UNDEFINED,
-                                &js_sys::Array::new(),
-                            ).unwrap());
+                            let promise = js_sys::Promise::from(
+                                js_sys::Reflect::apply(
+                                    &request_fn,
+                                    &JsValue::UNDEFINED,
+                                    &js_sys::Array::new(),
+                                )
+                                .unwrap(),
+                            );
                             let js_future = wasm_bindgen_futures::JsFuture::from(promise);
                             if let Ok(permission_val) = js_future.await {
                                 let permission_str = permission_val.as_string().unwrap_or_default();
@@ -238,13 +228,11 @@ impl NotificationManager {
         #[cfg(target_arch = "wasm32")]
         {
             // Check if Notification constructor is available
-            let notification_available = js_sys::Reflect::get(
-                &js_sys::global(),
-                &JsValue::from_str("Notification"),
-            )
-            .ok()
-            .map(|v| v.is_object())
-            .unwrap_or(false);
+            let notification_available =
+                js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("Notification"))
+                    .ok()
+                    .map(|v| v.is_object())
+                    .unwrap_or(false);
             notification_available
         }
 
@@ -257,14 +245,12 @@ impl NotificationManager {
     /// Show a notification with the given options
     #[wasm_bindgen(js_name = showNotification)]
     pub async fn show_notification(&self, title: String, body: String, _options: JsValue) {
+        let _ = (&title, &body);
         #[cfg(target_arch = "wasm32")]
         {
             // Use the browser's Notification API directly
-            let notification_result = js_sys::Reflect::get(
-                &js_sys::global(),
-                &JsValue::from_str("Notification"),
-            )
-            .ok();
+            let notification_result =
+                js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("Notification")).ok();
 
             if let Some(notification_obj) = notification_result {
                 if notification_obj.is_object() {
@@ -274,16 +260,21 @@ impl NotificationManager {
                             JsValue::from_str(title.as_str()),
                             JsValue::from_str(body.as_str()),
                         ]),
-                    ).unwrap_or(JsValue::UNDEFINED);
+                    )
+                    .unwrap_or(JsValue::UNDEFINED);
 
                     if !notification.is_undefined() {
                         // Set click handler
                         if let Some(win) = web_sys::window() {
                             let notification_clone = notification.clone();
                             let click_handler = Closure::wrap(Box::new(move || {
-                                web_sys::console::log_1(&JsValue::from_str(&format!("Notification clicked: {}", title)));
+                                web_sys::console::log_1(&JsValue::from_str(&format!(
+                                    "Notification clicked: {}",
+                                    title
+                                )));
                                 let _ = win.focus();
-                            }) as Box<dyn FnMut()>);
+                            })
+                                as Box<dyn FnMut()>);
 
                             let _ = js_sys::Reflect::set(
                                 &notification_clone,
@@ -299,7 +290,9 @@ impl NotificationManager {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            web_sys::console::log_1(&JsValue::from_str("Notification not supported outside browser"));
+            web_sys::console::log_1(&JsValue::from_str(
+                "Notification not supported outside browser",
+            ));
         }
     }
 
@@ -308,7 +301,9 @@ impl NotificationManager {
     pub fn close_all_notifications(&self) {
         #[cfg(target_arch = "wasm32")]
         {
-            web_sys::console::log_1(&JsValue::from_str("closeAllNotifications: Tracking notifications in real implementation"));
+            web_sys::console::log_1(&JsValue::from_str(
+                "closeAllNotifications: Tracking notifications in real implementation",
+            ));
         }
     }
 
@@ -372,7 +367,11 @@ impl NotificationManager {
             let div = match js_sys::Reflect::get(&document, &JsValue::from_str("createElement")) {
                 Ok(create_element_fn) if create_element_fn.is_function() => {
                     let create_element_fn: js_sys::Function = create_element_fn.unchecked_into();
-                    let result = js_sys::Reflect::apply(&create_element_fn, &document, &js_sys::Array::from_iter([JsValue::from("div")]));
+                    let result = js_sys::Reflect::apply(
+                        &create_element_fn,
+                        &document,
+                        &js_sys::Array::from_iter([JsValue::from("div")]),
+                    );
                     match result {
                         Ok(div) => div,
                         Err(_) => return,
@@ -382,7 +381,11 @@ impl NotificationManager {
             };
 
             // Set inner HTML
-            let _ = js_sys::Reflect::set(&div, &JsValue::from_str("innerHTML"), &JsValue::from_str(&guidance_html));
+            let _ = js_sys::Reflect::set(
+                &div,
+                &JsValue::from_str("innerHTML"),
+                &JsValue::from_str(&guidance_html),
+            );
 
             // Convert to Node for append_child
             let div_node: &Node = div.unchecked_ref();
@@ -399,7 +402,9 @@ impl NotificationManager {
             if let Ok(Some(button)) = div.query_selector("#close_guide_btn") {
                 let div_clone = div.clone();
                 let close_cb = Closure::wrap(Box::new(move || {
-                    div_clone.parent_node().map(|p: Node| p.remove_child(div_clone.unchecked_ref()));
+                    div_clone
+                        .parent_node()
+                        .map(|p: Node| p.remove_child(div_clone.unchecked_ref()));
                 }) as Box<dyn FnMut()>);
 
                 // Convert button to HtmlElement for set_onclick
@@ -450,7 +455,8 @@ fn get_notification_settings() -> Option<String> {
     #[cfg(target_arch = "wasm32")]
     {
         let window = window()?;
-        let storage_value = match js_sys::Reflect::get(&window, &JsValue::from_str("localStorage")) {
+        let storage_value = match js_sys::Reflect::get(&window, &JsValue::from_str("localStorage"))
+        {
             Ok(s) => s,
             Err(_) => return None,
         };
@@ -468,6 +474,7 @@ fn get_notification_settings() -> Option<String> {
     }
 }
 
+#[allow(dead_code)]
 fn save_notification_settings(_state: &str) {
     #[cfg(target_arch = "wasm32")]
     {
@@ -476,7 +483,8 @@ fn save_notification_settings(_state: &str) {
             None => return,
         };
 
-        let storage_value = match js_sys::Reflect::get(&window, &JsValue::from_str("localStorage")) {
+        let storage_value = match js_sys::Reflect::get(&window, &JsValue::from_str("localStorage"))
+        {
             Ok(s) => s,
             Err(_) => return,
         };

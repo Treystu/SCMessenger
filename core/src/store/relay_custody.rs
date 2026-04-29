@@ -1613,7 +1613,13 @@ fn filesystem_usage_bytes(path: &std::path::Path) -> Option<(u64, u64)> {
     use std::os::unix::ffi::OsStrExt;
 
     let c_path = CString::new(path.as_os_str().as_bytes()).ok()?;
+    // SAFETY: std::mem::zeroed() is safe here because `libc::statvfs` is a C struct
+    // with only primitive numeric fields; zeroing is the required initialization
+    // before passing it to `statvfs(3)`.
     let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
+    // SAFETY: `c_path` is a valid NUL-terminated C string created by `CString`,
+    // and `stat` is a mutable reference to a properly zeroed `libc::statvfs`.
+    // These invariants satisfy the preconditions of `statvfs(3)`.
     let rc = unsafe { libc::statvfs(c_path.as_ptr(), &mut stat) };
     if rc != 0 {
         return None;
@@ -2143,4 +2149,3 @@ mod tests {
         std::env::remove_var("SCM_RELAY_CUSTODY_DIR");
     }
 }
-

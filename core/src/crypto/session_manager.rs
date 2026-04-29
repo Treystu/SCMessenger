@@ -1,11 +1,11 @@
+use super::ratchet::{Chain, RatchetKey, RatchetSession};
+use crate::store::backend::StorageBackend;
 use anyhow::{bail, Result};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
-use zeroize::Zeroize;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
-use crate::store::backend::StorageBackend;
-use super::ratchet::{RatchetSession, RatchetKey, Chain};
+use zeroize::Zeroize;
 
 /// Manages ratchet sessions for multiple peer conversations.
 pub struct RatchetSessionManager {
@@ -39,7 +39,8 @@ impl RatchetSessionManager {
     pub fn save(&self) -> Result<()> {
         if let Some(backend) = &self.backend {
             let json = self.serialize_sessions()?;
-            backend.put(b"ratchet_sessions_v1", json.as_bytes())
+            backend
+                .put(b"ratchet_sessions_v1", json.as_bytes())
                 .map_err(|e| anyhow::anyhow!("Failed to save ratchet sessions: {}", e))?;
         }
         Ok(())
@@ -48,8 +49,10 @@ impl RatchetSessionManager {
     /// Load sessions from the persistent backend.
     pub fn load(&mut self) -> Result<()> {
         if let Some(backend) = &self.backend {
-            if let Some(bytes) = backend.get(b"ratchet_sessions_v1")
-                .map_err(|e| anyhow::anyhow!("Failed to load ratchet sessions: {}", e))? {
+            if let Some(bytes) = backend
+                .get(b"ratchet_sessions_v1")
+                .map_err(|e| anyhow::anyhow!("Failed to load ratchet sessions: {}", e))?
+            {
                 let json = String::from_utf8(bytes)
                     .map_err(|e| anyhow::anyhow!("Invalid ratchet session encoding: {}", e))?;
                 self.deserialize_sessions(&json)?;
@@ -66,7 +69,8 @@ impl RatchetSessionManager {
         their_identity_public_x25519: &X25519PublicKey,
     ) -> Result<&mut RatchetSession> {
         if !self.sessions.contains_key(peer_id) {
-            let session = RatchetSession::init_as_sender(our_signing_key, their_identity_public_x25519)?;
+            let session =
+                RatchetSession::init_as_sender(our_signing_key, their_identity_public_x25519)?;
             self.sessions.insert(peer_id.to_string(), session);
         }
         Ok(self.sessions.get_mut(peer_id).unwrap())
@@ -79,7 +83,8 @@ impl RatchetSessionManager {
         our_signing_key: &ed25519_dalek::SigningKey,
         sender_identity_public_x25519: &X25519PublicKey,
     ) -> Result<&mut RatchetSession> {
-        let session = RatchetSession::init_as_receiver(our_signing_key, sender_identity_public_x25519)?;
+        let session =
+            RatchetSession::init_as_receiver(our_signing_key, sender_identity_public_x25519)?;
         self.sessions.insert(peer_id.to_string(), session);
         Ok(self.sessions.get_mut(peer_id).unwrap())
     }
@@ -111,7 +116,8 @@ impl RatchetSessionManager {
 
     /// Serialize all sessions to JSON for persistence across app restarts.
     pub fn serialize_sessions(&self) -> Result<String> {
-        let serializable: HashMap<String, SerializableRatchetSession> = self.sessions
+        let serializable: HashMap<String, SerializableRatchetSession> = self
+            .sessions
             .iter()
             .map(|(k, v)| (k.clone(), SerializableRatchetSession::from_session(v)))
             .collect();
@@ -182,22 +188,24 @@ impl SerializableRatchetSession {
         Self {
             our_dh_secret_hex: hex::encode(session.our_dh_secret_bytes()),
             our_dh_public_hex: hex::encode(session.our_public_key()),
-            their_dh_public_hex: session.their_public_key()
-                .map(|k| hex::encode(k)),
+            their_dh_public_hex: session.their_public_key().map(hex::encode),
             root_key_hex: hex::encode(session.root_key_bytes()),
-            sending_chain: session.sending_chain_state().map(|(key, index)| ChainState {
-                chain_key_hex: hex::encode(key),
-                index,
-            }),
-            receiving_chain: session.receiving_chain_state().map(|(key, index)| ChainState {
-                chain_key_hex: hex::encode(key),
-                index,
-            }),
+            sending_chain: session
+                .sending_chain_state()
+                .map(|(key, index)| ChainState {
+                    chain_key_hex: hex::encode(key),
+                    index,
+                }),
+            receiving_chain: session
+                .receiving_chain_state()
+                .map(|(key, index)| ChainState {
+                    chain_key_hex: hex::encode(key),
+                    index,
+                }),
             dh_step_count: session.dh_step_count(),
             initialized: session.is_initialized(),
             has_identity_secret: session.has_identity_secret(),
-            identity_secret_hex: session.identity_secret_bytes()
-                .map(|s| hex::encode(s)),
+            identity_secret_hex: session.identity_secret_bytes().map(hex::encode),
         }
     }
 
@@ -309,7 +317,9 @@ mod tests {
         let peer_id = "peer-1";
 
         // Create a session
-        manager.get_or_create_session(peer_id, &our_key, &their_pub).unwrap();
+        manager
+            .get_or_create_session(peer_id, &our_key, &their_pub)
+            .unwrap();
         assert_eq!(manager.session_count(), 1);
 
         // Save

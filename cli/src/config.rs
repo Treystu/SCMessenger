@@ -247,9 +247,11 @@ impl Config {
     pub fn add_bootstrap_node(&mut self, multiaddr: String) -> Result<()> {
         // Check for duplicates by IP:Port only (strip PeerID)
         let stripped = Self::strip_peer_id(&multiaddr);
-        if self.bootstrap_nodes.iter().any(|n| {
-            Self::strip_peer_id(n) == stripped
-        }) {
+        if self
+            .bootstrap_nodes
+            .iter()
+            .any(|n| Self::strip_peer_id(n) == stripped)
+        {
             anyhow::bail!("Bootstrap node already exists");
         }
         self.bootstrap_nodes.push(multiaddr);
@@ -260,16 +262,16 @@ impl Config {
     /// Remove a bootstrap node from the config
     pub fn remove_bootstrap_node(&mut self, multiaddr: &str) -> Result<()> {
         let stripped = Self::strip_peer_id(multiaddr);
-        let removed_count = self.bootstrap_nodes
+        let removed_count = self
+            .bootstrap_nodes
             .iter()
             .filter(|n| Self::strip_peer_id(n) == stripped)
             .count();
         if removed_count == 0 {
             anyhow::bail!("Bootstrap node not found");
         }
-        self.bootstrap_nodes.retain(|n| {
-            Self::strip_peer_id(n) != stripped
-        });
+        self.bootstrap_nodes
+            .retain(|n| Self::strip_peer_id(n) != stripped);
         self.save()?;
         Ok(())
     }

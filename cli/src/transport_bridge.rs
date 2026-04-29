@@ -44,6 +44,12 @@ pub struct TransportBridge {
     cli_capabilities: Vec<TransportType>,
 }
 
+impl Default for TransportBridge {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TransportBridge {
     /// Create a new transport bridge
     pub fn new() -> Self {
@@ -378,4 +384,3 @@ mod tests {
         assert!(latency1 < latency2); // Local+WiFiDirect should be faster
     }
 }
-

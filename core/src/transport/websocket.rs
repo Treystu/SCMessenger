@@ -8,10 +8,7 @@ use crate::transport::internet::InternetTransportError;
 use futures::{SinkExt, StreamExt};
 use libp2p::Multiaddr;
 use std::time::Duration;
-use tokio_tungstenite::{
-    connect_async,
-    tungstenite::client::IntoClientRequest,
-};
+use tokio_tungstenite::{connect_async, tungstenite::client::IntoClientRequest};
 use tracing::{debug, info, warn};
 
 /// WebSocket transport error types
@@ -34,7 +31,11 @@ pub enum WebSocketTransportError {
 /// WebSocket transport for relay connectivity
 pub struct WebSocketTransport {
     /// WebSocket stream for communication
-    inner: Option<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>>,
+    inner: Option<
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+    >,
     /// WebSocket URL
     url: String,
     /// Connection timeout
@@ -63,16 +64,20 @@ impl WebSocketTransport {
         info!("Connecting to WebSocket relay: {}", self.url);
 
         // Create client request
-        let request = self.url.clone().into_client_request()
+        let request = self
+            .url
+            .clone()
+            .into_client_request()
             .map_err(|e| WebSocketTransportError::InvalidUrl(e.to_string()))?;
 
         // Apply connection timeout
-        let (ws_stream, response) = tokio::time::timeout(
-            self.connect_timeout,
-            connect_async(request)
-        ).await
-        .map_err(|_| WebSocketTransportError::Timeout("WebSocket connection timeout".to_string()))?
-        .map_err(|e| WebSocketTransportError::ConnectionFailed(e.to_string()))?;
+        let (ws_stream, response) =
+            tokio::time::timeout(self.connect_timeout, connect_async(request))
+                .await
+                .map_err(|_| {
+                    WebSocketTransportError::Timeout("WebSocket connection timeout".to_string())
+                })?
+                .map_err(|e| WebSocketTransportError::ConnectionFailed(e.to_string()))?;
 
         debug!("WebSocket connection established: {:?}", response);
 
@@ -87,43 +92,51 @@ impl WebSocketTransport {
         if let Some(ref mut ws_stream) = self.inner {
             let msg = tokio_tungstenite::tungstenite::Message::Binary(data);
 
-            tokio::time::timeout(
-                Duration::from_secs(5),
-                ws_stream.send(msg)
-            ).await
-            .map_err(|_| WebSocketTransportError::Timeout("WebSocket send timeout".to_string()))?
-            .map_err(|e| WebSocketTransportError::SendFailed(e.to_string()))
+            tokio::time::timeout(Duration::from_secs(5), ws_stream.send(msg))
+                .await
+                .map_err(|_| {
+                    WebSocketTransportError::Timeout("WebSocket send timeout".to_string())
+                })?
+                .map_err(|e| WebSocketTransportError::SendFailed(e.to_string()))
         } else {
-            Err(WebSocketTransportError::ConnectionFailed("Not connected".to_string()))
+            Err(WebSocketTransportError::ConnectionFailed(
+                "Not connected".to_string(),
+            ))
         }
     }
 
     /// Receive data from WebSocket
     pub async fn recv(&mut self) -> Result<Vec<u8>, WebSocketTransportError> {
         if let Some(ref mut ws_stream) = self.inner {
-            tokio::time::timeout(
-                Duration::from_secs(5),
-                ws_stream.next()
-            ).await
-            .map_err(|_| WebSocketTransportError::Timeout("WebSocket receive timeout".to_string()))?
-            .ok_or_else(|| WebSocketTransportError::ReceiveFailed("Connection closed".to_string()))?
-            .map_err(|e| WebSocketTransportError::ReceiveFailed(e.to_string()))
-            .and_then(|msg| {
-                match msg {
+            tokio::time::timeout(Duration::from_secs(5), ws_stream.next())
+                .await
+                .map_err(|_| {
+                    WebSocketTransportError::Timeout("WebSocket receive timeout".to_string())
+                })?
+                .ok_or_else(|| {
+                    WebSocketTransportError::ReceiveFailed("Connection closed".to_string())
+                })?
+                .map_err(|e| WebSocketTransportError::ReceiveFailed(e.to_string()))
+                .and_then(|msg| match msg {
                     tokio_tungstenite::tungstenite::Message::Binary(data) => Ok(data),
                     tokio_tungstenite::tungstenite::Message::Text(text) => Ok(text.into_bytes()),
-                    _ => Err(WebSocketTransportError::ReceiveFailed("Unsupported message type".to_string())),
-                }
-            })
+                    _ => Err(WebSocketTransportError::ReceiveFailed(
+                        "Unsupported message type".to_string(),
+                    )),
+                })
         } else {
-            Err(WebSocketTransportError::ConnectionFailed("Not connected".to_string()))
+            Err(WebSocketTransportError::ConnectionFailed(
+                "Not connected".to_string(),
+            ))
         }
     }
 
     /// Close WebSocket connection
     pub async fn close(&mut self) -> Result<(), WebSocketTransportError> {
         if let Some(ref mut ws_stream) = self.inner {
-            ws_stream.close(None).await
+            ws_stream
+                .close(None)
+                .await
                 .map_err(|e| WebSocketTransportError::ConnectionFailed(e.to_string()))?;
             self.inner = None;
             info!("WebSocket transport closed");
@@ -151,7 +164,9 @@ fn multiaddr_to_websocket_url(addr: &Multiaddr) -> Result<String, WebSocketTrans
             libp2p::multiaddr::Protocol::Ip6(ip) => {
                 host = Some(format!("[{}]", ip));
             }
-            libp2p::multiaddr::Protocol::Dns(domain) | libp2p::multiaddr::Protocol::Dns4(domain) | libp2p::multiaddr::Protocol::Dns6(domain) => {
+            libp2p::multiaddr::Protocol::Dns(domain)
+            | libp2p::multiaddr::Protocol::Dns4(domain)
+            | libp2p::multiaddr::Protocol::Dns6(domain) => {
                 host = Some(domain.to_string());
             }
             libp2p::multiaddr::Protocol::Tcp(p) => {
@@ -170,14 +185,21 @@ fn multiaddr_to_websocket_url(addr: &Multiaddr) -> Result<String, WebSocketTrans
     }
 
     if !is_websocket {
-        return Err(WebSocketTransportError::InvalidUrl("Not a WebSocket address".to_string()));
+        return Err(WebSocketTransportError::InvalidUrl(
+            "Not a WebSocket address".to_string(),
+        ));
     }
 
-    let host = host.ok_or_else(|| WebSocketTransportError::InvalidUrl("No host in address".to_string()))?;
+    let host =
+        host.ok_or_else(|| WebSocketTransportError::InvalidUrl("No host in address".to_string()))?;
     let port = port.unwrap_or(80);
 
     // Determine scheme based on port or presence of Wss protocol
-    let scheme = if addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::Wss(_))) || port == 443 {
+    let scheme = if addr
+        .iter()
+        .any(|p| matches!(p, libp2p::multiaddr::Protocol::Wss(_)))
+        || port == 443
+    {
         "wss"
     } else {
         "ws"
@@ -187,18 +209,30 @@ fn multiaddr_to_websocket_url(addr: &Multiaddr) -> Result<String, WebSocketTrans
 }
 
 /// Enhanced error diagnostics for WebSocket connection failures
-pub fn diagnose_websocket_error(error: WebSocketTransportError, relay_addr: &Multiaddr) -> InternetTransportError {
+pub fn diagnose_websocket_error(
+    error: WebSocketTransportError,
+    relay_addr: &Multiaddr,
+) -> InternetTransportError {
     match error {
         WebSocketTransportError::InvalidUrl(msg) => {
             warn!("Invalid WebSocket URL for relay {}: {}", relay_addr, msg);
             InternetTransportError::ConfigError(format!("Invalid WebSocket URL: {}", msg))
         }
         WebSocketTransportError::ConnectionFailed(msg) => {
-            warn!("WebSocket connection failed for relay {}: {}", relay_addr, msg);
-            InternetTransportError::ConnectionFailed(format!("WebSocket connection failed: {}", msg))
+            warn!(
+                "WebSocket connection failed for relay {}: {}",
+                relay_addr, msg
+            );
+            InternetTransportError::ConnectionFailed(format!(
+                "WebSocket connection failed: {}",
+                msg
+            ))
         }
         WebSocketTransportError::HandshakeFailed(msg) => {
-            warn!("WebSocket handshake failed for relay {}: {}", relay_addr, msg);
+            warn!(
+                "WebSocket handshake failed for relay {}: {}",
+                relay_addr, msg
+            );
             InternetTransportError::ConnectionFailed(format!("WebSocket handshake failed: {}", msg))
         }
         WebSocketTransportError::SendFailed(msg) => {
@@ -219,7 +253,6 @@ pub fn diagnose_websocket_error(error: WebSocketTransportError, relay_addr: &Mul
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p::multiaddr::Protocol;
 
     #[test]
     fn test_multiaddr_to_websocket_url_ws() {
@@ -251,7 +284,8 @@ mod tests {
 
     #[test]
     fn test_websocket_transport_creation() {
-        let transport = WebSocketTransport::new("ws://localhost:8080".to_string(), Duration::from_secs(10));
+        let transport =
+            WebSocketTransport::new("ws://localhost:8080".to_string(), Duration::from_secs(10));
         assert!(!transport.is_connected());
         assert_eq!(transport.url, "ws://localhost:8080");
     }

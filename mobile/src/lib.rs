@@ -50,10 +50,15 @@ mod tests {
         let bob_pubkey = bob.get_identity_info().public_key_hex.unwrap();
 
         let envelope = alice
-            .prepare_message(bob_pubkey, "Hello from mobile!".to_string(), None)
+            .prepare_message(
+                &bob_pubkey,
+                "Hello from mobile!",
+                scmessenger_core::MessageType::Text,
+                None,
+            )
             .unwrap();
 
-        let msg = bob.receive_message(envelope).unwrap();
+        let msg = bob.receive_message(envelope.envelope_data).unwrap();
         assert_eq!(msg.text_content().unwrap(), "Hello from mobile!");
     }
 

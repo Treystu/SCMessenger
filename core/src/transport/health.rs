@@ -7,8 +7,8 @@ use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use web_time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, error, info, warn};
+use web_time::{SystemTime, UNIX_EPOCH};
 
 /// Connection state for a peer
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -95,14 +95,14 @@ impl ConnectionStats {
     pub fn record_message_success(&mut self, bytes: u64, latency_ms: u64) {
         self.messages_sent += 1;
         self.bytes_sent += bytes;
-        
+
         // Update average latency (moving average)
         if self.messages_sent > 1 {
             self.avg_latency_ms = (self.avg_latency_ms + latency_ms) / 2;
         } else {
             self.avg_latency_ms = latency_ms;
         }
-        
+
         self.last_activity = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -172,9 +172,9 @@ impl ConnectionStats {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
-        
+
         let age_ms = now_ms - self.last_activity;
-        
+
         // Connection is healthy if:
         // 1. It's currently connected
         // 2. Has recent activity (< 30 seconds)
@@ -182,8 +182,8 @@ impl ConnectionStats {
         self.state == ConnectionState::Connected
             && age_ms < 30000
             && self.successful_connections > 0
-            && (self.connection_attempts == 0 || 
-                (self.successful_connections as f64 / self.connection_attempts as f64) > 0.7)
+            && (self.connection_attempts == 0
+                || (self.successful_connections as f64 / self.connection_attempts as f64) > 0.7)
     }
 
     /// Calculate connection quality score (0.0-1.0)
@@ -192,7 +192,7 @@ impl ConnectionStats {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
-        
+
         let age_ms = now_ms - self.last_activity;
         let age_factor = if age_ms < 10000 {
             1.0
@@ -203,19 +203,19 @@ impl ConnectionStats {
         } else {
             0.2
         };
-        
+
         let success_rate = if self.connection_attempts > 0 {
             self.successful_connections as f64 / self.connection_attempts as f64
         } else {
             1.0
         };
-        
+
         let message_success_rate = if self.messages_sent + self.message_failures > 0 {
             self.messages_sent as f64 / (self.messages_sent + self.message_failures) as f64
         } else {
             1.0
         };
-        
+
         // Weighted score: connection success (40%), message success (40%), recency (20%)
         (success_rate * 0.4 + message_success_rate * 0.4 + age_factor * 0.2).clamp(0.0, 1.0)
     }
@@ -228,6 +228,7 @@ pub struct TransportHealthMonitor {
     /// Global transport metrics
     global_metrics: Arc<Mutex<GlobalTransportMetrics>>,
     /// Connection state change callbacks
+    #[allow(clippy::type_complexity)]
     state_change_callbacks: Arc<Mutex<Vec<Box<dyn Fn(PeerId, ConnectionState) + Send + Sync>>>>,
 }
 
@@ -236,7 +237,13 @@ impl std::fmt::Debug for TransportHealthMonitor {
         f.debug_struct("TransportHealthMonitor")
             .field("connection_stats", &self.connection_stats)
             .field("global_metrics", &self.global_metrics)
-            .field("state_change_callbacks", &format!("{} callbacks", self.state_change_callbacks.lock().unwrap().len()))
+            .field(
+                "state_change_callbacks",
+                &format!(
+                    "{} callbacks",
+                    self.state_change_callbacks.lock().unwrap().len()
+                ),
+            )
             .finish()
     }
 }
@@ -260,19 +267,21 @@ impl TransportHealthMonitor {
     /// Update connection state
     pub fn update_connection_state(&self, peer_id: PeerId, state: ConnectionState) {
         let mut stats = self.connection_stats.lock().unwrap();
-        let entry = stats.entry(peer_id).or_insert_with(|| ConnectionStats::new(peer_id));
+        let entry = stats
+            .entry(peer_id)
+            .or_insert_with(|| ConnectionStats::new(peer_id));
         entry.update_state(state.clone());
-        
+
         // Notify callbacks
         let callbacks = self.state_change_callbacks.lock().unwrap();
         for callback in callbacks.iter() {
             callback(peer_id, state.clone());
         }
-        
+
         // Update global metrics
         let mut global = self.global_metrics.lock().unwrap();
         global.record_connection_state_change(&state);
-        
+
         match state {
             ConnectionState::Connected => {
                 info!("Connection established to peer: {}", peer_id);
@@ -293,7 +302,7 @@ impl TransportHealthMonitor {
         if let Some(entry) = stats.get_mut(&peer_id) {
             entry.record_message_success(bytes, latency_ms);
         }
-        
+
         let mut global = self.global_metrics.lock().unwrap();
         global.record_message_success(bytes, latency_ms);
     }
@@ -304,7 +313,7 @@ impl TransportHealthMonitor {
         if let Some(entry) = stats.get_mut(&peer_id) {
             entry.record_message_failure();
         }
-        
+
         let mut global = self.global_metrics.lock().unwrap();
         global.record_message_failure();
     }
@@ -315,7 +324,7 @@ impl TransportHealthMonitor {
         if let Some(entry) = stats.get_mut(&peer_id) {
             entry.record_bytes_received(bytes);
         }
-        
+
         let mut global = self.global_metrics.lock().unwrap();
         global.record_bytes_received(bytes);
     }
@@ -323,9 +332,11 @@ impl TransportHealthMonitor {
     /// Record connection attempt
     pub fn record_connection_attempt(&self, peer_id: PeerId) {
         let mut stats = self.connection_stats.lock().unwrap();
-        let entry = stats.entry(peer_id).or_insert_with(|| ConnectionStats::new(peer_id));
+        let entry = stats
+            .entry(peer_id)
+            .or_insert_with(|| ConnectionStats::new(peer_id));
         entry.record_connection_attempt();
-        
+
         let mut global = self.global_metrics.lock().unwrap();
         global.record_connection_attempt();
     }
@@ -336,7 +347,7 @@ impl TransportHealthMonitor {
         if let Some(entry) = stats.get_mut(&peer_id) {
             entry.record_successful_connection();
         }
-        
+
         let mut global = self.global_metrics.lock().unwrap();
         global.record_successful_connection();
     }
@@ -347,7 +358,7 @@ impl TransportHealthMonitor {
         if let Some(entry) = stats.get_mut(&peer_id) {
             entry.record_connection_failure();
         }
-        
+
         let mut global = self.global_metrics.lock().unwrap();
         global.record_connection_failure();
     }
@@ -381,7 +392,8 @@ impl TransportHealthMonitor {
     /// Get healthy connections
     pub fn get_healthy_connections(&self) -> Vec<PeerId> {
         let stats = self.connection_stats.lock().unwrap();
-        stats.iter()
+        stats
+            .iter()
             .filter(|(_, stat)| stat.is_healthy())
             .map(|(peer_id, _)| *peer_id)
             .collect()
@@ -390,7 +402,8 @@ impl TransportHealthMonitor {
     /// Get unhealthy connections
     pub fn get_unhealthy_connections(&self) -> Vec<PeerId> {
         let stats = self.connection_stats.lock().unwrap();
-        stats.iter()
+        stats
+            .iter()
             .filter(|(_, stat)| !stat.is_healthy())
             .map(|(peer_id, _)| *peer_id)
             .collect()
@@ -411,15 +424,16 @@ impl TransportHealthMonitor {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
-        
+
         let cutoff_ms = now_ms - (max_age_secs * 1000);
-        
+
         let mut stats = self.connection_stats.lock().unwrap();
-        let stale_peers: Vec<PeerId> = stats.iter()
+        let stale_peers: Vec<PeerId> = stats
+            .iter()
             .filter(|(_, stat)| stat.last_activity < cutoff_ms)
             .map(|(peer_id, _)| *peer_id)
             .collect();
-        
+
         for peer_id in stale_peers {
             debug!("Removing stale connection entry for peer: {}", peer_id);
             stats.remove(&peer_id);
@@ -527,15 +541,18 @@ impl GlobalTransportMetrics {
                     self.peak_active_connections = self.current_active_connections;
                 }
             }
-            ConnectionState::Disconnected | ConnectionState::Failed => {
-                if self.current_active_connections > 0 {
-                    self.current_active_connections -= 1;
-                }
+            ConnectionState::Disconnected | ConnectionState::Failed
+                if self.current_active_connections > 0 =>
+            {
+                self.current_active_connections -= 1;
             }
             _ => {}
         }
-        
-        let count = self.connection_state_counts.entry(state.clone()).or_insert(0);
+
+        let count = self
+            .connection_state_counts
+            .entry(state.clone())
+            .or_insert(0);
         *count += 1;
     }
 
@@ -545,24 +562,25 @@ impl GlobalTransportMetrics {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
-        
+
         let uptime_secs = (now - self.start_timestamp) / 1000;
         if uptime_secs == 0 {
             return 1.0; // Just started
         }
-        
+
         let connection_success_rate = if self.total_connection_attempts > 0 {
             self.total_successful_connections as f64 / self.total_connection_attempts as f64
         } else {
             1.0
         };
-        
+
         let message_success_rate = if self.total_messages_sent + self.total_message_failures > 0 {
-            self.total_messages_sent as f64 / (self.total_messages_sent + self.total_message_failures) as f64
+            self.total_messages_sent as f64
+                / (self.total_messages_sent + self.total_message_failures) as f64
         } else {
             1.0
         };
-        
+
         let connection_stability = if self.total_successful_connections > 0 {
             let avg_duration = if self.current_active_connections > 0 {
                 uptime_secs / self.current_active_connections as u64
@@ -573,9 +591,10 @@ impl GlobalTransportMetrics {
         } else {
             1.0
         };
-        
+
         // Weighted score: connection success (30%), message success (40%), stability (30%)
-        (connection_success_rate * 0.3 + message_success_rate * 0.4 + connection_stability * 0.3).clamp(0.0, 1.0)
+        (connection_success_rate * 0.3 + message_success_rate * 0.4 + connection_stability * 0.3)
+            .clamp(0.0, 1.0)
     }
 
     /// Get uptime in seconds
@@ -605,7 +624,10 @@ mod tests {
         stats.record_message_success(2048, 60);
 
         let score = stats.quality_score();
-        assert!(score > 0.8, "Good connection should have high quality score");
+        assert!(
+            score > 0.8,
+            "Good connection should have high quality score"
+        );
         assert!(stats.is_healthy(), "Good connection should be healthy");
     }
 
@@ -613,13 +635,13 @@ mod tests {
     fn test_connection_stats_unhealthy() {
         let peer_id = identity::Keypair::generate_ed25519().public().to_peer_id();
         let mut stats = ConnectionStats::new(peer_id);
-        
+
         // Simulate bad connection
         stats.record_connection_attempt();
         stats.record_connection_attempt();
         stats.record_connection_failure();
         stats.record_message_failure();
-        
+
         let score = stats.quality_score();
         assert!(score < 0.5, "Bad connection should have low quality score");
         assert!(!stats.is_healthy(), "Bad connection should not be healthy");
@@ -629,14 +651,14 @@ mod tests {
     fn test_transport_health_monitor() {
         let monitor = TransportHealthMonitor::new();
         let peer_id = identity::Keypair::generate_ed25519().public().to_peer_id();
-        
+
         // Test connection lifecycle
         monitor.update_connection_state(peer_id, ConnectionState::Connecting);
         monitor.record_connection_attempt(peer_id);
         monitor.update_connection_state(peer_id, ConnectionState::Connected);
         monitor.record_successful_connection(peer_id);
         monitor.record_message_success(peer_id, 1024, 50);
-        
+
         // Verify stats
         let stats = monitor.get_connection_stats(&peer_id);
         assert!(stats.is_some(), "Should have connection stats");
@@ -644,7 +666,7 @@ mod tests {
         assert_eq!(stats.state, ConnectionState::Connected);
         assert_eq!(stats.messages_sent, 1);
         assert_eq!(stats.successful_connections, 1);
-        
+
         // Verify global metrics
         let metrics = monitor.get_global_metrics();
         assert_eq!(metrics.total_successful_connections, 1);
@@ -654,16 +676,18 @@ mod tests {
     #[test]
     fn test_global_metrics_health_score() {
         let mut metrics = GlobalTransportMetrics::new();
-        
+
         // Simulate good transport performance
         for _ in 0..10 {
             metrics.record_connection_attempt();
             metrics.record_successful_connection();
             metrics.record_message_success(1024, 50);
         }
-        
+
         let score = metrics.health_score();
-        assert!(score > 0.9, "Good transport metrics should have high health score");
+        assert!(
+            score > 0.9,
+            "Good transport metrics should have high health score"
+        );
     }
 }
-

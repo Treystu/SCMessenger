@@ -128,12 +128,13 @@
         "protocol_implementation",
         "proven_compatibility"
       ],
-      "role": "rust_coder",
+      "role": "orchestrator",
       "size": "1.5t",
       "recommended_for": [
-        "rust_core",
-        "protocol_work",
-        "compatibility"
+        "P0_orchestration",
+        "P0_coordination",
+        "P0_verification",
+        "rust_core"
       ]
     },
     "deepseek-v4-pro:cloud": {
@@ -142,15 +143,25 @@
         "rca",
         "protocol_correctness",
         "proofs",
-        "multi_step_reasoning"
+        "multi_step_reasoning",
+        "architecture_planning",
+        "implementation_ordering",
+        "security_audit",
+        "adversarial_review",
+        "crypto_validation",
+        "wiring_verification"
       ],
-      "role": "deep_analyst",
+      "role": "architect_planner_validator",
       "size": "1.6T",
       "recommended_for": [
-        "P0_rca",
-        "P0_analysis",
-        "correctness_proof",
-        "deep_dive"
+        "P0_planning",
+        "P0_architecture",
+        "P0_security",
+        "P0_crypto",
+        "P0_validation",
+        "protocol_implementation",
+        "wiring_verification",
+        "adversarial_review"
       ]
     },
     "deepseek-v4-flash:cloud": {
@@ -532,7 +543,7 @@
     }
   },
   "source_of_truth": "https://ollama.com/api/tags",
-  "last_updated": "2026-04-28T13:42:00Z",
+  "last_updated": "2026-04-28T22:30:00Z",
   "cloud_suffix": ":cloud",
   "validation_rules": {
     "any_model_with_cloud_suffix": "available_via_ollama_cloud",

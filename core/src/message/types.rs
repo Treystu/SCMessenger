@@ -83,11 +83,11 @@ pub struct Envelope {
     pub ciphertext: Vec<u8>,
     /// Double Ratchet: sender's current DH ratchet public key (32 bytes).
     /// `None` for legacy per-message ECDH envelopes (backward compatible).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub ratchet_dh_public: Option<Vec<u8>>,
     /// Double Ratchet: message number in the current sending chain.
     /// `None` for legacy per-message ECDH envelopes.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub ratchet_message_number: Option<u32>,
 }
 

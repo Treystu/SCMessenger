@@ -19,36 +19,52 @@ mod tests {
     #[test]
     fn test_cli_parse_contact_add() {
         let cli = Cli::parse_from([
-            "scm", "contact", "add",
+            "scm",
+            "contact",
+            "add",
             "12D3KooTest12345678901234567890123456789012345678901234",
             "abcd1234efgh5678",
-            "--name", "Alice",
+            "--name",
+            "Alice",
         ]);
-        assert!(matches!(cli.command, Commands::Contact { action: ContactAction::Add { peer_id, public_key: _, name: Some(n) } } if peer_id.starts_with("12D3Koo") && n == "Alice"));
+        assert!(
+            matches!(cli.command, Commands::Contact { action: ContactAction::Add { peer_id, public_key: _, name: Some(n) } } if peer_id.starts_with("12D3Koo") && n == "Alice")
+        );
     }
 
     #[test]
     fn test_cli_parse_contact_list() {
         let cli = Cli::parse_from(["scm", "contact", "list"]);
-        assert!(matches!(cli.command, Commands::Contact { action: ContactAction::List }));
+        assert!(matches!(
+            cli.command,
+            Commands::Contact {
+                action: ContactAction::List
+            }
+        ));
     }
 
     #[test]
     fn test_cli_parse_block_add() {
         let cli = Cli::parse_from(["scm", "block", "add", "test-peer-id"]);
-        assert!(matches!(cli.command, Commands::Block { action: BlockAction::Add { peer_id, .. } } if peer_id == "test-peer-id"));
+        assert!(
+            matches!(cli.command, Commands::Block { action: BlockAction::Add { peer_id, .. } } if peer_id == "test-peer-id")
+        );
     }
 
     #[test]
     fn test_cli_parse_relay() {
         let cli = Cli::parse_from(["scm", "relay", "--listen", "/ip4/127.0.0.1/tcp/9001"]);
-        assert!(matches!(cli.command, Commands::Relay { listen, .. } if listen == "/ip4/127.0.0.1/tcp/9001"));
+        assert!(
+            matches!(cli.command, Commands::Relay { listen, .. } if listen == "/ip4/127.0.0.1/tcp/9001")
+        );
     }
 
     #[test]
     fn test_cli_parse_send() {
         let cli = Cli::parse_from(["scm", "send", "recipient-id", "hello world"]);
-        assert!(matches!(cli.command, Commands::Send { recipient, message } if recipient == "recipient-id" && message == "hello world"));
+        assert!(
+            matches!(cli.command, Commands::Send { recipient, message } if recipient == "recipient-id" && message == "hello world")
+        );
     }
 
     #[test]
@@ -59,38 +75,66 @@ mod tests {
 
     #[test]
     fn test_cli_parse_identity_export() {
-        let cli = Cli::parse_from(["scm", "identity", "export", "--passphrase", "secret", "--output", "backup.json"]);
-        assert!(matches!(cli.command, Commands::Identity { action: Some(IdentityAction::Export { ref passphrase, output: Some(ref o) }) } if passphrase == "secret" && o == "backup.json"));
+        let cli = Cli::parse_from([
+            "scm",
+            "identity",
+            "export",
+            "--passphrase",
+            "secret",
+            "--output",
+            "backup.json",
+        ]);
+        assert!(
+            matches!(cli.command, Commands::Identity { action: Some(IdentityAction::Export { ref passphrase, output: Some(ref o) }) } if passphrase == "secret" && o == "backup.json")
+        );
     }
 
     #[test]
     fn test_cli_parse_identity_import() {
-        let cli = Cli::parse_from(["scm", "identity", "import", "--passphrase", "secret", "--backup", "data"]);
-        assert!(matches!(cli.command, Commands::Identity { action: Some(IdentityAction::Import { ref passphrase, backup: Some(ref b), .. }) } if passphrase == "secret" && b == "data"));
+        let cli = Cli::parse_from([
+            "scm",
+            "identity",
+            "import",
+            "--passphrase",
+            "secret",
+            "--backup",
+            "data",
+        ]);
+        assert!(
+            matches!(cli.command, Commands::Identity { action: Some(IdentityAction::Import { ref passphrase, backup: Some(ref b), .. }) } if passphrase == "secret" && b == "data")
+        );
     }
 
     #[test]
     fn test_cli_parse_contact_remove() {
         let cli = Cli::parse_from(["scm", "contact", "remove", "Alice"]);
-        assert!(matches!(cli.command, Commands::Contact { action: ContactAction::Remove { ref contact } } if contact == "Alice"));
+        assert!(
+            matches!(cli.command, Commands::Contact { action: ContactAction::Remove { ref contact } } if contact == "Alice")
+        );
     }
 
     #[test]
     fn test_cli_parse_contact_search() {
         let cli = Cli::parse_from(["scm", "contact", "search", "query"]);
-        assert!(matches!(cli.command, Commands::Contact { action: ContactAction::Search { ref query } } if query == "query"));
+        assert!(
+            matches!(cli.command, Commands::Contact { action: ContactAction::Search { ref query } } if query == "query")
+        );
     }
 
     #[test]
     fn test_cli_parse_block_remove() {
         let cli = Cli::parse_from(["scm", "block", "remove", "test-peer-id"]);
-        assert!(matches!(cli.command, Commands::Block { action: BlockAction::Remove { peer_id, .. } } if peer_id == "test-peer-id"));
+        assert!(
+            matches!(cli.command, Commands::Block { action: BlockAction::Remove { peer_id, .. } } if peer_id == "test-peer-id")
+        );
     }
 
     #[test]
     fn test_cli_parse_block_delete() {
         let cli = Cli::parse_from(["scm", "block", "delete", "test-peer-id"]);
-        assert!(matches!(cli.command, Commands::Block { action: BlockAction::Delete { peer_id, .. } } if peer_id == "test-peer-id"));
+        assert!(
+            matches!(cli.command, Commands::Block { action: BlockAction::Delete { peer_id, .. } } if peer_id == "test-peer-id")
+        );
     }
 }
 
@@ -312,12 +356,7 @@ pub enum ContactAction {
 
 #[derive(Subcommand)]
 pub enum ConfigAction {
-    Set {
-        key: String,
-        value: String,
-    },
-    Get {
-        key: String,
-    },
+    Set { key: String, value: String },
+    Get { key: String },
     List,
 }

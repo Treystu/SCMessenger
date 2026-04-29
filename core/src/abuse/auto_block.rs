@@ -12,9 +12,9 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
+use crate::abuse::reputation::EnhancedAbuseReputationManager;
 use crate::store::blocked::BlockedManager;
 use crate::transport::reputation::ReputationScore;
-use crate::abuse::reputation::EnhancedAbuseReputationManager;
 
 /// Configuration for automatic blocking behavior
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -203,7 +203,11 @@ impl AutoBlockEngine {
 
     /// Check if a peer is exempt from auto-blocking
     pub fn is_exempt(&self, peer_id: &str) -> bool {
-        self.config.read().exempt_peer_ids.iter().any(|p| p == peer_id)
+        self.config
+            .read()
+            .exempt_peer_ids
+            .iter()
+            .any(|p| p == peer_id)
     }
 
     /// Get the audit log entries
@@ -248,9 +252,9 @@ fn current_epoch_secs() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::abuse::spam_detection::{SpamDetectionConfig, SpamDetectionEngine};
     use crate::store::backend::MemoryStorage;
     use crate::store::contacts::ContactManager;
-    use crate::abuse::spam_detection::{SpamDetectionConfig, SpamDetectionEngine};
 
     fn make_engine() -> AutoBlockEngine {
         let backend = Arc::new(MemoryStorage::new());
@@ -262,11 +266,7 @@ mod tests {
             blocked.clone(),
         );
         let reputation_mgr = Arc::new(EnhancedAbuseReputationManager::new(1000, spam_detector));
-        AutoBlockEngine::new(
-            AutoBlockConfig::default(),
-            blocked,
-            reputation_mgr,
-        )
+        AutoBlockEngine::new(AutoBlockConfig::default(), blocked, reputation_mgr)
     }
 
     #[test]

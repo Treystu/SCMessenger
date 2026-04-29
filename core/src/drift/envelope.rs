@@ -20,9 +20,9 @@
 /// [N]  ciphertext
 use super::{DriftError, DRIFT_VERSION};
 use crate::message::Envelope;
+use ed25519_dalek::Signer;
 use uuid::Uuid;
 use web_time::{SystemTime, UNIX_EPOCH};
-use ed25519_dalek::Signer;
 
 /// Compression threshold: payloads larger than this are LZ4-compressed.
 /// 256 bytes is the crossover point where LZ4 compression typically saves
@@ -155,8 +155,8 @@ impl DriftEnvelope {
         // Header (18 bytes)
         buf.push(self.version);
         // Encode envelope_type with compression flag
-        let type_byte = self.envelope_type.as_u8()
-            | if self.compressed { COMPRESSION_FLAG } else { 0 };
+        let type_byte =
+            self.envelope_type.as_u8() | if self.compressed { COMPRESSION_FLAG } else { 0 };
         buf.push(type_byte);
         buf.extend_from_slice(&self.message_id);
 
@@ -296,7 +296,10 @@ impl DriftEnvelope {
                 dh_key.copy_from_slice(&data[offset..offset + 32]);
                 offset += 32;
                 let msg_num = u32::from_le_bytes([
-                    data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
+                    data[offset],
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
                 ]);
                 (Some(dh_key), Some(msg_num))
             } else {
@@ -399,22 +402,27 @@ impl DriftEnvelope {
         let ttl_expiry = created_at + 604800;
 
         // Convert Vec<u8> fields to fixed-size arrays
-        let sender_public_key: [u8; 32] = legacy.sender_public_key
+        let sender_public_key: [u8; 32] = legacy
+            .sender_public_key
             .try_into()
             .map_err(|_| DriftError::IoError("Invalid sender public key length".into()))?;
 
-        let ephemeral_public_key: [u8; 32] = legacy.ephemeral_public_key
+        let ephemeral_public_key: [u8; 32] = legacy
+            .ephemeral_public_key
             .try_into()
             .map_err(|_| DriftError::IoError("Invalid ephemeral public key length".into()))?;
 
-        let nonce: [u8; 24] = legacy.nonce
+        let nonce: [u8; 24] = legacy
+            .nonce
             .try_into()
             .map_err(|_| DriftError::IoError("Invalid nonce length".into()))?;
 
         // Create the envelope without signature first
-        let ratchet_dh_public = legacy.ratchet_dh_public
+        let ratchet_dh_public = legacy
+            .ratchet_dh_public
             .map(|v| -> Result<[u8; 32], DriftError> {
-                v.try_into().map_err(|_| DriftError::IoError("Invalid ratchet_dh_public length".into()))
+                v.try_into()
+                    .map_err(|_| DriftError::IoError("Invalid ratchet_dh_public length".into()))
             })
             .transpose()?;
 
@@ -426,7 +434,7 @@ impl DriftEnvelope {
             recipient_hint,
             created_at,
             ttl_expiry,
-            hop_count: 0, // Initial hop count
+            hop_count: 0,  // Initial hop count
             priority: 128, // Medium priority
             sender_public_key,
             ephemeral_public_key,
@@ -451,7 +459,9 @@ impl DriftEnvelope {
 
         // Header and routing fields
         hasher.update(&[self.version]);
-        hasher.update(&[self.envelope_type.as_u8() | if self.compressed { COMPRESSION_FLAG } else { 0 }]);
+        hasher.update(&[
+            self.envelope_type.as_u8() | if self.compressed { COMPRESSION_FLAG } else { 0 }
+        ]);
         hasher.update(&self.message_id);
         hasher.update(&self.recipient_hint);
         hasher.update(&self.created_at.to_le_bytes());
@@ -734,10 +744,18 @@ mod tests {
 
         // The serialized form should be smaller than uncompressed
         let uncompressed_size = DriftEnvelope::FIXED_OVERHEAD + 5000;
-        assert!(bytes.len() < uncompressed_size, "Compressed {} < uncompressed {}", bytes.len(), uncompressed_size);
+        assert!(
+            bytes.len() < uncompressed_size,
+            "Compressed {} < uncompressed {}",
+            bytes.len(),
+            uncompressed_size
+        );
 
         // The type byte should have the compression flag set
-        assert!(bytes[1] & COMPRESSION_FLAG != 0, "Compression flag should be set");
+        assert!(
+            bytes[1] & COMPRESSION_FLAG != 0,
+            "Compression flag should be set"
+        );
 
         let restored = DriftEnvelope::from_bytes(&bytes).unwrap();
         assert!(restored.compressed);

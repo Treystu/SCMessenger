@@ -2,6 +2,8 @@
 //
 // Cross-platform (macOS, Linux, Windows) command-line interface for SCMessenger.
 
+#![allow(dead_code, unused)]
+
 mod api;
 mod ble_daemon;
 mod ble_mesh;
@@ -20,9 +22,8 @@ use scmessenger_core::store::{Contact, ContactManager, MessageDirection, Outbox,
 use scmessenger_core::transport::abstraction::TransportType;
 use scmessenger_core::transport::{self, SwarmEvent};
 use scmessenger_core::wasm_support::rpc::{
-    notif_delivery_status, notif_message_received, notif_peer_discovered, rpc_error, rpc_result,
-    ClientIntent, DeliveryStatusParams, JsonRpcErrorBody, MeshTopologyUpdateParams,
-    MessageReceivedParams, PeerDiscoveredParams,
+    notif_delivery_status, notif_message_received, notif_peer_discovered, DeliveryStatusParams,
+    MeshTopologyUpdateParams, MessageReceivedParams, PeerDiscoveredParams,
 };
 use scmessenger_core::IronCore;
 use std::collections::HashMap;
@@ -564,7 +565,7 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
             None => println!("{}", "No seniority timestamp available".dimmed()),
         },
         Some(IdentityAction::RegistrationState { identity_id }) => {
-            let state = core.get_registration_state(identity_id.clone());
+            let state = core.get_registration_state(&identity_id);
             println!("{}", "Registration State".bold());
             println!("  Identity:   {}", identity_id.bright_cyan());
             println!("  State:      {}", state.state);
@@ -577,7 +578,7 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
         }
         Some(IdentityAction::SignData { data_hex }) => {
             let data = hex::decode(&data_hex).context("Invalid hex data")?;
-            let result = core.sign_data(data).context("Failed to sign data")?;
+            let result = core.sign_data(&data).context("Failed to sign data")?;
             println!("{}", "Signature Result".bold());
             println!(
                 "  Signature:  {}",
@@ -715,10 +716,19 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             // and verify it matches the user-supplied public key.
             let canonical_pk = core
                 .extract_public_key_from_peer_id(peer_id.clone())
-                .context("Failed to derive public key from Peer ID — is it a valid libp2p Peer ID?")?;
+                .context(
+                    "Failed to derive public key from Peer ID — is it a valid libp2p Peer ID?",
+                )?;
             if canonical_pk.to_lowercase() != public_key.to_lowercase() {
-                eprintln!("{} The provided public key does not match the Peer ID.", "⚠ Error:".red());
-                eprintln!("  Peer ID {} resolves to public key: {}", peer_id.dimmed(), canonical_pk.yellow());
+                eprintln!(
+                    "{} The provided public key does not match the Peer ID.",
+                    "⚠ Error:".red()
+                );
+                eprintln!(
+                    "  Peer ID {} resolves to public key: {}",
+                    peer_id.dimmed(),
+                    canonical_pk.yellow()
+                );
                 eprintln!("  You provided public key: {}", public_key.dimmed());
                 return Ok(());
             }
@@ -914,31 +924,72 @@ async fn cmd_config(action: ConfigAction) -> Result<()> {
             for (key, value) in config.list() {
                 println!("  {:<20} {}", key.bright_cyan(), value);
             }
-
         }
 
-        ConfigAction::Privacy { padding, onion, cover, timing } => {
+        ConfigAction::Privacy {
+            padding,
+            onion,
+            cover,
+            timing,
+        } => {
             let data_dir = config::Config::data_dir()?;
             let storage_path = data_dir.join("storage");
             let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
-            
-            let mut p: privacy::PrivacyConfig = serde_json::from_str(&core.get_privacy_config())?;
-            
+
+            let mut p: scmessenger_core::privacy::PrivacyConfig =
+                serde_json::from_str(&core.get_privacy_config())?;
+
             if padding.is_none() && onion.is_none() && cover.is_none() && timing.is_none() {
                 // Just show current config if no flags provided
                 println!("{}", "Privacy Configuration".bold());
-                println!("  Message Padding:   {}", if p.message_padding_enabled { "ON".green() } else { "OFF".red() });
-                println!("  Onion Routing:      {}", if p.onion_routing_enabled { "ON".green() } else { "OFF".red() });
-                println!("  Cover Traffic:      {}", if p.cover_traffic_enabled { "ON".green() } else { "OFF".red() });
-                println!("  Timing Obfuscation: {}", if p.timing_obfuscation_enabled { "ON".green() } else { "OFF".red() });
+                println!(
+                    "  Message Padding:   {}",
+                    if p.message_padding_enabled {
+                        "ON".green()
+                    } else {
+                        "OFF".red()
+                    }
+                );
+                println!(
+                    "  Onion Routing:      {}",
+                    if p.onion_routing_enabled {
+                        "ON".green()
+                    } else {
+                        "OFF".red()
+                    }
+                );
+                println!(
+                    "  Cover Traffic:      {}",
+                    if p.cover_traffic_enabled {
+                        "ON".green()
+                    } else {
+                        "OFF".red()
+                    }
+                );
+                println!(
+                    "  Timing Obfuscation: {}",
+                    if p.timing_obfuscation_enabled {
+                        "ON".green()
+                    } else {
+                        "OFF".red()
+                    }
+                );
                 return Ok(());
             }
 
-            if let Some(v) = padding { p.message_padding_enabled = v; }
-            if let Some(v) = onion { p.onion_routing_enabled = v; }
-            if let Some(v) = cover { p.cover_traffic_enabled = v; }
-            if let Some(v) = timing { p.timing_obfuscation_enabled = v; }
-            
+            if let Some(v) = padding {
+                p.message_padding_enabled = v;
+            }
+            if let Some(v) = onion {
+                p.onion_routing_enabled = v;
+            }
+            if let Some(v) = cover {
+                p.cover_traffic_enabled = v;
+            }
+            if let Some(v) = timing {
+                p.timing_obfuscation_enabled = v;
+            }
+
             core.set_privacy_config(serde_json::to_string(&p)?)?;
             println!("{} Privacy configuration updated.", "✓".green());
         }
@@ -1075,7 +1126,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     };
 
     // ── Connection Ledger — persistent peer memory ──────────────────────
-    let mut connection_ledger = ledger::ConnectionLedger::load(&data_dir)?;
+    let connection_ledger = ledger::ConnectionLedger::load(&data_dir)?;
 
     // Subscribe to any topics discovered in the ledger from past sessions
     let known_topics = connection_ledger.all_known_topics();
@@ -1297,7 +1348,9 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                         // Attempt to request address reflection
                         // If this succeeds, we'll get the current address
                         // If it fails (no connection), we'll still dial with current address
-                        let _ = swarm_refresh_clone.request_address_reflection(peer_id).await;
+                        let _ = swarm_refresh_clone
+                            .request_address_reflection(peer_id)
+                            .await;
                     }
                 }
             }
@@ -1356,8 +1409,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                      let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::PeerDiscovered {
                                          peer_id: peer_id.to_string(),
                                          transport: "tcp".to_string(),
-                                         public_key,
-                                         identity,
+                                         public_key: public_key.unwrap_or_default(),
+                                         identity: identity.unwrap_or_default(),
                                      }));
                                      let n = notif_peer_discovered(PeerDiscoveredParams {
                                          peer_id: peer_id.to_string(),
@@ -1527,12 +1580,12 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                             // Forward onion-routed packet to next hop
                                             let next_hop_hex = msg.recipient_id.clone();
                                             let payload = msg.payload.clone();
-                                            
+
                                             if let Ok(next_hop_bytes) = hex::decode(&next_hop_hex) {
                                                 // Convert Ed25519 PK to libp2p PeerId
-                                                if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from(&next_hop_bytes[..32]) {
-                                                    let next_peer_id = libp2p::PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_pk));
-                                                    
+                                                if let Ok(keypair) = libp2p::identity::ed25519::Keypair::try_from_bytes(&mut next_hop_bytes[..32].to_vec()) {
+                                                    let next_peer_id = libp2p::PeerId::from_public_key(&keypair.public().into());
+
                                                     tracing::info!("Relaying onion packet from {} to next hop {}", peer_id, next_peer_id);
                                                     let swarm_clone = swarm_handle.clone();
                                                     tokio::spawn(async move {
@@ -1641,11 +1694,11 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                             }
                             server::UiCommand::ContactList => {
                                 if let Ok(list) = contacts_rx.list() {
-                                    let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ContactList { contacts: list }));
+                                    let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ContactList { contacts: list.into_iter().map(|c| serde_json::to_value(c).unwrap_or_default()).collect() }));
                                 }
                             }
                             server::UiCommand::HistoryList { peer_id, limit } => {
-                                let l = limit.unwrap_or(50) as u32;
+                                let l = limit.unwrap_or(50);
                                 if let Ok(messages) = history_rx.conversation(peer_id.clone(), l) {
                                     let history_messages = messages.into_iter().map(|m| {
                                         crate::api::HistoryMessage {
@@ -1657,7 +1710,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                             },
                                             timestamp: m.timestamp,
                                         }
-                                    }).collect();
+                                    }).collect::<Vec<_>>();
+                                    let history_messages: Vec<serde_json::Value> = history_messages.into_iter().map(|m| serde_json::to_value(m).unwrap_or_default()).collect();
                                     let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::HistoryList {
                                         peer_id,
                                         messages: history_messages
@@ -1692,7 +1746,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
                                      if let Some(pk) = pk_opt {
                                          // prepare_message_with_id automatically saves outgoing history
-        if let Ok(prep) = core_rx.prepare_message_with_id(pk, message, None) {
+        if let Ok(prep) = core_rx.prepare_message_with_id(&pk, &message, scmessenger_core::MessageType::Text, None) {
                                              if swarm_handle.send_message(target, prep.envelope_data, None, None).await.is_ok() {
                                                  let mid = id.clone().unwrap_or_default();
                                                  let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::MessageStatus {
@@ -1727,7 +1781,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                         .with_nickname(name.unwrap_or(peer_id));
                                     let _ = contacts_rx.add(contact);
                                     if let Ok(list) = contacts_rx.list() {
-                                        let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ContactList { contacts: list }));
+                                        let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ContactList { contacts: list.into_iter().map(|c| serde_json::to_value(c).unwrap_or_default()).collect() }));
                                     }
                                 }
                             }
@@ -1736,7 +1790,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                  // contacts.remove takes peer_id string
                                  if contacts_rx.remove(contact).is_ok() {
                                      if let Ok(list) = contacts_rx.list() {
-                                         let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ContactList { contacts: list }));
+                                         let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ContactList { contacts: list.into_iter().map(|c| serde_json::to_value(c).unwrap_or_default()).collect() }));
                                      }
                                  }
                             }
@@ -1745,7 +1799,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                     let value = cfg.get(&key);
                                     let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ConfigValue {
                                         key: key.clone(),
-                                        value,
+                                        value: value.unwrap_or_default(),
                                     }));
                                 }
                             }
@@ -1753,7 +1807,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                 if let Ok(cfg) = config::Config::load() {
                                     let config_data = cfg.list();
                                     let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::ConfigData {
-                                        config: config_data,
+                                        config: serde_json::to_value(&config_data).unwrap_or_default(),
                                     }));
                                 }
                             }
@@ -1790,27 +1844,25 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                 std::process::exit(0);
                             }
                             server::UiCommand::DaemonRpc { id, intent } => {
+                                let intent: server::ClientIntent = serde_json::from_str(&intent).unwrap_or(server::ClientIntent::GetIdentity);
                                 let push = |result: serde_json::Value| {
-                                    let resp = rpc_result(id.clone(), result);
+                                    let resp = server::rpc_result(Some(serde_json::Value::String(id.clone())), result);
                                     if let Ok(v) = serde_json::to_value(&resp) {
                                         let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
                                     }
                                 };
                                 let push_err = |code: i32, msg: String| {
-                                    let resp = rpc_error(
-                                        id.clone(),
-                                        JsonRpcErrorBody {
-                                            code,
-                                            message: msg,
-                                            data: None,
-                                        },
+                                    let resp = server::rpc_error(
+                                        Some(serde_json::Value::String(id.clone())),
+                                        code,
+                                        msg,
                                     );
                                     if let Ok(v) = serde_json::to_value(&resp) {
                                         let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
                                     }
                                 };
                                 match intent {
-                                    ClientIntent::GetIdentity {} => {
+                                    server::ClientIntent::GetIdentity => {
                                         let i = core_rx.get_identity_info();
                                         push(serde_json::json!({
                                             "peer_id": i.identity_id,
@@ -1820,7 +1872,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                             "nickname": i.nickname,
                                         }));
                                     }
-                                    ClientIntent::ScanPeers {} => {
+                                    server::ClientIntent::ScanPeers => {
                                         let peers: Vec<String> = peers_rx
                                             .lock()
                                             .await
@@ -1829,7 +1881,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                             .collect();
                                         push(serde_json::json!({ "peers": peers }));
                                     }
-                                    ClientIntent::GetTopology {} => {
+                                    server::ClientIntent::GetTopology => {
                                         let peer_count = peers_rx.lock().await.len();
                                         let (known_peers, bootstrap_nodes) = {
                                             let l = ledger_rx.lock().await;
@@ -1849,7 +1901,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                             push(v);
                                         }
                                     }
-                                    ClientIntent::SendMessage {
+                                    server::ClientIntent::SendMessage {
                                         recipient,
                                         message,
                                         id: msg_id,
@@ -1876,7 +1928,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                             push_err(-32002, "No public key for recipient".into());
                                             continue;
                                         };
-        match core_rx.prepare_message_with_id(pk, message, None) {
+        match core_rx.prepare_message_with_id(&pk, &message, scmessenger_core::MessageType::Text, None) {
                                             Ok(prep) => {
                                                 if swarm_handle
                                                     .send_message(target, prep.envelope_data, None, None)
@@ -2066,8 +2118,14 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     let listen_multiaddr: libp2p::Multiaddr =
         listen_addr.parse().context("Invalid listen multiaddr")?;
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);
-    let swarm_handle =
-        transport::start_swarm(network_keypair, Some(listen_multiaddr), event_tx, None, true).await?;
+    let swarm_handle = transport::start_swarm(
+        network_keypair,
+        Some(listen_multiaddr),
+        event_tx,
+        None,
+        true,
+    )
+    .await?;
     println!("{} P2P swarm started on {}", "✓".green(), listen_addr);
 
     // Subscribe to topics
@@ -2238,8 +2296,8 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
                             let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::PeerDiscovered {
                                 peer_id: peer_id.to_string(),
                                 transport: "tcp".to_string(),
-                                public_key,
-                                identity,
+                                public_key: public_key.unwrap_or_default(),
+                                identity: identity.unwrap_or_default(),
                             }));
                             let n = notif_peer_discovered(PeerDiscoveredParams {
                                 peer_id: peer_id.to_string(),
@@ -2336,11 +2394,11 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
                             if msg.message_type == scmessenger_core::MessageType::OnionRelay {
                                 let next_hop_hex = msg.recipient_id.clone();
                                 let payload = msg.payload.clone();
-                                
+
                                 if let Ok(next_hop_bytes) = hex::decode(&next_hop_hex) {
-                                    if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from(&next_hop_bytes[..32]) {
-                                        let next_peer_id = libp2p::PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_pk));
-                                        
+                                    if let Ok(libp2p_kp) = libp2p::identity::ed25519::Keypair::try_from_bytes(&mut next_hop_bytes[..32].to_vec()) {
+                                        let next_peer_id = libp2p::PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_kp.public()));
+
                                         tracing::info!("Relay node: forwarding onion packet to {}", next_peer_id);
                                         let swarm_clone = swarm_handle.clone();
                                         tokio::spawn(async move {
@@ -2406,7 +2464,13 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
     let contact = find_contact(&contacts, &recipient).context("Contact not found")?;
 
     let envelope_bytes = core
-        .prepare_message(contact.public_key.clone(), message.clone(), None)
+        .prepare_message(
+            &contact.public_key,
+            &message,
+            scmessenger_core::MessageType::Text,
+            None,
+        )
+        .map(|pm| pm.envelope_data)
         .context("Failed to encrypt message")?;
 
     println!(
@@ -2557,7 +2621,7 @@ async fn cmd_mark_sent(message_id: String) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
-    let removed = core.mark_message_sent(message_id.clone());
+    let removed = core.mark_message_sent(&message_id);
     if removed {
         println!(
             "{} Marked message as sent: {}",
@@ -2629,7 +2693,11 @@ async fn cmd_block(action: BlockAction) -> Result<()> {
         .context("Failed to load identity")?;
 
     match action {
-        BlockAction::Add { peer_id, device_id, reason } => {
+        BlockAction::Add {
+            peer_id,
+            device_id,
+            reason,
+        } => {
             core.block_peer(peer_id.clone(), device_id.clone(), reason.clone())
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
             println!("{} Blocked peer: {}", "✓".green(), peer_id.bright_cyan());
@@ -2648,7 +2716,11 @@ async fn cmd_block(action: BlockAction) -> Result<()> {
                 println!("  Device ID: {}", device_id.dimmed());
             }
         }
-        BlockAction::Delete { peer_id, device_id, reason } => {
+        BlockAction::Delete {
+            peer_id,
+            device_id,
+            reason,
+        } => {
             core.block_and_delete_peer(peer_id.clone(), device_id.clone(), reason.clone())
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
             println!(
@@ -2844,18 +2916,19 @@ async fn cmd_test() -> Result<()> {
     println!("{} Identity generation", "✓".green());
 
     let envelope = alice.prepare_message(
-        bob_info.public_key_hex.clone().unwrap(),
-        "Test message".to_string(),
+        &bob_info.public_key_hex.clone().unwrap(),
+        "Test message",
+        scmessenger_core::MessageType::Text,
         None,
     )?;
 
     println!(
         "{} Message encryption ({} bytes)",
         "✓".green(),
-        envelope.len()
+        envelope.envelope_data.len()
     );
 
-    let msg = bob.receive_message(envelope)?;
+    let msg = bob.receive_message(envelope.envelope_data)?;
     assert_eq!(msg.text_content().unwrap(), "Test message");
 
     println!("{} Message decryption", "✓".green());
@@ -2863,10 +2936,14 @@ async fn cmd_test() -> Result<()> {
     let eve = IronCore::new();
     eve.initialize_identity()?;
 
-    let envelope =
-        alice.prepare_message(bob_info.public_key_hex.unwrap(), "Secret".to_string(), None)?;
+    let envelope = alice.prepare_message(
+        &bob_info.public_key_hex.unwrap(),
+        "Secret",
+        scmessenger_core::MessageType::Text,
+        None,
+    )?;
 
-    assert!(eve.receive_message(envelope).is_err());
+    assert!(eve.receive_message(envelope.envelope_data).is_err());
     println!("{} Encryption security", "✓".green());
 
     println!();
@@ -2938,14 +3015,16 @@ fn prune_logs(log_dir: &std::path::Path, max_days: u64) -> Result<()> {
 }
 
 async fn cmd_audit(action: AuditAction) -> Result<()> {
-    let config = config::Config::load()?;
+    let _config = config::Config::load()?;
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
 
     match action {
         AuditAction::Export { output } => {
-            let json = core.export_audit_log().map_err(|e| anyhow::anyhow!("{:?}", e))?;
+            let json = core
+                .export_audit_log()
+                .map_err(|e| anyhow::anyhow!("{:?}", e))?;
             if let Some(path) = output {
                 std::fs::write(&path, json)?;
                 println!("{} Audit log exported to {}", "✓".green(), path);
@@ -2953,24 +3032,27 @@ async fn cmd_audit(action: AuditAction) -> Result<()> {
                 println!("{}", json);
             }
         }
-        AuditAction::Verify => {
-            match core.validate_audit_chain() {
-                Ok(_) => println!("{} Audit chain integrity verified: OK", "✓".green()),
-                Err(e) => println!("{} Audit chain validation failed: {:?}", "✗".red(), e),
-            }
-        }
+        AuditAction::Verify => match core.validate_audit_chain() {
+            Ok(_) => println!("{} Audit chain integrity verified: OK", "✓".green()),
+            Err(e) => println!("{} Audit chain validation failed: {:?}", "✗".red(), e),
+        },
         AuditAction::Stats => {
-             let events = core.get_audit_events_since(0);
-             println!("{}", "Audit Log Statistics".bold());
-             println!("  Total Events:   {}", events.len());
-             if let Some(first) = events.first() {
-                 println!("  First Event:    {}", format_timestamp(first.timestamp_unix_secs));
-             }
-             if let Some(last) = events.last() {
-                 println!("  Last Event:     {}", format_timestamp(last.timestamp_unix_secs));
-             }
+            let events = core.get_audit_events_since(0);
+            println!("{}", "Audit Log Statistics".bold());
+            println!("  Total Events:   {}", events.len());
+            if let Some(first) = events.first() {
+                println!(
+                    "  First Event:    {}",
+                    format_timestamp(first.timestamp_unix_secs)
+                );
+            }
+            if let Some(last) = events.last() {
+                println!(
+                    "  Last Event:     {}",
+                    format_timestamp(last.timestamp_unix_secs)
+                );
+            }
         }
     }
     Ok(())
 }
-

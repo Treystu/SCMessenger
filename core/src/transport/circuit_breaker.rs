@@ -6,11 +6,11 @@
 // - Open: relay has failed too many times, requests are rejected
 // - HalfOpen: probing relay to see if it has recovered
 
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
-use web_time::{Duration, SystemTime};
 use tracing::{debug, info, warn};
+use web_time::{Duration, SystemTime};
 
 /// Circuit breaker state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,7 +129,10 @@ impl CircuitBreakerManager {
                             return true;
                         }
                     }
-                    debug!("Circuit breaker OPEN for relay {}, skipping attempt", relay_address);
+                    debug!(
+                        "Circuit breaker OPEN for relay {}, skipping attempt",
+                        relay_address
+                    );
                     false
                 }
                 CircuitState::HalfOpen => {
@@ -156,7 +159,9 @@ impl CircuitBreakerManager {
     /// In Closed state, resets the failure counter.
     pub fn record_success(&self, relay_address: &str) {
         let mut entries = self.entries.write();
-        let entry = entries.entry(relay_address.to_string()).or_insert_with(CircuitBreakerEntry::new);
+        let entry = entries
+            .entry(relay_address.to_string())
+            .or_insert_with(CircuitBreakerEntry::new);
 
         entry.last_success_at = Some(SystemTime::now());
         entry.last_failure_reason = None;
@@ -168,8 +173,10 @@ impl CircuitBreakerManager {
             CircuitState::HalfOpen => {
                 entry.success_count += 1;
                 if entry.success_count >= self.config.success_threshold {
-                    info!("Circuit breaker CLOSING for relay {} after {} successful probes",
-                          relay_address, entry.success_count);
+                    info!(
+                        "Circuit breaker CLOSING for relay {} after {} successful probes",
+                        relay_address, entry.success_count
+                    );
                     entry.state = CircuitState::Closed;
                     entry.failure_count = 0;
                     entry.success_count = 0;
@@ -180,7 +187,10 @@ impl CircuitBreakerManager {
             }
             CircuitState::Open => {
                 // Shouldn't happen, but handle gracefully
-                debug!("Unexpected success on OPEN circuit for relay {}", relay_address);
+                debug!(
+                    "Unexpected success on OPEN circuit for relay {}",
+                    relay_address
+                );
             }
         }
     }
@@ -191,7 +201,9 @@ impl CircuitBreakerManager {
     /// In HalfOpen state, reopens the circuit immediately.
     pub fn record_failure(&self, relay_address: &str, reason: &str) {
         let mut entries = self.entries.write();
-        let entry = entries.entry(relay_address.to_string()).or_insert_with(CircuitBreakerEntry::new);
+        let entry = entries
+            .entry(relay_address.to_string())
+            .or_insert_with(CircuitBreakerEntry::new);
 
         entry.failure_count += 1;
         entry.last_failure_reason = Some(reason.to_string());
@@ -229,19 +241,27 @@ impl CircuitBreakerManager {
     /// Get the current circuit state for a relay
     pub fn get_state(&self, relay_address: &str) -> CircuitState {
         let entries = self.entries.read();
-        entries.get(relay_address).map(|e| e.state).unwrap_or(CircuitState::Closed)
+        entries
+            .get(relay_address)
+            .map(|e| e.state)
+            .unwrap_or(CircuitState::Closed)
     }
 
     /// Get the failure count for a relay
     pub fn get_failure_count(&self, relay_address: &str) -> u32 {
         let entries = self.entries.read();
-        entries.get(relay_address).map(|e| e.failure_count).unwrap_or(0)
+        entries
+            .get(relay_address)
+            .map(|e| e.failure_count)
+            .unwrap_or(0)
     }
 
     /// Get the last failure reason for a relay
     pub fn get_last_failure_reason(&self, relay_address: &str) -> Option<String> {
         let entries = self.entries.read();
-        entries.get(relay_address).and_then(|e| e.last_failure_reason.clone())
+        entries
+            .get(relay_address)
+            .and_then(|e| e.last_failure_reason.clone())
     }
 
     /// Reset the circuit breaker for a specific relay
@@ -260,7 +280,8 @@ impl CircuitBreakerManager {
     /// Get all relay addresses currently in an open state
     pub fn get_open_circuits(&self) -> Vec<String> {
         let entries = self.entries.read();
-        entries.iter()
+        entries
+            .iter()
             .filter(|(_, e)| e.state == CircuitState::Open)
             .map(|(addr, _)| addr.clone())
             .collect()
@@ -269,7 +290,8 @@ impl CircuitBreakerManager {
     /// Get all relay addresses with healthy (closed) circuits
     pub fn get_healthy_relays(&self) -> Vec<String> {
         let entries = self.entries.read();
-        entries.iter()
+        entries
+            .iter()
             .filter(|(_, e)| e.state == CircuitState::Closed)
             .map(|(addr, _)| addr.clone())
             .collect()
@@ -294,7 +316,10 @@ impl CircuitBreakerManager {
     fn transition_to_half_open(&self, relay_address: &str) {
         let mut entries = self.entries.write();
         if let Some(entry) = entries.get_mut(relay_address) {
-            info!("Circuit breaker transitioning to HALF-OPEN for relay {}", relay_address);
+            info!(
+                "Circuit breaker transitioning to HALF-OPEN for relay {}",
+                relay_address
+            );
             entry.state = CircuitState::HalfOpen;
             entry.half_open_started_at = Some(SystemTime::now());
             entry.half_open_probes += 1;
@@ -486,6 +511,9 @@ mod tests {
         let relay = "relay1.example.com";
 
         mgr.record_failure(relay, "DNS resolution failed");
-        assert_eq!(mgr.get_last_failure_reason(relay), Some("DNS resolution failed".to_string()));
+        assert_eq!(
+            mgr.get_last_failure_reason(relay),
+            Some("DNS resolution failed".to_string())
+        );
     }
 }

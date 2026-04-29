@@ -76,5 +76,4 @@ impl MultiPathDelivery {
     pub fn is_empty(&self) -> bool {
         self.paths.is_empty()
     }
-
 }

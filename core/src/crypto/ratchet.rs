@@ -18,8 +18,8 @@ use chacha20poly1305::{
 };
 use rand::RngCore;
 use std::collections::HashMap;
-use zeroize::Zeroize;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
+use zeroize::Zeroize;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -171,11 +171,15 @@ impl RatchetSession {
     }
 
     pub(crate) fn sending_chain_state(&self) -> Option<([u8; 32], u32)> {
-        self.sending_chain.as_ref().map(|c| (*c.chain_key.as_bytes(), c.index))
+        self.sending_chain
+            .as_ref()
+            .map(|c| (*c.chain_key.as_bytes(), c.index))
     }
 
     pub(crate) fn receiving_chain_state(&self) -> Option<([u8; 32], u32)> {
-        self.receiving_chain.as_ref().map(|c| (*c.chain_key.as_bytes(), c.index))
+        self.receiving_chain
+            .as_ref()
+            .map(|c| (*c.chain_key.as_bytes(), c.index))
     }
 
     pub(crate) fn has_identity_secret(&self) -> bool {
@@ -205,7 +209,8 @@ impl RatchetSession {
         let shared_secret = our_x25519.diffie_hellman(their_identity_public_x25519);
 
         // Derive initial root key from the identity DH
-        let root_key = derive_root_key(&RatchetKey::from_bytes([0u8; 32]), shared_secret.as_bytes());
+        let root_key =
+            derive_root_key(&RatchetKey::from_bytes([0u8; 32]), shared_secret.as_bytes());
 
         // X3DH step 2: our_dh_secret × their_identity_public → sending chain
         let dh_output = our_dh_secret.diffie_hellman(their_identity_public_x25519);
@@ -246,7 +251,8 @@ impl RatchetSession {
         let shared_secret = our_x25519.diffie_hellman(sender_identity_public_x25519);
 
         // Derive initial root key
-        let root_key = derive_root_key(&RatchetKey::from_bytes([0u8; 32]), shared_secret.as_bytes());
+        let root_key =
+            derive_root_key(&RatchetKey::from_bytes([0u8; 32]), shared_secret.as_bytes());
 
         // Store our identity secret for the first DH ratchet step
         let our_identity_secret = our_x25519;
@@ -280,7 +286,9 @@ impl RatchetSession {
 
     /// Encrypt a message using the current sending chain.
     pub fn encrypt(&mut self, plaintext: &[u8], aad: &[u8]) -> Result<RatchetEncryptResult> {
-        let chain = self.sending_chain.as_mut()
+        let chain = self
+            .sending_chain
+            .as_mut()
             .ok_or_else(|| anyhow::anyhow!("Sending chain not initialized"))?;
 
         if self.dh_step_count >= MAX_RATCHET_STEPS {
@@ -298,7 +306,13 @@ impl RatchetSession {
             .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
 
         let ciphertext = cipher
-            .encrypt(nonce, Payload { msg: plaintext, aad })
+            .encrypt(
+                nonce,
+                Payload {
+                    msg: plaintext,
+                    aad,
+                },
+            )
             .map_err(|e| anyhow::anyhow!("Encryption failed: {}", e))?;
 
         Ok(RatchetEncryptResult {
@@ -341,7 +355,13 @@ impl RatchetSession {
             .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
 
         cipher
-            .decrypt(nonce_obj, Payload { msg: ciphertext, aad })
+            .decrypt(
+                nonce_obj,
+                Payload {
+                    msg: ciphertext,
+                    aad,
+                },
+            )
             .map_err(|_| anyhow::anyhow!("Decryption failed"))
     }
 
@@ -353,7 +373,8 @@ impl RatchetSession {
         };
 
         let dh_output = first_dh_secret.diffie_hellman(their_new_dh);
-        let (new_root_key, receiving_chain_key) = root_key_ratchet(&self.root_key, dh_output.as_bytes());
+        let (new_root_key, receiving_chain_key) =
+            root_key_ratchet(&self.root_key, dh_output.as_bytes());
 
         self.their_dh_public = Some(*their_new_dh);
 
@@ -364,7 +385,8 @@ impl RatchetSession {
         let new_dh_public = X25519PublicKey::from(&new_dh_secret);
 
         let dh_output_2 = new_dh_secret.diffie_hellman(their_new_dh);
-        let (new_root_key_2, sending_chain_key) = root_key_ratchet(&new_root_key, dh_output_2.as_bytes());
+        let (new_root_key_2, sending_chain_key) =
+            root_key_ratchet(&new_root_key, dh_output_2.as_bytes());
 
         self.our_dh_secret = new_dh_secret;
         self.our_dh_public = new_dh_public;
@@ -387,7 +409,9 @@ impl RatchetSession {
             return Ok(key);
         }
 
-        let chain = self.receiving_chain.as_mut()
+        let chain = self
+            .receiving_chain
+            .as_mut()
             .ok_or_else(|| anyhow::anyhow!("Receiving chain not initialized"))?;
 
         if target_number < chain.index {
@@ -402,10 +426,8 @@ impl RatchetSession {
         while chain.index < target_number {
             let skipped_key = chain.next_message_key();
             let skipped_number = chain.index - 1;
-            self.skipped_keys.insert(
-                (their_dh.to_bytes(), skipped_number),
-                skipped_key,
-            );
+            self.skipped_keys
+                .insert((their_dh.to_bytes(), skipped_number), skipped_key);
 
             if self.skipped_keys.len() > MAX_SKIP_KEYS {
                 if let Some(oldest) = self.skipped_keys.keys().min().cloned() {
@@ -430,7 +452,8 @@ impl RatchetSession {
 
         if let Some(their_dh) = self.their_dh_public {
             let dh_output = self.our_dh_secret.diffie_hellman(&their_dh);
-            let (new_root_key, sending_chain_key) = root_key_ratchet(&self.root_key, dh_output.as_bytes());
+            let (new_root_key, sending_chain_key) =
+                root_key_ratchet(&self.root_key, dh_output.as_bytes());
             self.root_key = new_root_key;
             self.sending_chain = Some(Chain::new(sending_chain_key));
         }
@@ -462,26 +485,20 @@ fn derive_key_with_info(key: &RatchetKey, info: &[u8]) -> RatchetKey {
 }
 
 fn root_key_ratchet(root_key: &RatchetKey, dh_output: &[u8]) -> (RatchetKey, RatchetKey) {
-    let combined = blake3::derive_key(ROOT_KDF_CONTEXT, &[
-        root_key.as_bytes(),
-        dh_output,
-    ].concat());
-    let new_root = blake3::derive_key(
-        &format!("{}:root", ROOT_KDF_CONTEXT),
-        &combined,
-    );
-    let chain_key = blake3::derive_key(
-        &format!("{}:chain", ROOT_KDF_CONTEXT),
-        &combined,
-    );
-    (RatchetKey::from_bytes(new_root), RatchetKey::from_bytes(chain_key))
+    let combined = blake3::derive_key(ROOT_KDF_CONTEXT, &[root_key.as_bytes(), dh_output].concat());
+    let new_root = blake3::derive_key(&format!("{}:root", ROOT_KDF_CONTEXT), &combined);
+    let chain_key = blake3::derive_key(&format!("{}:chain", ROOT_KDF_CONTEXT), &combined);
+    (
+        RatchetKey::from_bytes(new_root),
+        RatchetKey::from_bytes(chain_key),
+    )
 }
 
 fn derive_root_key(prior_root: &RatchetKey, shared_secret: &[u8]) -> RatchetKey {
-    let derived = blake3::derive_key(ROOT_KDF_CONTEXT, &[
-        prior_root.as_bytes(),
-        shared_secret,
-    ].concat());
+    let derived = blake3::derive_key(
+        ROOT_KDF_CONTEXT,
+        &[prior_root.as_bytes(), shared_secret].concat(),
+    );
     RatchetKey::from_bytes(derived)
 }
 
@@ -554,13 +571,15 @@ mod tests {
         assert!(!bob_session.is_initialized());
 
         let encrypted = alice_session.encrypt(b"hello bob", b"aad").unwrap();
-        let plaintext = bob_session.decrypt(
-            &encrypted.our_dh_public,
-            encrypted.message_number,
-            &encrypted.nonce,
-            &encrypted.ciphertext,
-            b"aad",
-        ).unwrap();
+        let plaintext = bob_session
+            .decrypt(
+                &encrypted.our_dh_public,
+                encrypted.message_number,
+                &encrypted.nonce,
+                &encrypted.ciphertext,
+                b"aad",
+            )
+            .unwrap();
 
         assert_eq!(plaintext, b"hello bob");
         assert!(bob_session.is_initialized());

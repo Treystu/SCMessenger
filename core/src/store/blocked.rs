@@ -195,7 +195,7 @@ impl BlockedManager {
             blocked_list.push(blocked);
         }
 
-        blocked_list.sort_by(|a, b| b.blocked_at.cmp(&a.blocked_at));
+        blocked_list.sort_by_key(|b| std::cmp::Reverse(b.blocked_at));
         Ok(blocked_list)
     }
 

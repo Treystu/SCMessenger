@@ -134,6 +134,7 @@ impl Default for BleConfig {
 }
 
 /// BLE daemon for Windows CLI with graceful error handling.
+#[allow(dead_code)]
 pub struct BleDaemon {
     config: BleConfig,
     adapters: Vec<btleplug::platform::Adapter>,
@@ -163,7 +164,8 @@ impl BleDaemon {
             let manager = match btleplug::platform::Manager::new().await {
                 Ok(m) => m,
                 Err(e) => {
-                    self.status = BleStatus::Unavailable(BleError::ManagerInitFailed(e.to_string()));
+                    self.status =
+                        BleStatus::Unavailable(BleError::ManagerInitFailed(e.to_string()));
                     return Err(BleError::ManagerInitFailed(e.to_string()));
                 }
             };
@@ -172,13 +174,14 @@ impl BleDaemon {
                 Ok(adapters) => adapters,
                 Err(e) => {
                     let err_str = e.to_string().to_lowercase();
-                    let ble_error = if err_str.contains("access denied") || err_str.contains("permission") {
-                        BleError::PermissionDenied
-                    } else if err_str.contains("not found") || err_str.contains("no device") {
-                        BleError::NoAdapter
-                    } else {
-                        BleError::Other(e.to_string())
-                    };
+                    let ble_error =
+                        if err_str.contains("access denied") || err_str.contains("permission") {
+                            BleError::PermissionDenied
+                        } else if err_str.contains("not found") || err_str.contains("no device") {
+                            BleError::NoAdapter
+                        } else {
+                            BleError::Other(e.to_string())
+                        };
                     self.status = BleStatus::Unavailable(ble_error.clone());
                     return Err(ble_error);
                 }
@@ -196,8 +199,12 @@ impl BleDaemon {
 
         #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
         {
-            self.status = BleStatus::Unavailable(BleError::Other("BLE not supported on this platform".to_string()));
-            Err(BleError::Other("BLE not supported on this platform".to_string()))
+            self.status = BleStatus::Unavailable(BleError::Other(
+                "BLE not supported on this platform".to_string(),
+            ));
+            Err(BleError::Other(
+                "BLE not supported on this platform".to_string(),
+            ))
         }
     }
 
@@ -236,12 +243,17 @@ impl BleDaemon {
 
         #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
         {
-            Ok(vec!["Scan result (simulated)".to_string(); self.adapters.len()])
+            Ok(vec![
+                "Scan result (simulated)".to_string();
+                self.adapters.len()
+            ])
         }
 
         #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
         {
-            Err(BleError::Other("BLE scan not supported on this platform".to_string()))
+            Err(BleError::Other(
+                "BLE scan not supported on this platform".to_string(),
+            ))
         }
     }
 
@@ -265,7 +277,9 @@ impl BleDaemon {
 
         #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
         {
-            Err(BleError::Other("BLE advertising not supported on this platform".to_string()))
+            Err(BleError::Other(
+                "BLE advertising not supported on this platform".to_string(),
+            ))
         }
     }
 
@@ -331,9 +345,7 @@ pub fn format_timestamp(timestamp: u64) -> String {
 pub async fn try_enable_bluetooth() -> BleResult<()> {
     use std::process::Command;
 
-    let output = Command::new("sc")
-        .args(&["query", "bthserv"])
-        .output();
+    let output = Command::new("sc").args(["query", "bthserv"]).output();
 
     match output {
         Ok(output) => {
@@ -344,7 +356,10 @@ pub async fn try_enable_bluetooth() -> BleResult<()> {
                 Err(BleError::Other("Bluetooth service not running".to_string()))
             }
         }
-        Err(e) => Err(BleError::Other(format!("Failed to check Bluetooth service: {}", e))),
+        Err(e) => Err(BleError::Other(format!(
+            "Failed to check Bluetooth service: {}",
+            e
+        ))),
     }
 }
 
@@ -398,9 +413,18 @@ mod tests {
 
     #[test]
     fn test_ble_error_variants() {
-        assert_eq!(BleError::NoAdapter.to_string(), "No Bluetooth adapter found");
-        assert_eq!(BleError::PermissionDenied.to_string(), "Bluetooth permission denied");
-        assert_eq!(BleError::AdapterNotPowered.to_string(), "Bluetooth adapter not powered on");
+        assert_eq!(
+            BleError::NoAdapter.to_string(),
+            "No Bluetooth adapter found"
+        );
+        assert_eq!(
+            BleError::PermissionDenied.to_string(),
+            "Bluetooth permission denied"
+        );
+        assert_eq!(
+            BleError::AdapterNotPowered.to_string(),
+            "Bluetooth adapter not powered on"
+        );
         assert!(BleError::Timeout.to_string().contains("timed out"));
     }
 
@@ -417,6 +441,9 @@ mod tests {
         // Manual status injection for testing
         daemon.status = BleStatus::Unavailable(BleError::NoAdapter);
         assert!(!daemon.is_available());
-        assert_eq!(daemon.status(), &BleStatus::Unavailable(BleError::NoAdapter));
+        assert_eq!(
+            daemon.status(),
+            &BleStatus::Unavailable(BleError::NoAdapter)
+        );
     }
 }

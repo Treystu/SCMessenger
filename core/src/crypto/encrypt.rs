@@ -246,10 +246,13 @@ pub fn decrypt_message_ratcheted(
     session: &mut crate::crypto::RatchetSession,
     envelope: &crate::message::Envelope,
 ) -> Result<Vec<u8>> {
-    let dh_public = envelope.ratchet_dh_public.as_ref()
+    let dh_public = envelope
+        .ratchet_dh_public
+        .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Ratcheted envelope missing ratchet_dh_public field"))?;
-    let message_number = envelope.ratchet_message_number
-        .ok_or_else(|| anyhow::anyhow!("Ratcheted envelope missing ratchet_message_number field"))?;
+    let message_number = envelope.ratchet_message_number.ok_or_else(|| {
+        anyhow::anyhow!("Ratcheted envelope missing ratchet_message_number field")
+    })?;
 
     if envelope.nonce.len() != 24 {
         bail!("Invalid nonce length in ratcheted envelope");
@@ -258,7 +261,13 @@ pub fn decrypt_message_ratcheted(
     // Use sender public key as AAD (same binding as legacy path)
     let aad = envelope.sender_public_key.as_slice();
 
-    session.decrypt(dh_public, message_number, &envelope.nonce, &envelope.ciphertext, aad)
+    session.decrypt(
+        dh_public,
+        message_number,
+        &envelope.nonce,
+        &envelope.ciphertext,
+        aad,
+    )
 }
 
 /// Encrypt a plaintext message using an existing Double Ratchet session.

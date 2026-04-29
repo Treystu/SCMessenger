@@ -294,7 +294,7 @@ for a in cfg.get('agents', []):
             echo "Using validated model: $validated_model"
             model="$validated_model"
         else
-            echo "⚠️  Model validation template not found, proceeding with $model"
+            echo "Model validation template not found, proceeding with $model"
         fi
 
         # Native agent: create marker file for tracking
@@ -324,7 +324,7 @@ EOF
             echo "Using validated model: $validated_model"
             model="$validated_model"
         else
-            echo "⚠️  Model validation template not found, proceeding with $model"
+            echo "Model validation template not found, proceeding with $model"
         fi
 
         echo "Launching CLI agent: $agent_id with model $model"

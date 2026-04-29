@@ -5,10 +5,11 @@
 
 use crate::mobile_bridge::HistoryManager;
 use anyhow::{Context, Result};
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use sled::Db;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 /// Public contact structure exposed via UniFFI
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,7 +80,7 @@ impl ContactManager {
 
     /// Add a contact to the database
     pub fn add(&self, contact: Contact) -> Result<(), crate::IronCoreError> {
-        let db = self.db.lock().unwrap();
+        let db = self.db.lock();
         let key = contact.peer_id.as_bytes();
         let value = serde_json::to_vec(&contact)
             .context("Failed to serialize contact")
@@ -94,7 +95,7 @@ impl ContactManager {
 
     /// Get a contact by peer ID
     pub fn get(&self, peer_id: String) -> Result<Option<Contact>, crate::IronCoreError> {
-        let db = self.db.lock().unwrap();
+        let db = self.db.lock();
         if let Some(data) = db
             .get(peer_id.as_bytes())
             .map_err(|_| crate::IronCoreError::StorageError)?
@@ -110,7 +111,7 @@ impl ContactManager {
 
     /// Remove a contact
     pub fn remove(&self, peer_id: String) -> Result<(), crate::IronCoreError> {
-        let db = self.db.lock().unwrap();
+        let db = self.db.lock();
         db.remove(peer_id.as_bytes())
             .map_err(|_| crate::IronCoreError::StorageError)?;
         Ok(())
@@ -118,7 +119,7 @@ impl ContactManager {
 
     /// List all contacts, sorted by display name
     pub fn list(&self) -> Result<Vec<Contact>, crate::IronCoreError> {
-        let db = self.db.lock().unwrap();
+        let db = self.db.lock();
         let mut contacts = Vec::new();
 
         for item in db.iter() {
@@ -135,7 +136,7 @@ impl ContactManager {
 
     /// Search contacts by query (matches nickname, peer_id, public_key, or notes)
     pub fn search(&self, query: String) -> Result<Vec<Contact>, crate::IronCoreError> {
-        let db = self.db.lock().unwrap();
+        let db = self.db.lock();
         let query_lower = query.to_lowercase();
         let mut results = Vec::new();
 
@@ -227,7 +228,10 @@ impl ContactManager {
 
     /// Reconcile contacts from message history to recover potentially lost records.
     /// Scans all message records and creates a basic contact if the peer_id is unknown.
-    pub fn reconcile_from_history(&self, history: &HistoryManager) -> Result<u32, crate::IronCoreError> {
+    pub fn reconcile_from_history(
+        &self,
+        history: &HistoryManager,
+    ) -> Result<u32, crate::IronCoreError> {
         // The bridge needs to call the inner manager's reconcile logic.
         // Since ContactManager is the inner type in contacts.rs, and this bridge
         // wraps the sled DB, we implement the logic here or delegate.
@@ -250,20 +254,19 @@ impl ContactManager {
 
     /// Count total contacts
     pub fn count(&self) -> u32 {
-        let db = self.db.lock().unwrap();
+        let db = self.db.lock();
         db.len() as u32
     }
 
     pub fn flush(&self) {
-        if let Ok(db) = self.db.lock() {
-            let _ = db.flush();
-        }
+        let db = self.db.lock();
+        let _ = db.flush();
     }
 
     /// Verify database integrity and detect corruption.
     /// Returns an error if the database has data but returns 0 contacts.
     pub fn verify_integrity(&self) -> Result<(), crate::IronCoreError> {
-        let db = self.db.lock().map_err(|_| crate::IronCoreError::Internal)?;
+        let db = self.db.lock();
         let contact_count = db.len() as u32;
         let has_entries = db.iter().next().is_some();
 
@@ -297,7 +300,7 @@ impl ContactManager {
 fn current_timestamp() -> u64 {
     web_time::SystemTime::now()
         .duration_since(web_time::UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_secs()
 }
 
@@ -317,7 +320,7 @@ mod tests {
     #[test]
     fn test_contact_manager() -> Result<(), crate::IronCoreError> {
         let temp_dir = tempfile::tempdir().unwrap();
-        let storage_path = temp_dir.path().to_str().unwrap().to_string();
+        let storage_path = temp_dir.path().to_str().unwrap_or_default().to_string();
 
         let manager = ContactManager::new(storage_path)?;
 
@@ -349,7 +352,7 @@ mod tests {
     #[test]
     fn test_contact_persistence_across_manager_restart() -> Result<(), crate::IronCoreError> {
         let temp_dir = tempfile::tempdir().unwrap();
-        let storage_path = temp_dir.path().to_str().unwrap().to_string();
+        let storage_path = temp_dir.path().to_str().unwrap_or_default().to_string();
 
         {
             let manager = ContactManager::new(storage_path.clone())?;

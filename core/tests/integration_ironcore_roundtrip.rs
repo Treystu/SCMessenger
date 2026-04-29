@@ -7,7 +7,7 @@
 //! Run with:
 //!   cargo test --test integration_ironcore_roundtrip
 
-use scmessenger_core::IronCore;
+use scmessenger_core::{IronCore, MessageType};
 
 // ============================================================================
 // Helpers
@@ -44,18 +44,18 @@ fn test_two_node_message_roundtrip() {
     let plaintext = "Hello Bob, this message is for your eyes only.";
 
     // Alice prepares (encrypts) the envelope.
-    let envelope_bytes = alice
-        .prepare_message(pubkey(&bob), plaintext.to_string(), None)
+    let prepared = alice
+        .prepare_message(&pubkey(&bob), plaintext, MessageType::Text, None)
         .expect("prepare_message must succeed");
 
     assert!(
-        !envelope_bytes.is_empty(),
+        !prepared.envelope_data.is_empty(),
         "envelope_bytes must not be empty"
     );
 
     // Bob decrypts the envelope.
     let received = bob
-        .receive_message(envelope_bytes)
+        .receive_message(prepared.envelope_data)
         .expect("receive_message must succeed");
 
     // Plaintext content must be recovered verbatim.
@@ -89,11 +89,16 @@ fn test_wrong_recipient_cannot_decrypt() {
     let bob = make_node();
     let eve = make_node();
 
-    let envelope_bytes = alice
-        .prepare_message(pubkey(&bob), "Secret for Bob only".to_string(), None)
+    let prepared = alice
+        .prepare_message(
+            &pubkey(&bob),
+            "Secret for Bob only",
+            MessageType::Text,
+            None,
+        )
         .expect("prepare_message must succeed");
 
-    let result = eve.receive_message(envelope_bytes);
+    let result = eve.receive_message(prepared.envelope_data);
     assert!(
         result.is_err(),
         "Eve must not be able to decrypt a message encrypted for Bob"
@@ -112,17 +117,22 @@ fn test_envelope_signature_verification() {
     let alice = make_node();
     let bob = make_node();
 
-    let mut envelope_bytes = alice
-        .prepare_message(pubkey(&bob), "Tamper me if you dare".to_string(), None)
+    let mut prepared = alice
+        .prepare_message(
+            &pubkey(&bob),
+            "Tamper me if you dare",
+            MessageType::Text,
+            None,
+        )
         .expect("prepare_message must succeed");
 
     // Flip a byte well into the payload (past any headers / nonce material).
     // The envelope is bincode-encoded; the ciphertext lives toward the end.
     // Flipping any byte inside the AEAD ciphertext will invalidate the tag.
-    let tamper_index = envelope_bytes.len() / 2;
-    envelope_bytes[tamper_index] ^= 0xFF;
+    let tamper_index = prepared.envelope_data.len() / 2;
+    prepared.envelope_data[tamper_index] ^= 0xFF;
 
-    let result = bob.receive_message(envelope_bytes);
+    let result = bob.receive_message(prepared.envelope_data);
     assert!(
         result.is_err(),
         "Bob must reject a tampered envelope (AEAD authentication failure)"
@@ -140,16 +150,16 @@ fn test_duplicate_delivery_rejected() {
     let alice = make_node();
     let bob = make_node();
 
-    let envelope_bytes = alice
-        .prepare_message(pubkey(&bob), "Once is enough".to_string(), None)
+    let prepared = alice
+        .prepare_message(&pubkey(&bob), "Once is enough", MessageType::Text, None)
         .expect("prepare_message must succeed");
 
     // First delivery succeeds.
-    bob.receive_message(envelope_bytes.clone())
+    bob.receive_message(prepared.envelope_data.clone())
         .expect("first delivery must succeed");
 
     // Second delivery of the identical envelope must be accepted (for receipt re-dispatch)
-    let result = bob.receive_message(envelope_bytes);
+    let result = bob.receive_message(prepared.envelope_data);
     assert!(
         result.is_ok(),
         "duplicate envelope delivery should be accepted to re-dispatch callbacks"
@@ -178,12 +188,12 @@ fn test_multiple_messages_roundtrip() {
     let messages = ["First message", "Second message", "Third message"];
 
     for expected_text in &messages {
-        let envelope_bytes = alice
-            .prepare_message(bob_pubkey.clone(), expected_text.to_string(), None)
+        let prepared = alice
+            .prepare_message(&bob_pubkey, expected_text, MessageType::Text, None)
             .expect("prepare_message must succeed");
 
         let received = bob
-            .receive_message(envelope_bytes)
+            .receive_message(prepared.envelope_data)
             .expect("receive_message must succeed");
 
         assert_eq!(
@@ -213,12 +223,12 @@ fn test_self_message_roundtrip() {
 
     let plaintext = "Note to self";
 
-    let envelope_bytes = node
-        .prepare_message(pubkey(&node), plaintext.to_string(), None)
+    let prepared = node
+        .prepare_message(&pubkey(&node), plaintext, MessageType::Text, None)
         .expect("prepare_message to self must succeed");
 
     let received = node
-        .receive_message(envelope_bytes)
+        .receive_message(prepared.envelope_data)
         .expect("receive_message from self must succeed");
 
     assert_eq!(
@@ -241,12 +251,12 @@ fn test_empty_payload_roundtrip() {
     let alice = make_node();
     let bob = make_node();
 
-    let envelope_bytes = alice
-        .prepare_message(pubkey(&bob), String::new(), None)
+    let prepared = alice
+        .prepare_message(&pubkey(&bob), "", MessageType::Text, None)
         .expect("prepare_message with empty body must succeed");
 
     let received = bob
-        .receive_message(envelope_bytes)
+        .receive_message(prepared.envelope_data)
         .expect("receive_message of empty body must succeed");
 
     assert_eq!(

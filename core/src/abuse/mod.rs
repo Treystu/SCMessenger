@@ -12,6 +12,10 @@ pub mod auto_block;
 pub mod reputation;
 pub mod spam_detection;
 
-pub use auto_block::{AutoBlockConfig, AutoBlockEngine, AutoBlockAuditEntry, AutoBlockReason, AutoBlockResult};
+pub use auto_block::{
+    AutoBlockAuditEntry, AutoBlockConfig, AutoBlockEngine, AutoBlockReason, AutoBlockResult,
+};
 pub use reputation::{EnhancedAbuseReputationManager, EnhancedReputationScore};
-pub use spam_detection::{SpamDetectionEngine, SpamDetectionConfig, SpamDetectionResult, SpamSignal};
+pub use spam_detection::{
+    SpamDetectionConfig, SpamDetectionEngine, SpamDetectionResult, SpamSignal,
+};

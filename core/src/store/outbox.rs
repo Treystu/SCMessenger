@@ -600,5 +600,4 @@ mod tests {
         assert_eq!(msgs[0].attempts, u32::MAX);
         assert_eq!(outbox.total_count(), 1);
     }
-
 }

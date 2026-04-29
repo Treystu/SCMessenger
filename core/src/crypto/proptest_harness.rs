@@ -11,8 +11,8 @@
 //! cost per case; covered by unit tests in backup.rs instead.
 
 use crate::crypto::{
-    decrypt_message, encrypt_message, sign_envelope, verify_envelope,
-    RatchetSession, ed25519_to_x25519_secret,
+    decrypt_message, ed25519_to_x25519_secret, encrypt_message, sign_envelope, verify_envelope,
+    RatchetSession,
 };
 use ed25519_dalek::SigningKey;
 use proptest::prelude::*;

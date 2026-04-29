@@ -249,4 +249,3 @@ mod tests {
         assert!(decode_ble_payload_for_ui(&core, &junk).is_none());
     }
 }
-

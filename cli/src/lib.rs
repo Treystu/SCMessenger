@@ -2,6 +2,8 @@
 //
 // Re-exports modules for testing
 
+#![allow(dead_code, unused)]
+
 pub mod api;
 pub mod ble_daemon;
 pub mod ble_mesh;

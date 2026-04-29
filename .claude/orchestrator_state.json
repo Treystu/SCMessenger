@@ -18,6 +18,6 @@
   "agent_pool_config": ".claude/agent_pool.json",
   "active_native_agents": [],
   "agent_pool_enabled": true,
-  "agent_launch_command": "ollama launch claude --model glm-5.1:cloud -- --dangerously-skip-permissions -- \"You are an SCMessenger Autonomous Sub-Agent. Use the /loop 5m command to check the HANDOFF/todo/ directory. If you see a task file, claim it by renaming it to IN_PROGRESS_[filename].md. Execute the required code changes, run the local compilers to verify your work, and upon success, use bash to move the file to HANDOFF/done/. If you fail after 3 attempts, append your error logs and move it back to HANDOFF/todo/. Do not stop.\"",
+  "agent_launch_command": "ollama run glm-5.1:cloud -- --dangerously-skip-permissions",
   "notes": "Orchestrator integrates with existing agent system - no duplication. Native agent support added for Claude Code Agent tool subagents."
 }

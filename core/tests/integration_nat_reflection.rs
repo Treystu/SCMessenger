@@ -12,8 +12,8 @@
 use anyhow::Result as AnyhowResult;
 use libp2p::identity::Keypair;
 use libp2p::PeerId;
-use scmessenger_core::transport::swarm::{start_swarm, SwarmEvent2, SwarmHandle};
 use scmessenger_core::transport::nat::{NatConfig, NatTraversal, PeerAddressDiscovery};
+use scmessenger_core::transport::swarm::{start_swarm, SwarmEvent2, SwarmHandle};
 use std::time::Duration;
 use tokio::sync::mpsc;
 

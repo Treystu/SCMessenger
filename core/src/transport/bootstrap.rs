@@ -98,7 +98,6 @@ pub enum BootstrapState {
     Failed,
 }
 
-
 /// Represents a bootstrap node
 #[derive(Debug, Clone)]
 struct BootstrapNode {
@@ -132,10 +131,7 @@ impl BootstrapManager {
 
         let env_addrs = resolve_env_bootstrap_nodes();
 
-        let all_addrs: Vec<Multiaddr> = env_addrs
-            .into_iter()
-            .chain(default_addrs)
-            .collect();
+        let all_addrs: Vec<Multiaddr> = env_addrs.into_iter().chain(default_addrs).collect();
 
         let relay_discovery = RelayDiscovery::new(all_addrs.clone());
         let relay_fallback = RelayFallback::new(config.max_retries_per_node);
@@ -242,7 +238,10 @@ impl BootstrapManager {
                     let delay = self.backoff_for_node(node);
 
                     if delay > Duration::ZERO {
-                        debug!("Bootstrap backoff: waiting {:?} before retrying {}", delay, addr);
+                        debug!(
+                            "Bootstrap backoff: waiting {:?} before retrying {}",
+                            delay, addr
+                        );
                         tokio::time::sleep(delay).await;
                     }
 
@@ -256,7 +255,10 @@ impl BootstrapManager {
                         .await
                     {
                         Ok(()) => {
-                            info!("Bootstrap connected to {} via direct swarm connection", addr);
+                            info!(
+                                "Bootstrap connected to {} via direct swarm connection",
+                                addr
+                            );
                             self.record_success(&addr, peer_id);
                             self.circuit_breaker.record_success(&addr_str);
                             self.relay_discovery.record_success(&peer_id, 0);
@@ -274,7 +276,10 @@ impl BootstrapManager {
                                 debug!("Attempting WebSocket fallback for {}", addr);
                                 match self.try_websocket_connection(&addr).await {
                                     Ok(()) => {
-                                        info!("Bootstrap connected to {} via WebSocket fallback", addr);
+                                        info!(
+                                            "Bootstrap connected to {} via WebSocket fallback",
+                                            addr
+                                        );
                                         self.record_success(&addr, peer_id);
                                         self.circuit_breaker.record_success(&addr_str);
                                         self.relay_discovery.record_success(&peer_id, 0);
@@ -284,8 +289,17 @@ impl BootstrapManager {
                                     }
                                     Err(ws_err) => {
                                         let ws_err_str = ws_err.to_string();
-                                        warn!("WebSocket fallback failed for {}: {}", addr, ws_err_str);
-                                        self.record_failure(&addr, &format!("Direct: {}, WebSocket: {}", err_str, ws_err_str));
+                                        warn!(
+                                            "WebSocket fallback failed for {}: {}",
+                                            addr, ws_err_str
+                                        );
+                                        self.record_failure(
+                                            &addr,
+                                            &format!(
+                                                "Direct: {}, WebSocket: {}",
+                                                err_str, ws_err_str
+                                            ),
+                                        );
                                         self.circuit_breaker.record_failure(&addr_str, &ws_err_str);
                                         self.relay_discovery.record_failure(&peer_id, &ws_err_str);
                                     }
@@ -309,7 +323,9 @@ impl BootstrapManager {
                 None => {
                     // All primary nodes exhausted — try fallback discovery
                     if self.state != BootstrapState::FallbackDiscovery {
-                        info!("All primary bootstrap nodes exhausted, attempting fallback discovery");
+                        info!(
+                            "All primary bootstrap nodes exhausted, attempting fallback discovery"
+                        );
                         self.state = BootstrapState::FallbackDiscovery;
                         let discovered = self.discover_fallback_nodes();
                         for addr in discovered {
@@ -360,7 +376,10 @@ impl BootstrapManager {
             return Duration::ZERO;
         }
         let delay_secs = self.config.initial_backoff.as_secs_f64()
-            * self.config.backoff_multiplier.powi(node.attempts as i32 - 1);
+            * self
+                .config
+                .backoff_multiplier
+                .powi(node.attempts as i32 - 1);
         let capped = delay_secs.min(self.config.max_backoff.as_secs_f64());
         Duration::from_secs_f64(capped)
     }
@@ -420,15 +439,21 @@ impl BootstrapManager {
     #[cfg(not(target_arch = "wasm32"))]
     fn is_websocket_address(&self, addr: &Multiaddr) -> bool {
         addr.iter().any(|proto| {
-            matches!(proto, libp2p::multiaddr::Protocol::Ws(_) | libp2p::multiaddr::Protocol::Wss(_))
+            matches!(
+                proto,
+                libp2p::multiaddr::Protocol::Ws(_) | libp2p::multiaddr::Protocol::Wss(_)
+            )
         })
     }
 
     /// Try WebSocket connection as fallback
     #[cfg(not(target_arch = "wasm32"))]
-    async fn try_websocket_connection(&self, addr: &Multiaddr) -> Result<(), InternetTransportError> {
+    async fn try_websocket_connection(
+        &self,
+        addr: &Multiaddr,
+    ) -> Result<(), InternetTransportError> {
         // Import WebSocket transport
-        use crate::transport::websocket::{WebSocketTransport, diagnose_websocket_error};
+        use crate::transport::websocket::{diagnose_websocket_error, WebSocketTransport};
 
         info!("Attempting WebSocket connection to {}", addr);
 
@@ -437,7 +462,9 @@ impl BootstrapManager {
             .map_err(|e| diagnose_websocket_error(e, addr))?;
 
         // Attempt connection
-        ws_transport.connect().await
+        ws_transport
+            .connect()
+            .await
             .map_err(|e| diagnose_websocket_error(e, addr))?;
 
         // Connection successful (we don't actually use it here, just testing connectivity)
@@ -456,7 +483,6 @@ impl BootstrapManager {
         self.circuit_breaker.reset_all();
     }
 }
-
 
 /// Resolve bootstrap nodes from SCMESSENGER_BOOTSTRAP_NODES environment variable
 fn resolve_env_bootstrap_nodes() -> Vec<Multiaddr> {
@@ -477,10 +503,7 @@ fn discover_dns_bootstrap() -> Result<Vec<Multiaddr>, String> {
     let mut addrs = Vec::new();
 
     // Try well-known bootstrap domain
-    let known_hosts = [
-        "bootstrap.scmessenger.net",
-        "relay.scmessenger.net",
-    ];
+    let known_hosts = ["bootstrap.scmessenger.net", "relay.scmessenger.net"];
 
     for host in &known_hosts {
         // Try common ports
@@ -535,7 +558,7 @@ fn discover_websocket_bootstrap() -> Vec<Multiaddr> {
     let ip_ws_addrs = [
         "/ip4/34.135.34.73/tcp/443/ws",
         "/ip4/104.28.216.43/tcp/443/ws",
-        "/ip4/34.135.34.74/tcp/443/ws",  // Backup relay
+        "/ip4/34.135.34.74/tcp/443/ws", // Backup relay
     ];
 
     for addr_str in &ip_ws_addrs {
@@ -651,7 +674,9 @@ mod tests {
     fn test_dns_discovery() {
         let addrs = discover_dns_bootstrap().unwrap();
         assert!(!addrs.is_empty());
-        assert!(addrs.iter().any(|a| a.to_string().contains("bootstrap.scmessenger.net")));
+        assert!(addrs
+            .iter()
+            .any(|a| a.to_string().contains("bootstrap.scmessenger.net")));
     }
 
     #[test]
@@ -664,10 +689,17 @@ mod tests {
     #[test]
     fn test_websocket_discovery() {
         let addrs = discover_websocket_bootstrap();
-        assert!(!addrs.is_empty(), "WebSocket fallback should provide addresses");
-        assert!(addrs.iter().any(|a| a.to_string().contains("/ws")),
-                "Should contain WebSocket multiaddrs with /ws suffix");
-        assert!(addrs.iter().any(|a| a.to_string().contains("443")),
-                "Should contain addresses on standard HTTPS port");
+        assert!(
+            !addrs.is_empty(),
+            "WebSocket fallback should provide addresses"
+        );
+        assert!(
+            addrs.iter().any(|a| a.to_string().contains("/ws")),
+            "Should contain WebSocket multiaddrs with /ws suffix"
+        );
+        assert!(
+            addrs.iter().any(|a| a.to_string().contains("443")),
+            "Should contain addresses on standard HTTPS port"
+        );
     }
 }

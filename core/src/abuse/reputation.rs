@@ -6,9 +6,9 @@
 //! 3. Sophisticated abuse pattern recognition
 //! 4. Automatic blocking integration
 
-use std::sync::Arc;
-use crate::transport::reputation::{AbuseReputationManager, AbuseSignal, ReputationScore};
 use crate::abuse::spam_detection::{SpamDetectionEngine, SpamSignal};
+use crate::transport::reputation::{AbuseReputationManager, AbuseSignal, ReputationScore};
+use std::sync::Arc;
 
 /// Enhanced abuse reputation manager with spam detection
 pub struct EnhancedAbuseReputationManager {
@@ -17,10 +17,7 @@ pub struct EnhancedAbuseReputationManager {
 }
 
 impl EnhancedAbuseReputationManager {
-    pub fn new(
-        max_tracked_peers: usize,
-        spam_detector: SpamDetectionEngine,
-    ) -> Self {
+    pub fn new(max_tracked_peers: usize, spam_detector: SpamDetectionEngine) -> Self {
         Self {
             base_manager: AbuseReputationManager::new(max_tracked_peers),
             spam_detector,
@@ -56,13 +53,14 @@ impl EnhancedAbuseReputationManager {
         let score = self.base_manager.record_signal(peer_id, signal);
 
         // Check for spam patterns when certain signals occur
-        if matches!(signal, AbuseSignal::DuplicateMessage | AbuseSignal::InvalidFormat) {
+        if matches!(
+            signal,
+            AbuseSignal::DuplicateMessage | AbuseSignal::InvalidFormat
+        ) {
             let spam_result = self.spam_detector.detect_spam(peer_id);
             if spam_result.is_spam {
-                self.base_manager.record_signal(
-                    peer_id,
-                    AbuseSignal::InvalidFormat,
-                );
+                self.base_manager
+                    .record_signal(peer_id, AbuseSignal::InvalidFormat);
             }
         }
 
@@ -78,26 +76,36 @@ impl EnhancedAbuseReputationManager {
         match signal {
             SpamSignal::CommunityBlocked => {
                 // Handled by the spam detector; no additional base signal needed
-            },
+            }
             SpamSignal::ContentPattern => {
-                self.base_manager.record_signal(peer_id, AbuseSignal::InvalidFormat);
-            },
+                self.base_manager
+                    .record_signal(peer_id, AbuseSignal::InvalidFormat);
+            }
             SpamSignal::Flooding => {
-                self.base_manager.record_signal(peer_id, AbuseSignal::RateLimited);
-            },
+                self.base_manager
+                    .record_signal(peer_id, AbuseSignal::RateLimited);
+            }
             SpamSignal::MassDistribution => {
-                self.base_manager.record_signal(peer_id, AbuseSignal::DuplicateMessage);
-            },
+                self.base_manager
+                    .record_signal(peer_id, AbuseSignal::DuplicateMessage);
+            }
             SpamSignal::ColdContactSpam => {
-                self.base_manager.record_signal(peer_id, AbuseSignal::InvalidDestination);
-            },
+                self.base_manager
+                    .record_signal(peer_id, AbuseSignal::InvalidDestination);
+            }
         }
     }
 
     /// Record an outbound message for spam heuristic tracking.
     /// Delegates to the spam detection engine.
-    pub fn record_outbound_message(&self, peer_id: &str, envelope_data: &[u8], is_to_contact: bool) {
-        self.spam_detector.record_outbound_message(peer_id, envelope_data, is_to_contact);
+    pub fn record_outbound_message(
+        &self,
+        peer_id: &str,
+        envelope_data: &[u8],
+        is_to_contact: bool,
+    ) {
+        self.spam_detector
+            .record_outbound_message(peer_id, envelope_data, is_to_contact);
     }
 
     /// Get enhanced reputation score that includes spam detection
@@ -185,21 +193,18 @@ impl EnhancedReputationScore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
-    use crate::store::backend::MemoryStorage;
-    use crate::store::contacts::ContactManager;
-    use crate::store::blocked::BlockedManager;
     use crate::abuse::spam_detection::SpamDetectionConfig;
+    use crate::store::backend::MemoryStorage;
+    use crate::store::blocked::BlockedManager;
+    use crate::store::contacts::ContactManager;
+    use std::sync::Arc;
 
     fn make_manager() -> EnhancedAbuseReputationManager {
         let backend = Arc::new(MemoryStorage::new());
         let contacts = Arc::new(ContactManager::new(backend.clone()));
         let blocked = Arc::new(BlockedManager::new(backend));
-        let spam_detector = SpamDetectionEngine::new(
-            SpamDetectionConfig::default(),
-            contacts,
-            blocked,
-        );
+        let spam_detector =
+            SpamDetectionEngine::new(SpamDetectionConfig::default(), contacts, blocked);
         EnhancedAbuseReputationManager::new(1000, spam_detector)
     }
 

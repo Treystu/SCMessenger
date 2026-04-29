@@ -241,7 +241,7 @@ impl ResumePrefetchManager {
             .map(|(&hint, route)| (hint, route.priority))
             .collect();
 
-        hints.sort_by(|a, b| b.1.cmp(&a.1)); // Sort by priority descending
+        hints.sort_by_key(|b| std::cmp::Reverse(b.1)); // Sort by priority descending
 
         self.refresh_queue = hints.iter().map(|(h, _)| *h).collect();
 
@@ -361,7 +361,7 @@ impl ResumePrefetchManager {
 
         // Sort by priority for efficient lookup
         self.frequent_peers
-            .sort_by(|a, b| b.priority.cmp(&a.priority));
+            .sort_by_key(|b| std::cmp::Reverse(b.priority));
 
         // Limit list size
         if self.frequent_peers.len() > 50 {
@@ -547,4 +547,3 @@ mod tests {
         assert!(manager.frequent_peers[0].message_count < 2);
     }
 }
-

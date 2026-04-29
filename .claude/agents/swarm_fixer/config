@@ -1,0 +1,5 @@
+AGENT_ID=swarm_fixer
+AGENT_MODEL=gemini-3-flash-preview:cloud
+OLLAMA_HOST=localhost:11434
+WORKING_DIR=/c/Users/kanal/Documents/Github/SCMessenger
+START_TIME=1777437329

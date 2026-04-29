@@ -14,13 +14,13 @@ pub mod adaptive_ttl;
 pub mod engine;
 pub mod global;
 pub mod local;
+#[cfg(feature = "phase2_apis")]
+pub mod multipath;
 pub mod negative_cache;
 pub mod neighborhood;
 pub mod optimized_engine;
 #[cfg(feature = "phase2_apis")]
 pub mod reputation;
-#[cfg(feature = "phase2_apis")]
-pub mod multipath;
 pub mod resume_prefetch;
 pub mod smart_retry;
 pub mod timeout_budget;
@@ -40,4 +40,3 @@ pub use resume_prefetch::{
 };
 pub use smart_retry::{calculate_next_attempt, BackoffStrategy, DeliveryTrigger};
 pub use timeout_budget::{BudgetSummary, DiscoveryPhase, TimeoutBudget};
-

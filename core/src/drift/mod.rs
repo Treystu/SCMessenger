@@ -28,7 +28,10 @@ pub mod sync;
 pub use envelope::{DriftEnvelope, EnvelopeType};
 pub use frame::{DriftFrame, FrameType, FRAME_MAX_PAYLOAD, FRAME_READ_TIMEOUT};
 pub use policy::{DeviceState, PolicyEngine, PolicyError, RelayProfile};
-pub use relay::{DropReason, MaintenanceReport, NetworkState, RelayConfig, RelayDecision, RelayEngine, RelayError};
+pub use relay::{
+    DropReason, MaintenanceReport, NetworkState, RelayConfig, RelayDecision, RelayEngine,
+    RelayError,
+};
 pub use sketch::IBLT;
 pub use store::{MeshStore, MessageId, StoredEnvelope};
 pub use sync::{merge_envelopes, SyncMessage, SyncSession, SyncState};

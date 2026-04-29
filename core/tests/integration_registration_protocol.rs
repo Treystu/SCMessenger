@@ -1,9 +1,7 @@
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use scmessenger_core::identity::IdentityKeys;
-use scmessenger_core::transport::{
-    start_swarm, DeregistrationRequest, RegistrationRequest,
-};
 use scmessenger_core::transport::swarm::SwarmEvent2;
+use scmessenger_core::transport::{start_swarm, DeregistrationRequest, RegistrationRequest};
 use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
 

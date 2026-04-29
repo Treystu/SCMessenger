@@ -14,9 +14,23 @@
 
 use super::reflection::{AddressReflectionRequest, AddressReflectionResponse};
 use crate::identity::IdentityKeys;
-#[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "windows")))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    not(target_os = "android"),
+    not(target_os = "windows")
+))]
 use libp2p::mdns;
-#[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "windows")))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    not(target_os = "android"),
+    not(target_os = "windows")
+))]
+use libp2p::swarm::behaviour::toggle::Toggle;
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    not(target_os = "android"),
+    not(target_os = "windows")
+))]
 use libp2p::upnp;
 use libp2p::{
     autonat, dcutr, gossipsub, identify, kad, ping, relay,
@@ -24,8 +38,6 @@ use libp2p::{
     swarm::NetworkBehaviour,
     StreamProtocol,
 };
-#[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "windows")))]
-use libp2p::swarm::behaviour::toggle::Toggle;
 use uuid::Uuid;
 use web_time::Duration;
 
@@ -61,12 +73,20 @@ pub struct IronCoreBehaviour {
     /// LAN peer discovery — wrapped in Toggle so it can be disabled in
     /// environments without multicast support (containers, CI, cloud VMs).
     /// Also disabled on Android (no multicast support).
-    #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "windows")))]
+    #[cfg(all(
+        not(target_arch = "wasm32"),
+        not(target_os = "android"),
+        not(target_os = "windows")
+    ))]
     pub mdns: Toggle<mdns::tokio::Behaviour>,
     /// Peer identification — advertises relay capability
     pub identify: identify::Behaviour,
     /// UPnP port mapping
-    #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "windows")))]
+    #[cfg(all(
+        not(target_arch = "wasm32"),
+        not(target_os = "android"),
+        not(target_os = "windows")
+    ))]
     pub upnp: upnp::tokio::Behaviour,
 }
 
@@ -469,7 +489,11 @@ impl IronCoreBehaviour {
         // mDNS for LAN discovery — gracefully disabled in environments without
         // multicast support (Docker containers, cloud VMs, CI runners).
         // Also disabled on Android (no multicast support).
-        #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "windows")))]
+        #[cfg(all(
+            not(target_arch = "wasm32"),
+            not(target_os = "android"),
+            not(target_os = "windows")
+        ))]
         let mdns = match mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id) {
             Ok(m) => {
                 tracing::info!("mDNS LAN discovery: enabled");
@@ -501,7 +525,11 @@ impl IronCoreBehaviour {
                     peer_id
                 )),
         );
-        #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "windows")))]
+        #[cfg(all(
+            not(target_arch = "wasm32"),
+            not(target_os = "android"),
+            not(target_os = "windows")
+        ))]
         let upnp = upnp::tokio::Behaviour::default();
 
         // Relay server - all nodes act as relays for NAT traversal
@@ -520,10 +548,18 @@ impl IronCoreBehaviour {
             ledger_exchange,
             gossipsub,
             kademlia,
-            #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "windows")))]
+            #[cfg(all(
+                not(target_arch = "wasm32"),
+                not(target_os = "android"),
+                not(target_os = "windows")
+            ))]
             mdns,
             identify,
-            #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "windows")))]
+            #[cfg(all(
+                not(target_arch = "wasm32"),
+                not(target_os = "android"),
+                not(target_os = "windows")
+            ))]
             upnp,
         })
     }

@@ -1,20 +1,55 @@
 {
   "version": "2.2",
   "max_concurrent": 2,
-  "default_agent": "architect",
+  "default_agent": "orchestrator",
   "launch_mode": "cli_only",
   "agents": [
     {
-      "name": "architect",
+      "name": "orchestrator",
       "launch_type": "cli",
-      "model": "qwen3-coder:480b:cloud",
-      "fallback_model": "qwen3.5:397b:cloud",
-      "purpose": "System design, planning, architecture decisions, multi-file reasoning",
+      "model": "glm-5.1:cloud",
+      "fallback_model": "qwen3-coder:480b:cloud",
+      "purpose": "Lead coordinator: tracks progress across all phases, delegates tasks, verifies completion, manages HANDOFF state, ensures the swarm stays on track",
+      "task_patterns": [
+        "ORCHESTRATE",
+        "COORDINATE",
+        "DELEGATE",
+        "VERIFY",
+        "TRACK"
+      ],
+      "max_per_type": 1
+    },
+    {
+      "name": "architect-planner",
+      "launch_type": "cli",
+      "model": "deepseek-v4-pro:cloud",
+      "fallback_model": "deepseek-v3.2:cloud",
+      "purpose": "High-level architecture planning AND precision validation: designs system architecture, plans implementation order, validates correctness of crypto/protocol/security code, performs adversarial review",
       "task_patterns": [
         "ARCHITECTURE",
         "PLAN",
         "DESIGN",
-        "REFACTOR"
+        "VALIDATE",
+        "SECURITY",
+        "CRYPTO",
+        "AUDIT",
+        "REVIEW"
+      ],
+      "max_per_type": 1
+    },
+    {
+      "name": "rust-coder",
+      "launch_type": "cli",
+      "model": "glm-5.1:cloud",
+      "fallback_model": "qwen3-coder-next:cloud",
+      "purpose": "Rust core implementation: identity, crypto, transport, store, relay modules. glm-5.1 has proven Rust output quality",
+      "task_patterns": [
+        "RUST",
+        "CORE",
+        "PROTOCOL",
+        "CRYPTO_IMPL",
+        "WASM",
+        "MOBILE_BRIDGE"
       ],
       "max_per_type": 1
     },
@@ -23,30 +58,27 @@
       "launch_type": "cli",
       "model": "qwen3-coder-next:cloud",
       "fallback_model": "glm-5.1:cloud",
-      "purpose": "Rapid feature landing, general coding, bug fixes, feature implementation",
+      "purpose": "Rapid feature landing: general coding, bug fixes, platform client implementation",
       "task_patterns": [
         "IMPLEMENTATION",
         "BUG",
         "FIX",
         "FEATURE",
-        "WASM",
-        "IOS",
-        "ANDROID"
+        "CLI",
+        "PLATFORM"
       ],
       "max_per_type": 2
     },
     {
-      "name": "precision-validator",
+      "name": "gatekeeper-reviewer",
       "launch_type": "cli",
-      "model": "deepseek-v3.2:cloud",
-      "fallback_model": "deepseek-v4-pro:cloud",
-      "purpose": "Cryptography, math, protocol validation, security audit, unsafe block verification",
+      "model": "kimi-k2-thinking:cloud",
+      "fallback_model": "kimi-k2.6:cloud",
+      "purpose": "Pre-merge verification: final code review gate, ensures build passes, tests pass, docs synced",
       "task_patterns": [
-        "SECURITY",
-        "CRYPTO",
-        "AUDIT",
-        "VERIFY",
-        "REVIEW",
+        "MERGE",
+        "RELEASE",
+        "FINAL_REVIEW",
         "GATE"
       ],
       "max_per_type": 1
@@ -54,14 +86,15 @@
     {
       "name": "worker",
       "launch_type": "cli",
-      "model": "devstral-2:123b:cloud",
-      "fallback_model": "gemma4:31b:cloud",
-      "purpose": "Unit tests, UniFFI bindings, documentation, platform engineering",
+      "model": "gemma4:31b:cloud",
+      "fallback_model": "devstral-2:123b:cloud",
+      "purpose": "Unit tests, UniFFI bindings, documentation, platform engineering, small changes under 200 LOC",
       "task_patterns": [
         "PLATFORM",
         "BINDINGS",
         "TEST",
-        "DOCS"
+        "DOCS",
+        "GRADLE"
       ],
       "max_per_type": 1
     },
@@ -75,48 +108,22 @@
         "LINT",
         "TRIAGE",
         "QUICK",
-        "CI"
+        "CI",
+        "FMT"
       ],
       "max_per_type": 1
     },
     {
-      "name": "gatekeeper-reviewer",
+      "name": "wiring-verifier",
       "launch_type": "cli",
-      "model": "kimi-k2-thinking:cloud",
-      "fallback_model": "kimi-k2.6:cloud",
-      "purpose": "Pre-merge verification, final code review gate",
+      "model": "deepseek-v4-pro:cloud",
+      "fallback_model": "deepseek-v3.2:cloud",
+      "purpose": "Full repo-wide wiring verification: checks all module connections, IronCore entry points, cross-module dependencies, API surface completeness",
       "task_patterns": [
-        "MERGE",
-        "RELEASE",
-        "FINAL_REVIEW"
-      ],
-      "max_per_type": 1
-    },
-    {
-      "name": "swarm-orchestrator",
-      "launch_type": "cli",
-      "model": "mistral-large-3:675b:cloud",
-      "fallback_model": "cogito-2.1:671b:cloud",
-      "purpose": "Pipeline management, multi-agent coordination",
-      "task_patterns": [
-        "ORCHESTRATE",
-        "PIPELINE",
-        "SWARM"
-      ],
-      "max_per_type": 1
-    },
-    {
-      "name": "rust-coder",
-      "launch_type": "cli",
-      "model": "glm-5.1:cloud",
-      "fallback_model": "qwen3-coder-next:cloud",
-      "purpose": "Rust core, protocol implementation, WASM \u2014 glm-5.1 has proven Rust output",
-      "task_patterns": [
-        "RUST",
-        "CORE",
-        "PROTOCOL",
-        "CRYPTO_IMPL",
-        "WASM"
+        "WIRING",
+        "VERIFY",
+        "INTEGRATION",
+        "CONNECTIVITY"
       ],
       "max_per_type": 1
     },
@@ -133,21 +140,6 @@
         "CORE_TEST",
         "CRASH",
         "STRESS"
-      ],
-      "max_per_type": 1
-    },
-    {
-      "name": "deep-analyst",
-      "launch_type": "cli",
-      "model": "deepseek-v4-pro:cloud",
-      "fallback_model": "deepseek-v3.2:cloud",
-      "purpose": "Deep analysis, complex bug RCA, protocol correctness proofs, multi-step reasoning",
-      "task_patterns": [
-        "RCA",
-        "ANALYSIS",
-        "PROOF",
-        "CORRECTNESS",
-        "DEEP_DIVE"
       ],
       "max_per_type": 1
     },

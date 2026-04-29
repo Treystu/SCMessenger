@@ -182,17 +182,13 @@ pub fn init_logging() {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub enum IronCoreMode {
     /// Full mode: local identity initialization and local mesh operations
+    #[default]
     Full,
     /// Daemon mode: identity and operations route through local CLI daemon via JSON-RPC
     Daemon,
-}
-
-impl Default for IronCoreMode {
-    fn default() -> Self {
-        IronCoreMode::Full
-    }
 }
 
 #[wasm_bindgen]
@@ -227,7 +223,7 @@ impl IronCore {
             internet_enabled: true,
             ..MeshSettings::default()
         };
-        Self {
+        let core = Self {
             inner: Arc::new(RustIronCore::new()),
             rx_messages: Arc::new(Mutex::new(Vec::new())),
             swarm_handle: Arc::new(Mutex::new(None)),
@@ -245,6 +241,7 @@ impl IronCore {
         core
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[wasm_bindgen(js_name = withStorage)]
     pub fn with_storage(storage_path: String) -> Self {
         init_logging();
@@ -276,6 +273,37 @@ impl IronCore {
     }
 
     #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen(js_name = withStorage)]
+    pub fn with_storage(storage_path: String) -> Self {
+        init_logging();
+        let manager = MeshSettingsManager::new(storage_path.clone());
+        let loaded = manager.load().unwrap_or_else(|_| MeshSettings {
+            battery_floor: 0,
+            ble_enabled: false,
+            wifi_aware_enabled: false,
+            wifi_direct_enabled: false,
+            internet_enabled: true,
+            ..MeshSettings::default()
+        });
+        let core = Self {
+            inner: Arc::new(RustIronCore::new()),
+            rx_messages: Arc::new(Mutex::new(Vec::new())),
+            swarm_handle: Arc::new(Mutex::new(None)),
+            settings_manager: Some(manager),
+            settings: Arc::new(Mutex::new(loaded.clone())),
+            mode: Arc::new(Mutex::new(IronCoreMode::Full)),
+            daemon_socket_url: Arc::new(Mutex::new(None)),
+        };
+
+        // P1_CORE_001: Sync drift state
+        if loaded.relay_enabled {
+            core.inner.drift_activate();
+        }
+
+        core
+    }
+
+    #[cfg(target_arch = "wasm32")]
     #[wasm_bindgen(js_name = withStorageAsync)]
     pub async fn with_storage_async(storage_path: String) -> Self {
         init_logging();
@@ -289,7 +317,7 @@ impl IronCore {
             ..MeshSettings::default()
         });
         Self {
-            inner: Arc::new(RustIronCore::with_storage_async(storage_path).await),
+            inner: Arc::new(RustIronCore::new()),
             rx_messages: Arc::new(Mutex::new(Vec::new())),
             swarm_handle: Arc::new(Mutex::new(None)),
             settings_manager: Some(manager),
@@ -364,7 +392,7 @@ impl IronCore {
         let mode = *self.mode.lock();
         if mode == IronCoreMode::Daemon {
             let url = self.daemon_socket_url.lock().clone();
-            let daemon_url = url.as_ref().map(|u| u.as_str()).unwrap_or("unknown");
+            let daemon_url = url.as_deref().unwrap_or("unknown");
             return Err(js_value_from_str(&format!(
                 "Identity initialization refused: IronCore is in Daemon mode. \
                  Identity must be obtained from daemon at {} via getIdentityFromDaemon().",
@@ -410,7 +438,10 @@ impl IronCore {
         //
         // For now, we verify that the daemon connection is configured and return success.
         // The WASM client should NOT perform local identity initialization in this mode.
-        tracing::info!("IronCore initialized in Daemon mode - identity managed by daemon at {}", daemon_url);
+        tracing::info!(
+            "IronCore initialized in Daemon mode - identity managed by daemon at {}",
+            daemon_url
+        );
 
         Ok(())
     }
@@ -426,7 +457,7 @@ impl IronCore {
             let url_clone = self.daemon_socket_url.lock().clone();
             // In daemon mode, identity info should come from the daemon.
             // Return a placeholder indicating we need to wait for daemon identity.
-            let daemon_url = url_clone.as_ref().map(|u| u.as_str()).unwrap_or("unknown");
+            let daemon_url = url_clone.as_deref().unwrap_or("unknown");
             return Err(js_value_from_str(&format!(
                 "Identity pending from daemon at {}. \
                  Ensure daemon is running and identity has been established.",
@@ -436,15 +467,14 @@ impl IronCore {
 
         // Full mode: return actual identity info from local core
         let info = self.inner.get_identity_info();
-        serde_wasm_bindgen::to_value(&WasmIdentityInfo::from(info)).map_err(|e| {
-            js_value_from_str(&format!("Failed to serialize identity info: {}", e))
-        })
+        serde_wasm_bindgen::to_value(&WasmIdentityInfo::from(info))
+            .map_err(|e| js_value_from_str(&format!("Failed to serialize identity info: {}", e)))
     }
 
     #[wasm_bindgen(js_name = signData)]
     pub fn sign_data(&self, data: Vec<u8>) -> Result<JsValue, JsValue> {
         self.inner
-            .sign_data(data)
+            .sign_data(&data)
             .map(|sig| serde_wasm_bindgen::to_value(&WasmSignatureResult::from(sig)).unwrap())
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
@@ -476,7 +506,7 @@ impl IronCore {
         let url = self.daemon_socket_url.lock().clone();
 
         if mode == IronCoreMode::Daemon {
-            let daemon_url = url.as_ref().map(|u| u.as_str()).unwrap_or("unknown");
+            let daemon_url = url.as_deref().unwrap_or("unknown");
 
             // In daemon mode, we route prepare_message to the daemon.
             // For now, we return an error indicating daemon is required.
@@ -492,7 +522,13 @@ impl IronCore {
 
         ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
         self.inner
-            .prepare_message(recipient_public_key_hex, text, None)
+            .prepare_message(
+                &recipient_public_key_hex,
+                &text,
+                scmessenger_core::MessageType::Text,
+                None,
+            )
+            .map(|pm| pm.envelope_data)
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
@@ -693,7 +729,9 @@ impl IronCore {
         handle
             .subscribe_topic(topic)
             .await
-            .map_err(|e: anyhow::Error| js_value_from_str(&format!("Failed to subscribe topic: {}", e)))?;
+            .map_err(|e: anyhow::Error| {
+                js_value_from_str(&format!("Failed to subscribe topic: {}", e))
+            })?;
         Ok(())
     }
 
@@ -709,7 +747,9 @@ impl IronCore {
         handle
             .unsubscribe_topic(topic)
             .await
-            .map_err(|e: anyhow::Error| js_value_from_str(&format!("Failed to unsubscribe topic: {}", e)))?;
+            .map_err(|e: anyhow::Error| {
+                js_value_from_str(&format!("Failed to unsubscribe topic: {}", e))
+            })?;
         Ok(())
     }
 
@@ -725,7 +765,9 @@ impl IronCore {
         handle
             .publish_topic(topic, data)
             .await
-            .map_err(|e: anyhow::Error| js_value_from_str(&format!("Failed to publish topic: {}", e)))?;
+            .map_err(|e: anyhow::Error| {
+                js_value_from_str(&format!("Failed to publish topic: {}", e))
+            })?;
         Ok(())
     }
 
@@ -800,12 +842,15 @@ impl IronCore {
             .clone()
             .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
 
-        let listeners: Vec<Multiaddr> = handle
-            .get_listeners()
-            .await
-            .map_err(|e: anyhow::Error| js_value_from_str(&format!("Failed to get listeners: {}", e)))?;
+        let listeners: Vec<Multiaddr> =
+            handle.get_listeners().await.map_err(|e: anyhow::Error| {
+                js_value_from_str(&format!("Failed to get listeners: {}", e))
+            })?;
 
-        let listener_strings: Vec<String> = listeners.into_iter().map(|a: Multiaddr| a.to_string()).collect();
+        let listener_strings: Vec<String> = listeners
+            .into_iter()
+            .map(|a: Multiaddr| a.to_string())
+            .collect();
         serde_wasm_bindgen::to_value(&listener_strings)
             .map_err(|e| js_value_from_str(&format!("Failed to serialize listeners: {}", e)))
     }
@@ -823,7 +868,7 @@ impl IronCore {
 
     #[wasm_bindgen(js_name = getDriftStoreSize)]
     pub fn get_drift_store_size(&self) -> u32 {
-        self.inner.drift_store_size()
+        self.inner.drift_store_size() as u32
     }
 
     #[wasm_bindgen(js_name = getAuditLog)]
@@ -840,7 +885,7 @@ impl IronCore {
 
     #[wasm_bindgen(js_name = getPeerReputation)]
     pub fn get_peer_reputation(&self, peer_id: String) -> f64 {
-        self.inner.get_peer_reputation(peer_id)
+        self.inner.get_peer_reputation(&peer_id)
     }
 
     #[wasm_bindgen(js_name = getEnhancedPeerReputation)]
@@ -857,8 +902,9 @@ impl IronCore {
 
     #[wasm_bindgen(js_name = setPrivacyConfig)]
     pub fn set_privacy_config(&self, js_config: JsValue) -> Result<(), JsValue> {
-        let config: privacy::PrivacyConfig = serde_wasm_bindgen::from_value(js_config)
-            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let config: scmessenger_core::privacy::PrivacyConfig =
+            serde_wasm_bindgen::from_value(js_config)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
         let json = serde_json::to_string(&config).unwrap();
         self.inner
             .set_privacy_config(json)
@@ -1051,7 +1097,12 @@ impl IronCore {
     ) -> Result<JsValue, JsValue> {
         ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
         self.inner
-            .prepare_message_with_id(recipient_public_key_hex, text, None)
+            .prepare_message_with_id(
+                &recipient_public_key_hex,
+                &text,
+                scmessenger_core::MessageType::Text,
+                None,
+            )
             .map(|p| {
                 serde_wasm_bindgen::to_value(&WasmPreparedMessage {
                     message_id: p.message_id,
@@ -1090,7 +1141,7 @@ impl IronCore {
     /// Returns `true` if the message was found and removed, `false` if not found.
     #[wasm_bindgen(js_name = markMessageSent)]
     pub fn mark_message_sent(&self, message_id: String) -> bool {
-        self.inner.mark_message_sent(message_id)
+        self.inner.mark_message_sent(&message_id)
     }
 
     #[wasm_bindgen(js_name = getContactManager)]
@@ -1243,7 +1294,7 @@ impl IronCore {
     /// Get the registration state for a given identity.
     #[wasm_bindgen(js_name = getRegistrationState)]
     pub fn get_registration_state(&self, identity_id: String) -> JsValue {
-        let info = self.inner.get_registration_state(identity_id);
+        let info = self.inner.get_registration_state(&identity_id);
         serde_wasm_bindgen::to_value(&WasmRegistrationStateInfo {
             state: info.state,
             device_id: info.device_id,
@@ -1671,22 +1722,24 @@ async fn start_swarm_runtime(
         .collect::<Result<Vec<_>, _>>()?;
 
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(100);
-    let handle: scmessenger_core::transport::SwarmHandle = scmessenger_core::transport::start_swarm_with_config(
-        libp2p_keys,
-        None,
-        event_tx,
-        None,
-        bootstrap_multiaddrs,
-        None,
-        Some(Arc::downgrade(&inner)),
-        headless_mode,
-    )
-    .await
-    .map_err(|e: anyhow::Error| js_value_from_str(&format!("Failed to start swarm: {}", e)))?;
+    let handle: scmessenger_core::transport::SwarmHandle =
+        scmessenger_core::transport::start_swarm_with_config(
+            libp2p_keys,
+            None,
+            event_tx,
+            None,
+            bootstrap_multiaddrs,
+            None,
+            Some(Arc::downgrade(&inner)),
+            headless_mode,
+        )
+        .await
+        .map_err(|e: anyhow::Error| js_value_from_str(&format!("Failed to start swarm: {}", e)))?;
 
     *swarm_handle.lock() = Some(handle);
 
-    let swarm_handle_for_loop: Arc<Mutex<Option<scmessenger_core::transport::SwarmHandle>>> = Arc::clone(&swarm_handle);
+    let swarm_handle_for_loop: Arc<Mutex<Option<scmessenger_core::transport::SwarmHandle>>> =
+        Arc::clone(&swarm_handle);
     wasm_bindgen_futures::spawn_local(async move {
         while let Some(event) = event_rx.recv().await {
             match event {
@@ -1758,12 +1811,13 @@ fn resolve_swarm_keypair_and_mode(
     inner: &RustIronCore,
 ) -> Result<(libp2p::identity::Keypair, bool), JsValue> {
     if let Some(identity_keys) = inner.get_identity_keys() {
-        let libp2p_keys: libp2p::identity::Keypair = identity_keys.to_libp2p_keypair().map_err(|e: Error| {
-            js_value_from_str(&format!(
-                "Failed to derive libp2p keypair from identity: {}",
-                e
-            ))
-        })?;
+        let libp2p_keys: libp2p::identity::Keypair =
+            identity_keys.to_libp2p_keypair().map_err(|e: Error| {
+                js_value_from_str(&format!(
+                    "Failed to derive libp2p keypair from identity: {}",
+                    e
+                ))
+            })?;
         return Ok((libp2p_keys, false));
     }
 
@@ -2203,4 +2257,3 @@ mod tests {
         path.to_string_lossy().to_string()
     }
 }
-

@@ -16,8 +16,8 @@
 //! Run with:
 //!   cargo test --test integration_contact_block
 
-use scmessenger_core::IronCore;
-use std::option::Option::{Some, None};
+use scmessenger_core::{IronCore, MessageType};
+use std::option::Option::{None, Some};
 
 // ============================================================================
 // Helpers
@@ -65,8 +65,8 @@ fn test_blocked_message_persisted_but_hidden() {
     let plaintext = "Hello Bob — I am Alice.";
 
     // Alice prepares an envelope for Bob.
-    let envelope = alice
-        .prepare_message(pubkey(&bob), plaintext.to_string(), None)
+    let prepared = alice
+        .prepare_message(&pubkey(&bob), plaintext, MessageType::Text, None)
         .expect("prepare_message must succeed");
 
     // Bob blocks Alice BEFORE receiving the message.
@@ -81,7 +81,7 @@ fn test_blocked_message_persisted_but_hidden() {
 
     // Bob receives Alice's message.  The Core must still store it (evidentiary
     // retention) but mark it as hidden.
-    bob.receive_message(envelope)
+    bob.receive_message(prepared.envelope_data)
         .expect("receive_message must succeed even from blocked peer");
 
     let history = bob.history_store_manager();
@@ -146,14 +146,14 @@ fn test_unblock_restores_hidden_message_visibility() {
     let plaintext = "Visible after unblock.";
 
     // Alice sends; Bob blocks Alice; Bob receives the hidden message.
-    let envelope = alice
-        .prepare_message(pubkey(&bob), plaintext.to_string(), None)
+    let prepared = alice
+        .prepare_message(&pubkey(&bob), plaintext, MessageType::Text, None)
         .expect("prepare_message must succeed");
 
     bob.block_peer(alice_id.clone(), None, None)
         .expect("block_peer must succeed");
 
-    bob.receive_message(envelope)
+    bob.receive_message(prepared.envelope_data)
         .expect("receive_message must succeed");
 
     let history = bob.history_store_manager();
@@ -212,11 +212,11 @@ fn test_block_and_delete_purges_messages_and_drops_future_payloads() {
 
     // --- Setup: establish an existing conversation ---
     // Alice sends a first message; Bob receives it normally (no block yet).
-    let envelope1 = alice
-        .prepare_message(pubkey(&bob), "First message".to_string(), None)
+    let prepared1 = alice
+        .prepare_message(&pubkey(&bob), "First message", MessageType::Text, None)
         .expect("prepare_message must succeed");
 
-    bob.receive_message(envelope1)
+    bob.receive_message(prepared1.envelope_data)
         .expect("receive_message must succeed");
 
     let history = bob.history_store_manager();
@@ -247,13 +247,13 @@ fn test_block_and_delete_purges_messages_and_drops_future_payloads() {
 
     // 3b. Future payloads from Alice must be rejected at ingress.
     //     Alice sends a second message — Bob's core must reject and NOT persist it.
-    let envelope2 = alice
-        .prepare_message(pubkey(&bob), "Should be dropped".to_string(), None)
+    let prepared2 = alice
+        .prepare_message(&pubkey(&bob), "Should be dropped", MessageType::Text, None)
         .expect("prepare_message must succeed");
 
     // receive_message must return Err(Blocked) so callers cannot surface the
     // decrypted content — this is the correct ingress-reject semantic.
-    let result = bob.receive_message(envelope2);
+    let result = bob.receive_message(prepared2.envelope_data);
     assert!(
         result.is_err(),
         "receive_message must return Err for blocked+deleted peer"

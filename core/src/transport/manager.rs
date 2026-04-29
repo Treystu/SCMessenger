@@ -4,13 +4,13 @@
 //! the best transport for each peer based on capabilities and connection state.
 
 use crate::transport::abstraction::{
-    TransportCapabilities, TransportEvent, TransportType, TransportError,
+    TransportCapabilities, TransportError, TransportEvent, TransportType,
 };
 use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use web_time::{Duration, SystemTime};
 use tracing::{debug, info, warn};
+use web_time::{Duration, SystemTime};
 
 /// State of a registered transport
 #[derive(Debug, Clone)]
@@ -65,7 +65,8 @@ impl OutgoingQueue {
     pub fn enqueue(&mut self, item: PendingSend) {
         self.items.push(item);
         // Sort so highest priority items are first
-        self.items.sort_by(|a, b| b.priority.cmp(&a.priority));
+        self.items
+            .sort_by_key(|item| std::cmp::Reverse(item.priority));
     }
 
     /// Dequeue the highest priority item
@@ -158,8 +159,7 @@ impl ReconnectionState {
             .checked_pow(self.failures)
             .unwrap_or(u32::MAX) as u64;
         let interval_ms = base.saturating_mul(multiplier);
-        let capped = Duration::from_millis(interval_ms).min(RECONNECT_MAX_INTERVAL);
-        capped
+        Duration::from_millis(interval_ms).min(RECONNECT_MAX_INTERVAL)
     }
 
     /// Record a failed reconnection attempt, advancing the backoff
@@ -222,7 +222,11 @@ impl TransportManager {
     }
 
     /// Register a transport with capabilities
-    pub fn register_transport(&self, transport_type: TransportType, capabilities: TransportCapabilities) {
+    pub fn register_transport(
+        &self,
+        transport_type: TransportType,
+        capabilities: TransportCapabilities,
+    ) {
         let mut transports = self.transports.write();
         transports.insert(transport_type, TransportState::new(capabilities));
         info!("Transport registered: {}", transport_type);
@@ -232,14 +236,12 @@ impl TransportManager {
     pub fn handle_event(&self, event: TransportEvent) {
         match event {
             TransportEvent::PeerDiscovered {
-                peer_id,
-                transport,
-                ..
+                peer_id, transport, ..
             } => {
                 let mut peer_transports = self.peer_transports.write();
                 peer_transports
                     .entry(peer_id)
-                    .or_insert_with(HashSet::new)
+                    .or_default()
                     .insert(transport);
 
                 let mut last_seen = self.peer_last_seen.write();
@@ -247,10 +249,7 @@ impl TransportManager {
 
                 debug!("Peer {:x?} discovered on {}", &peer_id[..8], transport);
             }
-            TransportEvent::PeerDisconnected {
-                peer_id,
-                transport,
-            } => {
+            TransportEvent::PeerDisconnected { peer_id, transport } => {
                 let mut peer_transports = self.peer_transports.write();
                 if let Some(transports) = peer_transports.get_mut(&peer_id) {
                     transports.remove(&transport);
@@ -261,16 +260,20 @@ impl TransportManager {
                         let target_peers = self.target_peers.read();
                         if let Some(addr) = target_peers.get(&peer_id) {
                             let mut reconnect_queue = self.reconnection_queue.write();
-                            if !reconnect_queue.contains_key(&peer_id) {
+                            if let std::collections::hash_map::Entry::Vacant(e) =
+                                reconnect_queue.entry(peer_id)
+                            {
                                 let mut known_transports = HashSet::new();
                                 known_transports.insert(transport);
-                                reconnect_queue.insert(
+                                e.insert(ReconnectionState::new(
                                     peer_id,
-                                    ReconnectionState::new(peer_id, known_transports, addr.clone()),
-                                );
+                                    known_transports,
+                                    addr.clone(),
+                                ));
                                 info!(
                                     "Peer {:x?} lost on {} — queued for reconnection",
-                                    &peer_id[..8], transport
+                                    &peer_id[..8],
+                                    transport
                                 );
                             }
                         }
@@ -287,7 +290,11 @@ impl TransportManager {
                 if let Some(state) = transports.get_mut(&transport) {
                     state.connected_peers.insert(peer_id);
                 }
-                debug!("Connection established to {:x?} via {}", &peer_id[..8], transport);
+                debug!(
+                    "Connection established to {:x?} via {}",
+                    &peer_id[..8],
+                    transport
+                );
             }
             TransportEvent::TransportError { .. } => {
                 // Log and continue
@@ -300,13 +307,18 @@ impl TransportManager {
     /// **Important:** Returns `SendResult::Queued`, which means the message is
     /// in the outgoing queue — NOT that the peer has received it. Actual delivery
     /// confirmation requires an application-level receipt (see `CoreDelegate::on_receipt_received`).
-    pub fn send_to_peer(&self, peer_id: [u8; 32], data: Vec<u8>, priority: u8) -> Result<SendResult, TransportError> {
+    pub fn send_to_peer(
+        &self,
+        peer_id: [u8; 32],
+        data: Vec<u8>,
+        priority: u8,
+    ) -> Result<SendResult, TransportError> {
         let best = self.best_transport_for_peer(peer_id)?;
 
         // Structured tracing: Log transport handoff to hardware layer
         tracing::info!(
             event = "transport_handoff",
-            peer_id = %hex::encode(&peer_id),
+            peer_id = %hex::encode(peer_id),
             transport = %best,
             priority = priority,
             payload_size = data.len()
@@ -325,14 +337,23 @@ impl TransportManager {
     }
 
     /// Determine the best transport for a peer
-    pub fn best_transport_for_peer(&self, peer_id: [u8; 32]) -> Result<TransportType, TransportError> {
+    pub fn best_transport_for_peer(
+        &self,
+        peer_id: [u8; 32],
+    ) -> Result<TransportType, TransportError> {
         let peer_transports = self.peer_transports.read();
         let available = peer_transports
             .get(&peer_id)
-            .ok_or(TransportError::PeerNotFound(format!("{:x?}", &peer_id[..8])))?;
+            .ok_or(TransportError::PeerNotFound(format!(
+                "{:x?}",
+                &peer_id[..8]
+            )))?;
 
         if available.is_empty() {
-            return Err(TransportError::PeerNotFound(format!("{:x?}", &peer_id[..8])));
+            return Err(TransportError::PeerNotFound(format!(
+                "{:x?}",
+                &peer_id[..8]
+            )));
         }
 
         let transports = self.transports.read();
@@ -358,10 +379,7 @@ impl TransportManager {
                 }
 
                 // Bandwidth
-                let bandwidth_score = std::cmp::min(
-                    100,
-                    (caps.estimated_bandwidth_bps / 1_000_000) as u64,
-                );
+                let bandwidth_score = std::cmp::min(100, caps.estimated_bandwidth_bps / 1_000_000);
                 score += bandwidth_score * 5;
 
                 // Prefer lower latency
@@ -372,7 +390,10 @@ impl TransportManager {
             score
         });
 
-        best.copied().ok_or(TransportError::PeerNotFound(format!("{:x?}", &peer_id[..8])))
+        best.copied().ok_or(TransportError::PeerNotFound(format!(
+            "{:x?}",
+            &peer_id[..8]
+        )))
     }
 
     /// Get all discovered peers
@@ -456,16 +477,22 @@ impl TransportManager {
         if ready.len() > RECONNECT_MAX_CONCURRENT {
             // Sort by disconnected_at so longest-waiting peers go first
             ready.sort_by(|a, b| {
-                let a_disc = queue.get(a).map(|s| s.disconnected_at).unwrap_or(SystemTime::UNIX_EPOCH);
-                let b_disc = queue.get(b).map(|s| s.disconnected_at).unwrap_or(SystemTime::UNIX_EPOCH);
+                let a_disc = queue
+                    .get(a)
+                    .map(|s| s.disconnected_at)
+                    .unwrap_or(SystemTime::UNIX_EPOCH);
+                let b_disc = queue
+                    .get(b)
+                    .map(|s| s.disconnected_at)
+                    .unwrap_or(SystemTime::UNIX_EPOCH);
                 a_disc.cmp(&b_disc)
             });
 
             // Stagger the ones we're NOT returning this tick
             for (i, peer_id) in ready[RECONNECT_MAX_CONCURRENT..].iter().enumerate() {
                 if let Some(state) = queue.get_mut(peer_id) {
-                    state.next_attempt_at = SystemTime::now()
-                        + RECONNECT_STAGGER_INTERVAL * (i as u32 + 1);
+                    state.next_attempt_at =
+                        SystemTime::now() + RECONNECT_STAGGER_INTERVAL * (i as u32 + 1);
                 }
             }
 
@@ -518,21 +545,22 @@ impl TransportManager {
         let mut peer_transports = self.peer_transports.write();
 
         // Remove peers not seen for 5 minutes
-        last_seen.retain(|peer_id, seen_at| {
-            match now.duration_since(*seen_at) {
-                Ok(elapsed) if elapsed.as_secs() > 300 => {
-                    peer_transports.remove(peer_id);
-                    false
-                }
-                Err(_) => false,
-                Ok(_) => true,
+        last_seen.retain(|peer_id, seen_at| match now.duration_since(*seen_at) {
+            Ok(elapsed) if elapsed.as_secs() > 300 => {
+                peer_transports.remove(peer_id);
+                false
             }
+            Err(_) => false,
+            Ok(_) => true,
         });
 
         // Prune exhausted reconnection entries
         self.reconnection_queue.write().retain(|peer_id, state| {
             if state.is_exhausted() {
-                info!("Pruning exhausted reconnection entry for {:x?}", &peer_id[..8]);
+                info!(
+                    "Pruning exhausted reconnection entry for {:x?}",
+                    &peer_id[..8]
+                );
                 false
             } else {
                 true
@@ -744,7 +772,9 @@ mod tests {
         };
         manager.handle_event(established);
 
-        let best = manager.best_transport_for_peer(peer_id).expect("should have transport");
+        let best = manager
+            .best_transport_for_peer(peer_id)
+            .expect("should have transport");
         assert_eq!(best, TransportType::WiFiDirect);
     }
 
@@ -773,7 +803,9 @@ mod tests {
         };
         manager.handle_event(event2);
 
-        let best = manager.best_transport_for_peer(peer_id).expect("should have transport");
+        let best = manager
+            .best_transport_for_peer(peer_id)
+            .expect("should have transport");
         assert_eq!(best, TransportType::WiFiAware);
     }
 
@@ -802,7 +834,9 @@ mod tests {
         };
         manager.handle_event(event2);
 
-        let best = manager.best_transport_for_peer(peer_id).expect("should have transport");
+        let best = manager
+            .best_transport_for_peer(peer_id)
+            .expect("should have transport");
         assert_eq!(best, TransportType::Local);
     }
 
@@ -1046,11 +1080,7 @@ mod tests {
 
     #[test]
     fn test_reconnection_backoff_increases() {
-        let mut state = ReconnectionState::new(
-            create_peer_id(1),
-            HashSet::new(),
-            vec![],
-        );
+        let mut state = ReconnectionState::new(create_peer_id(1), HashSet::new(), vec![]);
 
         let first = state.backoff_interval();
         state.record_failure();
@@ -1065,11 +1095,7 @@ mod tests {
 
     #[test]
     fn test_reconnection_backoff_capped_at_max() {
-        let mut state = ReconnectionState::new(
-            create_peer_id(1),
-            HashSet::new(),
-            vec![],
-        );
+        let mut state = ReconnectionState::new(create_peer_id(1), HashSet::new(), vec![]);
 
         // Hit it many times to saturate
         for _ in 0..20 {
@@ -1081,11 +1107,7 @@ mod tests {
 
     #[test]
     fn test_reconnection_exhaustion() {
-        let mut state = ReconnectionState::new(
-            create_peer_id(1),
-            HashSet::new(),
-            vec![],
-        );
+        let mut state = ReconnectionState::new(create_peer_id(1), HashSet::new(), vec![]);
 
         assert!(!state.is_exhausted());
 

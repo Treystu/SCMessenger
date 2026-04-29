@@ -64,10 +64,8 @@ mod proofs {
             &format!("{}:{}", ctx, chain_key_info.to_hex()),
             chain_key.as_bytes(),
         );
-        let msg_key_1 = blake3::derive_key(
-            &format!("{}:{}", ctx, msg_key_info.to_hex()),
-            &new_chain,
-        );
+        let msg_key_1 =
+            blake3::derive_key(&format!("{}:{}", ctx, msg_key_info.to_hex()), &new_chain);
 
         assert_ne!(msg_key_0, msg_key_1);
     }

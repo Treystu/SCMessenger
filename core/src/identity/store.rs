@@ -186,7 +186,9 @@ impl IdentityStore {
                         Ok(Some(nickname))
                     }
                     None => {
-                        tracing::debug!("IdentityStore::load_nickname: NICKNAME_KEY not found in sled");
+                        tracing::debug!(
+                            "IdentityStore::load_nickname: NICKNAME_KEY not found in sled"
+                        );
                         Ok(None)
                     }
                 }
@@ -219,9 +221,9 @@ impl IdentityStore {
                 {
                     // Seniority is stored as a string (see save_device_metadata)
                     let s = String::from_utf8(bytes)?;
-                    let ts = s.parse::<u64>().map_err(|e| {
-                        anyhow::anyhow!("invalid stored seniority_timestamp: {e}")
-                    })?;
+                    let ts = s
+                        .parse::<u64>()
+                        .map_err(|e| anyhow::anyhow!("invalid stored seniority_timestamp: {e}"))?;
                     Ok(Some(ts))
                 } else {
                     Ok(None)

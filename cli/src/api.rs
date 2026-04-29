@@ -355,8 +355,12 @@ async fn handle_send_message(req: Request<Body>, ctx: Arc<ApiContext>) -> Result
 
     // Prepare and send message.
     // Uses prepare_message_with_id to trigger Core's auto-save to history.
-    let prepared =
-        core.prepare_message_with_id(contact.public_key.clone(), request.message.clone(), None)?;
+    let prepared = core.prepare_message_with_id(
+        &contact.public_key,
+        &request.message,
+        scmessenger_core::MessageType::Text,
+        None,
+    )?;
 
     ctx.swarm_handle
         .send_message(peer_id, prepared.envelope_data, None, None)
@@ -409,7 +413,7 @@ async fn handle_get_peers(_req: Request<Body>, ctx: Arc<ApiContext>) -> Result<R
         .into_iter()
         .map(|p| {
             let pid = p.to_string();
-            let reputation = ctx.core.get_peer_reputation(pid.clone());
+            let reputation = ctx.core.get_peer_reputation(&pid);
             PeerEntry {
                 peer_id: pid,
                 reputation,
@@ -638,10 +642,13 @@ async fn handle_export_diagnostics(
         .body(Body::from(diagnostics))?)
 }
 
-async fn handle_get_drift_status(_req: Request<Body>, ctx: Arc<ApiContext>) -> Result<Response<Body>> {
+async fn handle_get_drift_status(
+    _req: Request<Body>,
+    ctx: Arc<ApiContext>,
+) -> Result<Response<Body>> {
     let response = DriftStatusResponse {
         state: ctx.core.drift_network_state(),
-        store_size: ctx.core.drift_store_size(),
+        store_size: ctx.core.drift_store_size() as u32,
     };
 
     Ok(Response::builder()
@@ -667,4 +674,3 @@ pub async fn start_api_server(ctx: ApiContext) -> Result<()> {
 
     Ok(())
 }
-

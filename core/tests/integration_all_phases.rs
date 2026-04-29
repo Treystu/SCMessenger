@@ -10,8 +10,8 @@
 // All equivalent logic is exercised by unit tests (cargo test --lib).
 
 use libp2p::{identity::Keypair, Multiaddr};
-use scmessenger_core::transport::{start_swarm_with_config, MultiPortConfig};
 use scmessenger_core::transport::swarm::SwarmEvent2;
+use scmessenger_core::transport::{start_swarm_with_config, MultiPortConfig};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::timeout;

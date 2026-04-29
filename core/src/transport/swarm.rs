@@ -25,20 +25,20 @@ use super::mesh_routing::{
     advance_route_cursor, BootstrapCapability, MultiPathDelivery, RankedRoute,
 };
 // Import mycorrhizal routing modules
-use super::routing::{
-    engine::{RoutingDecision, NextHop},
-    optimized_engine::OptimizedRoutingEngine,
-    local::TransportType as RoutingTransportType,
-    smart_retry::{BackoffStrategy, calculate_next_attempt},
-};
 #[cfg(target_arch = "wasm32")]
 use super::multiport::MultiPortConfig;
 #[cfg(not(target_arch = "wasm32"))]
 use super::multiport::{self, BindResult, MultiPortConfig};
 use super::observation::{AddressObserver, ConnectionTracker};
 use super::reflection::{AddressReflectionRequest, AddressReflectionService};
-use crate::store::relay_custody::{CustodyEnforcement, RelayCustodyStore};
+use super::routing::{
+    engine::{NextHop, RoutingDecision},
+    local::TransportType as RoutingTransportType,
+    optimized_engine::OptimizedRoutingEngine,
+    smart_retry::{calculate_next_attempt, BackoffStrategy},
+};
 use crate::drift::{DriftFrame, SyncSession};
+use crate::store::relay_custody::{CustodyEnforcement, RelayCustodyStore};
 use anyhow::Result;
 use bincode;
 #[cfg(target_arch = "wasm32")]
@@ -204,8 +204,10 @@ impl RelayAbuseGuardrails {
             });
         let elapsed_ms = now_ms.saturating_sub(bucket.last_refill_ms);
         if elapsed_ms > 0 {
-            let refill = (elapsed_ms as f64 / 1000.0) * RELAY_PEER_BUCKET_REFILL_PER_SEC * multiplier;
-            bucket.tokens = (bucket.tokens + refill).min(RELAY_PEER_BUCKET_BURST_CAPACITY * multiplier);
+            let refill =
+                (elapsed_ms as f64 / 1000.0) * RELAY_PEER_BUCKET_REFILL_PER_SEC * multiplier;
+            bucket.tokens =
+                (bucket.tokens + refill).min(RELAY_PEER_BUCKET_BURST_CAPACITY * multiplier);
             bucket.last_refill_ms = now_ms;
         }
         if bucket.tokens < 1.0 {
@@ -677,7 +679,10 @@ fn routing_decision_to_ranked_routes(
     let mut routes = Vec::new();
 
     match &decision.primary {
-        NextHop::Direct { peer_id: _, transport: _ } => {
+        NextHop::Direct {
+            peer_id: _,
+            transport: _,
+        } => {
             // Direct route - use target peer directly
             routes.push(RankedRoute {
                 path: vec![*target_peer],
@@ -1071,9 +1076,7 @@ pub enum SwarmCommand {
         reply: mpsc::Sender<Vec<PeerId>>,
     },
     /// Get bootstrap candidates (all stable peers)
-    GetBootstrapCandidates {
-        reply: mpsc::Sender<Vec<PeerId>>,
-    },
+    GetBootstrapCandidates { reply: mpsc::Sender<Vec<PeerId>> },
     /// Get best paths to a target (Phase 2 multipath)
     GetBestPaths {
         target: PeerId,
@@ -1125,10 +1128,7 @@ pub enum SwarmEvent2 {
     PortMapping(String),
     /// Abuse signal detected by relay guardrails (P0_SECURITY_003).
     /// Carries the offending peer ID and the signal type name.
-    AbuseSignalDetected {
-        peer_id: PeerId,
-        signal: String,
-    },
+    AbuseSignalDetected { peer_id: PeerId, signal: String },
 }
 
 /// Handle to communicate with the running swarm task
@@ -1465,6 +1465,7 @@ pub async fn start_swarm(
 /// `bootstrap_addrs` — Multiaddrs of well-known relay / bootstrap nodes.
 /// The swarm will auto-dial these after binding, enabling cross-network
 /// peer discovery via Kademlia DHT and relay-circuit connectivity.
+#[allow(clippy::too_many_arguments, clippy::blocks_in_conditions)]
 pub async fn start_swarm_with_config(
     keypair: Keypair,
     listen_addr: Option<Multiaddr>,
@@ -2366,7 +2367,7 @@ pub async fn start_swarm_with_config(
                                         } else if {
                                             let (multiplier, spam_score) = if let Some(core) = core_handle.as_ref().and_then(|w| w.upgrade()) {
                                                 (
-                                                    core.peer_rate_limit_multiplier(peer.to_string()),
+                                                    core.peer_rate_limit_multiplier(&peer.to_string()),
                                                     core.peer_spam_score(peer.to_string())
                                                 )
                                             } else {
@@ -3073,7 +3074,7 @@ pub async fn start_swarm_with_config(
                                 if should_report {
                                     reported_peer_info.insert(peer_id, (info.agent_version.clone(), info.listen_addrs.clone()));
                                     // Emit event for application layer
-                                    let public_key_hex = info.public_key.clone().try_into_ed25519().map(|pk| hex::encode(pk.to_bytes()));
+                                    let public_key_hex = info.public_key.clone().try_into_ed25519().map(|pk| hex::encode(pk.to_bytes())).ok();
                                     let _ = event_tx.send(SwarmEvent2::PeerIdentified {
                                         peer_id,
                                         public_key: public_key_hex,
@@ -3836,6 +3837,15 @@ pub async fn start_swarm_with_config(
                                 relay_budget = budget;
                                 tracing::info!("🔄 Relay budget updated: {} msgs/hour", budget);
                             }
+                            SwarmCommand::GetBestRelays { reply, .. } => {
+                                let _ = reply.send(Vec::new()).await;
+                            }
+                            SwarmCommand::GetBootstrapCandidates { reply } => {
+                                let _ = reply.send(Vec::new()).await;
+                            }
+                            SwarmCommand::GetBestPaths { reply, .. } => {
+                                let _ = reply.send(Vec::new()).await;
+                            }
                             SwarmCommand::Shutdown => {
                                 tracing::info!("WASM swarm shutting down");
                                 break;
@@ -4093,6 +4103,7 @@ pub async fn start_swarm_with_config(
                                             } else if !relay_guardrails.consume_peer_token(
                                                 &peer.to_string(),
                                                 now_ms,
+                                                1.0,
                                             ) {
                                                 tracing::warn!(
                                                     "Relay request rate-limited for peer {} (message {})",
@@ -4317,8 +4328,10 @@ pub async fn start_swarm_with_config(
                                     address_observer.record_observation(peer_id, observed_addr);
                                 }
 
+                                let public_key_hex = info.public_key.clone().try_into_ed25519().map(|pk| hex::encode(pk.to_bytes())).ok();
                                 let _ = event_tx.send(SwarmEvent2::PeerIdentified {
                                     peer_id,
+                                    public_key: public_key_hex,
                                     agent_version: info.agent_version.clone(),
                                     listen_addrs: info.listen_addrs.clone(),
                                     protocols: info.protocols.iter().map(|p| p.to_string()).collect(),
@@ -4457,7 +4470,11 @@ pub async fn start_swarm_with_config(
 #[cfg(not(target_arch = "wasm32"))]
 use futures::StreamExt;
 use libp2p::identify;
-#[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "windows")))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    not(target_os = "android"),
+    not(target_os = "windows")
+))]
 use libp2p::mdns;
 use libp2p::{gossipsub, request_response};
 
@@ -4532,12 +4549,12 @@ mod tests {
         let mut guardrails = RelayAbuseGuardrails::new();
         let now_ms = 4_000_000;
         for _ in 0..RELAY_PEER_BUCKET_BURST_CAPACITY as usize {
-            assert!(guardrails.consume_peer_token("peer-a", now_ms));
+            assert!(guardrails.consume_peer_token("peer-a", now_ms, 1.0));
         }
-        assert!(!guardrails.consume_peer_token("peer-a", now_ms));
+        assert!(!guardrails.consume_peer_token("peer-a", now_ms, 1.0));
 
         let refill_ms = (1_000.0 / RELAY_PEER_BUCKET_REFILL_PER_SEC).ceil() as u64;
-        assert!(guardrails.consume_peer_token("peer-a", now_ms + refill_ms));
+        assert!(guardrails.consume_peer_token("peer-a", now_ms + refill_ms, 1.0));
     }
 
     #[test]
@@ -4668,4 +4685,3 @@ mod tests {
         );
     }
 }
-

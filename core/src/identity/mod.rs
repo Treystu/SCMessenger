@@ -37,9 +37,7 @@ impl IdentityManager {
             device_metadata: None,
         };
 
-        tracing::debug!(
-            "IdentityManager::with_backend: Initializing with persistent storage"
-        );
+        tracing::debug!("IdentityManager::with_backend: Initializing with persistent storage");
 
         // Load any previously-persisted identity material without generating
         // a new identity. Fresh installs remain uninitialized.

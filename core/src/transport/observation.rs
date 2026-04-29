@@ -116,7 +116,7 @@ impl AddressObserver {
 
         // Sort by count (most observed first)
         let mut addresses: Vec<(SocketAddr, u32)> = address_counts.into_iter().collect();
-        addresses.sort_by(|a, b| b.1.cmp(&a.1));
+        addresses.sort_by_key(|b| std::cmp::Reverse(b.1));
 
         // Cache the sorted addresses
         self.cached_external_addresses = addresses.into_iter().map(|(addr, _)| addr).collect();

@@ -5,7 +5,6 @@
 
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::XChaCha20Poly1305;
-use curve25519_dalek::edwards::CompressedEdwardsY;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use x25519_dalek::{EphemeralSecret, PublicKey};
@@ -118,25 +117,28 @@ pub fn construct_onion(
 
     // Encrypt routing info and payload for destination
     let cipher = XChaCha20Poly1305::new(&key);
-    let nonce_bytes = derive_nonce(shared_secret.as_bytes());
-    let nonce = chacha20poly1305::XNonce::from_slice(&nonce_bytes);
+    let routing_nonce_bytes = derive_nonce(shared_secret.as_bytes(), 0);
+    let routing_nonce = chacha20poly1305::XNonce::from_slice(&routing_nonce_bytes);
 
     let encrypted_routing_info = cipher
         .encrypt(
-            nonce,
+            routing_nonce,
             Payload {
                 msg: routing_info.as_slice(),
-                aad: &nonce_bytes,
+                aad: &routing_nonce_bytes,
             },
         )
         .map_err(|_| OnionError::EncryptionFailed)?;
 
+    let payload_nonce_bytes = derive_nonce(shared_secret.as_bytes(), 1);
+    let payload_nonce = chacha20poly1305::XNonce::from_slice(&payload_nonce_bytes);
+
     let encrypted_payload = cipher
         .encrypt(
-            nonce,
+            payload_nonce,
             Payload {
                 msg: payload,
-                aad: &nonce_bytes,
+                aad: &payload_nonce_bytes,
             },
         )
         .map_err(|_| OnionError::EncryptionFailed)?;
@@ -153,14 +155,9 @@ pub fn construct_onion(
     // Wrap with each relay in reverse order (from second-to-last to first)
     for i in (0..path.len() - 1).rev() {
         let relay_pk = path[i];
-        
-        // Convert Ed25519 public key to X25519 for DH
-        let compressed = CompressedEdwardsY::from_slice(&relay_pk)
-            .map_err(|_| OnionError::InvalidEnvelope)?;
-        let edwards_point = compressed.decompress()
-            .ok_or(OnionError::InvalidEnvelope)?;
-        let montgomery = edwards_point.to_montgomery();
-        let relay_public_key = PublicKey::from(montgomery.to_bytes());
+
+        // X25519 public key for DH
+        let relay_public_key = PublicKey::from(relay_pk);
 
         // Generate new ephemeral key for this layer
         let ephemeral_secret = EphemeralSecret::random_from_rng(rand::thread_rng());
@@ -174,26 +171,29 @@ pub fn construct_onion(
         let next_hop_pk = path[i + 1].to_vec();
 
         let cipher = XChaCha20Poly1305::new(&key);
-        let nonce_bytes = derive_nonce(shared_secret.as_bytes());
-        let nonce = chacha20poly1305::XNonce::from_slice(&nonce_bytes);
+        let routing_nonce_bytes = derive_nonce(shared_secret.as_bytes(), 0);
+        let routing_nonce = chacha20poly1305::XNonce::from_slice(&routing_nonce_bytes);
 
         // Encrypt routing info (next hop) and remaining layers
         let encrypted_routing_info = cipher
             .encrypt(
-                nonce,
+                routing_nonce,
                 Payload {
                     msg: next_hop_pk.as_slice(),
-                    aad: &nonce_bytes,
+                    aad: &routing_nonce_bytes,
                 },
             )
             .map_err(|_| OnionError::EncryptionFailed)?;
 
+        let payload_nonce_bytes = derive_nonce(shared_secret.as_bytes(), 1);
+        let payload_nonce = chacha20poly1305::XNonce::from_slice(&payload_nonce_bytes);
+
         let encrypted_payload = cipher
             .encrypt(
-                nonce,
+                payload_nonce,
                 Payload {
                     msg: remaining_layers.as_slice(),
-                    aad: &nonce_bytes,
+                    aad: &payload_nonce_bytes,
                 },
             )
             .map_err(|_| OnionError::EncryptionFailed)?;
@@ -251,30 +251,33 @@ pub fn peel_layer(
     // Try to decrypt routing_info - if empty, we're at the destination
     // The nonce was included as AAD during encryption, and is stored alongside ciphertext
     // For this implementation, we use a deterministic nonce derived from the shared secret
-    let nonce_bytes = derive_nonce(shared_secret.as_bytes());
-    let nonce = chacha20poly1305::XNonce::from_slice(&nonce_bytes);
+    let routing_nonce_bytes = derive_nonce(shared_secret.as_bytes(), 0);
+    let routing_nonce = chacha20poly1305::XNonce::from_slice(&routing_nonce_bytes);
+
+    let payload_nonce_bytes = derive_nonce(shared_secret.as_bytes(), 1);
+    let payload_nonce = chacha20poly1305::XNonce::from_slice(&payload_nonce_bytes);
 
     let routing_info_plaintext = if envelope.current_layer.encrypted_routing_info.is_empty() {
         vec![]
     } else {
         cipher
             .decrypt(
-                nonce,
+                routing_nonce,
                 Payload {
                     msg: envelope.current_layer.encrypted_routing_info.as_slice(),
-                    aad: &nonce_bytes,
+                    aad: &routing_nonce_bytes,
                 },
             )
-            .unwrap_or_default()
+            .map_err(|_| OnionError::DecryptionFailed)?
     };
 
     // Decrypt payload
     let payload_plaintext = cipher
         .decrypt(
-            nonce,
+            payload_nonce,
             Payload {
                 msg: envelope.current_layer.encrypted_payload.as_slice(),
-                aad: &nonce_bytes,
+                aad: &payload_nonce_bytes,
             },
         )
         .map_err(|_| OnionError::DecryptionFailed)?;
@@ -299,10 +302,13 @@ fn derive_layer_key(shared_secret: &[u8]) -> chacha20poly1305::Key {
     *chacha20poly1305::Key::from_slice(&key_bytes)
 }
 
-/// Derive a 24-byte nonce deterministically from a shared secret
-/// This allows the peeling side to reconstruct the same nonce
-fn derive_nonce(shared_secret: &[u8]) -> [u8; XCHACHA_NONCE_SIZE] {
-    let hash = blake3::derive_key("SCMessenger-onion-layer-nonce-v1", shared_secret);
+/// Derive a 24-byte nonce deterministically from a shared secret and counter
+/// This allows the peeling side to reconstruct the same nonce.
+/// Counter distinguishes routing_info (0) from payload (1) within the same layer.
+fn derive_nonce(shared_secret: &[u8], counter: u8) -> [u8; XCHACHA_NONCE_SIZE] {
+    let mut input = shared_secret.to_vec();
+    input.push(counter);
+    let hash = blake3::derive_key("SCMessenger-onion-layer-nonce-v1", &input);
     let mut nonce = [0u8; XCHACHA_NONCE_SIZE];
     nonce.copy_from_slice(&hash[..XCHACHA_NONCE_SIZE]);
     nonce

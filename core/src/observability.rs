@@ -222,12 +222,9 @@ impl AuditLog {
 
         // Update last_hash if we pruned everything
         if self.events.is_empty() {
-            self.last_hash = self
-                .pruned_head_hash
-                .clone()
-                .unwrap_or_else(|| {
-                    "0000000000000000000000000000000000000000000000000000000000000000".to_string()
-                });
+            self.last_hash = self.pruned_head_hash.clone().unwrap_or_else(|| {
+                "0000000000000000000000000000000000000000000000000000000000000000".to_string()
+            });
         }
 
         prune_count

@@ -95,8 +95,8 @@ impl StorageManager {
 
         // P0_SECURITY_001: Always enforce time-based retention first
         if self.retention.max_age_days > 0 {
-            let cutoff = current_timestamp()
-                .saturating_sub(self.retention.max_age_days as u64 * 86400);
+            let cutoff =
+                current_timestamp().saturating_sub(self.retention.max_age_days as u64 * 86400);
             let pruned = self.history.prune_before(cutoff)?;
             if pruned > 0 {
                 tracing::info!(
@@ -111,7 +111,9 @@ impl StorageManager {
         if self.retention.max_messages > 0 {
             let current_count = self.history.count();
             if current_count > self.retention.max_messages {
-                let pruned = self.history.enforce_retention(self.retention.max_messages)?;
+                let pruned = self
+                    .history
+                    .enforce_retention(self.retention.max_messages)?;
                 if pruned > 0 {
                     tracing::info!(
                         "Retention: pruned {} messages exceeding cap of {}",
@@ -152,7 +154,7 @@ impl StorageManager {
 fn current_timestamp() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_secs()
 }
 
@@ -264,4 +266,3 @@ mod tests {
         assert!(history.get("recent_msg".to_string()).unwrap().is_some());
     }
 }
-

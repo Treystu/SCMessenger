@@ -1,10 +1,8 @@
-#[cfg(not(target_arch = "wasm32"))]
-use crate::mobile_bridge::MeshSettings;
-#[cfg(target_arch = "wasm32")]
 use crate::MeshSettings;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NotificationKind {
@@ -332,10 +330,7 @@ impl NotificationEndpointRegistry {
             registered_at_ts: now,
         };
 
-        let mut endpoints = self
-            .endpoints
-            .lock()
-            .map_err(|e| NotificationEndpointError::StorageError(e.to_string()))?;
+        let mut endpoints = self.endpoints.lock();
         endpoints.insert(endpoint_id.clone(), endpoint.clone());
 
         Ok(endpoint)
@@ -343,10 +338,7 @@ impl NotificationEndpointRegistry {
 
     /// Unregister a notification endpoint.
     pub fn unregister_endpoint(&self, endpoint_id: &str) -> Result<(), NotificationEndpointError> {
-        let mut endpoints = self
-            .endpoints
-            .lock()
-            .map_err(|e| NotificationEndpointError::StorageError(e.to_string()))?;
+        let mut endpoints = self.endpoints.lock();
         endpoints
             .remove(endpoint_id)
             .ok_or(NotificationEndpointError::EndpointNotFound)?;
@@ -355,18 +347,13 @@ impl NotificationEndpointRegistry {
 
     /// List all registered endpoints.
     pub fn list_endpoints(&self) -> Vec<NotificationEndpoint> {
-        self.endpoints
-            .lock()
-            .map(|endpoints| endpoints.values().cloned().collect())
-            .unwrap_or_default()
+        let endpoints = self.endpoints.lock();
+        endpoints.values().cloned().collect()
     }
 
     /// Update last seen timestamp for an endpoint.
     pub fn touch_endpoint(&self, endpoint_id: &str) -> Result<(), NotificationEndpointError> {
-        let mut endpoints = self
-            .endpoints
-            .lock()
-            .map_err(|e| NotificationEndpointError::StorageError(e.to_string()))?;
+        let mut endpoints = self.endpoints.lock();
         let endpoint = endpoints
             .get_mut(endpoint_id)
             .ok_or(NotificationEndpointError::EndpointNotFound)?;

@@ -1,7 +1,7 @@
 # SCMessenger Documentation Hub
 
 Status: Active
-Last updated: 2026-04-11 (WASM thin client / daemon JSON-RPC)
+Last updated: 2026-04-28 (Phase 1-3 complete: wiring, tests, security hardening)
 
 This is the primary documentation entrypoint.
 
@@ -70,37 +70,28 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 - [GitHub Copilot Instructions](.github/copilot-instructions.md)
 - [Roo Code Integration Plan](scmessenger-roo-code-features-plan.md)
 
-### Roo Code Integration (2026-03-14)
+### Claude Code Integration (2026-04-28)
 
-Custom modes, rules, and skills for optimized agent workflows:
+Custom rules, prompts, and skills for the Claude Code agent harness:
 
-**Custom Modes** (`.roomodes/`):
-- [`scm-rust`](.roomodes/scm-rust.json) - Rust core development
-- [`scm-android`](.roomodes/scm-android.json) - Android/Kotlin development
-- [`scm-ios`](.roomodes/scm-ios.json) - iOS/Swift development
-- [`scm-protocol`](.roomodes/scm-protocol.json) - Protocol/crypto review
-- [`scm-docs`](.roomodes/scm-docs.json) - Documentation specialist
-- [`scm-release`](.roomodes/scm-release.json) - Release verification
-- [`scm-debug-mesh`](.roomodes/scm-debug-mesh.json) - Mesh/relay debugging
+**Project Rules** (`.claude/rules/`):
+- [`android.md`](.claude/rules/android.md) - Android development rules
+- [`build.md`](.claude/rules/build.md) - Build and CI rules
+- [`rust.md`](.claude/rules/rust.md) - Rust development rules
+- [`security.md`](.claude/rules/security.md) - Security and crypto constraints
 
-**Project Rules** (`.roo/rules/`):
-- [`000-critical.md`](.roo/rules/000-critical.md) - Non-negotiable rules
-- [`010-documentation.md`](.roo/rules/010-documentation.md) - Doc sync requirements
-- [`020-crypto.md`](.roo/rules/020-crypto.md) - Cryptography constraints
-- [`030-platform-parity.md`](.roo/rules/030-platform-parity.md) - Cross-platform rules
-- [`040-build-verify.md`](.roo/rules/040-build-verify.md) - Build verification
-- [`050-identity.md`](.roo/rules/050-identity.md) - Identity model rules
-- [`060-testing.md`](.roo/rules/060-testing.md) - Test requirements
+**Agent Prompts** (`.claude/prompts/`):
+- [`adversarial-reviewer.md`](.claude/prompts/adversarial-reviewer.md) - Security audit prompt
+- [`architect.md`](.claude/prompts/architect.md) - Architecture planning prompt
+- [`coordinator.md`](.claude/prompts/coordinator.md) - Swarm coordination prompt
+- [`gatekeeper.md`](.claude/prompts/gatekeeper.md) - Merge gate prompt
+- [`implementer.md`](.claude/prompts/implementer.md) - Feature implementation prompt
 
-**Skills** (`skills/`):
-- [`platform-parity-check`](skills/platform-parity-check/SKILL.md) - Cross-platform verification
-- [`release-gate-validator`](skills/release-gate-validator/SKILL.md) - Release readiness
-- [`mesh-diagnostics`](skills/mesh-diagnostics/SKILL.md) - Network troubleshooting
-
-**Memory Bank** (`.roo/memory-bank/`):
-- [`projectbrief.md`](.roo/memory-bank/projectbrief.md) - Project overview
-- [`techContext.md`](.roo/memory-bank/techContext.md) - Technology stack
-- [`activeContext.md`](.roo/memory-bank/activeContext.md) - Current focus
+**Agent Skills** (`.claude/skills/`):
+- [`adversarial_review.sh`](.claude/skills/adversarial_review.sh) - Security audit runner
+- [`build_verify.sh`](.claude/skills/build_verify.sh) - Build verification runner
+- [`core_cli_driver.sh`](.claude/skills/core_cli_driver.sh) - CLI driver runner
+- [`model_check.sh`](.claude/skills/model_check.sh) - Model capability checker
 
 ## Component and Platform Docs
 

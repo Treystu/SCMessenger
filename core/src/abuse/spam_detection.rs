@@ -13,8 +13,8 @@ use std::time::Instant;
 
 use parking_lot::RwLock;
 
-use crate::store::contacts::ContactManager;
 use crate::store::blocked::BlockedManager;
+use crate::store::contacts::ContactManager;
 
 /// Spam detection configuration
 #[derive(Debug, Clone)]
@@ -199,7 +199,9 @@ impl SpamDetectionEngine {
             let window = std::time::Duration::from_secs(self.config.flooding_window_secs);
 
             // Flooding detection
-            let recent_count = track.recent_message_times.iter()
+            let recent_count = track
+                .recent_message_times
+                .iter()
                 .filter(|t| now.duration_since(**t) < window)
                 .count();
             if recent_count >= self.config.flooding_max_in_window {
@@ -207,7 +209,12 @@ impl SpamDetectionEngine {
             }
 
             // Mass distribution detection
-            let max_repeats = track.content_fingerprints.values().copied().max().unwrap_or(0);
+            let max_repeats = track
+                .content_fingerprints
+                .values()
+                .copied()
+                .max()
+                .unwrap_or(0);
             if max_repeats >= self.config.mass_distribution_repeat_threshold {
                 contributing_signals.push(SpamSignal::MassDistribution);
             }
@@ -237,9 +244,11 @@ impl SpamDetectionEngine {
         } else {
             0.0
         };
-        let heuristic_confidence = contributing_signals.iter()
+        let heuristic_confidence = contributing_signals
+            .iter()
             .filter(|s| !matches!(s, SpamSignal::CommunityBlocked))
-            .count() as f64 * 0.3;
+            .count() as f64
+            * 0.3;
         let confidence = (community_confidence + heuristic_confidence).min(1.0);
 
         SpamDetectionResult {
@@ -289,7 +298,12 @@ impl SpamDetectionEngine {
     }
 
     /// Record an outbound message for heuristic tracking.
-    pub fn record_outbound_message(&self, peer_id: &str, envelope_data: &[u8], is_to_contact: bool) {
+    pub fn record_outbound_message(
+        &self,
+        peer_id: &str,
+        envelope_data: &[u8],
+        is_to_contact: bool,
+    ) {
         let mut tracks = self.peer_tracks.write();
 
         if !tracks.contains_key(peer_id) && tracks.len() >= self.max_tracked_peers {
@@ -308,7 +322,8 @@ impl SpamDetectionEngine {
         if track.content_fingerprints.len() > 256 {
             let mut fps: Vec<_> = track.content_fingerprints.iter().collect();
             fps.sort_by_key(|(_, c)| **c);
-            track.content_fingerprints = fps.into_iter()
+            track.content_fingerprints = fps
+                .into_iter()
                 .rev()
                 .take(128)
                 .map(|(k, v)| (*k, *v))
@@ -318,7 +333,9 @@ impl SpamDetectionEngine {
         let now = Instant::now();
         track.recent_message_times.push(now);
         let window = std::time::Duration::from_secs(self.config.flooding_window_secs);
-        track.recent_message_times.retain(|t| now.duration_since(*t) < window);
+        track
+            .recent_message_times
+            .retain(|t| now.duration_since(*t) < window);
 
         track.total_sends += 1;
         if !is_to_contact {
@@ -364,18 +381,14 @@ pub enum SpamSignal {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use crate::store::backend::MemoryStorage;
+    use std::sync::Arc;
 
     fn make_engine() -> SpamDetectionEngine {
         let backend = Arc::new(MemoryStorage::new());
         let contacts = Arc::new(ContactManager::new(backend.clone()));
         let blocked = Arc::new(BlockedManager::new(backend));
-        SpamDetectionEngine::new(
-            SpamDetectionConfig::default(),
-            contacts,
-            blocked,
-        )
+        SpamDetectionEngine::new(SpamDetectionConfig::default(), contacts, blocked)
     }
 
     fn make_heuristics_only_engine() -> SpamDetectionEngine {

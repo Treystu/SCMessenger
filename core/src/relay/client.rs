@@ -3,9 +3,11 @@
 //! AND-CELLULAR-001: Added QUIC/UDP transport fallback for cellular networks
 //! where TCP connections are often blocked by carrier-level port filtering.
 
+use super::protocol::{RelayCapability, RelayMessage, PROTOCOL_VERSION};
+#[cfg(not(target_arch = "wasm32"))]
+use futures::{SinkExt, StreamExt};
 #[cfg(not(target_os = "android"))]
 use quinn;
-use super::protocol::{RelayCapability, RelayMessage, PROTOCOL_VERSION};
 use std::collections::HashMap;
 #[cfg(not(target_os = "android"))]
 use std::net::SocketAddr;
@@ -15,8 +17,6 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::timeout;
-#[cfg(not(target_arch = "wasm32"))]
-use futures::{SinkExt, StreamExt};
 use web_time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Transport type for relay connections
@@ -291,7 +291,9 @@ impl RelayClient {
         // Set a reasonable timeout for the HTTP upgrade
         request.headers_mut().insert(
             "X-SCMessenger-Protocol",
-            "relay".parse().map_err(|_| RelayClientError::ConnectionFailed("Invalid header".into()))?,
+            "relay"
+                .parse()
+                .map_err(|_| RelayClientError::ConnectionFailed("Invalid header".into()))?,
         );
 
         let (ws_stream, _) = timeout(
@@ -300,7 +302,9 @@ impl RelayClient {
         )
         .await
         .map_err(|_| RelayClientError::IoTimeout(self.config.io_timeout))?
-        .map_err(|e| RelayClientError::ConnectionFailed(format!("WebSocket connect error: {}", e)))?;
+        .map_err(|e| {
+            RelayClientError::ConnectionFailed(format!("WebSocket connect error: {}", e))
+        })?;
 
         connection.set_state(ConnectionState::Handshaking);
 
@@ -312,20 +316,23 @@ impl RelayClient {
 
         let (mut write, mut read) = ws_stream.split();
 
-        timeout(
-            self.config.io_timeout,
-            write.send(Message::Binary(payload.into())),
-        )
-        .await
-        .map_err(|_| RelayClientError::IoTimeout(self.config.io_timeout))?
-        .map_err(|e| RelayClientError::ConnectionFailed(format!("WebSocket send error: {}", e)))?;
+        timeout(self.config.io_timeout, write.send(Message::Binary(payload)))
+            .await
+            .map_err(|_| RelayClientError::IoTimeout(self.config.io_timeout))?
+            .map_err(|e| {
+                RelayClientError::ConnectionFailed(format!("WebSocket send error: {}", e))
+            })?;
 
         // Read response
         let response_msg = timeout(self.config.io_timeout, read.next())
             .await
             .map_err(|_| RelayClientError::IoTimeout(self.config.io_timeout))?
-            .ok_or_else(|| RelayClientError::ConnectionFailed("WebSocket closed before response".into()))?
-            .map_err(|e| RelayClientError::ConnectionFailed(format!("WebSocket read error: {}", e)))?;
+            .ok_or_else(|| {
+                RelayClientError::ConnectionFailed("WebSocket closed before response".into())
+            })?
+            .map_err(|e| {
+                RelayClientError::ConnectionFailed(format!("WebSocket read error: {}", e))
+            })?;
 
         let response_bytes = match response_msg {
             Message::Binary(data) => data,
@@ -343,7 +350,10 @@ impl RelayClient {
 
         self.complete_handshake(&mut connection, response)?;
 
-        tracing::info!("WebSocket connection to {} established successfully", ws_url);
+        tracing::info!(
+            "WebSocket connection to {} established successfully",
+            ws_url
+        );
         Ok(connection)
     }
 

@@ -7,9 +7,9 @@
 //! P0_ANTI_ABUSE_001: Reputation scores persist across sessions via StorageBackend.
 //! Time-based decay gradually returns inactive peers toward neutral.
 
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::store::backend::StorageBackend;
@@ -144,8 +144,8 @@ impl PeerAbuseStats {
     /// - Negative signals (rate limits, invalid messages, duplicates) push toward MIN
     /// - Decay factor: signals lose weight over time
     fn calculate_score(&self) -> ReputationScore {
-        let positive = (self.successful_relays as f64 * 2.0)
-            + (self.successful_deliveries as f64 * 3.0);
+        let positive =
+            (self.successful_relays as f64 * 2.0) + (self.successful_deliveries as f64 * 3.0);
         let negative = (self.rate_limit_hits as f64 * 5.0)
             + (self.oversized_messages as f64 * 3.0)
             + (self.invalid_format_count as f64 * 4.0)
@@ -224,7 +224,8 @@ impl AbuseReputationManager {
                         if let Ok(stats) = serde_json::from_slice::<PeerAbuseStats>(&value) {
                             // Reconstruct Instant from epoch time (approximate)
                             let stats = PeerAbuseStats {
-                                last_signal_at: stats.last_signal_epoch_secs
+                                last_signal_at: stats
+                                    .last_signal_epoch_secs
                                     .map(|_| Instant::now()),
                                 ..stats
                             };
@@ -233,7 +234,8 @@ impl AbuseReputationManager {
                     }
                     // Enforce capacity limit after loading
                     if peers.len() > self.max_tracked_peers {
-                        let mut entries: Vec<_> = peers.iter()
+                        let mut entries: Vec<_> = peers
+                            .iter()
                             .map(|(k, s)| (k.clone(), s.reputation_score.value() as u32))
                             .collect();
                         entries.sort_by_key(|(_, v)| *v);
@@ -292,7 +294,8 @@ impl AbuseReputationManager {
                 let elapsed_secs = now_epoch.saturating_sub(last_epoch);
                 if elapsed_secs > decay_secs {
                     // Decay factor: how far past the TTL (capped at 1.0)
-                    let decay_ratio = ((elapsed_secs - decay_secs) as f64 / decay_secs as f64).min(1.0);
+                    let decay_ratio =
+                        ((elapsed_secs - decay_secs) as f64 / decay_secs as f64).min(1.0);
                     // Move score toward neutral by the decay ratio (max 50% per call)
                     let current = stats.reputation_score.value();
                     let neutral = ReputationScore::NEUTRAL;
@@ -302,12 +305,16 @@ impl AbuseReputationManager {
                     // Also decay signal counts proportionally
                     let count_decay = 1.0 - (decay_ratio * 0.3);
                     stats.rate_limit_hits = (stats.rate_limit_hits as f64 * count_decay) as u32;
-                    stats.oversized_messages = (stats.oversized_messages as f64 * count_decay) as u32;
-                    stats.invalid_format_count = (stats.invalid_format_count as f64 * count_decay) as u32;
+                    stats.oversized_messages =
+                        (stats.oversized_messages as f64 * count_decay) as u32;
+                    stats.invalid_format_count =
+                        (stats.invalid_format_count as f64 * count_decay) as u32;
                     stats.duplicate_count = (stats.duplicate_count as f64 * count_decay) as u32;
-                    stats.invalid_destination_count = (stats.invalid_destination_count as f64 * count_decay) as u32;
+                    stats.invalid_destination_count =
+                        (stats.invalid_destination_count as f64 * count_decay) as u32;
                     stats.failed_relays = (stats.failed_relays as f64 * count_decay) as u32;
-                    stats.connection_timeouts = (stats.connection_timeouts as f64 * count_decay) as u32;
+                    stats.connection_timeouts =
+                        (stats.connection_timeouts as f64 * count_decay) as u32;
 
                     to_persist.push(peer_id.clone());
                 }
@@ -560,7 +567,8 @@ mod tests {
         assert_eq!(manager.len(), 2);
 
         // Storage should not have the evicted peer
-        let stored_keys: Vec<_> = backend.scan_prefix(STORAGE_PREFIX)
+        let stored_keys: Vec<_> = backend
+            .scan_prefix(STORAGE_PREFIX)
             .unwrap_or_default()
             .into_iter()
             .map(|(k, _)| String::from_utf8_lossy(&k).to_string())
