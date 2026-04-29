@@ -1,0 +1,27 @@
+{
+  "name": "build_verify",
+  "description": "Run the full build verification pipeline: cargo build, cargo check, cargo clippy, cargo fmt, cargo test --no-run, and (optionally) Android build. Reports pass/fail for each gate.",
+  "script": ".claude/skills/build_verify.sh",
+  "commands": [
+    {
+      "name": "full",
+      "description": "Run all build verification gates (Rust + Android if applicable)"
+    },
+    {
+      "name": "rust",
+      "description": "Run Rust-only verification: build, check, clippy, fmt, test-compile"
+    },
+    {
+      "name": "android",
+      "description": "Run Android verification: assembleDebug + role navigation test"
+    },
+    {
+      "name": "wasm",
+      "description": "Run WASM verification: build + check for wasm32-unknown-unknown target"
+    },
+    {
+      "name": "compile_gate",
+      "description": "Run cargo test --workspace --no-run (compile gate only)"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+# Phase 1B: Core Module Wiring
+
+**Priority:** P0
+**Assigned Agent:** rust-coder (glm-5.1:cloud)
+**Fallback:** architect (qwen3-coder:480b:cloud)
+**Status:** TODO
+**Depends On:** phase_1a_compilation_baseline
+
+## Objective
+Ensure all core module handlers connect to IronCore and the module graph is complete.
+
+## Module Wiring Checklist
+- [ ] Wire `transport/` — ensure all libp2p Swarm handlers connect to `IronCore`
+- [ ] Wire `drift/` — protocol framing, compression (lz4), relay custody, sync
+- [ ] Wire `routing/` — adaptive routing with TTL budgets, multipath, reputation
+- [ ] Wire `relay/` — bootstrap nodes, client/server, delegate prewarm, peer exchange
+- [ ] Wire `notification/` — classification and delivery policy
+- [ ] Wire `abuse/` — spam detection, reputation, auto-block
+- [ ] Wire `privacy/` — onion routing, cover traffic, padding, timing obfuscation
+
+## Success Criteria
+- All modules have `pub fn` entry points callable from `IronCore`
+- No orphan modules — every module is wired into the main execution path
+- `cargo check --workspace` passes after wiring changes
+
+## Rules
+- All state behind `Arc<RwLock<...>>` (parking_lot)
+- Crypto path: X25519 ECDH → shared secret → XChaCha20-Poly1305
+- Transport priority: BLE → WiFi → mDNS → QUIC/TCP relay → Internet relay
+- Storage: sled-backed, behind `Store` module boundary

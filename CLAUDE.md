@@ -206,6 +206,8 @@ The ollama-based agent swarm is configured in `ORCHESTRATOR_DIRECTIVE.md` (the f
 - `deepseek-v4-flash` — DeepSeek V4 Flash, 140B params, fast reasoning
 - `kimi-k2.6` — Kimi K2.6, 595B params, latest Kimi
 - `kimi-k2-thinking` — Kimi K2 with extended thinking, 1.1T params
+- `kimi-k2:1t` — Kimi K2 base, 1.1T params
+- `kimi-k2.5` — Kimi K2.5, 1.1T params
 - `qwen3-coder:480b` — Specialized coding model, 510B params
 - `qwen3-coder-next` — Next-gen coding model, 81B params
 - `qwen3.5:397b` — General reasoning, strong fallback
@@ -221,8 +223,11 @@ The ollama-based agent swarm is configured in `ORCHESTRATOR_DIRECTIVE.md` (the f
 - `glm-4.7`, `glm-4.6` — Earlier GLM generations
 - `minimax-m2.7`, `minimax-m2.5`, `minimax-m2.1`, `minimax-m2` — MiniMax generations
 - `nemotron-3-super` — 230B, strong validation
+- `nemotron-3-nano:30b` — 32B, lightweight validation
 - `devstral-2:123b`, `devstral-small-2:24b` — Developer tooling models
 - `qwen3-vl:235b` — Vision-language (if needed)
+- `qwen3-vl:235b-instruct` — Vision-language instruct variant
+- `qwen3-next:80b` — Next-gen 80B generalist
 
 **Small / Local-Fallback:**
 - `gemma3:27b`, `gemma3:12b`, `gemma3:4b` — Lightweight Gemma variants
@@ -258,3 +263,54 @@ Integration tests are in `core/tests/`:
 - `test_address_observation`, `test_multiport`, `test_persistence_restart`, `test_mesh_routing`
 
 Property-based testing: `proptest` harness in `core/src/crypto/proptest_harness.rs`. Formal verification: `kani` proofs behind `kani-proofs` feature.
+
+## Harness Engineering Best Practices
+
+This CLAUDE.md file is re-injected into the context prefix on **every conversational turn** — it functions as the agent's persistent rule engine. Treat it as mission-critical infrastructure, not loose notes.
+
+### Prompt Architecture
+
+- **Write prompts as technical specifications**, not collaborative discussions. The agent executes literally — ambiguity is a liability.
+- **Definitive constraints** must be stated imperatively: "never modify the legacy auth module," "prefer WebSockets over SSE for message delivery."
+- **Operational manifests** must include exact commands: `cargo build --workspace`, `./gradlew assembleDebug`, etc. The agent must not waste tokens reverse-engineering standard processes.
+
+### Parallel Execution
+
+The agent's query engine detects independent operations and dispatches them concurrently. To trigger this:
+
+- Phrase prompts using **explicit parallel language**: "read the user schema AND the message schema simultaneously," "check CI logs AND execute unit tests at the same time."
+- Avoid sequential step-by-step instructions when operations are independent — this wastes both latency budget and context window.
+- For macro-refactoring (e.g., migrating the transport layer, updating UniFFI bindings), use the batch/swarm pattern: decompose into parallel git worktree agents.
+
+### Context Window Management
+
+The agent implements a five-stage compaction cascade when context nears capacity. To avoid premature compaction and maintain deep architectural understanding:
+
+- **Limit tool output with bounded operations** — use `head`, `tail`, bounded `sed`, or `grep` with context flags instead of dumping full files.
+- **Prefer shell search tools** (grep, ripgrep, `git log`/`git diff`) over sequential file reading — a single `grep` call is 10x more context-efficient than "read file A, now read file B."
+- **Keep prompt instructions dense** — every word consumes token budget that could go toward code understanding.
+
+### Multi-Model Routing Strategy
+
+Route work to the appropriate ollama cloud model tier based on task complexity. See `docs/CLAUDE_CODE_ARCHITECTURE_RESEARCH.md` for the full mapping.
+
+| Task Type | Primary Model | Fallback |
+|-----------|--------------|----------|
+| Architecture, planning | `qwen3-coder:480b:cloud` | `qwen3.5:397b:cloud` |
+| Implementation, coding | `qwen3-coder-next:cloud` | `glm-5.1:cloud` |
+| Rust core, protocol | `glm-5.1:cloud` | `qwen3-coder-next:cloud` |
+| Crypto, math, security | `deepseek-v3.2:cloud` | `deepseek-v4-pro:cloud` |
+| Code review, merge gate | `kimi-k2-thinking:cloud` | `kimi-k2.6:cloud` |
+| Quick fix, lint, CI | `gemini-3-flash-preview:cloud` | `deepseek-v4-flash:cloud` |
+| Tests, docs, bindings | `gemma4:31b:cloud` | `devstral-2:123b:cloud` |
+| Pipeline coordination | `mistral-large-3:675b:cloud` | `cogito-2.1:671b:cloud` |
+
+### Escalation Policy
+
+The swarm operates autonomously on all implementation, testing, documentation, and optimization work. The following decision types are escalated to the human operator:
+
+- Architectural direction changes that alter the project's core design philosophy
+- Security/privacy trade-off decisions
+- Technology stack migrations or additions
+- API contract breaking changes
+- Release timing and versioning strategy

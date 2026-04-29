@@ -1,0 +1,32 @@
+{
+  "name": "adversarial_review",
+  "description": "Launch an adversarial security review of specified modules. The reviewer agent probes for race conditions, null check failures, timing side channels, and edge-case architectural flaws. Operates in purely destructive, critical capacity.",
+  "script": ".claude/skills/adversarial_review.sh",
+  "commands": [
+    {
+      "name": "review",
+      "description": "Launch adversarial review of specified modules (crypto, transport, routing, privacy, or all)",
+      "args": ["module_scope"]
+    },
+    {
+      "name": "crypto_review",
+      "description": "Focused review of core/src/crypto/ — X25519, XChaCha20-Poly1305, key lifecycle"
+    },
+    {
+      "name": "transport_review",
+      "description": "Focused review of core/src/transport/ — BLE, relay, QUIC paths"
+    },
+    {
+      "name": "routing_review",
+      "description": "Focused review of core/src/routing/ — TTL budgets, multipath, reputation"
+    },
+    {
+      "name": "privacy_review",
+      "description": "Focused review of core/src/privacy/ — onion routing, cover traffic"
+    },
+    {
+      "name": "full_review",
+      "description": "Comprehensive review of all security-critical modules"
+    }
+  ]
+}
