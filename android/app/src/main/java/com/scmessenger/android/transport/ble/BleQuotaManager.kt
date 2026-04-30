@@ -24,7 +24,7 @@ class BleQuotaManager(
         pruneOldTimestamps(now)
 
         return if (scanStartTimestamps.size >= maxScansPerWindow) {
-            val oldestInWindow = scanStartTimestamps.first
+            val oldestInWindow = scanStartTimestamps.first()
             val cooldownMs = windowMs - (now - oldestInWindow) + 500 // 500ms safety margin
             Timber.w("BLE scan quota exhausted ($maxScansPerWindow starts / ${windowMs}ms). Cooldown: ${cooldownMs}ms")
             maxOf(cooldownMs, 1000)
@@ -53,7 +53,7 @@ class BleQuotaManager(
     }
 
     private fun pruneOldTimestamps(now: Long) {
-        while (scanStartTimestamps.isNotEmpty() && (now - scanStartTimestamps.first) > windowMs) {
+        while (scanStartTimestamps.isNotEmpty() && (now - scanStartTimestamps.first()) > windowMs) {
             scanStartTimestamps.removeFirst()
         }
     }

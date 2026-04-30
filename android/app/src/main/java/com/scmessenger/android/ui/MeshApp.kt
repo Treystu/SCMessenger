@@ -3,7 +3,7 @@ package com.scmessenger.android.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Settings
@@ -249,7 +249,7 @@ fun MeshBottomBar(navController: NavHostController, hasIdentity: Boolean) {
  * Screen definitions for navigation.
  */
 sealed class Screen(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    object Conversations : Screen("conversations", "Chats", androidx.compose.material.icons.Icons.Default.Chat)
+    object Conversations : Screen("conversations", "Chats", androidx.compose.material.icons.Icons.AutoMirrored.Filled.Chat)
     object Contacts : Screen("contacts", "Contacts", androidx.compose.material.icons.Icons.Default.People)
     object AddContact : Screen("add_contact", "Add Contact", androidx.compose.material.icons.Icons.Filled.Add)
     object Dashboard: Screen("dashboard", "Mesh", androidx.compose.material.icons.Icons.Filled.Router)

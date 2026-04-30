@@ -26,7 +26,7 @@ class FileLoggingTree(context: Context) : Timber.Tree() {
     }
 
     override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
-        if (isLogging.get()) return // Prevent recursion
+        if (isLogging.get() == true) return // Prevent recursion
 
         try {
             isLogging.set(true)
@@ -46,7 +46,7 @@ class FileLoggingTree(context: Context) : Timber.Tree() {
             
             // WS12.41: Send to IronCore for summarized storage
             synchronized(this) {
-                runCatching { ironCore?.recordLog(logLine) }
+                runCatching { ironCore?.recordLog(logLine) ?: false }
                     .onFailure { android.util.Log.w("FileLoggingTree", "IronCore logging failed; using file fallback", it) }
                 
                 // Fallback/Legacy: Still append to file but with smaller limit

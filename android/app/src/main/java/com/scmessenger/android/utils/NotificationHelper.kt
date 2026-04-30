@@ -489,7 +489,7 @@ object NotificationHelper {
     /**
      * WS14: Clear all request notifications.
      */
-    fun clearAllRequestNotifications(context: Context) {
+    fun clearAllRequestNotifications() {
         requestGroups.clear()
         // Cancel all request notifications (approximate - in production would track IDs)
         Timber.d("Cleared all request notifications")

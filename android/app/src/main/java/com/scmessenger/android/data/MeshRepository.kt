@@ -4065,7 +4065,7 @@ open class MeshRepository(private val context: Context) {
                 // Async reload of settings after service started - doesn't block
                 repoScope.launch {
                     try {
-                        val loaded = loadSettings()
+                        loadSettings()
                         Timber.d("Settings reloaded asynchronously after service startup")
                     } catch (e: Exception) {
                         Timber.w(e, "Async settings reload failed")
@@ -5078,7 +5078,6 @@ open class MeshRepository(private val context: Context) {
                     }
 
                     val sendTargets = linkedSetOf(bleAddr).apply { addAll(connectedBleDevices) }
-                    var lastFailureReason = "no_target_attempted"
 
                     for (target in sendTargets) {
                         if (bleClient != null) {
@@ -5094,10 +5093,8 @@ open class MeshRepository(private val context: Context) {
                                     )
                                     return@attemptDelivery true
                                 }
-                                lastFailureReason = "client_sendData_false:$target"
                             } catch (bleClientEx: Exception) {
                                 Timber.w(bleClientEx, "BLE client send failed for $target")
-                                lastFailureReason = "client_exception:${bleClientEx.message ?: "unknown"}"
                             }
                         }
 
@@ -5114,10 +5111,8 @@ open class MeshRepository(private val context: Context) {
                                     )
                                     return@attemptDelivery true
                                 }
-                                lastFailureReason = "server_sendData_false:$target"
                             } catch (bleServerEx: Exception) {
                                 Timber.w(bleServerEx, "BLE server send failed for $target")
-                                lastFailureReason = "server_exception:${bleServerEx.message ?: "unknown"}"
                             }
                         }
                     }
@@ -5203,7 +5198,6 @@ open class MeshRepository(private val context: Context) {
                         Timber.d("🔀 Transport: route=$corePeerId connected=$connected timeout=2000ms")
                     }
                     
-                    val attemptStart = System.currentTimeMillis()
                     val directError = bridge.sendMessageStatus(
                         corePeerId,
                         encryptedData,
@@ -5299,7 +5293,6 @@ open class MeshRepository(private val context: Context) {
                     }
 
                     val sendTargets = linkedSetOf(bleAddr).apply { addAll(connectedBleDevices) }
-                    var lastFailureReason = "no_target_attempted"
 
                     for (target in sendTargets) {
                         if (bleClient != null) {
@@ -5315,10 +5308,8 @@ open class MeshRepository(private val context: Context) {
                                     )
                                     return@attemptWifiThenBleFallback true
                                 }
-                                lastFailureReason = "client_sendData_false:$target"
                             } catch (bleClientEx: Exception) {
                                 Timber.w(bleClientEx, "BLE client send failed for $target")
-                                lastFailureReason = "client_exception:${bleClientEx.message ?: "unknown"}"
                             }
                         }
 
@@ -5335,10 +5326,8 @@ open class MeshRepository(private val context: Context) {
                                     )
                                     return@attemptWifiThenBleFallback true
                                 }
-                                lastFailureReason = "server_sendData_false:$target"
                             } catch (bleServerEx: Exception) {
                                 Timber.w(bleServerEx, "BLE server send failed for $target")
-                                lastFailureReason = "server_exception:${bleServerEx.message ?: "unknown"}"
                             }
                         }
                     }
@@ -5940,6 +5929,7 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
+    @Suppress("UNUSED_PARAMETER")
     private fun pendingOutboxExpiryReason(item: PendingOutboundEnvelope, nowEpochSec: Long): String? {
         // PHILOSOPHY: Messages NEVER expire. Every message retries
         // until successfully delivered. No attempt limit, no age limit.
@@ -7330,7 +7320,6 @@ open class MeshRepository(private val context: Context) {
         relayCircuitBreaker.resetAll()
 
         // Build prioritized address list based on network type
-        val baseNodes = emptyList<String>()
         val prioritizedAddresses = emptyList<String>()
 
         // Proactively probe known relay ports to deprioritize blocked addresses

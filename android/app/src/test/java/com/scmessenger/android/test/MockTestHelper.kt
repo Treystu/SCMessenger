@@ -56,7 +56,10 @@ object MockTestHelper {
      */
     fun createMockIronCore(): IronCore {
         return mockk<IronCore>(relaxed = true) {
-            every { prepareMessage(any(), any(), any()) } returns ByteArray(64) { it.toByte() }
+            every { prepareMessage(any(), any(), any(), any()) } returns PreparedMessage(
+                messageId = "msg-123",
+                envelopeData = ByteArray(64) { it.toByte() }
+            )
             // receiveMessage is no longer available or has different signature
             /*
             every { receiveMessage(any(), any()) } returns MessageEnvelope(
@@ -75,7 +78,7 @@ object MockTestHelper {
      * Create a mock MeshSettingsManager.
      */
     fun createMockSettingsManager(
-        initialSettings: MeshSettings? = null
+        @Suppress("UNUSED_PARAMETER") initialSettings: MeshSettings? = null
     ): Any {
         return mockk<Any>(relaxed = true) {
             every { this@mockk.toString().contains("load") } returns true

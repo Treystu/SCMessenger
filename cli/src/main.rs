@@ -22,8 +22,9 @@ use scmessenger_core::store::{Contact, ContactManager, MessageDirection, Outbox,
 use scmessenger_core::transport::abstraction::TransportType;
 use scmessenger_core::transport::{self, SwarmEvent};
 use scmessenger_core::wasm_support::rpc::{
-    notif_delivery_status, notif_message_received, notif_peer_discovered, DeliveryStatusParams,
-    MeshTopologyUpdateParams, MessageReceivedParams, PeerDiscoveredParams,
+    notif_delivery_status, notif_message_received, notif_peer_discovered, ClientIntent,
+    DeliveryStatusParams, MeshTopologyUpdateParams, MessageReceivedParams, PeerDiscoveredParams,
+    rpc_error, rpc_result,
 };
 use scmessenger_core::IronCore;
 use std::collections::HashMap;
@@ -1856,25 +1857,29 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                 std::process::exit(0);
                             }
                             server::UiCommand::DaemonRpc { id, intent } => {
-                                let intent: server::ClientIntent = serde_json::from_str(&intent).unwrap_or(server::ClientIntent::GetIdentity);
+                                let intent: ClientIntent = serde_json::from_str(&intent)
+                                    .unwrap_or(ClientIntent::GetIdentity {});
                                 let push = |result: serde_json::Value| {
-                                    let resp = server::rpc_result(Some(serde_json::Value::String(id.clone())), result);
+                                    let resp = rpc_result(Some(serde_json::Value::String(id.clone())), result);
                                     if let Ok(v) = serde_json::to_value(&resp) {
                                         let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
                                     }
                                 };
                                 let push_err = |code: i32, msg: String| {
-                                    let resp = server::rpc_error(
+                                    let resp = rpc_error(
                                         Some(serde_json::Value::String(id.clone())),
-                                        code,
-                                        msg,
+                                        scmessenger_core::wasm_support::rpc::JsonRpcErrorBody {
+                                            code,
+                                            message: msg,
+                                            data: None,
+                                        },
                                     );
                                     if let Ok(v) = serde_json::to_value(&resp) {
                                         let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
                                     }
                                 };
                                 match intent {
-                                    server::ClientIntent::GetIdentity => {
+                                    ClientIntent::GetIdentity {} => {
                                         let i = core_rx.get_identity_info();
                                         push(serde_json::json!({
                                             "peer_id": i.identity_id,
@@ -1884,7 +1889,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                             "nickname": i.nickname,
                                         }));
                                     }
-                                    server::ClientIntent::ScanPeers => {
+                                    ClientIntent::ScanPeers {} => {
                                         let peers: Vec<String> = peers_rx
                                             .lock()
                                             .await
@@ -1893,7 +1898,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                             .collect();
                                         push(serde_json::json!({ "peers": peers }));
                                     }
-                                    server::ClientIntent::GetTopology => {
+                                    ClientIntent::GetTopology {} => {
                                         let peer_count = peers_rx.lock().await.len();
                                         let (known_peers, bootstrap_nodes) = {
                                             let l = ledger_rx.lock().await;
@@ -1913,7 +1918,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                             push(v);
                                         }
                                     }
-                                    server::ClientIntent::SendMessage {
+                                    ClientIntent::SendMessage {
                                         recipient,
                                         message,
                                         id: msg_id,

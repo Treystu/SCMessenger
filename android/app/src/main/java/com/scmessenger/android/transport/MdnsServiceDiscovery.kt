@@ -3,6 +3,7 @@ package com.scmessenger.android.transport
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.os.Build
 import timber.log.Timber
 
 /**
@@ -185,6 +186,7 @@ class MdnsServiceDiscovery(
             }
 
             override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
+                @Suppress("DEPRECATION")
                 Timber.d("mDNS service resolved: ${serviceInfo.serviceName} at ${serviceInfo.host}:${serviceInfo.port}")
 
                 // Create a peer ID from the service name (matches iOS's service.name pattern)
@@ -195,7 +197,12 @@ class MdnsServiceDiscovery(
 
                 // TCP/mDNS parity: Notify the resolved LAN address so the caller
                 // can generate a libp2p multiaddr and dial via SwarmBridge.
-                val host = serviceInfo.host?.hostAddress
+                val host = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    serviceInfo.hostAddresses.firstOrNull()?.hostAddress
+                } else {
+                    @Suppress("DEPRECATION")
+                    serviceInfo.host?.hostAddress
+                }
                 val port = serviceInfo.port
                 if (host != null && port > 0) {
                     Timber.i("mDNS: LAN peer resolved $peerId at $host:$port — notifying for SwarmBridge dial")
@@ -204,6 +211,7 @@ class MdnsServiceDiscovery(
             }
         }
 
+        @Suppress("DEPRECATION")
         nsdManager?.resolveService(serviceInfo, resolveListener)
     }
 

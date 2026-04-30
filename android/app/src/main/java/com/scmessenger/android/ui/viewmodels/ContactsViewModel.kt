@@ -169,9 +169,9 @@ class ContactsViewModel @Inject constructor(
      */
     private fun isSameNearbyIdentity(peer: NearbyPeer, event: PeerEvent.IdentityDiscovered): Boolean {
         // Primary key: public key matching (most reliable across ID schemes)
-        val sameByPublicKey = !peer.publicKey.isNullOrBlank() &&
-            !event.publicKey.isNullOrBlank() &&
-            PeerIdValidator.isSame(peer.publicKey!!, event.publicKey)
+        val sameByPublicKey = peer.publicKey?.let { pk ->
+            PeerIdValidator.isSame(pk, event.publicKey)
+        } ?: false
         
         if (sameByPublicKey) return true
         
@@ -205,16 +205,15 @@ class ContactsViewModel @Inject constructor(
      */
     private fun isNearbyPeerContact(nearby: NearbyPeer, contact: uniffi.api.Contact): Boolean {
         // Primary key: public key matching (most reliable across ID schemes)
-        val sameByPublicKey = !nearby.publicKey.isNullOrBlank() &&
-            !contact.publicKey.isNullOrBlank() &&
-            PeerIdValidator.isSame(nearby.publicKey!!, contact.publicKey)
+        val sameByPublicKey = nearby.publicKey?.let { npk ->
+            PeerIdValidator.isSame(npk, contact.publicKey)
+        } ?: false
         
         if (sameByPublicKey) return true
         
         // Secondary: ID-based matching
         val sameByPeerId = PeerIdValidator.isSame(nearby.peerId, contact.peerId)
-        val sameByLibp2p = nearby.libp2pPeerId != null &&
-            PeerIdValidator.isSame(nearby.libp2pPeerId!!, contact.peerId)
+        val sameByLibp2p = nearby.libp2pPeerId?.let { PeerIdValidator.isSame(it, contact.peerId) } ?: false
         val sameByBle = nearby.blePeerId != null && nearby.blePeerId == contact.peerId
         
         return sameByPeerId || sameByLibp2p || sameByBle

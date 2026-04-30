@@ -13,7 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -86,7 +86,7 @@ fun NetworkStatusDialog(
                     // DNS Results
                     val failedDns = report!!.dnsResults.filterValues { !it }.keys
                     if (failedDns.isNotEmpty()) {
-                        Divider(modifier = Modifier.padding(vertical = 4.dp))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                         Text("DNS Failures:", style = MaterialTheme.typography.labelMedium)
                         failedDns.forEach { domain ->
                             Text("  - $domain", style = MaterialTheme.typography.bodySmall)
@@ -96,7 +96,7 @@ fun NetworkStatusDialog(
                     // Relay Results
                     val unreachableRelays = report!!.relayResults.filterValues { !it }.keys
                     if (unreachableRelays.isNotEmpty()) {
-                        Divider(modifier = Modifier.padding(vertical = 4.dp))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                         Text("Unreachable Relays:", style = MaterialTheme.typography.labelMedium)
                         unreachableRelays.forEach { relay ->
                             Text("  - $relay", style = MaterialTheme.typography.bodySmall)
@@ -105,7 +105,7 @@ fun NetworkStatusDialog(
 
                     // Recommendations
                     if (report!!.recommendations.isNotEmpty()) {
-                        Divider(modifier = Modifier.padding(vertical = 4.dp))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                         Text("Recommendations:", style = MaterialTheme.typography.labelMedium)
                         report!!.recommendations.forEach { rec ->
                             Text("  - $rec", style = MaterialTheme.typography.bodySmall)

@@ -130,7 +130,7 @@ class TopicManager(
     /**
      * Filter messages by topic.
      */
-    fun filterMessagesByTopic(messages: List<uniffi.api.MessageRecord>, topic: String): List<uniffi.api.MessageRecord> {
+    fun filterMessagesByTopic(messages: List<uniffi.api.MessageRecord>, @Suppress("UNUSED_PARAMETER") topic: String): List<uniffi.api.MessageRecord> {
         // Topic-based filtering: since MessageRecord doesn't carry a topic field,
         // we return all messages (gossipsub delivery is already topic-filtered at transport layer)
         return messages

@@ -6,7 +6,6 @@ import android.os.Build
 import android.os.ParcelFileDescriptor
 import timber.log.Timber
 import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.nio.ByteBuffer
 
 /**
@@ -76,7 +75,6 @@ class MeshVpnService : VpnService() {
                     }
 
                     val input = FileInputStream(iface.fileDescriptor)
-                    val output = FileOutputStream(iface.fileDescriptor)
                     val packet = ByteBuffer.allocate(32767)
 
                     while (isRunning) {

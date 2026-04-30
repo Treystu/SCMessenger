@@ -163,7 +163,7 @@ class PerformanceMonitor(context: Context) {
             Timber.i("ANR event written to: %s", file.absolutePath)
 
             // Keep only last 100 ANR files
-            val allAnrFiles = anrDir.listFiles { dir: File, name: String -> name.startsWith("anr_") && name.endsWith(".json") }
+            val allAnrFiles = anrDir.listFiles { _: File, name: String -> name.startsWith("anr_") && name.endsWith(".json") }
             val anrFiles: Array<File> = if (allAnrFiles != null) allAnrFiles.sortedBy { it.lastModified() }.toTypedArray() else emptyArray()
 
             if (anrFiles.size > 100) {

@@ -257,6 +257,7 @@ class BleGattServer(
         return true
     }
 
+    @Suppress("DEPRECATION")
     private val gattServerCallback = object : BluetoothGattServerCallback() {
 
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {

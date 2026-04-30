@@ -7,6 +7,7 @@ import android.content.IntentFilter
 import android.net.wifi.p2p.*
 import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceInfo
 import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceRequest
+import androidx.core.content.IntentCompat
 import timber.log.Timber
 import java.io.InputStream
 import java.io.OutputStream
@@ -282,8 +283,10 @@ class WifiDirectTransport(
                 }
 
                 WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
-                    val networkInfo = intent.getParcelableExtra<android.net.NetworkInfo>(WifiP2pManager.EXTRA_NETWORK_INFO)
+                    @Suppress("DEPRECATION")
+                    val networkInfo = IntentCompat.getParcelableExtra(intent, WifiP2pManager.EXTRA_NETWORK_INFO, android.net.NetworkInfo::class.java)
 
+                    @Suppress("DEPRECATION")
                     if (networkInfo?.isConnected == true) {
                         Timber.d("Connected to WiFi P2P group")
                         wifiP2pManager?.requestConnectionInfo(channel) { info ->

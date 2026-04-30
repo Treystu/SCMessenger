@@ -472,6 +472,7 @@ class BleGattClient(
         addresses.forEach { disconnect(it) }
     }
 
+    @Suppress("DEPRECATION")
     private val gattCallback = object : BluetoothGattCallback() {
 
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {

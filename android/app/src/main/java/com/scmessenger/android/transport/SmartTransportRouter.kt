@@ -279,14 +279,14 @@ class SmartTransportRouter {
      */
     suspend fun attemptDelivery(
         peerId: String,
-        envelopeData: ByteArray,
+        @Suppress("UNUSED_PARAMETER") envelopeData: ByteArray,
         wifiPeerId: String?,
         blePeerId: String?,
         tcpMdnsPeerId: String?,
         routePeerCandidates: List<String>,
-        listeners: List<String>,
-        traceMessageId: String?,
-        attemptContext: String?,
+        @Suppress("UNUSED_PARAMETER") listeners: List<String>,
+        @Suppress("UNUSED_PARAMETER") traceMessageId: String?,
+        @Suppress("UNUSED_PARAMETER") attemptContext: String?,
         tryWifi: suspend (String) -> Boolean,
         tryBle: suspend (String) -> Boolean,
         tryTcpMdns: suspend (String) -> Boolean,
