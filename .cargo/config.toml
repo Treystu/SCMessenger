@@ -1,10 +1,17 @@
-# Windows: disable incremental compilation to prevent rlib metadata
-# and paging file errors during integration test builds.
-# See P0_BUILD_004 for context.
 [build]
+# Disable incremental compilation to prevent rlib metadata
+# and paging file errors during integration test builds.
 incremental = false
 
-# GNU target: ensure dlltool is found for import library generation
-# (required by parking_lot_core, windows-sys, etc. on x86_64-pc-windows-gnu)
+# Default to GNU target on this machine since MSVC link.exe
+# is not installed and Git Bash /usr/bin/link shadows it.
+target = "x86_64-pc-windows-gnu"
+
 [target.x86_64-pc-windows-gnu]
-linker = "gcc"
+# MSYS2 MinGW-w64 gcc is available at C:\msys64\mingw64\bin
+linker = "C:/msys64/mingw64/bin/x86_64-w64-mingw32-gcc.exe"
+
+[target.x86_64-pc-windows-msvc]
+# MSVC linker is not installed on this machine.
+# If ever installed, remove the GNU default above.
+linker = "link.exe"

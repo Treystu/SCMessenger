@@ -90,8 +90,9 @@ store_orchestrator_pid() {
     local found_pid=$(powershell.exe -NoProfile -Command "
         \$p = Get-Process -Id $parent_pid -ErrorAction SilentlyContinue
         while (\$p -and \$p.ProcessName -ne 'claude') {
-            \$p = Get-Process -Id \$p.Id -ErrorAction SilentlyContinue | ForEach-Object { Get-Process -Id \$_.Id -ErrorAction SilentlyContinue }
-            break
+            \$parentId = \$p.ParentId
+            if (-not \$parentId -or \$parentId -eq 0 -or \$parentId -eq \$p.Id) { break }
+            \$p = Get-Process -Id \$parentId -ErrorAction SilentlyContinue
         }
         if (\$p -and \$p.ProcessName -eq 'claude') { Write-Output \$p.Id } else { Write-Output '' }
     " 2>/dev/null)
@@ -506,16 +507,31 @@ pool_launch_clean() {
 
     echo "=== Pre-Launch Hygiene Check ==="
 
-    # Phase 1: Kill stale untracked claude.exe processes
+    # Phase 1: Determine tracked PIDs (orchestrator + agents)
+    local orch_pid=$(get_orchestrator_pid)
     local tracked_pids=" $orch_pid"
     for pidfile in "$AGENT_ROOT"/*/pid; do
         if [ -f "$pidfile" ]; then
             tracked_pids="$tracked_pids $(cat "$pidfile")"
         fi
     done
-    local orch_pid=$(get_orchestrator_pid)
-    tracked_pids="$tracked_pids $orch_pid"
 
+    # Self-preservation: discover the claude.exe hosting this shell and add it to tracked
+    local host_claude_pid=$(powershell.exe -NoProfile -Command "
+        \$bash = Get-Process -Id $$ -ErrorAction SilentlyContinue
+        \$p = \$bash
+        while (\$p -and \$p.ProcessName -ne 'claude') {
+            \$parentId = \$p.ParentId
+            if (-not \$parentId -or \$parentId -eq 0 -or \$parentId -eq \$p.Id) { break }
+            \$p = Get-Process -Id \$parentId -ErrorAction SilentlyContinue
+        }
+        if (\$p -and \$p.ProcessName -eq 'claude') { Write-Output \$p.Id } else { Write-Output '' }
+    " 2>/dev/null)
+    if [ -n "$host_claude_pid" ]; then
+        tracked_pids="$tracked_pids $host_claude_pid"
+    fi
+
+    # Kill stale untracked claude.exe processes
     local untracked=$(powershell.exe -NoProfile -Command "
         \$tracked = @($(echo "$tracked_pids" | tr ' ' ',' | sed 's/^,//' | sed 's/,$//'))
         Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object {

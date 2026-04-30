@@ -1,0 +1,9 @@
+[build]
+# Use rust-lld to avoid Git Bash /usr/bin/link shadowing MSVC link.exe
+linker = "rust-lld.exe"
+
+# Disable incremental compilation to prevent rlib metadata errors on Windows
+incremental = false
+
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"
