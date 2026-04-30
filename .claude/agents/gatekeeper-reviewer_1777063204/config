@@ -1,5 +1,0 @@
-AGENT_ID=gatekeeper-reviewer_1777063204
-AGENT_MODEL=kimi-k2-thinking:cloud
-OLLAMA_HOST=localhost:11434
-WORKING_DIR=/c/Users/kanal/Documents/SCMessenger/SCMessenger
-START_TIME=1777063205

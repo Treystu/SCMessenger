@@ -122,3 +122,11 @@ control_android_logs.txt
 reference/Androidlogs.txt
 reference/Android-Debug.md
 .claude/compile.lock
+
+# Claude Code agent runtime (PID files, logs, per-agent configs)
+.claude/agents/
+**/.claude/agents/
+
+# Claude Code scheduled tasks runtime lock
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.json
