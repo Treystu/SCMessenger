@@ -22,6 +22,8 @@ import com.google.mlkit.common.MlKitException
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
+import androidx.compose.ui.res.stringResource
+import com.scmessenger.android.R
 import com.scmessenger.android.ui.components.ErrorBanner
 import com.scmessenger.android.ui.components.IdenticonFromPeerId
 import com.scmessenger.android.ui.viewmodels.ContactsViewModel
@@ -201,8 +203,9 @@ private fun ManualEntryTab(
                     IdenticonFromPeerId(peerId = peerId, size = 64.dp)
 
                     Column {
+                        val unknownFallback = stringResource(R.string.unknown_contact)
                         Text(
-                            text = nickname.ifBlank { "Unknown" },
+                            text = nickname.ifBlank { unknownFallback },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )

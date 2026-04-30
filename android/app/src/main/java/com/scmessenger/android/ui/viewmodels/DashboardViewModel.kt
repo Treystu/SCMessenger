@@ -2,12 +2,15 @@ package com.scmessenger.android.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.content.Context
+import com.scmessenger.android.R
 import com.scmessenger.android.data.MeshRepository
 import com.scmessenger.android.service.MeshEventBus
 import com.scmessenger.android.service.PeerEvent
 import com.scmessenger.android.service.StatusEvent
 import com.scmessenger.android.utils.toEpochSeconds
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -23,7 +26,8 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
-    private val meshRepository: MeshRepository
+    private val meshRepository: MeshRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
     // Service stats
     private val _stats = MutableStateFlow<uniffi.api.ServiceStats?>(null)
@@ -306,7 +310,7 @@ class DashboardViewModel @Inject constructor(
             "/wifi-aware/" in multiaddr -> "WiFi Aware"
             "/wifi-direct/" in multiaddr -> "WiFi Direct"
             "/ip4/" in multiaddr || "/ip6/" in multiaddr -> "Internet"
-            else -> "Unknown"
+            else -> context.getString(R.string.unknown_transport)
         }
     }
 

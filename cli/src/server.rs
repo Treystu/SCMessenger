@@ -29,6 +29,8 @@ pub enum UiEvent {
     IdentityInfo {
         peer_id: String,
         public_key: String,
+        nickname: Option<String>,
+        libp2p_peer_id: Option<String>,
     },
     IdentityExportData {
         identity_id: String,
@@ -119,6 +121,10 @@ pub struct WebContext {
     pub start_time: Instant,
     pub transport_bridge: Arc<Mutex<crate::transport_bridge::TransportBridge>>,
     pub ui_port: u16,
+    /// Optional IronCore reference for WASM JSON-RPC bridge handlers
+    /// (contacts, settings, history, blocking). None when core is not
+    /// available (e.g. bootstrap-only CLI modes).
+    pub core: Option<Arc<scmessenger_core::IronCore>>,
 }
 
 impl Clone for WebContext {
@@ -132,6 +138,7 @@ impl Clone for WebContext {
             start_time: self.start_time,
             transport_bridge: Arc::clone(&self.transport_bridge),
             ui_port: self.ui_port,
+            core: self.core.clone(),
         }
     }
 }
@@ -145,7 +152,7 @@ impl std::fmt::Debug for WebContext {
 // JSON-RPC types imported from core (shared wire contract with WASM client).
 use scmessenger_core::wasm_support::rpc::{
     parse_intent, rpc_error, rpc_result, ClientIntent, JsonRpcErrorBody, JsonRpcNotification,
-    JsonRpcRequest, JsonRpcResponse,
+    JsonRpcRequest, JsonRpcResponse, ERR_PARAMS,
 };
 
 /// WebSocket message sender handle connected clients.
@@ -338,13 +345,25 @@ async fn handle_jsonrpc_request(
     match intent {
         ClientIntent::GetIdentity {} => {
             let peer_count = ctx.peers.lock().await.len();
-            let payload = serde_json::json!({
+            let mut payload = serde_json::json!({
                 "identityId": ctx.node_peer_id,
                 "publicKeyHex": ctx.node_public_key,
                 "peerCount": peer_count,
                 "bootstrapNodes": ctx.bootstrap_nodes,
                 "uptimeSecs": ctx.start_time.elapsed().as_secs(),
             });
+            // Enrich with core identity fields when available
+            if let Some(ref core) = ctx.core {
+                let info = core.get_identity_info();
+                if let Some(obj) = payload.as_object_mut() {
+                    obj.insert("nickname".to_string(), serde_json::json!(info.nickname));
+                    obj.insert("libp2pPeerId".to_string(), serde_json::json!(info.libp2p_peer_id));
+                    obj.insert("initialized".to_string(), serde_json::json!(info.initialized));
+                    if let Some(local_peer_id) = info.libp2p_peer_id {
+                        obj.insert("localPeerId".to_string(), serde_json::json!(local_peer_id));
+                    }
+                }
+            }
             rpc_result(id, payload)
         }
         ClientIntent::SendMessage {
@@ -396,6 +415,299 @@ async fn handle_jsonrpc_request(
                     "bootstrapNodes": ctx.bootstrap_nodes,
                 }),
             )
+        }
+        // ── Contacts ──
+        ClientIntent::GetContacts {} => {
+            if let Some(ref core) = ctx.core {
+                let mgr = core.contacts_manager();
+                match mgr.list() {
+                    Ok(contacts) => {
+                        let list: Vec<serde_json::Value> = contacts
+                            .into_iter()
+                            .map(|c| {
+                                serde_json::json!({
+                                    "peerId": c.peer_id,
+                                    "nickname": c.nickname,
+                                    "localNickname": c.local_nickname,
+                                })
+                            })
+                            .collect();
+                        rpc_result(id, serde_json::json!({"contacts": list}))
+                    }
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to fetch contacts: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        ClientIntent::AddContact { peer_id, nickname } => {
+            if let Some(ref core) = ctx.core {
+                let mgr = core.contacts_manager();
+                let mut contact = scmessenger_core::contacts_bridge::Contact::new(
+                    peer_id.clone(),
+                    String::new(),
+                );
+                if let Some(n) = nickname {
+                    contact = contact.with_nickname(n);
+                }
+                match mgr.add(contact) {
+                    Ok(()) => rpc_result(id, serde_json::json!({"added": true})),
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to add contact: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        ClientIntent::RemoveContact { peer_id } => {
+            if let Some(ref core) = ctx.core {
+                let mgr = core.contacts_manager();
+                match mgr.remove(peer_id) {
+                    Ok(()) => rpc_result(id, serde_json::json!({"removed": true})),
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to remove contact: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        // ── Settings ──
+        ClientIntent::GetSettings {} => {
+            if let Some(ref core) = ctx.core {
+                let info = core.get_identity_info();
+                rpc_result(
+                    id,
+                    serde_json::json!({
+                        "nickname": info.nickname,
+                        "identityId": info.identity_id,
+                        "publicKeyHex": info.public_key_hex,
+                        "libp2pPeerId": info.libp2p_peer_id,
+                        "initialized": info.initialized,
+                    }),
+                )
+            } else {
+                rpc_result(
+                    id,
+                    serde_json::json!({
+                        "identityId": ctx.node_peer_id,
+                        "publicKeyHex": ctx.node_public_key,
+                    }),
+                )
+            }
+        }
+        ClientIntent::UpdateSettings { key, value } => {
+            if let Some(ref core) = ctx.core {
+                match key.as_str() {
+                    "nickname" => {
+                        if let Some(nick) = value.as_str() {
+                            match core.set_nickname(nick.to_string()) {
+                                Ok(()) => rpc_result(id, serde_json::json!({"updated": true})),
+                                Err(e) => rpc_error(
+                                    id,
+                                    JsonRpcErrorBody {
+                                        code: -32000,
+                                        message: format!("Failed to set nickname: {:?}", e),
+                                        data: None,
+                                    },
+                                ),
+                            }
+                        } else {
+                            rpc_error(
+                                id,
+                                JsonRpcErrorBody {
+                                    code: ERR_PARAMS,
+                                    message: "value must be a string for nickname".to_string(),
+                                    data: None,
+                                },
+                            )
+                        }
+                    }
+                    _ => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: ERR_PARAMS,
+                            message: format!("Unknown setting key: {}", key),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        // ── History ──
+        ClientIntent::GetHistory { limit } => {
+            if let Some(ref core) = ctx.core {
+                let mgr = core.history_manager();
+                match mgr.recent(None, limit.unwrap_or(50) as u32) {
+                    Ok(messages) => {
+                        let list: Vec<serde_json::Value> = messages
+                            .into_iter()
+                            .map(|m| {
+                                serde_json::json!({
+                                    "id": m.id,
+                                    "senderId": m.peer_id,
+                                    "content": m.content,
+                                    "timestamp": m.timestamp,
+                                    "direction": format!("{:?}", m.direction),
+                                })
+                            })
+                            .collect();
+                        rpc_result(id, serde_json::json!({"messages": list}))
+                    }
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to fetch history: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        ClientIntent::GetConversation { peer_id, limit } => {
+            if let Some(ref core) = ctx.core {
+                let mgr = core.history_manager();
+                match mgr.conversation(peer_id.clone(), limit.unwrap_or(50) as u32) {
+                    Ok(messages) => {
+                        let list: Vec<serde_json::Value> = messages
+                            .into_iter()
+                            .map(|m| {
+                                serde_json::json!({
+                                    "id": m.id,
+                                    "senderId": m.peer_id,
+                                    "content": m.content,
+                                    "timestamp": m.timestamp,
+                                })
+                            })
+                            .collect();
+                        rpc_result(id, serde_json::json!({"messages": list}))
+                    }
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to fetch conversation: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        // ── Blocking ──
+        ClientIntent::BlockPeer { peer_id, reason } => {
+            if let Some(ref core) = ctx.core {
+                match core.block_peer(peer_id, reason, None) {
+                    Ok(()) => rpc_result(id, serde_json::json!({"blocked": true})),
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to block peer: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        ClientIntent::UnblockPeer { peer_id } => {
+            if let Some(ref core) = ctx.core {
+                match core.unblock_peer(peer_id, None) {
+                    Ok(()) => rpc_result(id, serde_json::json!({"unblocked": true})),
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to unblock peer: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
         }
     }
 }

@@ -82,6 +82,154 @@ pub fn format_get_topology(id: impl serde::Serialize) -> Result<String, serde_js
     serde_json::to_string(&req)
 }
 
+// ── Contacts ──
+
+/// Build a `get_contacts` JSON-RPC request string.
+pub fn format_get_contacts(id: impl serde::Serialize) -> Result<String, serde_json::Error> {
+    let req = JsonRpcRequest {
+        jsonrpc: "2.0".into(),
+        id: Some(serde_json::to_value(id)?),
+        method: "get_contacts".into(),
+        params: serde_json::json!({}),
+    };
+    serde_json::to_string(&req)
+}
+
+/// Build an `add_contact` JSON-RPC request string.
+pub fn format_add_contact(
+    id: impl serde::Serialize,
+    peer_id: &str,
+    nickname: Option<&str>,
+) -> Result<String, serde_json::Error> {
+    let mut params = serde_json::json!({"peer_id": peer_id});
+    if let Some(n) = nickname {
+        params["nickname"] = serde_json::json!(n);
+    }
+    let req = JsonRpcRequest {
+        jsonrpc: "2.0".into(),
+        id: Some(serde_json::to_value(id)?),
+        method: "add_contact".into(),
+        params,
+    };
+    serde_json::to_string(&req)
+}
+
+/// Build a `remove_contact` JSON-RPC request string.
+pub fn format_remove_contact(
+    id: impl serde::Serialize,
+    peer_id: &str,
+) -> Result<String, serde_json::Error> {
+    let req = JsonRpcRequest {
+        jsonrpc: "2.0".into(),
+        id: Some(serde_json::to_value(id)?),
+        method: "remove_contact".into(),
+        params: serde_json::json!({"peer_id": peer_id}),
+    };
+    serde_json::to_string(&req)
+}
+
+// ── Settings ──
+
+/// Build a `get_settings` JSON-RPC request string.
+pub fn format_get_settings(id: impl serde::Serialize) -> Result<String, serde_json::Error> {
+    let req = JsonRpcRequest {
+        jsonrpc: "2.0".into(),
+        id: Some(serde_json::to_value(id)?),
+        method: "get_settings".into(),
+        params: serde_json::json!({}),
+    };
+    serde_json::to_string(&req)
+}
+
+/// Build an `update_settings` JSON-RPC request string.
+pub fn format_update_settings(
+    id: impl serde::Serialize,
+    key: &str,
+    value: &serde_json::Value,
+) -> Result<String, serde_json::Error> {
+    let req = JsonRpcRequest {
+        jsonrpc: "2.0".into(),
+        id: Some(serde_json::to_value(id)?),
+        method: "update_settings".into(),
+        params: serde_json::json!({"key": key, "value": value}),
+    };
+    serde_json::to_string(&req)
+}
+
+// ── History ──
+
+/// Build a `get_history` JSON-RPC request string.
+pub fn format_get_history(
+    id: impl serde::Serialize,
+    limit: Option<usize>,
+) -> Result<String, serde_json::Error> {
+    let mut params = serde_json::json!({});
+    if let Some(n) = limit {
+        params["limit"] = serde_json::json!(n);
+    }
+    let req = JsonRpcRequest {
+        jsonrpc: "2.0".into(),
+        id: Some(serde_json::to_value(id)?),
+        method: "get_history".into(),
+        params,
+    };
+    serde_json::to_string(&req)
+}
+
+/// Build a `get_conversation` JSON-RPC request string.
+pub fn format_get_conversation(
+    id: impl serde::Serialize,
+    peer_id: &str,
+    limit: Option<usize>,
+) -> Result<String, serde_json::Error> {
+    let mut params = serde_json::json!({"peer_id": peer_id});
+    if let Some(n) = limit {
+        params["limit"] = serde_json::json!(n);
+    }
+    let req = JsonRpcRequest {
+        jsonrpc: "2.0".into(),
+        id: Some(serde_json::to_value(id)?),
+        method: "get_conversation".into(),
+        params,
+    };
+    serde_json::to_string(&req)
+}
+
+// ── Blocking ──
+
+/// Build a `block_peer` JSON-RPC request string.
+pub fn format_block_peer(
+    id: impl serde::Serialize,
+    peer_id: &str,
+    reason: Option<&str>,
+) -> Result<String, serde_json::Error> {
+    let mut params = serde_json::json!({"peer_id": peer_id});
+    if let Some(r) = reason {
+        params["reason"] = serde_json::json!(r);
+    }
+    let req = JsonRpcRequest {
+        jsonrpc: "2.0".into(),
+        id: Some(serde_json::to_value(id)?),
+        method: "block_peer".into(),
+        params,
+    };
+    serde_json::to_string(&req)
+}
+
+/// Build an `unblock_peer` JSON-RPC request string.
+pub fn format_unblock_peer(
+    id: impl serde::Serialize,
+    peer_id: &str,
+) -> Result<String, serde_json::Error> {
+    let req = JsonRpcRequest {
+        jsonrpc: "2.0".into(),
+        id: Some(serde_json::to_value(id)?),
+        method: "unblock_peer".into(),
+        params: serde_json::json!({"peer_id": peer_id}),
+    };
+    serde_json::to_string(&req)
+}
+
 // ── Response / notification parsers ───────────────────────────────────────
 
 /// Parse a JSON-RPC response from the daemon.

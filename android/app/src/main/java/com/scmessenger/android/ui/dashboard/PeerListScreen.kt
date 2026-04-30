@@ -12,8 +12,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.scmessenger.android.R
 import com.scmessenger.android.ui.components.ErrorBanner
 import com.scmessenger.android.ui.components.IdenticonFromPeerId
 import com.scmessenger.android.service.ConnectionQuality
@@ -224,11 +226,12 @@ private fun TransportBadge(
         color = color,
         shape = MaterialTheme.shapes.small
     ) {
+        val unknownTransport = stringResource(R.string.unknown_transport)
         Text(
             text = transport,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             style = MaterialTheme.typography.labelSmall,
-            color = if (transport == "Unknown") MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimary
+            color = if (transport == unknownTransport) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimary
         )
     }
 }

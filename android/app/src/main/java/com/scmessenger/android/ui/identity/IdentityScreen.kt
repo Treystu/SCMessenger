@@ -187,7 +187,7 @@ private fun IdentityContent(
 
         // Identicon
         IdenticonFromPeerId(
-            peerId = identityInfo.identityId ?: stringResource(R.string.identity_field_unavailable),
+            peerId = identityInfo.libp2pPeerId ?: identityInfo.identityId ?: stringResource(R.string.identity_field_unavailable),
             size = 96.dp,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         )

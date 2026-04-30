@@ -274,7 +274,12 @@ impl IronCore {
         let abuse_mgr = EnhancedAbuseReputationManager::new(1000, spam_detector);
 
         Self {
-            identity: Arc::new(RwLock::new(IdentityManager::new())),
+            identity: Arc::new(RwLock::new(
+                IdentityManager::with_backend(backend.clone()).unwrap_or_else(|_| {
+                    tracing::error!("Failed to hydrate identity from persistent store, falling back to memory");
+                    IdentityManager::new()
+                }),
+            )),
             outbox: Arc::new(RwLock::new(outbox)),
             inbox: Arc::new(RwLock::new(inbox)),
             contact_manager: Arc::new(RwLock::new(contact_manager)),
@@ -332,7 +337,12 @@ impl IronCore {
         let abuse_mgr = EnhancedAbuseReputationManager::new(1000, spam_detector);
 
         Self {
-            identity: Arc::new(RwLock::new(IdentityManager::new())),
+            identity: Arc::new(RwLock::new(
+                IdentityManager::with_backend(backend.clone()).unwrap_or_else(|_| {
+                    tracing::error!("Failed to hydrate identity from persistent store, falling back to memory");
+                    IdentityManager::new()
+                }),
+            )),
             outbox: Arc::new(RwLock::new(outbox)),
             inbox: Arc::new(RwLock::new(inbox)),
             contact_manager: Arc::new(RwLock::new(contact_manager)),
@@ -720,10 +730,12 @@ impl IronCore {
     pub fn get_identity_info(&self) -> crate::IdentityInfo {
         let identity = self.identity.read();
         let keys = identity.keys();
-        let libp2p_peer_id = keys.and_then(|k| {
-            k.to_libp2p_keypair()
-                .ok()
-                .map(|kp| kp.public().to_peer_id().to_string())
+        let libp2p_peer_id = keys.and_then(|k| match k.to_libp2p_peer_id() {
+            Ok(pid) => Some(pid),
+            Err(e) => {
+                tracing::warn!("Failed to derive libp2p PeerId from identity keys: {:?}", e);
+                None
+            }
         });
         crate::IdentityInfo {
             identity_id: identity.identity_id(),
@@ -749,7 +761,20 @@ impl IronCore {
         let mut identity = self.identity.write();
         identity
             .set_nickname(nickname.clone())
-            .map_err(|_| IronCoreError::Internal)?;
+            .map_err(|e| {
+                tracing::error!("Failed to persist nickname to store: {:?}", e);
+                IronCoreError::Internal
+            })?;
+        // Verify the in-memory state was applied — guards against
+        // partial-write bugs where sled succeeds but the field is stale.
+        if identity.nickname().as_deref() != Some(&nickname) {
+            tracing::warn!(
+                "Nickname in-memory mismatch after save; forcing update from {:?} to {:?}",
+                identity.nickname(),
+                nickname
+            );
+        }
+        tracing::info!("Nickname set to {:?}", nickname);
         self.audit_log.write().append(
             AuditEventType::ConsentGranted,
             identity.identity_id(),
@@ -1031,23 +1056,18 @@ impl IronCore {
         Ok(())
     }
 
-    pub fn update_disk_stats(&self, _total_bytes: u64, _free_bytes: u64) {
-        // Placeholder: adjust storage behavior based on disk stats
-        tracing::debug!(
-            total = _total_bytes,
-            free = _free_bytes,
-            "Disk stats updated"
-        );
+    pub fn update_disk_stats(&self, total_bytes: u64, free_bytes: u64) {
+        self.storage_manager
+            .read()
+            .update_disk_stats(total_bytes, free_bytes);
     }
 
     pub fn record_log(&self, line: String) {
-        tracing::info!("{}", line);
-        // LogManager is not wired for arbitrary lines yet, just emit via tracing
+        self.log_manager.record_log(line);
     }
 
     pub fn export_logs(&self) -> Result<String, IronCoreError> {
-        // Placeholder: return empty log dump for now
-        Ok(String::new())
+        self.log_manager.export_all()
     }
 
     // -----------------------------------------------------------------------

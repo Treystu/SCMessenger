@@ -58,11 +58,46 @@ pub enum ClientIntent {
     ScanPeers {},
     GetTopology {},
     GetIdentity {},
+    // ── Contacts ──
+    GetContacts {},
+    AddContact {
+        peer_id: String,
+        #[serde(default)]
+        nickname: Option<String>,
+    },
+    RemoveContact {
+        peer_id: String,
+    },
+    // ── Settings ──
+    GetSettings {},
+    UpdateSettings {
+        key: String,
+        value: serde_json::Value,
+    },
+    // ── History ──
+    GetHistory {
+        #[serde(default)]
+        limit: Option<usize>,
+    },
+    GetConversation {
+        peer_id: String,
+        #[serde(default)]
+        limit: Option<usize>,
+    },
+    // ── Blocking ──
+    BlockPeer {
+        peer_id: String,
+        #[serde(default)]
+        reason: Option<String>,
+    },
+    UnblockPeer {
+        peer_id: String,
+    },
 }
 
-const ERR_PARSE: i32 = -32700;
-const ERR_METHOD: i32 = -32601;
-const ERR_PARAMS: i32 = -32602;
+pub const ERR_PARSE: i32 = -32700;
+pub const ERR_METHOD: i32 = -32601;
+pub const ERR_PARAMS: i32 = -32602;
 
 /// Map JSON-RPC `method` + `params` to a [`ClientIntent`].
 pub fn parse_intent(req: &JsonRpcRequest) -> Result<ClientIntent, JsonRpcErrorBody> {
@@ -110,6 +145,118 @@ pub fn parse_intent(req: &JsonRpcRequest) -> Result<ClientIntent, JsonRpcErrorBo
         "scan_peers" => Ok(ClientIntent::ScanPeers {}),
         "get_topology" => Ok(ClientIntent::GetTopology {}),
         "get_identity" => Ok(ClientIntent::GetIdentity {}),
+        // ── Contacts ──
+        "get_contacts" => Ok(ClientIntent::GetContacts {}),
+        "add_contact" => {
+            let peer_id = req
+                .params
+                .get("peer_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing peer_id".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            let nickname = req
+                .params
+                .get("nickname")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            Ok(ClientIntent::AddContact { peer_id, nickname })
+        }
+        "remove_contact" => {
+            let peer_id = req
+                .params
+                .get("peer_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing peer_id".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            Ok(ClientIntent::RemoveContact { peer_id })
+        }
+        // ── Settings ──
+        "get_settings" => Ok(ClientIntent::GetSettings {}),
+        "update_settings" => {
+            let key = req
+                .params
+                .get("key")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing key".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            let value = req
+                .params
+                .get("value")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            Ok(ClientIntent::UpdateSettings { key, value })
+        }
+        // ── History ──
+        "get_history" => {
+            let limit = req
+                .params
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize);
+            Ok(ClientIntent::GetHistory { limit })
+        }
+        "get_conversation" => {
+            let peer_id = req
+                .params
+                .get("peer_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing peer_id".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            let limit = req
+                .params
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize);
+            Ok(ClientIntent::GetConversation { peer_id, limit })
+        }
+        // ── Blocking ──
+        "block_peer" => {
+            let peer_id = req
+                .params
+                .get("peer_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing peer_id".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            let reason = req
+                .params
+                .get("reason")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            Ok(ClientIntent::BlockPeer { peer_id, reason })
+        }
+        "unblock_peer" => {
+            let peer_id = req
+                .params
+                .get("peer_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing peer_id".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            Ok(ClientIntent::UnblockPeer { peer_id })
+        }
         _ => Err(JsonRpcErrorBody {
             code: ERR_METHOD,
             message: format!("unknown method {}", req.method),

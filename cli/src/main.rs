@@ -495,6 +495,7 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    core.grant_consent();
     core.initialize_identity()
         .context("Failed to load identity")?;
 
@@ -637,9 +638,13 @@ fn print_full_identity(core: &IronCore, config: &config::Config) -> Result<()> {
         "  Peer ID (Network):      {}",
         local_peer_id.to_string().bright_cyan()
     );
-    if let Some(nick) = info.nickname {
-        println!("  Nickname:               {}", nick.bright_cyan());
-    }
+    println!(
+        "  Nickname:               {}",
+        info.nickname
+            .as_deref()
+            .unwrap_or("(not set)")
+            .bright_cyan()
+    );
     println!(
         "  Public Key:             {}",
         info.public_key_hex.unwrap().bright_yellow()
@@ -1163,6 +1168,9 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     println!("📒 {}", connection_ledger.summary());
     println!();
 
+    // Wrap core in Arc early so WebContext and later tasks can share it.
+    let core = Arc::new(core);
+
     // Use identity keypair for network (unified ID)
     let network_keypair = core
         .get_libp2p_keypair()
@@ -1197,6 +1205,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         start_time: std::time::Instant::now(),
         transport_bridge: transport_bridge.clone(),
         ui_port: ws_port,
+        core: Some(Arc::clone(&core)),
     });
 
     // Start WebSocket + HTTP Server (serves landing page at /)
@@ -1245,8 +1254,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     println!("  {}                        ", "quit".bright_green());
     println!();
 
-    let core = Arc::new(core);
-    // Note: peers and ledger Arc<Mutex> created above (before server::start)
+    // Note: core was wrapped in Arc above before WebContext creation;
+    // peers and ledger Arc<Mutex> were created above before server::start
     // so the landing page and API endpoints have access to them.
 
     let core_ble = Arc::clone(&core);
@@ -1691,6 +1700,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                 let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::IdentityInfo {
                                     peer_id: i.identity_id.unwrap_or_default(),
                                     public_key: i.public_key_hex.unwrap_or_default(),
+                                    nickname: i.nickname,
+                                    libp2p_peer_id: i.libp2p_peer_id,
                                 }));
                             }
                             server::UiCommand::IdentityExport => {
@@ -1980,6 +1991,10 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                             }
                                         }
                                     }
+                                    // New intents handled via WebSocket server.
+                                    _ => {
+                                        push_err(-32601, "Not supported in daemon context".into());
+                                    }
                                 }
                             }
                         }
@@ -2036,7 +2051,9 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String>) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = Arc::new(IronCore::with_storage(
+        storage_path.to_str().unwrap().to_string(),
+    ));
     // Load existing identity (if any) so the relay can migrate its network key
     // from the IronCore identity, preserving the PeerId on first upgrade.
     let _ = core.initialize_identity();
@@ -2125,6 +2142,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         start_time: std::time::Instant::now(),
         transport_bridge: transport_bridge.clone(),
         ui_port: http_port,
+        core: Some(Arc::clone(&core)),
     });
 
     // Start HTTP server (landing page + WebSocket)
@@ -2175,8 +2193,8 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         }
     };
 
-    // Control API
-    let core_arc = Arc::new(core);
+    // Control API — core is already Arc<IronCore>
+    let core_arc = Arc::clone(&core);
     let api_ctx = api::ApiContext {
         core: core_arc.clone(),
         swarm_handle: Arc::new(swarm_handle.clone()),

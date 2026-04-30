@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import com.scmessenger.android.utils.StorageManager
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 @HiltViewModel
@@ -75,6 +76,10 @@ class MainViewModel @Inject constructor(
     private val _themeMode = MutableStateFlow(PreferencesRepository.ThemeMode.SYSTEM)
     val themeMode: StateFlow<PreferencesRepository.ThemeMode> = _themeMode.asStateFlow()
 
+    // Guards against concurrent refreshIdentityState() calls that spam FFI
+    // and drop 160+ UI frames during startup.
+    private val isRefreshing = AtomicBoolean(false)
+
     init {
         Timber.d("MainViewModel init")
         refreshStorageStatus()
@@ -129,22 +134,32 @@ class MainViewModel @Inject constructor(
     }
 
     fun refreshIdentityState() {
+        // Drop duplicate FFI requests: concurrent refreshIdentityState() calls
+        // spike isIdentityInitialized() 4-5×, dropping 160+ UI frames at startup.
+        if (!isRefreshing.compareAndSet(false, true)) {
+            Timber.d("refreshIdentityState() skipped — already refreshing")
+            return
+        }
         viewModelScope.launch(Dispatchers.IO) {
-            Timber.d("refreshIdentityState() called")
-            val initialized = meshRepository.isIdentityInitialized()
-            Timber.d("Identity initialized state: $initialized")
-            _identityError.value = null
-            _isReady.value = initialized
+            try {
+                Timber.d("refreshIdentityState() called")
+                val initialized = meshRepository.isIdentityInitialized()
+                Timber.d("Identity initialized state: $initialized")
+                _identityError.value = null
+                _isReady.value = initialized
 
-            if (initialized) {
-                if (!_installChoiceCompleted.value) {
-                    Timber.d("Identity is initialized but install choice not completed, fixing preference...")
-                    preferencesRepository.setInstallChoiceCompleted(true)
+                if (initialized) {
+                    if (!_installChoiceCompleted.value) {
+                        Timber.d("Identity is initialized but install choice not completed, fixing preference...")
+                        preferencesRepository.setInstallChoiceCompleted(true)
+                    }
+                    if (!_onboardingCompleted.value) {
+                        Timber.d("Identity is initialized but onboarding not completed, fixing preference...")
+                        preferencesRepository.setOnboardingCompleted(true)
+                    }
                 }
-                if (!_onboardingCompleted.value) {
-                    Timber.d("Identity is initialized but onboarding not completed, fixing preference...")
-                    preferencesRepository.setOnboardingCompleted(true)
-                }
+            } finally {
+                isRefreshing.set(false)
             }
         }
     }

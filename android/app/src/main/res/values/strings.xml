@@ -14,4 +14,9 @@
 
     <!-- Settings / Identity -->
     <string name="identity_field_unavailable">Not available</string>
+
+    <!-- Placeholder / fallback strings -->
+    <string name="unknown_contact">Unknown</string>
+    <string name="unknown_transport">Unknown</string>
+    <string name="unknown_network_type">Unknown</string>
 </resources>

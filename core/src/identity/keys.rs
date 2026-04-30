@@ -103,15 +103,23 @@ impl IdentityKeys {
     /// NOTE: ed25519-dalek's SigningKey::to_bytes() returns the 32-byte seed,
     /// but libp2p's SecretKey::try_from_bytes() expects the 64-byte expanded form
     /// (seed || public_key). We expand the key here to bridge the format gap.
-    pub fn to_libp2p_keypair(&self) -> Result<libp2p::identity::Keypair> {
-        // Build the 64-byte expanded secret key: [seed(32) || public_key(32)]
-        let seed = self.signing_key.to_bytes();
-        let public = self.signing_key.verifying_key().to_bytes();
-        let mut expanded = [0u8; 64];
-        expanded[..32].copy_from_slice(&seed);
-        expanded[32..].copy_from_slice(&public);
+    /// Derive a libp2p PeerId directly from the 32-byte Ed25519 public key.
+    ///
+    /// PeerId is a hash of the encoded public key — the secret key is never
+    /// needed. This avoids the hacky 64-byte SecretKey expansion and works
+    /// even when only the public half is available.
+    pub fn to_libp2p_peer_id(&self) -> Result<String> {
+        let pub_bytes = self.signing_key.verifying_key().to_bytes();
+        let libp2p_pub = libp2p::identity::ed25519::PublicKey::try_from_bytes(&pub_bytes)
+            .map_err(|e| anyhow::anyhow!("Failed to derive libp2p PeerId from Ed25519 public key: {}", e))?;
+        Ok(libp2p::identity::PublicKey::from(libp2p_pub).to_peer_id().to_string())
+    }
 
-        let ed25519_secret = libp2p::identity::ed25519::SecretKey::try_from_bytes(&mut expanded[..])
+    pub fn to_libp2p_keypair(&self) -> Result<libp2p::identity::Keypair> {
+        // libp2p 0.53 SecretKey::try_from_bytes expects exactly 32 bytes (seed),
+        // NOT the 64-byte expanded form. Pass the raw seed from ed25519-dalek.
+        let mut seed = self.signing_key.to_bytes();
+        let ed25519_secret = libp2p::identity::ed25519::SecretKey::try_from_bytes(&mut seed)
             .map_err(|e| {
                 anyhow::anyhow!(
                     "Failed to convert Ed25519 secret key to libp2p format: {}",
@@ -119,7 +127,6 @@ impl IdentityKeys {
                 )
             })?;
         let ed25519_keypair = libp2p::identity::ed25519::Keypair::from(ed25519_secret);
-
         Ok(libp2p::identity::Keypair::from(ed25519_keypair))
     }
 }

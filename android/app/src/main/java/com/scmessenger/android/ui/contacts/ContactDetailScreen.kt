@@ -15,8 +15,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.scmessenger.android.R
 import com.scmessenger.android.ui.components.CopyableText
 import com.scmessenger.android.ui.components.ErrorBanner
 import com.scmessenger.android.ui.components.IdenticonFromPeerId
@@ -219,8 +221,9 @@ private fun ContactDetailContent(
                     size = 96.dp
                 )
 
+                val unknownFallback = stringResource(R.string.unknown_contact)
                 Text(
-                    text = contact.localNickname ?: contact.nickname ?: "Unknown",
+                    text = contact.localNickname ?: contact.nickname ?: unknownFallback,
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold
                 )

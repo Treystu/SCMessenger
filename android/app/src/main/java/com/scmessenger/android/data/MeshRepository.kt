@@ -3509,10 +3509,11 @@ open class MeshRepository(private val context: Context) {
             .onFailure { Timber.w(it, "Failed to hydrate identity before getIdentityInfo") }
         val result = ironCore?.getIdentityInfo()
         Timber.d(
-            "getIdentityInfo: result=%s, initialized=%s, nickname=%s",
+            "getIdentityInfo: result=%s, initialized=%s, nickname=%s, libp2pPeerId=%s",
             result?.identityId,
             result?.initialized,
-            result?.nickname
+            result?.nickname,
+            result?.libp2pPeerId
         )
         return result
     }

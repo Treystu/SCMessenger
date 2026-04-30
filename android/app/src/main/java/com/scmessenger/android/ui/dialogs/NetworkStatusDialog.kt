@@ -25,7 +25,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.scmessenger.android.R
 import com.scmessenger.android.network.DiagnosticsReporter
 import com.scmessenger.android.network.DiagnosticsReporter.NetworkDiagnosticsReport
 
@@ -145,6 +147,7 @@ private fun DiagnosticRow(label: String, value: String, isGood: Boolean) {
     }
 }
 
+@Composable
 private fun formatNetworkType(type: com.scmessenger.android.transport.NetworkType): String = when (type) {
     com.scmessenger.android.transport.NetworkType.WIFI -> "Wi-Fi"
     com.scmessenger.android.transport.NetworkType.WIFI_RESTRICTED -> "Wi-Fi (Restricted)"
@@ -154,5 +157,5 @@ private fun formatNetworkType(type: com.scmessenger.android.transport.NetworkTyp
     com.scmessenger.android.transport.NetworkType.ETHERNET -> "Ethernet"
     com.scmessenger.android.transport.NetworkType.VPN -> "VPN"
     com.scmessenger.android.transport.NetworkType.BLUETOOTH -> "Bluetooth"
-    com.scmessenger.android.transport.NetworkType.UNKNOWN -> "Unknown"
+    com.scmessenger.android.transport.NetworkType.UNKNOWN -> stringResource(R.string.unknown_network_type)
 }
