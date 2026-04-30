@@ -3,3 +3,8 @@
 # See P0_BUILD_004 for context.
 [build]
 incremental = false
+
+# GNU target: ensure dlltool is found for import library generation
+# (required by parking_lot_core, windows-sys, etc. on x86_64-pc-windows-gnu)
+[target.x86_64-pc-windows-gnu]
+linker = "gcc"
