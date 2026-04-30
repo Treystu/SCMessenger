@@ -45,7 +45,12 @@ fn test_two_node_message_roundtrip() {
 
     // Alice prepares (encrypts) the envelope.
     let prepared = alice
-        .prepare_message(&pubkey(&bob), plaintext.to_string(), MessageType::Text, None)
+        .prepare_message(
+            &pubkey(&bob),
+            plaintext.to_string(),
+            MessageType::Text,
+            None,
+        )
         .expect("prepare_message must succeed");
 
     assert!(
@@ -151,7 +156,12 @@ fn test_duplicate_delivery_rejected() {
     let bob = make_node();
 
     let prepared = alice
-        .prepare_message(&pubkey(&bob), "Once is enough".to_string(), MessageType::Text, None)
+        .prepare_message(
+            &pubkey(&bob),
+            "Once is enough".to_string(),
+            MessageType::Text,
+            None,
+        )
         .expect("prepare_message must succeed");
 
     // First delivery succeeds.
@@ -189,7 +199,12 @@ fn test_multiple_messages_roundtrip() {
 
     for expected_text in &messages {
         let prepared = alice
-            .prepare_message(&bob_pubkey, expected_text.to_string(), MessageType::Text, None)
+            .prepare_message(
+                &bob_pubkey,
+                expected_text.to_string(),
+                MessageType::Text,
+                None,
+            )
             .expect("prepare_message must succeed");
 
         let received = bob
@@ -224,7 +239,12 @@ fn test_self_message_roundtrip() {
     let plaintext = "Note to self";
 
     let prepared = node
-        .prepare_message(&pubkey(&node), plaintext.to_string(), MessageType::Text, None)
+        .prepare_message(
+            &pubkey(&node),
+            plaintext.to_string(),
+            MessageType::Text,
+            None,
+        )
         .expect("prepare_message to self must succeed");
 
     let received = node

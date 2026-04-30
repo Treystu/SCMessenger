@@ -351,6 +351,12 @@ enum ConfigAction {
     },
 }
 
+#[derive(Subcommand)]
+enum SwarmAction {
+    /// Show swarm connection statistics
+    Stats,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // 1. Determine data directory early for logging
@@ -3079,19 +3085,13 @@ async fn cmd_swarm_stats() -> Result<()> {
                 if peers.is_empty() {
                     println!("{}", "No active peer connections.".yellow());
                     println!();
-                    println!(
-                        "  Start the mesh node with: {}",
-                        "scm relay".dimmed()
-                    );
+                    println!("  Start the mesh node with: {}", "scm relay".dimmed());
                     println!(
                         "  Or start the messaging node with: {}",
                         "scm start".dimmed()
                     );
                 } else {
-                    println!(
-                        "{:<52} {:<14} {:<10}",
-                        "Peer ID", "Reputation", "Status"
-                    );
+                    println!("{:<52} {:<14} {:<10}", "Peer ID", "Reputation", "Status");
                     println!("{:-<52} {:-<14} {:-<10}", "", "", "");
 
                     for peer in &peers {
@@ -3124,23 +3124,17 @@ async fn cmd_swarm_stats() -> Result<()> {
             }
         }
 
-        match api::get_listeners_via_api().await {
-            Ok(listeners) => {
-                println!("  Listeners: {}", listeners.len());
-            }
-            _ => {}
+        if let Ok(listeners) = api::get_listeners_via_api().await {
+            println!("  Listeners: {}", listeners.len());
         }
 
-        match api::get_external_address_via_api().await {
-            Ok(addrs) => {
-                if !addrs.is_empty() {
-                    println!("  External addresses:");
-                    for addr in &addrs {
-                        println!("    - {}", addr.dimmed());
-                    }
+        if let Ok(addrs) = api::get_external_address_via_api().await {
+            if !addrs.is_empty() {
+                println!("  External addresses:");
+                for addr in &addrs {
+                    println!("    - {}", addr.dimmed());
                 }
             }
-            _ => {}
         }
     } else {
         let _config = config::Config::load()?;
