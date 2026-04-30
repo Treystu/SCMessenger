@@ -196,6 +196,7 @@ impl Default for IronCore {
     }
 }
 
+#[uniffi::export]
 impl IronCore {
     /// Create an in-memory IronCore with no persistent storage.
     #[uniffi::constructor]
@@ -455,12 +456,6 @@ impl IronCore {
     }
 
     /// Return the libp2p keypair derived from identity, if initialized.
-    pub fn get_libp2p_keypair(&self) -> Result<libp2p::identity::Keypair, IronCoreError> {
-        let identity = self.identity.read();
-        let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
-        keys.to_libp2p_keypair()
-            .map_err(|_| IronCoreError::CryptoError)
-    }
 
     /// Set the delegate for protocol event callbacks.
     pub fn set_delegate(&self, delegate: Option<Box<dyn CoreDelegate>>) {
@@ -558,88 +553,6 @@ impl IronCore {
     }
 
     /// Receive and decrypt an incoming envelope.
-    pub fn receive_message(&self, envelope_data: Vec<u8>) -> Result<Message, IronCoreError> {
-        let envelope = decode_envelope(&envelope_data).map_err(|e| {
-            tracing::warn!("Failed to decode envelope: {:?}", e);
-            IronCoreError::CryptoError
-        })?;
-
-        let identity = self.identity.read();
-        let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
-
-        let plaintext = decrypt_message(&keys.signing_key, &envelope).map_err(|e| {
-            tracing::warn!("Failed to decrypt message: {:?}", e);
-            IronCoreError::CryptoError
-        })?;
-
-        let message = decode_message(&plaintext).map_err(|e| {
-            tracing::warn!("Failed to decode message: {:?}", e);
-            IronCoreError::Internal
-        })?;
-
-        // Check blocked status
-        let is_blocked_and_deleted = self
-            .blocked_manager
-            .read()
-            .is_blocked_and_deleted(&message.sender_id)
-            .unwrap_or(false);
-        if is_blocked_and_deleted {
-            return Err(IronCoreError::Blocked);
-        }
-
-        let is_blocked = self
-            .blocked_manager
-            .read()
-            .is_blocked(&message.sender_id, None)
-            .unwrap_or(false);
-
-        // Record in inbox and history
-        let now = web_time::SystemTime::now()
-            .duration_since(web_time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
-        let is_dup = self.inbox.write().is_duplicate(&message.id);
-        if !is_dup {
-            self.inbox.write().receive(ReceivedMessage {
-                message_id: message.id.clone(),
-                sender_id: message.sender_id.clone(),
-                payload: message.payload.clone(),
-                received_at: now,
-            });
-
-            let content = String::from_utf8(message.payload.clone()).unwrap_or_default();
-            let _ = self.history_manager.add(MessageRecord {
-                id: message.id.clone(),
-                direction: MessageDirection::Received,
-                peer_id: message.sender_id.clone(),
-                content,
-                timestamp: message.timestamp,
-                sender_timestamp: message.timestamp,
-                delivered: true,
-                hidden: is_blocked,
-            });
-        }
-
-        self.audit_log.write().append(
-            AuditEventType::MessageReceived,
-            identity.identity_id(),
-            Some(message.sender_id.clone()),
-            None,
-        );
-
-        // Notify delegate
-        if let Some(delegate) = self.delegate.read().as_ref() {
-            delegate.on_message_received(
-                message.sender_id.clone(),
-                message.sender_id.clone(),
-                message.id.clone(),
-                message.timestamp,
-                message.payload.clone(),
-            );
-        }
-
-        Ok(message)
-    }
 
     /// Mark a message as sent (remove from outbox after transport confirms delivery).
     pub fn mark_message_sent(&self, message_id: String) -> bool {
@@ -791,15 +704,6 @@ impl IronCore {
     // -----------------------------------------------------------------------
 
     /// Build a registration request for the identity protocol.
-    pub fn build_registration_request(&self) -> Result<RegistrationRequest, IronCoreError> {
-        let identity = self.identity.read();
-        let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
-        let device_id = identity.device_id().ok_or(IronCoreError::NotInitialized)?;
-        let seniority = identity.seniority_timestamp().unwrap_or(0);
-
-        RegistrationRequest::new_signed(keys, device_id, seniority)
-            .map_err(|_| IronCoreError::Internal)
-    }
 
     // -----------------------------------------------------------------------
     // Runtime state
@@ -827,9 +731,6 @@ impl IronCore {
         }
     }
 
-    pub fn get_identity_keys(&self) -> Option<crate::identity::IdentityKeys> {
-        self.identity.read().keys().cloned()
-    }
 
     pub fn get_device_id(&self) -> Option<String> {
         self.identity.read().device_id()
@@ -881,21 +782,12 @@ impl IronCore {
         self.inbox.read().total_count() as u32
     }
 
-    pub fn flush_outbox_for_peer(&self, peer_id: &str) -> Vec<QueuedMessage> {
-        self.outbox.write().drain_for_peer(peer_id)
-    }
 
     // -----------------------------------------------------------------------
     // Store managers (returned to WASM for bridging)
     // -----------------------------------------------------------------------
 
-    pub fn contacts_store_manager(&self) -> CoreContactManager {
-        self.contact_manager.read().clone()
-    }
 
-    pub fn history_store_manager(&self) -> CoreHistoryManager {
-        (*self.history_manager).clone()
-    }
 
     // -----------------------------------------------------------------------
     // Blocking
@@ -954,11 +846,6 @@ impl IronCore {
         Ok(())
     }
 
-    pub fn list_blocked_peers_raw(
-        &self,
-    ) -> Result<Vec<crate::store::blocked::BlockedIdentity>, IronCoreError> {
-        self.blocked_manager.read().list()
-    }
 
     /// List blocked peers, returning bridge-compatible BlockedIdentity structs.
     /// Internal helper used by `list_blocked_peers` for UniFFI.
@@ -1094,22 +981,11 @@ impl IronCore {
     // Abuse / Reputation extended
     // -----------------------------------------------------------------------
 
-    pub fn get_enhanced_peer_reputation(&self, peer_id: String) -> (f64, f64, bool) {
-        let enhanced = self.abuse_manager.read().get_enhanced_score(&peer_id);
-        (
-            enhanced.base_score.value(),
-            enhanced.spam_confidence,
-            enhanced.base_score.value() < -0.5,
-        )
-    }
 
     // -----------------------------------------------------------------------
     // Privacy config
     // -----------------------------------------------------------------------
 
-    pub fn privacy_config(&self) -> crate::privacy::PrivacyConfig {
-        crate::privacy::PrivacyConfig::default()
-    }
 
     pub fn set_privacy_config(&self, json: String) -> Result<(), IronCoreError> {
         let _config: crate::privacy::PrivacyConfig =
@@ -1214,51 +1090,16 @@ impl IronCore {
 
     /// Make a routing decision for the given recipient.
     /// Returns `None` if the routing engine has not been initialized yet.
-    pub fn make_routing_decision(
-        &self,
-        recipient_hint: [u8; 4],
-        message_id: [u8; 16],
-        priority: u8,
-        now: u64,
-    ) -> Option<crate::routing::RoutingDecision> {
-        let mut engine = self.routing_engine.write();
-        engine
-            .as_mut()
-            .map(|e| e.route_message_optimized(&recipient_hint, &message_id, priority, now))
-    }
 
     /// Access the routing engine handle.
-    pub fn routing_engine_handle(&self) -> Arc<RwLock<Option<OptimizedRoutingEngine>>> {
-        self.routing_engine.clone()
-    }
 
     // -----------------------------------------------------------------------
     // Privacy subcomponents
     // -----------------------------------------------------------------------
 
     /// Initialize the cover traffic generator with the given config.
-    pub fn set_cover_traffic_generator(&self, config: CoverConfig) {
-        match CoverTrafficGenerator::new(config) {
-            Ok(gen) => {
-                *self.cover_traffic_generator.write() = Some(gen);
-            }
-            Err(e) => {
-                tracing::warn!("Failed to initialize cover traffic generator: {:?}", e);
-            }
-        }
-    }
 
     /// Initialize timing jitter with the given config.
-    pub fn set_timing_jitter(&self, config: JitterConfig) {
-        match TimingJitter::new(config) {
-            Ok(jitter) => {
-                *self.timing_jitter.write() = Some(jitter);
-            }
-            Err(e) => {
-                tracing::warn!("Failed to initialize timing jitter: {:?}", e);
-            }
-        }
-    }
 
     /// Compute a jitter delay if timing jitter is initialized.
     pub fn compute_jitter_delay(&self) -> Option<u64> {
@@ -1269,61 +1110,22 @@ impl IronCore {
     }
 
     /// Initialize the circuit builder with peers and config.
-    pub fn set_circuit_builder(
-        &self,
-        peers: Vec<crate::privacy::circuit::PeerInfo>,
-        config: CircuitConfig,
-    ) {
-        match CircuitBuilder::new(peers, config) {
-            Ok(builder) => {
-                *self.circuit_builder.write() = Some(builder);
-            }
-            Err(e) => {
-                tracing::warn!("Failed to initialize circuit builder: {:?}", e);
-            }
-        }
-    }
 
     // -----------------------------------------------------------------------
     // Notification endpoint registry
     // -----------------------------------------------------------------------
 
     /// Register a notification endpoint for remote push.
-    pub fn register_notification_endpoint(
-        &self,
-        platform: crate::NotificationPlatform,
-        token_or_subscription: String,
-        capabilities: crate::NotificationEndpointCapabilities,
-        device_id: String,
-    ) -> Result<crate::NotificationEndpoint, crate::NotificationEndpointError> {
-        self.notification_endpoint_registry
-            .read()
-            .register_endpoint(platform, token_or_subscription, capabilities, device_id)
-    }
 
     /// Unregister a notification endpoint.
-    pub fn unregister_notification_endpoint(
-        &self,
-        endpoint_id: &str,
-    ) -> Result<(), crate::NotificationEndpointError> {
-        self.notification_endpoint_registry
-            .read()
-            .unregister_endpoint(endpoint_id)
-    }
 
     /// List all registered notification endpoints.
-    pub fn list_notification_endpoints(&self) -> Vec<crate::NotificationEndpoint> {
-        self.notification_endpoint_registry.read().list_endpoints()
-    }
 
     // -----------------------------------------------------------------------
     // Transport manager
     // -----------------------------------------------------------------------
 
     /// Access the transport manager handle.
-    pub fn transport_manager_handle(&self) -> Arc<RwLock<TransportManager>> {
-        self.transport_manager.clone()
-    }
 
     // -----------------------------------------------------------------------
     // Relay standalone module accessors
@@ -1331,15 +1133,9 @@ impl IronCore {
 
     /// Access the bootstrap manager handle (available after identity init).
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn bootstrap_manager_handle(&self) -> Arc<RwLock<Option<BootstrapManager>>> {
-        self.bootstrap_manager.clone()
-    }
 
     /// Access the peer exchange manager handle.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn peer_exchange_manager_handle(&self) -> Arc<RwLock<PeerExchangeManager>> {
-        self.peer_exchange_manager.clone()
-    }
 
     // -----------------------------------------------------------------------
     // Contact & History managers (UniFFI bridge accessors)
@@ -1789,5 +1585,215 @@ impl IronCore {
             }
             None => vec![vec![target_peer_id]],
         }
+    }
+}
+
+
+// Non-FFI-safe methods moved to plain impl block to avoid uniffi::export compilation errors.
+impl IronCore {
+    pub fn get_libp2p_keypair(&self) -> Result<libp2p::identity::Keypair, IronCoreError> {
+        let identity = self.identity.read();
+        let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
+        keys.to_libp2p_keypair()
+            .map_err(|_| IronCoreError::CryptoError)
+    }
+    pub fn receive_message(&self, envelope_data: Vec<u8>) -> Result<Message, IronCoreError> {
+        let envelope = decode_envelope(&envelope_data).map_err(|e| {
+            tracing::warn!("Failed to decode envelope: {:?}", e);
+            IronCoreError::CryptoError
+        })?;
+
+        let identity = self.identity.read();
+        let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
+
+        let plaintext = decrypt_message(&keys.signing_key, &envelope).map_err(|e| {
+            tracing::warn!("Failed to decrypt message: {:?}", e);
+            IronCoreError::CryptoError
+        })?;
+
+        let message = decode_message(&plaintext).map_err(|e| {
+            tracing::warn!("Failed to decode message: {:?}", e);
+            IronCoreError::Internal
+        })?;
+
+        // Check blocked status
+        let is_blocked_and_deleted = self
+            .blocked_manager
+            .read()
+            .is_blocked_and_deleted(&message.sender_id)
+            .unwrap_or(false);
+        if is_blocked_and_deleted {
+            return Err(IronCoreError::Blocked);
+        }
+
+        let is_blocked = self
+            .blocked_manager
+            .read()
+            .is_blocked(&message.sender_id, None)
+            .unwrap_or(false);
+
+        // Record in inbox and history
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let is_dup = self.inbox.write().is_duplicate(&message.id);
+        if !is_dup {
+            self.inbox.write().receive(ReceivedMessage {
+                message_id: message.id.clone(),
+                sender_id: message.sender_id.clone(),
+                payload: message.payload.clone(),
+                received_at: now,
+            });
+
+            let content = String::from_utf8(message.payload.clone()).unwrap_or_default();
+            let _ = self.history_manager.add(MessageRecord {
+                id: message.id.clone(),
+                direction: MessageDirection::Received,
+                peer_id: message.sender_id.clone(),
+                content,
+                timestamp: message.timestamp,
+                sender_timestamp: message.timestamp,
+                delivered: true,
+                hidden: is_blocked,
+            });
+        }
+
+        self.audit_log.write().append(
+            AuditEventType::MessageReceived,
+            identity.identity_id(),
+            Some(message.sender_id.clone()),
+            None,
+        );
+
+        // Notify delegate
+        if let Some(delegate) = self.delegate.read().as_ref() {
+            delegate.on_message_received(
+                message.sender_id.clone(),
+                message.sender_id.clone(),
+                message.id.clone(),
+                message.timestamp,
+                message.payload.clone(),
+            );
+        }
+
+        Ok(message)
+    }
+    pub fn build_registration_request(&self) -> Result<RegistrationRequest, IronCoreError> {
+        let identity = self.identity.read();
+        let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
+        let device_id = identity.device_id().ok_or(IronCoreError::NotInitialized)?;
+        let seniority = identity.seniority_timestamp().unwrap_or(0);
+
+        RegistrationRequest::new_signed(keys, device_id, seniority)
+            .map_err(|_| IronCoreError::Internal)
+    }
+    pub fn get_identity_keys(&self) -> Option<crate::identity::IdentityKeys> {
+        self.identity.read().keys().cloned()
+    }
+    pub fn flush_outbox_for_peer(&self, peer_id: &str) -> Vec<QueuedMessage> {
+        self.outbox.write().drain_for_peer(peer_id)
+    }
+    pub fn contacts_store_manager(&self) -> CoreContactManager {
+        self.contact_manager.read().clone()
+    }
+    pub fn history_store_manager(&self) -> CoreHistoryManager {
+        (*self.history_manager).clone()
+    }
+    pub fn list_blocked_peers_raw(
+        &self,
+    ) -> Result<Vec<crate::store::blocked::BlockedIdentity>, IronCoreError> {
+        self.blocked_manager.read().list()
+    }
+    pub fn get_enhanced_peer_reputation(&self, peer_id: String) -> (f64, f64, bool) {
+        let enhanced = self.abuse_manager.read().get_enhanced_score(&peer_id);
+        (
+            enhanced.base_score.value(),
+            enhanced.spam_confidence,
+            enhanced.base_score.value() < -0.5,
+        )
+    }
+    pub fn privacy_config(&self) -> crate::privacy::PrivacyConfig {
+        crate::privacy::PrivacyConfig::default()
+    }
+    pub fn make_routing_decision(
+        &self,
+        recipient_hint: [u8; 4],
+        message_id: [u8; 16],
+        priority: u8,
+        now: u64,
+    ) -> Option<crate::routing::RoutingDecision> {
+        let mut engine = self.routing_engine.write();
+        engine
+            .as_mut()
+            .map(|e| e.route_message_optimized(&recipient_hint, &message_id, priority, now))
+    }
+    pub fn routing_engine_handle(&self) -> Arc<RwLock<Option<OptimizedRoutingEngine>>> {
+        self.routing_engine.clone()
+    }
+    pub fn set_cover_traffic_generator(&self, config: CoverConfig) {
+        match CoverTrafficGenerator::new(config) {
+            Ok(gen) => {
+                *self.cover_traffic_generator.write() = Some(gen);
+            }
+            Err(e) => {
+                tracing::warn!("Failed to initialize cover traffic generator: {:?}", e);
+            }
+        }
+    }
+    pub fn set_timing_jitter(&self, config: JitterConfig) {
+        match TimingJitter::new(config) {
+            Ok(jitter) => {
+                *self.timing_jitter.write() = Some(jitter);
+            }
+            Err(e) => {
+                tracing::warn!("Failed to initialize timing jitter: {:?}", e);
+            }
+        }
+    }
+    pub fn set_circuit_builder(
+        &self,
+        peers: Vec<crate::privacy::circuit::PeerInfo>,
+        config: CircuitConfig,
+    ) {
+        match CircuitBuilder::new(peers, config) {
+            Ok(builder) => {
+                *self.circuit_builder.write() = Some(builder);
+            }
+            Err(e) => {
+                tracing::warn!("Failed to initialize circuit builder: {:?}", e);
+            }
+        }
+    }
+    pub fn register_notification_endpoint(
+        &self,
+        platform: crate::NotificationPlatform,
+        token_or_subscription: String,
+        capabilities: crate::NotificationEndpointCapabilities,
+        device_id: String,
+    ) -> Result<crate::NotificationEndpoint, crate::NotificationEndpointError> {
+        self.notification_endpoint_registry
+            .read()
+            .register_endpoint(platform, token_or_subscription, capabilities, device_id)
+    }
+    pub fn unregister_notification_endpoint(
+        &self,
+        endpoint_id: &str,
+    ) -> Result<(), crate::NotificationEndpointError> {
+        self.notification_endpoint_registry
+            .read()
+            .unregister_endpoint(endpoint_id)
+    }
+    pub fn list_notification_endpoints(&self) -> Vec<crate::NotificationEndpoint> {
+        self.notification_endpoint_registry.read().list_endpoints()
+    }
+    pub fn transport_manager_handle(&self) -> Arc<RwLock<TransportManager>> {
+        self.transport_manager.clone()
+    }
+    pub fn bootstrap_manager_handle(&self) -> Arc<RwLock<Option<BootstrapManager>>> {
+        self.bootstrap_manager.clone()
+    }
+    pub fn peer_exchange_manager_handle(&self) -> Arc<RwLock<PeerExchangeManager>> {
+        self.peer_exchange_manager.clone()
     }
 }

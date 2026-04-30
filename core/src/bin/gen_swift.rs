@@ -8,17 +8,41 @@ fn main() {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
     let manifest_path = Utf8PathBuf::from(manifest_dir);
 
-    let udl_file = manifest_path.join("src/api.udl");
+    let _udl_file = manifest_path.join("src/api.udl");
     let config_file = manifest_path.join("uniffi.toml");
     let out_dir = manifest_path.join("target/generated-sources/uniffi/swift");
 
     // Create output directory if it doesn't exist
     std::fs::create_dir_all(&out_dir).expect("Failed to create output directory");
 
-    // Use the new uniffi_bindgen 0.31 API
+    // Locate the scmessenger-mobile cdylib for library-mode binding generation.
+    // Library mode scans proc-macro metadata from the compiled cdylib and merges
+    // it with the UDL declarations, producing complete bindings for proc-macro-
+    // exported interfaces (IronCore, MeshService, ContactManager, etc.).
+    let library_file = [
+        "../target/x86_64-pc-windows-gnu/debug/scmessenger_mobile.dll",
+        "../target/x86_64-pc-windows-gnu/release/scmessenger_mobile.dll",
+        "../target/debug/libscmessenger_mobile.so",
+        "../target/release/libscmessenger_mobile.so",
+        "../target/debug/libscmessenger_mobile.dylib",
+        "../target/release/libscmessenger_mobile.dylib",
+    ]
+    .iter()
+    .map(|p| manifest_path.join(p))
+    .find(|p| p.exists())
+    .unwrap_or_else(|| {
+        panic!(
+            "scmessenger_mobile cdylib not found. \
+             Please run: cargo build -p scmessenger-mobile"
+        )
+    });
+
+    println!("Generating Swift bindings from library: {}", library_file);
+
+    // Use the new uniffi_bindgen 0.31 API with library mode
     let options = GenerateOptions {
         languages: vec![TargetLanguage::Swift],
-        source: udl_file,
+        source: library_file,
         out_dir: out_dir.clone(),
         config_override: config_file.exists().then_some(config_file),
         format: false,

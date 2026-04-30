@@ -3,12 +3,12 @@
 
 [bindings.kotlin]
 package_name = "uniffi.api"
-cdylib_name = "scmessenger_core"
+cdylib_name = "scmessenger_mobile"
 android = true
 android_cleaner = true
 
 [bindings.swift]
 module_name = "SCMessengerCore"
-ffi_module_name = "scmessenger_core"
+ffi_module_name = "scmessenger_mobile"
 # Enable Swift concurrency support
 swift_concurrency = true

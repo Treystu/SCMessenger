@@ -215,7 +215,7 @@ task buildRustAndroid {
 
     doLast {
         // Check if library already exists - if so, skip build
-        def libExists = file('../../core/target/android-libs/arm64-v8a/libscmessenger_core.so').exists()
+        def libExists = file('../../core/target/android-libs/arm64-v8a/libscmessenger_mobile.so').exists()
         if (libExists) {
             println "Rust library already exists, skipping build"
             return
@@ -253,17 +253,17 @@ task buildRustAndroid {
                 }
 
                 if (isWindows) {
-                    commandLine 'cmd', '/c', "cargo ndk -t $target build ${rustProfile.join(' ')} -p scmessenger-core"
+                    commandLine 'cmd', '/c', "cargo ndk -t $target build ${rustProfile.join(' ')} -p scmessenger-mobile"
                 } else {
                     def cmd = ['cargo', 'ndk', '-t', target, 'build']
                     cmd.addAll(rustProfile)
-                    cmd.addAll(['-p', 'scmessenger-core'])
+                    cmd.addAll(['-p', 'scmessenger-mobile'])
                     commandLine cmd
                 }
             }
 
             // Copy library to the expected location
-            def sourceFile = file("../../target/${target}/${rustDir}/libscmessenger_core.so")
+            def sourceFile = file("../../target/${target}/${rustDir}/libscmessenger_mobile.so")
             def destDir = file("../../core/target/android-libs/${abi}")
 
             destDir.mkdirs()
@@ -292,12 +292,24 @@ task generateUniFFIBindings {
 
     doLast {
         def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
+
+        // Build scmessenger-mobile cdylib for host target so library-mode binding
+        // generation can extract proc-macro metadata (IronCore, MeshService, etc.)
+        exec {
+            workingDir '../../'
+            environment "RUSTFLAGS", ""
+            if (isWindows && msysUcrtBin) {
+                environment "PATH", "${msysUcrtBin};${System.getenv('PATH')}"
+                commandLine 'cmd', '/c', 'cargo build --target x86_64-pc-windows-gnu -p scmessenger-mobile'
+            } else {
+                commandLine 'cargo', 'build', '-p', 'scmessenger-mobile'
+            }
+        }
+
         exec {
             workingDir '../../core'
             // Unset RUSTFLAGS to avoid Android-specific linker flags affecting the generator build
             environment "RUSTFLAGS", ""
-            // Explicitly build for host target (not Android)
-            environment "CARGO_BUILD_TARGET", ""
 
             if (isWindows && msysUcrtBin) {
                 environment "PATH", "${msysUcrtBin};${System.getenv('PATH')}"
