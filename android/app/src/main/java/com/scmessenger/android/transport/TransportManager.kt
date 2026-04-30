@@ -40,6 +40,9 @@ class TransportManager(
     private var wifiAware: WifiAwareTransport? = null
     private var wifiDirect: WifiDirectTransport? = null
 
+    // mDNS LAN discovery (cross-platform: Android ↔ Windows/iOS/macOS)
+    private var mdnsDiscovery: MdnsServiceDiscovery? = null
+
     // Track active transports
     private val activeTransports = ConcurrentHashMap<TransportType, Boolean>()
 
@@ -99,7 +102,26 @@ class TransportManager(
         // Start WiFi Direct
         wifiDirect?.start()
 
-        Timber.i("All transports started")
+        // Start mDNS LAN discovery (cross-platform: discovers Windows/macOS/iOS peers)
+        mdnsDiscovery = MdnsServiceDiscovery(
+            context,
+            onPeerDiscovered = { peerId ->
+                Timber.d("mDNS peer discovered: $peerId")
+                activeTransports[TransportType.TCP_MDNS] = true
+                onPeerDiscovered(peerId, TransportType.TCP_MDNS)
+            },
+            onDataReceived = { peerId, data ->
+                onDataReceived(peerId, data, TransportType.TCP_MDNS)
+            },
+            onLanPeerResolved = { peerId, host, port ->
+                Timber.i("mDNS LAN peer resolved: $peerId at $host:$port — feeding to SwarmBridge")
+                // The resolved LAN address will be dialed via SwarmBridge's libp2p swarm
+                onPeerDiscovered(peerId, TransportType.TCP_MDNS)
+            }
+        )
+        mdnsDiscovery?.start()
+
+        Timber.i("All transports started (including mDNS LAN discovery)")
     }
 
     /**
@@ -121,6 +143,10 @@ class TransportManager(
         // Stop WiFi
         wifiAware?.stop()
         wifiDirect?.stop()
+
+        // Stop mDNS
+        mdnsDiscovery?.stop()
+        mdnsDiscovery = null
 
         activeTransports.clear()
         peerTransports.clear()
@@ -377,7 +403,19 @@ class TransportManager(
                 // Handled separately by SwarmBridge
             }
             TransportType.TCP_MDNS -> {
-                // Handled separately by SwarmBridge via LAN TCP
+                if (mdnsDiscovery == null) {
+                    mdnsDiscovery = MdnsServiceDiscovery(
+                        context,
+                        onPeerDiscovered = { peerId ->
+                            activeTransports[TransportType.TCP_MDNS] = true
+                            onPeerDiscovered(peerId, TransportType.TCP_MDNS)
+                        },
+                        onDataReceived = { peerId, data ->
+                            onDataReceived(peerId, data, TransportType.TCP_MDNS)
+                        }
+                    )
+                }
+                mdnsDiscovery?.start()
             }
         }
     }
@@ -401,7 +439,8 @@ class TransportManager(
                 // Handled separately by SwarmBridge
             }
             TransportType.TCP_MDNS -> {
-                // Handled separately by SwarmBridge via LAN TCP
+                mdnsDiscovery?.stop()
+                mdnsDiscovery = null
             }
         }
 

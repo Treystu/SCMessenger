@@ -11,4 +11,7 @@
     
     <!-- Common -->
     <string name="cancel">Cancel</string>
+
+    <!-- Settings / Identity -->
+    <string name="identity_field_unavailable">Not available</string>
 </resources>

@@ -13,6 +13,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -46,6 +51,14 @@ class NetworkDetector @Inject constructor(
     /** Network callback for real-time updates */
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
+    /** Debounce: coroutine scope for timed network state transitions */
+    private val debounceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var debounceJob: Job? = null
+    private var pendingNetworkType: NetworkType? = null
+
+    /** Hysteresis: minimum stable period before committing a network type change (ms) */
+    private val networkStabilityMs = 5000L
+
     /** Whether we've detected a cellular network (including restricted) that likely blocks non-standard ports */
     val isCellularNetwork: Boolean
         get() = _networkType.value == NetworkType.CELLULAR || _networkType.value == NetworkType.CELLULAR_RESTRICTED
@@ -54,9 +67,12 @@ class NetworkDetector @Inject constructor(
     val shouldPreferWebSocket: Boolean
         get() = isCellularNetwork || _blockedPorts.value.isNotEmpty()
 
-    /** Ports commonly blocked by cellular carriers */
+    /** Ports commonly blocked by cellular carriers.
+     *  NOTE: port 9001 (SCMessenger swarm) is excluded — blanket-blocking it severs
+     *  mDNS and local peer discovery, which must stay available regardless of
+     *  cellular classification. Actual carrier blocking is determined by
+     *  runtime port probes, not static heuristics. */
     private val commonlyBlockedPorts = setOf(
-        9001, // SCMessenger TCP/QUIC
         9010, // SCMessenger TCP/QUIC (secondary)
         4001, // libp2p TCP default
         5001, // libp2p WebSocket default
@@ -119,27 +135,52 @@ class NetworkDetector @Inject constructor(
             connectivityManager.unregisterNetworkCallback(it)
         }
         networkCallback = null
+        debounceJob?.cancel()
+        debounceJob = null
+        pendingNetworkType = null
         Timber.i("NetworkDetector monitoring stopped")
     }
 
     /**
      * Detect the type of the active network.
+     * Applies a 5-second hysteresis/debounce to prevent violent oscillations
+     * (e.g. WIFI → CELLULAR → WIFI flaps) from resetting circuit breakers
+     * and severing local peer discovery on every transient network event.
      */
     private fun detectNetworkType(network: Network) {
         val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return
         val type = classifyNetworkType(capabilities)
 
-        _networkType.value = type
-
-        // If cellular (including restricted), populate blocked ports
-        if (type == NetworkType.CELLULAR || type == NetworkType.CELLULAR_RESTRICTED) {
-            _blockedPorts.value = commonlyBlockedPorts
-            Timber.w("Cellular network detected (%s) — blocking ports: %s", type, commonlyBlockedPorts)
-        } else {
-            _blockedPorts.value = emptySet()
+        // If the type hasn't changed, skip entirely
+        if (type == _networkType.value) {
+            return
         }
 
-        Timber.d("Network type: %s, blocked ports: %s", type, _blockedPorts.value)
+        // Debounce: only commit after the network type has been stable for networkStabilityMs
+        pendingNetworkType = type
+        debounceJob?.cancel()
+        debounceJob = debounceScope.launch {
+            val candidateType = type
+            delay(networkStabilityMs)
+
+            // Only apply if the candidate is still the most recent pending type
+            if (pendingNetworkType == candidateType && candidateType != _networkType.value) {
+                val previousType = _networkType.value
+                _networkType.value = candidateType
+
+                // If cellular (including restricted), populate blocked ports
+                if (candidateType == NetworkType.CELLULAR || candidateType == NetworkType.CELLULAR_RESTRICTED) {
+                    _blockedPorts.value = commonlyBlockedPorts
+                    Timber.w("Cellular network detected (%s) after %dms stability — blocking ports: %s",
+                        candidateType, networkStabilityMs, commonlyBlockedPorts)
+                } else {
+                    _blockedPorts.value = emptySet()
+                }
+
+                Timber.i("Network type committed: %s → %s (stable for %dms), blocked ports: %s",
+                    previousType, candidateType, networkStabilityMs, _blockedPorts.value)
+            }
+        }
     }
 
     /**

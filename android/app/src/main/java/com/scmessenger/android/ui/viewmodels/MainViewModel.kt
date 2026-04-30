@@ -99,13 +99,18 @@ class MainViewModel @Inject constructor(
             }
         }
 
-        // Auto-refresh identity state when service state changes (important for lazy start)
+        // Auto-refresh identity state when service transitions to RUNNING (lazy start).
+        // Track prior state to avoid triggering refreshIdentityState on repeated
+        // RUNNING emissions, which can cascade through _isReady → MeshApp recomposition.
+        var lastServiceState: uniffi.api.ServiceState? = null
         viewModelScope.launch {
             meshRepository.serviceState.collect { state ->
                 Timber.d("MeshRepository service state: $state")
-                if (state == uniffi.api.ServiceState.RUNNING) {
+                if (state == uniffi.api.ServiceState.RUNNING &&
+                    lastServiceState != uniffi.api.ServiceState.RUNNING) {
                     refreshIdentityState()
                 }
+                lastServiceState = state
             }
         }
 

@@ -99,12 +99,19 @@ impl IdentityKeys {
     /// This allows using the same Ed25519 identity keys for both
     /// message encryption/signing AND libp2p network routing,
     /// eliminating the confusion of having two separate IDs.
+    ///
+    /// NOTE: ed25519-dalek's SigningKey::to_bytes() returns the 32-byte seed,
+    /// but libp2p's SecretKey::try_from_bytes() expects the 64-byte expanded form
+    /// (seed || public_key). We expand the key here to bridge the format gap.
     pub fn to_libp2p_keypair(&self) -> Result<libp2p::identity::Keypair> {
-        // Extract the secret key bytes
-        let secret_bytes = self.signing_key.to_bytes();
+        // Build the 64-byte expanded secret key: [seed(32) || public_key(32)]
+        let seed = self.signing_key.to_bytes();
+        let public = self.signing_key.verifying_key().to_bytes();
+        let mut expanded = [0u8; 64];
+        expanded[..32].copy_from_slice(&seed);
+        expanded[32..].copy_from_slice(&public);
 
-        // Create libp2p Ed25519 keypair from the same secret
-        let ed25519_secret = libp2p::identity::ed25519::SecretKey::try_from_bytes(secret_bytes)
+        let ed25519_secret = libp2p::identity::ed25519::SecretKey::try_from_bytes(&mut expanded[..])
             .map_err(|e| {
                 anyhow::anyhow!(
                     "Failed to convert Ed25519 secret key to libp2p format: {}",

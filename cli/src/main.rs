@@ -22,9 +22,9 @@ use scmessenger_core::store::{Contact, ContactManager, MessageDirection, Outbox,
 use scmessenger_core::transport::abstraction::TransportType;
 use scmessenger_core::transport::{self, SwarmEvent};
 use scmessenger_core::wasm_support::rpc::{
-    notif_delivery_status, notif_message_received, notif_peer_discovered, ClientIntent,
-    DeliveryStatusParams, MeshTopologyUpdateParams, MessageReceivedParams, PeerDiscoveredParams,
-    rpc_error, rpc_result,
+    notif_delivery_status, notif_message_received, notif_peer_discovered, rpc_error, rpc_result,
+    ClientIntent, DeliveryStatusParams, MeshTopologyUpdateParams, MessageReceivedParams,
+    PeerDiscoveredParams,
 };
 use scmessenger_core::IronCore;
 use std::collections::HashMap;

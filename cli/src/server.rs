@@ -234,8 +234,7 @@ async fn handle_ws_connection(
     let (mut ws_tx, mut ws_rx) = websocket.split();
 
     // Channel to forward broadcast notifications to this client.
-    let (client_tx, mut client_rx) =
-        futures::channel::mpsc::unbounded::<warp::ws::Message>();
+    let (client_tx, mut client_rx) = futures::channel::mpsc::unbounded::<warp::ws::Message>();
 
     // Register this client's sender for broadcast push.
     senders.lock().await.push(client_tx.clone());

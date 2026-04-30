@@ -14,12 +14,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
+import com.scmessenger.android.R
 import com.scmessenger.android.ui.components.CopyableText
 import com.scmessenger.android.ui.components.ErrorBanner
 import com.scmessenger.android.ui.components.IdenticonFromPeerId
@@ -185,7 +187,7 @@ private fun IdentityContent(
 
         // Identicon
         IdenticonFromPeerId(
-            peerId = identityInfo.identityId ?: "Unknown",
+            peerId = identityInfo.identityId ?: stringResource(R.string.identity_field_unavailable),
             size = 96.dp,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         )
@@ -210,7 +212,7 @@ private fun IdentityContent(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 CopyableText(
-                    text = identityInfo.identityId ?: "Unknown",
+                    text = identityInfo.identityId ?: stringResource(R.string.identity_field_unavailable),
                     monospace = true
                 )
             }
@@ -228,7 +230,7 @@ private fun IdentityContent(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 CopyableText(
-                    text = identityInfo.libp2pPeerId ?: "Unknown",
+                    text = identityInfo.libp2pPeerId ?: stringResource(R.string.identity_field_unavailable),
                     monospace = true
                 )
             }
@@ -246,7 +248,7 @@ private fun IdentityContent(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 CopyableText(
-                    text = identityInfo.publicKeyHex ?: "Unknown",
+                    text = identityInfo.publicKeyHex ?: stringResource(R.string.identity_field_unavailable),
                     monospace = true
                 )
             }

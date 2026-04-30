@@ -720,17 +720,21 @@ impl IronCore {
     pub fn get_identity_info(&self) -> crate::IdentityInfo {
         let identity = self.identity.read();
         let keys = identity.keys();
+        let libp2p_peer_id = keys.and_then(|k| {
+            k.to_libp2p_keypair()
+                .ok()
+                .map(|kp| kp.public().to_peer_id().to_string())
+        });
         crate::IdentityInfo {
             identity_id: identity.identity_id(),
             public_key_hex: identity.public_key_hex(),
             device_id: identity.device_id(),
             seniority_timestamp: identity.seniority_timestamp(),
             initialized: keys.is_some(),
-            nickname: None,
-            libp2p_peer_id: None,
+            nickname: identity.nickname(),
+            libp2p_peer_id,
         }
     }
-
 
     pub fn get_device_id(&self) -> Option<String> {
         self.identity.read().device_id()
@@ -782,12 +786,9 @@ impl IronCore {
         self.inbox.read().total_count() as u32
     }
 
-
     // -----------------------------------------------------------------------
     // Store managers (returned to WASM for bridging)
     // -----------------------------------------------------------------------
-
-
 
     // -----------------------------------------------------------------------
     // Blocking
@@ -845,7 +846,6 @@ impl IronCore {
         let _ = self.outbox.write().drain_for_peer(&peer_id);
         Ok(())
     }
-
 
     /// List blocked peers, returning bridge-compatible BlockedIdentity structs.
     /// Internal helper used by `list_blocked_peers` for UniFFI.
@@ -981,11 +981,9 @@ impl IronCore {
     // Abuse / Reputation extended
     // -----------------------------------------------------------------------
 
-
     // -----------------------------------------------------------------------
     // Privacy config
     // -----------------------------------------------------------------------
-
 
     pub fn set_privacy_config(&self, json: String) -> Result<(), IronCoreError> {
         let _config: crate::privacy::PrivacyConfig =
@@ -1136,7 +1134,6 @@ impl IronCore {
 
     /// Access the peer exchange manager handle.
     #[cfg(not(target_arch = "wasm32"))]
-
     // -----------------------------------------------------------------------
     // Contact & History managers (UniFFI bridge accessors)
     // -----------------------------------------------------------------------
@@ -1587,7 +1584,6 @@ impl IronCore {
         }
     }
 }
-
 
 // Non-FFI-safe methods moved to plain impl block to avoid uniffi::export compilation errors.
 impl IronCore {

@@ -71,9 +71,10 @@ class MeshServiceViewModel @Inject constructor(
     fun startService() {
         viewModelScope.launch {
             try {
-                // Force identity hydration (restore path) before service start request.
-                // Do not hard-block startup here; onboarding/UI owns readiness gating.
-                meshRepository.getIdentityInfo()
+                // Identity hydration is handled by MeshRepository.startMeshService()
+                // during service initialization (ensureLocalIdentityFederation).
+                // Calling getIdentityInfo() here would trigger ensureServiceInitializedFireAndForget()
+                // which starts the service recursively, causing a service-start loop.
 
                 val intent = Intent(context, MeshForegroundService::class.java).apply {
                     action = MeshForegroundService.ACTION_START

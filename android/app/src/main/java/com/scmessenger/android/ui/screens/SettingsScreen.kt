@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -36,7 +37,6 @@ fun SettingsScreen(
 ) {
     val meshSettings by settingsViewModel.settings.collectAsState()
     val identityInfo by settingsViewModel.identityInfo.collectAsState()
-    val hasIdentity by settingsViewModel.hasIdentity.collectAsState()
     val autoStart by settingsViewModel.autoStart.collectAsState()
     val notificationsEnabled by settingsViewModel.notificationsEnabled.collectAsState()
     val themeMode by settingsViewModel.themeMode.collectAsState()
@@ -61,23 +61,22 @@ fun SettingsScreen(
         }
     }
 
-    // Refresh identity whenever Settings screen is entered (nickname may have changed during onboarding)
+    // Load identity once when Settings screen is first composed.
+    // The ViewModel init() already handles the initial load on IO; this ensures
+    // the UI is populated even if the screen re-attaches (e.g., back-navigation).
     LaunchedEffect(Unit) {
         settingsViewModel.loadIdentity()
     }
 
-    // Reload identity when service comes online (identity may become available after startup)
+    // Reload identity when service transitions to RUNNING (lazy-start path).
+    // Track prior state to avoid re-firing on repeated RUNNING emissions.
+    var lastServiceState by remember { mutableStateOf<uniffi.api.ServiceState?>(null) }
     LaunchedEffect(serviceState) {
-        if (serviceState == uniffi.api.ServiceState.RUNNING) {
+        if (serviceState == uniffi.api.ServiceState.RUNNING &&
+            lastServiceState != uniffi.api.ServiceState.RUNNING) {
             settingsViewModel.loadIdentity()
         }
-    }
-
-    // Reload identity when identity state changes (e.g. created from IdentityScreen)
-    LaunchedEffect(hasIdentity) {
-        if (hasIdentity) {
-            settingsViewModel.loadIdentity()
-        }
+        lastServiceState = serviceState
     }
 
     val statsText = remember(serviceStats) { serviceViewModel.getStatsText() }
@@ -677,7 +676,7 @@ fun IdentitySection(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = identityInfo.libp2pPeerId?.take(16) ?: "????????",
+                        text = identityInfo.libp2pPeerId?.take(16) ?: stringResource(R.string.identity_field_unavailable),
                         style = MaterialTheme.typography.bodyMedium,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                     )
@@ -707,7 +706,7 @@ fun IdentitySection(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = identityInfo.identityId?.take(8) ?: "????????",
+                        text = identityInfo.identityId?.take(8) ?: stringResource(R.string.identity_field_unavailable),
                         style = MaterialTheme.typography.bodyMedium,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                     )
@@ -737,7 +736,7 @@ fun IdentitySection(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = identityInfo.publicKeyHex?.take(8) ?: "????????",
+                        text = identityInfo.publicKeyHex?.take(8) ?: stringResource(R.string.identity_field_unavailable),
                         style = MaterialTheme.typography.bodyMedium,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                     )

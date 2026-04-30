@@ -51,8 +51,11 @@ class IdentityViewModel @Inject constructor(
                 _isLoading.value = true
                 _error.value = null
 
-                val identity = meshRepository.getIdentityInfo()
-                _identityInfo.value = identity
+                // Use non-blocking variant to avoid triggering service init from UI layer
+                val identity = meshRepository.getIdentityInfoNonBlocking()
+                if (_identityInfo.value != identity) {
+                    _identityInfo.value = identity
+                }
 
                 if (identity == null || !identity.initialized) {
                     Timber.w("Identity not initialized")
@@ -85,7 +88,10 @@ class IdentityViewModel @Inject constructor(
                 }
 
                 // Inline loadIdentity to avoid race with _successMessage
-                _identityInfo.value = meshRepository.getIdentityInfo()
+                val info = meshRepository.getIdentityInfoNonBlocking()
+                if (_identityInfo.value != info) {
+                    _identityInfo.value = info
+                }
 
                 _successMessage.value = "Identity created successfully"
                 Timber.i("Identity created")

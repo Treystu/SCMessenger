@@ -9,10 +9,11 @@ import timber.log.Timber
 /**
  * mDNS/DNS-SD service discovery for cross-platform LAN discovery.
  *
- * This implements the same DNS-SD service type as iOS's mDNSServiceDiscovery,
- * allowing Android devices to discover iOS devices on the same local network.
+ * Uses the standard libp2p-mdns service type so that Android peers
+ * (using NsdManager) and Rust/WASM peers (using libp2p-mdns) can
+ * discover each other on the same local network.
  *
- * Service type: _scmessenger._tcp (matches iOS's mDNSServiceDiscovery.SERVICE_TYPE)
+ * Service type: _p2p._udp. (libp2p default; Android NsdManager appends .local. automatically)
  */
 class MdnsServiceDiscovery(
     private val context: Context,
@@ -29,10 +30,11 @@ class MdnsServiceDiscovery(
     @Volatile private var isRegistered = false
     @Volatile private var isDiscovering = false
 
-    // Service type (must match iOS's mDNSServiceDiscovery.SERVICE_TYPE)
-    private val serviceType = "_scmessenger._tcp"
+    // Service type must match libp2p-mdns default (_p2p._udp.) so Rust peers discover us.
+    // Android's NsdManager appends .local. automatically — do not include it here.
+    private val serviceType = "_p2p._udp."
     private val serviceName = "SCMessenger"
-    private val servicePort = 8888 // Matches Android's P2P_PORT
+    private val servicePort = 9001 // Must match the actual libp2p swarm listen port (startSwarm /ip4/0.0.0.0/tcp/9001)
 
     /**
      * Start mDNS service discovery and advertisement.
@@ -108,6 +110,10 @@ class MdnsServiceDiscovery(
             // Add service data to identify this as an SCMessenger device
             setAttribute("version", "1.0")
             setAttribute("service", "scmessenger")
+            // Advertise the libp2p peer-id in TXT so resolvers can construct
+            // the full /p2p/ multiaddr without an extra handshake round-trip.
+            // Note: the actual peer-id should be set from the active identity
+            // before registration; this is a best-effort placeholder.
         }
 
         registrationListener = object : NsdManager.RegistrationListener {
@@ -177,7 +183,11 @@ class MdnsServiceDiscovery(
     }
 
     /**
-     * Resolve a discovered service to get its address.
+     * Resolve a discovered service to get its address and TXT records.
+     *
+     * libp2p-mdns embeds the peer-id and/or full multiaddr in the DNS-SD
+     * response. We extract TXT record attributes to reconstruct the
+     * libp2p multiaddr so SwarmBridge can dial it directly.
      */
     private fun resolveService(serviceInfo: NsdServiceInfo) {
         resolveListener = object : NsdManager.ResolveListener {
@@ -185,27 +195,53 @@ class MdnsServiceDiscovery(
                 Timber.e("mDNS service resolve failed: $errorCode")
             }
 
-            override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
+            override fun onServiceResolved(resolvedInfo: NsdServiceInfo) {
                 @Suppress("DEPRECATION")
-                Timber.d("mDNS service resolved: ${serviceInfo.serviceName} at ${serviceInfo.host}:${serviceInfo.port}")
+                Timber.d("mDNS service resolved: ${resolvedInfo.serviceName} at ${resolvedInfo.host}:${resolvedInfo.port}")
 
-                // Create a peer ID from the service name (matches iOS's service.name pattern)
-                val peerId = "mdns-${serviceInfo.serviceName}"
+                // Extract TXT record attributes (libp2p-mdns may embed peer-id/multiaddr here)
+                val txtAttributes = resolvedInfo.attributes
+                val txtMap = mutableMapOf<String, String>()
+                if (txtAttributes != null) {
+                    for ((key, value) in txtAttributes) {
+                        txtMap[key] = String(value, Charsets.UTF_8)
+                    }
+                }
+                Timber.d("mDNS TXT records for ${resolvedInfo.serviceName}: $txtMap")
+
+                // Try to extract libp2p peer-id from TXT records
+                val libp2pPeerId = txtMap["peer-id"] ?: txtMap["p2p"]
+
+                // Create a peer ID. Prefer the TXT-embedded peer-id;
+                // fall back to deriving from the DNS-SD instance name.
+                val peerId = if (!libp2pPeerId.isNullOrBlank()) {
+                    libp2pPeerId
+                } else {
+                    "mdns-${resolvedInfo.serviceName}"
+                }
 
                 // Notify discovery
                 onPeerDiscovered(peerId)
 
-                // TCP/mDNS parity: Notify the resolved LAN address so the caller
-                // can generate a libp2p multiaddr and dial via SwarmBridge.
+                // Build LAN address for SwarmBridge dial:
+                // Extract host from resolved service (API-level aware)
                 val host = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    serviceInfo.hostAddresses.firstOrNull()?.hostAddress
+                    resolvedInfo.hostAddresses.firstOrNull()?.hostAddress
                 } else {
                     @Suppress("DEPRECATION")
-                    serviceInfo.host?.hostAddress
+                    resolvedInfo.host?.hostAddress
                 }
-                val port = serviceInfo.port
+                val port = resolvedInfo.port
+
                 if (host != null && port > 0) {
-                    Timber.i("mDNS: LAN peer resolved $peerId at $host:$port — notifying for SwarmBridge dial")
+                    // Reconstruct a libp2p multiaddr from resolved IP:port + optional TXT peer-id.
+                    // Format: /ip4/<host>/tcp/<port>[/p2p/<peerId>]
+                    val multiaddr = if (!libp2pPeerId.isNullOrBlank()) {
+                        "/ip4/$host/tcp/$port/p2p/$libp2pPeerId"
+                    } else {
+                        "/ip4/$host/tcp/$port"
+                    }
+                    Timber.i("mDNS: LAN peer resolved $peerId → $multiaddr — notifying for SwarmBridge dial")
                     onLanPeerResolved?.invoke(peerId, host, port)
                 }
             }

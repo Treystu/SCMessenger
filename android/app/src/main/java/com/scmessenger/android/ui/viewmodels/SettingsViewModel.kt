@@ -136,6 +136,17 @@ class SettingsViewModel @Inject constructor(
     private var cachedIdentityInfo: uniffi.api.IdentityInfo? = null
     private var isCacheValid = false
 
+    // ANR FIX: Guard identity emission — only emit when data actually changed.
+    // Prevents infinite recomposition loops when getIdentityInfo() returns
+    // structurally equal objects that would otherwise cascade through
+    // StateFlow → hasIdentity → LaunchedEffect(hasIdentity) → loadIdentity().
+    private fun emitIdentityInfo(info: uniffi.api.IdentityInfo?) {
+        if (_identityInfo.value != info) {
+            _identityInfo.value = info
+            cachedIdentityInfo = info
+        }
+    }
+
     init {
         // ANR FIX (P0_ANDROID_017): Defer heavy initialization to background thread
         // Settings screen should appear within 500ms for good UX
@@ -208,7 +219,7 @@ class SettingsViewModel @Inject constructor(
     private suspend fun loadIdentityInternal() {
         // ANR FIX: Return cached identity if already loaded
         if (cachedIdentityInfo != null && isCacheValid) {
-            _identityInfo.value = cachedIdentityInfo
+            emitIdentityInfo(cachedIdentityInfo)
             return
         }
         try {
@@ -216,17 +227,17 @@ class SettingsViewModel @Inject constructor(
             // during service startup when identity might not be fully initialized yet
             val info = meshRepository.getIdentityInfoNonBlocking()
             // Defensive fallback: if Rust core returns blank nickname, use cached preference
-            if (info?.nickname.isNullOrBlank()) {
+            if (info != null && info.nickname.isNullOrBlank()) {
                 val cached = preferencesRepository.identityNickname.first()
                 if (!cached.isNullOrBlank()) {
                     Timber.w("Rust core nickname blank; using DataStore fallback: $cached")
-                    _identityInfo.value = info?.copy(nickname = cached)
-                    cachedIdentityInfo = info?.copy(nickname = cached)  // ANR FIX: Cache for future use
+                    // Push fallback to Rust Core to permanently fix the null state
+                    meshRepository.setNickname(cached)
+                    emitIdentityInfo(info.copy(nickname = cached))
                     return
                 }
             }
-            _identityInfo.value = info
-            cachedIdentityInfo = info  // ANR FIX: Cache for future use
+            emitIdentityInfo(info)
         } catch (e: Exception) {
             Timber.e(e, "Failed to load identity")
         }
@@ -235,20 +246,27 @@ class SettingsViewModel @Inject constructor(
     fun loadIdentity() {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val info = meshRepository.getIdentityInfo()
-                // ANR FIX: Cache identity info to avoid redundant FFI calls
-                cachedIdentityInfo = info
+                // ANR FIX: Return cached identity if already loaded — prevents
+                // redundant FFI calls during recomposition cascades.
+                if (cachedIdentityInfo != null && isCacheValid) {
+                    emitIdentityInfo(cachedIdentityInfo)
+                    return@launch
+                }
+                // Use non-blocking variant to avoid triggering service init
+                // from the UI layer (prevents serviceState → loadIdentity loop).
+                val info = meshRepository.getIdentityInfoNonBlocking()
                 // Defensive fallback: if Rust core returns blank nickname, use cached preference
-                if (info?.nickname.isNullOrBlank()) {
+                if (info != null && info.nickname.isNullOrBlank()) {
                     val cached = preferencesRepository.identityNickname.first()
                     if (!cached.isNullOrBlank()) {
                         Timber.w("Rust core nickname blank; using DataStore fallback: $cached")
-                        _identityInfo.value = info?.copy(nickname = cached)
-                        cachedIdentityInfo = info?.copy(nickname = cached)  // ANR FIX: Update cache
+                        // Push fallback to Rust Core to permanently fix the null state
+                        meshRepository.setNickname(cached)
+                        emitIdentityInfo(info.copy(nickname = cached))
                         return@launch
                     }
                 }
-                _identityInfo.value = info
+                emitIdentityInfo(info)
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load identity")
             }

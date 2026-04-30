@@ -20,9 +20,7 @@
 //! {"jsonrpc":"2.0","method":"message_received","params":{"from":"...","content":"..."}}
 //! ```
 
-use scmessenger_core::wasm_support::rpc::{
-    JsonRpcNotification, JsonRpcRequest, JsonRpcResponse,
-};
+use scmessenger_core::wasm_support::rpc::{JsonRpcNotification, JsonRpcRequest, JsonRpcResponse};
 #[cfg(target_arch = "wasm32")]
 use std::sync::Arc;
 
@@ -101,7 +99,8 @@ pub fn parse_notification(s: &str) -> Result<JsonRpcNotification, serde_json::Er
 /// Callback invoked when a JSON-RPC response arrives matching a pending
 /// request ID. The `id` value is the original request ID; `result` and
 /// `error` correspond to the JSON-RPC response fields.
-pub type ResponseCallback = Box<dyn Fn(serde_json::Value, Option<serde_json::Value>, Option<serde_json::Value>)>;
+pub type ResponseCallback =
+    Box<dyn Fn(serde_json::Value, Option<serde_json::Value>, Option<serde_json::Value>)>;
 
 /// Callback invoked for each server-push notification.
 pub type NotificationCallback = Box<dyn Fn(String, serde_json::Value)>;
@@ -195,40 +194,44 @@ impl DaemonBridge {
         // ── onmessage ──
         let pending_map = Arc::clone(&self.pending);
         let notif_cb = Arc::clone(&self.on_notification);
-        let onmessage = Closure::wrap(Box::new(move |event: MessageEvent| {
-            let text = match event.data().as_string() {
-                Some(s) => s,
-                None => {
-                    tracing::warn!("Daemon bridge received non-text frame; ignored");
-                    return;
-                }
-            };
+        let onmessage =
+            Closure::wrap(Box::new(move |event: MessageEvent| {
+                let text = match event.data().as_string() {
+                    Some(s) => s,
+                    None => {
+                        tracing::warn!("Daemon bridge received non-text frame; ignored");
+                        return;
+                    }
+                };
 
-            // Try parsing as a JSON-RPC response (has `id`).
-            if let Ok(resp) = serde_json::from_str::<JsonRpcResponse>(&text) {
-                if let Some(ref id_val) = resp.id {
-                    if let Some(id_num) = id_val.as_u64() {
-                        let cb = pending_map.lock().remove(&id_num);
-                        if let Some(cb) = cb {
-                            cb(*id_val, resp.result, resp.error.map(|e| {
+                // Try parsing as a JSON-RPC response (has `id`).
+                if let Ok(resp) = serde_json::from_str::<JsonRpcResponse>(&text) {
+                    if let Some(ref id_val) = resp.id {
+                        if let Some(id_num) = id_val.as_u64() {
+                            let cb = pending_map.lock().remove(&id_num);
+                            if let Some(cb) = cb {
+                                cb(*id_val, resp.result, resp.error.map(|e| {
                                 serde_json::json!({"code": e.code, "message": e.message})
                             }));
-                            return;
+                                return;
+                            }
                         }
                     }
                 }
-            }
 
-            // Try parsing as a JSON-RPC notification (no `id`).
-            if let Ok(notif) = serde_json::from_str::<JsonRpcNotification>(&text) {
-                if let Some(ref cb) = *notif_cb.lock() {
-                    cb(notif.method, notif.params);
+                // Try parsing as a JSON-RPC notification (no `id`).
+                if let Ok(notif) = serde_json::from_str::<JsonRpcNotification>(&text) {
+                    if let Some(ref cb) = *notif_cb.lock() {
+                        cb(notif.method, notif.params);
+                    }
+                    return;
                 }
-                return;
-            }
 
-            tracing::warn!("Daemon bridge received unrecognized frame: {}", &text[..text.len().min(200)]);
-        }) as Box<dyn FnMut(MessageEvent)>);
+                tracing::warn!(
+                    "Daemon bridge received unrecognized frame: {}",
+                    &text[..text.len().min(200)]
+                );
+            }) as Box<dyn FnMut(MessageEvent)>);
         ws.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
         onmessage.forget();
 
@@ -275,7 +278,9 @@ impl DaemonBridge {
         params: serde_json::Value,
         cb: ResponseCallback,
     ) -> Result<u64, String> {
-        let id = self.next_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let id = self
+            .next_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let req = JsonRpcRequest {
             jsonrpc: "2.0".into(),
             id: Some(serde_json::json!(id)),
@@ -307,8 +312,14 @@ impl DaemonBridge {
         _params: serde_json::Value,
         _cb: ResponseCallback,
     ) -> Result<u64, String> {
-        let id = self.next_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        tracing::info!("Daemon bridge simulation: sent request id={} method={}", id, method);
+        let id = self
+            .next_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        tracing::info!(
+            "Daemon bridge simulation: sent request id={} method={}",
+            id,
+            method
+        );
         Ok(id)
     }
 
