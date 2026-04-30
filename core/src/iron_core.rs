@@ -101,7 +101,6 @@ pub enum ConsentState {
 ///
 /// Wraps all subsystems behind `Arc<RwLock<…>>` for safe concurrent access.
 #[allow(dead_code)]
-#[derive(uniffi::Object)]
 pub struct IronCore {
     pub(crate) identity: Arc<RwLock<IdentityManager>>,
     pub(crate) outbox: Arc<RwLock<Outbox>>,

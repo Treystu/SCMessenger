@@ -57,7 +57,6 @@ impl Contact {
 }
 
 /// Contact manager with thread-safe sled database backend
-#[derive(uniffi::Object)]
 pub struct ContactManager {
     db: Arc<Mutex<Db>>,
 }
