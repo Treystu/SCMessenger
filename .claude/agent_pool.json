@@ -17,6 +17,12 @@
         "VERIFY",
         "TRACK"
       ],
+      "file_domains": [
+        "HANDOFF/",
+        ".claude/",
+        "scripts/",
+        "docs/"
+      ],
       "max_per_type": 1
     },
     {
@@ -35,6 +41,12 @@
         "AUDIT",
         "REVIEW"
       ],
+      "file_domains": [
+        "docs/",
+        "REMAINING_WORK_TRACKING.md",
+        "core/src/crypto/",
+        "core/src/privacy/"
+      ],
       "max_per_type": 1
     },
     {
@@ -50,6 +62,16 @@
         "CRYPTO_IMPL",
         "WASM",
         "MOBILE_BRIDGE"
+      ],
+      "file_domains": [
+        "core/src/identity/",
+        "core/src/transport/",
+        "core/src/drift/",
+        "core/src/store/",
+        "core/src/routing/",
+        "core/src/relay/",
+        "core/src/abuse/",
+        "core/src/notification/"
       ],
       "max_per_type": 1
     },
@@ -67,6 +89,16 @@
         "CLI",
         "PLATFORM"
       ],
+      "file_domains": [
+        "cli/src/",
+        "wasm/src/",
+        "mobile/src/",
+        "core/src/iron_core.rs",
+        "core/src/api.udl",
+        "core/src/mobile_bridge.rs",
+        "core/src/contacts_bridge.rs",
+        "core/src/blocked_bridge.rs"
+      ],
       "max_per_type": 2
     },
     {
@@ -81,6 +113,7 @@
         "FINAL_REVIEW",
         "GATE"
       ],
+      "file_domains": [],
       "max_per_type": 1
     },
     {
@@ -95,6 +128,11 @@
         "TEST",
         "DOCS",
         "GRADLE"
+      ],
+      "file_domains": [
+        "core/tests/",
+        "android/app/src/",
+        "android/app/build.gradle"
       ],
       "max_per_type": 1
     },
@@ -111,6 +149,7 @@
         "CI",
         "FMT"
       ],
+      "file_domains": [],
       "max_per_type": 1
     },
     {
@@ -125,6 +164,7 @@
         "INTEGRATION",
         "CONNECTIVITY"
       ],
+      "file_domains": [],
       "max_per_type": 1
     },
     {
@@ -141,6 +181,7 @@
         "CRASH",
         "STRESS"
       ],
+      "file_domains": [],
       "max_per_type": 1
     },
     {
@@ -155,6 +196,7 @@
         "UI_REVIEW",
         "DIAGRAM"
       ],
+      "file_domains": [],
       "max_per_type": 1
     }
   ],

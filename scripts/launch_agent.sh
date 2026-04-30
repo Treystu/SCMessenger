@@ -19,15 +19,125 @@ AGENT_LOG="$AGENT_WORK_DIR/agent.log"
 AGENT_STDERR="$AGENT_WORK_DIR/stderr.log"
 AGENT_PID="$AGENT_WORK_DIR/pid"
 
+# Detect file domains for this agent from agent_pool.json
+AGENT_FILE_DOMAINS=""
+if [ -f ".claude/agent_pool.json" ]; then
+    AGENT_NAME_FROM_POOL=$(echo "$AGENT_ID" | sed 's/_[0-9]*$//')
+    if command -v jq > /dev/null 2>&1; then
+        AGENT_FILE_DOMAINS=$(jq -r --arg name "$AGENT_NAME_FROM_POOL" \
+            '.agents[] | select(.name == $name) | .file_domains[] // empty' \
+            .claude/agent_pool.json 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+    elif command -v python > /dev/null 2>&1 || command -v python3 > /dev/null 2>&1; then
+        PYTHON_CMD=$(command -v python3 > /dev/null 2>&1 && echo "python3" || echo "python")
+        AGENT_FILE_DOMAINS=$($PYTHON_CMD -c "
+import json,sys
+d=json.load(open('.claude/agent_pool.json'))
+matches=[a for a in d['agents'] if a['name']==sys.argv[1]]
+if matches and matches[0].get('file_domains'):
+    print(','.join(matches[0]['file_domains']))
+" "$AGENT_NAME_FROM_POOL" 2>/dev/null)
+    fi
+fi
+
 # Build agent prompt — include task file content if provided
-AGENT_PROMPT="You are an SCMessenger Autonomous Sub-Agent. Your task is in HANDOFF/todo/. Claim it by moving the file to HANDOFF/IN_PROGRESS/IN_PROGRESS_[filename].md. Implement the required code changes, verify with cargo build or gradle, then move to HANDOFF/done/. If you fail after 3 attempts, move it back to HANDOFF/todo/ with error logs appended. After completing your task, pick the next file from HANDOFF/todo/ and repeat. Use /loop 5m to self-pace."
+AGENT_PROMPT="You are an SCMessenger Autonomous Sub-Agent (ID: $AGENT_ID, Model: $AGENT_MODEL).
+
+## TASK WORKFLOW
+1. Claim a task from HANDOFF/todo/ by moving the file to HANDOFF/IN_PROGRESS/IN_PROGRESS_<filename>.md
+2. Implement the required code changes.
+3. Verify: run cargo check --workspace (or gradle for Android).
+4. On success: move the task file to HANDOFF/done/<filename>
+5. On failure after 3 attempts: move the task file back to HANDOFF/todo/ with error notes appended.
+6. After completing your task, pick the next file from HANDOFF/todo/ and repeat.
+
+## COMPILE LOCK PROTOCOL (MANDATORY)
+Multiple agents may be running concurrently. To avoid build conflicts:
+1. BEFORE running any cargo command (check, build, test, clippy, fmt), acquire the compile lock:
+   - Create .claude/compile.lock containing: AGENT_ID=<your_id>, PID=<your_bash_pid>, ACQUIRED=<epoch>
+   - If .claude/compile.lock exists and the owning PID is alive, WAIT (sleep 30, retry). Do NOT proceed.
+   - If .claude/compile.lock exists but the owning PID is dead, the lock is stale — remove it and acquire.
+   - The lock has a 10-minute maximum hold time. If held longer, it is stale — remove and acquire.
+2. AFTER your cargo command completes (success or failure), RELEASE the compile lock:
+   - Delete .claude/compile.lock
+3. NEVER hold the compile lock while doing non-compilation work (editing files, reading code).
+4. For file edits and reads that do NOT involve cargo, no lock is needed.
+
+## FILE DOMAIN RESPECT (MANDATORY)
+Your assigned file domains: ${AGENT_FILE_DOMAINS:-unrestricted}
+- ONLY edit files within your assigned file domains.
+- If a task requires editing a file outside your domains, SKIP that part and note it in the COMPLETION marker under BLOCKED_FOR_DOMAIN.
+- Reading files outside your domains is allowed and encouraged for context.
+- NEVER edit files claimed by another agent (check .claude/agents/*/COMPLETION for CHANGED_FILES).
+
+## COMPLETION PROTOCOL (MANDATORY)
+After completing OR failing a task, you MUST write a completion marker to .claude/agents/$AGENT_ID/COMPLETION:
+
+On success:
+STATUS=completed
+TASK_FILE=HANDOFF/done/<task_filename>
+CHANGED_FILES=<comma-separated list of files modified>
+BUILD_STATUS=pass
+COMPLETED_AT=<epoch timestamp>
+NEXT_TASK_REQUESTED=true
+
+On failure:
+STATUS=failed
+TASK_FILE=<current location of the task file>
+ERROR=<brief description of the failure>
+COMPLETED_AT=<epoch timestamp>
+
+When you have no more tasks and no task in progress, set NEXT_TASK_REQUESTED=false.
+
+## SELF-PACING
+Use /loop 5m to self-pace."
 
 if [ -n "$AGENT_TASK_FILE" ] && [ -f "$AGENT_TASK_FILE" ]; then
-    AGENT_PROMPT="You are an SCMessenger Autonomous Sub-Agent. You have been assigned a specific task. Read and execute the task file below completely. Follow all instructions precisely. After completing your task, move it to the appropriate HANDOFF directory. Use /loop 5m to self-pace.
+    AGENT_PROMPT="You are an SCMessenger Autonomous Sub-Agent (ID: $AGENT_ID, Model: $AGENT_MODEL).
+
+## ASSIGNED TASK
+Read and execute the task file below completely. Follow all instructions precisely.
 
 === ASSIGNED TASK FILE: $AGENT_TASK_FILE ===
 $(cat "$AGENT_TASK_FILE")
-=== END TASK FILE ==="
+=== END TASK FILE ===
+
+## COMPILE LOCK PROTOCOL (MANDATORY)
+Multiple agents may be running concurrently. To avoid build conflicts:
+1. BEFORE running any cargo command (check, build, test, clippy, fmt), acquire the compile lock:
+   - Create .claude/compile.lock containing: AGENT_ID=<your_id>, PID=<your_bash_pid>, ACQUIRED=<epoch>
+   - If .claude/compile.lock exists and the owning PID is alive, WAIT (sleep 30, retry). Do NOT proceed.
+   - If .claude/compile.lock exists but the owning PID is dead, the lock is stale — remove and acquire.
+   - The lock has a 10-minute maximum hold time. If held longer, it is stale — remove and acquire.
+2. AFTER your cargo command completes (success or failure), RELEASE the compile lock:
+   - Delete .claude/compile.lock
+3. NEVER hold the compile lock while doing non-compilation work (editing files, reading code).
+4. For file edits and reads that do NOT involve cargo, no lock is needed.
+
+## FILE DOMAIN RESPECT (MANDATORY)
+Your assigned file domains: ${AGENT_FILE_DOMAINS:-unrestricted}
+- ONLY edit files within your assigned file domains.
+- If a task requires editing a file outside your domains, SKIP that part and note it in the COMPLETION marker under BLOCKED_FOR_DOMAIN.
+- Reading files outside your domains is allowed and encouraged for context.
+- NEVER edit files claimed by another agent (check .claude/agents/*/COMPLETION for CHANGED_FILES).
+
+## COMPLETION PROTOCOL (MANDATORY)
+After completing OR failing this task, you MUST write a completion marker to .claude/agents/$AGENT_ID/COMPLETION:
+
+On success:
+STATUS=completed
+TASK_FILE=HANDOFF/done/<task_filename>
+CHANGED_FILES=<comma-separated list of files modified>
+BUILD_STATUS=pass
+COMPLETED_AT=<epoch timestamp>
+NEXT_TASK_REQUESTED=true
+
+On failure:
+STATUS=failed
+TASK_FILE=<current location of the task file>
+ERROR=<brief description of the failure>
+COMPLETED_AT=<epoch timestamp>
+
+Use /loop 5m to self-pace."
 fi
 
 # Colors for output
@@ -121,6 +231,7 @@ AGENT_MODEL=$AGENT_MODEL
 OLLAMA_HOST=$OLLAMA_HOST
 WORKING_DIR=$(pwd)
 START_TIME=$(date +%s)
+FILE_DOMAINS=${AGENT_FILE_DOMAINS:-unrestricted}
 EOF
 
     log "INFO" "Agent environment setup complete"
@@ -165,7 +276,7 @@ monitor_agent() {
     local check_interval=30
     local consecutive_failures=0
     local max_failures=3
-    local max_runtime_minutes=30
+    local max_runtime_minutes=0  # 0 = no timeout, monitor runs indefinitely
     local start_time=$(date +%s)
 
     log "INFO" "Starting agent monitoring for PID: $agent_pid (max runtime: ${max_runtime_minutes}m)"
@@ -179,8 +290,8 @@ monitor_agent() {
         fi
         local elapsed_seconds=$((now - start_time))
 
-        # Auto-stop after max runtime to prevent zombie monitors
-        if [ $elapsed_seconds -ge $((max_runtime_minutes * 60)) ]; then
+        # Auto-stop after max runtime to prevent zombie monitors (0 = no timeout)
+        if [ "$max_runtime_minutes" -gt 0 ] && [ $elapsed_seconds -ge $((max_runtime_minutes * 60)) ]; then
             log "INFO" "Agent monitor timeout after ${max_runtime_minutes}m, exiting monitor"
             return 0
         fi
@@ -238,6 +349,15 @@ stop_agent() {
         rm -f "$AGENT_PID"
     else
         log "WARN" "No PID file found"
+    fi
+
+    # Release compile lock if held by this agent
+    if [ -f ".claude/compile.lock" ]; then
+        local lock_owner=$(grep "AGENT_ID=" .claude/compile.lock 2>/dev/null | cut -d= -f2)
+        if [ "$lock_owner" = "$AGENT_ID" ]; then
+            rm -f .claude/compile.lock
+            log "INFO" "Released compile lock held by $AGENT_ID"
+        fi
     fi
 
     # Keep log files for analysis

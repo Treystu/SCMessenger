@@ -185,6 +185,11 @@ enum Commands {
         #[command(subcommand)]
         action: AuditAction,
     },
+    /// Swarm management commands
+    Swarm {
+        #[command(subcommand)]
+        action: SwarmAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -346,6 +351,12 @@ enum ConfigAction {
     },
 }
 
+#[derive(Subcommand)]
+enum SwarmAction {
+    /// Show swarm connection statistics
+    Stats,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // 1. Determine data directory early for logging
@@ -421,6 +432,20 @@ async fn main() -> Result<()> {
         Commands::HistoryDelete { id } => cmd_history_delete(id).await,
         Commands::Test => cmd_test().await,
         Commands::Audit { action } => cmd_audit(action).await,
+        Commands::Swarm { action } => cmd_swarm(action).await,
+    }
+}
+
+async fn cmd_swarm(action: SwarmAction) -> Result<()> {
+    match action {
+        SwarmAction::Stats => {
+            if !api::is_api_available().await {
+                println!("{}", "No SCMessenger node is running.".yellow());
+                return Ok(());
+            }
+            println!("{}", "Swarm stats: not yet implemented".yellow());
+            Ok(())
+        }
     }
 }
 
@@ -565,7 +590,7 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
             None => println!("{}", "No seniority timestamp available".dimmed()),
         },
         Some(IdentityAction::RegistrationState { identity_id }) => {
-            let state = core.get_registration_state(&identity_id);
+            let state = core.get_registration_state(identity_id.clone());
             println!("{}", "Registration State".bold());
             println!("  Identity:   {}", identity_id.bright_cyan());
             println!("  State:      {}", state.state);
@@ -578,7 +603,7 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
         }
         Some(IdentityAction::SignData { data_hex }) => {
             let data = hex::decode(&data_hex).context("Invalid hex data")?;
-            let result = core.sign_data(&data).context("Failed to sign data")?;
+            let result = core.sign_data(data).context("Failed to sign data")?;
             println!("{}", "Signature Result".bold());
             println!(
                 "  Signature:  {}",
@@ -1746,7 +1771,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
                                      if let Some(pk) = pk_opt {
                                          // prepare_message_with_id automatically saves outgoing history
-        if let Ok(prep) = core_rx.prepare_message_with_id(&pk, &message, scmessenger_core::MessageType::Text, None) {
+        if let Ok(prep) = core_rx.prepare_message_with_id(pk.clone(), message.clone(), scmessenger_core::MessageType::Text, None) {
                                              if swarm_handle.send_message(target, prep.envelope_data, None, None).await.is_ok() {
                                                  let mid = id.clone().unwrap_or_default();
                                                  let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::MessageStatus {
@@ -1928,7 +1953,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                             push_err(-32002, "No public key for recipient".into());
                                             continue;
                                         };
-        match core_rx.prepare_message_with_id(&pk, &message, scmessenger_core::MessageType::Text, None) {
+        match core_rx.prepare_message_with_id(pk.clone(), message.clone(), scmessenger_core::MessageType::Text, None) {
                                             Ok(prep) => {
                                                 if swarm_handle
                                                     .send_message(target, prep.envelope_data, None, None)
@@ -2465,8 +2490,8 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
 
     let envelope_bytes = core
         .prepare_message(
-            &contact.public_key,
-            &message,
+            contact.public_key.clone(),
+            message.clone(),
             scmessenger_core::MessageType::Text,
             None,
         )
@@ -2621,7 +2646,7 @@ async fn cmd_mark_sent(message_id: String) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
-    let removed = core.mark_message_sent(&message_id);
+    let removed = core.mark_message_sent(message_id.clone());
     if removed {
         println!(
             "{} Marked message as sent: {}",
@@ -2916,8 +2941,8 @@ async fn cmd_test() -> Result<()> {
     println!("{} Identity generation", "✓".green());
 
     let envelope = alice.prepare_message(
-        &bob_info.public_key_hex.clone().unwrap(),
-        "Test message",
+        bob_info.public_key_hex.clone().unwrap(),
+        "Test message".to_string(),
         scmessenger_core::MessageType::Text,
         None,
     )?;
@@ -2937,8 +2962,8 @@ async fn cmd_test() -> Result<()> {
     eve.initialize_identity()?;
 
     let envelope = alice.prepare_message(
-        &bob_info.public_key_hex.unwrap(),
-        "Secret",
+        bob_info.public_key_hex.clone().unwrap(),
+        "Secret".to_string(),
         scmessenger_core::MessageType::Text,
         None,
     )?;
@@ -3054,5 +3079,117 @@ async fn cmd_audit(action: AuditAction) -> Result<()> {
             }
         }
     }
+    Ok(())
+}
+
+async fn cmd_swarm(action: SwarmAction) -> Result<()> {
+    match action {
+        SwarmAction::Stats => cmd_swarm_stats().await,
+    }
+}
+
+async fn cmd_swarm_stats() -> Result<()> {
+    println!("{}", "SCMessenger Swarm Connection Stats".bold());
+    println!();
+
+    if api::is_api_available().await {
+        match api::get_peers_via_api().await {
+            Ok(peers) => {
+                if peers.is_empty() {
+                    println!("{}", "No active peer connections.".yellow());
+                    println!();
+                    println!(
+                        "  Start the mesh node with: {}",
+                        "scm relay".dimmed()
+                    );
+                    println!(
+                        "  Or start the messaging node with: {}",
+                        "scm start".dimmed()
+                    );
+                } else {
+                    println!(
+                        "{:<52} {:<14} {:<10}",
+                        "Peer ID", "Reputation", "Status"
+                    );
+                    println!("{:-<52} {:-<14} {:-<10}", "", "", "");
+
+                    for peer in &peers {
+                        let status = if peer.reputation > 80.0 {
+                            "active".green()
+                        } else if peer.reputation > 30.0 {
+                            "unstable".yellow()
+                        } else {
+                            "degraded".red()
+                        };
+
+                        println!(
+                            "{:<52} {:<14.1} {:<10}",
+                            peer.peer_id.dimmed(),
+                            peer.reputation,
+                            status,
+                        );
+                    }
+
+                    println!();
+                    println!(
+                        "{} {} active peer(s) in the swarm.",
+                        "ℹ".dimmed(),
+                        peers.len()
+                    );
+                }
+            }
+            Err(e) => {
+                println!("{} Failed to fetch peers: {}", "✗".red(), e);
+            }
+        }
+
+        match api::get_listeners_via_api().await {
+            Ok(listeners) => {
+                println!("  Listeners: {}", listeners.len());
+            }
+            _ => {}
+        }
+
+        match api::get_external_address_via_api().await {
+            Ok(addrs) => {
+                if !addrs.is_empty() {
+                    println!("  External addresses:");
+                    for addr in &addrs {
+                        println!("    - {}", addr.dimmed());
+                    }
+                }
+            }
+            _ => {}
+        }
+    } else {
+        let _config = config::Config::load()?;
+        let data_dir = config::Config::data_dir()?;
+        let storage_path = data_dir.join("storage");
+        let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+
+        let contacts = core.contacts_store_manager();
+        let history = core.history_store_manager();
+
+        let contact_list = contacts.list().unwrap_or_default();
+        let stats = history
+            .stats()
+            .map_err(|e| anyhow::anyhow!("History stats failed: {:?}", e))?;
+
+        println!(
+            "  {}",
+            "No daemon is running. Local storage overview:".yellow()
+        );
+        println!();
+        println!("  Contacts:        {}", contact_list.len());
+        println!("  Total Messages:  {}", stats.total_messages);
+        println!("    Sent:          {}", stats.sent_count);
+        println!("    Received:      {}", stats.received_count);
+        println!();
+        println!(
+            "  {}",
+            "Start the daemon with `scm relay` for live connection stats.".dimmed()
+        );
+    }
+
     Ok(())
 }

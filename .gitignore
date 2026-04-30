@@ -121,3 +121,4 @@ android_log.txt
 control_android_logs.txt
 reference/Androidlogs.txt
 reference/Android-Debug.md
+.claude/compile.lock

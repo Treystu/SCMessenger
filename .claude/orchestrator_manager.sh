@@ -6,6 +6,24 @@
 # v3.2: PowerShell-based process checking for Windows, self-preservation PID guard
 
 # Source cross-platform process helpers
+
+# Python detection: prefer python3, then python, then py -3 (Windows launcher)
+detect_python() {
+    if command -v python3 &>/dev/null && python3 --version &>/dev/null; then
+        echo "python3"
+    elif command -v python &>/dev/null && python --version &>/dev/null; then
+        echo "python"
+    elif command -v py &>/dev/null && py -3 --version &>/dev/null; then
+        echo "py -3"
+    else
+        echo ""
+    fi
+}
+PYTHON="$(detect_python)"
+if [ -z "$PYTHON" ]; then
+    echo "ERROR: No Python interpreter found. Install Python 3 or the py launcher."
+    exit 1
+fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/scripts/process_alive.sh"
 
@@ -190,7 +208,7 @@ pool_list() {
     echo ""
     printf "%-20s %-10s %-30s %-40s\n" "NAME" "LAUNCH" "MODEL" "PURPOSE"
     echo "--------------------------------------------------------------------------------------------------------"
-    python -c "
+    $PYTHON -c "
 import json, sys
 with open('$POOL_CONFIG') as f:
     cfg = json.load(f)
@@ -208,7 +226,7 @@ for a in cfg.get('agents', []):
     print(f'{name:<20s} {lt:<10s} {model:<30s} {purpose:<40s}')
 "
     echo ""
-    echo "Default agent: $(python -c "import json; print(json.load(open('$POOL_CONFIG')).get('default_agent','implementer'))")"
+    echo "Default agent: $($PYTHON -c "import json; print(json.load(open('$POOL_CONFIG')).get('default_agent','implementer'))")"
     echo "Usage: .claude/orchestrator_manager.sh pool launch <agent_name> [task_file]"
 }
 
@@ -234,6 +252,12 @@ pool_launch() {
         return 1
     fi
 
+    # Check file domain conflict with active agents
+    if ! check_file_domain_conflict "$agent_name"; then
+        echo "Error: File domain conflict with active agent. Choose a different agent or stop the conflicting agent."
+        return 1
+    fi
+
     # Find agent profile in pool config
     if [ ! -f "$POOL_CONFIG" ]; then
         echo "Error: Agent pool config not found at $POOL_CONFIG"
@@ -242,7 +266,7 @@ pool_launch() {
 
     # Extract agent config via Python
     local agent_info
-    agent_info=$(python -c "
+    agent_info=$($PYTHON -c "
 import json, sys
 with open('$POOL_CONFIG') as f:
     cfg = json.load(f)
@@ -270,7 +294,7 @@ sys.exit(1)
     # Get fallback model for CLI agents
     local fallback_model
     if [ "$launch_type" = "cli" ]; then
-        fallback_model=$(python -c "
+        fallback_model=$($PYTHON -c "
 import json
 with open('$POOL_CONFIG') as f:
     cfg = json.load(f)
@@ -377,6 +401,230 @@ pool_stop() {
     fi
 }
 
+# ─── Compile Lock Protocol ──────────────────────────────────────────────────
+
+COMPILE_LOCK=".claude/compile.lock"
+COMPILE_LOCK_TIMEOUT=300  # 5 minutes max hold time
+
+acquire_compile_lock() {
+    local agent_id="$1"
+    local scope="${2:-workspace}"
+    local now=$(date +%s)
+
+    if [ -f "$COMPILE_LOCK" ]; then
+        local holder=$(grep "^HOLDER=" "$COMPILE_LOCK" | cut -d'=' -f2)
+        local acquired=$(grep "^ACQUIRED_AT=" "$COMPILE_LOCK" | cut -d'=' -f2)
+        local lock_pid=$(grep "^PID=" "$COMPILE_LOCK" | cut -d'=' -f2)
+
+        if [ -n "$lock_pid" ] && process_alive "$lock_pid"; then
+            local elapsed=$((now - acquired))
+            if [ "$elapsed" -lt "$COMPILE_LOCK_TIMEOUT" ]; then
+                echo "COMPILE_LOCKED:$holder"
+                return 1
+            fi
+        fi
+        rm -f "$COMPILE_LOCK"
+    fi
+
+    cat > "$COMPILE_LOCK" <<EOF
+HOLDER=$agent_id
+ACQUIRED_AT=$now
+SCOPE=$scope
+PID=$$
+EOF
+    return 0
+}
+
+release_compile_lock() {
+    local agent_id="$1"
+    if [ -f "$COMPILE_LOCK" ]; then
+        local holder=$(grep "^HOLDER=" "$COMPILE_LOCK" | cut -d'=' -f2)
+        if [ "$holder" = "$agent_id" ]; then
+            rm -f "$COMPILE_LOCK"
+        fi
+    fi
+}
+
+# ─── File Domain Conflict Check ─────────────────────────────────────────────
+
+check_file_domain_conflict() {
+    local new_agent_name="$1"
+    local new_domains=$($PYTHON -c "
+import json
+with open('$POOL_CONFIG') as f:
+    cfg = json.load(f)
+for a in cfg.get('agents', []):
+    if a.get('name') == '$new_agent_name':
+        print(','.join(a.get('file_domains', [])))
+        break
+" 2>/dev/null)
+
+    if [ -z "$new_domains" ]; then
+        return 0
+    fi
+
+    for dir in "$AGENT_ROOT"/*/; do
+        [ -d "$dir" ] || continue
+        local active_id=$(basename "$dir")
+        local active_name=$(echo "$active_id" | sed 's/_[0-9]*$//')
+
+        local active_domains=$($PYTHON -c "
+import json
+with open('$POOL_CONFIG') as f:
+    cfg = json.load(f)
+for a in cfg.get('agents', []):
+    if a.get('name') == '$active_name':
+        print(','.join(a.get('file_domains', [])))
+        break
+" 2>/dev/null)
+
+        if [ -z "$active_domains" ]; then
+            continue
+        fi
+
+        local overlap=$($PYTHON -c "
+new = set('${new_domains}'.split(','))
+active = set('${active_domains}'.split(','))
+overlap = new & active
+if overlap:
+    print(','.join(overlap))
+" 2>/dev/null)
+
+        if [ -n "$overlap" ]; then
+            echo "CONFLICT: File domain overlap with active agent $active_id: $overlap"
+            return 1
+        fi
+    done
+    return 0
+}
+
+# ─── Pre-Launch Hygiene ──────────────────────────────────────────────────────
+
+pool_launch_clean() {
+    local agent_name="${1:-}"
+    local task_file="${2:-}"
+
+    echo "=== Pre-Launch Hygiene Check ==="
+
+    # Phase 1: Kill stale untracked claude.exe processes
+    local tracked_pids=" $orch_pid"
+    for pidfile in "$AGENT_ROOT"/*/pid; do
+        if [ -f "$pidfile" ]; then
+            tracked_pids="$tracked_pids $(cat "$pidfile")"
+        fi
+    done
+    local orch_pid=$(get_orchestrator_pid)
+    tracked_pids="$tracked_pids $orch_pid"
+
+    local untracked=$(powershell.exe -NoProfile -Command "
+        \$tracked = @($(echo "$tracked_pids" | tr ' ' ',' | sed 's/^,//' | sed 's/,$//'))
+        Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object {
+            \$tracked -notcontains \$_.Id
+        } | ForEach-Object { Write-Output \$_.Id }
+    " 2>/dev/null)
+
+    if [ -n "$untracked" ]; then
+        echo "HYGIENE: Untracked claude.exe processes: $untracked"
+        for pid in $untracked; do
+            echo "HYGIENE: Terminating stale claude.exe PID $pid"
+            powershell.exe -NoProfile -Command "Stop-Process -Id $pid -Force" 2>/dev/null || true
+        done
+    else
+        echo "HYGIENE: No untracked claude.exe processes"
+    fi
+
+    # Phase 2: Clean stale IN_PROGRESS claims (expired > 60 min)
+    local now=$(date +%s)
+    for lockfile in HANDOFF/IN_PROGRESS/*.lock; do
+        [ -f "$lockfile" ] || continue
+        local deadline=$(grep "^DEADLINE=" "$lockfile" | cut -d'=' -f2)
+        if [ -n "$deadline" ] && [ "$now" -gt "$deadline" ]; then
+            echo "HYGIENE: Reclaiming stale claim: $lockfile"
+            local task_file_stale="${lockfile%.lock}"
+            local original_name=$(basename "$task_file_stale" | sed 's/^IN_PROGRESS_//')
+            mv "$task_file_stale" "HANDOFF/todo/$original_name" 2>/dev/null || true
+            rm -f "$lockfile"
+        fi
+    done
+
+    # Phase 3: Clean stale compile.lock
+    if [ -f ".claude/compile.lock" ]; then
+        local lock_pid=$(grep "^PID=" ".claude/compile.lock" | cut -d'=' -f2)
+        if [ -n "$lock_pid" ] && ! process_alive "$lock_pid"; then
+            local lock_holder=$(grep "^HOLDER=" ".claude/compile.lock" | cut -d'=' -f2)
+            echo "HYGIENE: Removing stale compile.lock (holder $lock_holder PID $lock_pid dead)"
+            rm -f ".claude/compile.lock"
+        fi
+    fi
+
+    # Phase 4: Clean stale agent directories
+    clean_stale_pids
+
+    # Phase 5: Check for corrupted build artifacts
+    if [ -d "target" ]; then
+        local corrupt_count=$(find target -name "*.rlib" -size 0 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$corrupt_count" -gt 0 ]; then
+            echo "HYGIENE: Found $corrupt_count zero-byte rlib files -- running cargo clean"
+            cargo clean 2>/dev/null
+        else
+            echo "HYGIENE: Build directory healthy"
+        fi
+    fi
+
+    echo "=== Pre-Launch Hygiene Complete ==="
+    echo ""
+
+    pool_launch "$agent_name" "$task_file"
+}
+
+# ─── Batched Verification ─────────────────────────────────────────────────────
+
+pool_batch_verify() {
+    echo "=== Batched Verification ==="
+
+    local pending_crates=""
+    for agent_dir in "$AGENT_ROOT"/*/; do
+        [ -d "$agent_dir" ] || continue
+        local pv_file="$agent_dir/PENDING_VERIFY"
+        if [ -f "$pv_file" ]; then
+            local scope=$(grep "^SCOPE=" "$pv_file" | cut -d'=' -f2)
+            if [ -n "$scope" ]; then
+                pending_crates="$pending_crates $scope"
+            fi
+            rm -f "$pv_file"
+        fi
+    done
+
+    if [ -z "$pending_crates" ]; then
+        echo "No pending verifications. Running full workspace check."
+        export PATH="/c/msys64/ucrt64/bin:$PATH"
+        cargo check --workspace 2>&1
+        return $?
+    fi
+
+    local check_args=""
+    for crate in $(echo "$pending_crates" | tr ' ' '\n' | sort -u); do
+        [ -n "$crate" ] && check_args="$check_args -p $crate"
+    done
+
+    echo "Running targeted check:$check_args"
+    export PATH="/c/msys64/ucrt64/bin:$PATH"
+    cargo check $check_args 2>&1
+    local check_result=$?
+
+    echo "Running full workspace verification..."
+    cargo check --workspace 2>&1
+    local ws_result=$?
+
+    if [ $ws_result -eq 0 ]; then
+        echo "BATCH VERIFY: PASS"
+    else
+        echo "BATCH VERIFY: FAIL"
+    fi
+
+    return $ws_result
+}
+
 pool_status() {
     echo "=== Agent Pool Status ==="
     active_count=$(count_active_agents)
@@ -387,6 +635,104 @@ pool_status() {
     else
         list_agents
     fi
+}
+
+# ─── Patrol: Check completions, free slots, launch next tasks ──────────────
+
+pool_patrol() {
+    local actions_taken=0
+
+    echo "=== Patrol Scan ==="
+
+    # Phase 1: Check for completion markers
+    for agent_dir in "$AGENT_ROOT"/*/; do
+        [ -d "$agent_dir" ] || continue
+        local agent_id=$(basename "$agent_dir")
+        local completion_file="$agent_dir/COMPLETION"
+
+        if [ -f "$completion_file" ]; then
+            local status=$(grep "^STATUS=" "$completion_file" | cut -d'=' -f2)
+            local next_requested=$(grep "^NEXT_TASK_REQUESTED=" "$completion_file" | cut -d'=' -f2)
+            local task_file=$(grep "^TASK_FILE=" "$completion_file" | cut -d'=' -f2-)
+            local build_status=$(grep "^BUILD_STATUS=" "$completion_file" | cut -d'=' -f2)
+
+            case "$status" in
+                "completed")
+                    if [ "$next_requested" = "false" ]; then
+                        echo "PATROL: Agent $agent_id COMPLETED (build: $build_status). Freeing slot."
+                        pool_stop "$agent_id"
+                        ((actions_taken++))
+                    else
+                        echo "PATROL: Agent $agent_id COMPLETED and requesting next task. Clearing marker."
+                        rm -f "$completion_file"
+                        ((actions_taken++))
+                    fi
+                    ;;
+                "failed")
+                    echo "PATROL: Agent $agent_id FAILED. Stopping and re-queuing."
+                    local error=$(grep "^ERROR=" "$completion_file" | cut -d'=' -f2-)
+                    echo "  Error: $error"
+                    pool_stop "$agent_id"
+                    # Re-queue task if found
+                    if [ -n "$task_file" ] && [ -f "$task_file" ]; then
+                        local task_name=$(basename "$task_file" | sed 's/^IN_PROGRESS_//')
+                        mv "$task_file" "HANDOFF/todo/$task_name" 2>/dev/null || true
+                    fi
+                    ((actions_taken++))
+                    ;;
+            esac
+        fi
+    done
+
+    # Phase 2: Clean stale PIDs
+    clean_stale_pids
+
+    # Phase 3: Check for stale claims (IN_PROGRESS older than 60 min)
+    local now=$(date +%s)
+    local stale_threshold=3600
+    for lockfile in HANDOFF/IN_PROGRESS/*.lock; do
+        [ -f "$lockfile" ] || continue
+        local deadline=$(grep "^DEADLINE=" "$lockfile" | cut -d'=' -f2)
+        if [ -n "$deadline" ] && [ "$now" -gt "$deadline" ]; then
+            echo "PATROL: Stale claim detected: $lockfile"
+            local task_file="${lockfile%.lock}"
+            local agent_id=$(grep "^AGENT_ID=" "$lockfile" | cut -d'=' -f2)
+            # Check if agent is still alive
+            if [ -n "$agent_id" ] && [ -f "$AGENT_ROOT/$agent_id/pid" ]; then
+                local agent_pid=$(cat "$AGENT_ROOT/$agent_id/pid")
+                if process_alive "$agent_pid"; then
+                    echo "  Agent $agent_id still alive past deadline. Consider stopping."
+                else
+                    echo "  Agent $agent_id dead. Reclaiming task."
+                    local original_name=$(basename "$task_file" | sed 's/^IN_PROGRESS_//')
+                    mv "$task_file" "HANDOFF/todo/$original_name" 2>/dev/null || true
+                    rm -f "$lockfile"
+                    ((actions_taken++))
+                fi
+            fi
+        fi
+    done
+
+    # Phase 4: Launch new agents if slots available
+    local active=$(count_active_agents)
+    if [ "$active" -lt "$MAX_SUBAGENTS" ]; then
+        local available=$((MAX_SUBAGENTS - active))
+        local todo_count=$(ls HANDOFF/todo/*.md 2>/dev/null | grep -v IN_PROGRESS | wc -l)
+        if [ "$todo_count" -gt 0 ]; then
+            echo "PATROL: $available slot(s) available, $todo_count task(s) in todo queue."
+        else
+            echo "PATROL: $available slot(s) available but no tasks in todo."
+        fi
+    fi
+
+    # Phase 5: Summary
+    active=$(count_active_agents)
+    local done_count=$(ls HANDOFF/done/*.md 2>/dev/null | wc -l)
+    local todo_count=$(ls HANDOFF/todo/*.md 2>/dev/null | wc -l)
+    local in_progress_count=$(ls HANDOFF/IN_PROGRESS/*.md 2>/dev/null | wc -l)
+    echo ""
+    echo "PATROL COMPLETE: $actions_taken action(s) taken"
+    echo "Slots: $active/$MAX_SUBAGENTS | Tasks: $todo_count todo | $in_progress_count in-progress | $done_count done"
 }
 
 # ─── Main Command Router ─────────────────────────────────────────────────────
@@ -450,12 +796,25 @@ case "$1" in
             "status")
                 pool_status
                 ;;
+            "patrol")
+                pool_patrol
+                ;;
+            "launch-clean")
+                pool_launch_clean "$3" "$4"
+                ;;
+            "batch-verify")
+                pool_batch_verify
+                ;;
             *)
                 echo "Pool Commands:"
                 echo "  pool list              Show all agent profiles"
                 echo "  pool launch <name>     Spin up an agent from the pool"
+                echo "  pool launch-clean <n>  Spin up with hygiene check first"
                 echo "  pool stop <agent_id>   Spin down an agent"
                 echo "  pool status            Show active agents and slot usage"
+                echo "  pool patrol            Check completions, free slots"
+                echo "  pool batch-verify      Run batched verification"
+                echo "  pool patrol            Check completions, free slots, launch next tasks"
                 ;;
         esac
         ;;
