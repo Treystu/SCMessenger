@@ -91,129 +91,6 @@ dictionary RegistrationStateInfo {
 // MAIN INTERFACE
 // ============================================================================
 
-interface IronCore {
-    constructor();
-    [Name=with_storage]
-    constructor(string storage_path);
-    [Name=with_storage_and_logs]
-    constructor(string storage_path, string log_directory);
-
-    // Lifecycle
-    [Throws=IronCoreError]
-    void start();
-    void stop();
-    boolean is_running();
-
-    // Consent Gate (PHIL-004)
-    void grant_consent();
-
-    // Identity & Cryptography
-    [Throws=IronCoreError]
-    void initialize_identity();
-    IdentityInfo get_identity_info();
-    [Throws=IronCoreError]
-    void set_nickname(string nickname);
-    /// Get device ID for this installation (WS13.1)
-    string? get_device_id();
-    /// Get seniority timestamp for this installation (WS13.1)
-    u64? get_seniority_timestamp();
-    RegistrationStateInfo get_registration_state(string identity_id);
-    [Throws=IronCoreError]
-    string export_identity_backup(string passphrase);
-    [Throws=IronCoreError]
-    void import_identity_backup(string backup, string passphrase);
-    [Throws=IronCoreError]
-    SignatureResult sign_data(bytes data);
-    [Throws=IronCoreError]
-    boolean verify_signature(bytes data, bytes signature, string public_key_hex);
-    [Throws=IronCoreError]
-    string extract_public_key_from_peer_id(string peer_id);
-    /// Resolve any ID format (public_key_hex, identity_id, or libp2p_peer_id) to canonical public_key_hex.
-    /// This is the primary ID resolution function for cross-platform identity unification.
-    [Throws=IronCoreError]
-    string resolve_identity(string any_id);
-    /// Resolve any ID format to canonical identity_id (Blake3 hash of public key).
-    [Throws=IronCoreError]
-    string resolve_to_identity_id(string any_id);
-
-    // Messaging
-    [Throws=IronCoreError]
-    PreparedMessage prepare_message(string recipient_id, string content, MessageType msg_type, TtlConfig? ttl);
-    [Throws=IronCoreError]
-    PreparedMessage prepare_message_with_id(string recipient_id, string content, MessageType msg_type, TtlConfig? ttl);
-    [Throws=IronCoreError]
-    bytes prepare_receipt(string recipient_public_key_hex, string message_id);
-    /// Generate a cover traffic payload — random bytes that look like an encrypted
-    /// message. Broadcast via send_to_all_peers() to obscure real traffic patterns.
-    /// `size_bytes` controls payload size (16-1024); values outside range are clamped.
-    [Throws=IronCoreError]
-    bytes prepare_cover_traffic(u32 size_bytes);
-    u32 outbox_count();
-    u32 inbox_count();
-    boolean mark_message_sent(string message_id);
-    NotificationDecision classify_notification(
-        NotificationMessageContext message,
-        NotificationUiState ui_state,
-        MeshSettings settings
-    );
-
-    // Blocking
-    [Throws=IronCoreError]
-    void block_peer(string peer_id, string? device_id, string? reason);
-    [Throws=IronCoreError]
-    void unblock_peer(string peer_id, string? device_id);
-    [Throws=IronCoreError]
-    boolean is_peer_blocked(string peer_id, string? device_id);
-    [Throws=IronCoreError]
-    sequence<BlockedIdentity> list_blocked_peers();
-    [Throws=IronCoreError]
-    u32 blocked_count();
-    /// Block a peer AND delete all their stored messages (cascade purge).
-    /// Future payloads from this peer are dropped at the ingress layer.
-    [Throws=IronCoreError]
-    void block_and_delete_peer(string peer_id, string? device_id, string? reason);
-
-    // Delegate
-    void set_delegate(CoreDelegate? delegate);
-
-    // Storage & Clean-up (WS12.41 overhaul)
-    void update_disk_stats(u64 total_bytes, u64 free_bytes);
-    [Throws=IronCoreError]
-    void perform_maintenance();
-
-    // Log Summarization (WS12.41 overhaul)
-    void record_log(string line);
-    [Throws=IronCoreError]
-    string export_logs();
-
-    // Audit Log (tamper-evident security event trail)
-    sequence<AuditEvent> get_audit_log();
-    sequence<AuditEvent> get_audit_events_since(u64 since_unix_secs);
-    [Throws=IronCoreError]
-    string export_audit_log();
-    [Throws=IronCoreError]
-    void validate_audit_chain();
-
-    // Drift Protocol (P1_CORE_001: mesh store-and-forward)
-    void drift_activate();
-    void drift_deactivate();
-    string drift_network_state();
-    u32 drift_store_size();
-
-    // Abuse Reputation (P0_SECURITY_002)
-    void record_abuse_signal(string peer_id, string signal);
-    double get_peer_reputation(string peer_id);
-    double peer_rate_limit_multiplier(string peer_id);
-
-    // Privacy Features (P1_CORE_003: privacy modules activation)
-    /// Get current privacy configuration as JSON
-    string get_privacy_config();
-    /// Update privacy configuration from JSON
-    [Throws=IronCoreError]
-    void set_privacy_config(string config_json);
-    /// Compute timing jitter delay for relay forwarding (milliseconds).
-    u64 relay_jitter_delay(string priority);
-};
 
 // ============================================================================
 // CALLBACKS
@@ -287,49 +164,6 @@ dictionary ServiceStats {
     u64 uptime_secs;
 };
 
-interface MeshService {
-    constructor(MeshServiceConfig config);
-    [Name=with_storage]
-    constructor(MeshServiceConfig config, string storage_path);
-    [Name=with_storage_and_logs]
-    constructor(MeshServiceConfig config, string storage_path, string log_directory);
-
-    [Throws=IronCoreError]
-    void start();
-    void stop();
-    void pause();
-    void resume();
-    ServiceState get_state();
-    ServiceStats get_stats();
-    void reset_stats();
-    void set_platform_bridge(PlatformBridge? bridge);
-    void set_delegate(CoreDelegate? delegate);
-
-    [Throws=IronCoreError]
-    void start_swarm(string listen_addr);
-    SwarmBridge get_swarm_bridge();
-
-    /// Get the current NAT status as a string: "open", "restricted", "symmetric", or "unknown".
-    string get_nat_status();
-    ConnectionPathState get_connection_path_state();
-    /// Export a structured diagnostics JSON payload for support and partner testing.
-    string export_diagnostics();
-
-    void update_device_state(DeviceProfile profile);
-    void on_battery_changed(u8 battery_pct, boolean is_charging);
-    void on_network_changed(boolean has_wifi, boolean has_cellular);
-    void on_motion_changed(MotionState motion);
-    void on_entering_background();
-    void on_entering_foreground();
-    void on_ble_data_received(string peer_id, bytes data);
-    void set_relay_budget(u32 messages_per_hour);
-
-    void on_peer_discovered(string peer_id);
-    void on_peer_disconnected(string peer_id);
-    void on_data_received(string peer_id, bytes data);
-    IronCore? get_core();
-    AutoAdjustEngine get_auto_adjust_engine();
-};
 
 callback interface PlatformBridge {
     void on_battery_changed(u8 battery_pct, boolean is_charging);
@@ -374,17 +208,6 @@ dictionary RelayAdjustment {
     u32 max_payload_bytes;
 };
 
-interface AutoAdjustEngine {
-    constructor();
-
-    AdjustmentProfile compute_profile(DeviceProfile device);
-    BleAdjustment compute_ble_adjustment(AdjustmentProfile profile);
-    RelayAdjustment compute_relay_adjustment(AdjustmentProfile profile);
-
-    void override_ble_scan_interval(u32 interval_ms);
-    void override_relay_max_per_hour(u32 max);
-    void clear_overrides();
-};
 
 // ============================================================================
 // MESH SETTINGS
@@ -418,20 +241,6 @@ dictionary MeshSettings {
     boolean badge_enabled;
 };
 
-interface MeshSettingsManager {
-    constructor(string storage_path);
-
-    [Throws=IronCoreError]
-    MeshSettings load();
-
-    [Throws=IronCoreError]
-    void save(MeshSettings settings);
-
-    [Throws=IronCoreError]
-    void validate(MeshSettings settings);
-
-    MeshSettings default_settings();
-};
 
 // ============================================================================
 // CONTACTS
@@ -448,41 +257,6 @@ dictionary Contact {
     string? last_known_device_id; // WS13.2: Last known device ID for tight pairing
 };
 
-interface ContactManager {
-    [Throws=IronCoreError]
-    constructor(string storage_path);
-
-    [Throws=IronCoreError]
-    void add(Contact contact);
-
-    [Throws=IronCoreError]
-    Contact? get(string peer_id);
-
-    [Throws=IronCoreError]
-    void remove(string peer_id);
-
-    [Throws=IronCoreError]
-    sequence<Contact> list();
-
-    [Throws=IronCoreError]
-    sequence<Contact> search(string query);
-
-    [Throws=IronCoreError]
-    void set_nickname(string peer_id, string? nickname);
-
-    [Throws=IronCoreError]
-    void set_local_nickname(string peer_id, string? nickname);
-
-    [Throws=IronCoreError]
-    void update_last_seen(string peer_id);
-
-    /// Update the last known device ID for a contact (WS13.2)
-    [Throws=IronCoreError]
-    void update_device_id(string peer_id, string? device_id);
-
-    u32 count();
-    void flush();
-};
 
 // ============================================================================
 // MESSAGE HISTORY
@@ -513,56 +287,6 @@ dictionary HistoryStats {
     u32 undelivered_count;
 };
 
-interface HistoryManager {
-    [Throws=IronCoreError]
-    constructor(string storage_path);
-
-    [Throws=IronCoreError]
-    void add(MessageRecord record);
-
-    [Throws=IronCoreError]
-    MessageRecord? get(string id);
-
-    [Throws=IronCoreError]
-    sequence<MessageRecord> recent(string? peer_filter, u32 limit);
-
-    [Throws=IronCoreError]
-    sequence<MessageRecord> conversation(string peer_id, u32 limit);
-
-    [Throws=IronCoreError]
-    void remove_conversation(string peer_id);
-
-    [Throws=IronCoreError]
-    sequence<MessageRecord> search(string query, u32 limit);
-
-    [Throws=IronCoreError]
-    void mark_delivered(string id);
-
-    [Throws=IronCoreError]
-    void clear();
-
-    [Throws=IronCoreError]
-    void clear_conversation(string peer_id);
-
-    [Throws=IronCoreError]
-    void delete(string id);
-
-    [Throws=IronCoreError]
-    HistoryStats stats();
-
-    u32 count();
-
-    /// Enforce a maximum message cap — keeps ``max_messages`` newest, prunes the rest.
-    /// Returns the number of pruned records.
-    [Throws=IronCoreError]
-    u32 enforce_retention(u32 max_messages);
-
-    /// Remove all messages older than ``before_timestamp`` (Unix epoch seconds).
-    /// Returns the number of pruned records.
-    [Throws=IronCoreError]
-    u32 prune_before(u64 before_timestamp);
-    void flush();
-};
 
 // ============================================================================
 // CONNECTION LEDGER
@@ -579,59 +303,11 @@ dictionary LedgerEntry {
     sequence<string> topics;
 };
 
-interface LedgerManager {
-    constructor(string storage_path);
-
-    [Throws=IronCoreError]
-    void load();
-
-    [Throws=IronCoreError]
-    void save();
-
-    void record_connection(string multiaddr, string peer_id);
-    void record_failure(string multiaddr);
-    void annotate_identity(string multiaddr, string peer_id, string? public_key, string? nickname);
-
-    sequence<LedgerEntry> dialable_addresses();
-    sequence<LedgerEntry> get_preferred_relays(u32 limit);
-    sequence<string> all_known_topics();
-
-    string summary();
-};
 
 // ============================================================================
 // SWARM BRIDGE
 // ============================================================================
 
-interface SwarmBridge {
-    constructor();
-
-    [Throws=IronCoreError]
-    void send_message(string peer_id, bytes data, string? recipient_identity_id, string? intended_device_id);
-    string? send_message_status(string peer_id, bytes data, string? recipient_identity_id, string? intended_device_id);
-
-    [Throws=IronCoreError]
-    void dial(string multiaddr);
-
-    sequence<string> get_peers();
-    sequence<string> get_listeners();
-    sequence<string> get_external_addresses();
-    sequence<string> get_topics();
-
-    [Throws=IronCoreError]
-    void subscribe_topic(string topic);
-
-    [Throws=IronCoreError]
-    void unsubscribe_topic(string topic);
-
-    [Throws=IronCoreError]
-    void publish_topic(string topic, bytes data);
-
-    void shutdown();
-
-    [Throws=IronCoreError]
-    void send_to_all_peers(bytes data);
-};
 
 // ============================================================================
 // AUDIT LOG

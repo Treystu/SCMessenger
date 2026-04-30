@@ -125,6 +125,7 @@ pub struct ServiceStats {
 /// Uses `parking_lot::Mutex` throughout — unlike `std::sync::Mutex` it never
 /// poisons on panic, eliminating the PoisonError cascade that previously
 /// caused a fatal crash when `start_swarm` panicked while holding `core`.
+#[derive(uniffi::Object)]
 pub struct MeshService {
     _config: Mutex<MeshServiceConfig>,
     state: Mutex<ServiceState>,
@@ -1294,6 +1295,7 @@ pub struct RelayAdjustment {
     pub max_payload_bytes: u32,
 }
 
+#[derive(uniffi::Object)]
 pub struct AutoAdjustEngine {
     ble_scan_override: Mutex<Option<u32>>,
     relay_max_override: Mutex<Option<u32>>,
@@ -1305,7 +1307,9 @@ impl Default for AutoAdjustEngine {
     }
 }
 
+#[uniffi::export]
 impl AutoAdjustEngine {
+    #[uniffi::constructor]
     pub fn new() -> Self {
         Self {
             ble_scan_override: Mutex::new(None),
@@ -1378,6 +1382,7 @@ impl AutoAdjustEngine {
 // MESH SETTINGS MANAGER
 // ============================================================================
 
+#[derive(uniffi::Object)]
 pub struct MeshSettingsManager {
     storage_path: std::path::PathBuf,
 }
@@ -1492,6 +1497,7 @@ pub struct HistoryStats {
     pub undelivered_count: u32,
 }
 
+#[derive(uniffi::Object)]
 pub struct HistoryManager {
     db: Arc<Mutex<sled::Db>>,
 }
@@ -1832,6 +1838,7 @@ pub struct LedgerEntry {
     pub topics: Vec<String>,
 }
 
+#[derive(uniffi::Object)]
 pub struct LedgerManager {
     storage_path: std::path::PathBuf,
     entries: Arc<Mutex<Vec<LedgerEntry>>>,
@@ -2003,6 +2010,7 @@ impl LedgerManager {
 ///
 /// This bridge provides synchronous wrappers around async SwarmHandle operations
 /// using tokio::runtime::Handle to block on futures when necessary.
+#[derive(uniffi::Object)]
 pub struct SwarmBridge {
     handle: Arc<Mutex<Option<SwarmHandle>>>,
     captured_handle: Option<tokio::runtime::Handle>,
