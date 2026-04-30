@@ -45,12 +45,7 @@ fn test_two_node_message_roundtrip() {
 
     // Alice prepares (encrypts) the envelope.
     let prepared = alice
-        .prepare_message(
-            &pubkey(&bob),
-            plaintext.to_string(),
-            MessageType::Text,
-            None,
-        )
+        .prepare_message(pubkey(&bob), plaintext.to_string(), MessageType::Text, None)
         .expect("prepare_message must succeed");
 
     assert!(
@@ -96,7 +91,7 @@ fn test_wrong_recipient_cannot_decrypt() {
 
     let prepared = alice
         .prepare_message(
-            &pubkey(&bob),
+            pubkey(&bob),
             "Secret for Bob only".to_string(),
             MessageType::Text,
             None,
@@ -124,7 +119,7 @@ fn test_envelope_signature_verification() {
 
     let mut prepared = alice
         .prepare_message(
-            &pubkey(&bob),
+            pubkey(&bob),
             "Tamper me if you dare".to_string(),
             MessageType::Text,
             None,
@@ -157,7 +152,7 @@ fn test_duplicate_delivery_rejected() {
 
     let prepared = alice
         .prepare_message(
-            &pubkey(&bob),
+            pubkey(&bob),
             "Once is enough".to_string(),
             MessageType::Text,
             None,
@@ -200,7 +195,7 @@ fn test_multiple_messages_roundtrip() {
     for expected_text in &messages {
         let prepared = alice
             .prepare_message(
-                &bob_pubkey,
+                bob_pubkey.clone(),
                 expected_text.to_string(),
                 MessageType::Text,
                 None,
@@ -240,7 +235,7 @@ fn test_self_message_roundtrip() {
 
     let prepared = node
         .prepare_message(
-            &pubkey(&node),
+            pubkey(&node),
             plaintext.to_string(),
             MessageType::Text,
             None,
@@ -272,7 +267,7 @@ fn test_empty_payload_roundtrip() {
     let bob = make_node();
 
     let prepared = alice
-        .prepare_message(&pubkey(&bob), "".to_string(), MessageType::Text, None)
+        .prepare_message(pubkey(&bob), "".to_string(), MessageType::Text, None)
         .expect("prepare_message with empty body must succeed");
 
     let received = bob

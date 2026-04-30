@@ -66,12 +66,7 @@ fn test_blocked_message_persisted_but_hidden() {
 
     // Alice prepares an envelope for Bob.
     let prepared = alice
-        .prepare_message(
-            &pubkey(&bob),
-            plaintext.to_string(),
-            MessageType::Text,
-            None,
-        )
+        .prepare_message(pubkey(&bob), plaintext.to_string(), MessageType::Text, None)
         .expect("prepare_message must succeed");
 
     // Bob blocks Alice BEFORE receiving the message.
@@ -152,12 +147,7 @@ fn test_unblock_restores_hidden_message_visibility() {
 
     // Alice sends; Bob blocks Alice; Bob receives the hidden message.
     let prepared = alice
-        .prepare_message(
-            &pubkey(&bob),
-            plaintext.to_string(),
-            MessageType::Text,
-            None,
-        )
+        .prepare_message(pubkey(&bob), plaintext.to_string(), MessageType::Text, None)
         .expect("prepare_message must succeed");
 
     bob.block_peer(alice_id.clone(), None, None)
@@ -224,7 +214,7 @@ fn test_block_and_delete_purges_messages_and_drops_future_payloads() {
     // Alice sends a first message; Bob receives it normally (no block yet).
     let prepared1 = alice
         .prepare_message(
-            &pubkey(&bob),
+            pubkey(&bob),
             "First message".to_string(),
             MessageType::Text,
             None,
@@ -264,7 +254,7 @@ fn test_block_and_delete_purges_messages_and_drops_future_payloads() {
     //     Alice sends a second message — Bob's core must reject and NOT persist it.
     let prepared2 = alice
         .prepare_message(
-            &pubkey(&bob),
+            pubkey(&bob),
             "Should be dropped".to_string(),
             MessageType::Text,
             None,
