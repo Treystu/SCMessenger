@@ -351,12 +351,6 @@ enum ConfigAction {
     },
 }
 
-#[derive(Subcommand)]
-enum SwarmAction {
-    /// Show swarm connection statistics
-    Stats,
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     // 1. Determine data directory early for logging
@@ -433,19 +427,6 @@ async fn main() -> Result<()> {
         Commands::Test => cmd_test().await,
         Commands::Audit { action } => cmd_audit(action).await,
         Commands::Swarm { action } => cmd_swarm(action).await,
-    }
-}
-
-async fn cmd_swarm(action: SwarmAction) -> Result<()> {
-    match action {
-        SwarmAction::Stats => {
-            if !api::is_api_available().await {
-                println!("{}", "No SCMessenger node is running.".yellow());
-                return Ok(());
-            }
-            println!("{}", "Swarm stats: not yet implemented".yellow());
-            Ok(())
-        }
     }
 }
 
