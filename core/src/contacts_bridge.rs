@@ -62,8 +62,10 @@ pub struct ContactManager {
     db: Arc<Mutex<Db>>,
 }
 
+#[uniffi::export]
 impl ContactManager {
     /// Create or open contact database at the given path
+    #[uniffi::constructor]
     pub fn new(storage_path: String) -> Result<Self, crate::IronCoreError> {
         let path = PathBuf::from(storage_path).join("contacts.db");
         let db = sled::Config::default()

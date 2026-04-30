@@ -198,6 +198,7 @@ impl Default for IronCore {
 
 impl IronCore {
     /// Create an in-memory IronCore with no persistent storage.
+    #[uniffi::constructor]
     pub fn new() -> Self {
         let backend: Arc<dyn StorageBackend> = Arc::new(MemoryStorage::new());
         let contact_manager = CoreContactManager::new(backend.clone());
@@ -253,6 +254,7 @@ impl IronCore {
 
     /// Create IronCore with persistent sled-backed storage at `path`.
     #[cfg(not(target_arch = "wasm32"))]
+    #[uniffi::constructor]
     pub fn with_storage(path: String) -> Self {
         let backend: Arc<dyn StorageBackend> = match SledStorage::new(&path) {
             Ok(s) => Arc::new(s),
@@ -310,6 +312,7 @@ impl IronCore {
 
     /// Create IronCore with persistent storage and a log directory.
     #[cfg(not(target_arch = "wasm32"))]
+    #[uniffi::constructor]
     pub fn with_storage_and_logs(path: String, log_dir: String) -> Self {
         let backend: Arc<dyn StorageBackend> = match SledStorage::new(&path) {
             Ok(s) => Arc::new(s),

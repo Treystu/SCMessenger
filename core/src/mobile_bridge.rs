@@ -46,7 +46,7 @@ pub enum MotionState {
 }
 
 /// Network connectivity type reported by the platform.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, uniffi::Enum)]
 pub enum NetworkType {
     /// No connectivity.
     None,
@@ -66,7 +66,7 @@ pub enum NetworkType {
 /// This is the canonical state record stored inside `MeshService`.
 /// It is richer than `DeviceProfile` (which is the UniFFI-facing input type)
 /// and drives the threshold-based behavior adjustments.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
 pub struct DeviceState {
     /// Battery level 0–100.
     pub battery_level: u8,
@@ -98,7 +98,7 @@ impl DeviceState {
 ///
 /// Callers (swarm thread, scan schedulers, relay logic) should query
 /// `MeshService::recommended_behavior()` and honour these hints.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct BehaviorAdjustment {
     /// Suggested BLE / WiFi-Aware scan interval in milliseconds.
     /// Higher value = less frequent scanning = less battery drain.
@@ -150,7 +150,9 @@ pub struct MeshService {
     external_delegate: Arc<Mutex<Option<Box<dyn crate::CoreDelegate>>>>,
 }
 
+#[uniffi::export]
 impl MeshService {
+    #[uniffi::constructor]
     pub fn new(config: MeshServiceConfig) -> Self {
         Self {
             _config: Mutex::new(config),
@@ -173,6 +175,7 @@ impl MeshService {
     }
 
     /// Create MeshService with persistent storage
+    #[uniffi::constructor]
     pub fn with_storage(config: MeshServiceConfig, storage_path: String) -> Self {
         Self {
             _config: Mutex::new(config),
@@ -195,6 +198,7 @@ impl MeshService {
     }
 
     /// Create MeshService with persistent storage and structured tracing
+    #[uniffi::constructor]
     pub fn with_storage_and_logs(
         config: MeshServiceConfig,
         storage_path: String,
@@ -416,69 +420,6 @@ impl MeshService {
         });
 
         payload.to_string()
-    }
-
-    fn resolve_swarm_keypair_and_mode(
-        &self,
-    ) -> Result<(libp2p::identity::Keypair, bool), crate::IronCoreError> {
-        let identity_keypair = {
-            let core_guard = self.core.lock();
-            let core = core_guard
-                .as_ref()
-                .ok_or(crate::IronCoreError::NotInitialized)?;
-            core.get_libp2p_keypair().ok()
-        };
-
-        if let Some(keypair) = identity_keypair {
-            return Ok((keypair, false));
-        }
-
-        tracing::info!("No identity keypair available; using persisted headless network key");
-        let keypair = self.load_or_create_headless_network_keypair()?;
-        Ok((keypair, true))
-    }
-
-    fn load_or_create_headless_network_keypair(
-        &self,
-    ) -> Result<libp2p::identity::Keypair, crate::IronCoreError> {
-        const HEADLESS_KEY_FILE: &str = "relay_network_key.pb";
-
-        let Some(storage_path) = self.storage_path.as_ref() else {
-            tracing::warn!("MeshService has no storage path; using ephemeral headless keypair");
-            return Ok(libp2p::identity::Keypair::generate_ed25519());
-        };
-
-        let storage_dir = std::path::PathBuf::from(storage_path);
-        std::fs::create_dir_all(&storage_dir).map_err(|_| crate::IronCoreError::StorageError)?;
-        let key_path = storage_dir.join(HEADLESS_KEY_FILE);
-
-        if key_path.exists() {
-            let bytes = std::fs::read(&key_path).map_err(|_| crate::IronCoreError::StorageError)?;
-            match libp2p::identity::Keypair::from_protobuf_encoding(&bytes) {
-                Ok(keypair) => return Ok(keypair),
-                Err(err) => {
-                    tracing::warn!(
-                        "Failed to decode headless network key at {} ({}); rotating key",
-                        key_path.display(),
-                        err
-                    );
-                }
-            }
-        }
-
-        let keypair = libp2p::identity::Keypair::generate_ed25519();
-        let encoded = keypair
-            .to_protobuf_encoding()
-            .map_err(|_| crate::IronCoreError::Internal)?;
-        std::fs::write(&key_path, encoded).map_err(|_| crate::IronCoreError::StorageError)?;
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
-        }
-
-        Ok(keypair)
     }
 
     pub fn start_swarm(&self, listen_addr: String) -> Result<(), crate::IronCoreError> {
@@ -959,54 +900,6 @@ impl MeshService {
         }
     }
 
-    /// Compute recommended behavior from a device state snapshot.
-    ///
-    /// This is a pure function — no side-effects — so callers can call it at
-    /// any time without acquiring locks.
-    pub fn compute_behavior(state: &DeviceState) -> BehaviorAdjustment {
-        let battery = state.battery_level;
-        let charging = state.is_charging;
-
-        // Minimal mode: critical battery and not charging.
-        if battery <= 10 && !charging {
-            return BehaviorAdjustment {
-                scan_interval_ms: 30_000, // 30 s — barely alive
-                relay_enabled: false,
-                relay_budget: 0,
-                minimal_operation: true,
-            };
-        }
-
-        // Low battery: reduce everything but keep messaging alive.
-        if battery <= 20 && !charging {
-            return BehaviorAdjustment {
-                scan_interval_ms: 10_000, // 10 s
-                relay_enabled: false,     // no relay duty when low
-                relay_budget: 0,
-                minimal_operation: false,
-            };
-        }
-
-        // Stationary with good battery or charging: maximise relay duty.
-        let stationary = matches!(state.motion_state, MotionState::Still);
-        if charging || (battery >= 50 && stationary) {
-            return BehaviorAdjustment {
-                scan_interval_ms: 500, // very frequent
-                relay_enabled: true,
-                relay_budget: 200,
-                minimal_operation: false,
-            };
-        }
-
-        // Normal operation (battery 21–49, not charging, possibly moving).
-        BehaviorAdjustment {
-            scan_interval_ms: 2_000, // 2 s
-            relay_enabled: true,
-            relay_budget: 100,
-            minimal_operation: false,
-        }
-    }
-
     /// Return the recommended behavior adjustments for the *current* device state.
     ///
     /// Returns `None` if no device state has been reported yet.
@@ -1177,6 +1070,120 @@ impl MeshService {
         if let Some(bridge) = self.platform_bridge.lock().as_ref() {
             bridge.send_ble_packet(peer_id, data);
         }
+    }
+}
+
+// Non-UniFFI internal methods for MeshService
+impl MeshService {
+    /// Compute recommended behavior from a device state snapshot.
+    ///
+    /// This is a pure function — no side-effects — so callers can call it at
+    /// any time without acquiring locks.
+    pub fn compute_behavior(state: &DeviceState) -> BehaviorAdjustment {
+        let battery = state.battery_level;
+        let charging = state.is_charging;
+
+        // Minimal mode: critical battery and not charging.
+        if battery <= 10 && !charging {
+            return BehaviorAdjustment {
+                scan_interval_ms: 30_000, // 30 s — barely alive
+                relay_enabled: false,
+                relay_budget: 0,
+                minimal_operation: true,
+            };
+        }
+
+        // Low battery: reduce everything but keep messaging alive.
+        if battery <= 20 && !charging {
+            return BehaviorAdjustment {
+                scan_interval_ms: 10_000, // 10 s
+                relay_enabled: false,     // no relay duty when low
+                relay_budget: 0,
+                minimal_operation: false,
+            };
+        }
+
+        // Stationary with good battery or charging: maximise relay duty.
+        let stationary = matches!(state.motion_state, MotionState::Still);
+        if charging || (battery >= 50 && stationary) {
+            return BehaviorAdjustment {
+                scan_interval_ms: 500, // very frequent
+                relay_enabled: true,
+                relay_budget: 200,
+                minimal_operation: false,
+            };
+        }
+
+        // Normal operation (battery 21–49, not charging, possibly moving).
+        BehaviorAdjustment {
+            scan_interval_ms: 2_000, // 2 s
+            relay_enabled: true,
+            relay_budget: 100,
+            minimal_operation: false,
+        }
+    }
+
+    fn resolve_swarm_keypair_and_mode(
+        &self,
+    ) -> Result<(libp2p::identity::Keypair, bool), crate::IronCoreError> {
+        let identity_keypair = {
+            let core_guard = self.core.lock();
+            let core = core_guard
+                .as_ref()
+                .ok_or(crate::IronCoreError::NotInitialized)?;
+            core.get_libp2p_keypair().ok()
+        };
+
+        if let Some(keypair) = identity_keypair {
+            return Ok((keypair, false));
+        }
+
+        tracing::info!("No identity keypair available; using persisted headless network key");
+        let keypair = self.load_or_create_headless_network_keypair()?;
+        Ok((keypair, true))
+    }
+
+    fn load_or_create_headless_network_keypair(
+        &self,
+    ) -> Result<libp2p::identity::Keypair, crate::IronCoreError> {
+        const HEADLESS_KEY_FILE: &str = "relay_network_key.pb";
+
+        let Some(storage_path) = self.storage_path.as_ref() else {
+            tracing::warn!("MeshService has no storage path; using ephemeral headless keypair");
+            return Ok(libp2p::identity::Keypair::generate_ed25519());
+        };
+
+        let storage_dir = std::path::PathBuf::from(storage_path);
+        std::fs::create_dir_all(&storage_dir).map_err(|_| crate::IronCoreError::StorageError)?;
+        let key_path = storage_dir.join(HEADLESS_KEY_FILE);
+
+        if key_path.exists() {
+            let bytes = std::fs::read(&key_path).map_err(|_| crate::IronCoreError::StorageError)?;
+            match libp2p::identity::Keypair::from_protobuf_encoding(&bytes) {
+                Ok(keypair) => return Ok(keypair),
+                Err(err) => {
+                    tracing::warn!(
+                        "Failed to decode headless network key at {} ({}); rotating key",
+                        key_path.display(),
+                        err
+                    );
+                }
+            }
+        }
+
+        let keypair = libp2p::identity::Keypair::generate_ed25519();
+        let encoded = keypair
+            .to_protobuf_encoding()
+            .map_err(|_| crate::IronCoreError::Internal)?;
+        std::fs::write(&key_path, encoded).map_err(|_| crate::IronCoreError::StorageError)?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
+        }
+
+        Ok(keypair)
     }
 }
 
@@ -1387,7 +1394,9 @@ pub struct MeshSettingsManager {
     storage_path: std::path::PathBuf,
 }
 
+#[uniffi::export]
 impl MeshSettingsManager {
+    #[uniffi::constructor]
     pub fn new(storage_path: String) -> Self {
         Self {
             storage_path: std::path::PathBuf::from(storage_path),
@@ -1502,7 +1511,9 @@ pub struct HistoryManager {
     db: Arc<Mutex<sled::Db>>,
 }
 
+#[uniffi::export]
 impl HistoryManager {
+    #[uniffi::constructor]
     pub fn new(storage_path: String) -> Result<Self, crate::IronCoreError> {
         let path = std::path::PathBuf::from(storage_path).join("history.db");
         let db = sled::Config::default()
@@ -1844,7 +1855,9 @@ pub struct LedgerManager {
     entries: Arc<Mutex<Vec<LedgerEntry>>>,
 }
 
+#[uniffi::export]
 impl LedgerManager {
+    #[uniffi::constructor]
     pub fn new(storage_path: String) -> Self {
         Self {
             storage_path: std::path::PathBuf::from(storage_path),
@@ -2060,7 +2073,9 @@ fn get_global_runtime() -> tokio::runtime::Handle {
     handle
 }
 
+#[uniffi::export]
 impl SwarmBridge {
+    #[uniffi::constructor]
     pub fn new() -> Self {
         Self {
             handle: Arc::new(Mutex::new(None)),
@@ -2068,19 +2083,6 @@ impl SwarmBridge {
             nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
             dispatch_ble_fn: Arc::new(Mutex::new(None)),
         }
-    }
-
-    /// Set the SwarmHandle for this bridge.
-    /// This must be called after starting the swarm to wire up network operations.
-    pub fn set_handle(&self, handle: SwarmHandle) {
-        *self.handle.lock() = Some(handle);
-    }
-
-    /// Internal helper to get the runtime handle for spawning
-    pub fn get_runtime_handle(&self) -> tokio::runtime::Handle {
-        self.captured_handle
-            .clone()
-            .unwrap_or_else(get_global_runtime)
     }
 
     /// Send an encrypted message envelope to a peer.
@@ -2331,6 +2333,22 @@ impl SwarmBridge {
             let rt = self.get_runtime_handle();
             let _ = rt.block_on(handle.shutdown());
         }
+    }
+}
+
+// Non-UniFFI internal methods for SwarmBridge
+impl SwarmBridge {
+    /// Set the SwarmHandle for this bridge.
+    /// This must be called after starting the swarm to wire up network operations.
+    pub fn set_handle(&self, handle: SwarmHandle) {
+        *self.handle.lock() = Some(handle);
+    }
+
+    /// Internal helper to get the runtime handle for spawning
+    pub fn get_runtime_handle(&self) -> tokio::runtime::Handle {
+        self.captured_handle
+            .clone()
+            .unwrap_or_else(get_global_runtime)
     }
 
     /// Dispatch a BLE packet to the platform layer.
