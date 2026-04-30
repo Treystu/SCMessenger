@@ -356,8 +356,8 @@ async fn handle_send_message(req: Request<Body>, ctx: Arc<ApiContext>) -> Result
     // Prepare and send message.
     // Uses prepare_message_with_id to trigger Core's auto-save to history.
     let prepared = core.prepare_message_with_id(
-        &contact.public_key,
-        &request.message,
+        contact.public_key.clone(),
+        request.message.clone(),
         scmessenger_core::MessageType::Text,
         None,
     )?;
@@ -413,7 +413,7 @@ async fn handle_get_peers(_req: Request<Body>, ctx: Arc<ApiContext>) -> Result<R
         .into_iter()
         .map(|p| {
             let pid = p.to_string();
-            let reputation = ctx.core.get_peer_reputation(&pid);
+            let reputation = ctx.core.get_peer_reputation(pid.clone());
             PeerEntry {
                 peer_id: pid,
                 reputation,
@@ -648,7 +648,7 @@ async fn handle_get_drift_status(
 ) -> Result<Response<Body>> {
     let response = DriftStatusResponse {
         state: ctx.core.drift_network_state(),
-        store_size: ctx.core.drift_store_size() as u32,
+        store_size: ctx.core.drift_store_size(),
     };
 
     Ok(Response::builder()

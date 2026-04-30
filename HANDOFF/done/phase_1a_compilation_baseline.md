@@ -3,30 +3,27 @@
 **Priority:** P0
 **Assigned Agent:** rust-coder (glm-5.1:cloud)
 **Fallback:** implementer (qwen3-coder-next:cloud)
-**Status:** TODO
+**Status:** COMPLETED
+**Verified:** 2026-04-29
 
 ## Objective
 Get `cargo check --workspace` passing with zero errors.
 
 ## Pre-Work
-Merge conflict markers have been resolved. Verify no remaining conflicts:
-```bash
-grep -rl "<<<<<<< HEAD" --include="*.rs" --include="*.kt" --include="*.toml" --include="*.gradle" --include="*.swift" .
-```
-If any found, resolve them before proceeding.
+Merge conflict markers have been resolved. Verified no remaining conflicts.
 
 ## Tasks
-1. Run `cargo check --workspace` and capture all errors
-2. Fix each compile error, starting with the most fundamental (lib.rs, module declarations)
-3. Verify `cargo test --workspace --no-run` compiles all tests
-4. Run `cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments` and fix all warnings
-5. Run `cargo fmt --all -- --check` and fix any formatting issues
+1. [x] Run `cargo check --workspace` and capture all errors — PASSES
+2. [x] Fix each compile error, starting with the most fundamental (lib.rs, module declarations) — DONE
+3. [x] Verify `cargo test --workspace --no-run` compiles all tests — PASSES
+4. [x] Run `cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments` and fix all warnings — PASSES
+5. [x] Run `cargo fmt --all -- --check` and fix any formatting issues — PASSES
 
 ## Success Criteria
-- `cargo check --workspace` exits 0
-- `cargo test --workspace --no-run` exits 0
-- `cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments` exits 0
-- `cargo fmt --all -- --check` exits 0
+- [x] `cargo check --workspace` exits 0
+- [x] `cargo test --workspace --no-run` exits 0
+- [x] `cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments` exits 0
+- [x] `cargo fmt --all -- --check` exits 0
 
 ## Rules
 - All state behind `Arc<RwLock<...>>` (parking_lot), not std::sync

@@ -234,6 +234,11 @@ pub enum Commands {
     HistoryDelete { id: String },
     /// Run self-tests
     Test,
+    /// Swarm management commands
+    Swarm {
+        #[command(subcommand)]
+        action: SwarmAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -359,4 +364,10 @@ pub enum ConfigAction {
     Set { key: String, value: String },
     Get { key: String },
     List,
+}
+
+#[derive(Subcommand)]
+pub enum SwarmAction {
+    /// Show swarm connection statistics
+    Stats,
 }

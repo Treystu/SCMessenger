@@ -474,7 +474,7 @@ impl IronCore {
     #[wasm_bindgen(js_name = signData)]
     pub fn sign_data(&self, data: Vec<u8>) -> Result<JsValue, JsValue> {
         self.inner
-            .sign_data(&data)
+            .sign_data(data)
             .map(|sig| serde_wasm_bindgen::to_value(&WasmSignatureResult::from(sig)).unwrap())
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
@@ -523,8 +523,8 @@ impl IronCore {
         ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
         self.inner
             .prepare_message(
-                &recipient_public_key_hex,
-                &text,
+                recipient_public_key_hex,
+                text,
                 scmessenger_core::MessageType::Text,
                 None,
             )
@@ -868,7 +868,7 @@ impl IronCore {
 
     #[wasm_bindgen(js_name = getDriftStoreSize)]
     pub fn get_drift_store_size(&self) -> u32 {
-        self.inner.drift_store_size() as u32
+        self.inner.drift_store_size()
     }
 
     #[wasm_bindgen(js_name = getAuditLog)]
@@ -885,7 +885,7 @@ impl IronCore {
 
     #[wasm_bindgen(js_name = getPeerReputation)]
     pub fn get_peer_reputation(&self, peer_id: String) -> f64 {
-        self.inner.get_peer_reputation(&peer_id)
+        self.inner.get_peer_reputation(peer_id.clone())
     }
 
     #[wasm_bindgen(js_name = getEnhancedPeerReputation)]
@@ -1098,8 +1098,8 @@ impl IronCore {
         ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
         self.inner
             .prepare_message_with_id(
-                &recipient_public_key_hex,
-                &text,
+                recipient_public_key_hex,
+                text,
                 scmessenger_core::MessageType::Text,
                 None,
             )
@@ -1141,7 +1141,7 @@ impl IronCore {
     /// Returns `true` if the message was found and removed, `false` if not found.
     #[wasm_bindgen(js_name = markMessageSent)]
     pub fn mark_message_sent(&self, message_id: String) -> bool {
-        self.inner.mark_message_sent(&message_id)
+        self.inner.mark_message_sent(message_id)
     }
 
     #[wasm_bindgen(js_name = getContactManager)]
@@ -1294,7 +1294,7 @@ impl IronCore {
     /// Get the registration state for a given identity.
     #[wasm_bindgen(js_name = getRegistrationState)]
     pub fn get_registration_state(&self, identity_id: String) -> JsValue {
-        let info = self.inner.get_registration_state(&identity_id);
+        let info = self.inner.get_registration_state(identity_id);
         serde_wasm_bindgen::to_value(&WasmRegistrationStateInfo {
             state: info.state,
             device_id: info.device_id,

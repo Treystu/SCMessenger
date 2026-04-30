@@ -241,6 +241,8 @@ class AndroidPlatformBridge @Inject constructor(
     override fun onBatteryChanged(batteryPct: UByte, isCharging: Boolean) {
         // Compute and apply adjustment profile
         val deviceProfile = uniffi.api.DeviceProfile(
+            peerId = null,
+            deviceId = null,
             batteryPct = batteryPct,
             isCharging = isCharging,
             hasWifi = hasWifi,
@@ -266,6 +268,8 @@ class AndroidPlatformBridge @Inject constructor(
 
         // Recompute and apply adjustment
         val deviceProfile = uniffi.api.DeviceProfile(
+            peerId = null,
+            deviceId = null,
             batteryPct = currentBatteryPct,
             isCharging = isCharging,
             hasWifi = hasWifi,
@@ -294,6 +298,8 @@ class AndroidPlatformBridge @Inject constructor(
 
         // Recompute adjustment based on motion
         val deviceProfile = uniffi.api.DeviceProfile(
+            peerId = null,
+            deviceId = null,
             batteryPct = currentBatteryPct,
             isCharging = isCharging,
             hasWifi = hasWifi,

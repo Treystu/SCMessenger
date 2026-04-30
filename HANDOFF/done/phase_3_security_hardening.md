@@ -3,7 +3,8 @@
 **Priority:** P0 (Security-critical)
 **Assigned Agent:** precision-validator (deepseek-v3.2:cloud)
 **Fallback:** deep-analyst (deepseek-v4-pro:cloud)
-**Status:** TODO
+**Status:** NOT STARTED
+**Verified:** 2026-04-29
 **Depends On:** phase_1c_integration_tests
 
 ## 3A: Crypto Module Review
@@ -26,13 +27,13 @@
 - [ ] Verify timing obfuscation
 
 ## 3D: Supply Chain Audit
-- [ ] Audit `Cargo.lock` for unexpected additions
-- [ ] Verify no secrets/keys in committed files (`git diff --cached`)
-- [ ] Run `scripts/docs_sync_check.sh`
+- [x] Audit `Cargo.lock` for unexpected additions — cargo-audit ran, no critical findings
+- [x] Verify no secrets/keys in committed files (`git diff --cached`) — clean
+- [x] Run `scripts/docs_sync_check.sh` — passes
 
 ## Success Criteria
-- All adversarial reviews produce zero CRITICAL or HIGH findings
-- Kani proofs pass (if `kani-proofs` feature)
+- [ ] All adversarial reviews produce zero CRITICAL or HIGH findings
+- [ ] Kani proofs pass (if `kani-proofs` feature)
 
 ## Rules
 - Use `.claude/prompts/adversarial-reviewer.md` prompt template

@@ -135,6 +135,20 @@ class MeshServiceViewModel @Inject constructor(
     }
 
     /**
+     * Apply transport settings to enable/disable specific transports.
+     * Called after settings change to dynamically update transport state.
+     */
+    fun applyTransportSettings(settings: uniffi.api.MeshSettings) {
+        viewModelScope.launch {
+            try {
+                meshRepository.applyTransportSettings(settings)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to apply transport settings")
+            }
+        }
+    }
+
+    /**
      * Get formatted stats for display.
      */
     fun getStatsText(): String {

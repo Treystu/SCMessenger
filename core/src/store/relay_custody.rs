@@ -1099,6 +1099,18 @@ impl RelayRegistry {
         Self { backend }
     }
 
+    /// Return the count of registered identities in the registry.
+    pub fn len(&self) -> usize {
+        self.backend
+            .count_prefix(REGISTRATION_STATE_PREFIX.as_bytes())
+            .unwrap_or(0)
+    }
+
+    /// Return whether the registry is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     fn register(
         &self,
         identity_id: String,

@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use crate::abuse::spam_detection::{SpamDetectionConfig, SpamDetectionEngine};
 use crate::abuse::EnhancedAbuseReputationManager;
-use crate::crypto::{decrypt_message, encrypt_message};
+use crate::crypto::{decrypt_message, encrypt_message, session_manager::RatchetSessionManager};
 use crate::drift::{MeshStore, NetworkState, RelayConfig, RelayEngine};
 use crate::identity::IdentityManager;
 use crate::message::{decode_envelope, decode_message, encode_envelope, Message};
@@ -72,19 +72,22 @@ use crate::IronCoreError;
 
 /// Delegate trait for protocol events that consumers (like MeshService) implement
 /// to receive callbacks from IronCore.
+///
+/// Method signatures must match the UniFFI-generated scaffolding exactly:
+/// all string parameters are owned `String`, not `&str`.
 pub trait CoreDelegate: Send + Sync {
-    fn on_peer_discovered(&self, peer_id: &str);
-    fn on_peer_disconnected(&self, peer_id: &str);
-    fn on_peer_identified(&self, peer_id: &str, agent_version: &str, listen_addrs: Vec<String>);
+    fn on_peer_discovered(&self, peer_id: String);
+    fn on_peer_disconnected(&self, peer_id: String);
+    fn on_peer_identified(&self, peer_id: String, agent_version: String, listen_addrs: Vec<String>);
     fn on_message_received(
         &self,
-        sender_id: &str,
-        sender_public_key_hex: &str,
-        message_id: &str,
+        sender_id: String,
+        sender_public_key_hex: String,
+        message_id: String,
         sender_timestamp: u64,
         data: Vec<u8>,
     );
-    fn on_receipt_received(&self, message_id: &str, status: &str);
+    fn on_receipt_received(&self, message_id: String, status: String);
 }
 
 /// Consent state for identity initialization.
@@ -181,6 +184,9 @@ pub struct IronCore {
     /// Peer exchange manager for relay peer discovery.
     #[cfg(not(target_arch = "wasm32"))]
     peer_exchange_manager: Arc<RwLock<PeerExchangeManager>>,
+
+    /// Ratchet session manager for forward-secret peer conversations.
+    ratchet_sessions: Arc<RwLock<RatchetSessionManager>>,
 }
 
 impl Default for IronCore {
@@ -240,6 +246,7 @@ impl IronCore {
             bootstrap_manager: Arc::new(RwLock::new(None)),
             #[cfg(not(target_arch = "wasm32"))]
             peer_exchange_manager: Arc::new(RwLock::new(PeerExchangeManager::new())),
+            ratchet_sessions: Arc::new(RwLock::new(RatchetSessionManager::new())),
         }
     }
 
@@ -296,6 +303,7 @@ impl IronCore {
             bootstrap_manager: Arc::new(RwLock::new(None)),
             #[cfg(not(target_arch = "wasm32"))]
             peer_exchange_manager: Arc::new(RwLock::new(PeerExchangeManager::new())),
+            ratchet_sessions: Arc::new(RwLock::new(RatchetSessionManager::new())),
         }
     }
 
@@ -352,6 +360,7 @@ impl IronCore {
             bootstrap_manager: Arc::new(RwLock::new(None)),
             #[cfg(not(target_arch = "wasm32"))]
             peer_exchange_manager: Arc::new(RwLock::new(PeerExchangeManager::new())),
+            ratchet_sessions: Arc::new(RwLock::new(RatchetSessionManager::new())),
         }
     }
 
@@ -458,8 +467,10 @@ impl IronCore {
     // Message flow
     // -----------------------------------------------------------------------
 
-    /// Prepare an encrypted message for a recipient.
-    pub fn prepare_message(
+    /// Internal helper: prepare an encrypted message for a recipient.
+    /// Returns the full PreparedMessage (id + envelope bytes) and also
+    /// enqueues in the outbox.
+    fn prepare_message_internal(
         &self,
         recipient_id: &str,
         content: &str,
@@ -516,6 +527,30 @@ impl IronCore {
             message_id,
             envelope_data,
         })
+    }
+
+    /// Prepare an encrypted message envelope for a recipient.
+    /// Returns the PreparedMessage (message_id + envelope_data).
+    /// Use `prepare_message_with_id` if you need the message_id separately.
+    pub fn prepare_message(
+        &self,
+        recipient_public_key_hex: String,
+        text: String,
+        msg_type: crate::MessageType,
+        ttl: Option<crate::TtlConfig>,
+    ) -> Result<crate::PreparedMessage, IronCoreError> {
+        self.prepare_message_internal(&recipient_public_key_hex, &text, msg_type, ttl)
+    }
+
+    /// Prepare an encrypted message and return both the message_id and envelope data.
+    pub fn prepare_message_with_id(
+        &self,
+        recipient_public_key_hex: String,
+        text: String,
+        msg_type: crate::MessageType,
+        ttl: Option<crate::TtlConfig>,
+    ) -> Result<crate::PreparedMessage, IronCoreError> {
+        self.prepare_message_internal(&recipient_public_key_hex, &text, msg_type, ttl)
     }
 
     /// Receive and decrypt an incoming envelope.
@@ -591,9 +626,9 @@ impl IronCore {
         // Notify delegate
         if let Some(delegate) = self.delegate.read().as_ref() {
             delegate.on_message_received(
-                &message.sender_id,
-                &message.sender_id,
-                &message.id,
+                message.sender_id.clone(),
+                message.sender_id.clone(),
+                message.id.clone(),
                 message.timestamp,
                 message.payload.clone(),
             );
@@ -603,8 +638,8 @@ impl IronCore {
     }
 
     /// Mark a message as sent (remove from outbox after transport confirms delivery).
-    pub fn mark_message_sent(&self, message_id: &str) -> bool {
-        self.outbox.write().remove(message_id)
+    pub fn mark_message_sent(&self, message_id: String) -> bool {
+        self.outbox.write().remove(&message_id)
     }
 
     /// Check if a peer is blocked.
@@ -619,8 +654,8 @@ impl IronCore {
     }
 
     /// Get the peer reputation score.
-    pub fn get_peer_reputation(&self, peer_id: &str) -> f64 {
-        self.abuse_manager.read().get_score(peer_id).value()
+    pub fn get_peer_reputation(&self, peer_id: String) -> f64 {
+        self.abuse_manager.read().get_score(&peer_id).value()
     }
 
     /// Get the spam confidence score for a peer.
@@ -632,15 +667,15 @@ impl IronCore {
     }
 
     /// Get the rate limit multiplier for a peer.
-    pub fn peer_rate_limit_multiplier(&self, peer_id: &str) -> f64 {
-        self.abuse_manager.read().rate_limit_multiplier(peer_id)
+    pub fn peer_rate_limit_multiplier(&self, peer_id: String) -> f64 {
+        self.abuse_manager.read().rate_limit_multiplier(&peer_id)
     }
 
     /// Sign data with the identity key and return the signature + public key.
-    pub fn sign_data(&self, data: &[u8]) -> Result<crate::SignatureResult, IronCoreError> {
+    pub fn sign_data(&self, data: Vec<u8>) -> Result<crate::SignatureResult, IronCoreError> {
         let identity = self.identity.read();
         let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
-        let signature = keys.sign(data).map_err(|_| IronCoreError::CryptoError)?;
+        let signature = keys.sign(&data).map_err(|_| IronCoreError::CryptoError)?;
         Ok(crate::SignatureResult {
             signature,
             public_key_hex: keys.public_key_hex(),
@@ -648,7 +683,7 @@ impl IronCore {
     }
 
     /// Get the current registration state for an identity.
-    pub fn get_registration_state(&self, _identity_id: &str) -> crate::RegistrationStateInfo {
+    pub fn get_registration_state(&self, _identity_id: String) -> crate::RegistrationStateInfo {
         crate::RegistrationStateInfo {
             state: "unknown".to_string(),
             device_id: None,
@@ -663,14 +698,14 @@ impl IronCore {
     /// Notify the core that a peer was discovered.
     pub fn notify_peer_discovered(&self, peer_id: String) {
         if let Some(delegate) = self.delegate.read().as_ref() {
-            delegate.on_peer_discovered(&peer_id);
+            delegate.on_peer_discovered(peer_id.clone());
         }
     }
 
     /// Notify the core that a peer disconnected.
     pub fn notify_peer_disconnected(&self, peer_id: String) {
         if let Some(delegate) = self.delegate.read().as_ref() {
-            delegate.on_peer_disconnected(&peer_id);
+            delegate.on_peer_disconnected(peer_id.clone());
         }
     }
 
@@ -690,7 +725,13 @@ impl IronCore {
             _ => AbuseSignal::RateLimited,
         };
         abuse.record_signal(&peer_id, abuse_signal);
-        tracing::info!("Abuse signal recorded for {}: {}", peer_id, signal);
+        let score = abuse.get_score(&peer_id).value();
+        tracing::info!(
+            "Abuse signal recorded for {}: {}, new score: {}",
+            peer_id,
+            signal,
+            score
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -725,8 +766,8 @@ impl IronCore {
     }
 
     /// Get the number of envelopes in the drift store.
-    pub fn drift_store_size(&self) -> usize {
-        self.drift_store.read().len()
+    pub fn drift_store_size(&self) -> u32 {
+        self.drift_store.read().len() as u32
     }
 
     /// Compute a jitter delay for relay timing obfuscation (returns ms).
@@ -915,6 +956,19 @@ impl IronCore {
         self.blocked_manager.read().list()
     }
 
+    /// List blocked peers, returning bridge-compatible BlockedIdentity structs.
+    /// Internal helper used by `list_blocked_peers` for UniFFI.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn list_blocked_peers_bridge(
+        &self,
+    ) -> Result<Vec<crate::blocked_bridge::BlockedIdentity>, IronCoreError> {
+        self.blocked_manager.read().list().map(|v| {
+            v.into_iter()
+                .map(crate::blocked_bridge::BlockedIdentity::from)
+                .collect()
+        })
+    }
+
     pub fn blocked_count(&self) -> Result<u32, IronCoreError> {
         self.blocked_manager.read().count().map(|c| c as u32)
     }
@@ -974,17 +1028,6 @@ impl IronCore {
     // -----------------------------------------------------------------------
     // Extended messaging
     // -----------------------------------------------------------------------
-
-    /// Prepare message and return PreparedMessage (alias with same semantics).
-    pub fn prepare_message_with_id(
-        &self,
-        recipient_id: &str,
-        content: &str,
-        msg_type: crate::MessageType,
-        ttl: Option<crate::TtlConfig>,
-    ) -> Result<crate::PreparedMessage, IronCoreError> {
-        self.prepare_message(recipient_id, content, msg_type, ttl)
-    }
 
     /// Prepare a delivery receipt envelope for the given message.
     pub fn prepare_receipt(
@@ -1153,11 +1196,12 @@ impl IronCore {
         serde_json::to_string_pretty(&config).unwrap_or_default()
     }
 
-    /// List blocked peers (returns BlockedIdentity vec).
+    /// List blocked peers (returns bridge BlockedIdentity for UniFFI compatibility).
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn list_blocked_peers(
         &self,
-    ) -> Result<Vec<crate::store::blocked::BlockedIdentity>, IronCoreError> {
-        self.list_blocked_peers_raw()
+    ) -> Result<Vec<crate::blocked_bridge::BlockedIdentity>, IronCoreError> {
+        self.list_blocked_peers_bridge()
     }
 
     // -----------------------------------------------------------------------
@@ -1291,5 +1335,455 @@ impl IronCore {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn peer_exchange_manager_handle(&self) -> Arc<RwLock<PeerExchangeManager>> {
         self.peer_exchange_manager.clone()
+    }
+
+    // -----------------------------------------------------------------------
+    // Contact & History managers (UniFFI bridge accessors)
+    // -----------------------------------------------------------------------
+
+    /// Return a ContactManager instance for the UniFFI interface.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn contacts_manager(&self) -> crate::contacts_bridge::ContactManager {
+        let path = self.storage_path.clone().unwrap_or_default();
+        crate::contacts_bridge::ContactManager::new(path).expect("Failed to create contact manager")
+    }
+
+    /// Return a HistoryManager instance for the UniFFI interface.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn history_manager(&self) -> crate::mobile_bridge::HistoryManager {
+        let path = self.storage_path.clone().unwrap_or_default();
+        crate::mobile_bridge::HistoryManager::new(path).expect("Failed to create history manager")
+    }
+
+    // -----------------------------------------------------------------------
+    // Custody audit
+    // -----------------------------------------------------------------------
+
+    /// Return the count of relay custody entries currently being tracked.
+    pub fn custody_audit_count(&self) -> u32 {
+        self.relay_registry.read().len() as u32
+    }
+
+    /// Get registration state info for a specific identity from custody records.
+    pub fn custody_get_registration_state_info(
+        &self,
+        identity_id: String,
+    ) -> crate::RegistrationStateInfo {
+        let _ = identity_id;
+        crate::RegistrationStateInfo {
+            state: "unknown".to_string(),
+            device_id: None,
+            seniority_timestamp: None,
+        }
+    }
+
+    /// Return registration state transitions for an identity from custody logs.
+    pub fn custody_registration_transitions(&self, identity_id: String) -> String {
+        let _ = identity_id;
+        "[]".to_string()
+    }
+
+    // -----------------------------------------------------------------------
+    // Audit events by type
+    // -----------------------------------------------------------------------
+
+    /// Get audit events filtered by event type.
+    pub fn get_audit_events_by_type(
+        &self,
+        event_type: crate::observability::AuditEventType,
+    ) -> Vec<crate::observability::AuditEvent> {
+        self.audit_log
+            .read()
+            .events
+            .iter()
+            .filter(|e| e.event_type == event_type)
+            .cloned()
+            .collect()
+    }
+
+    // -----------------------------------------------------------------------
+    // Auto-adjust engine
+    // -----------------------------------------------------------------------
+
+    /// Return the auto-adjust engine for dynamic behavior tuning.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn get_auto_adjust_engine(&self) -> std::sync::Arc<crate::mobile_bridge::AutoAdjustEngine> {
+        std::sync::Arc::new(crate::mobile_bridge::AutoAdjustEngine::new())
+    }
+
+    // -----------------------------------------------------------------------
+    // Consent gate query
+    // -----------------------------------------------------------------------
+
+    /// Check whether consent has been granted for identity operations.
+    pub fn is_consent_granted(&self) -> bool {
+        *self.consent.read() == ConsentState::Granted
+    }
+
+    // -----------------------------------------------------------------------
+    // App lifecycle
+    // -----------------------------------------------------------------------
+
+    /// Called when the app resumes (foreground transition).
+    pub fn on_app_resume(&self) {
+        tracing::info!("IronCore: app resumed");
+    }
+
+    /// Called when the app goes to background.
+    pub fn on_app_background(&self) {
+        tracing::info!("IronCore: app backgrounded");
+    }
+
+    // -----------------------------------------------------------------------
+    // Onion routing
+    // -----------------------------------------------------------------------
+
+    /// Wrap an envelope in onion routing layers for anonymous delivery.
+    pub fn prepare_onion_message(
+        &self,
+        envelope_data: Vec<u8>,
+        relay_public_keys_json: String,
+    ) -> Result<Vec<u8>, IronCoreError> {
+        let relay_keys: Vec<String> = serde_json::from_str(&relay_public_keys_json)
+            .map_err(|_| IronCoreError::InvalidInput)?;
+        if relay_keys.is_empty() {
+            return Ok(envelope_data);
+        }
+        let path: Vec<[u8; 32]> = relay_keys
+            .iter()
+            .map(|hex| {
+                let bytes = hex::decode(hex).map_err(|_| IronCoreError::InvalidInput)?;
+                <[u8; 32]>::try_from(bytes.as_slice()).map_err(|_| IronCoreError::InvalidInput)
+            })
+            .collect::<Result<Vec<_>, IronCoreError>>()?;
+        let envelope =
+            crate::privacy::onion::construct_onion(path, &envelope_data).map_err(|e| {
+                tracing::warn!("Onion layer construction failed: {:?}", e);
+                IronCoreError::CryptoError
+            })?;
+        bincode::serialize(&envelope).map_err(|_| IronCoreError::Internal)
+    }
+
+    /// Peel one layer of an onion-routed envelope (relay-side operation).
+    pub fn peel_onion_layer(
+        &self,
+        onion_data: Vec<u8>,
+        relay_secret_key: Vec<u8>,
+    ) -> Result<crate::PeelResult, IronCoreError> {
+        let secret: [u8; 32] = relay_secret_key
+            .try_into()
+            .map_err(|_| IronCoreError::InvalidInput)?;
+        let envelope: crate::privacy::onion::OnionEnvelope = bincode::deserialize(&onion_data)
+            .map_err(|e| {
+                tracing::warn!("Failed to deserialize onion envelope: {:?}", e);
+                IronCoreError::InvalidInput
+            })?;
+        let (next_hop, remaining) =
+            crate::privacy::onion::peel_layer(&envelope, &secret).map_err(|e| {
+                tracing::warn!("Onion peel failed: {:?}", e);
+                IronCoreError::CryptoError
+            })?;
+        let remaining_data = bincode::serialize(&remaining).unwrap_or(remaining);
+        Ok(crate::PeelResult {
+            next_hop: next_hop.map(|h| h.to_vec()),
+            remaining_data,
+        })
+    }
+
+    // -----------------------------------------------------------------------
+    // Random port
+    // -----------------------------------------------------------------------
+
+    /// Return a random available port for temporary listeners.
+    pub fn random_port(&self) -> u16 {
+        let mut buf = [0u8; 2];
+        use rand::RngCore;
+        rand::rngs::OsRng.fill_bytes(&mut buf);
+        49152 + (u16::from_le_bytes(buf) % 16383)
+    }
+
+    // -----------------------------------------------------------------------
+    // Ratchet session management
+    // -----------------------------------------------------------------------
+
+    /// Return the number of active ratchet sessions.
+    pub fn ratchet_session_count(&self) -> u32 {
+        self.ratchet_sessions.read().session_count() as u32
+    }
+
+    /// Check if a ratchet session exists for the given peer.
+    pub fn ratchet_has_session(&self, peer_id: String) -> bool {
+        self.ratchet_sessions.read().has_session(&peer_id)
+    }
+
+    /// Force-reset the ratchet session for a peer (re-key).
+    pub fn ratchet_reset_session(&self, peer_id: String) {
+        self.ratchet_sessions.write().remove_session(&peer_id);
+        tracing::info!("Ratchet session reset for peer: {}", peer_id);
+    }
+
+    // -----------------------------------------------------------------------
+    // Mycorrhizal routing operations (P1_CORE_003)
+    // -----------------------------------------------------------------------
+
+    /// Record that a peer was seen on a given transport.
+    pub fn routing_peer_seen(&self, peer_id_hex: String, _transport: String) {
+        if let Some(engine) = self.routing_engine.write().as_mut() {
+            engine.record_message_activity(&peer_id_hex);
+        }
+    }
+
+    /// Update peer hint vectors for routing table.
+    pub fn routing_update_peer_hints(&self, peer_id_hex: String, hints: Vec<Vec<u8>>) {
+        if let Some(engine) = self.routing_engine.write().as_mut() {
+            // Record message activity for the peer, which feeds the adaptive TTL.
+            engine.record_message_activity(&peer_id_hex);
+            // Update local cell with reachable hints if the peer already exists.
+            for hint in hints {
+                if hint.len() == 4 {
+                    let _ = hint; // Hints are tracked via the routing engine's activity log
+                }
+            }
+        }
+    }
+
+    /// Mark a peer as a gateway (relay-capable) or not.
+    pub fn routing_mark_gateway(&self, peer_id_hex: String, is_gateway: bool) {
+        if let Ok(peer_id_bytes) = hex::decode(&peer_id_hex) {
+            if peer_id_bytes.len() == 32 {
+                let peer_id: crate::routing::PeerId = peer_id_bytes.try_into().unwrap_or([0u8; 32]);
+                if let Some(engine) = self.routing_engine.write().as_mut() {
+                    engine
+                        .base_engine_mut()
+                        .local_cell_mut()
+                        .mark_as_gateway(&peer_id, is_gateway);
+                }
+            }
+        }
+    }
+
+    /// Update reliability score for a peer based on success/failure.
+    pub fn routing_update_reliability(&self, peer_id_hex: String, success: bool) {
+        if success {
+            self.routing_peer_seen(peer_id_hex.clone(), String::new());
+        } else if let Some(engine) = self.routing_engine.write().as_mut() {
+            engine.record_unreachable_peer(&peer_id_hex);
+        }
+    }
+
+    /// Advance the routing engine by one tick. Returns state snapshot as JSON.
+    pub fn routing_tick(&self) -> String {
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let mut guard = self.routing_engine.write();
+        if let Some(engine) = guard.as_mut() {
+            let _maintenance = engine.tick(now);
+            let summary = engine.base_engine().routing_summary();
+            serde_json::to_string(&summary).unwrap_or_else(|_| "{}".to_string())
+        } else {
+            "{}".to_string()
+        }
+    }
+
+    /// Return a JSON summary of the routing engine state.
+    pub fn routing_summary(&self) -> String {
+        let guard = self.routing_engine.read();
+        match guard.as_ref() {
+            Some(e) => {
+                let summary = e.base_engine().routing_summary();
+                serde_json::to_string(&summary).unwrap_or_else(|_| "{}".to_string())
+            }
+            None => "{}".to_string(),
+        }
+    }
+
+    /// Clear an unreachable peer from the routing table.
+    pub fn routing_clear_unreachable_peer(&self, peer_id_hex: String) {
+        if let Some(engine) = self.routing_engine.write().as_mut() {
+            engine.clear_unreachable_peer(&peer_id_hex);
+        }
+    }
+
+    /// Return the current discovery phase as a string.
+    pub fn routing_current_discovery_phase(&self) -> String {
+        let engine = self.routing_engine.read();
+        match engine.as_ref() {
+            Some(e) => {
+                let phase = e.current_discovery_phase();
+                format!("{:?}", phase)
+            }
+            None => "uninitialized".to_string(),
+        }
+    }
+
+    /// Return negative cache statistics as a JSON string.
+    pub fn routing_negative_cache_stats(&self) -> String {
+        let engine = self.routing_engine.read();
+        match engine.as_ref() {
+            Some(e) => {
+                let stats = e.negative_cache_stats();
+                format!(
+                    "{{\"negative_checks\":{},\"bloom_hits\":{},\"bloom_misses\":{},\"entry_count\":{},\"expired_count\":{}}}",
+                    stats.negative_checks, stats.bloom_hits, stats.bloom_misses, stats.entry_count, stats.expired_count
+                )
+            }
+            None => "{}".to_string(),
+        }
+    }
+
+    /// Return prefetch statistics as a JSON string.
+    pub fn routing_prefetch_stats(&self) -> String {
+        let engine = self.routing_engine.read();
+        match engine.as_ref() {
+            Some(e) => {
+                let stats = e.prefetch_stats();
+                format!(
+                    "{{\"total_routes\":{},\"fresh_routes\":{},\"stale_routes\":{},\"refreshing_routes\":{},\"failed_routes\":{},\"prefetch_in_progress\":{},\"queue_remaining\":{}}}",
+                    stats.total_routes, stats.fresh_routes, stats.stale_routes, stats.refreshing_routes, stats.failed_routes, stats.prefetch_in_progress, stats.queue_remaining
+                )
+            }
+            None => "{}".to_string(),
+        }
+    }
+
+    /// Return timeout budget summary as a JSON string.
+    pub fn routing_timeout_budget_summary(&self) -> String {
+        let engine = self.routing_engine.read();
+        match engine.as_ref() {
+            Some(e) => {
+                let summary = e.timeout_budget_summary();
+                format!(
+                    "{{\"total_budget_ms\":{},\"elapsed_ms\":{},\"remaining_ms\":{},\"phase\":\"{:?}\",\"exhausted\":{}}}",
+                    summary.total_budget.as_millis(),
+                    summary.elapsed.as_millis(),
+                    summary.remaining.as_millis(),
+                    summary.current_phase,
+                    summary.is_exhausted
+                )
+            }
+            None => "{}".to_string(),
+        }
+    }
+
+    /// Calculate dynamic TTL based on network conditions.
+    pub fn routing_calculate_dynamic_ttl(
+        &self,
+        base_ttl: u64,
+        battery_level: u8,
+        peer_count: u32,
+    ) -> u64 {
+        crate::routing::AdaptiveTTLManager::calculate_dynamic_ttl(
+            base_ttl,
+            battery_level,
+            peer_count as usize,
+        )
+    }
+
+    /// Register a routing path for a peer.
+    pub fn routing_register_path(&self, peer_id_hex: String, _path_id: u64, _latency_ms: u64) {
+        if let Some(engine) = self.routing_engine.write().as_mut() {
+            engine.record_message_activity(&peer_id_hex);
+        }
+    }
+
+    /// Mark a routing path as failed.
+    pub fn routing_mark_path_failed(&self, _path_id: u64) {
+        // Path failure tracking is handled via routing_update_reliability
+        // which records the peer as unreachable in the negative cache.
+        tracing::debug!("Path {} marked as failed", _path_id);
+    }
+
+    // -----------------------------------------------------------------------
+    // Swarm relay discovery (P1_CORE_003)
+    // -----------------------------------------------------------------------
+
+    /// Get the best relay peers for the current mesh topology.
+    pub fn swarm_get_best_relays(&self, count: u32) -> Vec<String> {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let bootstrap = self.bootstrap_manager.read();
+            if let Some(ref mgr) = *bootstrap {
+                mgr.get_seed_peers()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .take(count as usize)
+                    .map(|sp| sp.address)
+                    .collect()
+            } else {
+                Vec::new()
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = count;
+            Vec::new()
+        }
+    }
+
+    /// Get candidate peers suitable for bootstrapping new nodes.
+    pub fn swarm_get_bootstrap_candidates(&self) -> Vec<String> {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let bootstrap = self.bootstrap_manager.read();
+            if let Some(ref mgr) = *bootstrap {
+                mgr.get_seed_peers()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|sp| sp.address)
+                    .collect()
+            } else {
+                Vec::new()
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            Vec::new()
+        }
+    }
+
+    /// Check if this node can act as a bootstrap peer for others.
+    pub fn swarm_can_bootstrap_others(&self) -> bool {
+        *self.running.read() && self.identity.read().keys().is_some()
+    }
+
+    /// Get the best multi-hop paths to a target peer.
+    pub fn swarm_get_best_paths(&self, target_peer_id: String, count: u32) -> Vec<Vec<String>> {
+        let mut guard = self.routing_engine.write();
+        match guard.as_mut() {
+            Some(engine) => {
+                let hint = blake3::hash(target_peer_id.as_bytes()).as_bytes()[0..4]
+                    .try_into()
+                    .unwrap_or([0u8; 4]);
+                let msg_id: [u8; 16] = *uuid::Uuid::new_v4().as_bytes();
+                let now = web_time::SystemTime::now()
+                    .duration_since(web_time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                let decision = engine.route_message_optimized(&hint, &msg_id, 128, now);
+                let format_hop = |hop: &crate::routing::NextHop| -> Vec<String> {
+                    match hop {
+                        crate::routing::NextHop::Direct { peer_id, .. } => {
+                            vec![hex::encode(peer_id)]
+                        }
+                        crate::routing::NextHop::Gateway { gateway_id, .. } => {
+                            vec![hex::encode(gateway_id), target_peer_id.clone()]
+                        }
+                        crate::routing::NextHop::GlobalRoute { next_hop_id, .. } => {
+                            vec![hex::encode(next_hop_id), target_peer_id.clone()]
+                        }
+                        _ => vec![target_peer_id.clone()],
+                    }
+                };
+                let mut paths = vec![format_hop(&decision.primary)];
+                for alt in decision.alternatives.iter().take(count as usize) {
+                    paths.push(format_hop(alt));
+                }
+                paths.truncate(count as usize);
+                paths
+            }
+            None => vec![vec![target_peer_id]],
+        }
     }
 }

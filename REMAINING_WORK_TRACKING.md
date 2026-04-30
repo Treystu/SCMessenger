@@ -1,7 +1,30 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-04-28
+Last updated: 2026-04-29
+
+---
+
+## 2026-04-29 Swarm Orchestrator Session: "Major Wiring Changes" (commit 37d028fc)
+
+**Status:** ✅ COMPLETED (with carry-forward)
+
+The swarm orchestrator completed a 67-task, 5-phase session. Summary of what landed vs remains:
+
+### Completed This Session
+- **Rust workspace:** `cargo check/build/clippy/fmt` all PASS. Core unit tests: 812 passed, 0 failed.
+- **IronCore struct:** Created at `core/src/iron_core.rs` (1295 lines) -- central entry point unifying identity, crypto, transport, store, and routing.
+- **Transport/swarm.rs import errors:** Fixed; `cargo check --workspace` passes clean.
+- **Phase 1-5 batch files:** Moved to `HANDOFF/done/` (internal status fields still say "TODO" -- cosmetic only, documented here).
+
+### Still Open / Carry-Forward
+- **Android build:** FAILING (separate agent working on this).
+- **Core integration tests:** Cannot compile on Windows (known rlib staleness issue, documented in `.cargo/config.toml` and `P0_BUILD_004`).
+- **9 cargo-audit vulnerabilities** identified (see `tmp/audit_reports/cargo_audit_2026-04-29.txt`):
+  - 1 HIGH: quinn-proto 0.11.13 (DoS) -- upgrade to >=0.11.14
+  - 1 MEDIUM: ring 0.16.20 (AES panic) -- transitive via rcgen/libp2p-tls
+  - 4 rustls-webpki CVEs (0.101.7 + 0.103.9) -- name constraint + CRL parsing issues
+  - 7 warnings: unmaintained crates (bincode, core2, fxhash, instant, ring 0.16), unsound lru/rand
 
 ---
 

@@ -374,6 +374,8 @@ class SettingsViewModel @Inject constructor(
         _settings.value?.let { current ->
             // Allow toggling - when disabled, stops ALL communication (bidirectional)
             debouncedUpdateSettings(current.copy(relayEnabled = enabled))
+            // Apply transport settings when mesh participation changes
+            meshRepository.applyTransportSettings(current.copy(relayEnabled = enabled))
         }
     }
 
@@ -392,24 +394,32 @@ class SettingsViewModel @Inject constructor(
     fun updateBleEnabled(enabled: Boolean) {
         _settings.value?.let { current ->
             debouncedUpdateSettings(current.copy(bleEnabled = enabled))
+            // Apply transport settings to enable/disable BLE
+            meshRepository.applyTransportSettings(current.copy(bleEnabled = enabled))
         }
     }
 
     fun updateWifiAwareEnabled(enabled: Boolean) {
         _settings.value?.let { current ->
             debouncedUpdateSettings(current.copy(wifiAwareEnabled = enabled))
+            // Apply transport settings to enable/disable WiFi Aware
+            meshRepository.applyTransportSettings(current.copy(wifiAwareEnabled = enabled))
         }
     }
 
     fun updateWifiDirectEnabled(enabled: Boolean) {
         _settings.value?.let { current ->
             debouncedUpdateSettings(current.copy(wifiDirectEnabled = enabled))
+            // Apply transport settings to enable/disable WiFi Direct
+            meshRepository.applyTransportSettings(current.copy(wifiDirectEnabled = enabled))
         }
     }
 
     fun updateInternetEnabled(enabled: Boolean) {
         _settings.value?.let { current ->
             debouncedUpdateSettings(current.copy(internetEnabled = enabled))
+            // Apply transport settings to enable/disable the internet transport
+            meshRepository.applyTransportSettings(current.copy(internetEnabled = enabled))
         }
     }
 

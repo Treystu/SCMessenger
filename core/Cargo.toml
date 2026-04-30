@@ -6,7 +6,7 @@ license.workspace = true
 authors.workspace = true
 
 [lib]
-crate-type = ["lib", "cdylib"]
+crate-type = ["lib"]
 
 [dependencies]
 # Workspace dependencies
@@ -66,13 +66,14 @@ libp2p = { workspace = true, features = [
 ] }
 quinn = "0.11"
 ureq = "2"
-tokio-tungstenite = { workspace = true }
+tokio-tungstenite = { workspace = true, features = ["native-tls"] }
 
 [target.'cfg(all(not(target_arch = "wasm32"), target_os = "android"))'.dependencies]
 tokio = { workspace = true, features = ["full"] }
 libp2p = { workspace = true, features = [
   "tcp",
   "quic",
+  "dns",
   "tokio",
   "websocket",
   "noise",
@@ -90,7 +91,7 @@ libp2p = { workspace = true, features = [
 ] }
 ureq = "2"
 libc = "0.2"
-tokio-tungstenite = { workspace = true }
+tokio-tungstenite = { workspace = true, default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
 
 [dev-dependencies]
 mockall = { workspace = true }

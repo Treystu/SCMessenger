@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
+import com.scmessenger.android.service.AndroidPlatformBridge
 import com.scmessenger.android.service.AnrWatchdog
 import com.scmessenger.android.ui.theme.SCMessengerTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -46,6 +47,9 @@ import com.scmessenger.android.data.PreferencesRepository
 class MainActivity : ComponentActivity() {
     @Inject
     lateinit var meshRepository: MeshRepository
+
+    @Inject
+    lateinit var platformBridge: AndroidPlatformBridge
 
     private val mainViewModel: MainViewModel by viewModels()
 
@@ -239,6 +243,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         Timber.d("MainActivity resumed")
+        platformBridge.notifyForeground()
         checkPermissions()
         if (meshRepository.hasRequiredRuntimePermissions()) {
             meshRepository.onRuntimePermissionsGranted()
@@ -260,6 +265,7 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         Timber.d("MainActivity paused")
+        platformBridge.notifyBackground()
     }
 
     override fun onDestroy() {

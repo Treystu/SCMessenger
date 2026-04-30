@@ -753,8 +753,8 @@ impl MeshService {
                                                             .map(|a| a.to_string())
                                                             .collect();
                                                         delegate.on_peer_identified(
-                                                            &peer_id.to_string(),
-                                                            &agent_version,
+                                                            peer_id.to_string(),
+                                                            agent_version,
                                                             addrs_str,
                                                         );
                                                     }
@@ -1185,25 +1185,30 @@ struct MeshServiceCoreDelegate {
 }
 
 impl crate::CoreDelegate for MeshServiceCoreDelegate {
-    fn on_peer_discovered(&self, peer_id: &str) {
+    fn on_peer_discovered(&self, peer_id: String) {
         if let Some(service) = self.service.upgrade() {
-            service.on_peer_discovered(peer_id.to_string());
+            service.on_peer_discovered(peer_id.clone());
             if let Some(delegate) = service.external_delegate.lock().as_ref() {
                 delegate.on_peer_discovered(peer_id);
             }
         }
     }
 
-    fn on_peer_disconnected(&self, peer_id: &str) {
+    fn on_peer_disconnected(&self, peer_id: String) {
         if let Some(service) = self.service.upgrade() {
-            service.on_peer_disconnected(peer_id.to_string());
+            service.on_peer_disconnected(peer_id.clone());
             if let Some(delegate) = service.external_delegate.lock().as_ref() {
                 delegate.on_peer_disconnected(peer_id);
             }
         }
     }
 
-    fn on_peer_identified(&self, peer_id: &str, agent_version: &str, listen_addrs: Vec<String>) {
+    fn on_peer_identified(
+        &self,
+        peer_id: String,
+        agent_version: String,
+        listen_addrs: Vec<String>,
+    ) {
         if let Some(service) = self.service.upgrade() {
             if let Some(delegate) = service.external_delegate.lock().as_ref() {
                 delegate.on_peer_identified(peer_id, agent_version, listen_addrs);
@@ -1213,9 +1218,9 @@ impl crate::CoreDelegate for MeshServiceCoreDelegate {
 
     fn on_message_received(
         &self,
-        sender_id: &str,
-        sender_public_key_hex: &str,
-        message_id: &str,
+        sender_id: String,
+        sender_public_key_hex: String,
+        message_id: String,
         sender_timestamp: u64,
         data: Vec<u8>,
     ) {
@@ -1232,7 +1237,7 @@ impl crate::CoreDelegate for MeshServiceCoreDelegate {
         }
     }
 
-    fn on_receipt_received(&self, message_id: &str, status: &str) {
+    fn on_receipt_received(&self, message_id: String, status: String) {
         if let Some(service) = self.service.upgrade() {
             if let Some(delegate) = service.external_delegate.lock().as_ref() {
                 delegate.on_receipt_received(message_id, status);

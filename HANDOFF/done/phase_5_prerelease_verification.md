@@ -3,28 +3,29 @@
 **Priority:** P0 (Release gate)
 **Assigned Agent:** gatekeeper-reviewer (kimi-k2-thinking:cloud)
 **Fallback:** kimi-k2.6:cloud
-**Status:** TODO
+**Status:** NOT STARTED
+**Verified:** 2026-04-29
 **Depends On:** phase_4_documentation_polish
 **REQUIRES HUMAN SIGN-OFF**
 
 ## 5A: Build Verification
-- [ ] `cargo build --workspace` — release mode
-- [ ] `cargo test --workspace` — all tests pass
-- [ ] `cargo clippy --workspace -- -D warnings`
-- [ ] `cargo fmt --all -- --check`
-- [ ] `./gradlew assembleDebug` — Android
-- [ ] `wasm-pack build --target web` — WASM
+- [ ] `cargo build --workspace` — PASSES (debug, via PATH=/c/msys64/ucrt64/bin)
+- [ ] `cargo test --workspace` — 831 unit/CLI tests pass; integration tests blocked (Windows rlib)
+- [ ] `cargo clippy --workspace -- -D warnings` — PASSES
+- [ ] `cargo fmt --all -- --check` — PASSES
+- [ ] `./gradlew assembleDebug` — FAILS (UniFFI MSVC target mismatch)
+- [ ] `wasm-pack build --target web` — WASM — NOT VERIFIED
 
 ## 5B: Integration Test Suite
-- [ ] Full integration test pass (all scenarios from Phase 1C)
-- [ ] Property test pass (`proptest` harness)
-- [ ] Kani proofs pass (if `kani-proofs` feature)
+- [ ] Full integration test pass (all scenarios from Phase 1C) — BLOCKED (Windows)
+- [ ] Property test pass (`proptest` harness) — NOT RUN
+- [ ] Kani proofs pass (if `kani-proofs` feature) — NOT RUN
 
 ## 5C: Documentation Final
-- [ ] `scripts/docs_sync_check.sh` — zero failures
-- [ ] All canonical docs reflect current state
-- [ ] `REMAINING_WORK_TRACKING.md` updated
-- [ ] `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md` updated
+- [ ] `scripts/docs_sync_check.sh` — PASSES (zero failures)
+- [ ] All canonical docs reflect current state — IN PROGRESS
+- [ ] `REMAINING_WORK_TRACKING.md` updated — DONE 2026-04-29
+- [ ] `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md` updated — NEEDS UPDATE
 
 ## 5D: Human Escalation Points (REQUIRE EXPLICIT APPROVAL)
 - [ ] **[HUMAN]** Approve release timing and version number

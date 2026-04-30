@@ -10,6 +10,9 @@ import com.scmessenger.android.utils.CircuitBreaker
 import com.scmessenger.android.utils.NetworkFailureMetrics
 import com.scmessenger.android.utils.PeerIdValidator
 import com.scmessenger.android.utils.PeerKeyUtils
+import com.scmessenger.android.transport.TransportManager
+import com.scmessenger.android.transport.SmartTransportRouter
+import com.scmessenger.android.service.TransportType
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -84,6 +87,31 @@ open class MeshRepository(private val context: Context) {
             return settings?.relayEnabled ?: true
         }
 
+        /**
+         * Map service TransportType to SmartTransportRouter TransportType for message deduplication.
+         */
+        internal fun mapToSmartTransportType(transport: TransportType): SmartTransportRouter.TransportType {
+            return when (transport) {
+                TransportType.BLE -> SmartTransportRouter.TransportType.BLE
+                TransportType.WIFI_AWARE -> SmartTransportRouter.TransportType.WIFI_DIRECT
+                TransportType.WIFI_DIRECT -> SmartTransportRouter.TransportType.WIFI_DIRECT
+                TransportType.INTERNET -> SmartTransportRouter.TransportType.CORE
+                TransportType.TCP_MDNS -> SmartTransportRouter.TransportType.TCP_MDNS
+            }
+        }
+
+        /**
+         * Map SmartTransportRouter TransportType back to service TransportType.
+         */
+        internal fun mapFromSmartTransportType(transport: SmartTransportRouter.TransportType): TransportType {
+            return when (transport) {
+                SmartTransportRouter.TransportType.BLE -> TransportType.BLE
+                SmartTransportRouter.TransportType.WIFI_DIRECT -> TransportType.WIFI_DIRECT
+                SmartTransportRouter.TransportType.CORE -> TransportType.INTERNET
+                SmartTransportRouter.TransportType.TCP_MDNS -> TransportType.TCP_MDNS
+            }
+        }
+
         internal fun requireMeshParticipationEnabled(settings: uniffi.api.MeshSettings?) {
             if (!isMeshParticipationEnabled(settings)) {
                 throw IllegalStateException(
@@ -150,6 +178,17 @@ open class MeshRepository(private val context: Context) {
     /** Available internal storage in MB. used for low-storage warnings. */
     fun getAvailableStorageMB(): Long {
         return com.scmessenger.android.utils.StorageManager.getAvailableStorageMB(context)
+    }
+
+    /**
+     * Check if a message is a duplicate and record it for cross-transport deduplication.
+     * Returns Triple(isDuplicate, timeVarianceMs, firstTransport).
+     */
+    private suspend fun checkAndRecordMessage(messageId: String, transport: TransportType): Triple<Boolean, Long?, TransportType?> {
+        val smartTransportType = mapToSmartTransportType(transport)
+        return smartTransportRouter?.checkAndRecordMessage(messageId, smartTransportType)?.let { (isDuplicate, timeVariance, firstSmartTransport) ->
+            Triple(isDuplicate, timeVariance, mapFromSmartTransportType(firstSmartTransport ?: SmartTransportRouter.TransportType.CORE))
+        } ?: Triple(false, null, null)
     }
 
     private suspend fun enhanceNetworkErrorLogging(exception: Exception, node: String) {
@@ -245,6 +284,9 @@ open class MeshRepository(private val context: Context) {
 
     // Smart Transport Router (500ms timeout fallback + health tracking)
     @Volatile private var smartTransportRouter: com.scmessenger.android.transport.SmartTransportRouter? = null
+
+    // Transport Manager for BLE/WiFi transport control
+    @Volatile private var transportManager: TransportManager? = null
 
     // Service state
     private val _serviceState = MutableStateFlow(uniffi.api.ServiceState.STOPPED)
@@ -742,6 +784,20 @@ open class MeshRepository(private val context: Context) {
             contactManager = uniffi.api.ContactManager(storagePath)
             ledgerManager = uniffi.api.LedgerManager(storagePath)
             autoAdjustEngine = meshService?.getAutoAdjustEngine() ?: uniffi.api.AutoAdjustEngine()
+
+            // Initialize TransportManager for BLE/WiFi transport control
+            // This will be used to enable/disable transports when settings change
+            transportManager = TransportManager(
+                context = context,
+                onPeerDiscovered = { peerId, transport ->
+                    // TransportManager peers are handled by MeshService via onPeerDiscovered
+                    meshService?.onPeerDiscovered(peerId)
+                },
+                onDataReceived = { peerId, data, transport ->
+                    // TransportManager data is handled by MeshService via onDataReceived
+                    meshService?.onDataReceived(peerId, data)
+                }
+            )
 
             // Pre-load data where applicable
             ledgerManager?.load()
@@ -1482,6 +1538,15 @@ open class MeshRepository(private val context: Context) {
                     data: ByteArray
                 ) {
                     Timber.i("Message from $senderId: $messageId")
+                    repoScope.launch {
+                        // Check for duplicate messages across transports
+                        val (isDuplicate, timeVarianceMs, firstTransport) = checkAndRecordMessage(messageId, TransportType.INTERNET)
+                        if (isDuplicate) {
+                            Timber.i("Message duplicate detected (core transport): $messageId time_variance=${timeVarianceMs}ms first_transport=$firstTransport")
+                            return@launch
+                        }
+                    }
+
                     logDeliveryAttempt(
                         messageId = messageId,
                         medium = "core",
@@ -2042,15 +2107,15 @@ open class MeshRepository(private val context: Context) {
                     }
 
                     if (attempt < receiptSendMaxAttempts) {
-                        val delaySec = receiptRetryDelaySec(attempt)
+                        val delayMs = getRetryDelay(attempt - 1)
                         logDeliveryAttempt(
                             messageId = normalizedMessageId,
                             medium = "receipt",
                             phase = "retry",
                             outcome = "scheduled",
-                            detail = "ctx=receipt_send sender=$senderId attempt=$attempt delay_sec=$delaySec"
+                            detail = "ctx=receipt_send sender=$senderId attempt=$attempt delay_sec=${delayMs / 1000}"
                         )
-                        kotlinx.coroutines.delay(delaySec * 1000L)
+                        kotlinx.coroutines.delay(delayMs)
                     } else {
                         logDeliveryAttempt(
                             messageId = normalizedMessageId,
@@ -2091,11 +2156,6 @@ open class MeshRepository(private val context: Context) {
         candidateJob.start()
     }
 
-    private fun receiptRetryDelaySec(attempt: Int): Long {
-        val exponent = (attempt - 1).coerceIn(0, 3)
-        return 1L shl exponent
-    }
-
     private fun sendIdentitySyncIfNeeded(routePeerId: String, knownPublicKey: String? = null) {
         val normalizedRoute = routePeerId.trim()
         if (normalizedRoute.isEmpty() || isBootstrapRelayPeer(normalizedRoute)) return
@@ -2125,7 +2185,7 @@ open class MeshRepository(private val context: Context) {
                 }
 
                 val payload = encodeIdentitySyncPayload()
-                val prepared = ironCore?.prepareMessageWithId(recipientPublicKey, payload, null)
+                val prepared = ironCore?.prepareMessageWithId(recipientPublicKey, payload, uniffi.api.MessageType.TEXT, null)
                 if (prepared == null) {
                     identitySyncSentPeers.remove(normalizedRoute)
                     return@launch
@@ -2202,7 +2262,7 @@ open class MeshRepository(private val context: Context) {
                 }
 
                 val payload = encodeMeshMessagePayload(content = "", kind = "history_sync")
-                val prepared = try { ironCore?.prepareMessageWithId(recipientPublicKey, payload, null) } catch (e: Exception) { Timber.e(e, "prepareMessageWithId failed in history_sync"); null }
+                val prepared = try { ironCore?.prepareMessageWithId(recipientPublicKey, payload, uniffi.api.MessageType.TEXT, null) } catch (e: Exception) { Timber.e(e, "prepareMessageWithId failed in history_sync"); null }
                 if (prepared == null) {
                     Timber.e("sendHistorySyncIfNeeded: prepared is null for $normalizedRoute")
                     historySyncSentPeers.remove(normalizedRoute)
@@ -2261,7 +2321,7 @@ open class MeshRepository(private val context: Context) {
                         arr.put(obj)
                     }
                     val payload = encodeMeshMessagePayload(content = arr.toString(), kind = "history_sync_data")
-                    val prepared = try { ironCore?.prepareMessageWithId(recipientPublicKey, payload, null) } catch (e: Exception) {
+                    val prepared = try { ironCore?.prepareMessageWithId(recipientPublicKey, payload, uniffi.api.MessageType.TEXT, null) } catch (e: Exception) {
                         Timber.e(e, "prepareMessage failed in sync_data batch $batchIndex (${batch.size} msgs)")
                         null
                     }
@@ -2333,6 +2393,7 @@ open class MeshRepository(private val context: Context) {
         if (bleAdvertiser == null) {
             bleAdvertiser = com.scmessenger.android.transport.ble.BleAdvertiser(context)
         }
+        bleAdvertiser?.setRotationInterval(900_000L) // 15-minute default identity beacon rotation
         bleAdvertiser?.startAdvertising()
 
         // BLE GATT Server: Serves our identity and accepts writes from nearby peers
@@ -2838,14 +2899,8 @@ open class MeshRepository(private val context: Context) {
             // P0_ANDROID_010: Ensure consent is granted whenever identity is initialized.
             // This handles the case where identity was loaded from sled but consent wasn't set
             // (e.g., after a process restart where consent_granted resets to false).
-            try {
-                if (!core.isConsentGranted()) {
-                    core.grantConsent()
-                }
-            } catch (_: Exception) {
-                // isConsentGranted may not exist in all versions; grant unconditionally
-                core.grantConsent()
-            }
+            // grantConsent is idempotent — calling it when already granted is a no-op.
+            core.grantConsent()
 
             val nickname = info.nickname?.trim().orEmpty()
             if (nickname.isNotEmpty()) {
@@ -3679,7 +3734,7 @@ open class MeshRepository(private val context: Context) {
 
                 // 4. Encrypt/Prepare message
                 val outboundContent = encodeMessageWithIdentityHints(content)
-                val prepared = ironCore?.prepareMessageWithId(finalPublicKey, outboundContent, null)
+                val prepared = ironCore?.prepareMessageWithId(finalPublicKey, outboundContent, uniffi.api.MessageType.TEXT, null)
                     ?: throw IllegalStateException("Failed to prepare message: IronCore not initialized")
 
                 val realMessageId = prepared.messageId.trim()
@@ -4596,6 +4651,59 @@ open class MeshRepository(private val context: Context) {
     fun saveSettings(settings: uniffi.api.MeshSettings) {
         settingsManager?.save(settings)
         Timber.i("Settings saved")
+    }
+
+    /**
+     * Apply transport settings by enabling/disabling transports based on settings.
+     * This is called when settings change to dynamically update transport state.
+     */
+    fun applyTransportSettings(settings: uniffi.api.MeshSettings) {
+        val currentSettings = loadSettings()
+
+        // Apply BLE settings
+        if (settings.bleEnabled != currentSettings.bleEnabled) {
+            if (settings.bleEnabled) {
+                transportManager?.enableTransport(TransportType.BLE)
+                Timber.d("BLE transport enabled via settings")
+            } else {
+                transportManager?.disableTransport(TransportType.BLE)
+                Timber.d("BLE transport disabled via settings")
+            }
+        }
+
+        // Apply WiFi Aware settings
+        if (settings.wifiAwareEnabled != currentSettings.wifiAwareEnabled) {
+            if (settings.wifiAwareEnabled) {
+                transportManager?.enableTransport(TransportType.WIFI_AWARE)
+                Timber.d("WiFi Aware transport enabled via settings")
+            } else {
+                transportManager?.disableTransport(TransportType.WIFI_AWARE)
+                Timber.d("WiFi Aware transport disabled via settings")
+            }
+        }
+
+        // Apply WiFi Direct settings
+        if (settings.wifiDirectEnabled != currentSettings.wifiDirectEnabled) {
+            if (settings.wifiDirectEnabled) {
+                transportManager?.enableTransport(TransportType.WIFI_DIRECT)
+                Timber.d("WiFi Direct transport enabled via settings")
+            } else {
+                transportManager?.disableTransport(TransportType.WIFI_DIRECT)
+                Timber.d("WiFi Direct transport disabled via settings")
+            }
+        }
+
+        // Apply Internet settings (Swarm)
+        if (settings.internetEnabled != currentSettings.internetEnabled) {
+            if (settings.internetEnabled) {
+                // Internet transport is handled by SwarmBridge, started via initializeAndStartSwarm
+                // For now, we just log the change
+                Timber.d("Internet transport enabled via settings")
+            } else {
+                // Internet transport is handled by SwarmBridge, shutdown via stopMeshService
+                Timber.d("Internet transport disabled via settings")
+            }
+        }
     }
 
     fun validateSettings(settings: uniffi.api.MeshSettings): Boolean {

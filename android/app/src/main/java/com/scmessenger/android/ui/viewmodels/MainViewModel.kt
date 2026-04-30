@@ -1,11 +1,13 @@
 package com.scmessenger.android.ui.viewmodels
 
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.scmessenger.android.data.MeshRepository
 import com.scmessenger.android.data.PreferencesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,7 +22,8 @@ import javax.inject.Inject
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val meshRepository: MeshRepository,
-    private val preferencesRepository: PreferencesRepository
+    private val preferencesRepository: PreferencesRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _isReady = MutableStateFlow(false)
@@ -211,7 +214,7 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val available = meshRepository.getAvailableStorageMB()
             _availableStorageMB.value = available
-            _isStorageLow.value = available < StorageManager.CRITICAL_STORAGE_THRESHOLD_MB
+            _isStorageLow.value = StorageManager.isStorageStateCritical(context)
             Timber.d("Storage refreshed: $available MB available (Low=${_isStorageLow.value})")
         }
     }

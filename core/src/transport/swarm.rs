@@ -2367,7 +2367,7 @@ pub async fn start_swarm_with_config(
                                         } else if {
                                             let (multiplier, spam_score) = if let Some(core) = core_handle.as_ref().and_then(|w| w.upgrade()) {
                                                 (
-                                                    core.peer_rate_limit_multiplier(&peer.to_string()),
+                                                    core.peer_rate_limit_multiplier(peer.to_string()),
                                                     core.peer_spam_score(peer.to_string())
                                                 )
                                             } else {

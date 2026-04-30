@@ -16,6 +16,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.scmessenger.android.ui.components.ErrorBanner
 import com.scmessenger.android.ui.components.IdenticonFromPeerId
+import com.scmessenger.android.service.ConnectionQuality
+import com.scmessenger.android.ui.components.ConnectionQualityIndicator
 import com.scmessenger.android.ui.components.StatusIndicator
 import com.scmessenger.android.ui.theme.*
 import com.scmessenger.android.ui.viewmodels.DashboardViewModel
@@ -179,6 +181,10 @@ private fun PeerCard(
 
                     StatusIndicator(
                         isOnline = peer.isOnline
+                    )
+                    ConnectionQualityIndicator(
+                        quality = if (peer.isOnline) ConnectionQuality.GOOD
+                                  else ConnectionQuality.UNKNOWN
                     )
                     Text(
                         text = if (peer.isOnline) "Online" else "Offline",

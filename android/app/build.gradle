@@ -190,6 +190,19 @@ dependencies {
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
 }
 
+// Detect MSYS2/MinGW toolchain path for GNU builds on Windows.
+// The GNU toolchain requires dlltool.exe on PATH, which lives in MSYS2.
+def msysUcrtBin = file('C:/msys64/ucrt64/bin').exists() ? 'C:/msys64/ucrt64/bin' : null
+
+// Read SDK path from local.properties for cargo-ndk
+def localPropsFile = rootProject.file("local.properties")
+def localProps = new Properties()
+if (localPropsFile.exists()) {
+    localProps.load(new FileInputStream(localPropsFile))
+}
+def sdkDir = localProps.getProperty('sdk.dir') ?: System.getenv('ANDROID_HOME') ?: System.getenv('ANDROID_SDK_ROOT')
+def ndkDir = sdkDir ? "${sdkDir}/ndk/${android.ndkVersion}" : null
+
 // Task to build Rust library for all Android architectures
 task buildRustAndroid {
     description = 'Build Rust library for Android using cargo-ndk'
@@ -232,6 +245,12 @@ task buildRustAndroid {
                 workingDir '../../'
                 // Ensure 16KB page alignment for Android 15+ compatibility
                 environment "RUSTFLAGS", "-C link-arg=-Wl,-z,max-page-size=16384"
+
+                if (sdkDir) environment "ANDROID_HOME", sdkDir
+                if (ndkDir && file(ndkDir).exists()) environment "ANDROID_NDK_HOME", ndkDir
+                if (isWindows && msysUcrtBin) {
+                    environment "PATH", "${msysUcrtBin};${System.getenv('PATH')}"
+                }
 
                 if (isWindows) {
                     commandLine 'cmd', '/c', "cargo ndk -t $target build ${rustProfile.join(' ')} -p scmessenger-core"
@@ -280,10 +299,18 @@ task generateUniFFIBindings {
             // Explicitly build for host target (not Android)
             environment "CARGO_BUILD_TARGET", ""
 
+            if (isWindows && msysUcrtBin) {
+                environment "PATH", "${msysUcrtBin};${System.getenv('PATH')}"
+            }
+
             if (isWindows) {
-                commandLine 'cmd', '/c', 'cargo run --target x86_64-pc-windows-msvc --bin gen_kotlin --features gen-bindings'
+                // Use the gnu target (active default toolchain on Windows CI/dev).
+                // MSVC target requires Visual C++ build tools (cl.exe) for quinn/ring,
+                // which are not guaranteed on PATH; gnu uses MinGW which is provisioned.
+                commandLine 'cmd', '/c', 'cargo run --target x86_64-pc-windows-gnu --bin gen_kotlin --features gen-bindings'
             } else {
-                commandLine 'cargo', 'run', '--target', 'x86_64-pc-windows-msvc', '--bin', 'gen_kotlin', '--features', 'gen-bindings'
+                // macOS/Linux: use the host default toolchain (no --target flag)
+                commandLine 'cargo', 'run', '--bin', 'gen_kotlin', '--features', 'gen-bindings'
             }
         }
     }
