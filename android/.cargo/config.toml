@@ -1,9 +1,8 @@
+# Android builds share the root cargo config for linker settings.
+# Root `.cargo/config.toml` defines the explicit MSVC linker path.
+# This file is intentionally minimal; only Android-specific overrides belong here.
+
 [build]
-# Use rust-lld to avoid Git Bash /usr/bin/link shadowing MSVC link.exe
-linker = "rust-lld.exe"
-
-# Disable incremental compilation to prevent rlib metadata errors on Windows
+# Disable incremental compilation to prevent rlib metadata errors on Windows.
+# This mirrors the root `.cargo/config.toml` setting.
 incremental = false
-
-[target.x86_64-pc-windows-msvc]
-linker = "rust-lld.exe"

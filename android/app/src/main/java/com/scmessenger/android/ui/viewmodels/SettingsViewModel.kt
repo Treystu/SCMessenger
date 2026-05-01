@@ -176,16 +176,28 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 _isLoading.value = true
-                // Load settings first (depends on MeshRepository which may trigger service startup)
                 loadSettingsInternal()
-                // Then load identity
                 loadIdentityInternal()
-                // Mark cache as valid after initial load
                 isCacheValid = true
             } catch (e: Exception) {
                 Timber.e(e, "Failed to initialize SettingsViewModel")
             } finally {
                 _isLoading.value = false
+            }
+        }
+
+        // Reactive identity refresh: when mesh service transitions to RUNNING,
+        // immediately refresh identity so the UI shows PeerID without polling delay.
+        // Force-refresh replaces cached SharedPreferences data with live Rust core data.
+        var lastServiceState: uniffi.api.ServiceState? = null
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            meshRepository.serviceState.collect { state ->
+                if (state == uniffi.api.ServiceState.RUNNING &&
+                    lastServiceState != uniffi.api.ServiceState.RUNNING) {
+                    Timber.d("SettingsViewModel: service -> RUNNING, force-refreshing identity")
+                    loadIdentityInternal(forceRefresh = true)
+                }
+                lastServiceState = state
             }
         }
     }
@@ -215,10 +227,14 @@ class SettingsViewModel @Inject constructor(
      * Internal identity loader that runs on IO dispatcher.
      * ANR FIX: Uses cached identity info when available to avoid redundant FFI calls.
      * Uses non-blocking identity access to avoid main thread blocking during service startup.
+     *
+     * @param forceRefresh When true, skips the cache and loads fresh data from Rust core.
+     *                     Used when service transitions to RUNNING to ensure live data replaces
+     *                     cached data from SharedPreferences.
      */
-    private suspend fun loadIdentityInternal() {
-        // ANR FIX: Return cached identity if already loaded
-        if (cachedIdentityInfo != null && isCacheValid) {
+    private suspend fun loadIdentityInternal(forceRefresh: Boolean = false) {
+        // ANR FIX: Return cached identity if already loaded (unless force-refreshing)
+        if (!forceRefresh && cachedIdentityInfo != null && isCacheValid) {
             emitIdentityInfo(cachedIdentityInfo)
             return
         }
@@ -243,12 +259,13 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun loadIdentity() {
+    fun loadIdentity(forceRefresh: Boolean = false) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 // ANR FIX: Return cached identity if already loaded — prevents
                 // redundant FFI calls during recomposition cascades.
-                if (cachedIdentityInfo != null && isCacheValid) {
+                // Skip cache when force-refreshing (service RUNNING transition).
+                if (!forceRefresh && cachedIdentityInfo != null && isCacheValid) {
                     emitIdentityInfo(cachedIdentityInfo)
                     return@launch
                 }

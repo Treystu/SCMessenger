@@ -1536,7 +1536,7 @@ pub async fn start_swarm_with_config(
         }
 
         // Always expose a QUIC listener for NAT traversal and future relay-circuit upgrades.
-        if let Ok(quic_addr) = "/ip4/0.0.0.0/udp/0/quic-v1".parse::<Multiaddr>() {
+        if let Ok(quic_addr) = "/ip4/0.0.0.0/udp/0/quic".parse::<Multiaddr>() {
             match swarm.listen_on(quic_addr.clone()) {
                 Ok(_) => tracing::info!("✓ Bound QUIC listener {}", quic_addr),
                 Err(e) => tracing::warn!("✗ Failed to bind QUIC listener {}: {}", quic_addr, e),

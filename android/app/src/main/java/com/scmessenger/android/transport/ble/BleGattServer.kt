@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
  * - Connection multiplexing (multiple clients)
  * - Data forwarding to Rust via PlatformBridge
  */
+@Suppress("DEPRECATION")
 class BleGattServer(
     private val context: Context,
     private val onDataReceived: (peerId: String, data: ByteArray) -> Unit
@@ -257,7 +258,6 @@ class BleGattServer(
         return true
     }
 
-    @Suppress("DEPRECATION")
     private val gattServerCallback = object : BluetoothGattServerCallback() {
 
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {

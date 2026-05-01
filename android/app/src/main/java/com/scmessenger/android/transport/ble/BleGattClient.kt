@@ -32,6 +32,7 @@ import kotlinx.coroutines.sync.Semaphore
  * - Handles reliable write with chunking for >MTU payloads
  * - Maintains connection pool (max 5 concurrent)
  */
+@Suppress("DEPRECATION")
 class BleGattClient(
     private val context: Context,
     private val onIdentityReceived: (deviceAddress: String, identity: ByteArray) -> Unit,
@@ -472,7 +473,6 @@ class BleGattClient(
         addresses.forEach { disconnect(it) }
     }
 
-    @Suppress("DEPRECATION")
     private val gattCallback = object : BluetoothGattCallback() {
 
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {

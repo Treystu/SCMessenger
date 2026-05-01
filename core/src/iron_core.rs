@@ -276,7 +276,9 @@ impl IronCore {
         Self {
             identity: Arc::new(RwLock::new(
                 IdentityManager::with_backend(backend.clone()).unwrap_or_else(|_| {
-                    tracing::error!("Failed to hydrate identity from persistent store, falling back to memory");
+                    tracing::error!(
+                        "Failed to hydrate identity from persistent store, falling back to memory"
+                    );
                     IdentityManager::new()
                 }),
             )),
@@ -339,7 +341,9 @@ impl IronCore {
         Self {
             identity: Arc::new(RwLock::new(
                 IdentityManager::with_backend(backend.clone()).unwrap_or_else(|_| {
-                    tracing::error!("Failed to hydrate identity from persistent store, falling back to memory");
+                    tracing::error!(
+                        "Failed to hydrate identity from persistent store, falling back to memory"
+                    );
                     IdentityManager::new()
                 }),
             )),
@@ -731,9 +735,14 @@ impl IronCore {
         let identity = self.identity.read();
         let keys = identity.keys();
         let libp2p_peer_id = keys.and_then(|k| match k.to_libp2p_peer_id() {
-            Ok(pid) => Some(pid),
+            Ok(pid) => {
+                println!("[IDENTITY_DIAG] to_libp2p_peer_id OK: {}", pid);
+                Some(pid)
+            }
             Err(e) => {
-                tracing::warn!("Failed to derive libp2p PeerId from identity keys: {:?}", e);
+                let msg = format!("[IDENTITY_DIAG] to_libp2p_peer_id FAILED: {:?}", e);
+                println!("{}", msg);
+                tracing::error!("{}", msg);
                 None
             }
         });
@@ -759,12 +768,10 @@ impl IronCore {
     /// Set the nickname for the local identity.
     pub fn set_nickname(&self, nickname: String) -> Result<(), IronCoreError> {
         let mut identity = self.identity.write();
-        identity
-            .set_nickname(nickname.clone())
-            .map_err(|e| {
-                tracing::error!("Failed to persist nickname to store: {:?}", e);
-                IronCoreError::Internal
-            })?;
+        identity.set_nickname(nickname.clone()).map_err(|e| {
+            tracing::error!("Failed to persist nickname to store: {:?}", e);
+            IronCoreError::Internal
+        })?;
         // Verify the in-memory state was applied — guards against
         // partial-write bugs where sled succeeds but the field is stale.
         if identity.nickname().as_deref() != Some(&nickname) {

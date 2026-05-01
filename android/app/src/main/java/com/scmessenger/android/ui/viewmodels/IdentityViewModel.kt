@@ -40,6 +40,20 @@ class IdentityViewModel @Inject constructor(
 
     init {
         loadIdentity()
+
+        // P0: Refresh identity from Rust core when service transitions to RUNNING,
+        // replacing SharedPreferences cache with live data.
+        var lastServiceState: uniffi.api.ServiceState? = null
+        viewModelScope.launch(Dispatchers.IO) {
+            meshRepository.serviceState.collect { state ->
+                if (state == uniffi.api.ServiceState.RUNNING &&
+                    lastServiceState != uniffi.api.ServiceState.RUNNING) {
+                    Timber.d("IdentityViewModel: service -> RUNNING, refreshing identity")
+                    loadIdentity()
+                }
+                lastServiceState = state
+            }
+        }
     }
 
     /**

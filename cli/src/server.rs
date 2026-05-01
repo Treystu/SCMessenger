@@ -357,8 +357,14 @@ async fn handle_jsonrpc_request(
                 let info = core.get_identity_info();
                 if let Some(obj) = payload.as_object_mut() {
                     obj.insert("nickname".to_string(), serde_json::json!(info.nickname));
-                    obj.insert("libp2pPeerId".to_string(), serde_json::json!(info.libp2p_peer_id));
-                    obj.insert("initialized".to_string(), serde_json::json!(info.initialized));
+                    obj.insert(
+                        "libp2pPeerId".to_string(),
+                        serde_json::json!(info.libp2p_peer_id),
+                    );
+                    obj.insert(
+                        "initialized".to_string(),
+                        serde_json::json!(info.initialized),
+                    );
                     if let Some(local_peer_id) = info.libp2p_peer_id {
                         obj.insert("localPeerId".to_string(), serde_json::json!(local_peer_id));
                     }
@@ -457,10 +463,8 @@ async fn handle_jsonrpc_request(
         ClientIntent::AddContact { peer_id, nickname } => {
             if let Some(ref core) = ctx.core {
                 let mgr = core.contacts_manager();
-                let mut contact = scmessenger_core::contacts_bridge::Contact::new(
-                    peer_id.clone(),
-                    String::new(),
-                );
+                let mut contact =
+                    scmessenger_core::contacts_bridge::Contact::new(peer_id.clone(), String::new());
                 if let Some(n) = nickname {
                     contact = contact.with_nickname(n);
                 }

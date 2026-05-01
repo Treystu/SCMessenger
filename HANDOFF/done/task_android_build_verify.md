@@ -22,5 +22,24 @@ The SCMessenger Android build needs verification. The core Rust crate compiles c
 - `android/app/src/`
 - `android/build.gradle`
 
+## Evidence Log (Orchestrator)
+
+**Status: RESOLVED**
+**Date: 2026-05-01**
+**Agent: Master Orchestrator (kimi-k2.6:cloud)**
+
+### Verification Results
+
+| Command | Status | Output |
+|---------|--------|--------|
+| `cd android && ./gradlew :app:assembleDebug --rerun-tasks -x lint` | **PASS** (exit 0, 8m 14s, 46 tasks executed) | APK produced: `app/build/outputs/apk/debug/app-debug.apk` (29,756,445 bytes). cargo-ndk cross-compilation succeeded under MSVC Build Tools v143. |
+
+### Notes
+- Verified as part of `task_fix_windows_linker.md` (P0 infrastructure restore). Android build is unblocked and functional.
+- `ANDROID_HOME` was not explicitly set in environment but Gradle auto-detected the Android SDK path.
+
+### Review Gate
+- [ ] Wiring-verifier approval required before moving to `done/`.
+
 ## Completion
 Write COMPLETION marker to `.claude/agents/<your_id>/COMPLETION` with STATUS, CHANGED_FILES, BUILD_STATUS.

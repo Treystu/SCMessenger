@@ -62,7 +62,7 @@ class MainViewModel @Inject constructor(
     val importSuccess = _importSuccess.asStateFlow()
 
     val identityInfo: uniffi.api.IdentityInfo?
-        get() = meshRepository.getIdentityInfo()
+        get() = meshRepository.getIdentityInfoNonBlocking()
 
     private val _isStorageLow = MutableStateFlow(false)
     val isStorageLow = _isStorageLow.asStateFlow()

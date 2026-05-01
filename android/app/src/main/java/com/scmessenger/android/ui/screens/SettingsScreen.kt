@@ -69,12 +69,13 @@ fun SettingsScreen(
     }
 
     // Reload identity when service transitions to RUNNING (lazy-start path).
+    // Force-refresh to replace cached SharedPreferences data with live Rust core data.
     // Track prior state to avoid re-firing on repeated RUNNING emissions.
     var lastServiceState by remember { mutableStateOf<uniffi.api.ServiceState?>(null) }
     LaunchedEffect(serviceState) {
         if (serviceState == uniffi.api.ServiceState.RUNNING &&
             lastServiceState != uniffi.api.ServiceState.RUNNING) {
-            settingsViewModel.loadIdentity()
+            settingsViewModel.loadIdentity(forceRefresh = true)
         }
         lastServiceState = serviceState
     }

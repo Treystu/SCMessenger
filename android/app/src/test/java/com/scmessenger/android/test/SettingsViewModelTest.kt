@@ -62,7 +62,9 @@ class SettingsViewModelTest {
 
         every { repository.loadSettings() } returns settings()
         every { repository.validateSettings(any()) } returns true
-        every { repository.getIdentityInfo() } returns null
+        every { repository.getIdentityInfoNonBlocking() } returns null
+        every { repository.serviceState } returns MutableStateFlow(uniffi.api.ServiceState.STOPPED)
+        coEvery { preferences.identityNickname } returns kotlinx.coroutines.flow.flowOf(null)
 
         every { preferences.serviceAutoStart } returns MutableStateFlow(false)
         every { preferences.vpnModeEnabled } returns MutableStateFlow(false)

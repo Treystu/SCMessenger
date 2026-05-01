@@ -36,8 +36,8 @@ Last verified: **2026-04-28** (Phase 1-3 complete: compilation baseline, module 
 
 ### Phase 2: Platform Clients (Partial — Environment Blockers)
 - ✅ WASM target builds successfully (`cargo build -p scmessenger-wasm --target wasm32-unknown-unknown`)
-- ⚠️ CLI build blocked on Windows by missing `dlltool.exe` (MinGW toolchain)
-- ⚠️ Android build blocked on Windows by missing `ANDROID_HOME`
+- ⚠️ CLI build previously blocked on Windows by missing `dlltool.exe` (MinGW toolchain). **RESOLVED 2026-05-01** — MSVC Build Tools v143 installed; `.cargo/config.toml` updated with explicit MSVC linker path; `cargo build --workspace` passes cleanly.
+- ⚠️ Android build requires `ANDROID_HOME` environment variable or auto-detected SDK path.
 
 ### Phase 3: Security Hardening
 - Adversarial review by deepseek-v4-pro:cloud

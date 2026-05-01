@@ -3,15 +3,14 @@
 # and paging file errors during integration test builds.
 incremental = false
 
-# Default to GNU target on this machine since MSVC link.exe
-# is not installed and Git Bash /usr/bin/link shadows it.
-target = "x86_64-pc-windows-gnu"
-
-[target.x86_64-pc-windows-gnu]
-# MSYS2 MinGW-w64 gcc is available at C:\msys64\mingw64\bin
-linker = "C:/msys64/mingw64/bin/x86_64-w64-mingw32-gcc.exe"
+# MSVC Build Tools v143 (14.50.35717) are installed on this machine.
+# Default host target is x86_64-pc-windows-msvc (via rustup default).
+# The explicit MSVC linker path below immunizes against Git Bash /usr/bin/link
+# shadowing the MSVC linker on PATH.
 
 [target.x86_64-pc-windows-msvc]
-# MSVC linker is not installed on this machine.
-# If ever installed, remove the GNU default above.
-linker = "link.exe"
+linker = "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/link.exe"
+
+[target.x86_64-pc-windows-gnu]
+# Retained for explicit --target x86_64-pc-windows-gnu builds.
+linker = "C:/msys64/mingw64/bin/x86_64-w64-mingw32-gcc.exe"

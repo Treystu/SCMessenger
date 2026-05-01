@@ -82,7 +82,8 @@ class NetworkDiagnostics @Inject constructor(
         )
         return domains.associateWith { domain ->
             try {
-                InetAddress.getByName(domain) != null
+                InetAddress.getByName(domain)
+                true
             } catch (e: Exception) {
                 Timber.d("DNS test failed for %s: %s", domain, e.message)
                 false

@@ -55,6 +55,17 @@ open class MeshRepository(private val context: Context) {
     companion object {
         private const val IDENTITY_BACKUP_PREFS = "identity_backup_prefs"
         private const val IDENTITY_BACKUP_KEY = "identity_backup_v1"
+
+        // P0: Cache key identity fields in SharedPreferences for instant UI load.
+        // Eliminates 30-60s "Unavailable" gap while service starts up.
+        private const val IDENTITY_CACHE_PREFS = "identity_cache_prefs"
+        private const val IDENTITY_CACHE_ID = "identity_id"
+        private const val IDENTITY_CACHE_PUBLIC_KEY = "public_key_hex"
+        private const val IDENTITY_CACHE_DEVICE_ID = "device_id"
+        private const val IDENTITY_CACHE_SENIORITY = "seniority_timestamp"
+        private const val IDENTITY_CACHE_NICKNAME = "nickname"
+        private const val IDENTITY_CACHE_PEER_ID = "libp2p_peer_id"
+        private const val IDENTITY_CACHE_INITIALIZED = "initialized"
         /** Static fallback bootstrap nodes for NAT traversal and internet roaming.
          *  These are used if env override and remote fetch both fail/are absent.
          *  Priority order: QUIC/UDP (cellular-friendly) → TCP (WiFi/enterprise).
@@ -250,6 +261,12 @@ open class MeshRepository(private val context: Context) {
 
     private val identityBackupPrefs: SharedPreferences by lazy {
         context.getSharedPreferences(IDENTITY_BACKUP_PREFS, Context.MODE_PRIVATE)
+    }
+
+    // P0: Fast-access cache for identity fields. Read synchronously on UI thread
+    // without needing Rust core, eliminating the 30-60s "Unavailable" gap.
+    private val identityCachePrefs: SharedPreferences by lazy {
+        context.getSharedPreferences(IDENTITY_CACHE_PREFS, Context.MODE_PRIVATE)
     }
 
     // Mesh service instance (lazy init)
@@ -2740,11 +2757,9 @@ open class MeshRepository(private val context: Context) {
                     )
                 }
                 val canonicalPeerId = PeerIdValidator.normalize(merged.peerId.ifEmpty { normalizedKey })
-                val canonicalPublicKey = normalizePublicKey(merged.publicKey)
 
                 val withCanonical = current + (canonicalPeerId to merged)
-                withCanonical.filterNot { (mapKey, candidate) ->
-                    // Cleanup duplicate entries for the same identity if they were added under different keys
+                withCanonical.filterNot { (mapKey, _) ->
                     mapKey != canonicalPeerId && PeerIdValidator.isSame(mapKey, canonicalPeerId)
                 }
             }
@@ -2903,6 +2918,8 @@ open class MeshRepository(private val context: Context) {
             core.grantConsent()
 
             val nickname = info.nickname?.trim().orEmpty()
+            // P0: Cache identity fields for instant UI load on next startup
+            cacheIdentityFields(info)
             if (nickname.isNotEmpty()) {
                 persistIdentityBackup(core)
             }
@@ -2958,6 +2975,49 @@ open class MeshRepository(private val context: Context) {
         } catch (e: Exception) {
             Timber.w("Failed to persist identity backup payload: ${e.message}")
         }
+    }
+
+    // P0: Cache key identity fields to SharedPreferences for instant UI load.
+    // Called whenever identity is successfully obtained from Rust core.
+    private fun cacheIdentityFields(info: uniffi.api.IdentityInfo) {
+        identityCachePrefs.edit().apply {
+            putString(IDENTITY_CACHE_ID, info.identityId)
+            putString(IDENTITY_CACHE_PUBLIC_KEY, info.publicKeyHex)
+            putString(IDENTITY_CACHE_DEVICE_ID, info.deviceId)
+            val seniority = info.seniorityTimestamp
+            if (seniority != null) {
+                putLong(IDENTITY_CACHE_SENIORITY, seniority.toLong())
+            } else {
+                remove(IDENTITY_CACHE_SENIORITY)
+            }
+            putString(IDENTITY_CACHE_NICKNAME, info.nickname)
+            putString(IDENTITY_CACHE_PEER_ID, info.libp2pPeerId)
+            putBoolean(IDENTITY_CACHE_INITIALIZED, info.initialized)
+        }.apply()
+        Timber.d("Cached identity fields: peerId=%s, id=%s",
+            info.libp2pPeerId?.take(8), info.identityId?.take(8))
+    }
+
+    // P0: Read cached identity fields for instant UI display without needing Rust core.
+    // Returns null if no cache exists (fresh install or cleared data).
+    fun readCachedIdentityFields(): uniffi.api.IdentityInfo? {
+        if (!identityCachePrefs.contains(IDENTITY_CACHE_INITIALIZED)) {
+            return null
+        }
+        val initialized = identityCachePrefs.getBoolean(IDENTITY_CACHE_INITIALIZED, false)
+        if (!initialized) {
+            return null
+        }
+        return uniffi.api.IdentityInfo(
+            identityId = identityCachePrefs.getString(IDENTITY_CACHE_ID, null),
+            publicKeyHex = identityCachePrefs.getString(IDENTITY_CACHE_PUBLIC_KEY, null),
+            deviceId = identityCachePrefs.getString(IDENTITY_CACHE_DEVICE_ID, null),
+            seniorityTimestamp = identityCachePrefs.getLong(IDENTITY_CACHE_SENIORITY, 0L)
+                .toULong().let { if (it == 0uL) null else it },
+            initialized = initialized,
+            nickname = identityCachePrefs.getString(IDENTITY_CACHE_NICKNAME, null),
+            libp2pPeerId = identityCachePrefs.getString(IDENTITY_CACHE_PEER_ID, null)
+        )
     }
 
     fun setPlatformBridge(bridge: uniffi.api.PlatformBridge) {
@@ -3163,14 +3223,14 @@ open class MeshRepository(private val context: Context) {
         }
         
         val trimmed = id.trim()
-        val canonicalId = canonicalContactId(trimmed)
+        val resolvedCanonicalId = canonicalContactId(trimmed)
         
         // Additional validation: Check if this ID maps to multiple contacts (ambiguity check)
         try {
             val contacts = contactManager?.list().orEmpty()
             val matchingContacts = contacts.filter {
                 val contactId = canonicalContactId(it.peerId)
-                PeerIdValidator.isSame(contactId, canonicalId)
+                PeerIdValidator.isSame(contactId, resolvedCanonicalId)
             }
             
             if (matchingContacts.size > 1) {
@@ -3184,7 +3244,7 @@ open class MeshRepository(private val context: Context) {
             Timber.w("ID_VALIDATION: Could not check contact ambiguity for '$trimmed': ${e.message}")
         }
         
-        return canonicalId
+        return resolvedCanonicalId
     }
 
     private fun canonicalContactId(id: String): String {
@@ -3494,12 +3554,29 @@ open class MeshRepository(private val context: Context) {
      * This is non-blocking and safe to call from the main thread during UI composition.
      */
     fun getIdentityInfoNonBlocking(): uniffi.api.IdentityInfo? {
+        // Try to get identity info even if the service isn't fully RUNNING yet.
+        // ironCore may already have identity loaded from sled before the swarm
+        // finishes binding. This eliminates the 30-60s polling gap in Settings UI.
+        val core = ironCore
+        if (core != null) {
+            val info = core.getIdentityInfo()
+            if (info != null && info.initialized) {
+                cacheIdentityFields(info)
+            }
+            return info
+        }
+        // P0: Fall back to cached identity fields when Rust core isn't ready yet.
+        // This eliminates the 30-60s "Unavailable" gap during service startup.
+        val cached = readCachedIdentityFields()
+        if (cached != null) {
+            Timber.d("getIdentityInfoNonBlocking: using cached identity (core not ready)")
+            return cached
+        }
+        // Last resort: only return null if there's truly no core available and no cache.
         val state = meshService?.getState()
         if (state != uniffi.api.ServiceState.RUNNING) {
-            // Service not running, return null - identity will be populated later
             return null
         }
-        // Service is running, now safe to call getIdentityInfo
         return getIdentityInfo()
     }
 
@@ -3515,6 +3592,10 @@ open class MeshRepository(private val context: Context) {
             result?.nickname,
             result?.libp2pPeerId
         )
+        // P0: Cache identity fields for instant UI load on next startup
+        if (result != null && result.initialized) {
+            cacheIdentityFields(result)
+        }
         return result
     }
 
@@ -3538,6 +3619,10 @@ open class MeshRepository(private val context: Context) {
                 info?.nickname,
                 info?.initialized
             )
+            // P0: Update cache after nickname change
+            if (info != null && info.initialized) {
+                cacheIdentityFields(info)
+            }
         } catch (e: Exception) {
             Timber.e(e, "Rust core failed to set nickname")
             throw IllegalStateException("Failed to persist nickname: ${e.message}", e)
@@ -4238,6 +4323,9 @@ open class MeshRepository(private val context: Context) {
 
         // 2. Clear identity backup SharedPreferences
         identityBackupPrefs.edit().clear().apply()
+
+        // P0: Clear cached identity fields so reset is reflected on next launch
+        identityCachePrefs.edit().clear().apply()
 
         // 3. Delete all files in storage path (Rust DBs, keys, etc)
         val files = context.filesDir.listFiles()
@@ -7317,8 +7405,17 @@ open class MeshRepository(private val context: Context) {
         Timber.i("Racing bootstrap: network=%s, transports=%s", diagnostics.networkType,
             transportPriority.joinToString("→") { it.scheme })
 
-        // Reset circuit breakers on network change
-        relayCircuitBreaker.resetAll()
+        // Reset circuit breakers on network change — but only when transitioning
+        // TO a healthy network (WiFi) FROM a restrictive one (cellular).
+        // Resetting on every WIFI↔CELLULAR flap destroys circuit state and
+        // causes aggressive re-bootstrapping + mDNS spam.
+        val isRecoveryTransition = diagnostics.networkType == com.scmessenger.android.transport.NetworkType.WIFI ||
+            diagnostics.networkType == com.scmessenger.android.transport.NetworkType.ETHERNET
+        if (isRecoveryTransition && relayCircuitBreaker.getOpenCircuits().isNotEmpty()) {
+            Timber.i("Network recovered to %s — resetting %d open circuits",
+                diagnostics.networkType, relayCircuitBreaker.getOpenCircuits().size)
+            relayCircuitBreaker.resetAll()
+        }
 
         // Build prioritized address list based on network type
         val prioritizedAddresses = emptyList<String>()
@@ -7460,6 +7557,13 @@ open class MeshRepository(private val context: Context) {
 
     // P0_NETWORK_001: Watch for network type changes to trigger re-bootstrap
     private var networkWatchJob: kotlinx.coroutines.Job? = null
+    // Exponential backoff cooldown: each consecutive flap doubles the cooldown
+    // up to a 10-minute cap. Resets after a stable period without changes.
+    private var lastNetworkChangeMs: Long = 0L
+    private var networkFlapCount: Int = 0
+    private val networkChangeCooldownBaseMs: Long = 30_000L
+    private val networkChangeCooldownMaxMs: Long = 600_000L
+    private val networkChangeStableResetMs: Long = 120_000L
 
     private fun startNetworkChangeWatch() {
         networkWatchJob?.cancel()
@@ -7467,10 +7571,38 @@ open class MeshRepository(private val context: Context) {
             var previousType = networkDetector.networkType.value
             networkDetector.networkType.collect { newType ->
                 if (newType != previousType && newType != com.scmessenger.android.transport.NetworkType.UNKNOWN) {
-                    Timber.i("Network type changed: %s → %s, resetting circuit breakers and re-bootstrapping",
-                        previousType, newType)
+                    val now = System.currentTimeMillis()
+                    val elapsedSinceStable = now - lastNetworkChangeMs
+
+                    // If the last change was long ago (>2min), reset the flap counter.
+                    if (elapsedSinceStable >= networkChangeStableResetMs) {
+                        networkFlapCount = 0
+                    }
+
+                    val cooldownMs = minOf(
+                        networkChangeCooldownBaseMs * (1L shl networkFlapCount.coerceAtMost(5)),
+                        networkChangeCooldownMaxMs
+                    )
+
+                    if (elapsedSinceStable < cooldownMs && networkFlapCount > 0) {
+                        Timber.w("Network change throttled: %s → %s (cooldown=%dms, flapping=%d)",
+                            previousType, newType, cooldownMs, networkFlapCount)
+                        previousType = newType
+                        return@collect
+                    }
+
+                    networkFlapCount++
+                    lastNetworkChangeMs = now
+                    Timber.i("Network type changed: %s → %s (flap=%d, cooldown=%dms)",
+                        previousType, newType, networkFlapCount, cooldownMs)
+
+                    // Only reset circuits when transitioning TO a healthy network.
+                    val isRecovery = newType == com.scmessenger.android.transport.NetworkType.WIFI ||
+                        newType == com.scmessenger.android.transport.NetworkType.ETHERNET
+                    if (isRecovery) {
+                        relayCircuitBreaker.resetAll()
+                    }
                     previousType = newType
-                    relayCircuitBreaker.resetAll()
                     racingBootstrapWithFallback()
                 }
             }
