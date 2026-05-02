@@ -7,6 +7,7 @@ use crate::transport::abstraction::{
     TransportCapabilities, TransportError, TransportEvent, TransportType,
 };
 use crate::transport::health::TransportHealthMonitor;
+use crate::transport::observation::AddressObserver;
 use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -210,6 +211,9 @@ pub struct TransportManager {
 
     /// Optional health monitor for stale connection cleanup
     health_monitor: Option<Arc<TransportHealthMonitor>>,
+
+    /// Address observer for consensus-based address discovery and expiry
+    address_observer: Arc<RwLock<AddressObserver>>,
 }
 
 impl TransportManager {
@@ -223,6 +227,7 @@ impl TransportManager {
             target_peers: Arc::new(RwLock::new(HashMap::new())),
             reconnection_queue: Arc::new(RwLock::new(HashMap::new())),
             health_monitor: None,
+            address_observer: Arc::new(RwLock::new(AddressObserver::new())),
         }
     }
 
@@ -581,6 +586,22 @@ impl TransportManager {
         if let Some(ref monitor) = self.health_monitor {
             monitor.cleanup_stale_connections(3600);
         }
+    }
+
+    /// Expire address observations older than `max_age_secs`.
+    /// Should be called periodically from the maintenance loop to prune
+    /// stale external address observations.
+    pub fn expire_address_observations(&self, max_age_secs: u64) {
+        self.address_observer.write().expire_old_observations(max_age_secs);
+    }
+
+    /// Return the set of currently healthy peer IDs from the health monitor.
+    /// Returns an empty list if no health monitor is configured.
+    pub fn get_healthy_connections(&self) -> Vec<libp2p::PeerId> {
+        self.health_monitor
+            .as_ref()
+            .map(|m| m.get_healthy_connections())
+            .unwrap_or_default()
     }
 }
 

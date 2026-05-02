@@ -14,6 +14,7 @@
 use parking_lot::RwLock;
 use std::sync::Arc;
 
+use crate::abuse::auto_block::{AutoBlockConfig, AutoBlockEngine};
 use crate::abuse::spam_detection::{SpamDetectionConfig, SpamDetectionEngine};
 use crate::abuse::EnhancedAbuseReputationManager;
 use crate::crypto::{decrypt_message, encrypt_message, session_manager::RatchetSessionManager};
@@ -135,6 +136,9 @@ pub struct IronCore {
     /// Abuse reputation manager.
     abuse_manager: Arc<RwLock<EnhancedAbuseReputationManager>>,
 
+    /// Auto-block engine for periodic abuse scan.
+    auto_block_engine: Arc<RwLock<AutoBlockEngine>>,
+
     /// Storage path for persistent data (None = in-memory).
     storage_path: Option<String>,
     /// Log directory for structured tracing.
@@ -213,12 +217,20 @@ impl IronCore {
         let history_manager = Arc::new(CoreHistoryManager::new(backend.clone()));
         let log_mgr = Arc::new(LogManager::new(backend.clone()));
         let blocked_manager = CoreBlockedManager::new(backend.clone());
+        let blocked_for_auto_block = CoreBlockedManager::new(backend.clone());
         let inbox = Inbox::new();
         let outbox = Outbox::new();
         let storage_manager = StorageManager::new(history_manager.clone(), log_mgr.clone());
         let spam_detector =
             SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
         let abuse_mgr = EnhancedAbuseReputationManager::new(1000, spam_detector);
+        let auto_block_spam = SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
+        let auto_block_reputation = EnhancedAbuseReputationManager::new(1000, auto_block_spam);
+        let auto_block = AutoBlockEngine::new(
+            AutoBlockConfig::default(),
+            Arc::new(blocked_for_auto_block),
+            Arc::new(auto_block_reputation),
+        );
 
         Self {
             identity: Arc::new(RwLock::new(IdentityManager::new())),
@@ -237,6 +249,7 @@ impl IronCore {
             drift_store: Arc::new(RwLock::new(MeshStore::new())),
             drift_engine: Arc::new(RwLock::new(None)),
             abuse_manager: Arc::new(RwLock::new(abuse_mgr)),
+            auto_block_engine: Arc::new(RwLock::new(auto_block)),
             storage_path: None,
             log_directory: None,
             #[cfg(not(target_arch = "wasm32"))]
@@ -273,12 +286,20 @@ impl IronCore {
         let history_manager = Arc::new(CoreHistoryManager::new(backend.clone()));
         let log_mgr = Arc::new(LogManager::new(backend.clone()));
         let blocked_manager = CoreBlockedManager::new(backend.clone());
+        let blocked_for_auto_block = CoreBlockedManager::new(backend.clone());
         let inbox = Inbox::new();
         let outbox = Outbox::new();
         let storage_manager = StorageManager::new(history_manager.clone(), log_mgr.clone());
         let spam_detector =
             SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
         let abuse_mgr = EnhancedAbuseReputationManager::new(1000, spam_detector);
+        let auto_block_spam = SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
+        let auto_block_reputation = EnhancedAbuseReputationManager::new(1000, auto_block_spam);
+        let auto_block = AutoBlockEngine::new(
+            AutoBlockConfig::default(),
+            Arc::new(blocked_for_auto_block),
+            Arc::new(auto_block_reputation),
+        );
 
         Self {
             identity: Arc::new(RwLock::new(
@@ -304,6 +325,7 @@ impl IronCore {
             drift_store: Arc::new(RwLock::new(MeshStore::new())),
             drift_engine: Arc::new(RwLock::new(None)),
             abuse_manager: Arc::new(RwLock::new(abuse_mgr)),
+            auto_block_engine: Arc::new(RwLock::new(auto_block)),
             storage_path: Some(path),
             log_directory: None,
             #[cfg(not(target_arch = "wasm32"))]
@@ -338,12 +360,20 @@ impl IronCore {
         let history_manager = Arc::new(CoreHistoryManager::new(backend.clone()));
         let log_mgr = Arc::new(LogManager::new(backend.clone()));
         let blocked_manager = CoreBlockedManager::new(backend.clone());
+        let blocked_for_auto_block = CoreBlockedManager::new(backend.clone());
         let inbox = Inbox::new();
         let outbox = Outbox::new();
         let storage_manager = StorageManager::new(history_manager.clone(), log_mgr.clone());
         let spam_detector =
             SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
         let abuse_mgr = EnhancedAbuseReputationManager::new(1000, spam_detector);
+        let auto_block_spam = SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
+        let auto_block_reputation = EnhancedAbuseReputationManager::new(1000, auto_block_spam);
+        let auto_block = AutoBlockEngine::new(
+            AutoBlockConfig::default(),
+            Arc::new(blocked_for_auto_block),
+            Arc::new(auto_block_reputation),
+        );
 
         Self {
             identity: Arc::new(RwLock::new(
@@ -369,6 +399,7 @@ impl IronCore {
             drift_store: Arc::new(RwLock::new(MeshStore::new())),
             drift_engine: Arc::new(RwLock::new(None)),
             abuse_manager: Arc::new(RwLock::new(abuse_mgr)),
+            auto_block_engine: Arc::new(RwLock::new(auto_block)),
             storage_path: Some(path),
             log_directory: Some(log_dir),
             #[cfg(not(target_arch = "wasm32"))]
@@ -589,6 +620,16 @@ impl IronCore {
         self.blocked_manager
             .read()
             .is_blocked(&peer_id, device_id.as_deref())
+    }
+
+    /// Get the set of peer IDs that are blocked-only (not deleted).
+    /// Used by the query layer to filter blocked peers from UI results
+    /// without purging them (evidentiary retention).
+    pub fn blocked_only_peer_ids(&self) -> Result<Vec<String>, IronCoreError> {
+        self.blocked_manager
+            .read()
+            .blocked_only_peer_ids()
+            .map(|set| set.into_iter().collect())
     }
 
     /// Get the peer reputation score.
@@ -823,6 +864,13 @@ impl IronCore {
 
     pub fn inbox_count(&self) -> u32 {
         self.inbox.read().total_count() as u32
+    }
+
+    /// Drain all received messages from the inbox, clearing the buffer while
+    /// preserving dedup IDs. This is the core parity of the WASM
+    /// `drainReceivedMessages` method.
+    pub fn drain_received_messages(&self) -> Vec<ReceivedMessage> {
+        self.inbox.write().drain_received_messages()
     }
 
     // -----------------------------------------------------------------------
@@ -1067,6 +1115,34 @@ impl IronCore {
             None,
             Some(format!("removed={}", removed)),
         );
+
+        // Run periodic abuse scan: evaluate all tracked peers and auto-block
+        // those exceeding reputation or spam thresholds.
+        match self.auto_block_engine.read().evaluate_all_tracked() {
+            Ok(blocked_count) => {
+                if blocked_count > 0 {
+                    tracing::info!("Maintenance auto-blocked {} peers", blocked_count);
+                    self.audit_log.write().append(
+                        AuditEventType::ContactBlocked,
+                        self.identity.read().identity_id(),
+                        None,
+                        Some(format!("auto_blocked={}", blocked_count)),
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Maintenance abuse scan failed: {:?}", e);
+            }
+        }
+
+        // Expire stale address observations from the routing layer.
+        self.transport_manager
+            .write()
+            .expire_address_observations(3600);
+
+        // Clean up stale connection stats from the health monitor.
+        self.transport_manager.write().tick();
+
         Ok(())
     }
 
@@ -1834,6 +1910,17 @@ impl IronCore {
     }
     pub fn transport_manager_handle(&self) -> Arc<RwLock<TransportManager>> {
         self.transport_manager.clone()
+    }
+
+    /// Get the list of currently healthy peer connections from the transport layer.
+    pub fn get_healthy_connections(&self) -> Vec<libp2p::PeerId> {
+        self.transport_manager.read().get_healthy_connections()
+    }
+
+    /// Expire address observations older than the given threshold.
+    /// Called as part of periodic maintenance to prune stale external address data.
+    pub fn expire_address_observations(&self, max_age_secs: u64) {
+        self.transport_manager.read().expire_address_observations(max_age_secs);
     }
     pub fn bootstrap_manager_handle(&self) -> Arc<RwLock<Option<BootstrapManager>>> {
         self.bootstrap_manager.clone()
